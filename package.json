@@ -1,0 +1,23 @@
+{
+  "name": "cripfcnt3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "fs": "^0.0.1-security",
+    "hbs": "^4.2.0",
+    "nodemon": "^3.1.10",
+    "openai": "^6.6.0",
+    "tavily": "^1.0.2"
+  }
+}
