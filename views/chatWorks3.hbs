@@ -39,38 +39,28 @@
       background: #004c99;
     }
 
-.card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  margin: 1rem 0;
-  padding: 1rem 1.2rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-}
+    #output {
+      white-space: pre-wrap; /* preserve line breaks */
+      font-family: "Courier New", monospace; /* typewriter style */
+      line-height: 1.5;
+      background: #fff;
+      padding: 1rem;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      margin-top: 1.5rem;
+      min-height: 200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
 
-.card-header {
-  font-weight: 700;
-  color: #003366;
-  font-size: 15px;
-  text-transform: uppercase;
-  border-bottom: 2px solid #00336630;
-  padding-bottom: 6px;
-  margin-bottom: 0.6rem;
-}
+    .highlight-num {
+      color: #0d6efd;
+      font-weight: bold;
+    }
 
-#output {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 1rem;
-  font-family: "Inter", sans-serif;
-  font-size: 15px;
-  color: #222;
-  line-height: 1.7;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-
+    .highlight-key {
+      color: #198754;
+      font-weight: bold;
+    }
   </style>
 </head>
 
@@ -142,30 +132,16 @@ async function startChat() {
     }
 
     // Format output for readability
-// 🧩 Final clean & format into section cards
-let html = output.textContent
-  // Bold text markers
-  .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
-  // Highlight numbers like 7 / 10
-  .replace(/(\d+(\.\d+)?\s*\/\s*\d+)/g, "<span class='highlight-num'>$1</span>")
-  // Highlight key metrics
-  .replace(/SCOI\s*=?\s*[\d.]+/gi, "<span class='highlight-key'>$&</span>")
-  .replace(/ERF\s*:?[\s\d.]+/gi, "<span class='highlight-key'>$&</span>")
-  // Add breaks before each numbered section (1️⃣–6️⃣)
-  .replace(/\s*(\d+)\s*[️⃣⛹️‍♂️]?\s*(?=\b(Visibility|Contribution|SCOI|Environment|Adjustment|Final|Commentary)\b)/gi, 
-    "<br><br><div class='card'><div class='card-header'>Section $1</div>")
-  // Make section headers bold and colored
-  .replace(/\b(Visibility|Contribution|Calculation|Adjustment|Environment|Final|Commentary)\b/gi, 
-    "<b style='color:#003366;'>$1</b>")
-  // Add closing </div> tags after each period that ends a section
-  .replace(/(\.\s*)(?=\d+\s*[️⃣]?|$)/g, "$1</div><br>")
-  // Tidy spacing and newlines
-  .replace(/\n{2,}/g, "<br><br>")
-  .replace(/\n/g, "<br>");
+    let html = output.textContent
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+      .replace(/(\d+(\.\d+)?\s*\/\s*10)/g, "<span class='highlight-num'>$1</span>")
+      .replace(/SCOI\s*=?\s*[\d.]+/gi, "<span class='highlight-key'>$&</span>")
+      .replace(/ERF\s*:?[\s\d.]+/gi, "<span class='highlight-key'>$&</span>")
+      .replace(/(\d️⃣|[1-6]️⃣)/g, "<br><b style='color:#003366;'>$1</b> ") // stage markers
+      .replace(/(Visibility|Contribution|Calculation|Adjustment|Commentary)/gi, "<b style='color:#003366;'>$1</b>")
+      .replace(/\n{2,}/g, "\n");
 
-output.innerHTML = html;
-
-
+    output.innerHTML = html;
 
   } catch (err) {
     output.innerHTML = `❌ Error: ${err.message}`;

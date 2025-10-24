@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-   "type": "module",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-     "start": "node server.js",
-  "dev": "nodemon server.js"
+    "start": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
@@ -18,8 +17,10 @@
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
     "hbs": "^4.2.0",
+    "node-fetch": "^3.3.2",
     "nodemon": "^3.1.10",
     "openai": "^6.6.0",
-    "tavily": "^1.0.2"
+    "tavily": "^1.0.2",
+    "undici": "^7.16.0"
   }
 }

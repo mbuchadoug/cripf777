@@ -1,13 +1,9 @@
-// server.js — CRIPFCnt SCOI Server (v5: Merged & Structured)
-
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
 import { engine } from "express-handlebars";
-import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 
 dotenv.config();
 
@@ -16,75 +12,18 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
 
-// Handlebars setup
+// Configure handlebars view engine
 app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// Ensure data folder exists
-const dataPath = path.join(process.cwd(), "data", "scoi.json");
-if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-
-// Helper: clean AI text
-function cleanAIText(text) {
-  if (!text) return "";
-  return String(text)
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/\r/g, "")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-
-// Helper: format SCOI audit
-function formatSCOI(entityData, entity) {
-  const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
-  const rawSCOI = (contribution / visibility).toFixed(3);
-  const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
-
-  return `
-### SCOI Audit — ${entity}
-
----
-
-**1️⃣ Visibility — Score: ${visibility} / 10**  
-**Rationale:**  
-${visibilityRationale}
-
----
-
-**2️⃣ Contribution — Score: ${contribution} / 10**  
-**Rationale:**  
-${contributionRationale}
-
----
-
-**3️⃣ SCOI Calculation**  
-SCOI = Contribution / Visibility = ${contribution} / ${visibility} = ${rawSCOI}  
-**Interpretation:**  
-${scoiInterpretation}
-
----
-
-**4️⃣ Global Environment Adjustment — ERF: ${ERF}**  
-**Rationale:**  
-${ERFRationale}
-
----
-
-**5️⃣ Adjusted SCOI**  
-Adjusted SCOI = SCOI × ERF = ${rawSCOI} × ${ERF} = ${adjusted}
-
----
-
-**6️⃣ Final CRIPFCnt Commentary:**  
-${commentary}
-`;
-}
+// Serve static files (CSS, JS, images if needed)
+app.use(express.static(path.join(__dirname, "public")));
 
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page
@@ -92,37 +31,29 @@ ${commentary}
 app.get("/", (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
-    message: "Enter an organization or entity name to perform a live CRIPFCnt audit powered by OpenAI.",
+    message:
+      "Enter an organization or entity name to perform a live CRIPFCnt audit powered by OpenAI.",
   });
 });
 
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint
 // -------------------------------
-// -------------------------------
-// 🔹 ROUTE: Chat Stream Endpoint (Clean, Structured Output)
-// -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-
-  const keepAlive = setInterval(() => {
-    try { res.write(":\n\n"); } catch (e) {}
-  }, 15000);
 
   try {
     const { entity } = req.body;
     if (!entity) {
-      res.write("data: ❌ Missing entity name.\n\n");
-      clearInterval(keepAlive);
+      res.write("data: Missing entity name.\n\n");
       return res.end();
     }
 
-    // System prompt instructs AI to return clean structured SCOI
     const systemPrompt = `
 You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
-Generate a **single, clean, structured SCOI audit** for the entity provided.
+Generate a full SCOI audit for the given entity.
 Follow this structure exactly:
 
 1️⃣ Visibility — score and rationale
@@ -131,9 +62,6 @@ Follow this structure exactly:
 4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
 5️⃣ Adjusted SCOI = SCOI × ERF
 6️⃣ Final CRIPFCnt Commentary
-
-Return the audit **as readable text**, without splitting words or repeating sections.
-Do not include any placeholders, repeated headers, or HTML/markdown except basic headings.
 `;
 
     const stream = await openai.chat.completions.create({
@@ -143,24 +71,19 @@ Do not include any placeholders, repeated headers, or HTML/markdown except basic
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.`
+          content: `Perform a CRIPFCnt SCOI Audit for ${entity}. Include adjusted SCOI and interpretive commentary.`,
         },
       ],
     });
 
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
-      if (content) {
-        // Write each chunk as SSE
-        res.write(`data: ${content}\n\n`);
-      }
+      if (content) res.write(`data: ${content}\n\n`);
     }
   } catch (err) {
     console.error(err);
-    res.write(`data: ❌ Server error: ${err.message}\n\n`);
+    res.write(`data: ❌ Error: ${err.message}\n\n`);
   } finally {
-    clearInterval(keepAlive);
-    res.write("data: [DONE]\n\n");
     res.end();
   }
 });
@@ -210,7 +133,8 @@ app.get("/api/audits", (req, res) => {
   res.json({
     framework: "CRIPFCnt SCOI Audit System",
     author: "Donald Mataranyika",
-    description: "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
+    description:
+      "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
     formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
     data: scoiAudits,
   });
@@ -220,4 +144,6 @@ app.get("/api/audits", (req, res) => {
 // 🟢 SERVER START
 // -------------------------------
 const PORT = process.env.PORT || 9000;
-app.listen(PORT, () => console.log(`🚀 CRIPFCnt Audit Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 CRIPFCnt Audit Server running on port ${PORT}`);
+});
