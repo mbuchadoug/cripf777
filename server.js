@@ -89,7 +89,7 @@ ${commentary}
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page
 // -------------------------------
-app.get("/", (req, res) => {
+app.get("/chat", (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
     message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
