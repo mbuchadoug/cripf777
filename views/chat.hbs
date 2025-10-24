@@ -127,7 +127,11 @@ async function startChat() {
       buffer += chunk;
 
       // When we have a full sentence or newline, flush to output
-      const sentences = buffer.split(/(?<=[.:\n])\s+/);
+      //const sentences = buffer.split(/(?<=[.:\n])\s+/);
+
+      // Prevent breaking decimals (e.g. 7.8 -> 7\n8)
+const sentences = buffer.split(/(?<!\d)\.(?!\d)|(?<=[:\n])\s+/);
+
       buffer = sentences.pop() || "";
 
       for (const s of sentences) {
@@ -141,27 +145,25 @@ async function startChat() {
       flushText(true);
     }
 
-    // Format output for readability
-// 🧩 Final clean & format into section cards
 let html = output.textContent
+  // Normalize spaces
+  .replace(/\s+/g, " ")
   // Bold text markers
   .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
-  // Highlight numbers like 7 / 10
+  // Highlight numbers like 7 / 10 or 7.5 / 10
   .replace(/(\d+(\.\d+)?\s*\/\s*\d+)/g, "<span class='highlight-num'>$1</span>")
-  // Highlight key metrics
-  .replace(/SCOI\s*=?\s*[\d.]+/gi, "<span class='highlight-key'>$&</span>")
-  .replace(/ERF\s*:?[\s\d.]+/gi, "<span class='highlight-key'>$&</span>")
-  // Add breaks before each numbered section (1️⃣–6️⃣)
-  .replace(/\s*(\d+)\s*[️⃣⛹️‍♂️]?\s*(?=\b(Visibility|Contribution|SCOI|Environment|Adjustment|Final|Commentary)\b)/gi, 
-    "<br><br><div class='card'><div class='card-header'>Section $1</div>")
-  // Make section headers bold and colored
+  // Highlight SCOI and ERF values
+  .replace(/(SCOI\s*[=:]?\s*[\d.]+)/gi, "<span class='highlight-key'>$1</span>")
+  .replace(/(ERF\s*[=:]?\s*[\d.]+)/gi, "<span class='highlight-key'>$1</span>")
+  // Create new card sections for 1️⃣–6️⃣ patterns even without line breaks
+  .replace(/(\b[1-6])\s*[️⃣]*\s*(Visibility|Contribution|SCOI|Global|Adjusted|Final)/gi, 
+    "</div><br><div class='card'><div class='card-header'>Section $1 — $2</div>")
+  // Bold and color key section titles
   .replace(/\b(Visibility|Contribution|Calculation|Adjustment|Environment|Final|Commentary)\b/gi, 
     "<b style='color:#003366;'>$1</b>")
-  // Add closing </div> tags after each period that ends a section
-  .replace(/(\.\s*)(?=\d+\s*[️⃣]?|$)/g, "$1</div><br>")
-  // Tidy spacing and newlines
-  .replace(/\n{2,}/g, "<br><br>")
-  .replace(/\n/g, "<br>");
+  // Close any remaining open card
+  .concat("</div>");
+
 
 output.innerHTML = html;
 
