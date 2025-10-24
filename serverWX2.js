@@ -92,7 +92,7 @@ ${commentary}
 app.get("/", (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
-    message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
+    message: "Enter an organization or entity name to perform a live CRIPFCnt audit powered by OpenAI.",
   });
 });
 
