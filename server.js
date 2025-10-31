@@ -86,10 +86,28 @@ ${commentary}
 `;
 }
 
+
+app.get("/", (req, res) => {
+res.render('website/index')
+});
+
+app.get("/about", (req, res) => {
+res.render('website/about')
+});
+
+app.get("/services", (req, res) => {
+res.render('website/services')
+});
+
+app.get("/contact", (req, res) => {
+res.render('website/contact')
+});
+
+
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page
 // -------------------------------
-app.get("/chat", (req, res) => {
+app.get("/audit", (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
     message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
@@ -215,6 +233,8 @@ app.get("/api/audits", (req, res) => {
     data: scoiAudits,
   });
 });
+
+
 
 // -------------------------------
 // 🟢 SERVER START
