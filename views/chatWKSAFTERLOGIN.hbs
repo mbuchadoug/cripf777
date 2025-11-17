@@ -248,11 +248,48 @@
           .replace(/\b(ERF\s*=?\s*[\d.]+)/gi, "<b style='color:#006600;'>$1</b>")
           .replace(/\b(Visibility|Contribution|Adjustment|Commentary|Environment|Calculation|Rationale|Score)\b/gi, "<b style='color:#003366;'>$1</b>");
 
-        // ----------------------------
-        // REMOVE authoritative SCOI calculation completely
-        // ----------------------------
+        // Compute authoritative SCOI block if numeric values present
+        function findNumeric(label) {
+          const re = new RegExp(label + '[^\\d\\n]*(\\d+(?:\\.\\d+)?)', 'i');
+          const m = cleaned.match(re);
+          return m ? parseFloat(m[1]) : null;
+        }
 
-        // (Intentionally left empty – the audit will now display ONLY the model output.)
+        const visRaw = findNumeric('Visibility');
+        const conRaw = findNumeric('Contribution');
+        const erfMatch = cleaned.match(/ERF[^0-9\-]*([0-9]+(?:\.[0-9]+)?)/i);
+        const erfRaw = erfMatch ? parseFloat(erfMatch[1]) : null;
+
+        const normalize = x => {
+          if (x === null || x === undefined || Number.isNaN(x)) return null;
+          const n = Number(x);
+          return n > 10 ? +(n/10).toFixed(3) : +n.toFixed(3);
+        };
+
+        const visibility = normalize(visRaw);
+        const contribution = normalize(conRaw);
+        const ERF = erfRaw ? Number(erfRaw) : null;
+
+        if (visibility && contribution) {
+          const rawSCOI = visibility === 0 ? 0 : +(contribution / visibility).toFixed(3);
+          const erfUsed = ERF || 1;
+          const adjusted = +(rawSCOI * erfUsed).toFixed(3);
+
+          const auth = `
+            <div class="section">
+              <div class="section-header">✅ Computed SCOI — authoritative</div>
+              <div>
+                Visibility = ${visibility} / 10<br>
+                Contribution = ${contribution} / 10<br>
+                SCOI = Contribution / Visibility = ${contribution} / ${visibility} = <b>${rawSCOI}</b><br>
+                ERF = ${erfUsed}<br>
+                Adjusted SCOI = SCOI × ERF = <b>${adjusted}</b>
+              </div>
+            </div>
+            <div class="divider"></div>
+          `;
+          formatted = auth + formatted;
+        }
 
         // Append final CRIPFCnt note
         const note = `
