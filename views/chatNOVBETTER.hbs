@@ -25,10 +25,6 @@
     .user-meta .email{font-size:0.85rem;color:#666}
     .user-actions a{display:inline-block;margin-left:12px;padding:6px 10px;background:#fff;border:1px solid #d9e6fb;color:#003366;text-decoration:none;border-radius:8px;font-weight:600}
     @media (max-width:680px){body{margin:16px}.user-block img{width:36px;height:36px}}
-    /* Note style */
-    .note { background:#fff; border-left:4px solid #ffd54f; padding:12px 16px; border-radius:8px; margin-top:12px; color:#333; }
-    .note .title { font-weight:700; color:#333; margin-bottom:6px; }
-    .note small { color:#555; }
   </style>
 </head>
 <body>
@@ -60,7 +56,7 @@
   <div id="output"></div>
 
   <script>
-    // small helper: escape HTML
+    // Escape HTML
     function escapeHtml(s){
       if(!s) return "";
       return String(s)
@@ -71,16 +67,18 @@
         .replace(/'/g,'&#039;');
     }
 
-    // build regex that matches spaced-out letters for an entity (so "L a f a r g e" or "La farge" match)
+    // Build a regex pattern that matches the entity even if letters are spaced or case differs
     function entitySpacedRegex(entity) {
       if (!entity) return null;
       const core = entity.replace(/\s+/g, "").replace(/[^a-zA-Z0-9]/g, "");
       if (!core) return null;
-      const pattern = core.split("").map(ch => ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*").join("");
+      const pattern = core.split("").map(ch =>
+        ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*"
+      ).join("");
       return new RegExp(pattern, "gi");
     }
 
-    // conservative cleaning of streamed text (keeps punctuation, avoids over-joining)
+    // Light cleaning only – FIXED
     function conservativeClean(text) {
       if (!text) return "";
 
@@ -89,32 +87,18 @@
       // remove SSE markers
       s = s.replace(/data:\s*/g, "").replace(/\[DONE\]/g, "");
 
-      // collapse multiple whitespace to a single space
+      // collapse multiple whitespace (spaces / newlines / tabs) into a single space
       s = s.replace(/\s+/g, " ").trim();
 
-      // fix broken decimals (e.g. "0 . 875")
+      // fix broken decimals like "0 . 875"
       s = s.replace(/(\d)\s*\.\s*(\d)/g, "$1.$2");
 
-      // normalize SCOI / ERF broken spacing
+      // fix SCOI / ERF spacing
       s = s.replace(/\bSCO\s*I\b/gi, "SCOI");
       s = s.replace(/\bER\s*F\b/gi, "ERF");
 
-      // Additional robust fixes for spaced-out full tokens:
-      // Ensure patterns like "S CO I" or "S  C O  I" become "SCOI"
-      s = s.replace(/\bS\s*C\s*O\s*I\b/gi, "SCOI");
-
-      // Fix spaced forms of "Resilience" (e.g., "Res ilience", "R e s i l i e n c e")
-      s = s.replace(/\bR\s*e\s*s\s*i\s*l\s*i\s*e\s*n\s*c\s*e\b/gi, "Resilience");
-
-      // Fix "R ationale" -> "Rationale"
+      // fix "R ationale" → "Rationale"
       s = s.replace(/\bR\s+ationale\b/gi, "Rationale");
-
-      // Fix "Adjust ed" -> "Adjusted"
-      s = s.replace(/\bAdjust\s*ed\b/gi, "Adjusted");
-
-      // Fix broken/bounded CRIPFCnt variants like "C R I P F C n t" or "CR IP FC nt"
-      s = s.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*n\s*t\b/gi, "CRIPFCnt");
-      s = s.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*N\s*T\b/gi, "CRIPFCnt");
 
       return s;
     }
@@ -149,7 +133,7 @@
         let fullText = "";
         let done = false;
 
-        // Read stream; ensure we don't accidentally join tokens across chunk boundaries
+        // Read stream; insert a space at chunk boundaries if necessary to avoid run-together words
         while (!done) {
           const { value, done: d } = await reader.read();
           done = d;
@@ -163,10 +147,16 @@
           }
         }
 
-        // conservative clean the whole payload
+        // Clean minimally
         let cleaned = conservativeClean(fullText);
 
-        // canonical tokens we want to protect/correct
+        // Canonicalize the entity specifically (safe — only targets the user supplied entity)
+        const entRegex = entitySpacedRegex(entity);
+        if (entRegex) {
+          cleaned = cleaned.replace(entRegex, entity);
+        }
+
+        // Also apply a few well-known safe canonicalizations for common brands (fallback)
         const canonical = {
           "lafarge": "Lafarge",
           "innscor": "Innscor",
@@ -178,50 +168,13 @@
           "cafca": "Cafca",
           "zimsec": "ZIMSEC"
         };
-
-        // 1) Specific entity canonicalization (user-entered) - very safe
-        const entRegex = entitySpacedRegex(entity);
-        if (entRegex) {
-          cleaned = cleaned.replace(entRegex, entity);
-        }
-
-        // 2) Fallback canonical replacements (allow spaced letters)
         Object.keys(canonical).forEach(k => {
           const v = canonical[k];
-          // match letters with optional spaces between them (so "L a f a r g e" or "La farge" match)
-          const spacedPattern = k.split("").map(ch => ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*").join("");
-          cleaned = cleaned.replace(new RegExp(spacedPattern, "gi"), v);
+          const re = new RegExp("\\b" + k.split("").join("\\s*") + "\\b", "gi");
+          cleaned = cleaned.replace(re, v);
         });
 
-        // ----------------------------
-        // Ensure spacing around canonical tokens (fix "Lafargehas", "lafargecontributes")
-        // ----------------------------
-        const canonValues = Object.values(canonical)
-          .map(v => v.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"))
-          .join("|");
-
-        if (canonValues.length > 0) {
-          // insert space AFTER token if immediately followed by a letter/digit (e.g., "Lafargehas" -> "Lafarge has")
-          cleaned = cleaned.replace(new RegExp(`(${canonValues})(?=[A-Za-z0-9])`, "gi"), "$1 ");
-
-          // insert space BEFORE token if immediately preceded by a letter/digit (e.g., "theLafarge" -> "the Lafarge")
-          // use lookbehind (supported in modern browsers)
-          cleaned = cleaned.replace(new RegExp(`(?<=[A-Za-z0-9])(${canonValues})`, "gi"), " $1");
-
-          // also handle lowercase canonical forms that might have been introduced earlier
-          cleaned = cleaned.replace(new RegExp(`(${canonValues.toLowerCase()})(?=[A-Za-z0-9])`, "gi"), (m, p1) => {
-            return p1 + " ";
-          });
-
-          // collapse accidental double spaces into single spaces
-          cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
-        }
-        // ----------------------------
-
-        // Final safety: fix any remaining broken CRIPFCnt forms
-        cleaned = cleaned.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*n\s*t\b/gi, "CRIPFCnt");
-
-        // Split into sections by numeric markers used by the model
+        // Split sections by number pattern
         const sections = cleaned
           .split(/(?=\d+\s*[️⃣]\s*)/)
           .map(s => s.trim())
@@ -241,14 +194,14 @@
           `;
         }).join("");
 
-        // Highlight key metrics visually
+        // Highlight key metrics
         formatted = formatted
           .replace(/(\d+(\.\d+)?\s*[×\/]\s*\d+(\.\d+)?)/g, "<b>$1</b>")
           .replace(/\b(SCOI\s*=?\s*[\d.]+)/gi, "<b style='color:#004c99;'>$1</b>")
           .replace(/\b(ERF\s*=?\s*[\d.]+)/gi, "<b style='color:#006600;'>$1</b>")
           .replace(/\b(Visibility|Contribution|Adjustment|Commentary|Environment|Calculation|Rationale|Score)\b/gi, "<b style='color:#003366;'>$1</b>");
 
-        // Compute authoritative SCOI block if numeric values present
+        // Compute authoritative SCOI block
         function findNumeric(label) {
           const re = new RegExp(label + '[^\\d\\n]*(\\d+(?:\\.\\d+)?)', 'i');
           const m = cleaned.match(re);
@@ -291,18 +244,7 @@
           formatted = auth + formatted;
         }
 
-        // Append final CRIPFCnt note
-        const note = `
-          <div class="section note">
-            <div class="title">📌 Note</div>
-            <div>
-              <small>This score reflects the commonly accepted <b>(Grid)</b> value interpretation.<br>
-              For the full <b>CRIPFCnt placement-based recalibration</b>, contact <b>CRIPFCnt Research Desk</b>.</small>
-            </div>
-          </div>
-        `;
-
-        output.innerHTML = formatted + note;
+        output.innerHTML = formatted;
 
       } catch (err) {
         output.innerHTML = `❌ Error: ${escapeHtml(err.message || String(err))}`;

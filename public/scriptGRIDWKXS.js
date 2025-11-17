@@ -13,7 +13,7 @@ async function send() {
   const response = await fetch("/api/chat-stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entity: message }),
+    body: JSON.stringify({ message }),
   });
 
   if (!response.body) return;

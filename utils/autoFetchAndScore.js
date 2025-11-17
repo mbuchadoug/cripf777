@@ -20,6 +20,43 @@ try {
 }
 
 // ----------------------
+// 🔹 Parse exemplars from the logic file (e.g., “Marketing”)
+// ----------------------
+function parseExemplars(text) {
+  const exemplars = {};
+  const sectionRe = /CRIPFCnt SCOI Audit\s*—\s*[“"]?([^"\n(]+)[”"]?.*?\n([\s\S]*?)(?=\n⸻|\n-{3,}|\n?#|\n?CRIPFCnt SCOI Audit|$)/g;
+  let m;
+  while ((m = sectionRe.exec(text)) !== null) {
+    const name = m[1].trim();
+    const body = m[2];
+
+    const vis = /Visibility[^:]*[:—-]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
+    const con = /Contribution[^:]*[:—-]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
+    const erf = /ERF[^:\d]*:\s*(\d+(?:\.\d+)?)/i.exec(body)?.[1];
+
+    if (vis && con && erf) {
+      const visibility = +vis, contribution = +con, ERF = +erf;
+      const rawSCOI = +(contribution / visibility).toFixed(3);
+      const adjustedSCOI = +(rawSCOI * ERF).toFixed(3);
+      const interpretation = /Interpretation[^:]*:\s*([\s\S]*?)(?=\n⸻|\n\d️⃣|$)/i.exec(body)?.[1]?.trim() || "";
+      const commentary = /Final CRIPFCnt Commentary[^:]*:\s*([\s\S]*?)(?=\n⸻|\n\d️⃣|$)/i.exec(body)?.[1]?.trim() || "";
+      exemplars[name.toLowerCase()] = {
+        entity: name,
+        visibility, contribution, ERF,
+        rawSCOI, adjustedSCOI,
+        interpretation, commentary,
+        placementLevel:
+          adjustedSCOI > 1.0 ? "Silent Over-Contributor" :
+          adjustedSCOI >= 0.95 ? "Balanced Axis" : "Grid Performer",
+        source: "CRIPFCnt exemplar"
+      };
+    }
+  }
+  return exemplars;
+}
+const EXEMPLARS = parseExemplars(cripfLogic);
+
+// ----------------------
 // 🔹 Setup Cache
 // ----------------------
 const cachePath = path.join(process.cwd(), "data", "cache.json");
@@ -31,12 +68,41 @@ try {
   cache = {};
 }
 
+// ----------------------
+// 🔹 JSON Schema for model
+// ----------------------
+const jsonSchema = {
+  name: "CRIPFCntSCOI",
+  schema: {
+    type: "object",
+    required: [
+      "visibility","visibilityRationale",
+      "contribution","contributionRationale",
+      "erf","erfRationale",
+      "scoiInterpretation","commentary"
+    ],
+    properties: {
+      visibility: { type: "number", minimum: 0, maximum: 10 },
+      contribution: { type: "number", minimum: 0, maximum: 10 },
+      erf: { type: "number", minimum: 0.5, maximum: 1.5 },
+      visibilityRationale: { type: "string" },
+      contributionRationale: { type: "string" },
+      erfRationale: { type: "string" },
+      scoiInterpretation: { type: "string" },
+      commentary: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  strict: true
+};
+
 /**
  * Generate SCOI-style audit using CRIPFCnt methodology
  * Deterministic + Framework-anchored version
  */
 export default async function autoFetchAndScore(entity, openai) {
   console.log(`🔍 Running CRIPFCnt SCOI audit for: ${entity}`);
+  const key = entity.trim().toLowerCase();
 
   // ✅ Return from cache if already analyzed
   if (cache[entity]) {
@@ -44,8 +110,15 @@ export default async function autoFetchAndScore(entity, openai) {
     return cache[entity];
   }
 
+  // ✅ Exact exemplar override (guaranteed canonical values)
+  if (EXEMPLARS[key]) {
+    cache[entity] = EXEMPLARS[key];
+    fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+    return EXEMPLARS[key];
+  }
+
   // ----------------------
-  // 🔹 Fetch context
+  // 🔹 Fetch context (optional, helps for companies/books)
   // ----------------------
   let tavilyResults;
   try {
@@ -64,87 +137,89 @@ export default async function autoFetchAndScore(entity, openai) {
       .join("\n\n") || "No search results available.";
 
   // ----------------------
-  // 🔹 AI Prompt (Anchored)
+  // 🔹 AI Prompt (Anchored, deterministic, JSON-only)
   // ----------------------
-  const aiPrompt = `
+  const systemPrompt = `
 You are the official CRIPFCnt SCOI computation model (Donald Mataranyika Axis Framework).
+Use the CRIPFCnt logic below as the ONLY authority for scores, ratios, tone, and placement.
 
-Below is your full internal logic and scoring methodology:
----
+--- CRIPFCnt LOGIC (verbatim) ---
 ${cripfLogic}
----
+--- END LOGIC ---
 
-🎯 Task:
+Calibration anchors (must inform outputs):
+- Marketing: Visibility=9, Contribution=5, ERF=1.1 → Adjusted≈0.605.
+- Law: Visibility=7, Contribution=6, ERF=0.90 → Adjusted≈0.77.
+- Corporate Governance: Visibility=9, Contribution=6, ERF=1.2 → Adjusted≈0.80.
+
+Guardrails:
+- High visibility ≠ high contribution by default.
+- Prefer conservative contribution for performative/visibility-heavy domains.
+- Output JSON only per schema.
+`;
+
+  const userPrompt = `
 Perform a CRIPFCnt SCOI Audit for: "${entity}"
 
-Always follow this 6-step structure:
-1️⃣ Visibility — score (0–10) and rationale  
-2️⃣ Contribution — score (0–10) and rationale  
-3️⃣ SCOI Calculation (show formula + interpretation)  
-4️⃣ Global Environment Adjustment — ERF and rationale  
-5️⃣ Adjusted SCOI (show full equation)  
-6️⃣ Final CRIPFCnt Commentary — with civilization tone and structural depth  
-
-🧭 Rules:
-- Use the CRIPFCnt logic, weights, and ERF definitions above.
-- Reference the examples in the framework file for tone and interpretation.
-- Be consistent across runs (no randomness).
-- Align numbers with the proportionality shown in the framework.
-- Incorporate the global environment stress context.
-
-Context for this audit:
+Context (neutral; optional to cite):
 ${webText}
+
+Return ONLY JSON with fields:
+visibility, visibilityRationale,
+contribution, contributionRationale,
+erf, erfRationale,
+scoiInterpretation, commentary.
 `;
 
   // ----------------------
-  // 🔹 Generate AI Response
+  // 🔹 Generate AI Response (deterministic + schema-locked)
   // ----------------------
   const response = await openai.responses.create({
     model: "gpt-4o-mini",
-    input: aiPrompt,
+    temperature: 0,
+    top_p: 0.05,
+    seed: 42,
+    response_format: { type: "json_schema", json_schema: jsonSchema },
+    input: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ],
   });
 
-  const summary =
-    response.output?.[0]?.content?.[0]?.text ||
-    "No summary generated by CRIPFCnt auditor.";
+  const raw = response.output?.[0]?.content?.[0]?.text || "{}";
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = {
+      visibility: 8.5,
+      contribution: 7.5,
+      erf: 1.1,
+      visibilityRationale: "Defaulted due to parse failure.",
+      contributionRationale: "Defaulted due to parse failure.",
+      erfRationale: "Defaulted due to parse failure.",
+      scoiInterpretation: "Defaulted due to parse failure.",
+      commentary: "Defaulted due to parse failure."
+    };
+  }
 
   // ----------------------
-  // 🔹 Parse key numbers
+  // 🔹 Authoritative math + placement
   // ----------------------
-  const num = (label) => {
-    const m = summary.match(
-      new RegExp(`${label}[^\\d]*(\\d+(\\.\\d+)?)`, "i")
-    );
-    return m ? parseFloat(m[1]) : null;
-  };
+  const visibility = Number(data.visibility);
+  const contribution = Number(data.contribution);
+  const ERF = Number(data.erf);
 
-  const visibility = num("Visibility") || 8.5;
-  const contribution = num("Contribution") || 7.5;
-  const erf = num("ERF") || 1.1;
-  const rawSCOI = +(contribution / visibility).toFixed(2);
-  const adjustedSCOI = +(rawSCOI * erf).toFixed(2);
+  const rawSCOI = +(contribution / visibility).toFixed(3);
+  const adjustedSCOI = +(rawSCOI * ERF).toFixed(3);
 
-  // Placement classification
-  let placementLevel =
+  const placementLevel =
     adjustedSCOI > 1.0
       ? "Silent Over-Contributor"
       : adjustedSCOI >= 0.95
       ? "Balanced Axis"
       : "Grid Performer";
-
-  // Extract main text sections
-  const interpretation = extractSection(summary, "Interpretation");
-  const commentary = extractSection(summary, "Commentary");
-
-  // ----------------------
-  // 🔹 Add depth & structure
-  // ----------------------
-  const structuralInsight = `
-📘 Structural Insight:
-This audit reflects ${entity}'s position within the CRIPFCnt Axis Law —
-where Visibility, Responsibility, and Resilience define placement under civilization stress.
-The Adjusted SCOI of ${adjustedSCOI} situates it as a "${placementLevel}" within the Recalibration Spectrum.
-`;
 
   // ----------------------
   // 🔹 Build final object
@@ -153,15 +228,17 @@ The Adjusted SCOI of ${adjustedSCOI} situates it as a "${placementLevel}" within
     entity,
     visibility,
     contribution,
+    ERF,
     rawSCOI,
-    adjustmentFactor: erf,
     adjustedSCOI,
     placementLevel,
-    summary: summary.trim(),
-    interpretation,
-    commentary: `${commentary}\n\n${structuralInsight}`.trim(),
+    interpretation: data.scoiInterpretation?.trim() || "",
+    commentary: data.commentary?.trim() || "",
+    visibilityRationale: data.visibilityRationale?.trim() || "",
+    contributionRationale: data.contributionRationale?.trim() || "",
+    ERFRationale: data.erfRationale?.trim() || "",
     urls: tavilyResults?.results?.map((r) => r.url) || [],
-    source: "tavily + CRIPFCnt logic",
+    source: "tavily + CRIPFCnt logic (anchored)"
   };
 
   // ----------------------
@@ -171,13 +248,4 @@ The Adjusted SCOI of ${adjustedSCOI} situates it as a "${placementLevel}" within
   fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
 
   return result;
-}
-
-/**
- * Extract specific section text from the AI summary
- */
-function extractSection(text, keyword) {
-  const re = new RegExp(`${keyword}[:\\-\\s]+([\\s\\S]*?)(?=\\n\\d|$)`, "i");
-  const m = text.match(re);
-  return m ? m[1].trim() : "";
 }
