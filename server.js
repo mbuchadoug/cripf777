@@ -1,6 +1,11 @@
 // server.js — cleaned & ordered
-import express from "express";
+
 import dotenv from "dotenv";
+dotenv.config();   
+
+
+import express from "express";
+
 import OpenAI from "openai";
 import path from "path";
 import fs from "fs";
@@ -18,7 +23,7 @@ import authRoutes from "./routes/auth.js";
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
 
-dotenv.config();
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

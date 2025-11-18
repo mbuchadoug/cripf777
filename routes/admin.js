@@ -7,18 +7,20 @@ const router = Router();
 
 console.log("🔥 admin routes loaded");
 // ADMIN_EMAILS should be a comma-separated list of admin emails
-const ADMIN_SET = new Set(
-  (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-);
+// inside routes/admin.js — replace module-level ADMIN_SET with a getter
+function getAdminSet() {
+  return new Set(
+    (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
 
-// middleware to restrict to admins
 function ensureAdmin(req, res, next) {
   const email = (req.user && (req.user.email || req.user.username) || "").toLowerCase();
+  const ADMIN_SET = getAdminSet(); // compute now, when env is available
   if (!email || !ADMIN_SET.has(email)) {
-    // prefer a friendly HTML response when viewed in browser
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(403).send("<h3>Forbidden — admin only</h3>");
     }
@@ -26,6 +28,7 @@ function ensureAdmin(req, res, next) {
   }
   next();
 }
+
 
 /**
  * GET /admin/users
