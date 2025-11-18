@@ -1,4 +1,4 @@
-// server.js — cleaned & ordered
+// server.js — merged: SSE streaming + sessions + passport/google auth + minimal chunk cleaning
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -10,13 +10,13 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
-
 import { ensureAuth } from "./middleware/authGuard.js";
+//import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
-import authRoutes from "./routes/auth.js";
 
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
+import authRoutes from "./routes/auth.js";
 
 dotenv.config();
 
@@ -71,15 +71,20 @@ app.use(
 );
 
 // ---------- PASSPORT setup ----------
-configurePassport(); // must set up strategies & serialize/deserialize
+configurePassport(); // ensure your config/passport.js attaches the GoogleStrategy etc.
 app.use(passport.initialize());
 app.use(passport.session());
 
-// expose auth routes (only once)
+// expose auth routes
+app.use("/auth", authRoutes);
+
+//import adminRoutes from "./routes/admin.js";   // add at top with other imports
+
 app.use("/auth", authRoutes);
 
 // mount admin - requires sessions + passport to be configured earlier
 app.use("/admin", adminRoutes);
+
 
 // small debug route to see current user (helpful during testing)
 app.get("/api/whoami", (req, res) => {
@@ -168,6 +173,15 @@ app.get("/contact", (req, res) => {
   res.render("website/contact", { user: req.user || null });
 });
 
+// Render chat page (if you want to require auth here, use passport.authenticate in a route)
+/*app.get("/audit", (req, res) => {
+  res.render("chat", {
+    title: "CRIPFCnt SCOI Audit",
+    message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
+    user: req.user || null,
+  });
+});*/
+
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -175,6 +189,7 @@ app.get("/audit", ensureAuth, (req, res) => {
     user: req.user || null,
   });
 });
+
 
 // -------------------------------
 // Chat stream endpoint (SSE streaming — preserved behaviour)
