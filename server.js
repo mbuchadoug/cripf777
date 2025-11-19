@@ -1,8 +1,6 @@
-// server.js — cleaned & ordered (patched)
-import dotenv from "dotenv";
-dotenv.config();
-
+// server.js — CRIPFCnt SCOI Server (merged, v6)
 import express from "express";
+import dotenv from "dotenv";
 import OpenAI from "openai";
 import path from "path";
 import fs from "fs";
@@ -11,61 +9,47 @@ import { engine } from "express-handlebars";
 import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
-import cookieParser from "cookie-parser";
-import { ensureVisitorId } from "./middleware/visitorId.js";
-import { visitTracker } from "./middleware/visits.js";
 import passport from "passport";
-import { ensureAuth } from "./middleware/authGuard.js";
-import adminRoutes from "./routes/admin.js";
-import authRoutes from "./routes/auth.js";
+
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
+import authRoutes from "./routes/auth.js";
+import { ensureAuth } from "./middleware/authGuard.js";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// basic middleware
+// Basic middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// cookie parser — only once and before any middleware that needs cookies
-app.use(cookieParser());
+// Compatibility shim: ensure res.render callbacks that call req.next won't crash
+app.use((req, res, next) => {
+  if (typeof req.next !== "function") req.next = next;
+  next();
+});
 
-// ---------- Handlebars setup (compatible with express@4 + express-handlebars@6) ----------
-const hbsHelpers = {
-  eq: (a, b) => String(a) === String(b),
-  formatDate: (d) => {
-    if (!d) return "";
-    try { return new Date(d).toISOString().slice(0, 10); } catch (e) { return String(d); }
-  },
-};
-
-app.engine(
-  "hbs",
-  engine({
-    extname: ".hbs",
-    defaultLayout: "main",
-    layoutsDir: path.join(__dirname, "views", "layouts"),
-    partialsDir: path.join(__dirname, "views", "partials"),
-    helpers: hbsHelpers,
-  })
-);
+// Handlebars setup
+app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
 // OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Ensure data folder exists
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
 if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
-// --------- MONGOOSE connect (optional but needed for Mongo-backed sessions) ----------
+// --------- MONGOOSE connect (optional but useful for sessions) ----------
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — cannot start sessions/persistence.");
+  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
 } else {
   mongoose.set("strictQuery", true);
   mongoose
@@ -73,6 +57,7 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
+      // continue running (sessions will fail if DB required)
     });
 }
 
@@ -93,27 +78,14 @@ app.use(
 );
 
 // ---------- PASSPORT setup ----------
-try {
-  configurePassport(); // may register strategies - wrap to catch sync errors
-} catch (e) {
-  console.error("configurePassport() threw an error:", e && e.stack ? e.stack : e);
-}
+configurePassport(); // expects config/passport.js to call passport.use(...)
 app.use(passport.initialize());
 app.use(passport.session());
 
-// visitor + analytics (ensureVisitorId must run before visitTracker)
-app.use(ensureVisitorId);
-app.use(visitTracker);
-
-// diagnostic routes (simple)
-app.get("/health", (_req, res) => res.status(200).send("ok"));
-app.get("/debug/ping", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-
-// expose auth routes and admin routes
+// expose auth routes under /auth
 app.use("/auth", authRoutes);
-app.use("/admin", adminRoutes);
 
-// small debug route to see current user (helpful during testing)
+// small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
     return res.json({ authenticated: true, user: req.user });
@@ -121,19 +93,17 @@ app.get("/api/whoami", (req, res) => {
   return res.json({ authenticated: false });
 });
 
-// ----------------------
-// Helper: non-destructive chunk cleaner
-// ----------------------
-function cleanChunkPreserveSpacing(text) {
+// Helper: clean AI text (keeps minimal whitespace normalization)
+function cleanAIText(text) {
   if (!text) return "";
   return String(text)
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/\r/g, "");
+    .replace(/\r/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }
 
-// -------------------------------
-// Helper: format SCOI audit (unchanged)
-// -------------------------------
+// Helper: format SCOI audit
 function formatSCOI(entityData, entity) {
   const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
   const rawSCOI = (contribution / visibility).toFixed(3);
@@ -179,16 +149,9 @@ ${commentary}
 `;
 }
 
-// -------------------------------
-// Routes (kept as you had them)
-// -------------------------------
+// Public pages
 app.get("/", (req, res) => {
-  try {
-    return res.render("website/index", { user: req.user || null });
-  } catch (err) {
-    console.error("Render error for / :", err && err.stack ? err.stack : err);
-    return res.status(500).send("Server error rendering homepage");
-  }
+  res.render("website/index", { user: req.user || null });
 });
 
 app.get("/about", (req, res) => {
@@ -203,6 +166,9 @@ app.get("/contact", (req, res) => {
   res.render("website/contact", { user: req.user || null });
 });
 
+// -------------------------------
+// 🔹 ROUTE: Render Chat Page (protected)
+// -------------------------------
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -212,7 +178,7 @@ app.get("/audit", ensureAuth, (req, res) => {
 });
 
 // -------------------------------
-// Chat stream endpoint (SSE streaming — preserved behaviour)
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
 // -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -257,10 +223,14 @@ Return the audit as readable text.
       ],
     });
 
+    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
-      const cleaned = cleanChunkPreserveSpacing(content);
+
+      const cleaned = cleanAIText(content);
+
+      // If chunk contains newlines, send each line prefixed by data:
       const lines = cleaned.split("\n");
       for (const line of lines) {
         res.write(`data: ${line}\n`);
@@ -279,10 +249,21 @@ Return the audit as readable text.
 });
 
 // -------------------------------
-// Static SCOI audits (JSON)
+// 🔹 ROUTE: Static SCOI Audits (JSON)
 // -------------------------------
 const scoiAudits = [
-  // ... your existing data set ...
+  // small sample; keep or replace with your data
+  {
+    organization: "Econet Holdings",
+    visibility: 9.5,
+    contribution: 7.0,
+    rawSCOI: 0.74,
+    resilienceFactor: 1.25,
+    adjustedSCOI: 0.93,
+    placementLevel: "Re-emerging Placement",
+    interpretation: `Econet’s contribution remains high but has been visually overpowered by scale and routine visibility...`,
+  },
+  // add more items as desired
 ];
 
 app.get("/api/audits", (req, res) => {
@@ -295,31 +276,10 @@ app.get("/api/audits", (req, res) => {
   });
 });
 
-// Error handler (should be last middleware before app.listen)
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err && err.stack ? err.stack : err);
-  if (res.headersSent) return next(err);
-  res.status(500);
-  if (req.headers.accept && req.headers.accept.indexOf("text/html") !== -1) {
-    return res.send("<h1>Server error</h1><p>An internal error occurred. Check server logs.</p>");
-  }
-  res.json({ error: "Server error" });
-});
-
-// handle uncaught errors so process doesn't silently die
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err && err.stack ? err.stack : err);
-});
-process.on("unhandledRejection", (reason) => {
-  console.error("UNHANDLED REJECTION:", reason && reason.stack ? reason.stack : reason);
-});
-
 // -------------------------------
 // 🟢 SERVER START
 // -------------------------------
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
-});
+app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));
