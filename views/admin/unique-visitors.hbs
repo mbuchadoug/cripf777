@@ -1,0 +1,15 @@
+<h1>{{title}}</h1>
+<p>Total unique visitors: <strong>{{totalUnique}}</strong></p>
+
+{{#if path}}
+<p>Filtered path: {{path}}</p>
+{{/if}}
+
+<table border="1" cellpadding="6">
+  <thead><tr><th>{{period}}</th><th>Unique visitors</th></tr></thead>
+  <tbody>
+    {{#each series}}
+      <tr><td>{{_id}}</td><td>{{uniqueCount}}</td></tr>
+    {{/each}}
+  </tbody>
+</table>

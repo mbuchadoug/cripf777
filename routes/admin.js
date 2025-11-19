@@ -3,6 +3,8 @@ import { Router } from "express";
 import User from "../models/user.js"; // adjust path if needed
 import { ensureAuth } from "../middleware/authGuard.js";
 import Visit from "../models/visit.js"; // top of file with other imports
+import UniqueVisit from "../models/uniqueVisit.js";
+
 
 
 
@@ -238,6 +240,82 @@ router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
   } catch (err) {
     console.error("[admin/visits] error:", err);
     res.status(500).send("Failed to fetch visits");
+  }
+});
+
+
+/**
+ * GET /admin/unique-visitors
+ * Query params:
+ *   period=day|month|year   (default: day)
+ *   days=N                 (for day period; default 30, max 365)
+ *   path=/some/path        (optional; filter by page path)
+ *
+ * Renders admin/unique-visitors (HTML) or returns JSON when Accept does not include text/html.
+ */
+router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const period = (req.query.period || "day").toLowerCase();
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
+    const pathFilter = req.query.path ? String(req.query.path) : null;
+
+    // Build match stage if filtering by path
+    const match = {};
+    if (pathFilter) match.path = pathFilter;
+
+    // Pipeline will produce documents: { _id: <periodKey>, uniqueCount: <number> }
+    let pipeline = [];
+
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+
+    if (period === "year") {
+      pipeline.push({
+        $group: { _id: "$year", uniqueCount: { $sum: 1 } },
+      });
+      pipeline.push({ $sort: { _id: 1 } });
+    } else if (period === "month") {
+      pipeline.push({
+        $group: { _id: "$month", uniqueCount: { $sum: 1 } },
+      });
+      pipeline.push({ $sort: { _id: 1 } });
+    } else {
+      // default: day
+      // get latest N days, so sort desc then limit then regroup ascending
+      // But with UniqueVisit each document represents a visitor/day, so grouping by day counts uniques.
+      pipeline.push({
+        $group: { _id: "$day", uniqueCount: { $sum: 1 } },
+      });
+      pipeline.push({ $sort: { _id: -1 } });
+      pipeline.push({ $limit: days });
+      pipeline.push({ $sort: { _id: 1 } }); // return ascending by date for charts
+    }
+
+    const series = await UniqueVisit.aggregate(pipeline).allowDiskUse(true);
+
+    // Compute overall unique visitor total (unique visitorIds in the collection) efficiently with aggregation
+    const totalAgg = [];
+    if (Object.keys(match).length) totalAgg.push({ $match: match });
+    totalAgg.push({ $group: { _id: "$visitorId" } });
+    totalAgg.push({ $count: "totalUnique" });
+
+    const totalRes = await UniqueVisit.aggregate(totalAgg).allowDiskUse(true);
+    const totalUnique = (totalRes[0] && totalRes[0].totalUnique) || 0;
+
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      return res.render("admin/unique-visitors", {
+        title: "Admin · Unique visitors",
+        series,
+        period,
+        days,
+        path: pathFilter,
+        totalUnique,
+      });
+    }
+
+    return res.json({ period, days, path: pathFilter, totalUnique, series });
+  } catch (err) {
+    console.error("[admin/unique-visitors] error:", err);
+    res.status(500).send("Failed to fetch unique visitors");
   }
 });
 
