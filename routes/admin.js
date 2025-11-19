@@ -122,4 +122,50 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /admin/users/:id/delete
+ * Permanently deletes a user by _id.
+ * Safety:
+ * - Prevents deleting currently logged-in admin (self-delete).
+ * - Logs action server-side.
+ */
+router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).send("Missing user id");
+
+    // Prevent admin from deleting themselves
+    const currentUserId = req.user && req.user._id && String(req.user._id);
+    if (currentUserId && currentUserId === String(id)) {
+      // send friendly message on HTML requests, otherwise JSON
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).send("<h3>Cannot delete current admin user</h3>");
+      }
+      return res.status(400).json({ error: "Cannot delete current admin user" });
+    }
+
+    // find the user for logging before delete
+    const userToDelete = await User.findById(id).lean();
+    if (!userToDelete) {
+      return res.status(404).send("User not found");
+    }
+
+    // perform deletion
+    await User.deleteOne({ _id: id });
+
+    console.log(`[admin] user deleted id=${id} email=${userToDelete.email} by admin=${req.user && req.user.email}`);
+
+    // redirect back to users list preserving query params if present
+    const referer = req.get("referer") || "/admin/users";
+    return res.redirect(referer);
+  } catch (err) {
+    console.error("[admin/users/:id/delete] error:", err);
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      return res.status(500).send("Failed to delete user");
+    }
+    return res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+
 export default router;
