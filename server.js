@@ -14,7 +14,13 @@ import { engine } from "express-handlebars";
 import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
+import cookieParser from "cookie-parser";
+import { ensureVisitorId } from "./middleware/visitorId.js";
 import { visitTracker } from "./middleware/visits.js";
+
+
+
+
 
 
 
@@ -35,11 +41,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(cookieParser());
 
 // Handlebars setup
 app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
+
 
 // OpenAI client
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -84,7 +92,10 @@ configurePassport(); // must set up strategies & serialize/deserialize
 app.use(passport.initialize());
 app.use(passport.session());
 // ... after passport.session() and before route handlers:
+app.use(cookieParser());
+app.use(ensureVisitorId);
 app.use(visitTracker);
+
 
 // expose auth routes (only once)
 app.use("/auth", authRoutes);

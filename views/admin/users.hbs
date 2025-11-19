@@ -48,7 +48,7 @@
       <td>{{#if lastLogin}}{{lastLogin}}{{else}}-{{/if}}</td>
       <td style="white-space:nowrap">
         <!-- View/Edit link if you have one -->
-        <a href="/admin/users/{{_id}}" class="small-link">View</a>
+       <!-- <a href="/admin/users/{{_id}}" class="small-link">View</a>-->
 
         <!-- Delete form -->
         <form method="post" action="/admin/users/{{_id}}/delete" style="display:inline;margin-left:8px" onsubmit="return confirmDelete(this);">
