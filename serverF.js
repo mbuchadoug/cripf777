@@ -44,9 +44,30 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(cookieParser());
 
 // Handlebars setup
-app.engine("hbs", engine({ extname: ".hbs" }));
+// ---------- Handlebars setup (compatible with express@4 + express-handlebars@6) ----------
+
+
+const hbsHelpers = {
+  eq: (a, b) => String(a) === String(b),
+  formatDate: (d) => {
+    if (!d) return "";
+    try { return new Date(d).toISOString().slice(0, 10); } catch (e) { return String(d); }
+  },
+};
+
+app.engine(
+  "hbs",
+  engine({
+    extname: ".hbs",
+    defaultLayout: "main",
+    layoutsDir: path.join(__dirname, "views", "layouts"),
+    partialsDir: path.join(__dirname, "views", "partials"),
+    helpers: hbsHelpers,
+  })
+);
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
+
 
 
 // OpenAI client
@@ -294,5 +315,17 @@ app.get("/api/audits", (req, res) => {
 // -------------------------------
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
+
+
+// Error handler (should be last middleware before app.listen)
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err && err.stack ? err.stack : err);
+  if (res.headersSent) return next(err);
+  res.status(500);
+  if (req.headers.accept && req.headers.accept.indexOf("text/html") !== -1) {
+    return res.send("<h1>Server error</h1><p>An internal error occurred. Check server logs.</p>");
+  }
+  res.json({ error: "Server error" });
+});
 
 app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));

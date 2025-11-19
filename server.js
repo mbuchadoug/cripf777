@@ -1,11 +1,8 @@
-// server.js — cleaned & ordered
-
+// server.js — cleaned & ordered (patched)
 import dotenv from "dotenv";
-dotenv.config();   
-
+dotenv.config();
 
 import express from "express";
-
 import OpenAI from "openai";
 import path from "path";
 import fs from "fs";
@@ -17,36 +14,26 @@ import MongoStore from "connect-mongo";
 import cookieParser from "cookie-parser";
 import { ensureVisitorId } from "./middleware/visitorId.js";
 import { visitTracker } from "./middleware/visits.js";
-
-
-
-
-
-
-
 import passport from "passport";
-
 import { ensureAuth } from "./middleware/authGuard.js";
 import adminRoutes from "./routes/admin.js";
 import authRoutes from "./routes/auth.js";
-
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
-
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// basic middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// cookie parser — only once and before any middleware that needs cookies
 app.use(cookieParser());
 
-// Handlebars setup
 // ---------- Handlebars setup (compatible with express@4 + express-handlebars@6) ----------
-
-
 const hbsHelpers = {
   eq: (a, b) => String(a) === String(b),
   formatDate: (d) => {
@@ -68,10 +55,8 @@ app.engine(
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
-
-
 // OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 // Ensure data folder exists
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
@@ -88,7 +73,6 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
-      // don't exit immediately — sessions will fail but server can run in limited mode
     });
 }
 
@@ -103,25 +87,30 @@ app.use(
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // false for local dev
+      secure: process.env.NODE_ENV === "production",
     },
   })
 );
 
 // ---------- PASSPORT setup ----------
-configurePassport(); // must set up strategies & serialize/deserialize
+try {
+  configurePassport(); // may register strategies - wrap to catch sync errors
+} catch (e) {
+  console.error("configurePassport() threw an error:", e && e.stack ? e.stack : e);
+}
 app.use(passport.initialize());
 app.use(passport.session());
-// ... after passport.session() and before route handlers:
-app.use(cookieParser());
+
+// visitor + analytics (ensureVisitorId must run before visitTracker)
 app.use(ensureVisitorId);
 app.use(visitTracker);
 
+// diagnostic routes (simple)
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+app.get("/debug/ping", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
-// expose auth routes (only once)
+// expose auth routes and admin routes
 app.use("/auth", authRoutes);
-
-// mount admin - requires sessions + passport to be configured earlier
 app.use("/admin", adminRoutes);
 
 // small debug route to see current user (helpful during testing)
@@ -138,9 +127,7 @@ app.get("/api/whoami", (req, res) => {
 function cleanChunkPreserveSpacing(text) {
   if (!text) return "";
   return String(text)
-    // remove zero-width / hidden characters (these cause weird spacing/splits)
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    // normalize CR to LF
     .replace(/\r/g, "");
 }
 
@@ -193,10 +180,15 @@ ${commentary}
 }
 
 // -------------------------------
-// Routes (unchanged)
+// Routes (kept as you had them)
 // -------------------------------
 app.get("/", (req, res) => {
-  res.render("website/index", { user: req.user || null });
+  try {
+    return res.render("website/index", { user: req.user || null });
+  } catch (err) {
+    console.error("Render error for / :", err && err.stack ? err.stack : err);
+    return res.status(500).send("Server error rendering homepage");
+  }
 });
 
 app.get("/about", (req, res) => {
@@ -265,21 +257,14 @@ Return the audit as readable text.
       ],
     });
 
-    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
-
-      // Minimal, safe cleaning that preserves spacing/punctuation
       const cleaned = cleanChunkPreserveSpacing(content);
-
-      // If chunk contains newlines, send each line prefixed by data: (SSE multi-line support)
       const lines = cleaned.split("\n");
       for (const line of lines) {
-        // write each line as data: (empty line allowed)
         res.write(`data: ${line}\n`);
       }
-      // end SSE event
       res.write("\n");
     }
   } catch (err) {
@@ -310,13 +295,6 @@ app.get("/api/audits", (req, res) => {
   });
 });
 
-// -------------------------------
-// 🟢 SERVER START
-// -------------------------------
-const PORT = process.env.PORT || 9000;
-const HOST = process.env.HOST || "127.0.0.1";
-
-
 // Error handler (should be last middleware before app.listen)
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err && err.stack ? err.stack : err);
@@ -328,4 +306,20 @@ app.use((err, req, res, next) => {
   res.json({ error: "Server error" });
 });
 
-app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));
+// handle uncaught errors so process doesn't silently die
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err && err.stack ? err.stack : err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason && reason.stack ? reason.stack : reason);
+});
+
+// -------------------------------
+// 🟢 SERVER START
+// -------------------------------
+const PORT = process.env.PORT || 9000;
+const HOST = process.env.HOST || "127.0.0.1";
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+});
