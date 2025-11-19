@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{{title}}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:18px}
+    table{border-collapse:collapse;width:100%;margin-top:12px}
+    th,td{border:1px solid #e6eef8;padding:8px;text-align:left}
+    th{background:#f3f8ff}
+    .controls{display:flex;gap:8px;align-items:center}
+    a.btn{display:inline-block;padding:8px 12px;background:#0b63d6;color:#fff;border-radius:6px;text-decoration:none}
+  </style>
+</head>
+<body>
+  <h1>{{title}}</h1>
+
+  <div class="controls">
+    <form method="get" action="/admin/visits" style="display:flex;gap:8px;align-items:center">
+      <label>Period:
+        <select name="period">
+          <option value="day" {{#if (eq period "day")}}selected{{/if}}>Day</option>
+          <option value="month" {{#if (eq period "month")}}selected{{/if}}>Month</option>
+          <option value="year" {{#if (eq period "year")}}selected{{/if}}>Year</option>
+        </select>
+      </label>
+      <label>Days:
+        <input type="number" name="days" value="30" style="width:80px" />
+      </label>
+      <button type="submit">Show</button>
+    </form>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Bucket</th><th>Hits</th></tr>
+    </thead>
+    <tbody>
+      {{#each stats}}
+        <tr><td>{{this._id}}</td><td>{{this.hits}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</body>
+</html>

@@ -14,6 +14,10 @@ import { engine } from "express-handlebars";
 import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
+import { visitTracker } from "./middleware/visits.js";
+
+
+
 import passport from "passport";
 
 import { ensureAuth } from "./middleware/authGuard.js";
@@ -79,6 +83,8 @@ app.use(
 configurePassport(); // must set up strategies & serialize/deserialize
 app.use(passport.initialize());
 app.use(passport.session());
+// ... after passport.session() and before route handlers:
+app.use(visitTracker);
 
 // expose auth routes (only once)
 app.use("/auth", authRoutes);

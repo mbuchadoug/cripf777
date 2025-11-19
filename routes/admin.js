@@ -2,6 +2,10 @@
 import { Router } from "express";
 import User from "../models/user.js"; // adjust path if needed
 import { ensureAuth } from "../middleware/authGuard.js";
+import Visit from "../models/visit.js"; // top of file with other imports
+
+
+
 
 const router = Router();
 
@@ -167,5 +171,72 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
+
+router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const period = (req.query.period || "day"); // day|month|year
+    const days = parseInt(req.query.days || "30", 10);
+
+    let groupId;
+    let dateFormat;
+    if (period === "month") {
+      groupId = "$month";
+      dateFormat = { $dateToString: { format: "%Y-%m", date: "$createdAt" } };
+    } else if (period === "year") {
+      groupId = "$year";
+      dateFormat = { $dateToString: { format: "%Y", date: "$createdAt" } };
+    } else {
+      // default day
+      dateFormat = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } };
+    }
+
+    // Use stored day/month/year fields for fast grouping (we have day/month/year in doc)
+    const pipeline = [];
+    if (period === "year") {
+      pipeline.push({
+        $group: {
+          _id: "$year",
+          hits: { $sum: "$hits" },
+        },
+      });
+    } else if (period === "month") {
+      pipeline.push({
+        $group: {
+          _id: "$month",
+          hits: { $sum: "$hits" },
+        },
+      });
+    } else {
+      pipeline.push({
+        $group: {
+          _id: "$day",
+          hits: { $sum: "$hits" },
+        },
+      });
+      pipeline.push({ $sort: { _id: -1 } });
+      pipeline.push({ $limit: days });
+    }
+
+    // run aggregation
+    const stats = await Visit.aggregate(pipeline);
+
+    // format results sorted ascending by date (so charts look right)
+    stats.sort((a, b) => (a._id > b._id ? 1 : -1));
+
+    // If HTML requested, render; else return JSON
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      res.render("admin/visits", {
+        title: "Admin · Site visits",
+        stats,
+        period,
+      });
+    } else {
+      res.json({ period, stats });
+    }
+  } catch (err) {
+    console.error("[admin/visits] error:", err);
+    res.status(500).send("Failed to fetch visits");
+  }
+});
 
 export default router;
