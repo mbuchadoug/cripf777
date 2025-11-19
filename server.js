@@ -1,215 +1,131 @@
-
-
-import dotenv from "dotenv";
-dotenv.config();   
-
+// server.js — CRIPFCnt (local-friendly, render-wrapper + optional features)
+// Based on your working v5 server but safer: fixes express-handlebars render crash.
 
 import express from "express";
-
+import dotenv from "dotenv";
 import OpenAI from "openai";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { engine } from "express-handlebars";
-import mongoose from "mongoose";
-import session from "express-session";
-import MongoStore from "connect-mongo";
-import cookieParser from "cookie-parser";
-import { ensureVisitorId } from "./middleware/visitorId.js";
-import { visitTracker } from "./middleware/visits.js";
 
-
-
-
-
-
-
-import passport from "passport";
-
-import { ensureAuth } from "./middleware/authGuard.js";
-import adminRoutes from "./routes/admin.js";
-import authRoutes from "./routes/auth.js";
-
-import autoFetchAndScore from "./utils/autoFetchAndScore.js";
-import configurePassport from "./config/passport.js";
-
-
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
-app.use(cookieParser());
 
+// --------------------
+// Simple per-request render wrapper
+// (ensures render errors call the real next(err), avoiding `req.next is not a function`)
+// --------------------
+app.use((req, res, next) => {
+  // defensive: if some middleware expects req.next, provide it (but prefer real next)
+  if (typeof req.next !== "function") req.next = next;
+
+  // keep original render
+  const origRender = res.render && res.render.bind(res);
+
+  res.render = function patchedRender(view, opts, cb) {
+    try {
+      if (typeof opts === "function") {
+        cb = opts;
+        opts = undefined;
+      }
+
+      if (!origRender) {
+        const err = new Error("res.render not available");
+        return next(err);
+      }
+
+      return origRender(view, opts, function renderCallback(err, html) {
+        if (err) {
+          // IMPORTANT: call the real next (closed over)
+          return next(err);
+        }
+        if (typeof cb === "function") return cb(null, html);
+        if (!res.headersSent) return res.send(html);
+      });
+    } catch (err) {
+      // fallback
+      console.error("patchedRender error:", err && err.stack ? err.stack : err);
+      return next(err);
+    }
+  };
+
+  next();
+});
+
+// --------------------
 // Handlebars setup
+// --------------------
 app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
+// --------------------
+// OpenAI client (optional — keep if you use chat-stream endpoint)
+// --------------------
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Ensure data folder exists
+// --------------------
+// Simple helper to ensure data dir exists (used by your audits if needed)
+// --------------------
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
 if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
-// --------- MONGOOSE connect (optional but needed for Mongo-backed sessions) ----------
-const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — cannot start sessions/persistence.");
-} else {
-  mongoose.set("strictQuery", true);
-  mongoose
-    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => {
-      console.error("❌ MongoDB connection failed:", err.message || err);
-      // don't exit immediately — sessions will fail but server can run in limited mode
-    });
-}
-
-// ---------- SESSIONS (must be before passport.initialize/session) ----------
-const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
-app.use(
-  session({
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    store: mongoUri ? MongoStore.create({ mongoUrl: mongoUri }) : undefined,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // false for local dev
-    },
-  })
-);
-
-// ---------- PASSPORT setup ----------
-configurePassport(); // must set up strategies & serialize/deserialize
-app.use(passport.initialize());
-app.use(passport.session());
-// ... after passport.session() and before route handlers:
-app.use(cookieParser());
-app.use(ensureVisitorId);
-app.use(visitTracker);
-
-
-// expose auth routes (only once)
-app.use("/auth", authRoutes);
-
-// mount admin - requires sessions + passport to be configured earlier
-app.use("/admin", adminRoutes);
-
-// small debug route to see current user (helpful during testing)
-app.get("/api/whoami", (req, res) => {
-  if (req.isAuthenticated && req.isAuthenticated()) {
-    return res.json({ authenticated: true, user: req.user });
-  }
-  return res.json({ authenticated: false });
-});
-
-// ----------------------
-// Helper: non-destructive chunk cleaner
-// ----------------------
-function cleanChunkPreserveSpacing(text) {
-  if (!text) return "";
-  return String(text)
-    // remove zero-width / hidden characters (these cause weird spacing/splits)
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    // normalize CR to LF
-    .replace(/\r/g, "");
-}
-
-// -------------------------------
-// Helper: format SCOI audit (unchanged)
-// -------------------------------
-function formatSCOI(entityData, entity) {
-  const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
-  const rawSCOI = (contribution / visibility).toFixed(3);
-  const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
-
-  return `
-### SCOI Audit — ${entity}
-
----
-
-**1️⃣ Visibility — Score: ${visibility} / 10**  
-**Rationale:**  
-${visibilityRationale}
-
----
-
-**2️⃣ Contribution — Score: ${contribution} / 10**  
-**Rationale:**  
-${contributionRationale}
-
----
-
-**3️⃣ SCOI Calculation**  
-SCOI = Contribution / Visibility = ${contribution} / ${visibility} = ${rawSCOI}  
-**Interpretation:**  
-${scoiInterpretation}
-
----
-
-**4️⃣ Global Environment Adjustment — ERF: ${ERF}**  
-**Rationale:**  
-${ERFRationale}
-
----
-
-**5️⃣ Adjusted SCOI**  
-Adjusted SCOI = SCOI × ERF = ${rawSCOI} × ${ERF} = ${adjusted}
-
----
-
-**6️⃣ Final CRIPFCnt Commentary:**  
-${commentary}
-`;
-}
-
-// -------------------------------
-// Routes (unchanged)
-// -------------------------------
+// --------------------
+// Simple routes (kept like your working v5 server)
+// --------------------
 app.get("/", (req, res) => {
-  res.render("website/index", { user: req.user || null });
+  // try website/index first, fall back to landing or static public/index.html
+  try {
+    const candidates = [
+      path.join(app.get("views"), "website", "index.hbs"),
+      path.join(app.get("views"), "landing.hbs"),
+      path.join(app.get("views"), "index.hbs"),
+      path.join(__dirname, "public", "index.html"),
+    ];
+    const found = candidates.find(p => fs.existsSync(p));
+    if (!found) {
+      return res.status(200).send(`<h3>No homepage template found</h3>
+        <p>Create views/website/index.hbs or public/index.html</p>`);
+    }
+    if (found.endsWith("public/index.html")) return res.sendFile(found);
+    // compute relative view name (e.g. website/index)
+    const rel = path.relative(app.get("views"), found).replace(/\.hbs$/, "").split(path.sep).join("/");
+    return res.render(rel, {});
+  } catch (err) {
+    console.error("GET / render error:", err && err.stack ? err.stack : err);
+    return res.status(500).send("Server error rendering homepage");
+  }
 });
 
-app.get("/about", (req, res) => {
-  res.render("website/about", { user: req.user || null });
-});
+app.get("/about", (req, res) => res.render("website/about"));
+app.get("/services", (req, res) => res.render("website/services"));
+app.get("/contact", (req, res) => res.render("website/contact"));
 
-app.get("/services", (req, res) => {
-  res.render("website/services", { user: req.user || null });
-});
-
-app.get("/contact", (req, res) => {
-  res.render("website/contact", { user: req.user || null });
-});
-
-app.get("/audit", ensureAuth, (req, res) => {
-  res.render("chat", {
+app.get("/audit", (req, res) => {
+  return res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
     message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
-    user: req.user || null,
   });
 });
 
-// -------------------------------
-// Chat stream endpoint (SSE streaming — preserved behaviour)
-// -------------------------------
+// --------------------
+// SSE chat-stream (kept from your v5)
+// --------------------
 app.post("/api/chat-stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
   const keepAlive = setInterval(() => {
-    try {
-      res.write(":\n\n");
-    } catch (e) {}
+    try { res.write(":\n\n"); } catch (e) {}
   }, 15000);
 
   try {
@@ -221,50 +137,31 @@ app.post("/api/chat-stream", async (req, res) => {
     }
 
     const systemPrompt = `
-You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
-Generate a single, clean, structured SCOI audit for the entity provided.
-Follow this structure exactly:
-
-1️⃣ Visibility — score and rationale
-2️⃣ Contribution — score and rationale
-3️⃣ SCOI = Contribution / Visibility (with brief interpretation)
-4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
-5️⃣ Adjusted SCOI = SCOI × ERF
-6️⃣ Final CRIPFCnt Commentary
-
-Return the audit as readable text.
+You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s model.
+Return a single, structured SCOI audit for the entity provided.
 `;
+    if (!openai || !openai.chat) {
+      res.write("data: ❌ OpenAI not configured.\n\n");
+      clearInterval(keepAlive);
+      return res.end();
+    }
 
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       stream: true,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.` },
-      ],
+        { role: "user", content: `Perform a full SCOI Audit for: "${entity}".` }
+      ]
     });
 
-    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
-      if (!content) continue;
-
-      // Minimal, safe cleaning that preserves spacing/punctuation
-      const cleaned = cleanChunkPreserveSpacing(content);
-
-      // If chunk contains newlines, send each line prefixed by data: (SSE multi-line support)
-      const lines = cleaned.split("\n");
-      for (const line of lines) {
-        // write each line as data: (empty line allowed)
-        res.write(`data: ${line}\n`);
-      }
-      // end SSE event
-      res.write("\n");
+      if (content) res.write(`data: ${String(content).replace(/\r/g, "")}\n\n`);
     }
   } catch (err) {
-    console.error("Stream error:", err);
-    const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
-    res.write(`data: ❌ Server error: ${msg}\n\n`);
+    console.error("chat-stream error:", err && err.stack ? err.stack : err);
+    res.write(`data: ❌ Server error: ${String(err).replace(/\r?\n/g, " ")}\n\n`);
   } finally {
     clearInterval(keepAlive);
     res.write("data: [DONE]\n\n");
@@ -272,27 +169,32 @@ Return the audit as readable text.
   }
 });
 
-// -------------------------------
-// Static SCOI audits (JSON)
-// -------------------------------
-const scoiAudits = [
-  // ... your existing data set ...
-];
-
+// --------------------
+// Sample audits JSON endpoint (kept as before)
+// --------------------
 app.get("/api/audits", (req, res) => {
-  res.json({
+  return res.json({
     framework: "CRIPFCnt SCOI Audit System",
     author: "Donald Mataranyika",
-    description: "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
-    formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
-    data: scoiAudits,
+    data: []
   });
 });
 
-// -------------------------------
-// 🟢 SERVER START
-// -------------------------------
-const PORT = process.env.PORT || 9000;
-const HOST = process.env.HOST || "127.0.0.1";
+// --------------------
+// Catch-all error handler
+// --------------------
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err && err.stack ? err.stack : err);
+  if (res.headersSent) return next(err);
+  res.status(500);
+  if (req.headers.accept && req.headers.accept.indexOf("text/html") !== -1) {
+    return res.send("<h1>Server error</h1><p>Check logs</p>");
+  }
+  return res.json({ error: "Server error" });
+});
 
-app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));
+// --------------------
+// Start server
+// --------------------
+const PORT = process.env.PORT || 9000;
+app.listen(PORT, "127.0.0.1", () => console.log(`🚀 Server running on http://127.0.0.1:${PORT}`));
