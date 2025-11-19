@@ -171,27 +171,17 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
+// routes/admin.js (replace existing /admin/visits handler with this)
+//import Visit from "../models/visit.js"; // ensure this import exists near top of file
 
 router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const period = (req.query.period || "day"); // day|month|year
-    const days = parseInt(req.query.days || "30", 10);
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
 
-    let groupId;
-    let dateFormat;
-    if (period === "month") {
-      groupId = "$month";
-      dateFormat = { $dateToString: { format: "%Y-%m", date: "$createdAt" } };
-    } else if (period === "year") {
-      groupId = "$year";
-      dateFormat = { $dateToString: { format: "%Y", date: "$createdAt" } };
-    } else {
-      // default day
-      dateFormat = { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } };
-    }
+    // Build aggregation pipeline using stored day/month/year fields
+    let pipeline = [];
 
-    // Use stored day/month/year fields for fast grouping (we have day/month/year in doc)
-    const pipeline = [];
     if (period === "year") {
       pipeline.push({
         $group: {
@@ -199,6 +189,7 @@ router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
           hits: { $sum: "$hits" },
         },
       });
+      pipeline.push({ $sort: { _id: 1 } });
     } else if (period === "month") {
       pipeline.push({
         $group: {
@@ -206,7 +197,9 @@ router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
           hits: { $sum: "$hits" },
         },
       });
+      pipeline.push({ $sort: { _id: 1 } });
     } else {
+      // day
       pipeline.push({
         $group: {
           _id: "$day",
@@ -217,26 +210,36 @@ router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
       pipeline.push({ $limit: days });
     }
 
-    // run aggregation
-    const stats = await Visit.aggregate(pipeline);
+    const rawStats = await Visit.aggregate(pipeline);
 
-    // format results sorted ascending by date (so charts look right)
-    stats.sort((a, b) => (a._id > b._id ? 1 : -1));
+    // sort ascending by date so charts and tables read left→right
+    rawStats.sort((a, b) => (a._id > b._id ? 1 : -1));
 
-    // If HTML requested, render; else return JSON
+    const stats = rawStats;
+
+    // flags for template (no helper required)
+    const isDay = period === "day";
+    const isMonth = period === "month";
+    const isYear = period === "year";
+
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      res.render("admin/visits", {
+      return res.render("admin/visits", {
         title: "Admin · Site visits",
         stats,
         period,
+        days,
+        isDay,
+        isMonth,
+        isYear,
       });
-    } else {
-      res.json({ period, stats });
     }
+
+    return res.json({ period, days, stats });
   } catch (err) {
     console.error("[admin/visits] error:", err);
     res.status(500).send("Failed to fetch visits");
   }
 });
+
 
 export default router;
