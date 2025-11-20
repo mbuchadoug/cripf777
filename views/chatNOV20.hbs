@@ -22,7 +22,7 @@
 <meta name="twitter:description" content="CRIPFCnt — an eight-pillar framework and life manual for society, leadership and AI-era intelligence." />
 <meta name="twitter:image" content="{{siteUrl}}/static/img/logo.png" />
 
-<!-- Structured Data: Organization + WebSite (trimmed) -->
+<!-- Structured Data: Organization + WebSite + Breadcrumb + SocialProfile (adjust URLs) -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -30,6 +30,7 @@
   "name": "CRIPFCnt",
   "url": "{{siteUrl}}",
   "logo": "{{siteUrl}}/static/img/logo.png"
+  ]
 }
 </script>
 
@@ -96,7 +97,7 @@
   </header>
 
   <div style="margin-bottom:18px;">
-    <input id="entity" type="text" placeholder="Enter a company, person, theory, law, term, biography (e.g., Lafarge; Isaac Newton; Rationale; Fourier Transform)" style="width:75%; max-width:760px;">
+    <input id="entity" type="text" placeholder="e.g., Lafarge" style="width:60%; max-width:520px;">
     <button id="analyzeBtn">Analyze</button>
   </div>
 
@@ -114,17 +115,11 @@
         .replace(/'/g,'&#039;');
     }
 
-    // build regex that matches spaced-out letters for an entity (supports punctuation and short names)
+    // build regex that matches spaced-out letters for an entity (so "L a f a r g e" or "La farge" match)
     function entitySpacedRegex(entity) {
       if (!entity) return null;
-      // keep letters/numbers only for pattern building, but keep original entity for replacement
-      const core = String(entity).replace(/\s+/g, "").replace(/[^a-zA-Z0-9]/g, "");
+      const core = entity.replace(/\s+/g, "").replace(/[^a-zA-Z0-9]/g, "");
       if (!core) return null;
-      // if core is short (<=2 char) match whole word only
-      if (core.length <= 2) {
-        return new RegExp("\\b" + core.split("").map(ch => ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*").join("") + "\\b", "gi");
-      }
-      // create pattern like: L\s*a\s*f\s*a\s*r\s*g\s*e (works for spaced letters)
       const pattern = core.split("").map(ch => ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*").join("");
       return new RegExp(pattern, "gi");
     }
@@ -148,8 +143,20 @@
       s = s.replace(/\bSCO\s*I\b/gi, "SCOI");
       s = s.replace(/\bER\s*F\b/gi, "ERF");
 
-      // fix spaced letters for common tokens like SCOI and CRIPFCnt
+      // Additional robust fixes for spaced-out full tokens:
+      // Ensure patterns like "S CO I" or "S  C O  I" become "SCOI"
       s = s.replace(/\bS\s*C\s*O\s*I\b/gi, "SCOI");
+
+      // Fix spaced forms of "Resilience" (e.g., "Res ilience", "R e s i l i e n c e")
+      s = s.replace(/\bR\s*e\s*s\s*i\s*l\s*i\s*e\s*n\s*c\s*e\b/gi, "Resilience");
+
+      // Fix "R ationale" -> "Rationale"
+      s = s.replace(/\bR\s+ationale\b/gi, "Rationale");
+
+      // Fix "Adjust ed" -> "Adjusted"
+      s = s.replace(/\bAdjust\s*ed\b/gi, "Adjusted");
+
+      // Fix broken/bounded CRIPFCnt variants like "C R I P F C n t" or "CR IP FC nt"
       s = s.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*n\s*t\b/gi, "CRIPFCnt");
       s = s.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*N\s*T\b/gi, "CRIPFCnt");
 
@@ -163,34 +170,22 @@
 
     async function startChat() {
       const entityInput = document.getElementById("entity");
-      const entityRaw = entityInput.value || "";
-      const entity = entityRaw.trim();
-      if (!entity) return alert("Please enter an entity, person, theory, term or short phrase to analyze.");
-
-      // Limit extremely long inputs to prevent accidental overload (you can change length)
-      if (entity.length > 800) {
-        return alert("Please shorten the query to under 800 characters.");
-      }
+      const entity = entityInput.value.trim();
+      if (!entity) return alert("Enter a company name");
 
       const output = document.getElementById("output");
       output.innerHTML = `
         <b>🔍 SCOI Audit — ${escapeHtml(entity)}</b><br><br>
-        <div class="loader" role="status" aria-hidden="true"></div>
-        <div class="loading-text">Analyzing "${escapeHtml(entity)}" — this may take a few seconds...</div>
+        <div class="loader"></div>
+        <div class="loading-text">Analyzing data for ${escapeHtml(entity)}...</div>
       `;
 
       try {
         const res = await fetch("/api/chat-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // send the entity as-is; server should accept arbitrary strings (company, person, theory, term)
           body: JSON.stringify({ entity })
         });
-        if (!res.ok) {
-          // surface server error
-          const errText = await res.text().catch(()=>null);
-          throw new Error("Server error: " + (errText || res.status + " " + res.statusText));
-        }
         if (!res.body) throw new Error("No response stream from server.");
 
         const reader = res.body.getReader();
@@ -204,7 +199,6 @@
           done = d;
           if (value) {
             const chunk = decoder.decode(value, { stream: !done });
-            // Avoid accidental joining of alphanumeric tokens across chunk boundary
             if (fullText.length > 0 && /[A-Za-z0-9]$/.test(fullText) && /^[A-Za-z0-9]/.test(chunk)) {
               fullText += " " + chunk;
             } else {
@@ -216,11 +210,7 @@
         // conservative clean the whole payload
         let cleaned = conservativeClean(fullText);
 
-        // 1) Replace spaced-out forms of the user-entered entity with the canonical user entry
-        const entRegex = entitySpacedRegex(entity);
-        if (entRegex) cleaned = cleaned.replace(entRegex, entity);
-
-        // 2) Some safe canonical tokens (optional, not mandatory) — keep for nicer output
+        // canonical tokens we want to protect/correct
         const canonical = {
           "lafarge": "Lafarge",
           "innscor": "Innscor",
@@ -233,32 +223,58 @@
           "zimsec": "ZIMSEC"
         };
 
+        // 1) Specific entity canonicalization (user-entered) - very safe
+        const entRegex = entitySpacedRegex(entity);
+        if (entRegex) {
+          cleaned = cleaned.replace(entRegex, entity);
+        }
+
+        // 2) Fallback canonical replacements (allow spaced letters)
         Object.keys(canonical).forEach(k => {
           const v = canonical[k];
+          // match letters with optional spaces between them (so "L a f a r g e" or "La farge" match)
           const spacedPattern = k.split("").map(ch => ch.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s*").join("");
           cleaned = cleaned.replace(new RegExp(spacedPattern, "gi"), v);
         });
 
-        // Ensure tokens are separated from adjacent words (avoid "Lafargehas")
-        const canonValues = Object.values(canonical).map(v => v.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")).join("|");
-        if (canonValues) {
+        // ----------------------------
+        // Ensure spacing around canonical tokens (fix "Lafargehas", "lafargecontributes")
+        // ----------------------------
+        const canonValues = Object.values(canonical)
+          .map(v => v.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"))
+          .join("|");
+
+        if (canonValues.length > 0) {
+          // insert space AFTER token if immediately followed by a letter/digit (e.g., "Lafargehas" -> "Lafarge has")
           cleaned = cleaned.replace(new RegExp(`(${canonValues})(?=[A-Za-z0-9])`, "gi"), "$1 ");
+
+          // insert space BEFORE token if immediately preceded by a letter/digit (e.g., "theLafarge" -> "the Lafarge")
+          // use lookbehind (supported in modern browsers)
           cleaned = cleaned.replace(new RegExp(`(?<=[A-Za-z0-9])(${canonValues})`, "gi"), " $1");
+
+          // also handle lowercase canonical forms that might have been introduced earlier
+          cleaned = cleaned.replace(new RegExp(`(${canonValues.toLowerCase()})(?=[A-Za-z0-9])`, "gi"), (m, p1) => {
+            return p1 + " ";
+          });
+
+          // collapse accidental double spaces into single spaces
           cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
         }
+        // ----------------------------
 
-        // final CRIPFCnt fix
+        // Final safety: fix any remaining broken CRIPFCnt forms
         cleaned = cleaned.replace(/\bC\s*R\s*I\s*P\s*F\s*C\s*n\s*t\b/gi, "CRIPFCnt");
 
-        // split into sections (graceful fallback if model doesn't use numeric markers)
-        const sections = cleaned.split(/\n{2,}|(?=\d+\s*[️⃣]\s*)/).map(s => s.trim()).filter(Boolean);
+        // Split into sections by numeric markers used by the model
+        const sections = cleaned
+          .split(/(?=\d+\s*[️⃣]\s*)/)
+          .map(s => s.trim())
+          .filter(Boolean);
 
-        // Render sections with headers if possible
         let formatted = sections.map(sec => {
-          // try extract a short header (numbers, or first 6-12 words)
-          const firstLine = sec.split("\n", 1)[0] || "";
-          const headerMatch = firstLine.match(/^(\d{1,2}\b[^\n:]{0,40}|[A-Z][^.\n]{0,60})/);
-          const header = headerMatch ? headerMatch[0] : "Section";
+          const header = sec.match(/^\d+\s*[️⃣]\s*[^:]+:/)?.[0]
+                       || sec.match(/^\d+\s*[️⃣]\s*[^\d]*/)?.[0]
+                       || "Section";
           const body = sec.replace(header, "").trim();
           return `
             <div class="section">
@@ -269,24 +285,31 @@
           `;
         }).join("");
 
-        // Highlight a few key tokens for readability
+        // Highlight key metrics visually
         formatted = formatted
           .replace(/(\d+(\.\d+)?\s*[×\/]\s*\d+(\.\d+)?)/g, "<b>$1</b>")
           .replace(/\b(SCOI\s*=?\s*[\d.]+)/gi, "<b style='color:#004c99;'>$1</b>")
           .replace(/\b(ERF\s*=?\s*[\d.]+)/gi, "<b style='color:#006600;'>$1</b>")
           .replace(/\b(Visibility|Contribution|Adjustment|Commentary|Environment|Calculation|Rationale|Score)\b/gi, "<b style='color:#003366;'>$1</b>");
 
-        // final note
+        // ----------------------------
+        // REMOVE authoritative SCOI calculation completely
+        // ----------------------------
+
+        // (Intentionally left empty – the audit will now display ONLY the model output.)
+
+        // Append final CRIPFCnt note
         const note = `
           <div class="section note">
             <div class="title">📌 Note</div>
             <div>
-              <small>This output is directly from the SCOI/CRIPFCnt model for the supplied entity. For a formal recalibration or research-grade audit, contact CRIPFCnt Research Desk.</small>
+              <small>This score reflects the commonly accepted <b>(Grid)</b> value interpretation.<br>
+              For the full <b>CRIPFCnt placement-based recalibration</b>, contact <b>CRIPFCnt Research Desk</b>.</small>
             </div>
           </div>
         `;
 
-        output.innerHTML = `<div><strong>Results for:</strong> ${escapeHtml(entity)}</div><br>` + (formatted || "<div>No detailed sections were produced — the model returned a short summary.</div>") + note;
+        output.innerHTML = formatted + note;
 
       } catch (err) {
         output.innerHTML = `❌ Error: ${escapeHtml(err.message || String(err))}`;
