@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, v6)
+// server.fixed.js — fixed CRIPFCnt server (full file)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -33,20 +33,10 @@ const app = express();
 // ------------------ Basic parsing middleware ------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// cookies must be parsed before you try to read them in ensureVisitorId
 app.use(cookieParser());
 
-// ------------------ COMPATIBILITY SHIM (MUST BE EARLY) ------------------
-// Ensure req.next exists for any code (templates, libs) that call it.
-// This must run before any middleware that might later trigger rendering.
-app.use((req, res, next) => {
-  if (typeof req.next !== "function") req.next = next;
-  next();
-});
-
-// --------- MONGOOSE connect (optional but useful for sessions) ----------
-const mongoUri = process.env.MONGODB_URI;
+// ------------------ MONGO CONNECT ------------------
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.MONGOURL;
 if (!mongoUri) {
   console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
 } else {
@@ -56,11 +46,10 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
-      // continue running (sessions will fail if DB required)
     });
 }
 
-// ---------- SESSIONS (MUST come before passport.initialize/session) ----------
+// ---------- SESSIONS (must be before passport.initialize/session) ----------
 const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
 app.use(
   session({
@@ -81,13 +70,12 @@ configurePassport(); // expects config/passport.js to call passport.use(...)
 app.use(passport.initialize());
 app.use(passport.session());
 
-// ---------- VISITOR ID + TRACKING (after passport & sessions) ----------
-// set visitor cookie and attach req.visitorId
+// ---------- Visitor ID + Visit Tracking (no side-effect on express internals) ----------
+// ensureVisitorId only uses cookies and sets req.visitorId; it does not mutate Express internals.
 app.use(ensureVisitorId);
-// track visits (writes Visit and UniqueVisit to MongoDB)
 app.use(visitTracker);
 
-// serve static files (after tracking so static requests are filtered/tracked too)
+// serve static files (after tracking so static requests are tracked too)
 app.use(express.static(path.join(__dirname, "public")));
 
 // Handlebars setup
@@ -114,7 +102,107 @@ app.get("/api/whoami", (req, res) => {
   return res.json({ authenticated: false });
 });
 
-// ... rest of your file unchanged (helpers, routes, SSE endpoint, server.start)
+// Public pages
+app.get("/", (req, res) => {
+  try {
+    res.render("website/index", { user: req.user || null });
+  } catch (err) {
+    console.error("Render error on / :", err);
+    res.status(500).send("Server render error");
+  }
+});
+
+app.get("/about", (req, res) => res.render("website/about", { user: req.user || null }));
+app.get("/services", (req, res) => res.render("website/services", { user: req.user || null }));
+app.get("/contact", (req, res) => res.render("website/contact", { user: req.user || null }));
+
+// Protected route
+app.get("/audit", ensureAuth, (req, res) => {
+  res.render("chat", {
+    title: "CRIPFCnt SCOI Audit",
+    message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
+    user: req.user || null,
+  });
+});
+
+// SSE chat endpoint (kept as-is but wrapped with defensive error handling)
+app.post("/api/chat-stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(":\n\n");
+    } catch (e) {}
+  }, 15000);
+
+  try {
+    const { entity } = req.body;
+    if (!entity) {
+      res.write("data: ❌ Missing entity name.\n\n");
+      clearInterval(keepAlive);
+      return res.end();
+    }
+
+    const systemPrompt = `
+You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
+Generate a single, clean, structured SCOI audit for the entity provided.
+Follow this structure exactly:
+
+1️⃣ Visibility — score and rationale
+2️⃣ Contribution — score and rationale
+3️⃣ SCOI = Contribution / Visibility (with brief interpretation)
+4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
+5️⃣ Adjusted SCOI = SCOI × ERF
+6️⃣ Final CRIPFCnt Commentary
+
+Return the audit as readable text.
+`;
+
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      stream: true,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.` },
+      ],
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices?.[0]?.delta?.content;
+      if (!content) continue;
+      const cleaned = String(content).replace(/\r/g, "").trim();
+      const lines = cleaned.split("\n");
+      for (const line of lines) res.write(`data: ${line}\n`);
+      res.write("\n");
+    }
+  } catch (err) {
+    console.error("Stream error:", err);
+    const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
+    res.write(`data: ❌ Server error: ${msg}\n\n`);
+  } finally {
+    clearInterval(keepAlive);
+    try { res.write("data: [DONE]\n\n"); } catch (e) {}
+    res.end();
+  }
+});
+
+// Small API example
+app.get("/api/audits", (req, res) => {
+  res.json({ framework: "CRIPFCnt SCOI Audit System", author: "Donald Mataranyika" });
+});
+
+// Global error handler — always keep this last
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  if (res.headersSent) return next(err);
+  res.status(500).send("Internal Server Error");
+});
+
+// -------------------------------
+// 🟢 SERVER START
+// -------------------------------
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 
