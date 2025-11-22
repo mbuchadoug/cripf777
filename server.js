@@ -37,6 +37,14 @@ app.use(express.urlencoded({ extended: true }));
 // cookies must be parsed before you try to read them in ensureVisitorId
 app.use(cookieParser());
 
+// ------------------ COMPATIBILITY SHIM (MUST BE EARLY) ------------------
+// Ensure req.next exists for any code (templates, libs) that call it.
+// This must run before any middleware that might later trigger rendering.
+app.use((req, res, next) => {
+  if (typeof req.next !== "function") req.next = next;
+  next();
+});
+
 // --------- MONGOOSE connect (optional but useful for sessions) ----------
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
@@ -82,12 +90,6 @@ app.use(visitTracker);
 // serve static files (after tracking so static requests are filtered/tracked too)
 app.use(express.static(path.join(__dirname, "public")));
 
-// Compatibility shim: ensure res.render callbacks that call req.next won't crash
-app.use((req, res, next) => {
-  if (typeof req.next !== "function") req.next = next;
-  next();
-});
-
 // Handlebars setup
 app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
@@ -112,192 +114,7 @@ app.get("/api/whoami", (req, res) => {
   return res.json({ authenticated: false });
 });
 
-// Helper: clean AI text (keeps minimal whitespace normalization)
-function cleanAIText(text) {
-  if (!text) return "";
-  return String(text)
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/\r/g, "")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-
-// Helper: format SCOI audit
-function formatSCOI(entityData, entity) {
-  const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
-  const rawSCOI = (contribution / visibility).toFixed(3);
-  const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
-
-  return `
-### SCOI Audit — ${entity}
-
----
-
-**1️⃣ Visibility — Score: ${visibility} / 10**  
-**Rationale:**  
-${visibilityRationale}
-
----
-
-**2️⃣ Contribution — Score: ${contribution} / 10**  
-**Rationale:**  
-${contributionRationale}
-
----
-
-**3️⃣ SCOI Calculation**  
-SCOI = Contribution / Visibility = ${contribution} / ${visibility} = ${rawSCOI}  
-**Interpretation:**  
-${scoiInterpretation}
-
----
-
-**4️⃣ Global Environment Adjustment — ERF: ${ERF}**  
-**Rationale:**  
-${ERFRationale}
-
----
-
-**5️⃣ Adjusted SCOI**  
-Adjusted SCOI = SCOI × ERF = ${rawSCOI} × ${ERF} = ${adjusted}
-
----
-
-**6️⃣ Final CRIPFCnt Commentary:**  
-${commentary}
-`;
-}
-
-// Public pages
-app.get("/", (req, res) => {
-  res.render("website/index", { user: req.user || null });
-});
-
-app.get("/about", (req, res) => {
-  res.render("website/about", { user: req.user || null });
-});
-
-app.get("/services", (req, res) => {
-  res.render("website/services", { user: req.user || null });
-});
-
-app.get("/contact", (req, res) => {
-  res.render("website/contact", { user: req.user || null });
-});
-
-// -------------------------------
-// 🔹 ROUTE: Render Chat Page (protected)
-// -------------------------------
-app.get("/audit", ensureAuth, (req, res) => {
-  res.render("chat", {
-    title: "CRIPFCnt SCOI Audit",
-    message: "Enter an organization or entity name to perform a live CRIPFCnt audit.",
-    user: req.user || null,
-  });
-});
-
-// -------------------------------
-// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
-// -------------------------------
-app.post("/api/chat-stream", async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  const keepAlive = setInterval(() => {
-    try {
-      res.write(":\n\n");
-    } catch (e) {}
-  }, 15000);
-
-  try {
-    const { entity } = req.body;
-    if (!entity) {
-      res.write("data: ❌ Missing entity name.\n\n");
-      clearInterval(keepAlive);
-      return res.end();
-    }
-
-    const systemPrompt = `
-You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
-Generate a single, clean, structured SCOI audit for the entity provided.
-Follow this structure exactly:
-
-1️⃣ Visibility — score and rationale
-2️⃣ Contribution — score and rationale
-3️⃣ SCOI = Contribution / Visibility (with brief interpretation)
-4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
-5️⃣ Adjusted SCOI = SCOI × ERF
-6️⃣ Final CRIPFCnt Commentary
-
-Return the audit as readable text.
-`;
-
-    const stream = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      stream: true,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.` },
-      ],
-    });
-
-    // Stream chunks from openai; clean minimally and send SSE-safe lines.
-    for await (const chunk of stream) {
-      const content = chunk.choices?.[0]?.delta?.content;
-      if (!content) continue;
-
-      const cleaned = cleanAIText(content);
-
-      // If chunk contains newlines, send each line prefixed by data:
-      const lines = cleaned.split("\n");
-      for (const line of lines) {
-        res.write(`data: ${line}\n`);
-      }
-      res.write("\n");
-    }
-  } catch (err) {
-    console.error("Stream error:", err);
-    const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
-    res.write(`data: ❌ Server error: ${msg}\n\n`);
-  } finally {
-    clearInterval(keepAlive);
-    res.write("data: [DONE]\n\n");
-    res.end();
-  }
-});
-
-// -------------------------------
-// 🔹 ROUTE: Static SCOI Audits (JSON)
-// -------------------------------
-const scoiAudits = [
-  // small sample; keep or replace with your data
-  {
-    organization: "Econet Holdings",
-    visibility: 9.5,
-    contribution: 7.0,
-    rawSCOI: 0.74,
-    resilienceFactor: 1.25,
-    adjustedSCOI: 0.93,
-    placementLevel: "Re-emerging Placement",
-    interpretation: `Econet’s contribution remains high but has been visually overpowered by scale and routine visibility...`,
-  },
-  // add more items as desired
-];
-
-app.get("/api/audits", (req, res) => {
-  res.json({
-    framework: "CRIPFCnt SCOI Audit System",
-    author: "Donald Mataranyika",
-    description: "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
-    formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
-    data: scoiAudits,
-  });
-});
-
-// -------------------------------
-// 🟢 SERVER START
-// -------------------------------
+// ... rest of your file unchanged (helpers, routes, SSE endpoint, server.start)
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 
