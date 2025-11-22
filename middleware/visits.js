@@ -1,4 +1,4 @@
-// middleware/visits.js — UPDATED
+// middleware/visits.js — UPDATED (use this file)
 import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
 
@@ -9,7 +9,6 @@ export function visitTracker(req, res, next) {
   try {
     const ua = (req.headers["user-agent"] || "").toLowerCase();
     const url = req.originalUrl || req.url || "/";
-
     // Skip static and bot requests
     if (STATIC_PREFIXES.some(p => url.startsWith(p))) return next();
     if (BOT_RE.test(ua)) return next();
