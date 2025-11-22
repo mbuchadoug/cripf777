@@ -25,7 +25,7 @@ export function visitTracker(req, res, next) {
     setImmediate(async () => {
       try {
         // 1) increment total hits (per-day per-path doc)
-        const r1 = await Visit.updateOne(
+        await Visit.updateOne(
           { day, path },
           {
             $inc: { hits: 1 },
@@ -34,21 +34,17 @@ export function visitTracker(req, res, next) {
           },
           { upsert: true }
         );
-        console.log(`[visitTracker] Visit.updateOne day=${day} path=${path} result=${JSON.stringify(r1)}`);
 
         // 2) record unique visit only if we have a visitorId
         if (visitorId) {
           const ufilter = { day, visitorId, path };
           const uupdate = { $setOnInsert: { firstSeenAt: new Date(), month, year } };
           try {
-            const r2 = await UniqueVisit.updateOne(ufilter, uupdate, { upsert: true });
-            console.log(`[visitTracker] UniqueVisit.updateOne day=${day} visitor=${visitorId} path=${path} result=${JSON.stringify(r2)}`);
+            await UniqueVisit.updateOne(ufilter, uupdate, { upsert: true });
           } catch (e) {
             // duplicate key errors are expected when the unique index prevents duplicate insert
             if (e && e.code !== 11000) {
               console.warn("uniqueVisit error:", e?.message || e);
-            } else {
-              console.log("[visitTracker] UniqueVisit duplicate (expected)");
             }
           }
         }

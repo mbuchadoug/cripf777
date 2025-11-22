@@ -10,14 +10,12 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
-
-// middleware & admin routes
+// near top of server.js (after other imports)
 import adminRoutes from "./routes/admin.js";
-import cookieParser from "cookie-parser";
-import { ensureVisitorId } from "./middleware/visitorId.js";
-import { visitTracker } from "./middleware/visits.js";
 
-// utilities, passport config, auth routes
+// ... after passport.initialize()/passport.session() and after app.use("/auth", authRoutes)
+
+
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
@@ -33,18 +31,6 @@ const app = express();
 // Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// parse cookies before we try to read them in ensureVisitorId
-app.use(cookieParser());
-
-// set visitor cookie and attach req.visitorId (must be before visitTracker)
-app.use(ensureVisitorId);
-
-// track visits (writes Visit and UniqueVisit to MongoDB)
-// put this before serving static files and before other routes you want tracked
-app.use(visitTracker);
-
-// serve static files after visit tracking so static requests are tracked as well
 app.use(express.static(path.join(__dirname, "public")));
 
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
@@ -104,7 +90,6 @@ app.use(passport.session());
 // expose auth routes under /auth
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
-
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
