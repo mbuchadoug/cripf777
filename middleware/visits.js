@@ -1,5 +1,5 @@
-// middleware/visits.js — safer visit tracker
-
+// middleware/visits.js (fixed)
+import mongoose from "mongoose";
 import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
 
@@ -8,50 +8,65 @@ const STATIC_PREFIXES = ["/static/", "/css/", "/js/", "/images/", "/favicon.ico"
 
 export function visitTracker(req, res, next) {
   try {
-    const ua = String(req.headers["user-agent"] || "").toLowerCase();
+    const ua = (req.headers["user-agent"] || "").toLowerCase();
     const url = req.originalUrl || req.url || "/";
-
-    // skip static assets and bots
-    if (STATIC_PREFIXES.some(p => url.startsWith(p))) return next();
+    if (STATIC_PREFIXES.some((p) => url.startsWith(p))) return next();
     if (BOT_RE.test(ua)) return next();
 
+    // prepare values
     const now = new Date();
     const day = now.toISOString().slice(0, 10); // YYYY-MM-DD
     const month = now.toISOString().slice(0, 7); // YYYY-MM
-    const year = String(now.getFullYear());
+    const year = now.getFullYear().toString();
     const path = (url.split("?")[0] || "/");
 
     const visitorId = req.visitorId || null;
 
-    // perform DB updates asynchronously so we don't block response
+    // do DB ops asynchronously so we don't block request handling
     setImmediate(async () => {
       try {
-        // increment or insert day+path doc
-        await Visit.updateOne(
+        // only attempt writes if mongoose connected
+        if (mongoose.connection.readyState !== 1) {
+          // not connected; skip tracking
+          console.warn("[visitTracker] skipping DB write — mongoose not connected");
+          return;
+        }
+
+        // 1) increment total hits (per-day per-path doc)
+        // use findOneAndUpdate with distinct operators to avoid conflicting path errors
+        await Visit.findOneAndUpdate(
           { day, path },
           {
             $inc: { hits: 1 },
             $setOnInsert: { firstSeenAt: now },
-            $set: { lastSeenAt: now, month, year }
+            $set: { lastSeenAt: now, month, year },
           },
-          { upsert: true }
-        );
+          { upsert: true, new: false } // new:false is fine — we just want the write
+        ).exec();
 
-        // record unique visitor only when we have a visitorId
+        // 2) record unique visit only if we have a visitorId
         if (visitorId) {
-          await UniqueVisit.updateOne(
-            { day, visitorId, path },
-            { $setOnInsert: { firstSeenAt: now, month, year } },
-            { upsert: true }
-          );
+          try {
+            await UniqueVisit.findOneAndUpdate(
+              { day, visitorId, path },
+              { $setOnInsert: { firstSeenAt: now, month, year } },
+              { upsert: true, new: false }
+            ).exec();
+          } catch (e) {
+            // duplicate key or other expected races can happen — log but don't crash
+            if (e && e.code === 11000) {
+              // duplicate insert — ignore
+            } else {
+              console.warn("[visitTracker] uniqueVisit write error:", e && (e.message || e));
+            }
+          }
         }
-      } catch (e) {
-        // do not crash the server on DB errors
-        console.warn("[visitTracker] db error:", e && (e.message || e));
+      } catch (err) {
+        console.warn("[visitTracker] db error:", err && (err.message || err));
       }
     });
   } catch (e) {
-    console.warn("visitTracker fatal:", e && (e.message || e));
+    console.warn("visitTracker error:", e && (e.message || e));
   } finally {
     return next();
   }
