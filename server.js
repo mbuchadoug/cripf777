@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (fixed)
+// server.js — CRIPFCnt SCOI Server (merged, v6) - UPDATED
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -41,10 +41,10 @@ app.use(cookieParser());
 app.use(ensureVisitorId);
 
 // track visits (writes Visit and UniqueVisit to MongoDB)
-// put this BEFORE static so requests for public assets can also be tracked if you want
+// put this before serving static files and before other routes you want tracked
 app.use(visitTracker);
 
-// serve static files
+// serve static files (after visitTracker so those requests can be tracked too)
 app.use(express.static(path.join(__dirname, "public")));
 
 // Handlebars setup
@@ -70,7 +70,7 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
-      // continue running (sessions may not work properly)
+      // continue running (sessions will fail if DB required)
     });
 }
 
@@ -91,7 +91,8 @@ app.use(
 );
 
 // ---------- PASSPORT setup ----------
-configurePassport(); // expects config/passport.js to call passport.use(...)
+// configurePassport registers strategies, serialize/deserialize
+configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -165,21 +166,24 @@ ${commentary}
 
 // Public pages
 app.get("/", (req, res) => {
-  // Render the main homepage; if view missing, fallback to JSON/text handled by error middleware
   res.render("website/index", { user: req.user || null });
 });
 
 app.get("/about", (req, res) => {
   res.render("website/about", { user: req.user || null });
 });
+
 app.get("/services", (req, res) => {
   res.render("website/services", { user: req.user || null });
 });
+
 app.get("/contact", (req, res) => {
   res.render("website/contact", { user: req.user || null });
 });
 
-// audit (protected)
+// -------------------------------
+// 🔹 ROUTE: Render Chat Page (protected)
+// -------------------------------
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -188,7 +192,9 @@ app.get("/audit", ensureAuth, (req, res) => {
   });
 });
 
-// SSE endpoint (unchanged logic)
+// -------------------------------
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
+// -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
@@ -232,10 +238,14 @@ Return the audit as readable text.
       ],
     });
 
+    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
+
       const cleaned = cleanAIText(content);
+
+      // If chunk contains newlines, send each line prefixed by data:
       const lines = cleaned.split("\n");
       for (const line of lines) {
         res.write(`data: ${line}\n`);
@@ -253,7 +263,9 @@ Return the audit as readable text.
   }
 });
 
-// Static SCOI audits
+// -------------------------------
+// 🔹 ROUTE: Static SCOI Audits (JSON)
+// -------------------------------
 const scoiAudits = [
   {
     organization: "Econet Holdings",
@@ -277,20 +289,21 @@ app.get("/api/audits", (req, res) => {
   });
 });
 
-// Minimal error handler — return small text fallback (avoids failing to find 'error' view)
+// -------------------------------
+// Minimal error handler
+// We return a simple text response instead of trying to render an 'error' view
+// which may be missing (that was causing crashes).
 app.use((err, req, res, next) => {
-  console.error("Unhandled error (global handler):", err && (err.stack || err.message) || err);
-  if (res.headersSent) return next(err);
-  res.status(err.status || 500);
-  // If the view exists you can render it; fallback to plain text
   try {
-    return res.render("error", { message: err.message || "Server error" });
-  } catch (e) {
-    return res.type("text").send(`Error: ${err.message || "Server error"}`);
-  }
+    console.error("Unhandled error (global handler):", err && (err.stack || err.message) || err);
+  } catch (e) {}
+  if (res.headersSent) return next(err);
+  res.status(500).type("text").send("Internal Server Error");
 });
 
-// Server start
+// -------------------------------
+// 🟢 SERVER START
+// -------------------------------
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 
