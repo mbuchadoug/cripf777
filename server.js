@@ -30,21 +30,56 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Basic middleware
+// ------------------ Basic parsing middleware ------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// parse cookies before we try to read them in ensureVisitorId
+// cookies must be parsed before you try to read them in ensureVisitorId
 app.use(cookieParser());
 
-// set visitor cookie and attach req.visitorId (must be before visitTracker)
-app.use(ensureVisitorId);
+// --------- MONGOOSE connect (optional but useful for sessions) ----------
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
+} else {
+  mongoose.set("strictQuery", true);
+  mongoose
+    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("✅ Connected to MongoDB"))
+    .catch((err) => {
+      console.error("❌ MongoDB connection failed:", err.message || err);
+      // continue running (sessions will fail if DB required)
+    });
+}
 
+// ---------- SESSIONS (MUST come before passport.initialize/session) ----------
+const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
+app.use(
+  session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    store: mongoUri ? MongoStore.create({ mongoUrl: mongoUri }) : undefined,
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    },
+  })
+);
+
+// ---------- PASSPORT setup (after sessions) ----------
+configurePassport(); // expects config/passport.js to call passport.use(...)
+app.use(passport.initialize());
+app.use(passport.session());
+
+// ---------- VISITOR ID + TRACKING (after passport & sessions) ----------
+// set visitor cookie and attach req.visitorId
+app.use(ensureVisitorId);
 // track visits (writes Visit and UniqueVisit to MongoDB)
-// put this before serving static files and before other routes you want tracked
 app.use(visitTracker);
 
-// serve static files after visit tracking so static requests are tracked as well
+// serve static files (after tracking so static requests are filtered/tracked too)
 app.use(express.static(path.join(__dirname, "public")));
 
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
@@ -65,43 +100,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
 if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
-// --------- MONGOOSE connect (optional but useful for sessions) ----------
-const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
-} else {
-  mongoose.set("strictQuery", true);
-  mongoose
-    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => {
-      console.error("❌ MongoDB connection failed:", err.message || err);
-      // continue running (sessions will fail if DB required)
-    });
-}
-
-// ---------- SESSIONS (must be before passport.initialize/session) ----------
-const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
-app.use(
-  session({
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    store: mongoUri ? MongoStore.create({ mongoUrl: mongoUri }) : undefined,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-    },
-  })
-);
-
-// ---------- PASSPORT setup ----------
-configurePassport(); // expects config/passport.js to call passport.use(...)
-app.use(passport.initialize());
-app.use(passport.session());
-
-// expose auth routes under /auth
+// expose auth routes under /auth and admin routes under /admin
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
