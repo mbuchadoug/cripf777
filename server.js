@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, v6) — UPDATED
+// server.js — CRIPFCnt SCOI Server (merged, v6) — UPDATED (with render safety patch)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -29,7 +29,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Basic middleware
+// -------------------- Basic middleware --------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -75,13 +75,100 @@ app.use(
 app.use(ensureVisitorId);
 app.use(visitTracker);
 
-// Compatibility shim: ensure res.render callbacks that call req.next won't crash
+// -------------------- SAFETY PATCH: ensure req.next/res.next and safe render --------------------
+/**
+ * Defensive middleware to ensure req.next exists and a safe wrapper for res.render.
+ * This prevents crashes when some view engines / third-party code call req.next(err).
+ * Place before any route that calls res.render.
+ */
 app.use((req, res, next) => {
-  if (typeof req.next !== "function") req.next = next;
+  // If req.next is missing or not a function, create a safe wrapper that calls the real next.
+  if (typeof req.next !== "function") {
+    Object.defineProperty(req, "next", {
+      value: (...args) => {
+        try {
+          return next(...args);
+        } catch (err) {
+          console.error("req.next wrapper error:", err);
+        }
+      },
+      configurable: true,
+      enumerable: false,
+      writable: false,
+    });
+  }
+  // Provide res.next as well for extra safety
+  if (typeof res.next !== "function") {
+    Object.defineProperty(res, "next", {
+      value: (...args) => {
+        try {
+          return next(...args);
+        } catch (err) {
+          console.error("res.next wrapper error:", err);
+        }
+      },
+      configurable: true,
+      enumerable: false,
+      writable: false,
+    });
+  }
   next();
 });
 
-// Handlebars setup
+// Wrap res.render to defensively forward errors to next(...) so we don't crash when view engine errors occur
+(() => {
+  const originalRender = app.response.render;
+  app.response.render = function (view, options, cb) {
+    const res = this;
+    const req = res.req;
+    const safeNext = typeof (req && req.next) === "function" ? req.next : (err) => {
+      // fallback no-op that logs
+      console.error("render error (no next available):", err && (err.stack || err));
+    };
+
+    // normalize args: (view, [options], [cb])
+    if (typeof options === "function") {
+      cb = options;
+      options = undefined;
+    }
+
+    try {
+      return originalRender.call(res, view, options, function (err, html) {
+        if (err) {
+          try {
+            return safeNext(err);
+          } catch (e) {
+            console.error("Error forwarding render error to next:", e);
+            try {
+              res.status(500).send("Server error during render");
+            } catch (sendErr) {
+              console.error("Failed to send fallback 500:", sendErr);
+            }
+            return;
+          }
+        }
+
+        if (typeof cb === "function") {
+          return cb(null, html);
+        }
+        return res.send(html);
+      });
+    } catch (e) {
+      try {
+        return safeNext(e);
+      } catch (e2) {
+        console.error("Unhandled render exception:", e2);
+        try {
+          res.status(500).send("Server render exception");
+        } catch (e3) {
+          console.error(e3);
+        }
+      }
+    }
+  };
+})();
+
+// Handlebars setup (view engine)
 app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
@@ -289,6 +376,13 @@ app.get("/api/audits", (req, res) => {
     formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
     data: scoiAudits,
   });
+});
+
+// Global error handler — ensures errors are logged and the process won't crash on unhandled render errors
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR HANDLER:", err && err.stack ? err.stack : err);
+  if (res.headersSent) return next(err);
+  res.status(500).send("Internal server error (see server logs).");
 });
 
 // -------------------------------
