@@ -415,4 +415,146 @@ router.get("/visitors/summary", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
+
+/**
+ * GET /admin/visits/data
+ * Query params:
+ *  - period = day|week|month|year  (default day)
+ *  - days = N                      (lookback days when period=day; default 30, max 365)
+ *  - start=YYYY-MM-DD              (optional start date)
+ *  - end=YYYY-MM-DD                (optional end date)
+ *
+ * Returns JSON: { period, start, end, series: [{ key: "2025-11-19" | "2025-W47" | "2025-11" | "2025", hits }] }
+ */
+router.get("/visits/data", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const period = (req.query.period || "day").toLowerCase();
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
+    const start = req.query.start ? String(req.query.start) : null;
+    const end = req.query.end ? String(req.query.end) : null;
+
+    const match = {};
+    // If start/end provided, use them; else if period=day use lookback from today
+    if (start || end) {
+      if (start) match.day = { ...(match.day || {}), $gte: start };
+      if (end) match.day = { ...(match.day || {}), $lte: end };
+    } else if (period === "day") {
+      const now = new Date();
+      const from = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      const fromStr = from.toISOString().slice(0, 10);
+      match.day = { $gte: fromStr };
+    }
+
+    // Build aggregation pipeline that groups into requested bucket
+    let groupStage;
+    let projectStage = null;
+    const pipeline = [];
+
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+
+    if (period === "year") {
+      groupStage = { _id: "$year", hits: { $sum: "$hits" } };
+      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
+    } else if (period === "month") {
+      groupStage = { _id: "$month", hits: { $sum: "$hits" } };
+      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
+    } else if (period === "week") {
+      // convert day string to date, then use ISO week + year
+      // produce keys like "2025-W47" (ISO week)
+      pipeline.push({
+        $addFields: {
+          _dayDate: { $dateFromString: { dateString: "$day", timezone: "UTC" } },
+        },
+      });
+      pipeline.push({
+        $group: {
+          _id: {
+            year: { $isoWeekYear: "$_dayDate" },
+            week: { $isoWeek: "$_dayDate" },
+          },
+          hits: { $sum: "$hits" },
+        },
+      });
+      // project a string key for client convenience
+      pipeline.push({
+        $project: {
+          _id: { $concat: [{ $toString: "$_id.year" }, "-W", { $toString: "$_id.week" }] },
+          hits: 1,
+        },
+      });
+      pipeline.push({ $sort: { _id: 1 } });
+    } else {
+      // default day grouping (assumes day is stored as YYYY-MM-DD)
+      groupStage = { _id: "$day", hits: { $sum: "$hits" } };
+      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
+    }
+
+    const raw = await Visit.aggregate(pipeline).allowDiskUse(true);
+    return res.json({ period, start: start || null, end: end || null, series: raw });
+  } catch (err) {
+    console.error("/admin/visits/data error:", err && (err.stack || err));
+    return res.status(500).json({ error: "visits data failed" });
+  }
+});
+
+/**
+ * GET /admin/unique-visitors/data
+ * Same params as /visits/data but returns unique counts per bucket
+ * Response: { period, series: [{ key, count }] }
+ */
+router.get("/unique-visitors/data", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const period = (req.query.period || "day").toLowerCase();
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
+    const start = req.query.start ? String(req.query.start) : null;
+    const end = req.query.end ? String(req.query.end) : null;
+
+    const match = {};
+    if (start || end) {
+      if (start) match.day = { ...(match.day || {}), $gte: start };
+      if (end) match.day = { ...(match.day || {}), $lte: end };
+    } else if (period === "day") {
+      const now = new Date();
+      const from = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      match.day = { $gte: from.toISOString().slice(0, 10) };
+    }
+
+    const pipeline = [];
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+
+    if (period === "year") {
+      pipeline.push({ $group: { _id: "$year", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
+    } else if (period === "month") {
+      pipeline.push({ $group: { _id: "$month", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
+    } else if (period === "week") {
+      pipeline.push({
+        $addFields: { _dayDate: { $dateFromString: { dateString: "$day", timezone: "UTC" } } },
+      });
+      pipeline.push({
+        $group: {
+          _id: { year: { $isoWeekYear: "$_dayDate" }, week: { $isoWeek: "$_dayDate" }, visitorId: "$visitorId" },
+        },
+      });
+      // now we have one doc per visitor per week; group by week and count distinct visitors
+      pipeline.push({
+        $group: { _id: { year: "$_id.year", week: "$_id.week" }, count: { $sum: 1 } },
+      });
+      pipeline.push({
+        $project: { _id: { $concat: [{ $toString: "$_id.year" }, "-W", { $toString: "$_id.week" }] }, count: 1 },
+      });
+      pipeline.push({ $sort: { _id: 1 } });
+    } else {
+      // day default
+      pipeline.push({ $group: { _id: "$day", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
+    }
+
+    const raw = await UniqueVisit.aggregate(pipeline).allowDiskUse(true);
+    return res.json({ period, start: start || null, end: end || null, series: raw });
+  } catch (err) {
+    console.error("/admin/unique-visitors/data error:", err && (err.stack || err));
+    return res.status(500).json({ error: "unique visitors data failed" });
+  }
+});
+
+
 export default router;

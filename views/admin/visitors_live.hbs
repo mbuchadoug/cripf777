@@ -6,6 +6,7 @@
   <style>
     body { font-family: Inter, system-ui, -apple-system, sans-serif; margin:18px; color:#0b2545; }
     .card { background:#fff; border-radius:10px; padding:14px; box-shadow:0 6px 18px rgba(11,37,69,0.04); max-width:1100px; }
+    .controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap }
     .metrics { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
     .metric { background:#f5f9ff; border-radius:8px; padding:12px; min-width:160px; }
     .metric h3 { margin:0; font-size:0.9rem; color:#16365c; }
@@ -14,25 +15,60 @@
     .log { margin-top:12px; max-height:360px; overflow:auto; border:1px solid #eef4fb; border-radius:8px; padding:8px; background:#fcfeff; }
     .log-item { padding:6px 8px; border-bottom:1px dashed #eef5fb; font-size:0.95rem; color:#234; }
     .log-item:last-child { border-bottom:none; }
+    .small { font-size:0.9rem; color:#666 }
+    table { width:100%; border-collapse:collapse; margin-top:8px }
+    th, td { padding:8px; border-bottom:1px solid #eef4fb; text-align:left }
+    .kpis { display:flex; gap:8px; align-items:center; }
   </style>
 </head>
 <body>
   <div class="card">
     <h2 style="margin-top:0">Live visitors (admin)</h2>
+
+    <div class="controls">
+      <label>Period:
+        <select id="periodSelect">
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+          <option value="year">Year</option>
+        </select>
+      </label>
+
+      <label>Lookback (days):
+        <input id="lookback" type="number" min="1" max="365" value="30" style="width:90px" />
+      </label>
+
+      <label>Start:
+        <input id="startDate" type="date" />
+      </label>
+
+      <label>End:
+        <input id="endDate" type="date" />
+      </label>
+
+      <button id="applyFilters">Apply</button>
+      <button id="refreshNow">Refresh</button>
+      <div style="margin-left:auto" class="small">Auto-refresh: every 5s (can be stopped)</div>
+    </div>
+
     <div class="metrics">
       <div class="metric">
-        <h3>Total hits (today)</h3>
+        <h3>Total hits (selected)</h3>
         <p id="totalHits">—</p>
       </div>
       <div class="metric">
-        <h3>Unique visitors (today)</h3>
+        <h3>Unique visitors (selected)</h3>
         <p id="uniqueToday">—</p>
       </div>
       <div style="flex:1; min-width:240px;">
-        <h3 style="margin:0 0 6px 0">Top paths (today)</h3>
+        <h3 style="margin:0 0 6px 0">Top paths (selected)</h3>
         <div id="topPaths" class="top-paths"></div>
       </div>
     </div>
+
+    <h4 style="margin:10px 0 6px 0">Series (hits / unique)</h4>
+    <div id="seriesContainer"></div>
 
     <h4 style="margin:10px 0 6px 0">Live log</h4>
     <div id="log" class="log" aria-live="polite"></div>
@@ -40,45 +76,140 @@
 
 <script>
 (function () {
+  const periodEl = document.getElementById('periodSelect');
+  const lookbackEl = document.getElementById('lookback');
+  const startEl = document.getElementById('startDate');
+  const endEl = document.getElementById('endDate');
+  const applyBtn = document.getElementById('applyFilters');
+  const refreshBtn = document.getElementById('refreshNow');
+
   const totalHitsEl = document.getElementById('totalHits');
   const uniqueTodayEl = document.getElementById('uniqueToday');
   const topPathsEl = document.getElementById('topPaths');
+  const seriesContainer = document.getElementById('seriesContainer');
   const logEl = document.getElementById('log');
 
-  async function poll() {
+  let autoTimer = null;
+  let lastParams = null;
+
+  function buildQueryParams(obj) {
+    const parts = [];
+    for (const k in obj) {
+      if (obj[k] !== null && obj[k] !== undefined && obj[k] !== '') parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(obj[k])}`);
+    }
+    return parts.length ? '?' + parts.join('&') : '';
+  }
+
+  async function fetchSummary(period, start, end, days) {
+    // lightweight summary endpoint (server may provide /admin/visitors/summary)
     try {
-      const resp = await fetch('/admin/visitors/summary', { credentials: 'same-origin' });
-      if (!resp.ok) throw new Error('status ' + resp.status);
-      const data = await resp.json();
-
-      totalHitsEl.textContent = String(data.totalHits ?? '0');
-      uniqueTodayEl.textContent = String(data.uniqueToday ?? '0');
-
-      topPathsEl.innerHTML = '';
-      (data.topPaths || []).forEach(tp => {
-        const el = document.createElement('div');
-        el.style.fontSize = '0.95rem';
-        el.textContent = `${tp._id} — ${tp.hits} hits`;
-        topPathsEl.appendChild(el);
-      });
-
-      const entry = document.createElement('div');
-      entry.className = 'log-item';
-      entry.textContent = `[${new Date(data.timestamp).toLocaleTimeString()}] total=${data.totalHits} unique=${data.uniqueToday}`;
-      logEl.prepend(entry);
-      while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
+      const q = buildQueryParams({ period, start, end, days });
+      const r = await fetch('/admin/visitors/summary' + q, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
     } catch (err) {
-      const entry = document.createElement('div');
-      entry.className = 'log-item';
-      entry.textContent = `[${new Date().toLocaleTimeString()}] poll error: ${err.message || err}`;
-      logEl.prepend(entry);
-    } finally {
-      setTimeout(poll, 5000); // poll every 5 seconds
+      // summary may not exist; fall through
+      return null;
     }
   }
 
-  // begin polling after a short delay to let page settle
-  setTimeout(poll, 500);
+  async function fetchSeries(period, start, end, days) {
+    const q = buildQueryParams({ period, start, end, days });
+    const hitsResp = await fetch('/admin/visits/data' + q, { credentials: 'same-origin' });
+    if (!hitsResp.ok) throw new Error('visits/data status ' + hitsResp.status);
+    const hitsData = await hitsResp.json();
+
+    const uniqResp = await fetch('/admin/unique-visitors/data' + q, { credentials: 'same-origin' });
+    if (!uniqResp.ok) throw new Error('unique-visitors/data status ' + uniqResp.status);
+    const uniqData = await uniqResp.json();
+
+    return { hitsData, uniqData };
+  }
+
+  function renderSeries(hitsData, uniqData) {
+    seriesContainer.innerHTML = '';
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>Bucket</th><th style="text-align:right">Hits</th><th style="text-align:right">Unique</th></tr>';
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+
+    const hitsMap = new Map((hitsData.series || []).map(s => [String(s._id), Number(s.hits || s.hits || 0)]));
+    const uniqMap = new Map((uniqData.series || []).map(s => [String(s._id), Number(s.count || s.count || 0)]));
+    const keys = Array.from(new Set([...(hitsData.series || []).map(s => s._id), ...(uniqData.series || []).map(s => s._id)]));
+
+    keys.forEach(k => {
+      const tr = document.createElement('tr');
+      const hits = hitsMap.get(k) || 0;
+      const uniq = uniqMap.get(k) || 0;
+      tr.innerHTML = `<td>${k}</td><td style="text-align:right">${hits}</td><td style="text-align:right">${uniq}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    seriesContainer.appendChild(table);
+
+    // update KPI boxes with totals (sum across buckets)
+    const totalHits = (hitsData.series || []).reduce((s, it) => s + Number(it.hits || 0), 0);
+    const totalUnique = (uniqData.series || []).reduce((s, it) => s + Number(it.count || 0), 0);
+    totalHitsEl.textContent = String(totalHits);
+    uniqueTodayEl.textContent = String(totalUnique);
+
+    // top paths: derive from hitsData if present (server may include topPaths in summary endpoint too)
+    // Keep top 10 paths from server if available (hitsData.topPaths optional)
+    topPathsEl.innerHTML = '';
+    if (hitsData.topPaths && Array.isArray(hitsData.topPaths)) {
+      hitsData.topPaths.forEach(tp => {
+        const el = document.createElement('div'); el.textContent = `${tp._id} — ${tp.hits} hits`; topPathsEl.appendChild(el);
+      });
+    }
+  }
+
+  async function refresh() {
+    const period = periodEl.value;
+    const days = lookbackEl.value;
+    const start = startEl.value || null;
+    const end = endEl.value || null;
+
+    lastParams = { period, days, start, end };
+
+    try {
+      // Try summary first (lighter)
+      const summary = await fetchSummary(period, start, end, days);
+      if (summary) {
+        if (summary.totalHits !== undefined) totalHitsEl.textContent = String(summary.totalHits);
+        if (summary.uniqueToday !== undefined) uniqueTodayEl.textContent = String(summary.uniqueToday);
+        topPathsEl.innerHTML = '';
+        (summary.topPaths || []).forEach(tp => { const el = document.createElement('div'); el.textContent = `${tp._id} — ${tp.hits} hits`; topPathsEl.appendChild(el); });
+      }
+
+      // Always fetch series for filtering table/chart
+      const { hitsData, uniqData } = await fetchSeries(period, start, end, days);
+      renderSeries(hitsData, uniqData);
+
+      const entry = document.createElement('div'); entry.className = 'log-item'; entry.textContent = `[${new Date().toLocaleTimeString()}] refreshed (${period})`; logEl.prepend(entry);
+      while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
+    } catch (err) {
+      console.error('refresh error', err);
+      const entry = document.createElement('div'); entry.className = 'log-item'; entry.textContent = `[${new Date().toLocaleTimeString()}] refresh error: ${err.message || err}`; logEl.prepend(entry);
+    }
+  }
+
+  applyBtn.addEventListener('click', () => { refresh(); });
+  refreshBtn.addEventListener('click', () => { refresh(); });
+
+  // Auto refresh loop
+  function startAuto() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = setInterval(() => { refresh(); }, 5000);
+  }
+  function stopAuto() { if (autoTimer) clearInterval(autoTimer); autoTimer = null; }
+
+  // start
+  setTimeout(() => { refresh().then(startAuto).catch(startAuto); }, 300);
+
+  // expose a global to stop/start if needed from console
+  window._visitorsLive = { refresh, stopAuto, startAuto };
 })();
 </script>
 
