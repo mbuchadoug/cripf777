@@ -13,20 +13,61 @@
       --border-soft: #e1e5ec;
       --text-main: #1f2933;
       --text-muted: #6b7280;
-      --danger: #c0392b;
+      --nav-bg: #ffffff;
+      --nav-border: #e5e7eb;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      padding: 24px;
+      padding: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text-main);
     }
 
-    .shell {
+    /* NAVBAR */
+    .navbar {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      height: 60px;
+      background: var(--nav-bg);
+      border-bottom: 1px solid var(--nav-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 999;
+    }
+
+    .nav-left {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-dark);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--accent-dark);
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+
+    .nav-links a:hover {
+      background: var(--accent-soft);
+    }
+
+    /* PAGE LAYOUT */
+    .page {
+      padding: 100px 24px 24px;
       max-width: 1100px;
       margin: 0 auto;
     }
@@ -52,23 +93,6 @@
       color: var(--text-muted);
     }
 
-    a.btn-link {
-      text-decoration: none;
-      font-size: 0.85rem;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border-soft);
-      background: #fff;
-      color: var(--accent-dark);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    a.btn-link:hover {
-      border-color: var(--accent);
-    }
-
     .layout-grid {
       display: grid;
       grid-template-columns: 1.2fr 2fr;
@@ -77,16 +101,14 @@
     }
 
     @media (max-width: 860px) {
-      .layout-grid {
-        grid-template-columns: 1fr;
-      }
+      .layout-grid { grid-template-columns: 1fr; }
     }
 
     .card {
       background: var(--card-bg);
       border-radius: 14px;
       padding: 16px 18px;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+      box-shadow: 0 8px 20px rgba(15,23,42,0.04);
       border: 1px solid var(--border-soft);
     }
 
@@ -97,28 +119,11 @@
       margin-bottom: 6px;
     }
 
-    .card-title {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--accent-dark);
-    }
+    .card-title { font-size: 0.95rem; font-weight: 700; color: var(--accent-dark); }
 
-    .metric-value {
-      font-size: 1.9rem;
-      font-weight: 800;
-      color: #111827;
-    }
-
-    .metric-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
+    .metric-value { font-size: 1.9rem; font-weight: 800; color: #111827; }
 
     .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
       padding: 4px 9px;
       border-radius: 999px;
       background: var(--accent-soft);
@@ -127,21 +132,9 @@
       font-weight: 600;
     }
 
-    .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .filters label {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
+    /* Filters */
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .filters label { font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; }
     .filters select,
     .filters input[type="number"],
     .filters input[type="text"] {
@@ -160,35 +153,12 @@
       color: #fff;
       font-size: 0.85rem;
       cursor: pointer;
-      margin-left: 2px;
     }
 
-    .filters button:hover {
-      background: var(--accent-dark);
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: #f3f4f6;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    /* table */
-
+    /* Table */
     .table-card {
       overflow: hidden;
       padding: 0;
-    }
-
-    .table-wrapper {
-      width: 100%;
-      overflow-x: auto;
     }
 
     table {
@@ -198,151 +168,85 @@
       min-width: 420px;
     }
 
-    thead {
-      background: #f9fafb;
-    }
-
-    th,
-    td {
+    th, td {
       padding: 10px 12px;
       border-bottom: 1px solid #e5e7eb;
-      text-align: left;
       white-space: nowrap;
+      text-align: left;
     }
 
-    th {
-      font-size: 0.75rem;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
+    thead { background: #f9fafb; }
 
-    tbody tr:nth-child(even) {
-      background: #fafbff;
-    }
+    tbody tr:nth-child(even) { background: #fafbff; }
 
-    tbody tr:hover {
-      background: #eef4ff;
-    }
+    tbody tr:hover { background: #eef4ff; }
 
-    .td-period {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 0.8rem;
-    }
+    .td-period { font-family: monospace; }
 
-    .td-count {
-      font-weight: 600;
-    }
-
-    .td-count.strong {
-      color: #059669;
-    }
-
-    .empty-state {
-      padding: 24px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.9rem;
-    }
-
-    .empty-state span {
-      display: inline-block;
-      margin-top: 6px;
-    }
-
-    .hint {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 6px;
-    }
-
-    .footer-note {
-      margin-top: 14px;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
+    .footer-note { margin-top: 14px; font-size: 0.75rem; color: var(--text-muted); }
   </style>
 </head>
 <body>
-  <div class="shell">
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="nav-left">Admin Dashboard</div>
+    <div class="nav-links">
+      <a href="/admin/users">Users</a>
+      <a href="/admin/visitors-live">Live Logs</a>
+      <a href="/admin/visits">Visits</a>
+      <a href="/admin/unique-visitors" style="background:var(--accent-soft)">Unique</a>
+    </div>
+  </nav>
+
+  <div class="page">
     <header>
       <div>
         <h1>Unique visitors</h1>
-        <p class="subtitle">
-          High-level view of how many distinct visitors have interacted with your CRIPFCnt surfaces.
-        </p>
-      </div>
-      <div>
-        <a href="/admin/users" class="btn-link">
-          ← Back to users
-        </a>
+        <p class="subtitle">High-level view of distinct visitors across your surfaces.</p>
       </div>
     </header>
 
     <div class="layout-grid">
-      <!-- Left: KPI + filters -->
+      <!-- Left Card -->
       <section class="card">
         <div class="card-header">
           <div>
             <div class="card-title">Global unique footprint</div>
             <div class="metric-value">{{totalUnique}}</div>
-            <div class="metric-label">
-              Total distinct visitor IDs stored in <code>UniqueVisit</code>
-            </div>
           </div>
-          <span class="badge">
-            ● Live metric
-          </span>
+          <span class="badge">● Live metric</span>
         </div>
 
         <form class="filters" method="get" action="/admin/unique-visitors">
           <label>
             Period
             <select name="period">
-              <option value="day" {{#if isDay}}selected{{/if}}>By day</option>
-              <option value="month" {{#if isMonth}}selected{{/if}}>By month</option>
-              <option value="year" {{#if isYear}}selected{{/if}}>By year</option>
+              <option value="day" {{#if isDay}}selected{{/if}}>Day</option>
+              <option value="month" {{#if isMonth}}selected{{/if}}>Month</option>
+              <option value="year" {{#if isYear}}selected{{/if}}>Year</option>
             </select>
           </label>
 
           <label>
-            Lookback (days)
-            <input type="number" name="days" min="1" max="365" value="{{days}}">
+            Lookback
+            <input type="number" name="days" min="1" max="365" value="{{days}}"/>
           </label>
 
           <label>
-            Path filter
-            <input
-              type="text"
-              name="path"
-              placeholder="/ or /audit"
-              value="{{path}}"
-            >
+            Path
+            <input type="text" name="path" placeholder="/ or /audit" value="{{path}}"/>
           </label>
 
           <button type="submit">Apply</button>
         </form>
-
-        {{#if path}}
-          <div class="pill">
-            Filtering by path:
-            <strong>{{path}}</strong>
-          </div>
-        {{/if}}
-
-        <p class="hint">
-          Tip: switch to <strong>month</strong> or <strong>year</strong> view
-          to see longer-term placement-level demand trends.
-        </p>
       </section>
 
-      <!-- Right: table -->
+      <!-- Right Card: Table -->
       <section class="card table-card">
-        <div class="card-header" style="padding: 16px 18px 0 18px;">
+        <div class="card-header" style="padding:16px 18px 0 18px;">
           <div class="card-title">Time-series</div>
-          <span class="badge">
-            {{period}} view
-          </span>
+          <span class="badge">{{period}} view</span>
         </div>
 
         <div class="table-wrapper">
@@ -356,29 +260,24 @@
               </thead>
               <tbody>
                 {{#each series}}
-                  <tr>
-                    <td class="td-period">{{_id}}</td>
-                    <td class="td-count {{#if @last}}strong{{/if}}">
-                      {{uniqueCount}}
-                    </td>
-                  </tr>
+                <tr>
+                  <td class="td-period">{{_id}}</td>
+                  <td class="td-count">{{uniqueCount}}</td>
+                </tr>
                 {{/each}}
               </tbody>
             </table>
           {{else}}
-            <div class="empty-state">
-              No unique visitor data found for this filter.
-              <span>Try widening the period or removing the path filter.</span>
-            </div>
+            <div class="empty-state">No data found.</div>
           {{/if}}
         </div>
       </section>
     </div>
 
     <p class="footer-note">
-      Unique visitor IDs are calculated per <strong>day × visitor × path</strong> and aggregated into
-      <code>day</code>, <code>month</code>, and <code>year</code> buckets for placement-level analysis.
+      Unique visitor IDs are tracked per <strong>day × visitor × path</strong> and aggregated across periods.
     </p>
   </div>
+
 </body>
 </html>
