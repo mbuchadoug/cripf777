@@ -72,8 +72,37 @@
  
  	
 </body>
+<script>
+(function () {
+  function getVisitorId() {
+    const name = 'zimedufinder_vid';
+    const cookie = document.cookie.split('; ').find(c => c.indexOf(name + '=') === 0);
+    if (cookie) return cookie.split('=')[1];
+    const id = 'v_' + (crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2,8));
+    document.cookie = name + '=' + id + ';path=/;max-age=' + (60*60*24*365) + ';SameSite=Lax';
+    return id;
+  }
+  const visitorId = getVisitorId();
+
+  function sendHit(path) {
+    const payload = { visitorId, path: path || location.pathname + location.search, ts: new Date().toISOString(), ua: navigator.userAgent };
+    const url = '/api/track';
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon(url, blob);
+      return;
+    }
+    fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(()=>{});
+  }
+
+  // send on load and before unload
+  sendHit(location.pathname + location.search);
+  window.addEventListener('pagehide', function () { sendHit(location.pathname + location.search); }, { passive: true });
+})();
+</script>
+
 
 </html>
 
 
-</html>

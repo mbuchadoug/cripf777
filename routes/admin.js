@@ -386,4 +386,33 @@ router.get("/visitors-live", ensureAuth, ensureAdmin, (req, res) => {
   return safeRender(req, res, "admin/visitors_live", { title: "Admin · Live Visitors" });
 });
 
+
+// GET /admin/visitors/summary  (returns JSON aggregates for today)
+router.get("/visitors/summary", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    const aggHits = await Visit.aggregate([
+      { $match: { day: today } },
+      { $group: { _id: null, totalHits: { $sum: "$hits" } } },
+    ]);
+
+    const totalHits = (aggHits[0] && aggHits[0].totalHits) || 0;
+    const uniqueToday = await UniqueVisit.countDocuments({ day: today });
+
+    const topPaths = await Visit.aggregate([
+      { $match: { day: today } },
+      { $group: { _id: "$path", hits: { $sum: "$hits" } } },
+      { $sort: { hits: -1 } },
+      { $limit: 10 },
+    ]);
+
+    return res.json({ totalHits, uniqueToday, topPaths, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error("/admin/visitors/summary error:", err && (err.stack || err));
+    return res.status(500).json({ error: "summary failed" });
+  }
+});
+
 export default router;

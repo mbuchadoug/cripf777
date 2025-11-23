@@ -38,58 +38,49 @@
     <div id="log" class="log" aria-live="polite"></div>
   </div>
 
-  <script>
-    (function () {
-      const evtSource = new EventSource('/admin/visitors/stream');
-      const totalHitsEl = document.getElementById('totalHits');
-      const uniqueTodayEl = document.getElementById('uniqueToday');
-      const topPathsEl = document.getElementById('topPaths');
-      const logEl = document.getElementById('log');
+<script>
+(function () {
+  const totalHitsEl = document.getElementById('totalHits');
+  const uniqueTodayEl = document.getElementById('uniqueToday');
+  const topPathsEl = document.getElementById('topPaths');
+  const logEl = document.getElementById('log');
 
-      evtSource.onmessage = function (e) {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.error) {
-            const item = document.createElement('div');
-            item.className = 'log-item';
-            item.textContent = `[${data.timestamp || new Date().toISOString()}] ERROR: ${data.error}`;
-            logEl.prepend(item);
-            return;
-          }
+  async function poll() {
+    try {
+      const resp = await fetch('/admin/visitors/summary', { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error('status ' + resp.status);
+      const data = await resp.json();
 
-          totalHitsEl.textContent = String(data.totalHits ?? '0');
-          uniqueTodayEl.textContent = String(data.uniqueToday ?? '0');
+      totalHitsEl.textContent = String(data.totalHits ?? '0');
+      uniqueTodayEl.textContent = String(data.uniqueToday ?? '0');
 
-          topPathsEl.innerHTML = '';
-          if (Array.isArray(data.topPaths)) {
-            data.topPaths.forEach(tp => {
-              const el = document.createElement('div');
-              el.style.fontSize = '0.95rem';
-              el.textContent = `${tp._id} — ${tp.hits} hits`;
-              topPathsEl.appendChild(el);
-            });
-          }
+      topPathsEl.innerHTML = '';
+      (data.topPaths || []).forEach(tp => {
+        const el = document.createElement('div');
+        el.style.fontSize = '0.95rem';
+        el.textContent = `${tp._id} — ${tp.hits} hits`;
+        topPathsEl.appendChild(el);
+      });
 
-          // add a compact log entry
-          const entry = document.createElement('div');
-          entry.className = 'log-item';
-          entry.textContent = `[${data.timestamp}] totalHits=${data.totalHits} unique=${data.uniqueToday}`;
-          logEl.prepend(entry);
+      const entry = document.createElement('div');
+      entry.className = 'log-item';
+      entry.textContent = `[${new Date(data.timestamp).toLocaleTimeString()}] total=${data.totalHits} unique=${data.uniqueToday}`;
+      logEl.prepend(entry);
+      while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
+    } catch (err) {
+      const entry = document.createElement('div');
+      entry.className = 'log-item';
+      entry.textContent = `[${new Date().toLocaleTimeString()}] poll error: ${err.message || err}`;
+      logEl.prepend(entry);
+    } finally {
+      setTimeout(poll, 5000); // poll every 5 seconds
+    }
+  }
 
-          // keep at most 200 lines
-          while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
-        } catch (err) {
-          console.error('SSE parse error', err);
-        }
-      };
+  // begin polling after a short delay to let page settle
+  setTimeout(poll, 500);
+})();
+</script>
 
-      evtSource.onerror = function (err) {
-        const entry = document.createElement('div');
-        entry.className = 'log-item';
-        entry.textContent = `[${new Date().toISOString()}] connection error — attempting reconnect...`;
-        logEl.prepend(entry);
-      };
-    })();
-  </script>
 </body>
 </html>

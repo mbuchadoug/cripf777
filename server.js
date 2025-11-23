@@ -10,6 +10,10 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
+import trackRouter from "./routes/track.js";
+// ...
+
+
 // near top of server.js (after other imports)
 import adminRoutes from "./routes/admin.js";
 
@@ -90,6 +94,7 @@ app.use(passport.session());
 // expose auth routes under /auth
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
+app.use("/api", trackRouter);
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
