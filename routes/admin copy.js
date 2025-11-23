@@ -2,19 +2,24 @@
 import { Router } from "express";
 import User from "../models/user.js"; // adjust path if needed
 import { ensureAuth } from "../middleware/authGuard.js";
-import Visit from "../models/visit.js";
+import Visit from "../models/visit.js"; // top of file with other imports
 import UniqueVisit from "../models/uniqueVisit.js";
+
+
+
+
+
 
 const router = Router();
 
 console.log("🔥 admin routes loaded");
-
 // ADMIN_EMAILS should be a comma-separated list of admin emails
+// inside routes/admin.js — replace module-level ADMIN_SET with a getter
 function getAdminSet() {
   return new Set(
     (process.env.ADMIN_EMAILS || "")
       .split(",")
-      .map((s) => s.trim().toLowerCase())
+      .map(s => s.trim().toLowerCase())
       .filter(Boolean)
   );
 }
@@ -31,37 +36,6 @@ function ensureAdmin(req, res, next) {
   next();
 }
 
-/**
- * Helper safeRender
- * Always pass a callback to res.render to avoid express internals calling req.next
- * which can throw if req.next isn't a function.
- */
-function safeRender(req, res, view, locals = {}) {
-  try {
-    return res.render(view, locals, (err, html) => {
-      if (err) {
-        console.error(`[safeRender] render error for view="${view}":`, err && (err.stack || err));
-        // If HTML expected, send friendly fallback page
-        if (req.headers.accept && req.headers.accept.includes("text/html")) {
-          if (!res.headersSent) {
-            return res.status(500).send(`<h3>Server error rendering ${view}</h3><pre style="white-space:pre-wrap;color:#900">${String(err.message || err)}</pre>`);
-          }
-          return;
-        }
-        // Otherwise send JSON error
-        if (!res.headersSent) return res.status(500).json({ error: "Render failed", detail: String(err.message || err) });
-        return;
-      }
-      // success
-      if (!res.headersSent) return res.send(html);
-    });
-  } catch (e) {
-    console.error(`[safeRender] synchronous render exception for view="${view}":`, e && (e.stack || e));
-    if (!res.headersSent) {
-      return res.status(500).send("Server render exception");
-    }
-  }
-}
 
 /**
  * GET /admin/users
@@ -127,14 +101,18 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
     }
 
     const total = await User.countDocuments(filter);
-    const users = await User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * perPage).limit(perPage).lean();
+    const users = await User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * perPage)
+      .limit(perPage)
+      .lean();
 
     // compute prev/next for view
     const pages = Math.max(1, Math.ceil(total / perPage));
     const prev = page > 1 ? page - 1 : null;
     const next = page < pages ? page + 1 : null;
 
-    return safeRender(req, res, "admin/users", {
+    res.render("admin/users", {
       title: "Admin · Google Users",
       users,
       q,
@@ -146,14 +124,17 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
       next,
     });
   } catch (err) {
-    console.error("[admin/users] error:", err && (err.stack || err));
-    if (!res.headersSent) return res.status(500).send("Failed to load users");
+    console.error("[admin/users] error:", err);
+    res.status(500).send("Failed to load users");
   }
 });
 
 /**
  * POST /admin/users/:id/delete
  * Permanently deletes a user by _id.
+ * Safety:
+ * - Prevents deleting currently logged-in admin (self-delete).
+ * - Logs action server-side.
  */
 router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -163,6 +144,7 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
     // Prevent admin from deleting themselves
     const currentUserId = req.user && req.user._id && String(req.user._id);
     if (currentUserId && currentUserId === String(id)) {
+      // send friendly message on HTML requests, otherwise JSON
       if (req.headers.accept && req.headers.accept.includes("text/html")) {
         return res.status(400).send("<h3>Cannot delete current admin user</h3>");
       }
@@ -184,7 +166,7 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
     const referer = req.get("referer") || "/admin/users";
     return res.redirect(referer);
   } catch (err) {
-    console.error("[admin/users/:id/delete] error:", err && (err.stack || err));
+    console.error("[admin/users/:id/delete] error:", err);
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(500).send("Failed to delete user");
     }
@@ -192,12 +174,12 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
-/**
- * GET /admin/visits
- */
+// routes/admin.js (replace existing /admin/visits handler with this)
+//import Visit from "../models/visit.js"; // ensure this import exists near top of file
+
 router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
   try {
-    const period = req.query.period || "day"; // day|month|year
+    const period = (req.query.period || "day"); // day|month|year
     const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
 
     // Build aggregation pipeline using stored day/month/year fields
@@ -238,29 +220,39 @@ router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
 
     const stats = rawStats;
 
-    // flags for template
+    // flags for template (no helper required)
     const isDay = period === "day";
     const isMonth = period === "month";
     const isYear = period === "year";
 
-    // render with safe callback
-    return safeRender(req, res, "admin/visits", {
-      title: "Admin · Site visits",
-      stats,
-      period,
-      days,
-      isDay,
-      isMonth,
-      isYear,
-    });
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      return res.render("admin/visits", {
+        title: "Admin · Site visits",
+        stats,
+        period,
+        days,
+        isDay,
+        isMonth,
+        isYear,
+      });
+    }
+
+    return res.json({ period, days, stats });
   } catch (err) {
-    console.error("[admin/visits] error:", err && (err.stack || err));
-    if (!res.headersSent) return res.status(500).send("Failed to fetch visits");
+    console.error("[admin/visits] error:", err);
+    res.status(500).send("Failed to fetch visits");
   }
 });
 
+
 /**
  * GET /admin/unique-visitors
+ * Query params:
+ *   period=day|month|year   (default: day)
+ *   days=N                 (for day period; default 30, max 365)
+ *   path=/some/path        (optional; filter by page path)
+ *
+ * Renders admin/unique-visitors (HTML) or returns JSON when Accept does not include text/html.
  */
 router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -289,6 +281,8 @@ router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
       pipeline.push({ $sort: { _id: 1 } });
     } else {
       // default: day
+      // get latest N days, so sort desc then limit then regroup ascending
+      // But with UniqueVisit each document represents a visitor/day, so grouping by day counts uniques.
       pipeline.push({
         $group: { _id: "$day", uniqueCount: { $sum: 1 } },
       });
@@ -299,7 +293,7 @@ router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
 
     const series = await UniqueVisit.aggregate(pipeline).allowDiskUse(true);
 
-    // Compute overall unique visitor total
+    // Compute overall unique visitor total (unique visitorIds in the collection) efficiently with aggregation
     const totalAgg = [];
     if (Object.keys(match).length) totalAgg.push({ $match: match });
     totalAgg.push({ $group: { _id: "$visitorId" } });
@@ -308,17 +302,21 @@ router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
     const totalRes = await UniqueVisit.aggregate(totalAgg).allowDiskUse(true);
     const totalUnique = (totalRes[0] && totalRes[0].totalUnique) || 0;
 
-    return safeRender(req, res, "admin/unique-visitors", {
-      title: "Admin · Unique visitors",
-      series,
-      period,
-      days,
-      path: pathFilter,
-      totalUnique,
-    });
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      return res.render("admin/unique-visitors", {
+        title: "Admin · Unique visitors",
+        series,
+        period,
+        days,
+        path: pathFilter,
+        totalUnique,
+      });
+    }
+
+    return res.json({ period, days, path: pathFilter, totalUnique, series });
   } catch (err) {
-    console.error("[admin/unique-visitors] error:", err && (err.stack || err));
-    if (!res.headersSent) return res.status(500).send("Failed to fetch unique visitors");
+    console.error("[admin/unique-visitors] error:", err);
+    res.status(500).send("Failed to fetch unique visitors");
   }
 });
 
@@ -330,7 +328,7 @@ router.get("/visitors/stream", ensureAuth, ensureAdmin, async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  res.flushHeaders && res.flushHeaders();
 
   // heartbeat so proxies don't close
   const keepAlive = setInterval(() => {
@@ -362,6 +360,9 @@ router.get("/visitors/stream", ensureAuth, ensureAdmin, async (req, res) => {
         { $limit: 10 },
       ]);
 
+      // 4) last N minutes approximation: get Visit docs for today and sum (approx)
+      // (Visit does daily buckets, so per-minute requires more instrumentation.
+      //  This is a reasonable approximation for live dashboard.)
       const payload = { totalHits, uniqueToday, topPaths, timestamp: new Date().toISOString() };
 
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -382,8 +383,8 @@ router.get("/visitors/stream", ensureAuth, ensureAdmin, async (req, res) => {
   });
 });
 
-router.get("/visitors-live", ensureAuth, ensureAdmin, (req, res) => {
-  return safeRender(req, res, "admin/visitors_live", { title: "Admin · Live Visitors" });
+router.get("/visitors-live", ensureAuth, ensureAdmin, (_req, res) => {
+  res.render("admin/visitors_live", { title: "Admin · Live Visitors" });
 });
 
 export default router;

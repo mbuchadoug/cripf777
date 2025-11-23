@@ -18,7 +18,7 @@
     "csv-stringify": "^6.6.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "express-handlebars": "^6.0.7",
+    "express-handlebars": "^6.0.6",
     "express-session": "^1.18.2",
     "fs": "^0.0.1-security",
     "hbs": "^4.2.0",

@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, v6) — UPDATED (safe render wrapper)
+// server.js — CRIPFCnt SCOI Server (merged, v6)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -10,17 +10,16 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
-
-import cookieParser from "cookie-parser";
-
+// near top of server.js (after other imports)
 import adminRoutes from "./routes/admin.js";
-import authRoutes from "./routes/auth.js";
+
+// ... after passport.initialize()/passport.session() and after app.use("/auth", authRoutes)
+
 
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
+import authRoutes from "./routes/auth.js";
 import { ensureAuth } from "./middleware/authGuard.js";
-import { ensureVisitorId } from "./middleware/visitorId.js";
-import { visitTracker } from "./middleware/visits.js";
 
 dotenv.config();
 
@@ -29,11 +28,28 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// -------------------- Basic middleware --------------------
+// Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
-app.use(cookieParser());
+
+// Compatibility shim: ensure res.render callbacks that call req.next won't crash
+app.use((req, res, next) => {
+  if (typeof req.next !== "function") req.next = next;
+  next();
+});
+
+// Handlebars setup
+app.engine("hbs", engine({ extname: ".hbs" }));
+app.set("view engine", "hbs");
+app.set("views", path.join(__dirname, "views"));
+
+// OpenAI client
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Ensure data folder exists
+const dataPath = path.join(process.cwd(), "data", "scoi.json");
+if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
 // --------- MONGOOSE connect (optional but useful for sessions) ----------
 const mongoUri = process.env.MONGODB_URI;
@@ -46,10 +62,11 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
+      // continue running (sessions will fail if DB required)
     });
 }
 
-// ---------- SESSIONS ----------
+// ---------- SESSIONS (must be before passport.initialize/session) ----------
 const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
 app.use(
   session({
@@ -61,148 +78,19 @@ app.use(
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
     },
   })
 );
 
-// visitor id + tracker (after session & cookie)
-app.use(ensureVisitorId);
-app.use(visitTracker);
-
-// -------------------- SAFETY PATCH: ensure req.next/res.next and a safer res.render --------------------
-app.use((req, res, next) => {
-  // ensure req.next exists and is callable
-  if (typeof req.next !== "function") {
-    Object.defineProperty(req, "next", {
-      value: (...args) => {
-        try {
-          return next(...args);
-        } catch (err) {
-          console.error("req.next wrapper error:", err);
-        }
-      },
-      configurable: true,
-      enumerable: false,
-      writable: false,
-    });
-  }
-
-  if (typeof res.next !== "function") {
-    Object.defineProperty(res, "next", {
-      value: (...args) => {
-        try {
-          return next(...args);
-        } catch (err) {
-          console.error("res.next wrapper error:", err);
-        }
-      },
-      configurable: true,
-      enumerable: false,
-      writable: false,
-    });
-  }
-
-  next();
-});
-
-// IIFE that patches res.render to be safer
-(() => {
-  const originalRender = app.response.render;
-  app.response.render = function (view, options, cb) {
-    const res = this;
-    const req = res.req;
-
-    // normalize args (view, [options], [cb])
-    if (typeof options === "function") {
-      cb = options;
-      options = undefined;
-    }
-
-    const safeCallback = (err, html) => {
-      if (err) {
-        // log useful debug info about which view and locals caused the error
-        try {
-          const localsSummary = options ? (typeof options === "object" ? Object.keys(options) : String(options)) : "(no locals)";
-          console.error(`Render ERROR for view="${view}" locals=${localsSummary}:`, err && (err.stack || err));
-        } catch (logErr) {
-          console.error("Failed to log render error context:", logErr);
-        }
-        // forward to next (use req.next if available)
-        const forward = typeof (req && req.next) === "function" ? req.next : (e) => console.error("No next to forward render error:", e);
-        try {
-          return forward(err);
-        } catch (fwdErr) {
-          console.error("Error forwarding render error:", fwdErr);
-          // last resort: ensure we don't crash and try to send a fallback 500 if possible
-          if (!res.headersSent) {
-            try { res.status(500).send("Server error during render"); } catch (sErr) { console.error("Failed fallback send:", sErr); }
-          }
-          return;
-        }
-      }
-
-      // If callback was provided by caller, call it first (it might handle sending)
-      if (typeof cb === "function") {
-        try {
-          cb(null, html);
-        } catch (cbErr) {
-          console.error("Callback threw while handling rendered HTML:", cbErr);
-        }
-      }
-
-      // Only send if nothing else has sent response yet
-      if (!res.headersSent) {
-        try {
-          res.send(html);
-        } catch (sendErr) {
-          console.error("Failed to send rendered html (headers may have been sent):", sendErr);
-        }
-      } else {
-        // headers already sent — nothing to do
-      }
-    };
-
-    // Call original render which will eventually invoke our callback
-    try {
-      return originalRender.call(res, view, options, safeCallback);
-    } catch (e) {
-      // if render throws synchronously, forward to next
-      console.error("Synchronous render exception for view=", view, e && (e.stack || e));
-      const forward = typeof (req && req.next) === "function" ? req.next : (err) => console.error("No next to forward render exception:", err);
-      try {
-        return forward(e);
-      } catch (fwdErr) {
-        console.error("Failed forwarding sync render exception:", fwdErr);
-        if (!res.headersSent) {
-          try { res.status(500).send("Server render exception"); } catch (sErr) { console.error("Failed fallback send:", sErr); }
-        }
-      }
-    }
-  };
-})();
-
-// Handlebars setup (view engine)
-app.engine("hbs", engine({ extname: ".hbs" }));
-app.set("view engine", "hbs");
-app.set("views", path.join(__dirname, "views"));
-
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Ensure data folder exists
-const dataPath = path.join(process.cwd(), "data", "scoi.json");
-if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-
 // ---------- PASSPORT setup ----------
-configurePassport();
+configurePassport(); // expects config/passport.js to call passport.use(...)
 app.use(passport.initialize());
 app.use(passport.session());
 
+// expose auth routes under /auth
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
-
-// small debug route
+// small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
     return res.json({ authenticated: true, user: req.user });
@@ -210,7 +98,7 @@ app.get("/api/whoami", (req, res) => {
   return res.json({ authenticated: false });
 });
 
-// Helper and routes (unchanged — include your SSE route and others here)
+// Helper: clean AI text (keeps minimal whitespace normalization)
 function cleanAIText(text) {
   if (!text) return "";
   return String(text)
@@ -220,6 +108,7 @@ function cleanAIText(text) {
     .trim();
 }
 
+// Helper: format SCOI audit
 function formatSCOI(entityData, entity) {
   const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
   const rawSCOI = (contribution / visibility).toFixed(3);
@@ -269,16 +158,22 @@ ${commentary}
 app.get("/", (req, res) => {
   res.render("website/index", { user: req.user || null });
 });
+
 app.get("/about", (req, res) => {
   res.render("website/about", { user: req.user || null });
 });
+
 app.get("/services", (req, res) => {
   res.render("website/services", { user: req.user || null });
 });
+
 app.get("/contact", (req, res) => {
   res.render("website/contact", { user: req.user || null });
 });
 
+// -------------------------------
+// 🔹 ROUTE: Render Chat Page (protected)
+// -------------------------------
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -287,13 +182,18 @@ app.get("/audit", ensureAuth, (req, res) => {
   });
 });
 
+// -------------------------------
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
+// -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
   const keepAlive = setInterval(() => {
-    try { res.write(":\n\n"); } catch (e) {}
+    try {
+      res.write(":\n\n");
+    } catch (e) {}
   }, 15000);
 
   try {
@@ -328,12 +228,18 @@ Return the audit as readable text.
       ],
     });
 
+    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
+
       const cleaned = cleanAIText(content);
+
+      // If chunk contains newlines, send each line prefixed by data:
       const lines = cleaned.split("\n");
-      for (const line of lines) res.write(`data: ${line}\n`);
+      for (const line of lines) {
+        res.write(`data: ${line}\n`);
+      }
       res.write("\n");
     }
   } catch (err) {
@@ -347,19 +253,38 @@ Return the audit as readable text.
   }
 });
 
-// sample audits route (unchanged)
+// -------------------------------
+// 🔹 ROUTE: Static SCOI Audits (JSON)
+// -------------------------------
+const scoiAudits = [
+  // small sample; keep or replace with your data
+  {
+    organization: "Econet Holdings",
+    visibility: 9.5,
+    contribution: 7.0,
+    rawSCOI: 0.74,
+    resilienceFactor: 1.25,
+    adjustedSCOI: 0.93,
+    placementLevel: "Re-emerging Placement",
+    interpretation: `Econet’s contribution remains high but has been visually overpowered by scale and routine visibility...`,
+  },
+  // add more items as desired
+];
+
 app.get("/api/audits", (req, res) => {
-  res.json({ framework: "CRIPFCnt SCOI Audit System", author: "Donald Mataranyika", data: [] });
+  res.json({
+    framework: "CRIPFCnt SCOI Audit System",
+    author: "Donald Mataranyika",
+    description: "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
+    formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
+    data: scoiAudits,
+  });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR HANDLER:", err && err.stack ? err.stack : err);
-  if (res.headersSent) return next(err);
-  res.status(500).send("Internal server error (see server logs).");
-});
-
-// SERVER START
+// -------------------------------
+// 🟢 SERVER START
+// -------------------------------
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
+
 app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));
