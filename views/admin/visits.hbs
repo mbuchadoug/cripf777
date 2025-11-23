@@ -1,50 +1,152 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{title}}</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;padding:18px}
-    table{border-collapse:collapse;width:100%;margin-top:12px}
-    th,td{border:1px solid #e6eef8;padding:8px;text-align:left}
-    th{background:#f3f8ff}
-    .controls{display:flex;gap:8px;align-items:center}
-    a.btn{display:inline-block;padding:8px 12px;background:#0b63d6;color:#fff;border-radius:6px;text-decoration:none}
-    .small{font-size:0.9rem;color:#666}
+    :root{
+      --bg:#f6f8fb; --sidebar:#0b2545; --accent:#0066cc; --muted:#6b7280; --card:#ffffff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;color:#0b2545;background:var(--bg)}
+
+    /* layout */
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:linear-gradient(180deg,var(--sidebar),#092136);color:#fff;position:fixed;inset:0 auto 0 0;padding:20px 18px;display:flex;flex-direction:column;gap:18px}
+    .brand{font-weight:800;font-size:1.05rem;letter-spacing:0.02em}
+    .nav{display:flex;flex-direction:column;gap:6px}
+    .nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:rgba(255,255,255,0.92);text-decoration:none;font-weight:600}
+    .nav a:hover{background:rgba(255,255,255,0.04)}
+    .nav a.active{background:rgba(255,255,255,0.08);box-shadow:0 6px 18px rgba(2,6,23,0.12)}
+    .nav .badge{margin-left:auto;background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:999px;font-size:0.75rem}
+
+    .sidebar-foot{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+    .sidebar-foot a{color:rgba(255,255,255,0.85);text-decoration:none;font-size:0.95rem}
+
+    /* content area (leave space for fixed sidebar) */
+    .main{margin-left:260px;padding:28px;flex:1}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    .topbar .title{font-size:1.25rem;font-weight:800}
+    .controls{display:flex;gap:10px;align-items:center}
+    .controls select,.controls input[type="number"],.controls input[type="text"]{padding:8px 10px;border-radius:8px;border:1px solid #e6eef8;font-size:0.95rem}
+    .primary-btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:10px;border:none;cursor:pointer;font-weight:700}
+    .ghost-btn{background:transparent;border:1px solid #d8e6ff;padding:8px 12px;border-radius:10px;color:var(--sidebar);font-weight:700}
+
+    /* cards & table */
+    .grid{display:grid;grid-template-columns:1.2fr 2fr;gap:20px;margin-bottom:20px}
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(11,37,69,0.04);border:1px solid #eef4fb}
+    .metrics{display:flex;gap:12px;align-items:stretch}
+    .metric{flex:1;padding:12px;border-radius:10px;background:#f8fbff}
+    .metric h4{margin:0;font-size:0.85rem;color:var(--muted)}
+    .metric p{margin:8px 0 0;font-size:1.5rem;font-weight:800}
+
+    .table-wrapper{background:var(--card);border-radius:12px;padding:12px;border:1px solid #eef4fb}
+    table{width:100%;border-collapse:collapse;font-size:0.95rem}
+    th,td{padding:10px 12px;border-bottom:1px solid #eef4fb;text-align:left}
+    th{background:#fbfdff;color:var(--muted);font-size:0.75rem;text-transform:uppercase}
+
+    .hint{font-size:0.85rem;color:var(--muted)}
+
+    /* responsive */
+    @media (max-width:960px){.sidebar{position:relative;width:100%;flex-direction:row;overflow:auto;height:auto;padding:12px}.app{flex-direction:column}.main{margin-left:0;padding:16px}.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-  <h1>{{title}}</h1>
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" role="navigation" aria-label="Admin sidebar">
+      <div class="brand">CRIPFCnt · Admin</div>
 
-  <div class="controls">
-    <form method="get" action="/admin/visits" style="display:flex;gap:8px;align-items:center">
-      <label>Period:
-        <select name="period">
-          <option value="day" {{#if isDay}}selected{{/if}}>Day</option>
-          <option value="month" {{#if isMonth}}selected{{/if}}>Month</option>
-          <option value="year" {{#if isYear}}selected{{/if}}>Year</option>
-        </select>
-      </label>
+      <nav class="nav" aria-label="Admin links">
+        <a href="/admin/users" class="{{#eq ../active 'users'}}active{{/eq}}">Users</a>
+        <a href="/admin/visitors-live" class="{{#eq ../active 'visitors-live'}}active{{/eq}}">Live logs <span class="badge">Live</span></a>
+        <a href="/admin/unique-visitors" class="{{#eq ../active 'unique-visitors'}}active{{/eq}}">Unique visitors</a>
+        <a href="/admin/visits" class="{{#eq ../active 'visits'}}active{{/eq}}">Visits</a>
+        <a href="/audit">SCOI Audit</a>
+      </nav>
 
-      <label>Days:
-        <input type="number" name="days" value="{{days}}" style="width:80px" />
-      </label>
+      <div class="sidebar-foot">
+        <div class="hint">Signed in as <strong>{{user.email}}</strong></div>
+        <a href="/auth/logout">Sign out</a>
+      </div>
+    </aside>
 
-      <button type="submit">Show</button>
-      <a class="btn" href="/admin/users">Back to users</a>
-    </form>
-    <div style="margin-left:auto" class="small">Rows: {{stats.length}}</div>
+    <!-- MAIN -->
+    <main class="main">
+      <div class="topbar">
+        <div class="title">{{title}}</div>
+        <div class="controls">
+          <form id="filters" method="get" action="/admin/visits" style="display:flex;gap:8px;align-items:center">
+            <label>
+              Period
+              <select name="period">
+                <option value="day" {{#if isDay}}selected{{/if}}>Day</option>
+                <option value="month" {{#if isMonth}}selected{{/if}}>Month</option>
+                <option value="year" {{#if isYear}}selected{{/if}}>Year</option>
+              </select>
+            </label>
+
+            <label>
+              Days
+              <input type="number" name="days" min="1" max="365" value="{{days}}" style="width:84px">
+            </label>
+
+            <button class="primary-btn" type="submit">Apply</button>
+          </form>
+
+          <a class="ghost-btn" href="/admin/users">Back to users</a>
+        </div>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <div class="metrics">
+            <div class="metric">
+              <h4>Total hits (selected)</h4>
+              <p>{{statsTotal}}</p>
+            </div>
+            <div class="metric">
+              <h4>Data points</h4>
+              <p>{{stats.length}}</p>
+            </div>
+            <div class="metric">
+              <h4>Period</h4>
+              <p>{{period}}</p>
+            </div>
+          </div>
+
+          <p class="hint" style="margin-top:12px">Use the filters to change the aggregation window. Click a row below to drill into path-level data.</p>
+        </section>
+
+        <section class="card table-wrapper">
+          <table aria-describedby="visits-table">
+            <thead>
+              <tr><th>Bucket</th><th>Hits</th></tr>
+            </thead>
+            <tbody>
+              {{#each stats}}
+                <tr onclick="handleRowClick('{{this._id}}')" style="cursor:pointer">
+                  <td>{{this._id}}</td>
+                  <td>{{this.hits}}</td>
+                </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <footer style="margin-top:18px;color:var(--muted);font-size:0.9rem">Unique visitor IDs are calculated per <strong>day × visitor × path</strong>.</footer>
+    </main>
   </div>
 
-  <table>
-    <thead>
-      <tr><th>Bucket</th><th>Hits</th></tr>
-    </thead>
-    <tbody>
-      {{#each stats}}
-        <tr><td>{{this._id}}</td><td>{{this.hits}}</td></tr>
-      {{/each}}
-    </tbody>
-  </table>
+  <script>
+    function handleRowClick(id){
+      // Basic drill-in behaviour: go to unique-visitors filtered by path (optional)
+      // You can replace this with a modal or client-side fetch for richer UX.
+      const q = new URLSearchParams({ period: '{{period}}' });
+      window.location = '/admin/visits?period={{period}}&days={{days}}';
+    }
+  </script>
 </body>
 </html>
