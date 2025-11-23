@@ -61,11 +61,6 @@
       .search-input{display:none}
       .sidebar{display:flex;gap:8px;overflow:auto}
     }
-
-    /* period control */
-    .period-select{display:flex;gap:8px;align-items:center;margin-top:10px}
-    .period-select button{padding:8px;border-radius:8px;border:1px solid #eef4fb;background:#fff;cursor:pointer}
-    .period-select button.active{background:#eef6ff;border-color:var(--accent)}
   </style>
 </head>
 <body>
@@ -101,13 +96,11 @@
         <a class="menu-item active" href="/admin/visitors-live">📡 Live logs</a>
         <a class="menu-item" href="/admin/visits">📈 Visits</a>
         <a class="menu-item" href="/admin/unique-visitors">🔎 Unique</a>
-
         <div style="height:12px"></div>
         <div style="font-size:0.85rem;color:var(--muted);">Quick filters</div>
-        <div class="period-select" style="margin-top:8px">
-          <button data-period="day">Today</button>
-          <button data-period="month">This month</button>
-          <button data-period="year">This year</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <button onclick="window.location='/admin/visitors-live?period=day'" style="padding:8px;border-radius:8px;border:1px solid #eef4fb;background:#fff">Today</button>
+          <button onclick="window.location='/admin/visitors-live?period=month'" style="padding:8px;border-radius:8px;border:1px solid #eef4fb;background:#fff">This month</button>
         </div>
       </aside>
 
@@ -131,15 +124,15 @@
 
           <div class="metrics" style="margin-top:14px">
             <div class="metric">
-              <h4>Total hits (<span id="periodLabel">today</span>)</h4>
+              <h4>Total hits (today)</h4>
               <p id="totalHits">—</p>
             </div>
             <div class="metric">
-              <h4>Unique visitors (<span id="periodLabel2">today</span>)</h4>
+              <h4>Unique visitors (today)</h4>
               <p id="uniqueToday">—</p>
             </div>
             <div class="metric" style="flex:2">
-              <h4>Top paths (<span id="periodLabel3">today</span>)</h4>
+              <h4>Top paths (today)</h4>
               <div id="topPaths" class="top-paths"></div>
             </div>
           </div>
@@ -158,44 +151,12 @@
       links.forEach(a => {
         if (location.pathname.startsWith(a.dataset.route)) a.classList.add('active');
       });
+      // small helper to mark sidebar active
       const sidebar = document.querySelectorAll('.menu-item');
       sidebar.forEach(s => { if (location.pathname.startsWith(s.getAttribute('href'))) s.classList.add('active'); });
     })();
 
-    // Helper: read period from URL or default to 'day'
-    function getPeriodFromUrl() {
-      const qp = new URLSearchParams(location.search);
-      const p = (qp.get('period') || qp.get('period') === '' ? qp.get('period') : null);
-      if (!p) {
-        // also support legacy param 'range' if used server-side
-        return qp.get('range') || 'day';
-      }
-      return p || 'day';
-    }
-
-    // Update UI period buttons and labels
-    function updatePeriodUI(period) {
-      document.querySelectorAll('.period-select button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.period === period);
-      });
-      const lbls = document.querySelectorAll('#periodLabel, #periodLabel2, #periodLabel3');
-      lbls.forEach(el => el.textContent = period === 'day' ? 'today' : period === 'month' ? 'this month' : 'this year');
-    }
-
-    // Sidebar quick filter buttons: update URL (history) and refresh data
-    document.querySelectorAll('.period-select button').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const period = btn.dataset.period;
-        const url = new URL(location.href);
-        url.searchParams.set('period', period);
-        history.pushState({}, '', url);
-        updatePeriodUI(period);
-        // trigger an immediate refresh
-        fetchAndRender(true);
-      });
-    });
-
-    // Polling logic (fetches summary endpoint and includes period query)
+    // Polling logic (fetches summary endpoint)
     (function(){
       const totalHitsEl = document.getElementById('totalHits');
       const uniqueTodayEl = document.getElementById('uniqueToday');
@@ -204,61 +165,38 @@
       const refreshEl = document.getElementById('refreshRate');
 
       let timer = null;
-      // exposed so quick filter can trigger immediate refresh
-      window.fetchAndRender = async function (silent) {
-        const period = getPeriodFromUrl() || 'day';
-        // include period in request so backend can return month/year aggregates as needed
-        const url = '/admin/visitors/summary?period=' + encodeURIComponent(period);
-
-        try {
-          const resp = await fetch(url, { credentials: 'same-origin' });
+      async function fetchAndRender(){
+        try{
+          const resp = await fetch('/admin/visitors/summary', { credentials: 'same-origin' });
           if (!resp.ok) throw new Error('status '+resp.status);
           const data = await resp.json();
-
-          // update labels/UI
-          updatePeriodUI(period);
 
           totalHitsEl.textContent = String(data.totalHits ?? '0');
           uniqueTodayEl.textContent = String(data.uniqueToday ?? '0');
 
           topPathsEl.innerHTML='';
           (data.topPaths||[]).forEach(tp=>{
-            const el = document.createElement('div'); el.style.fontSize='0.95rem'; el.textContent = `${tp._id || '/'} — ${tp.hits} hits`; topPathsEl.appendChild(el);
+            const el = document.createElement('div'); el.style.fontSize='0.95rem'; el.textContent = `${tp._id} — ${tp.hits} hits`; topPathsEl.appendChild(el);
           });
 
-          if (!silent) {
-            const entry = document.createElement('div'); entry.className='log-item';
-            entry.textContent=`[${new Date(data.timestamp || Date.now()).toLocaleTimeString()}] total=${data.totalHits} unique=${data.uniqueToday} (period=${period})`;
-            logEl.prepend(entry);
-            while(logEl.children.length>400) logEl.removeChild(logEl.lastChild);
-          }
-        } catch(e){
-          if (!silent) {
-            const entry = document.createElement('div'); entry.className='log-item';
-            entry.textContent=`[${new Date().toLocaleTimeString()}] poll error: ${e.message||e}`; logEl.prepend(entry);
-          }
+          const entry = document.createElement('div'); entry.className='log-item'; entry.textContent=`[${new Date(data.timestamp).toLocaleTimeString()}] total=${data.totalHits} unique=${data.uniqueToday}`; logEl.prepend(entry);
+          while(logEl.children.length>400) logEl.removeChild(logEl.lastChild);
+        }catch(e){
+          const entry = document.createElement('div'); entry.className='log-item'; entry.textContent=`[${new Date().toLocaleTimeString()}] poll error: ${e.message||e}`; logEl.prepend(entry);
         }
-      };
+      }
 
       function schedule(){
         const ms = Number(refreshEl.value);
         if (timer) clearInterval(timer);
-        if (ms>0) timer = setInterval(()=> window.fetchAndRender(true), ms);
+        if (ms>0) timer = setInterval(fetchAndRender, ms);
       }
 
-      // init
-      updatePeriodUI( getPeriodFromUrl() );
-      fetchAndRender(); // initial (not silent)
-      schedule();
-
-      // bind refresh change
       refreshEl.addEventListener('change', ()=>{ schedule(); });
 
-      // handle back/forward browser navigation to reflect period param
-      window.addEventListener('popstate', () => {
-        updatePeriodUI( getPeriodFromUrl() );
-        fetchAndRender();
-      });
+      // initial run
+      fetchAndRender();
+      schedule();
     })();
   </script>
 </body>
