@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, v6)
+// server.js — CRIPFCnt SCOI Server (merged, v6) — UPDATED
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -10,18 +10,15 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
-// near top of server.js (after other imports)
+
+import cookieParser from "cookie-parser";
+
 import adminRoutes from "./routes/admin.js";
-
-// ... after passport.initialize()/passport.session() and after app.use("/auth", authRoutes)
-
+import authRoutes from "./routes/auth.js";
 
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
-import authRoutes from "./routes/auth.js";
 import { ensureAuth } from "./middleware/authGuard.js";
-
-import cookieParser from "cookie-parser";
 import { ensureVisitorId } from "./middleware/visitorId.js";
 import { visitTracker } from "./middleware/visits.js";
 
@@ -35,17 +32,49 @@ const app = express();
 // Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// serve static assets early
 app.use(express.static(path.join(__dirname, "public")));
 
-
-
+// cookie parser must run before any cookie-dependent middleware
 app.use(cookieParser());
 
-// ensure each request has a visitorId cookie (or creates one)
-app.use(ensureVisitorId);
+// --------- MONGOOSE connect (optional but useful for sessions) ----------
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
+} else {
+  mongoose.set("strictQuery", true);
+  mongoose
+    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("✅ Connected to MongoDB"))
+    .catch((err) => {
+      console.error("❌ MongoDB connection failed:", err.message || err);
+    });
+}
 
-// track visits (non-blocking; uses setImmediate internally)
+// ---------- SESSIONS (must be before passport.initialize/session and before auth routes) ----------
+const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
+app.use(
+  session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    store: mongoUri ? MongoStore.create({ mongoUrl: mongoUri }) : undefined,
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
+  })
+);
+
+// Now visitor id and visit tracker can run (they depend on cookies; putting them
+// after session is safe and ensures req.session exists for other middleware)
+app.use(ensureVisitorId);
 app.use(visitTracker);
+
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
 app.use((req, res, next) => {
   if (typeof req.next !== "function") req.next = next;
@@ -64,45 +93,18 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
 if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
-// --------- MONGOOSE connect (optional but useful for sessions) ----------
-const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
-} else {
-  mongoose.set("strictQuery", true);
-  mongoose
-    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => {
-      console.error("❌ MongoDB connection failed:", err.message || err);
-      // continue running (sessions will fail if DB required)
-    });
-}
+// ---------- PASSPORT setup (register strategies before calling initialize) ----------
+configurePassport(); // registers serialize/deserialize & strategies on the passport singleton
 
-// ---------- SESSIONS (must be before passport.initialize/session) ----------
-const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
-app.use(
-  session({
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    store: mongoUri ? MongoStore.create({ mongoUrl: mongoUri }) : undefined,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-    },
-  })
-);
-
-// ---------- PASSPORT setup ----------
-configurePassport(); // expects config/passport.js to call passport.use(...)
 app.use(passport.initialize());
 app.use(passport.session());
 
-// expose auth routes under /auth
+// expose auth routes under /auth (mounted after passport.session)
 app.use("/auth", authRoutes);
+
+// expose admin routes (protected by ensureAuth/ensureAdmin inside router)
 app.use("/admin", adminRoutes);
+
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
@@ -241,14 +243,11 @@ Return the audit as readable text.
       ],
     });
 
-    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
 
       const cleaned = cleanAIText(content);
-
-      // If chunk contains newlines, send each line prefixed by data:
       const lines = cleaned.split("\n");
       for (const line of lines) {
         res.write(`data: ${line}\n`);
@@ -270,7 +269,6 @@ Return the audit as readable text.
 // 🔹 ROUTE: Static SCOI Audits (JSON)
 // -------------------------------
 const scoiAudits = [
-  // small sample; keep or replace with your data
   {
     organization: "Econet Holdings",
     visibility: 9.5,
@@ -281,7 +279,6 @@ const scoiAudits = [
     placementLevel: "Re-emerging Placement",
     interpretation: `Econet’s contribution remains high but has been visually overpowered by scale and routine visibility...`,
   },
-  // add more items as desired
 ];
 
 app.get("/api/audits", (req, res) => {
