@@ -9,6 +9,7 @@ import UniqueVisit from "../models/uniqueVisit.js";
 
 
 
+
 const router = Router();
 
 console.log("🔥 admin routes loaded");
@@ -319,5 +320,71 @@ router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /admin/visitors/stream
+ * SSE endpoint — pushes live aggregate stats every N seconds
+ */
+router.get("/visitors/stream", ensureAuth, ensureAdmin, async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders && res.flushHeaders();
+
+  // heartbeat so proxies don't close
+  const keepAlive = setInterval(() => {
+    try { res.write(":\n\n"); } catch (e) {}
+  }, 15000);
+
+  let intervalId = null;
+
+  async function publish() {
+    try {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+      // 1) total hits today (sum Visit.hits for today)
+      const aggHits = await Visit.aggregate([
+        { $match: { day: today } },
+        { $group: { _id: null, totalHits: { $sum: "$hits" } } },
+      ]);
+      const totalHits = (aggHits[0] && aggHits[0].totalHits) || 0;
+
+      // 2) unique visitors today
+      const uniqueToday = await UniqueVisit.countDocuments({ day: today });
+
+      // 3) hits by path (top 10) for today
+      const topPaths = await Visit.aggregate([
+        { $match: { day: today } },
+        { $group: { _id: "$path", hits: { $sum: "$hits" } } },
+        { $sort: { hits: -1 } },
+        { $limit: 10 },
+      ]);
+
+      // 4) last N minutes approximation: get Visit docs for today and sum (approx)
+      // (Visit does daily buckets, so per-minute requires more instrumentation.
+      //  This is a reasonable approximation for live dashboard.)
+      const payload = { totalHits, uniqueToday, topPaths, timestamp: new Date().toISOString() };
+
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      const errMsg = String(err?.message || err);
+      res.write(`data: ${JSON.stringify({ error: errMsg, timestamp: new Date().toISOString() })}\n\n`);
+    }
+  }
+
+  // publish immediately, then every 5s
+  publish().catch(() => {});
+  intervalId = setInterval(() => publish().catch(() => {}), 5000);
+
+  // cleanup on client disconnect
+  req.on("close", () => {
+    clearInterval(intervalId);
+    clearInterval(keepAlive);
+  });
+});
+
+router.get("/visitors-live", ensureAuth, ensureAdmin, (_req, res) => {
+  res.render("admin/visitors_live", { title: "Admin · Live Visitors" });
+});
 
 export default router;

@@ -21,6 +21,10 @@ import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
 import { ensureAuth } from "./middleware/authGuard.js";
 
+import cookieParser from "cookie-parser";
+import { ensureVisitorId } from "./middleware/visitorId.js";
+import { visitTracker } from "./middleware/visits.js";
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +37,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+
+
+app.use(cookieParser());
+
+// ensure each request has a visitorId cookie (or creates one)
+app.use(ensureVisitorId);
+
+// track visits (non-blocking; uses setImmediate internally)
+app.use(visitTracker);
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
 app.use((req, res, next) => {
   if (typeof req.next !== "function") req.next = next;
