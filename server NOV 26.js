@@ -13,8 +13,14 @@ import passport from "passport";
 import trackRouter from "./routes/track.js";
 import User from "./models/user.js";
 
+// ...
+
+
 // near top of server.js (after other imports)
 import adminRoutes from "./routes/admin.js";
+
+// ... after passport.initialize()/passport.session() and after app.use("/auth", authRoutes)
+
 
 import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
@@ -27,10 +33,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-
-// friendly support contact (configurable via .env)
-const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
-
 
 // Basic middleware
 app.use(express.json());
@@ -188,6 +190,15 @@ app.get("/audit", ensureAuth, (req, res) => {
 });
 
 // -------------------------------
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
+// -------------------------------
+// -------------------------------
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
+// -------------------------------
+// Make sure this import exists near the top of server.js
+
+
+// -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
 // -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
@@ -238,20 +249,11 @@ app.post("/api/chat-stream", async (req, res) => {
           const current = await User.findById(userId);
           const used = (current && current.searchCountDay === today) ? (current.searchCount || 0) : 0;
 
-          // compute next UTC midnight for a friendly reset time
-          const resetAtDate = new Date();
-          resetAtDate.setUTCHours(24, 0, 0, 0);
-          const resetAtISO = resetAtDate.toISOString();
-
           return res.status(429).json({
             error: "Daily search limit reached",
             message: `You have reached your daily limit of ${DAILY_LIMIT} searches (used: ${used}). Please try again tomorrow or contact support.`,
             used,
-            limit: DAILY_LIMIT,
-            // friendly message suitable for direct display
-            friendly: `You’ve used ${used} of ${DAILY_LIMIT} free audits today. Your free quota will reset at ${resetAtDate.toLocaleString('en-GB', { timeZone: 'UTC' })} (UTC). If you need more audits today, contact ${SUPPORT_EMAIL}.`,
-            resetAt: resetAtISO,
-            support: SUPPORT_EMAIL
+            limit: DAILY_LIMIT
           });
         }
         // resetResult success -> consumed 1 credit
@@ -339,6 +341,7 @@ Return the audit as readable text.
 // 🔹 ROUTE: Static SCOI Audits (JSON)
 // -------------------------------
 const scoiAudits = [
+  // small sample; keep or replace with your data
   {
     organization: "Econet Holdings",
     visibility: 9.5,
@@ -349,6 +352,7 @@ const scoiAudits = [
     placementLevel: "Re-emerging Placement",
     interpretation: `Econet’s contribution remains high but has been visually overpowered by scale and routine visibility...`,
   },
+  // add more items as desired
 ];
 
 app.get("/api/audits", (req, res) => {
@@ -360,6 +364,9 @@ app.get("/api/audits", (req, res) => {
     data: scoiAudits,
   });
 });
+
+
+
 
 app.get("/api/search-quota", (req, res) => {
   if (!(req.isAuthenticated && req.isAuthenticated())) return res.json({ authenticated: false, isAdmin: false, remaining: 0, limit: 0 });
