@@ -11,6 +11,8 @@ import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
 import trackRouter from "./routes/track.js";
+import User from "./models/user.js";
+
 // ...
 
 
@@ -193,8 +195,14 @@ app.get("/audit", ensureAuth, (req, res) => {
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
 // -------------------------------
+// Make sure this import exists near the top of server.js
+
+
+// -------------------------------
+// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
+// -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
-  // Require authentication — audit page is protected, but ensure server enforces it too
+  // Require authentication
   if (!(req.isAuthenticated && req.isAuthenticated())) {
     return res.status(401).json({ error: "Authentication required" });
   }
@@ -203,7 +211,7 @@ app.post("/api/chat-stream", async (req, res) => {
   const userId = user && user._id;
   const userEmail = (user && (user.email || "") || "").toLowerCase();
 
-  // Admin bypass: read ADMIN_EMAILS from env
+  // Admin bypass set
   const adminSet = new Set(
     (process.env.ADMIN_EMAILS || "")
       .split(",")
@@ -212,33 +220,33 @@ app.post("/api/chat-stream", async (req, res) => {
   );
   const isAdmin = userEmail && adminSet.has(userEmail);
 
-  // If admin -> proceed without consumption checks
   const DAILY_LIMIT = parseInt(process.env.SEARCH_DAILY_LIMIT || "3", 10);
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // ensure keepAlive variable exists in outer scope so catch can clear it
+  let keepAlive;
 
   try {
-    // If not admin, enforce daily limit with atomic updates on User
+    // enforce daily limit for non-admins
     if (!isAdmin) {
-      // Attempt 1: if searchCountDay === today and searchCount < DAILY_LIMIT, increment
-      const incResult = await user.findOneAndUpdate(
+      // Attempt to increment if already today and below limit
+      const incResult = await User.findOneAndUpdate(
         { _id: userId, searchCountDay: today, searchCount: { $lt: DAILY_LIMIT } },
         { $inc: { searchCount: 1 }, $set: { lastLogin: new Date() } },
         { new: true }
-      ).lean();
+      );
 
       if (!incResult) {
-        // Attempt 2: if searchCountDay is not today (new day or not set), reset to today and set to 1
-        const resetResult = await user.findOneAndUpdate(
-          { _id: userId, $or: [ { searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } } ] },
+        // If not today's day (or not set), reset to today and set to 1
+        const resetResult = await User.findOneAndUpdate(
+          { _id: userId, $or: [{ searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } }] },
           { $set: { searchCountDay: today, searchCount: 1, lastLogin: new Date() } },
           { new: true }
-        ).lean();
+        );
 
         if (!resetResult) {
-          // Both attempts failed — user has either reached the limit or some other condition occurred.
-          // Determine current count to show a helpful error (best-effort read)
-          const current = await user.findById(userId).lean();
+          // both attempts failed - likely limit reached
+          const current = await User.findById(userId);
           const used = (current && current.searchCountDay === today) ? (current.searchCount || 0) : 0;
 
           return res.status(429).json({
@@ -248,19 +256,18 @@ app.post("/api/chat-stream", async (req, res) => {
             limit: DAILY_LIMIT
           });
         }
-        // resetResult successful — we have consumed 1 credit for today; continue
+        // resetResult success -> consumed 1 credit
       }
-      // incResult successful — credit consumed; continue
+      // incResult success -> consumed 1 credit
     }
 
-    // At this point: either admin (no limit) or non-admin with a consumed credit.
-    // Proceed with SSE streaming to OpenAI.
-
+    // Setup SSE headers & keep-alive after credit has been consumed
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
 
-    const keepAlive = setInterval(() => {
+    keepAlive = setInterval(() => {
       try { res.write(":\n\n"); } catch (e) {}
     }, 15000);
 
@@ -286,7 +293,7 @@ Follow this structure exactly:
 Return the audit as readable text.
 `;
 
-    // create streaming completion (adjust model & params as you use)
+    // call OpenAI (streaming)
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       stream: true,
@@ -296,14 +303,11 @@ Return the audit as readable text.
       ],
     });
 
-    // Stream chunks from openai; clean minimally and send SSE-safe lines.
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (!content) continue;
 
       const cleaned = cleanAIText(content);
-
-      // If chunk contains newlines, send each line prefixed by data:
       const lines = cleaned.split("\n");
       for (const line of lines) {
         res.write(`data: ${line}\n`);
@@ -315,24 +319,20 @@ Return the audit as readable text.
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (err) {
-    console.error("Stream error or credit check error:", err && (err.stack || err));
-    // If the error happened after consuming a credit, we keep the credit consumed — avoids abuse by requests that fail to complete.
-    try {
-      clearInterval(keepAlive);
-    } catch (e) {}
+    console.error("Stream / credits handler error:", err && (err.stack || err));
+    try { if (keepAlive) clearInterval(keepAlive); } catch (e) {}
+
     const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
-    // If SSE headers already sent, try to send an SSE error message
-    try {
-      if (!res.headersSent) {
-        return res.status(500).json({ error: "Server error", detail: msg });
-      } else {
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "Server error", detail: msg });
+    } else {
+      try {
         res.write(`data: ❌ Server error: ${msg}\n\n`);
         res.write("data: [DONE]\n\n");
         res.end();
+      } catch (e) {
+        console.error("Failed to send SSE error:", e);
       }
-    } catch (e) {
-      // nothing more to do
-      console.error("Failed to send error to client:", e);
     }
   }
 });
