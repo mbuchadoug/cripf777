@@ -190,81 +190,19 @@ app.get("/audit", ensureAuth, (req, res) => {
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming)
 // -------------------------------
-// -------------------------------
-// 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
-// -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
-  // Require authentication — audit page is protected, but ensure server enforces it too
-  if (!(req.isAuthenticated && req.isAuthenticated())) {
-    return res.status(401).json({ error: "Authentication required" });
-  }
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-  const user = req.user;
-  const userId = user && user._id;
-  const userEmail = (user && (user.email || "") || "").toLowerCase();
-
-  // Admin bypass: read ADMIN_EMAILS from env
-  const adminSet = new Set(
-    (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map(s => String(s || "").trim().toLowerCase())
-      .filter(Boolean)
-  );
-  const isAdmin = userEmail && adminSet.has(userEmail);
-
-  // If admin -> proceed without consumption checks
-  const DAILY_LIMIT = parseInt(process.env.SEARCH_DAILY_LIMIT || "3", 10);
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(":\n\n");
+    } catch (e) {}
+  }, 15000);
 
   try {
-    // If not admin, enforce daily limit with atomic updates on User
-    if (!isAdmin) {
-      // Attempt 1: if searchCountDay === today and searchCount < DAILY_LIMIT, increment
-      const incResult = await User.findOneAndUpdate(
-        { _id: userId, searchCountDay: today, searchCount: { $lt: DAILY_LIMIT } },
-        { $inc: { searchCount: 1 }, $set: { lastLogin: new Date() } },
-        { new: true }
-      ).lean();
-
-      if (!incResult) {
-        // Attempt 2: if searchCountDay is not today (new day or not set), reset to today and set to 1
-        const resetResult = await User.findOneAndUpdate(
-          { _id: userId, $or: [ { searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } } ] },
-          { $set: { searchCountDay: today, searchCount: 1, lastLogin: new Date() } },
-          { new: true }
-        ).lean();
-
-        if (!resetResult) {
-          // Both attempts failed — user has either reached the limit or some other condition occurred.
-          // Determine current count to show a helpful error (best-effort read)
-          const current = await User.findById(userId).lean();
-          const used = (current && current.searchCountDay === today) ? (current.searchCount || 0) : 0;
-
-          return res.status(429).json({
-            error: "Daily search limit reached",
-            message: `You have reached your daily limit of ${DAILY_LIMIT} searches (used: ${used}). Please try again tomorrow or contact support.`,
-            used,
-            limit: DAILY_LIMIT
-          });
-        }
-        // resetResult successful — we have consumed 1 credit for today; continue
-      }
-      // incResult successful — credit consumed; continue
-    }
-
-    // At this point: either admin (no limit) or non-admin with a consumed credit.
-    // Proceed with SSE streaming to OpenAI.
-
-    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const keepAlive = setInterval(() => {
-      try { res.write(":\n\n"); } catch (e) {}
-    }, 15000);
-
-    const { entity } = req.body || {};
+    const { entity } = req.body;
     if (!entity) {
       res.write("data: ❌ Missing entity name.\n\n");
       clearInterval(keepAlive);
@@ -286,7 +224,6 @@ Follow this structure exactly:
 Return the audit as readable text.
 `;
 
-    // create streaming completion (adjust model & params as you use)
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       stream: true,
@@ -310,30 +247,14 @@ Return the audit as readable text.
       }
       res.write("\n");
     }
-
+  } catch (err) {
+    console.error("Stream error:", err);
+    const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
+    res.write(`data: ❌ Server error: ${msg}\n\n`);
+  } finally {
     clearInterval(keepAlive);
     res.write("data: [DONE]\n\n");
     res.end();
-  } catch (err) {
-    console.error("Stream error or credit check error:", err && (err.stack || err));
-    // If the error happened after consuming a credit, we keep the credit consumed — avoids abuse by requests that fail to complete.
-    try {
-      clearInterval(keepAlive);
-    } catch (e) {}
-    const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
-    // If SSE headers already sent, try to send an SSE error message
-    try {
-      if (!res.headersSent) {
-        return res.status(500).json({ error: "Server error", detail: msg });
-      } else {
-        res.write(`data: ❌ Server error: ${msg}\n\n`);
-        res.write("data: [DONE]\n\n");
-        res.end();
-      }
-    } catch (e) {
-      // nothing more to do
-      console.error("Failed to send error to client:", e);
-    }
   }
 });
 
@@ -363,20 +284,6 @@ app.get("/api/audits", (req, res) => {
     formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
     data: scoiAudits,
   });
-});
-
-
-
-
-app.get("/api/search-quota", (req, res) => {
-  if (!(req.isAuthenticated && req.isAuthenticated())) return res.json({ authenticated: false, isAdmin: false, remaining: 0, limit: 0 });
-  const user = req.user;
-  const isAdmin = (new Set((process.env.ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()))).has((user.email || "").toLowerCase());
-  const limit = parseInt(process.env.SEARCH_DAILY_LIMIT || "3", 10);
-  const today = new Date().toISOString().slice(0,10);
-  const used = (user.searchCountDay === today) ? (user.searchCount || 0) : 0;
-  const remaining = isAdmin ? Infinity : Math.max(0, limit - used);
-  return res.json({ authenticated: true, isAdmin, used, remaining, limit });
 });
 
 // -------------------------------

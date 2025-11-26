@@ -11,13 +11,7 @@ const UserSchema = new mongoose.Schema({
   locale: String,
   provider: String,
   createdAt: { type: Date, default: Date.now },
-  lastLogin: { type: Date, default: Date.now },
-
-  // NEW: daily search credit tracking
-  // 'searchCountDay' stores a YYYY-MM-DD string for the day the counter applies to.
-  // 'searchCount' stores how many searches used on that day.
-  searchCountDay: { type: String, index: true, default: null },
-  searchCount: { type: Number, default: 0 },
+  lastLogin: { type: Date, default: Date.now }
 }, { strict: true });
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
