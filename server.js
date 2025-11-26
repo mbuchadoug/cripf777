@@ -221,7 +221,7 @@ app.post("/api/chat-stream", async (req, res) => {
     // If not admin, enforce daily limit with atomic updates on User
     if (!isAdmin) {
       // Attempt 1: if searchCountDay === today and searchCount < DAILY_LIMIT, increment
-      const incResult = await User.findOneAndUpdate(
+      const incResult = await user.findOneAndUpdate(
         { _id: userId, searchCountDay: today, searchCount: { $lt: DAILY_LIMIT } },
         { $inc: { searchCount: 1 }, $set: { lastLogin: new Date() } },
         { new: true }
@@ -229,7 +229,7 @@ app.post("/api/chat-stream", async (req, res) => {
 
       if (!incResult) {
         // Attempt 2: if searchCountDay is not today (new day or not set), reset to today and set to 1
-        const resetResult = await User.findOneAndUpdate(
+        const resetResult = await user.findOneAndUpdate(
           { _id: userId, $or: [ { searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } } ] },
           { $set: { searchCountDay: today, searchCount: 1, lastLogin: new Date() } },
           { new: true }
@@ -238,7 +238,7 @@ app.post("/api/chat-stream", async (req, res) => {
         if (!resetResult) {
           // Both attempts failed — user has either reached the limit or some other condition occurred.
           // Determine current count to show a helpful error (best-effort read)
-          const current = await User.findById(userId).lean();
+          const current = await user.findById(userId).lean();
           const used = (current && current.searchCountDay === today) ? (current.searchCount || 0) : 0;
 
           return res.status(429).json({
