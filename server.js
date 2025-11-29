@@ -12,6 +12,10 @@ import MongoStore from "connect-mongo";
 import passport from "passport";
 import trackRouter from "./routes/track.js";
 import User from "./models/user.js";
+import lmsRoutes from "./routes/lms.js";
+import apiLmsRoutes from "./routes/api_lms.js";
+
+
 
 // near top of server.js (after other imports)
 import adminRoutes from "./routes/admin.js";
@@ -95,6 +99,8 @@ app.use(passport.session());
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/api", trackRouter);
+app.use("/lms", lmsRoutes);
+app.use("/api/lms", apiLmsRoutes);
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
