@@ -63,6 +63,18 @@ function safeRender(req, res, view, locals = {}) {
   }
 }
 
+
+// helper: escape HTML for safe inline preview / logs
+function escapeHtml(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 /**
  * GET /admin/users
  * Query params:
