@@ -1,15 +1,18 @@
 // routes/admin.js
 import { Router } from "express";
-import User from "../models/user.js"; // adjust path if needed
-import { ensureAuth } from "../middleware/authGuard.js";
+import User from "../models/user.js";
 import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
+import Question from "../models/question.js"; // make sure this model exists (see example in the note)
+import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
 
 console.log("🔥 admin routes loaded");
 
-// ADMIN_EMAILS should be a comma-separated list of admin emails
+/**
+ * getAdminSet / ensureAdmin
+ */
 function getAdminSet() {
   return new Set(
     (process.env.ADMIN_EMAILS || "")
@@ -18,10 +21,9 @@ function getAdminSet() {
       .filter(Boolean)
   );
 }
-
 function ensureAdmin(req, res, next) {
   const email = (req.user && (req.user.email || req.user.username) || "").toLowerCase();
-  const ADMIN_SET = getAdminSet(); // compute now, when env is available
+  const ADMIN_SET = getAdminSet();
   if (!email || !ADMIN_SET.has(email)) {
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(403).send("<h3>Forbidden — admin only</h3>");
@@ -32,27 +34,22 @@ function ensureAdmin(req, res, next) {
 }
 
 /**
- * Helper safeRender
- * Always pass a callback to res.render to avoid express internals calling req.next
- * which can throw if req.next isn't a function.
+ * safeRender helper — ensures res.render uses callback to avoid internal next call problems
  */
 function safeRender(req, res, view, locals = {}) {
   try {
     return res.render(view, locals, (err, html) => {
       if (err) {
         console.error(`[safeRender] render error for view="${view}":`, err && (err.stack || err));
-        // If HTML expected, send friendly fallback page
         if (req.headers.accept && req.headers.accept.includes("text/html")) {
           if (!res.headersSent) {
             return res.status(500).send(`<h3>Server error rendering ${view}</h3><pre style="white-space:pre-wrap;color:#900">${String(err.message || err)}</pre>`);
           }
           return;
         }
-        // Otherwise send JSON error
         if (!res.headersSent) return res.status(500).json({ error: "Render failed", detail: String(err.message || err) });
         return;
       }
-      // success
       if (!res.headersSent) return res.send(html);
     });
   } catch (e) {
@@ -63,25 +60,13 @@ function safeRender(req, res, view, locals = {}) {
   }
 }
 
-
-// helper: escape HTML for safe inline preview / logs
-function escapeHtml(s) {
-  if (s === null || s === undefined) return "";
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+/* -----------------------------------------
+   Admin: Users list + delete (kept)
+   ----------------------------------------- */
 
 /**
  * GET /admin/users
- * Query params:
- *   q - search term (name or email)
- *   page - 1-based page number (default 1)
- *   perPage - results per page (default 50, max 200)
- *   format=csv - returns CSV
+ * (search & CSV export)
  */
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -90,7 +75,6 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
     const perPage = Math.min(200, Math.max(10, parseInt(req.query.perPage || "50", 10)));
     const format = (req.query.format || "").toLowerCase();
 
-    // filter: users with googleId OR provider === 'google'
     const baseFilter = {
       $or: [{ googleId: { $exists: true, $ne: null } }, { provider: "google" }],
     };
@@ -108,10 +92,8 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
       };
     }
 
-    // CSV export (no extra deps)
     if (format === "csv") {
       const docs = await User.find(filter).sort({ createdAt: -1 }).lean();
-      // build CSV rows
       const header = ["id", "googleId", "name", "email", "provider", "createdAt", "lastLogin", "locale"];
       const rows = [header.join(",")];
       for (const u of docs) {
@@ -122,8 +104,6 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
         const createdAt = u.createdAt ? u.createdAt.toISOString() : "";
         const lastLogin = u.lastLogin ? u.lastLogin.toISOString() : "";
         const locale = (u.locale || "").replace(/"/g, '""');
-
-        // quote fields containing comma/newline/doublequote
         const safe = [u._id, googleId, name, email, provider, createdAt, lastLogin, locale].map((v) => {
           const s = String(v ?? "");
           if (/[,"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -131,7 +111,6 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
         });
         rows.push(safe.join(","));
       }
-
       const csv = rows.join("\n");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="google_users_${Date.now()}.csv"`);
@@ -140,12 +119,9 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
 
     const total = await User.countDocuments(filter);
     const users = await User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * perPage).limit(perPage).lean();
-
-    // compute prev/next for view
     const pages = Math.max(1, Math.ceil(total / perPage));
     const prev = page > 1 ? page - 1 : null;
     const next = page < pages ? page + 1 : null;
-
     return safeRender(req, res, "admin/users", {
       title: "Admin · Google Users",
       users,
@@ -165,14 +141,11 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
 
 /**
  * POST /admin/users/:id/delete
- * Permanently deletes a user by _id.
  */
 router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     if (!id) return res.status(400).send("Missing user id");
-
-    // Prevent admin from deleting themselves
     const currentUserId = req.user && req.user._id && String(req.user._id);
     if (currentUserId && currentUserId === String(id)) {
       if (req.headers.accept && req.headers.accept.includes("text/html")) {
@@ -180,19 +153,12 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
       }
       return res.status(400).json({ error: "Cannot delete current admin user" });
     }
-
-    // find the user for logging before delete
     const userToDelete = await User.findById(id).lean();
     if (!userToDelete) {
       return res.status(404).send("User not found");
     }
-
-    // perform deletion
     await User.deleteOne({ _id: id });
-
     console.log(`[admin] user deleted id=${id} email=${userToDelete.email} by admin=${req.user && req.user.email}`);
-
-    // redirect back to users list preserving query params if present
     const referer = req.get("referer") || "/admin/users";
     return res.redirect(referer);
   } catch (err) {
@@ -205,129 +171,58 @@ router.post("/users/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /**
- * GET /admin/visits
+ * Visits / unique visitors / visitors stream
+ * (kept from previous file)
  */
 router.get("/visits", ensureAuth, ensureAdmin, async (req, res) => {
   try {
-    const period = req.query.period || "day"; // day|month|year
+    const period = req.query.period || "day";
     const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
-
-    // Build aggregation pipeline using stored day/month/year fields
     let pipeline = [];
-
     if (period === "year") {
-      pipeline.push({
-        $group: {
-          _id: "$year",
-          hits: { $sum: "$hits" },
-        },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
+      pipeline.push({ $group: { _id: "$year", hits: { $sum: "$hits" } } }, { $sort: { _id: 1 } });
     } else if (period === "month") {
-      pipeline.push({
-        $group: {
-          _id: "$month",
-          hits: { $sum: "$hits" },
-        },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
+      pipeline.push({ $group: { _id: "$month", hits: { $sum: "$hits" } } }, { $sort: { _id: 1 } });
     } else {
-      // day
-      pipeline.push({
-        $group: {
-          _id: "$day",
-          hits: { $sum: "$hits" },
-        },
-      });
-      pipeline.push({ $sort: { _id: -1 } });
-      pipeline.push({ $limit: days });
+      pipeline.push({ $group: { _id: "$day", hits: { $sum: "$hits" } } }, { $sort: { _id: -1 } }, { $limit: days });
     }
-
     const rawStats = await Visit.aggregate(pipeline);
-
-    // sort ascending by date so charts and tables read left→right
     rawStats.sort((a, b) => (a._id > b._id ? 1 : -1));
-
     const stats = rawStats;
-
-    // flags for template
     const isDay = period === "day";
     const isMonth = period === "month";
     const isYear = period === "year";
-
-    // render with safe callback
-    return safeRender(req, res, "admin/visits", {
-      title: "Admin · Site visits",
-      stats,
-      period,
-      days,
-      isDay,
-      isMonth,
-      isYear,
-    });
+    return safeRender(req, res, "admin/visits", { title: "Admin · Site visits", stats, period, days, isDay, isMonth, isYear });
   } catch (err) {
     console.error("[admin/visits] error:", err && (err.stack || err));
     if (!res.headersSent) return res.status(500).send("Failed to fetch visits");
   }
 });
 
-/**
- * GET /admin/unique-visitors
- */
 router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const period = (req.query.period || "day").toLowerCase();
     const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
     const pathFilter = req.query.path ? String(req.query.path) : null;
-
-    // Build match stage if filtering by path
     const match = {};
     if (pathFilter) match.path = pathFilter;
-
-    // Pipeline will produce documents: { _id: <periodKey>, uniqueCount: <number> }
     let pipeline = [];
-
     if (Object.keys(match).length) pipeline.push({ $match: match });
-
     if (period === "year") {
-      pipeline.push({
-        $group: { _id: "$year", uniqueCount: { $sum: 1 } },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
+      pipeline.push({ $group: { _id: "$year", uniqueCount: { $sum: 1 } } }, { $sort: { _id: 1 } });
     } else if (period === "month") {
-      pipeline.push({
-        $group: { _id: "$month", uniqueCount: { $sum: 1 } },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
+      pipeline.push({ $group: { _id: "$month", uniqueCount: { $sum: 1 } } }, { $sort: { _id: 1 } });
     } else {
-      // default: day
-      pipeline.push({
-        $group: { _id: "$day", uniqueCount: { $sum: 1 } },
-      });
-      pipeline.push({ $sort: { _id: -1 } });
-      pipeline.push({ $limit: days });
-      pipeline.push({ $sort: { _id: 1 } }); // return ascending by date for charts
+      pipeline.push({ $group: { _id: "$day", uniqueCount: { $sum: 1 } } }, { $sort: { _id: -1 } }, { $limit: days }, { $sort: { _id: 1 } });
     }
-
     const series = await UniqueVisit.aggregate(pipeline).allowDiskUse(true);
-
-    // Compute overall unique visitor total
     const totalAgg = [];
     if (Object.keys(match).length) totalAgg.push({ $match: match });
     totalAgg.push({ $group: { _id: "$visitorId" } });
     totalAgg.push({ $count: "totalUnique" });
-
     const totalRes = await UniqueVisit.aggregate(totalAgg).allowDiskUse(true);
     const totalUnique = (totalRes[0] && totalRes[0].totalUnique) || 0;
-
-    return safeRender(req, res, "admin/unique-visitors", {
-      title: "Admin · Unique visitors",
-      series,
-      period,
-      days,
-      path: pathFilter,
-      totalUnique,
-    });
+    return safeRender(req, res, "admin/unique-visitors", { title: "Admin · Unique visitors", series, period, days, path: pathFilter, totalUnique });
   } catch (err) {
     console.error("[admin/unique-visitors] error:", err && (err.stack || err));
     if (!res.headersSent) return res.status(500).send("Failed to fetch unique visitors");
@@ -335,59 +230,34 @@ router.get("/unique-visitors", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /**
- * GET /admin/visitors/stream
- * SSE endpoint — pushes live aggregate stats every N seconds
+ * SSE for visitors (kept)
  */
 router.get("/visitors/stream", ensureAuth, ensureAdmin, async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   if (typeof res.flushHeaders === "function") res.flushHeaders();
-
-  // heartbeat so proxies don't close
   const keepAlive = setInterval(() => {
     try { res.write(":\n\n"); } catch (e) {}
   }, 15000);
-
   let intervalId = null;
-
   async function publish() {
     try {
       const now = new Date();
-      const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-      // 1) total hits today (sum Visit.hits for today)
-      const aggHits = await Visit.aggregate([
-        { $match: { day: today } },
-        { $group: { _id: null, totalHits: { $sum: "$hits" } } },
-      ]);
+      const today = now.toISOString().slice(0, 10);
+      const aggHits = await Visit.aggregate([{ $match: { day: today } }, { $group: { _id: null, totalHits: { $sum: "$hits" } } }]);
       const totalHits = (aggHits[0] && aggHits[0].totalHits) || 0;
-
-      // 2) unique visitors today
       const uniqueToday = await UniqueVisit.countDocuments({ day: today });
-
-      // 3) hits by path (top 10) for today
-      const topPaths = await Visit.aggregate([
-        { $match: { day: today } },
-        { $group: { _id: "$path", hits: { $sum: "$hits" } } },
-        { $sort: { hits: -1 } },
-        { $limit: 10 },
-      ]);
-
+      const topPaths = await Visit.aggregate([{ $match: { day: today } }, { $group: { _id: "$path", hits: { $sum: "$hits" } } }, { $sort: { hits: -1 } }, { $limit: 10 }]);
       const payload = { totalHits, uniqueToday, topPaths, timestamp: new Date().toISOString() };
-
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch (err) {
       const errMsg = String(err?.message || err);
       res.write(`data: ${JSON.stringify({ error: errMsg, timestamp: new Date().toISOString() })}\n\n`);
     }
   }
-
-  // publish immediately, then every 5s
   publish().catch(() => {});
   intervalId = setInterval(() => publish().catch(() => {}), 5000);
-
-  // cleanup on client disconnect
   req.on("close", () => {
     clearInterval(intervalId);
     clearInterval(keepAlive);
@@ -398,285 +268,263 @@ router.get("/visitors-live", ensureAuth, ensureAdmin, (req, res) => {
   return safeRender(req, res, "admin/visitors_live", { title: "Admin · Live Visitors" });
 });
 
-
-// GET /admin/visitors/summary  (returns JSON aggregates for today)
-router.get("/visitors/summary", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    const aggHits = await Visit.aggregate([
-      { $match: { day: today } },
-      { $group: { _id: null, totalHits: { $sum: "$hits" } } },
-    ]);
-
-    const totalHits = (aggHits[0] && aggHits[0].totalHits) || 0;
-    const uniqueToday = await UniqueVisit.countDocuments({ day: today });
-
-    const topPaths = await Visit.aggregate([
-      { $match: { day: today } },
-      { $group: { _id: "$path", hits: { $sum: "$hits" } } },
-      { $sort: { hits: -1 } },
-      { $limit: 10 },
-    ]);
-
-    return res.json({ totalHits, uniqueToday, topPaths, timestamp: new Date().toISOString() });
-  } catch (err) {
-    console.error("/admin/visitors/summary error:", err && (err.stack || err));
-    return res.status(500).json({ error: "summary failed" });
-  }
-});
-
+/* -----------------------------------------
+   NEW: LMS Importer (preview + save to DB)
+   ----------------------------------------- */
 
 /**
- * GET /admin/visits/data
- * Query params:
- *  - period = day|week|month|year  (default day)
- *  - days = N                      (lookback days when period=day; default 30, max 365)
- *  - start=YYYY-MM-DD              (optional start date)
- *  - end=YYYY-MM-DD                (optional end date)
+ * Helper: parseQuizText
+ * Accepts plain text with question blocks separated by blank lines.
+ * Expected block sample:
  *
- * Returns JSON: { period, start, end, series: [{ key: "2025-11-19" | "2025-W47" | "2025-11" | "2025", hits }] }
+ * 1. Taking responsibility in a team means:
+ *
+ * a) Completing only your assigned tasks...
+ * b) Stepping in where needed...
+ * c) Waiting for instructions...
+ * d) Avoiding tasks outside...
+ *
+ * ✅ Correct Answer: b) Stepping in where needed...
+ *
+ * This function is conservative and tries to extract:
+ * - question text
+ * - choices (a,b,c,d)
+ * - correctIndex (0-based)
  */
-router.get("/visits/data", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const period = (req.query.period || "day").toLowerCase();
-    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
-    const start = req.query.start ? String(req.query.start) : null;
-    const end = req.query.end ? String(req.query.end) : null;
-
-    const match = {};
-    // If start/end provided, use them; else if period=day use lookback from today
-    if (start || end) {
-      if (start) match.day = { ...(match.day || {}), $gte: start };
-      if (end) match.day = { ...(match.day || {}), $lte: end };
-    } else if (period === "day") {
-      const now = new Date();
-      const from = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
-      const fromStr = from.toISOString().slice(0, 10);
-      match.day = { $gte: fromStr };
-    }
-
-    // Build aggregation pipeline that groups into requested bucket
-    let groupStage;
-    let projectStage = null;
-    const pipeline = [];
-
-    if (Object.keys(match).length) pipeline.push({ $match: match });
-
-    if (period === "year") {
-      groupStage = { _id: "$year", hits: { $sum: "$hits" } };
-      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
-    } else if (period === "month") {
-      groupStage = { _id: "$month", hits: { $sum: "$hits" } };
-      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
-    } else if (period === "week") {
-      // convert day string to date, then use ISO week + year
-      // produce keys like "2025-W47" (ISO week)
-      pipeline.push({
-        $addFields: {
-          _dayDate: { $dateFromString: { dateString: "$day", timezone: "UTC" } },
-        },
-      });
-      pipeline.push({
-        $group: {
-          _id: {
-            year: { $isoWeekYear: "$_dayDate" },
-            week: { $isoWeek: "$_dayDate" },
-          },
-          hits: { $sum: "$hits" },
-        },
-      });
-      // project a string key for client convenience
-      pipeline.push({
-        $project: {
-          _id: { $concat: [{ $toString: "$_id.year" }, "-W", { $toString: "$_id.week" }] },
-          hits: 1,
-        },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
+function parseQuizText(text) {
+  if (!text || !String(text).trim()) return [];
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  // split into blocks on blank lines
+  const blocks = [];
+  let cur = [];
+  for (const line of lines) {
+    if (!line.trim()) {
+      if (cur.length) {
+        blocks.push(cur.slice());
+        cur = [];
+      }
     } else {
-      // default day grouping (assumes day is stored as YYYY-MM-DD)
-      groupStage = { _id: "$day", hits: { $sum: "$hits" } };
-      pipeline.push({ $group: groupStage }, { $sort: { _id: 1 } });
+      cur.push(line);
+    }
+  }
+  if (cur.length) blocks.push(cur);
+
+  const parsed = [];
+  for (const block of blocks) {
+    // join block to single string for ease
+    const blockText = block.join("\n").trim();
+
+    // attempt to find the question line(s) — first non-choice lines
+    // find the index of first choice (a) line
+    let choiceStart = -1;
+    for (let i = 0; i < block.length; i++) {
+      if (/^\s*[a-dA-D]\s*\)|^\s*[a-dA-D]\s*\./.test(block[i])) {
+        choiceStart = i;
+        break;
+      }
     }
 
-    const raw = await Visit.aggregate(pipeline).allowDiskUse(true);
-    return res.json({ period, start: start || null, end: end || null, series: raw });
-  } catch (err) {
-    console.error("/admin/visits/data error:", err && (err.stack || err));
-    return res.status(500).json({ error: "visits data failed" });
+    if (choiceStart === -1) {
+      // no choices detected — skip
+      continue;
+    }
+
+    // question lines are before choiceStart
+    const questionLines = block.slice(0, choiceStart).join(" ").replace(/^\d+\.\s*/, "").trim();
+    const questionText = questionLines || "";
+
+    // parse choices between choiceStart and maybe correct answer line
+    const choices = [];
+    for (let i = choiceStart; i < block.length; i++) {
+      const line = block[i].trim();
+      // stop if we hit "Correct Answer" line or similar
+      if (/correct answer/i.test(line) || /✅|✔|Correct:/i.test(line)) break;
+      const m = line.match(/^\s*([a-dA-D])\s*[)\.]?\s*(.+)$/);
+      if (m) {
+        choices.push({ label: m[1].toLowerCase(), text: m[2].trim() });
+      } else {
+        // if not match, maybe continuation of previous choice — append
+        if (choices.length) {
+          choices[choices.length - 1].text += " " + line;
+        }
+      }
+    }
+
+    // find correct answer index
+    let correctIndex = null;
+    for (const line of block) {
+      const m = line.match(/([a-dA-D])\s*\)/);
+      // prefer lines like "Correct Answer: b) text" or "✅ Correct Answer: b) ...", or "Correct Answer: b"
+      if (/correct answer/i.test(line) || /✅|✔/.test(line)) {
+        const mm = line.match(/([a-dA-D])\s*[\)\.]?/);
+        if (mm) {
+          const lab = mm[1].toLowerCase();
+          const idx = choices.findIndex((c) => c.label === lab);
+          if (idx !== -1) correctIndex = idx;
+        }
+      }
+    }
+
+    // fallback: if not found, try to search for "(b)" in any line with "Correct"
+    if (correctIndex === null) {
+      // look for any "Correct Answer" containing a letter
+      const caLine = block.find((l) => /correct answer/i.test(l));
+      if (caLine) {
+        const mm = caLine.match(/([a-dA-D])/);
+        if (mm) {
+          const lab = mm[1].toLowerCase();
+          const idx = choices.findIndex((c) => c.label === lab);
+          if (idx !== -1) correctIndex = idx;
+        }
+      }
+    }
+
+    // last fallback: if only one choice is marked with leading "✅" or similar
+    if (correctIndex === null) {
+      for (let i = 0; i < choices.length; i++) {
+        if (/^\s*✅|^\s*✔/.test(choices[i].text)) {
+          correctIndex = i;
+          // strip the mark
+          choices[i].text = choices[i].text.replace(/^\s*✅\s*/, "").replace(/^\s*✔\s*/, "");
+          break;
+        }
+      }
+    }
+
+    // if still null and choices exist, default to 0 (but mark as unsure)
+    if (correctIndex === null && choices.length) correctIndex = 0;
+
+    if (!questionText || choices.length < 2) {
+      // skip invalid blocks
+      continue;
+    }
+
+    parsed.push({
+      raw: blockText,
+      text: questionText,
+      choices: choices.map((c) => ({ label: c.label, text: c.text })),
+      correctIndex,
+    });
   }
+
+  return parsed;
+}
+
+/**
+ * GET /admin/lms/import
+ * Show importer UI (preview)
+ */
+router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
+  // Render the same import view you were using (views/admin/lms_import.hbs).
+  // If you don't have that view, this expects a template that posts the pasted text to POST /admin/lms/import
+  return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)" });
 });
 
 /**
- * GET /admin/unique-visitors/data
- * Same params as /visits/data but returns unique counts per bucket
- * Response: { period, series: [{ key, count }] }
+ * POST /admin/lms/import
+ * Body parameters:
+ *  - text (string) : pasted quiz text
+ *  - save = "1" to persist parsed questions into DB
  */
-router.get("/unique-visitors/data", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const period = (req.query.period || "day").toLowerCase();
-    const days = Math.max(1, Math.min(365, parseInt(req.query.days || "30", 10)));
-    const start = req.query.start ? String(req.query.start) : null;
-    const end = req.query.end ? String(req.query.end) : null;
-
-    const match = {};
-    if (start || end) {
-      if (start) match.day = { ...(match.day || {}), $gte: start };
-      if (end) match.day = { ...(match.day || {}), $lte: end };
-    } else if (period === "day") {
-      const now = new Date();
-      const from = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
-      match.day = { $gte: from.toISOString().slice(0, 10) };
-    }
-
-    const pipeline = [];
-    if (Object.keys(match).length) pipeline.push({ $match: match });
-
-    if (period === "year") {
-      pipeline.push({ $group: { _id: "$year", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
-    } else if (period === "month") {
-      pipeline.push({ $group: { _id: "$month", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
-    } else if (period === "week") {
-      pipeline.push({
-        $addFields: { _dayDate: { $dateFromString: { dateString: "$day", timezone: "UTC" } } },
-      });
-      pipeline.push({
-        $group: {
-          _id: { year: { $isoWeekYear: "$_dayDate" }, week: { $isoWeek: "$_dayDate" }, visitorId: "$visitorId" },
-        },
-      });
-      // now we have one doc per visitor per week; group by week and count distinct visitors
-      pipeline.push({
-        $group: { _id: { year: "$_id.year", week: "$_id.week" }, count: { $sum: 1 } },
-      });
-      pipeline.push({
-        $project: { _id: { $concat: [{ $toString: "$_id.year" }, "-W", { $toString: "$_id.week" }] }, count: 1 },
-      });
-      pipeline.push({ $sort: { _id: 1 } });
-    } else {
-      // day default
-      pipeline.push({ $group: { _id: "$day", count: { $sum: 1 } } }, { $sort: { _id: 1 } });
-    }
-
-    const raw = await UniqueVisit.aggregate(pipeline).allowDiskUse(true);
-    return res.json({ period, start: start || null, end: end || null, series: raw });
-  } catch (err) {
-    console.error("/admin/unique-visitors/data error:", err && (err.stack || err));
-    return res.status(500).json({ error: "unique visitors data failed" });
-  }
-});
-
-/* -----------------------------
-   NEW: Admin LMS helper routes
-   -----------------------------
-   These are minimal, safe helpers so admin can:
-     - visit /admin/lms/quiz  (redirect to public UI)
-     - visit /admin/lms/questions (small admin landing)
-     - visit /admin/lms/import  (paste upload textarea)
-   They use ensureAuth + ensureAdmin already defined above.
-*/
-
-// Redirect /admin/lms/quiz -> public quiz UI (/lms/quiz)
-router.get("/lms/quiz", ensureAuth, ensureAdmin, (req, res) => {
-  // you were seeing "Cannot GET /admin/lms/quiz" — this makes the admin link work by redirecting.
-  return res.redirect("/lms/quiz");
-});
-
-// Admin landing for LMS question management (simple page with quick links)
-router.get("/lms/questions", ensureAuth, ensureAdmin, (req, res) => {
-  const html = `
-    <html>
-      <head><title>Admin · LMS Questions</title>
-        <meta charset="utf-8" />
-        <style>body{font-family:Arial;padding:24px;background:#f7f9fb;color:#111}a{color:#0a66c2}</style>
-      </head>
-      <body>
-        <h1>Admin — LMS Questions</h1>
-        <p>Quick links:</p>
-        <ul>
-          <li><a href="/admin/lms/import">Import questions (paste)</a></li>
-          <li><a href="/api/lms/quiz?count=5" target="_blank">Fetch sample quiz (JSON) — /api/lms/quiz?count=5</a></li>
-          <li><a href="/lms/quiz" target="_blank">Open public Quiz UI — /lms/quiz</a></li>
-        </ul>
-        <p><small>If you want full CSV/.txt file upload support, we can add a file upload endpoint (requires multer) — tell me and I'll add it.</small></p>
-      </body>
-    </html>
-  `;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
-});
-
-// Import via paste (GET shows a textarea; POST accepts plain text content)
-router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
-  const html = `
-    <html>
-      <head><title>Import LMS Questions</title>
-        <meta charset="utf-8" />
-        <style>body{font-family:Arial;padding:18px;background:#fcfdff}textarea{width:100%;height:360px;font-family:monospace;padding:12px}</style>
-      </head>
-      <body>
-        <h1>Import LMS Questions (paste)</h1>
-        <form method="POST" action="/admin/lms/import">
-          <p>Paste your questions & answers here (plain text). The importer will attempt to parse lines and show a summary.</p>
-          <textarea name="content" placeholder="Paste questions..."></textarea>
-          <div style="margin-top:8px">
-            <button type="submit">Import</button>
-            <a href="/admin/lms/questions" style="margin-left:12px">Back</a>
-          </div>
-        </form>
-      </body>
-    </html>
-  `;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
-});
-
-// NOTE: For simplicity we accept urlencoded body for the textarea. If your server didn't set body parser for urlencoded on admin routes,
-// ensure app.use(express.urlencoded({ extended: true })) is declared globally (your server.js has this already).
 router.post("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
   try {
-    const content = String(req.body && (req.body.content || "")).trim();
-    if (!content) {
-      return res.status(400).send("No content provided. Paste questions into the textarea and submit.");
+    const text = req.body.text || req.body.paste || "";
+    if (!text || !String(text).trim()) {
+      return res.status(400).send("No text provided");
     }
 
-    // Basic naive parser: split by double newline into blocks, keep raw blocks
-    // (You should replace this with your real import logic or model inserts)
-    const blocks = content.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+    const parsed = parseQuizText(text);
+    if (!parsed.length) {
+      // Render a simple failure page so admin can reattempt
+      return safeRender(req, res, "admin/lms_import_failed", { title: "Import failed", message: "No valid question blocks detected. Check formatting." });
+    }
 
-    // For this simple importer, return a summary (count of blocks) and echo first few parsed blocks
-    const preview = blocks.slice(0, 10).map((b, i) => `<pre style="white-space:pre-wrap;padding:8px;border:1px solid #eee">${i+1}. ${escapeHtml(b)}</pre>`).join("\n");
+    // If the admin clicked the Save/Import action, persist to DB
+    const wantsSave = String(req.body.save || "").trim() === "1" || req.query.save === "1";
+    if (wantsSave) {
+      // Build docs for insert
+      const docs = parsed.map((q) => {
+        const doc = {
+          text: q.text,
+          choices: q.choices.map((c) => ({ label: c.label, text: c.text })),
+          correctIndex: (typeof q.correctIndex === "number" ? q.correctIndex : 0),
+          tags: [],
+          difficulty: null,
+          source: "import",
+          createdAt: new Date(),
+        };
+        return doc;
+      });
 
-    const html = `
-      <html>
-        <head><title>Import Result</title><meta charset="utf-8" /></head>
-        <body style="font-family:Arial;padding:18px">
-          <h1>Import summary</h1>
-          <p>Detected <strong>${blocks.length}</strong> question blocks (split on blank lines).</p>
-          <p>This importer currently <strong>does not</strong> insert into DB automatically — it shows a preview so you can verify format. If you want, I can modify this endpoint to save parsed questions into your Questions collection (requires the Question model and exact mapping).</p>
-          <h3>Preview (first 10 blocks)</h3>
-          ${preview}
-          <p style="margin-top:12px"><a href="/admin/lms/questions">Back to LMS admin</a></p>
-        </body>
-      </html>
-    `;
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.send(html);
+      // Insert into DB
+      const insertRes = await Question.insertMany(docs, { ordered: false });
+      console.log(`[admin/lms/import] inserted ${insertRes.length} questions into DB by ${req.user && req.user.email}`);
+      return safeRender(req, res, "admin/lms_import_saved", {
+        title: "Import saved",
+        count: insertRes.length,
+        docs: insertRes,
+      });
+    }
+
+    // Otherwise, show preview page with parsed blocks and an option to save
+    return safeRender(req, res, "admin/lms_import_preview", {
+      title: "Import summary",
+      blocksDetected: parsed.length,
+      preview: parsed.slice(0, 50), // show first 50
+      originalText: text,
+    });
   } catch (err) {
     console.error("[admin/lms/import] error:", err && (err.stack || err));
-    return res.status(500).send("Import failed");
+    // respond with simple error page
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      if (!res.headersSent) return res.status(500).send("Import failed");
+      return;
+    }
+    return res.status(500).json({ error: "Import failed", detail: String(err && err.message) });
+  }
+});
+
+/* -----------------------------------------
+   Admin: Manage Questions listing (simple)
+   ----------------------------------------- */
+
+/**
+ * GET /admin/lms/questions
+ * List questions with pagination and quick delete
+ */
+router.get("/lms/questions", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const perPage = Math.min(200, Math.max(10, parseInt(req.query.perPage || "50", 10)));
+    const total = await Question.countDocuments({});
+    const docs = await Question.find({}).sort({ createdAt: -1 }).skip((page - 1) * perPage).limit(perPage).lean();
+    return safeRender(req, res, "admin/lms_questions", {
+      title: "Manage LMS Questions",
+      questions: docs,
+      page,
+      perPage,
+      total,
+      pages: Math.max(1, Math.ceil(total / perPage)),
+    });
+  } catch (err) {
+    console.error("[admin/lms/questions] error:", err && (err.stack || err));
+    return res.status(500).send("Failed to load questions");
   }
 });
 
 /**
- * If you prefer a more advanced importer (uploading .txt/.csv, parsing MCQ formats,
- * inserting into a Questions collection, validating duplicates), tell me and I will:
- *  - Add a Question model (models/question.js)
- *  - Add multer file upload support
- *  - Implement robust parsing and DB insert with validation
+ * POST /admin/lms/questions/:id/delete
  */
+router.post("/lms/questions/:id/delete", ensureAuth, ensureAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).send("Missing id");
+    await Question.deleteOne({ _id: id });
+    return res.redirect("/admin/lms/questions");
+  } catch (err) {
+    console.error("[admin/lms/questions/:id/delete] error:", err && (err.stack || err));
+    return res.status(500).send("Delete failed");
+  }
+});
 
-// export
 export default router;
