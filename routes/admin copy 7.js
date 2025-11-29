@@ -87,7 +87,7 @@ function parseQuestionBlocks(raw) {
 
   for (const block of blocks) {
     const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
-    if (lines.length < 3) continue;
+    if (lines.length < 2) continue;
 
     // strip leading numbering if present
     if (/^\d+\.\s*/.test(lines[0])) {
@@ -95,12 +95,15 @@ function parseQuestionBlocks(raw) {
     }
     const questionText = lines[0];
 
-    // find choices lines a) b) c) d)
-    const choiceLines = lines.filter(l => /^[a-d]\)/i.test(l));
-    const choices = choiceLines.map(cl => cl.replace(/^[a-d]\)\s*/i, "").trim());
+    // collect choice lines (a) b) c) d) ) in order they appear
+    const choiceLines = lines.filter(l => /^[a-d][\)\.]/i.test(l));
+    const choices = choiceLines.map(cl => {
+      const m = cl.match(/^[a-d][\)\.]\s*(.*)$/i);
+      return (m && m[1]) ? m[1].trim() : cl;
+    });
 
     // find correct answer line
-    const correctLine = lines.find(l => /Correct Answer:/i.test(l) || /✅ Correct Answer:/i.test(l));
+    const correctLine = lines.find(l => /Correct Answer:/i.test(l) || /^✅/u.test(l));
     let correctIndex = null;
     if (correctLine) {
       const m = correctLine.match(/Correct Answer:\s*([a-d])\)?/i);
@@ -108,17 +111,21 @@ function parseQuestionBlocks(raw) {
         const letter = m[1].toLowerCase();
         correctIndex = { a:0,b:1,c:2,d:3 }[letter];
       } else {
-        const textMatch = correctLine.replace(/Correct Answer:\s*/i, "").trim();
-        const found = choices.findIndex(c => c.toLowerCase().startsWith(textMatch.toLowerCase()) || c.toLowerCase() === textMatch.toLowerCase());
-        if (found >= 0) correctIndex = found;
+        // fallback: match provided text to one of the choices
+        const after = correctLine.replace(/Correct Answer:\s*/i, "").replace(/^✅\s*/u, "").trim();
+        if (after) {
+          const found = choices.findIndex(c => c.toLowerCase().startsWith(after.toLowerCase()) || c.toLowerCase() === after.toLowerCase());
+          if (found >= 0) correctIndex = found;
+        }
       }
     }
 
     if (!questionText || choices.length === 0) continue;
 
+    // store choices as embedded objects { text: ... } (matches typical Mongoose embedded shape)
     parsed.push({
       text: questionText,
-      choices: choices.map(c => ({ text: c })),
+      choices: choices.map(c => ({ text: String(c).trim() })),
       correctIndex: typeof correctIndex === "number" ? correctIndex : null,
       rawBlock: block
     });
@@ -139,7 +146,7 @@ router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
  * Accepts:
  *   - file upload (field 'file')
  *   - or pasted text in textarea (field 'text')
- * If 'save' param present, attempt to save parsed questions to DB (Questions collection).
+ * If 'save' param present (save=1) will attempt to save parsed questions to DB.
  */
 router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async (req, res) => {
   try {
@@ -159,7 +166,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       return res.status(400).json({ error: "No text provided" });
     }
 
-    // Save fallback file to disk so API /mnt/data reads it
+    // Save fallback file to disk so API /mnt/data reads it even if DB not used
     try {
       const dir = path.dirname(FALLBACK_PATH);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -182,11 +189,11 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
     if (saveToDb && blocks.length) {
       try {
-        // import Question model if present (best-effort)
-        let Question;
+        // dynamic import of Question model (best-effort)
+        let Question = null;
         try {
           Question = (await import("../models/question.js")).default;
-        } catch (e) {
+        } catch (e1) {
           try {
             Question = (await import("../models/question/index.js")).default;
           } catch (e2) {
@@ -198,19 +205,23 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
           dbSkipped = true;
           console.warn("[admin/lms/import] Question model not found — skipping DB insert");
         } else {
-          // map parsed blocks into the DB schema shape (best effort)
-          const toInsert = blocks.map(b => ({
-            text: b.text,
-            // store choices as array of objects or strings depending on your schema
-            choices: b.choices.map(c => (typeof c === "string" ? { text: c } : (c.text ? { text: c.text } : c))),
-            correctIndex: typeof b.correctIndex === "number" ? b.correctIndex : null,
-            tags: ["responsibility"],
-            source: "import",
-            createdAt: new Date()
-          }));
+          // Prepare docs to match common embedded-choice schema: choices: [{ text }]
+          const toInsert = blocks.map(b => {
+            return {
+              text: b.text,
+              // ensure the choices are objects (they already are from parser)
+              choices: Array.isArray(b.choices) ? b.choices.map(ch => (typeof ch === "string" ? { text: ch } : { text: String(ch.text || ch) })) : [],
+              correctIndex: (typeof b.correctIndex === "number" && b.correctIndex >= 0) ? b.correctIndex : 0,
+              tags: ["responsibility"],
+              source: "import",
+              createdAt: new Date()
+            };
+          });
 
-          const result = await Question.insertMany(toInsert);
-          inserted = result.length || 0;
+          // insertMany with ordered:false so one bad doc won't block all inserts
+          const result = await Question.insertMany(toInsert, { ordered: false }).catch(e => { throw e; });
+          inserted = (result && result.length) ? result.length : 0;
+          console.log(`[admin/lms/import] inserted ${inserted} questions into DB`);
         }
       } catch (err) {
         console.error("[admin/lms/import] DB insert error:", err && (err.stack || err));
@@ -218,7 +229,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       }
     }
 
-    // Render preview page (if HTML) with summary
+    // Render preview page (HTML) with summary
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return safeRender(req, res, "admin/lms_import_summary", {
         title: "Import summary",
@@ -243,132 +254,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
   }
 });
 
-// ------------------------------------------------------------------
-// NEW: quiz listing + delete UI for admin
-// ------------------------------------------------------------------
-
-// GET /admin/lms/quizzes
-// Lists quiz groups by source and tag (counts) and provides delete buttons
-router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    // try to load Question model
-    let Question;
-    try {
-      Question = (await import("../models/question.js")).default;
-    } catch (e) {
-      try {
-        Question = (await import("../models/question/index.js")).default;
-      } catch (e2) {
-        Question = null;
-      }
-    }
-
-    if (!Question) {
-      // If no Question model, render a helpful page
-      return safeRender(req, res, "admin/lms_quizzes", {
-        title: "Quizzes",
-        error: "Question model not found. Ensure ../models/question.js exists.",
-        sources: [],
-        tags: []
-      });
-    }
-
-    // aggregate counts by source
-    const bySource = await Question.aggregate([
-      { $group: { _id: "$source", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    // aggregate counts by tags (tags is an array)
-    const byTag = await Question.aggregate([
-      { $unwind: { path: "$tags", preserveNullAndEmptyArrays: true } },
-      { $group: { _id: "$tags", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    // normalize results
-    const sources = (bySource || []).map(s => ({ source: s._id || "undefined", count: s.count }));
-    const tags = (byTag || []).map(t => ({ tag: t._id || "(no tag)", count: t.count }));
-
-    return safeRender(req, res, "admin/lms_quizzes", {
-      title: "Manage Quizzes",
-      sources,
-      tags,
-      error: null
-    });
-  } catch (err) {
-    console.error("[admin/lms/quizzes] error:", err && (err.stack || err));
-    return safeRender(req, res, "admin/lms_quizzes", {
-      title: "Manage Quizzes",
-      sources: [],
-      tags: [],
-      error: String(err.message || err)
-    });
-  }
-});
-
-// POST /admin/lms/quizzes/delete
-// Body: { type: "source"|"tag", value: "<value>" }
-// deletes matching questions (after admin confirmation in UI)
-router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const type = req.body && req.body.type;
-    const value = req.body && req.body.value;
-    if (!type || !value) {
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.status(400).send("Missing type or value");
-      }
-      return res.status(400).json({ error: "Missing type or value" });
-    }
-
-    // load model
-    let Question;
-    try {
-      Question = (await import("../models/question.js")).default;
-    } catch (e) {
-      try {
-        Question = (await import("../models/question/index.js")).default;
-      } catch (e2) {
-        Question = null;
-      }
-    }
-
-    if (!Question) {
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.status(500).send("Question model not found");
-      }
-      return res.status(500).json({ error: "Question model not found" });
-    }
-
-    let filter = {};
-    if (type === "source") {
-      filter = { source: value };
-    } else if (type === "tag") {
-      filter = { tags: value };
-    } else {
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.status(400).send("Invalid delete type");
-      }
-      return res.status(400).json({ error: "Invalid delete type" });
-    }
-
-    // optionally you might want to require an additional "confirm" param; UI already confirms via JS
-    const deleteResult = await Question.deleteMany(filter);
-
-    console.log(`[admin/lms/quizzes/delete] admin=${(req.user && req.user.email)} deleted ${deleteResult.deletedCount} docs for ${type}=${value}`);
-
-    // redirect back to list
-    return res.redirect("/admin/lms/quizzes");
-  } catch (err) {
-    console.error("[admin/lms/quizzes/delete] error:", err && (err.stack || err));
-    if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      return res.status(500).send("Delete failed");
-    }
-    return res.status(500).json({ error: "Delete failed", detail: String(err.message || err) });
-  }
-});
-
-// other admin routes below (user listing, visits, etc).
+// --- Example admin users page (kept minimal) ---
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 }).lean();
@@ -378,5 +264,7 @@ router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
     return res.status(500).send("Failed to load users");
   }
 });
+
+// You can add additional admin endpoints (visits, unique-visitors, etc.) below if needed.
 
 export default router;
