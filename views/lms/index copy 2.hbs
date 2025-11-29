@@ -61,7 +61,6 @@
     .btn{display:inline-block;padding:12px 18px;border-radius:10px;font-weight:800;font-size:14px}
     .btn-primary{background:var(--gold);color:#000}
     .btn-outline{background:transparent;border:2px solid rgba(212,175,55,0.95);color:rgba(255,255,255,0.95)}
-    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)}
 
     /* hero right card */
     .hero-right{width:360px;min-width:260px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));border-left:1px solid rgba(255,255,255,0.04);padding:18px;border-radius:0 0 0 0;position:relative}
@@ -80,7 +79,7 @@
     .section-left{flex:1;min-width:300px}
     .section-right{flex:1;min-width:260px}
     .section h2{margin:0 0 8px 0;color:var(--gold);font-size:22px}
-    .section p{margin:0;color:rgba(255,255,255,0.88) }
+    .section p{margin:0;color:rgba(255,255,255,0.88)}
 
     /* placement grid & features */
     .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
@@ -174,16 +173,7 @@
               <a class="btn btn-primary" href="/auth/google">Sign in to Start</a>
             {{/if}}
             <a class="btn btn-outline" href="/lms/course/{{#if courses.[0].slug}}{{courses.[0].slug}}{{else}}responsibility-lms{{/if}}#modules">Explore Courses</a>
-
-            <!-- Quiz CTAs -->
-            <a class="btn btn-ghost" href="/lms/quiz" aria-label="Take Quiz (UI)">Take a 5-question Quiz</a>
-            <a class="btn btn-ghost" href="/api/lms/quiz?count=5" target="_blank" aria-label="Fetch sample quiz via API">API Sample</a>
-
-            {{#if user}}
-              <!-- admin-only action visible to signed-in users; actual server enforces admin rights -->
-              <a class="btn btn-ghost" href="/admin/lms/import" aria-label="Load Questions (Admin)">Load Questions (Admin)</a>
-            {{/if}}
-
+            <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/lms/quiz">Take a 5-question Quiz</a>
           </div>
         </div>
 
@@ -207,10 +197,10 @@
             <div style="margin-top:12px;color:var(--muted);font-size:13px">
               Quick actions:
               <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-                <a class="btn" href="/api/lms/quiz?count=5" target="_blank">API: /api/lms/quiz?count=5</a>
-                <a class="btn" href="/lms/quiz">Open Quiz UI</a>
+                <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/api/lms/quiz?count=5" target="_blank">API: sample /api/lms/quiz?count=5</a>
+                <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/lms/quiz">Open Quiz UI</a>
                 {{#if user}}
-                  <a class="btn" href="/admin/lms/import">Load Questions (Admin)</a>
+                  <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/admin/lms/questions">Manage Questions</a>
                 {{/if}}
               </div>
             </div>
@@ -328,7 +318,7 @@
             <a class="btn" href="/lms/quiz">Attempt Sample Quiz (UI)</a>
             <a class="btn" href="/api/lms/quiz?count=5" target="_blank">Fetch API sample</a>
             {{#if user}}
-              <a class="btn" href="/admin/lms/import">Admin: Load Questions</a>
+              <a class="btn" href="/admin/lms/questions">Admin: Manage Questions</a>
             {{/if}}
           </div>
 

@@ -108,6 +108,8 @@ app.use("/lms", lmsRoutes);
 app.use("/api/lms", apiLmsRoutes);
 app.use("/admin", lmsAdminRoutes); // admin UI + upload
 app.use("/api", quizApiRoutes);    // quiz endpoints
+
+
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
