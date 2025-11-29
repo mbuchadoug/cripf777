@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, updated)
+// server.js — CRIPFCnt SCOI Server (merged, v6)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -10,15 +10,25 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
-
-// routes & utils
 import trackRouter from "./routes/track.js";
+import User from "./models/user.js";
 import lmsRoutes from "./routes/lms.js";
 import apiLmsRoutes from "./routes/api_lms.js";
-import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
-import User from "./models/user.js";
+import lmsAdminRoutes from "./routes/lmsAdmin.js";
+import quizApiRoutes from "./routes/quizApi.js";
+
+
+
+
+
+
+// near top of server.js (after other imports)
+import adminRoutes from "./routes/admin.js";
+
+import autoFetchAndScore from "./utils/autoFetchAndScore.js";
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
+import { ensureAuth } from "./middleware/authGuard.js";
 
 dotenv.config();
 
@@ -29,6 +39,7 @@ const app = express();
 
 // friendly support contact (configurable via .env)
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
+
 
 // Basic middleware
 app.use(express.json());
@@ -46,7 +57,7 @@ app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
-// OpenAI client (optional)
+// OpenAI client
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Ensure data folder exists
@@ -85,25 +96,19 @@ app.use(
 );
 
 // ---------- PASSPORT setup ----------
-configurePassport(); // expects config/passport.js to call passport.use(...) and serialize/deserialize
+configurePassport(); // expects config/passport.js to call passport.use(...)
 app.use(passport.initialize());
 app.use(passport.session());
 
-// mount auth routes first (so /auth is available when needed)
+// expose auth routes under /auth
 app.use("/auth", authRoutes);
-
-// ADMIN (single mount for admin UI & import routes)
-// Ensure routes/admin.js contains everything admin-related (user management + lms imports)
 app.use("/admin", adminRoutes);
-
-// API routes — keep LMS API on /api/lms so quiz UI fetches work: GET /api/lms/quiz and POST /api/lms/quiz/submit
-app.use("/api/lms", apiLmsRoutes);
-
-// Other API-level routes (tracking, etc.)
 app.use("/api", trackRouter);
-
-// Public LMS pages
 app.use("/lms", lmsRoutes);
+app.use("/api/lms", apiLmsRoutes);
+app.use("/admin", lmsAdminRoutes); // admin UI + upload
+app.use("/api", quizApiRoutes);    // quiz endpoints
+
 
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
@@ -173,12 +178,15 @@ ${commentary}
 app.get("/", (req, res) => {
   res.render("website/index", { user: req.user || null });
 });
+
 app.get("/about", (req, res) => {
   res.render("website/about", { user: req.user || null });
 });
+
 app.get("/services", (req, res) => {
   res.render("website/services", { user: req.user || null });
 });
+
 app.get("/contact", (req, res) => {
   res.render("website/contact", { user: req.user || null });
 });
@@ -186,7 +194,6 @@ app.get("/contact", (req, res) => {
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page (protected)
 // -------------------------------
-import { ensureAuth } from "./middleware/authGuard.js";
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -197,7 +204,6 @@ app.get("/audit", ensureAuth, (req, res) => {
 
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
-// (kept as-is from your original file)
 // -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   // Require authentication
@@ -257,6 +263,7 @@ app.post("/api/chat-stream", async (req, res) => {
             message: `You have reached your daily limit of ${DAILY_LIMIT} searches (used: ${used}). Please try again tomorrow or contact support.`,
             used,
             limit: DAILY_LIMIT,
+            // friendly message suitable for direct display
             friendly: `You’ve used ${used} of ${DAILY_LIMIT} free audits today. Your free quota will reset at ${resetAtDate.toLocaleString('en-GB', { timeZone: 'UTC' })} (UTC). If you need more audits today, contact ${SUPPORT_EMAIL}.`,
             resetAt: resetAtISO,
             support: SUPPORT_EMAIL
