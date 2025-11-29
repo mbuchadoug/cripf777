@@ -6,34 +6,108 @@
   <title>Take Quiz — Responsibility LMS</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:24px; background:#0b0b0b;color:#fff}
-    .container{max-width:920px;margin:0 auto}
-    .card{background:linear-gradient(180deg,#0f0f0f,#0b0b0b);padding:18px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
-    h1{margin:0 0 12px 0;color:#D4AF37}
-    .q{margin-top:16px;padding:12px;border-radius:8px;background:#0b0b0b;border:1px solid rgba(255,255,255,0.02)}
-    .choice{display:block;padding:8px;margin-top:8px;border-radius:8px;background:#0f1112;border:1px solid rgba(255,255,255,0.02);cursor:pointer}
-    .choice.selected{outline:2px solid rgba(212,175,55,0.9);background:linear-gradient(90deg, rgba(212,175,55,0.06), transparent)}
-    .btn{display:inline-block;padding:10px 14px;border-radius:8px;background:#D4AF37;color:#000;font-weight:800;border:none;cursor:pointer;margin-top:12px}
-    .muted{color:#9aa3ad;font-size:13px}
-    .score{margin-top:12px;padding:12px;border-radius:8px;background:linear-gradient(90deg,#051117,#07121a);border:1px solid rgba(255,255,255,0.02)}
-    .correct{background:linear-gradient(90deg,#06360b,#084d18)}
-    .wrong{background:linear-gradient(90deg,#3b0b0b,#611215)}
+    :root{
+      --gold: #D4AF37;
+      --bg: #0b0b0b;
+      --card: #0f1213;
+      --muted: #9aa3ad;
+      --choice-bg: rgba(255,255,255,0.03);
+      --choice-text: #eef2f2;
+      --selected-bg-1: #D4AF37;
+      --selected-bg-2: #FFEA9C;
+    }
+
+    html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial;}
+    .container{max-width:980px;margin:28px auto;padding:0 18px}
+    .card{
+      background: linear-gradient(180deg, var(--card), #0b0b0b);
+      padding:26px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);
+      box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+    }
+
+    h1{margin:0 0 10px;color:var(--gold);font-size:34px;letter-spacing:0.2px}
+    .muted{color:var(--muted);font-size:14px}
+
+    /* Question block */
+    .q{margin-top:20px;padding:18px;border-radius:12px;background:linear-gradient(180deg,#0e0f10,#0b0b0b);border:1px solid rgba(255,255,255,0.02)}
+    .q .qtitle{font-weight:800;font-size:18px;margin-bottom:12px;color:#fff}
+
+    /* Choice button */
+    .choice{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      width:100%;
+      padding:12px 14px;
+      margin:8px 0;
+      border-radius:10px;
+      background: var(--choice-bg);
+      border:1px solid rgba(255,255,255,0.03);
+      color:var(--choice-text);
+      font-size:15px;
+      text-align:left;
+      cursor:pointer;
+      transition: transform .06s ease, box-shadow .06s ease, background .08s ease;
+    }
+    .choice:focus{outline:none;box-shadow:0 6px 20px rgba(0,0,0,0.6);}
+    .choice:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,0.45);background:rgba(255,255,255,0.05)}
+
+    /* letter badge */
+    .choice .letter{
+      min-width:34px;height:34px;border-radius:8px;
+      display:inline-flex;align-items:center;justify-content:center;
+      background:rgba(0,0,0,0.35);color:var(--choice-text);
+      font-weight:800;border:1px solid rgba(255,255,255,0.03);
+      flex-shrink:0;
+    }
+
+    /* selected */
+    .choice.selected{
+      background: linear-gradient(90deg, var(--selected-bg-1), var(--selected-bg-2));
+      color:#0b0b0b;
+      border:1px solid rgba(0,0,0,0.2);
+      box-shadow: 0 14px 36px rgba(212,175,55,0.12);
+    }
+    .choice.selected .letter{background:transparent;color:#0b0b0b;border:none}
+
+    /* actions */
+    .actions{margin-top:16px;display:flex;gap:12px;align-items:center}
+    .btn{
+      display:inline-block;padding:10px 16px;border-radius:10px;background:var(--gold);color:#000;font-weight:800;border:none;cursor:pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    }
+    .btn:disabled{opacity:0.6;cursor:not-allowed}
+
+    /* result */
+    .score{margin-top:16px;padding:14px;border-radius:10px;background:linear-gradient(90deg,#051117,#07121a);border:1px solid rgba(255,255,255,0.02)}
+    .result-list{margin-top:12px}
+    .result-item{margin-top:12px;padding:10px;border-radius:8px;background:#0e0e0f;border:1px solid rgba(255,255,255,0.02)}
+    .correct{background:linear-gradient(90deg,#06360b,#084d18);color:#eaffea}
+    .wrong{background:linear-gradient(90deg,#3b0b0b,#611215);color:#ffd6d6}
+
+    /* small screens */
+    @media (max-width:640px){
+      .card{padding:16px}
+      h1{font-size:24px}
+      .choice{font-size:14px;padding:10px}
+      .choice .letter{min-width:30px;height:30px;font-size:14px}
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card">
+  <div class="container" role="main">
+    <div class="card" role="region" aria-label="Responsibility quick quiz">
       <h1>Responsibility — Quick Quiz</h1>
       <div class="muted">Each quiz pulls random questions from the bank. Answer the 5 questions below and submit to see your score.</div>
 
-      <div id="quizArea"></div>
+      <div id="quizArea" style="margin-top:14px" aria-live="polite"></div>
 
-      <div style="margin-top:14px">
-        <button id="submitBtn" class="btn">Submit Answers</button>
-        <span id="status" class="muted" style="margin-left:12px"></span>
+      <div class="actions">
+        <button id="submitBtn" class="btn" aria-disabled="false">Submit Answers</button>
+        <div id="status" class="muted" style="margin-left:8px"></div>
       </div>
 
-      <div id="result" style="display:none" class="score"></div>
+      <div id="result" style="display:none" class="score" aria-live="polite"></div>
     </div>
   </div>
 
@@ -46,20 +120,24 @@
 
       let examId = null;
       let series = []; // [{id,text,choices:[{text}],tags,difficulty}]
-      let answers = {}; // map qid -> index
+      let answers = {}; // qid -> index
 
       async function loadQuiz(count=5){
         status.textContent = "Loading quiz...";
         try {
           const res = await fetch('/api/lms/quiz?count=' + encodeURIComponent(count));
-          if (!res.ok) throw new Error('failed to fetch quiz');
+          if (!res.ok) {
+            const t = await res.json().catch(()=>null);
+            throw new Error((t && t.error) ? t.error : 'failed to fetch quiz');
+          }
           const payload = await res.json();
-          examId = payload.examId;
+          examId = payload.examId || null;
           series = payload.series || [];
           renderQuiz(series);
           status.textContent = "";
         } catch (e) {
           status.textContent = "Error loading quiz: " + (e.message || e);
+          quizArea.innerHTML = '';
         }
       }
 
@@ -69,43 +147,77 @@
         list.forEach((q, idx) => {
           const div = document.createElement('div');
           div.className = 'q';
+          div.setAttribute('data-qid', q.id || '');
           const qnum = idx + 1;
-          const html = `<div style="font-size:15px;font-weight:700">Q${qnum}. ${escapeHtml(q.text)}</div>`;
-          div.innerHTML = html;
-          q.choices.forEach((c, ci) => {
+          const qtitle = document.createElement('div');
+          qtitle.className = 'qtitle';
+          qtitle.innerText = `Q${qnum}. ${q.text}`;
+          div.appendChild(qtitle);
+
+          // choices container
+          const choicesWrap = document.createElement('div');
+          choicesWrap.className = 'choices';
+
+          (q.choices || []).forEach((c, ci) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'choice';
-            btn.innerText = c.text;
+            btn.setAttribute('aria-pressed', 'false');
+            btn.setAttribute('data-index', String(ci));
+
+            // letter badge (a, b, c, d)
+            const letter = document.createElement('div');
+            letter.className = 'letter';
+            letter.innerText = String.fromCharCode(97 + ci); // a,b,c...
+
+            const txt = document.createElement('div');
+            txt.className = 'ctxt';
+            txt.innerText = c.text;
+
+            btn.appendChild(letter);
+            btn.appendChild(txt);
+
             btn.addEventListener('click', () => {
-              // mark selected
-              const parent = btn.parentElement;
-              parent.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
+              // remove selected from siblings
+              choicesWrap.querySelectorAll('.choice').forEach(n => {
+                n.classList.remove('selected');
+                n.setAttribute('aria-pressed','false');
+              });
               btn.classList.add('selected');
+              btn.setAttribute('aria-pressed','true');
               answers[q.id] = ci;
             });
-            div.appendChild(btn);
+
+            choicesWrap.appendChild(btn);
           });
+
+          div.appendChild(choicesWrap);
           quizArea.appendChild(div);
         });
+
+        // if no questions show a friendly message
+        if (!list || list.length === 0) {
+          quizArea.innerHTML = '<div class="muted">No quiz questions available. Please import questions in Admin.</div>';
+        }
       }
 
       submitBtn.addEventListener('click', async () => {
         const keys = Object.keys(answers);
+        if (series.length === 0) {
+          alert('No questions loaded.');
+          return;
+        }
         if (keys.length < series.length) {
           if (!confirm(`You answered ${keys.length} of ${series.length} questions. Submit anyway?`)) return;
         }
-        // build answers array
+
         const payload = { examId, answers: [] };
         for (const q of series) {
-          payload.answers.push({
-            questionId: q.id,
-            choiceIndex: answers[q.id] ?? null
-          });
+          payload.answers.push({ questionId: q.id, choiceIndex: answers[q.id] ?? null });
         }
 
-        // submit
         submitBtn.disabled = true;
+        submitBtn.setAttribute('aria-disabled','true');
         status.textContent = "Submitting answers...";
         try {
           const res = await fetch('/api/lms/quiz/submit', {
@@ -124,45 +236,51 @@
           status.textContent = "Error: " + (e.message || e);
         } finally {
           submitBtn.disabled = false;
+          submitBtn.setAttribute('aria-disabled','false');
         }
       });
 
       function showResult(resp){
         result.style.display = 'block';
-        result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
-                            <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
-                            <div style="margin-top:10px">Detailed feedback below:</div>`;
+        result.innerHTML = `
+          <div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
+          <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
+          <div style="margin-top:10px">Detailed feedback below:</div>
+        `;
 
-        // show per-question feedback
-        const list = document.createElement('div');
-        list.style.marginTop = '12px';
-        resp.details.forEach(d => {
-          const q = series.find(s => s.id === d.questionId);
-          const block = document.createElement('div');
-          block.style.marginTop = '10px';
-          block.innerHTML = `<div style="font-weight:700">${escapeHtml(q ? q.text : d.questionId)}</div>`;
-          // choices with marking
-          (q ? q.choices : []).forEach((c, i) => {
-            const el = document.createElement('div');
-            el.style.padding = '6px';
-            el.style.borderRadius = '6px';
-            el.style.marginTop = '6px';
-            el.style.background = '#0e0e0f';
-            el.style.border = '1px solid rgba(255,255,255,0.02)';
-            if (i === d.correctIndex) el.classList.add('correct');
-            if (i === d.yourIndex && !d.correct) el.classList.add('wrong');
-            el.innerText = (i+1) + '. ' + c.text;
-            block.appendChild(el);
+        const listWrap = document.createElement('div');
+        listWrap.className = 'result-list';
+
+        (resp.details || []).forEach(d => {
+          const q = series.find(s => s.id === d.questionId) || { text: d.questionId, choices: [] };
+          const item = document.createElement('div');
+          item.className = 'result-item';
+
+          const title = document.createElement('div');
+          title.style.fontWeight = '700';
+          title.innerText = q.text || d.questionId;
+          item.appendChild(title);
+
+          (q.choices || []).forEach((c, i) => {
+            const choiceLine = document.createElement('div');
+            choiceLine.style.padding = '8px';
+            choiceLine.style.borderRadius = '6px';
+            choiceLine.style.marginTop = '8px';
+            choiceLine.style.border = '1px solid rgba(255,255,255,0.02)';
+            choiceLine.innerText = `${String.fromCharCode(97 + i)}. ${c.text}`;
+
+            if (i === d.correctIndex) choiceLine.classList.add('correct');
+            if (i === d.yourIndex && !d.correct) choiceLine.classList.add('wrong');
+
+            item.appendChild(choiceLine);
           });
-          list.appendChild(block);
+
+          listWrap.appendChild(item);
         });
 
-        result.appendChild(list);
-      }
-
-      function escapeHtml(s){
-        if (!s) return '';
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        result.appendChild(listWrap);
+        // scroll result into view (nice UX)
+        result.scrollIntoView({behavior:'smooth', block:'center'});
       }
 
       // initial load
