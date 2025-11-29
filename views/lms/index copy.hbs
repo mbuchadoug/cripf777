@@ -30,14 +30,6 @@
     a{color:inherit;text-decoration:none}
     .container{max-width:var(--maxw);margin:36px auto;padding:0 22px}
 
-    /* Top nav inside page (keeps visible even if partial missing) */
-    .top-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-    .nav-left{display:flex;gap:12px;align-items:center}
-    .brand{font-weight:900;color:var(--gold);letter-spacing:0.6px}
-    .nav-links{display:flex;gap:10px;align-items:center}
-    .nav-links a{color:var(--muted);padding:8px 10px;border-radius:8px;font-weight:700}
-    .nav-links a:hover{color:var(--white);background:rgba(255,255,255,0.02)}
-
     /* HERO */
     .hero {
       border-radius:18px;
@@ -89,7 +81,7 @@
 
     /* modules / lessons list */
     .course-block{margin-top:24px;padding:18px;border-radius:12px;background:linear-gradient(180deg,#060606,#0b0b0b);border:1px solid rgba(255,255,255,0.03)}
-    .course-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .course-header{display:flex;justify-content:space-between;align-items:center}
     .course-title{font-size:20px;color:var(--gold);font-weight:900}
     .course-meta{color:var(--muted);font-size:13px}
     .modules{margin-top:12px;display:grid;gap:12px}
@@ -103,9 +95,6 @@
     .final-cta h3{margin:0;color:var(--gold)}
     .final-cta p{margin:0;color:var(--muted)}
 
-    /* footer links row */
-    .footer-links{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;color:var(--muted);font-size:13px}
-
     /* responsive */
     @media (max-width:980px){
       .hero-overlay{flex-direction:column;padding:30px}
@@ -113,7 +102,6 @@
       .two-col{grid-template-columns:1fr}
       .grid-3{grid-template-columns:1fr}
       h1{font-size:36px}
-      .course-header{flex-direction:column;align-items:flex-start;gap:8px}
     }
     @media (max-width:480px){
       h1{font-size:26px}
@@ -126,32 +114,6 @@
   {{> navbar }}
 
   <div class="container" role="main">
-
-    <!-- Top nav (redundant / fallback) -->
-    <div class="top-nav" role="navigation" aria-label="LMS quick nav">
-      <div class="nav-left">
-        <div class="brand">CRIPFCnt · Responsibility LMS</div>
-        <div class="nav-links" aria-hidden="false">
-          <a href="/lms">Home</a>
-          <a href="/lms#modules">Courses</a>
-          <a href="/lms/quiz">Quiz</a>
-          <a href="/scoi">SCOI</a>
-          <a href="/contact">Contact</a>
-          {{#if user}}
-            <a href="/admin">Admin</a>
-            <a href="/admin/lms/questions">Manage Qs</a>
-          {{/if}}
-        </div>
-      </div>
-
-      <div>
-        {{#if user}}
-          <a href="/auth/logout" style="color:var(--muted);font-weight:700">Sign out</a>
-        {{else}}
-          <a href="/auth/google" style="color:var(--muted);font-weight:700">Sign in</a>
-        {{/if}}
-      </div>
-    </div>
 
     <!-- HERO -->
     <header class="hero" role="banner" aria-label="Responsibility LMS hero">
@@ -173,7 +135,6 @@
               <a class="btn btn-primary" href="/auth/google">Sign in to Start</a>
             {{/if}}
             <a class="btn btn-outline" href="/lms/course/{{#if courses.[0].slug}}{{courses.[0].slug}}{{else}}responsibility-lms{{/if}}#modules">Explore Courses</a>
-            <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/lms/quiz">Take a 5-question Quiz</a>
           </div>
         </div>
 
@@ -193,18 +154,6 @@
               <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/lms/course/{{#if courses.[0].slug}}{{courses.[0].slug}}{{else}}responsibility-lms{{/if}}#modules">View Modules</a>
               <a class="btn" style="background:transparent;border:1px solid rgba(212,175,55,0.12);color:var(--gold)" href="/lms/course/{{#if courses.[0].slug}}{{courses.[0].slug}}{{else}}responsibility-lms{{/if}}#cert">Certification</a>
             </div>
-
-            <div style="margin-top:12px;color:var(--muted);font-size:13px">
-              Quick actions:
-              <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-                <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/api/lms/quiz?count=5" target="_blank">API: sample /api/lms/quiz?count=5</a>
-                <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/lms/quiz">Open Quiz UI</a>
-                {{#if user}}
-                  <a class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--white)" href="/admin/lms/questions">Manage Questions</a>
-                {{/if}}
-              </div>
-            </div>
-
           </div>
         </aside>
       </div>
@@ -313,15 +262,6 @@
               </div>
             {{/each}}
           </div>
-
-          <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-            <a class="btn" href="/lms/quiz">Attempt Sample Quiz (UI)</a>
-            <a class="btn" href="/api/lms/quiz?count=5" target="_blank">Fetch API sample</a>
-            {{#if user}}
-              <a class="btn" href="/admin/lms/questions">Admin: Manage Questions</a>
-            {{/if}}
-          </div>
-
         {{else}}
           <div style="color:var(--muted)">No seeded course found. Run the seed script or create a course in Admin. The course listing and lesson links will appear here.</div>
         {{/if}}
@@ -333,13 +273,6 @@
       <div>
         <h3>Ready to start your Responsibility Journey?</h3>
         <p>Join professionals recalibrating their consciousness, purpose and capacity through the world’s first Placement-Aligned Responsibility LMS.</p>
-
-        <div class="footer-links">
-          <a href="/about">About</a>
-          <a href="/scoi">SCOI Framework</a>
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
-        </div>
       </div>
       <div style="text-align:right">
         {{#if user}}

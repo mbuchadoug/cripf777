@@ -14,6 +14,11 @@ import trackRouter from "./routes/track.js";
 import User from "./models/user.js";
 import lmsRoutes from "./routes/lms.js";
 import apiLmsRoutes from "./routes/api_lms.js";
+import lmsAdminRoutes from "./routes/lmsAdmin.js";
+import quizApiRoutes from "./routes/quizApi.js";
+
+
+
 
 
 
@@ -101,6 +106,8 @@ app.use("/admin", adminRoutes);
 app.use("/api", trackRouter);
 app.use("/lms", lmsRoutes);
 app.use("/api/lms", apiLmsRoutes);
+app.use("/admin", lmsAdminRoutes); // admin UI + upload
+app.use("/api", quizApiRoutes);    // quiz endpoints
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
