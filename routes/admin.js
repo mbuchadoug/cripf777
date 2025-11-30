@@ -378,8 +378,22 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
  * If type === 'tag' and value provided -> deletes by tag
  * Else deletes ALL questions
  */
-router.post("/admin/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
+/**
+ * POST /admin/lms/quizzes/delete
+ * Legacy path used by the Manage UI. Accepts form fields:
+ *  - type: "source" | "tag" | (omit for all)
+ *  - value: the value for the type
+ *
+ * This duplicates the delete-all behaviour so the UI's form (which posts to /delete)
+ * works without changing the template.
+ */
+router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
+    // ensure body parser is enabled in app (express.urlencoded/json)
+    const filterType = req.body && (req.body.type || req.body.filter);
+    const value = req.body && (req.body.value || req.body.value);
+
+    // load Question model
     let Question;
     try {
       Question = (await import("../models/question.js")).default;
@@ -394,21 +408,20 @@ router.post("/admin/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, re
       return res.status(500).json({ error: "Question model not found" });
     }
 
-    const type = req.body && (req.body.type || req.body.filter || req.body._type) || "all";
-    const value = req.body && (req.body.value || req.body._value) || "";
-
     let filter = {};
-    if (type === "source" && value) {
-      filter.source = value;
-    } else if (type === "tag" && value) {
-      filter.tags = value;
+    if (filterType === "source" && value) {
+      filter = { source: value };
+    } else if (filterType === "tag" && value) {
+      // tag might be stored as array; use $in for safety
+      filter = { tags: value };
     } else {
-      filter = {};
+      filter = {}; // delete all
     }
 
     const deleteRes = await Question.deleteMany(filter);
     console.log(`[admin/lms/quizzes/delete] deleted ${deleteRes.deletedCount} questions (filter: ${JSON.stringify(filter)})`);
 
+    // redirect back to manage page (same as delete-all did)
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.redirect("/admin/lms/quizzes?deleted=" + encodeURIComponent(deleteRes.deletedCount));
     }
