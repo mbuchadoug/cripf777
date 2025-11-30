@@ -15,8 +15,8 @@
       --choice-bg:#0f1112;
       --choice-border: rgba(255,255,255,0.03);
       --selected-outline: rgba(212,175,55,0.9);
-      --correct-grad: linear-gradient(90deg,#06360b,#084d18);
-      --wrong-grad: linear-gradient(90deg,#3b0b0b,#611215);
+      --correct: linear-gradient(90deg,#06360b,#084d18);
+      --wrong: linear-gradient(90deg,#3b0b0b,#611215);
     }
 
     html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
@@ -41,8 +41,8 @@
     }
     .choice .text{flex:1;color:rgba(255,255,255,0.92)}
     .choice.selected{outline:3px solid var(--selected-outline);background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)}
-    .choice.correct{background:var(--correct-grad);border-color:rgba(0,0,0,0.3)}
-    .choice.wrong{background:var(--wrong-grad);border-color:rgba(0,0,0,0.3)}
+    .choice.correct{background:var(--correct);border-color:rgba(0,0,0,0.3)}
+    .choice.wrong{background:var(--wrong);border-color:rgba(0,0,0,0.3)}
 
     /* controls */
     .controls{display:flex;align-items:center;gap:12px;margin-top:16px}
@@ -52,29 +52,6 @@
     /* result */
     .score{margin-top:14px;padding:12px;border-radius:8px;background:linear-gradient(90deg,#051117,#07121a);border:1px solid rgba(255,255,255,0.02)}
     .detail-block{margin-top:10px;padding:12px;border-radius:8px;background:#0b0b0b;border:1px solid rgba(255,255,255,0.02)}
-
-    /* feedback elements (used in results) */
-    .fb-question{margin-top:12px}
-    .fb-question .fb-qtitle{font-weight:700;margin-bottom:8px}
-    .fb-choice{
-      display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;margin-top:8px;
-      background:#0e0e0f;border:1px solid rgba(255,255,255,0.02);color:#ddd;
-    }
-    .fb-choice .fb-label{
-      display:inline-block;min-width:28px;text-align:center;margin-right:8px;color:#111;background:rgba(0,0,0,0.25);border-radius:6px;padding:6px;font-weight:800;
-    }
-    .fb-choice.correct{
-      background:var(--correct-grad);
-      color:#e6ffea;
-      border-color: rgba(0,150,50,0.25);
-      font-weight:700;
-    }
-    .fb-choice.wrong{
-      background:var(--wrong-grad);
-      color:#ffdada;
-      border-color: rgba(200,30,30,0.25);
-      font-weight:700;
-    }
 
     @media (max-width:720px){
       .page{padding:12px}
@@ -122,27 +99,35 @@
     }
 
     // Repair blocks where q.text accidentally contains choices (parser mis-split).
+    // Heuristic: q.text contains "a)" OR contains multiple newlines with choice lines.
     function repairBlock(q){
+      // ensure q is object
       if (!q || typeof q !== 'object') return q;
       const out = Object.assign({}, q);
+      // normalize original choices
       out.choices = (out.choices || []).map(normalizeChoice);
 
-      if (typeof out.text === 'string' && (/(?:\n|^)[a-d][\)\.]/i.test(out.text) || /^[a-d][\)\.]/i.test(out.text) )) {
+      // If q.text contains choice markers, try to split
+      if (typeof out.text === 'string' && (/(?:\n|^)[a-d]\)/i.test(out.text) || /^[a-d]\)/i.test(out.text) )) {
         const txt = out.text.replace(/\r/g,'\n');
+        // split lines and pick the first non-choice line as question (if exists)
         const lines = txt.split(/\n/).map(s=>s.trim()).filter(Boolean);
-        const qLine = lines.find(l => !/^[a-d][\)\.]/i.test(l));
-        const choiceLines = lines.filter(l => /^[a-d][\)\.]/i.test(l));
+        const qLine = lines.find(l => !/^[a-d]\)/i.test(l));
+        const choiceLines = lines.filter(l => /^[a-d]\)/i.test(l));
         if (qLine) out.text = qLine;
+        // append any choiceLines into choices if they look unique
         choiceLines.forEach(cl => {
-          const clean = cl.replace(/^[a-d][\)\.]\s*/i,'').trim();
+          const clean = cl.replace(/^[a-d]\)\s*/i,'').trim();
           if (clean && !out.choices.some(c => c.text.trim() === clean)) {
             out.choices.push({ text: clean });
           }
         });
       }
 
+      // final normalization: if choices empty but rawPossible contains comma-separated items, split
       if ((!out.choices || out.choices.length === 0) && typeof out.text === 'string' && out.text.includes('\n')) {
         const parts = out.text.split('\n').map(s => s.trim()).filter(Boolean);
+        // assume first line could be question if it ends with ':' otherwise take parts[0] as question
         const maybeQuestion = parts[0];
         const maybeChoices = parts.slice(1).filter(p => p.length);
         if (maybeChoices.length >= 2) {
@@ -151,7 +136,9 @@
         }
       }
 
+      // fallback: if q.text equals one of choices (duplicate), prefer choices and clear q.text
       if (out.choices.length && out.text && out.choices.some(c => c.text.trim() === out.text.trim())) {
+        // try to pick a more descriptive text by joining first 2 choices with a placeholder
         out.text = `Choose the best option`;
       }
 
@@ -170,8 +157,10 @@
       list.forEach((rawQ, idx) => {
         const q = repairBlock(rawQ);
         const qid = q.id || q._id || `q${idx}`;
+        // normalize choices
         const choices = (q.choices || []).map(normalizeChoice);
 
+        // create DOM
         const block = document.createElement('div');
         block.className = 'q';
         const qnum = idx + 1;
@@ -184,6 +173,7 @@
         const choicesWrap = document.createElement('div');
         choicesWrap.className = 'choices';
 
+        // If choices are empty, show a placeholder
         if (!choices.length) {
           const p = document.createElement('div');
           p.className = 'muted';
@@ -209,11 +199,14 @@
             btn.appendChild(badge);
             btn.appendChild(txt);
 
+            // click handler
             btn.addEventListener('click', () => {
+              // deselect siblings
               choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
               btn.classList.add('selected');
               answers[qid] = ci;
             });
+            // keyboard support
             btn.addEventListener('keydown', (ev) => {
               if (ev.key === 'Enter' || ev.key === ' ') {
                 ev.preventDefault();
@@ -228,6 +221,7 @@
         block.appendChild(choicesWrap);
         quizArea.appendChild(block);
 
+        // store normalized q back (so result mapping works)
         q.id = qid;
         q.choices = choices;
         series[idx] = q;
@@ -244,8 +238,10 @@
         }
         const payload = await res.json();
         examId = payload.examId || null;
+        // Accept different payload shapes: payload.series || payload.questions || payload.items
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
+        // copy into our local series (repair will run during render)
         series = rawSeries.map(s => Object.assign({}, s));
         renderQuiz(series);
         status.textContent = '';
@@ -299,52 +295,39 @@
                           <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
                           <div style="margin-top:10px">Detailed feedback below:</div>`;
 
-      // remove any previous correct/wrong classes shown on the main quiz choices
+      // clear previous markings
       document.querySelectorAll('.choice').forEach(n => n.classList.remove('correct','wrong'));
 
       const list = document.createElement('div');
       list.style.marginTop = '12px';
 
       (resp.details || []).forEach(d => {
-        // try to find matching question in series by id
         const q = series.find(s => (s.id || s._id) === d.questionId) || series.find(s => s.id === d.questionId) || null;
+        const header = document.createElement('div');
+        header.className = 'detail-block';
+        const qText = q ? q.text : d.questionId;
+        header.innerHTML = `<div style="font-weight:700">${escapeHtml(qText)}</div>`;
 
-        const qBlock = document.createElement('div');
-        qBlock.className = 'fb-question';
-
-        const title = document.createElement('div');
-        title.className = 'fb-qtitle';
-        title.textContent = q ? (q.text || d.question || '') : (d.question || d.questionId || '');
-        qBlock.appendChild(title);
-
+        // choices if available
         const choicesContainer = document.createElement('div');
-        // choose source for choices: q.choices preferred, fallback to d.choices
-        const choiceSource = (q && q.choices && q.choices.length) ? q.choices : (d.choices || []);
-        choiceSource.forEach((c, i) => {
+        choicesContainer.style.marginTop = '8px';
+        (q && q.choices ? q.choices : (d.choices || [])).forEach((c,i) => {
           const el = document.createElement('div');
-          el.className = 'fb-choice';
-          const label = document.createElement('div');
-          label.className = 'fb-label';
-          label.textContent = letterForIndex(i) + '.';
-          const txt = document.createElement('div');
-          txt.textContent = (typeof c === 'string') ? c : (c.text || '');
-
-          el.appendChild(label);
-          el.appendChild(txt);
-
-          if (typeof d.correctIndex === 'number' && i === d.correctIndex) el.classList.add('correct');
-          if (typeof d.yourIndex === 'number' && i === d.yourIndex && !d.correct) el.classList.add('wrong');
-
+          el.style.padding = '8px';
+          el.style.borderRadius = '8px';
+          el.style.marginTop = '6px';
+          el.style.background = '#0e0e0f';
+          el.style.border = '1px solid rgba(255,255,255,0.02)';
+          el.textContent = `${letterForIndex(i)}. ${ (typeof c === 'string') ? c : (c.text || '') }`;
+          if (i === d.correctIndex) el.classList.add('correct');
+          if (i === d.yourIndex && !d.correct) el.classList.add('wrong');
           choicesContainer.appendChild(el);
         });
-
-        qBlock.appendChild(choicesContainer);
-        list.appendChild(qBlock);
+        header.appendChild(choicesContainer);
+        list.appendChild(header);
       });
 
       result.appendChild(list);
-      // jump to result for user
-      result.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function escapeHtml(s){
