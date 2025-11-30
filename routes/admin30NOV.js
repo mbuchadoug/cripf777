@@ -9,9 +9,6 @@ import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
-
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -370,122 +367,6 @@ router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => 
     return res.status(500).json({ error: "Delete failed", detail: String(err.message || err) });
   }
 });
-
-/**
- * ADMIN: backup / delete all questions
- *
- * - GET  /admin/lms/questions/export    => download JSON backup of all questions
- * - POST /admin/lms/questions/delete-all => delete all questions from DB + remove fallback file
- *
- * Protect these endpoints with ensureAuth + ensureAdmin
- */
-
-
-// Backup/export all questions as JSON
-router.get(
-  "/lms/questions/export",
-  ensureAuth,
-  ensureAdmin,
-  async (req, res) => {
-    try {
-      // try to load Question model
-      let Question = null;
-      try {
-        Question = (await import("../models/question.js")).default;
-      } catch (e) {
-        try {
-          Question = (await import("../models/question/index.js")).default;
-        } catch (e2) {
-          Question = null;
-        }
-      }
-
-      if (!Question) {
-        return res.status(404).send("Question model not found on server - cannot export.");
-      }
-
-      // stream export
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="questions_backup_${Date.now()}.json"`);
-
-      // stream as newline-delimited JSON to avoid huge memory use
-      const cursor = Question.find({}).cursor();
-      res.write("[\n");
-      let first = true;
-      for await (const doc of cursor) {
-        if (!first) res.write(",\n");
-        res.write(JSON.stringify(doc));
-        first = false;
-      }
-      res.write("\n]");
-      res.end();
-    } catch (err) {
-      console.error("[admin/lms/questions/export] error:", err && (err.stack || err));
-      return res.status(500).send("Export failed");
-    }
-  }
-);
-
-// Delete ALL questions (DB) and remove fallback file
-router.post(
-  "/lms/questions/delete-all",
-  ensureAuth,
-  ensureAdmin,
-  async (req, res) => {
-    try {
-      // try to load Question model
-      let Question = null;
-      try {
-        Question = (await import("../models/question.js")).default;
-      } catch (e) {
-        try {
-          Question = (await import("../models/question/index.js")).default;
-        } catch (e2) {
-          Question = null;
-        }
-      }
-
-      let deletedCount = 0;
-      let dbSkipped = false;
-
-      if (!Question) {
-        dbSkipped = true;
-        console.warn("[admin/lms/questions/delete-all] Question model not found — skipping DB delete.");
-      } else {
-        const resDelete = await Question.deleteMany({});
-        deletedCount = resDelete && resDelete.deletedCount ? resDelete.deletedCount : 0;
-        console.log(`[admin/lms/questions/delete-all] deleted ${deletedCount} questions`);
-      }
-
-      // remove fallback file if exists
-      try {
-        if (fs.existsSync(FALLBACK_PATH)) {
-          fs.unlinkSync(FALLBACK_PATH);
-          console.log(`[admin/lms/questions/delete-all] removed fallback file ${FALLBACK_PATH}`);
-        }
-      } catch (e) {
-        console.warn("[admin/lms/questions/delete-all] failed to remove fallback file:", e && (e.stack || e));
-      }
-
-      // respond: if HTML request redirect back to manage UI with query
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        // Redirect to manage quizzes UI with a message flag
-        const referer = "/admin/lms/quizzes";
-        const q = `?deleted=${encodeURIComponent(deletedCount)}&skipped=${dbSkipped ? "1" : "0"}`;
-        return res.redirect(referer + q);
-      }
-
-      return res.json({ success: true, deletedCount, dbSkipped });
-    } catch (err) {
-      console.error("[admin/lms/questions/delete-all] error:", err && (err.stack || err));
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.status(500).send("Delete failed");
-      }
-      return res.status(500).json({ error: "Delete failed", detail: String(err.message || err) });
-    }
-  }
-);
-
 
 // other admin routes below (user listing, visits, etc).
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
