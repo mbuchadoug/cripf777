@@ -66,18 +66,59 @@ function safeRender(req, res, view, locals = {}) {
 }
 
 /**
- * Robust parser for the quiz text format (kept from your previous file).
- * Returns array of { text, choices: [{ text }], correctIndex, rawBlock }
+ * Parser for the quiz text format with a merge pass to avoid separated question headings.
+ *
+ * Blocks are split on two-or-more newlines. If a block looks like a question-only
+ * heading (e.g. "1. question...") and the next block starts with choice markers
+ * (a) b) ...), they are merged before parsing.
  */
 function parseQuestionBlocks(raw) {
   if (!raw || typeof raw !== "string") return [];
   const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-  const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  // initial raw blocks split (two or more newlines)
+  let rawBlocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  // Merge pass: when a block is likely just a numbered heading and the next block starts
+  // with choices, merge them to avoid the importer splitting question+choices.
+  const merged = [];
+  for (let i = 0; i < rawBlocks.length; i++) {
+    const cur = rawBlocks[i];
+    const nxt = rawBlocks[i + 1];
+
+    const looksLikeHeadingOnly = (() => {
+      if (!cur) return false;
+      const lines = cur.split("\n").map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return false;
+      // if block contains no choice markers and the first line starts with digits + '.' treat as heading-only
+      const hasChoice = lines.some(l => /^[a-d][\.\)]\s+/i.test(l) || /^\([a-d]\)\s+/i.test(l));
+      if (hasChoice) return false;
+      if (/^\d+\.\s*/.test(lines[0]) && lines.length <= 2) return true;
+      // fallback: single short line (as heading)
+      if (lines.length === 1 && lines[0].length < 240 && !/^[a-d][\.\)]\s+/i.test(lines[0])) return true;
+      return false;
+    })();
+
+    const nextStartsWithChoice = (() => {
+      if (!nxt) return false;
+      const first = nxt.split("\n").map(l => l.trim()).find(Boolean) || "";
+      return /^[\(\[]?[a-d][\)\.\]]?\s+/i.test(first) || /^[a-d]\s+/.test(first);
+    })();
+
+    if (looksLikeHeadingOnly && nextStartsWithChoice) {
+      merged.push((cur + "\n\n" + nxt).trim());
+      i++; // skip next
+    } else {
+      merged.push(cur);
+    }
+  }
+
   const parsed = [];
 
-  for (const block of blocks) {
+  // parse each merged block
+  for (const block of merged) {
     const lines = block.split("\n").map(l => l.replace(/\t/g, ' ').trim()).filter(Boolean);
-    if (lines.length === 0) continue;
+    if (!lines.length) continue;
 
     const isChoiceLine = (s) => /^[a-d][\.\)]\s+/i.test(s) || /^\([a-d]\)\s+/i.test(s);
     const isCorrectLine = (s) => /Correct Answer:/i.test(s) || /✅\s*Correct Answer:/i.test(s);
@@ -93,40 +134,35 @@ function parseQuestionBlocks(raw) {
       questionLines = lines.slice(0, firstChoiceIdx);
       let i = firstChoiceIdx;
       for (; i < lines.length; i++) {
-        const line = lines[i];
-        if (isCorrectLine(line)) {
-          footerLines.push(line);
+        const ln = lines[i];
+        if (isCorrectLine(ln)) {
+          footerLines.push(ln);
           i++;
           break;
         }
-        if (isChoiceLine(line) || /^[a-d]\s+/.test(line)) {
-          choiceLines.push(line);
+        if (isChoiceLine(ln) || /^[a-d]\s+/.test(ln)) {
+          choiceLines.push(ln);
         } else {
           if (choiceLines.length) {
-            choiceLines[choiceLines.length - 1] += " " + line;
+            choiceLines[choiceLines.length - 1] += " " + ln;
           } else {
-            questionLines.push(line);
+            questionLines.push(ln);
           }
         }
       }
-      if (firstChoiceIdx !== -1 && footerLines.length === 0) {
-        for (let j = firstChoiceIdx + choiceLines.length; j < lines.length; j++) {
-          const ln = lines[j];
-          if (isCorrectLine(ln)) footerLines.push(ln);
-          else footerLines.push(ln);
-        }
-      }
+      for (let j = i; j < lines.length; j++) footerLines.push(lines[j]);
     } else {
+      // heuristic: first line question, rest choices/footers
       questionLines = [lines[0]];
       for (let i = 1; i < lines.length; i++) {
-        const l = lines[i];
-        if (isChoiceLine(l) || /^[a-d]\s+/.test(l) || /^[A-D]\)\s+/.test(l)) {
-          choiceLines.push(l);
-        } else if (isCorrectLine(l)) {
-          footerLines.push(l);
+        const ln = lines[i];
+        if (isChoiceLine(ln) || /^[a-d]\s+/.test(ln) || /^[A-D]\)\s+/.test(ln)) {
+          choiceLines.push(ln);
+        } else if (isCorrectLine(ln)) {
+          footerLines.push(ln);
         } else {
-          if (choiceLines.length === 0) questionLines.push(l);
-          else choiceLines[choiceLines.length - 1] += " " + l;
+          if (!choiceLines.length) questionLines.push(ln);
+          else choiceLines[choiceLines.length - 1] += " " + ln;
         }
       }
     }
@@ -134,11 +170,9 @@ function parseQuestionBlocks(raw) {
     let questionText = questionLines.join(" ").trim();
     questionText = questionText.replace(/^\d+\.\s*/, "").trim();
 
-    const choices = choiceLines.map(cl => {
-      const txt = cl.replace(/^[\(\[]?[a-d][\)\.\]]?\s*/i, "").trim();
-      return { text: txt };
-    });
+    const choices = choiceLines.map(cl => ({ text: cl.replace(/^[\(\[]?[a-d][\)\.\]]?\s*/i, "").trim() }));
 
+    // determine correct index from footer if any
     let correctIndex = null;
     const footer = footerLines.join(" ").trim();
     if (footer) {
@@ -149,11 +183,10 @@ function parseQuestionBlocks(raw) {
         const m2 = footer.match(/([a-d])\)/i);
         if (m2) correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m2[1].toLowerCase()];
         else {
-          const stripped = footer.replace(/Correct Answer:/i, "").replace(/✅/g, "").trim();
+          const stripped = footer.replace(/Correct Answer:/i, "").replace(/✅/g, "").trim().toLowerCase();
           const found = choices.findIndex(c => {
-            const lcChoice = (c.text || "").toLowerCase().replace(/^[\)\.:\s]*/, "");
-            const sc = stripped.toLowerCase().replace(/^[\)\.:\s]*/, "");
-            return lcChoice.startsWith(sc) || lcChoice === sc || sc.startsWith(lcChoice);
+            const lc = (c.text || "").toLowerCase().replace(/^[\)\.:\s]*/, "");
+            return lc.startsWith(stripped) || lc === stripped || stripped.startsWith(lc);
           });
           if (found >= 0) correctIndex = found;
         }
@@ -161,7 +194,7 @@ function parseQuestionBlocks(raw) {
     }
 
     if (!questionText) continue;
-    if (choices.length === 0) continue;
+    if (!choices || !choices.length) continue;
 
     parsed.push({
       text: questionText,
@@ -191,6 +224,7 @@ router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
  */
 router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async (req, res) => {
   try {
+    // prefer uploaded file -> fallback to textarea 'text'
     let content = "";
 
     if (req.file && req.file.buffer && req.file.buffer.length) {
@@ -220,6 +254,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     const blocks = parseQuestionBlocks(content);
     console.log(`[admin/lms/import] parsed ${blocks.length} question blocks`);
 
+    // If admin requested to "save" to DB, attempt to insert into Question collection
     const saveToDb = req.body && (req.body.save === "1" || req.body.save === "true" || req.body.save === "on");
 
     let inserted = 0;
@@ -228,6 +263,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
     if (saveToDb && blocks.length) {
       try {
+        // import Question model if present (best-effort)
         let Question;
         try {
           Question = (await import("../models/question.js")).default;
@@ -263,6 +299,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       }
     }
 
+    // Render preview page (if HTML) with summary
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return safeRender(req, res, "admin/lms_import_summary", {
         title: "Import summary",
@@ -275,7 +312,9 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       });
     }
 
+    // JSON response for API callers
     return res.json({ success: true, parsed: blocks.length, savedToDb: saveToDb && !dbSkipped && !dbErr, inserted, dbSkipped, dbErr });
+
   } catch (err) {
     console.error("[admin/lms/import] error:", err && (err.stack || err));
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
@@ -287,7 +326,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
 /**
  * GET /admin/lms/quizzes
- * Manage Quizzes page: lists distinct sources and tags with counts (for UI to render delete buttons).
+ * Manage quizzes view - shows detected sources and tags from DB.
  */
 router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -302,19 +341,9 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
     let tags = [];
 
     if (Question) {
-      // distinct sources
-      sources = await Question.aggregate([
-        { $group: { _id: "$source", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]).catch(() => []);
-      // distinct tags (tags may be array) — unwind then group
-      tags = await Question.aggregate([
-        { $unwind: { path: "$tags", preserveNullAndEmptyArrays: false } },
-        { $group: { _id: "$tags", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]).catch(() => []);
-      sources = (sources || []).map(s => ({ source: s._id || "unknown", count: s.count }));
-      tags = (tags || []).map(t => ({ tag: t._id || "unknown", count: t.count }));
+      sources = await Question.distinct("source").catch(() => []);
+      tags = await Question.distinct("tags").catch(() => []);
+      tags = (Array.isArray(tags) ? tags.flat() : tags).filter(Boolean);
     }
 
     return safeRender(req, res, "admin/lms_quizzes", { title: "Manage Quizzes", sources: sources || [], tags: tags || [] });
@@ -325,73 +354,11 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /**
- * GET /admin/lms/questions
- * Query params:
- *   - ?source=import  => returns list of questions for that source
- *   - ?tag=responsibility => returns questions with that tag
- * Returns JSON or renders a view if needed.
+ * POST /admin/lms/quizzes/delete
+ * Convenience endpoint: deletes by source OR tag OR all (if no filter provided).
+ * Accepts form or JSON.
  */
-router.get("/lms/questions", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    let Question;
-    try {
-      Question = (await import("../models/question.js")).default;
-    } catch (e) {
-      Question = null;
-    }
-
-    if (!Question) {
-      return res.status(500).json({ error: "Question model not found" });
-    }
-
-    const { source, tag } = req.query;
-    const filter = {};
-    if (source) filter.source = source;
-    if (tag) filter.tags = tag;
-
-    const questions = await Question.find(filter).select("text choices correctIndex source tags createdAt").sort({ createdAt: -1 }).lean();
-    if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      // if you want an HTML view, create admin/lms_questions.hbs and render here
-      return safeRender(req, res, "admin/lms_questions", { title: "Questions", questions, filter });
-    }
-    return res.json({ count: questions.length, questions });
-  } catch (err) {
-    console.error("[admin/lms/questions] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "failed to query questions", detail: String(err.message || err) });
-  }
-});
-
-/**
- * POST /admin/lms/question/delete
- * Body: { id: "<questionId>" }
- * Deletes a single question by _id
- */
-router.post("/lms/question/delete", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    let Question;
-    try {
-      Question = (await import("../models/question.js")).default;
-    } catch (e) {
-      Question = null;
-    }
-    if (!Question) return res.status(500).json({ error: "Question model not found" });
-
-    const id = (req.body && req.body.id) || (req.query && req.query.id);
-    if (!id) return res.status(400).json({ error: "Missing id" });
-
-    const del = await Question.deleteOne({ _id: id });
-    return res.json({ deleted: del.deletedCount || 0 });
-  } catch (err) {
-    console.error("[admin/lms/question/delete] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "delete failed", detail: String(err.message || err) });
-  }
-});
-
-/**
- * POST /admin/lms/quizzes/delete-all
- * (keeps your existing behavior) — deletes by source, tag, or everything.
- */
-router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res) => {
+router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     let Question;
     try {
@@ -416,18 +383,18 @@ router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res)
     } else if (filterType === "tag" && value) {
       filter.tags = value;
     } else {
-      filter = {}; // delete all
+      filter = {};
     }
 
     const deleteRes = await Question.deleteMany(filter);
-    console.log(`[admin/lms/quizzes/delete-all] deleted ${deleteRes.deletedCount} questions (filter: ${JSON.stringify(filter)})`);
+    console.log(`[admin/lms/quizzes/delete] deleted ${deleteRes.deletedCount} questions (filter: ${JSON.stringify(filter)})`);
 
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.redirect("/admin/lms/quizzes?deleted=" + encodeURIComponent(deleteRes.deletedCount));
     }
     return res.json({ deleted: deleteRes.deletedCount, filter });
   } catch (err) {
-    console.error("[admin/lms/quizzes/delete-all] error:", err && (err.stack || err));
+    console.error("[admin/lms/quizzes/delete] error:", err && (err.stack || err));
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(500).send("Failed to delete questions");
     }
@@ -435,7 +402,7 @@ router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res)
   }
 });
 
-// other admin routes below (user listing, visits, etc).
+// other admin routes (users)
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 }).lean();
