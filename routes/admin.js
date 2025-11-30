@@ -66,159 +66,135 @@ function safeRender(req, res, view, locals = {}) {
 }
 
 /**
- * Robust parser for the quiz text format.
+ * Parser for the quiz text format with a merge pass to avoid separated question headings.
  *
- * Accepts blocks separated by one or more blank lines. Each block typically follows:
- *   1. Question text...
- *   a) choice text
- *   b) choice text
- *   c) ...
- *   Correct Answer: b
- *
- * The parser is forgiving:
- * - question lines that start "1." or not numbered are supported
- * - choice markers allowed: a) a. a) (case-insensitive)
- * - correct answer can be "Correct Answer: b)" or "Correct Answer: b" or full text
- *
- * Returns array of { text, choices: [{ text }], correctIndex, rawBlock }
+ * Blocks are split on two-or-more newlines. If a block looks like a question-only
+ * heading (e.g. "1. question...") and the next block starts with choice markers
+ * (a) b) ...), they are merged before parsing.
  */
 function parseQuestionBlocks(raw) {
   if (!raw || typeof raw !== "string") return [];
-  // normalize line endings and trim overall whitespace
   const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 
-  // split into blocks on one or more blank lines (we use 2+ newlines or single blank-line)
-  // split on two-or-more newlines OR on a newline that is followed by whitespace-only line.
-  const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+  // initial raw blocks split (two or more newlines)
+  let rawBlocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  // Merge pass: when a block is likely just a numbered heading and the next block starts
+  // with choices, merge them to avoid the importer splitting question+choices.
+  const merged = [];
+  for (let i = 0; i < rawBlocks.length; i++) {
+    const cur = rawBlocks[i];
+    const nxt = rawBlocks[i + 1];
+
+    const looksLikeHeadingOnly = (() => {
+      if (!cur) return false;
+      const lines = cur.split("\n").map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return false;
+      // if block contains no choice markers and the first line starts with digits + '.' treat as heading-only
+      const hasChoice = lines.some(l => /^[a-d][\.\)]\s+/i.test(l) || /^\([a-d]\)\s+/i.test(l));
+      if (hasChoice) return false;
+      if (/^\d+\.\s*/.test(lines[0]) && lines.length <= 2) return true;
+      // fallback: single short line (as heading)
+      if (lines.length === 1 && lines[0].length < 240 && !/^[a-d][\.\)]\s+/i.test(lines[0])) return true;
+      return false;
+    })();
+
+    const nextStartsWithChoice = (() => {
+      if (!nxt) return false;
+      const first = nxt.split("\n").map(l => l.trim()).find(Boolean) || "";
+      return /^[\(\[]?[a-d][\)\.\]]?\s+/i.test(first) || /^[a-d]\s+/.test(first);
+    })();
+
+    if (looksLikeHeadingOnly && nextStartsWithChoice) {
+      merged.push((cur + "\n\n" + nxt).trim());
+      i++; // skip next
+    } else {
+      merged.push(cur);
+    }
+  }
+
   const parsed = [];
 
-  for (const block of blocks) {
-    // split into lines, preserve order but remove purely-empty lines
+  // parse each merged block
+  for (const block of merged) {
     const lines = block.split("\n").map(l => l.replace(/\t/g, ' ').trim()).filter(Boolean);
-    if (lines.length === 0) continue;
-
-    // strategy:
-    // - find index of the first choice line (a) / b) / a. / etc)
-    // - everything before that (joined with space) is the question text (strip leading numbering)
-    // - collect choice lines (a,b,c,d...) that occur (stop when we hit a non-choice that looks like 'Correct Answer' or other footer)
-    // - find correct line and parse letter or match text
+    if (!lines.length) continue;
 
     const isChoiceLine = (s) => /^[a-d][\.\)]\s+/i.test(s) || /^\([a-d]\)\s+/i.test(s);
     const isCorrectLine = (s) => /Correct Answer:/i.test(s) || /✅\s*Correct Answer:/i.test(s);
 
-    // find first choice line index
     let firstChoiceIdx = lines.findIndex(isChoiceLine);
+    if (firstChoiceIdx === -1) firstChoiceIdx = lines.findIndex(l => /^[a-d]\s+/.test(l));
 
-    // If no choice lines found, attempt to locate choices that start with letters + whitespace (fallback)
-    if (firstChoiceIdx === -1) {
-      firstChoiceIdx = lines.findIndex(l => /^[a-d]\s+/.test(l));
-    }
-
-    // question lines are lines before firstChoiceIdx (if found), else assume first line is question
     let questionLines = [];
     let choiceLines = [];
     let footerLines = [];
 
     if (firstChoiceIdx > 0) {
       questionLines = lines.slice(0, firstChoiceIdx);
-      // rest until a "Correct Answer" or end are potential choice lines
       let i = firstChoiceIdx;
       for (; i < lines.length; i++) {
-        const line = lines[i];
-        if (isCorrectLine(line)) {
-          footerLines.push(line);
+        const ln = lines[i];
+        if (isCorrectLine(ln)) {
+          footerLines.push(ln);
           i++;
           break;
         }
-        if (isChoiceLine(line) || /^[a-d]\s+/.test(line)) {
-          choiceLines.push(line);
+        if (isChoiceLine(ln) || /^[a-d]\s+/.test(ln)) {
+          choiceLines.push(ln);
         } else {
-          // If it's not a choice, but looks like a continuation of previous choice (no marker) - attach to previous
           if (choiceLines.length) {
-            choiceLines[choiceLines.length - 1] += " " + line;
+            choiceLines[choiceLines.length - 1] += " " + ln;
           } else {
-            // no choice yet — treat line as footer/question continuation
-            questionLines.push(line);
+            questionLines.push(ln);
           }
         }
       }
-      // any remaining lines after footer (i..end) append to footerLines
-      if (firstChoiceIdx !== -1 && footerLines.length === 0) {
-        // search for explicit correct line later
-        for (let j = firstChoiceIdx + choiceLines.length; j < lines.length; j++) {
-          const ln = lines[j];
-          if (isCorrectLine(ln)) footerLines.push(ln);
-          else footerLines.push(ln);
-        }
-      }
+      for (let j = i; j < lines.length; j++) footerLines.push(lines[j]);
     } else {
-      // No explicit choice marker found. Heuristic:
-      // treat first line as question, subsequent lines starting with letters as choices.
+      // heuristic: first line question, rest choices/footers
       questionLines = [lines[0]];
       for (let i = 1; i < lines.length; i++) {
-        const l = lines[i];
-        if (isChoiceLine(l) || /^[a-d]\s+/.test(l) || /^[A-D]\)\s+/.test(l)) {
-          choiceLines.push(l);
-        } else if (isCorrectLine(l)) {
-          footerLines.push(l);
+        const ln = lines[i];
+        if (isChoiceLine(ln) || /^[a-d]\s+/.test(ln) || /^[A-D]\)\s+/.test(ln)) {
+          choiceLines.push(ln);
+        } else if (isCorrectLine(ln)) {
+          footerLines.push(ln);
         } else {
-          // either continuation of question (if before choices) or appended to last choice
-          if (choiceLines.length === 0) {
-            questionLines.push(l);
-          } else {
-            choiceLines[choiceLines.length - 1] += " " + l;
-          }
+          if (!choiceLines.length) questionLines.push(ln);
+          else choiceLines[choiceLines.length - 1] += " " + ln;
         }
       }
     }
 
-    // Build question text (join question lines and strip leading numbering like "1. ")
     let questionText = questionLines.join(" ").trim();
     questionText = questionText.replace(/^\d+\.\s*/, "").trim();
 
-    // Normalize choice lines into plain texts
-    const choices = choiceLines.map(cl => {
-      // remove leading "a) " "a. " "(a) " "a " etc
-      const txt = cl.replace(/^[\(\[]?[a-d][\)\.\]]?\s*/i, "").trim();
-      return { text: txt };
-    });
+    const choices = choiceLines.map(cl => ({ text: cl.replace(/^[\(\[]?[a-d][\)\.\]]?\s*/i, "").trim() }));
 
-    // find a correctIndex from footerLines (look for letter) OR from a "Correct Answer: <text>"
+    // determine correct index from footer if any
     let correctIndex = null;
-    let correctLetter = null;
     const footer = footerLines.join(" ").trim();
-
     if (footer) {
-      // try letter capture
       const m = footer.match(/Correct Answer:\s*[:\-]?\s*([a-d])\b/i);
       if (m) {
-        correctLetter = m[1].toLowerCase();
-        correctIndex = { a: 0, b: 1, c: 2, d: 3 }[correctLetter];
+        correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m[1].toLowerCase()];
       } else {
-        // try to extract single-letter inside parentheses e.g. "Correct Answer: b) ..." or emoji line
         const m2 = footer.match(/([a-d])\)/i);
-        if (m2) {
-          correctLetter = m2[1].toLowerCase();
-          correctIndex = { a: 0, b: 1, c: 2, d: 3 }[correctLetter];
-        } else {
-          // fallback: see if footer contains the exact text of one of choices
-          const stripped = footer.replace(/Correct Answer:/i, "").replace(/✅/g, "").trim();
+        if (m2) correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m2[1].toLowerCase()];
+        else {
+          const stripped = footer.replace(/Correct Answer:/i, "").replace(/✅/g, "").trim().toLowerCase();
           const found = choices.findIndex(c => {
-            const lcChoice = (c.text || "").toLowerCase().replace(/^[\)\.:\s]*/, "");
-            const sc = stripped.toLowerCase().replace(/^[\)\.:\s]*/, "");
-            return lcChoice.startsWith(sc) || lcChoice === sc || sc.startsWith(lcChoice);
+            const lc = (c.text || "").toLowerCase().replace(/^[\)\.:\s]*/, "");
+            return lc.startsWith(stripped) || lc === stripped || stripped.startsWith(lc);
           });
           if (found >= 0) correctIndex = found;
         }
       }
     }
 
-    // sanity checks
     if (!questionText) continue;
-    if (choices.length === 0) {
-      // skip blocks that don't contain choices
-      continue;
-    }
+    if (!choices || !choices.length) continue;
 
     parsed.push({
       text: questionText,
@@ -258,7 +234,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     }
 
     if (!content || !content.trim()) {
-      // no content provided
       if (req.headers.accept && req.headers.accept.includes("text/html")) {
         return res.status(400).send("Import failed: No text provided. Paste your questions or upload a .txt file and click Import.");
       }
@@ -267,7 +242,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
     // Save fallback file to disk so API /mnt/data reads it
     try {
-      // ensure dir exists
       const dir = path.dirname(FALLBACK_PATH);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(FALLBACK_PATH, content, { encoding: "utf8" });
@@ -294,7 +268,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
         try {
           Question = (await import("../models/question.js")).default;
         } catch (e) {
-          // alternative path name or missing model
           try {
             Question = (await import("../models/question/index.js")).default;
           } catch (e2) {
@@ -309,7 +282,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
           // map parsed blocks into the DB schema shape (choices as embedded docs)
           const toInsert = blocks.map(b => ({
             text: b.text,
-            // make sure we insert choices as objects (not plain strings) to match typical schemas
             choices: (b.choices || []).map(c => ({ text: c.text })),
             correctIndex: typeof b.correctIndex === "number" ? b.correctIndex : null,
             tags: ["responsibility"],
@@ -354,8 +326,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
 /**
  * GET /admin/lms/quizzes
- * Returns a simple view listing quiz sources and tags detected in DB (for Manage Quizzes page).
- * If no Question model found, the view will still render but show "No sources found".
+ * Manage quizzes view - shows detected sources and tags from DB.
  */
 router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -370,10 +341,8 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
     let tags = [];
 
     if (Question) {
-      // aggregate distinct sources and tags
       sources = await Question.distinct("source").catch(() => []);
       tags = await Question.distinct("tags").catch(() => []);
-      // normalize tags (tags may be arrays)
       tags = (Array.isArray(tags) ? tags.flat() : tags).filter(Boolean);
     }
 
@@ -385,15 +354,11 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /**
- * POST /admin/lms/quizzes/delete-all
- * Deletes questions by filter:
- *  - if body.filter === 'source' and body.value provided -> deletes by source
- *  - if body.filter === 'tag' and body.value provided -> deletes by tag
- *  - else deletes ALL questions
- *
- * Protected by ensureAuth + ensureAdmin.
+ * POST /admin/lms/quizzes/delete
+ * Convenience endpoint: deletes by source OR tag OR all (if no filter provided).
+ * Accepts form or JSON.
  */
-router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res) => {
+router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     let Question;
     try {
@@ -418,19 +383,18 @@ router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res)
     } else if (filterType === "tag" && value) {
       filter.tags = value;
     } else {
-      filter = {}; // delete all
+      filter = {};
     }
 
     const deleteRes = await Question.deleteMany(filter);
-    console.log(`[admin/lms/quizzes/delete-all] deleted ${deleteRes.deletedCount} questions (filter: ${JSON.stringify(filter)})`);
+    console.log(`[admin/lms/quizzes/delete] deleted ${deleteRes.deletedCount} questions (filter: ${JSON.stringify(filter)})`);
 
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      // redirect back to manage page with a flash-like query param (simple)
       return res.redirect("/admin/lms/quizzes?deleted=" + encodeURIComponent(deleteRes.deletedCount));
     }
     return res.json({ deleted: deleteRes.deletedCount, filter });
   } catch (err) {
-    console.error("[admin/lms/quizzes/delete-all] error:", err && (err.stack || err));
+    console.error("[admin/lms/quizzes/delete] error:", err && (err.stack || err));
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(500).send("Failed to delete questions");
     }
@@ -438,9 +402,7 @@ router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res)
   }
 });
 
-// other admin routes below (user listing, visits, etc).
-// --- Example: /admin/users (kept minimal here; you likely have a larger set already) ---
-
+// other admin routes (users)
 router.get("/users", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 }).lean();
