@@ -66,12 +66,28 @@ function safeRender(req, res, view, locals = {}) {
 }
 
 /**
- * Robust parser for the quiz text format (kept from your previous file).
+ * Robust parser for the quiz text format.
+ *
+ * Accepts blocks separated by one or more blank lines. Each block typically follows:
+ *   1. Question text...
+ *   a) choice text
+ *   b) choice text
+ *   c) ...
+ *   Correct Answer: b
+ *
+ * The parser is forgiving:
+ * - question lines that start "1." or not numbered are supported
+ * - choice markers allowed: a) a. a) (case-insensitive)
+ * - correct answer can be "Correct Answer: b)" or "Correct Answer: b" or full text
+ *
  * Returns array of { text, choices: [{ text }], correctIndex, rawBlock }
  */
 function parseQuestionBlocks(raw) {
   if (!raw || typeof raw !== "string") return [];
+  // normalize line endings and trim overall whitespace
   const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+
+  // split into blocks on one or more blank lines
   const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
   const parsed = [];
 
@@ -143,9 +159,8 @@ function parseQuestionBlocks(raw) {
     const footer = footerLines.join(" ").trim();
     if (footer) {
       const m = footer.match(/Correct Answer:\s*[:\-]?\s*([a-d])\b/i);
-      if (m) {
-        correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m[1].toLowerCase()];
-      } else {
+      if (m) correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m[1].toLowerCase()];
+      else {
         const m2 = footer.match(/([a-d])\)/i);
         if (m2) correctIndex = { a: 0, b: 1, c: 2, d: 3 }[m2[1].toLowerCase()];
         else {
@@ -177,18 +192,11 @@ function parseQuestionBlocks(raw) {
 // path to save fallback file so API can read it
 const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
 
-// GET import page (render a simple importer)
+// GET import page
 router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
   return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)" });
 });
 
-/**
- * POST /admin/lms/import
- * Accepts:
- *   - file upload (field 'file')
- *   - or pasted text in textarea (field 'text')
- * If 'save' param present (save=1), attempt to save parsed questions to DB (Questions collection).
- */
 router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async (req, res) => {
   try {
     let content = "";
@@ -220,6 +228,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     const blocks = parseQuestionBlocks(content);
     console.log(`[admin/lms/import] parsed ${blocks.length} question blocks`);
 
+    // save to DB if requested
     const saveToDb = req.body && (req.body.save === "1" || req.body.save === "true" || req.body.save === "on");
 
     let inserted = 0;
@@ -243,7 +252,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
           dbSkipped = true;
           console.warn("[admin/lms/import] Question model not found — skipping DB insert");
         } else {
-          // map parsed blocks into the DB schema shape (choices as embedded docs)
           const toInsert = blocks.map(b => ({
             text: b.text,
             choices: (b.choices || []).map(c => ({ text: c.text })),
@@ -287,7 +295,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
 /**
  * GET /admin/lms/quizzes
- * Manage Quizzes page: lists distinct sources and tags with counts (for UI to render delete buttons).
+ * Lists quiz sources and tags with counts for Manage Quizzes UI.
  */
 router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
   try {
@@ -302,22 +310,35 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
     let tags = [];
 
     if (Question) {
-      // distinct sources
-      sources = await Question.aggregate([
-        { $group: { _id: "$source", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]).catch(() => []);
-      // distinct tags (tags may be array) — unwind then group
-      tags = await Question.aggregate([
-        { $unwind: { path: "$tags", preserveNullAndEmptyArrays: false } },
-        { $group: { _id: "$tags", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]).catch(() => []);
-      sources = (sources || []).map(s => ({ source: s._id || "unknown", count: s.count }));
-      tags = (tags || []).map(t => ({ tag: t._id || "unknown", count: t.count }));
+      // aggregate counts by source
+      try {
+        const srcAgg = await Question.aggregate([
+          { $group: { _id: { $ifNull: ["$source", "unknown"] }, count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ]).allowDiskUse(true);
+        sources = srcAgg.map(r => ({ name: String(r._id), count: r.count }));
+      } catch (e) {
+        console.warn("[admin/lms/quizzes] source aggregation failed:", e && e.message);
+        const distinct = await Question.distinct("source").catch(() => []);
+        sources = (distinct || []).map(s => ({ name: s || "unknown", count: 0 }));
+      }
+
+      // aggregate counts by tag (tags may be arrays)
+      try {
+        const tagAgg = await Question.aggregate([
+          { $unwind: { path: "$tags", preserveNullAndEmptyArrays: false } },
+          { $group: { _id: "$tags", count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ]).allowDiskUse(true);
+        tags = tagAgg.map(r => ({ name: String(r._id), count: r.count }));
+      } catch (e) {
+        console.warn("[admin/lms/quizzes] tag aggregation failed:", e && e.message);
+        const distinctTags = await Question.distinct("tags").catch(() => []);
+        tags = (distinctTags || []).flat().filter(Boolean).map(t => ({ name: t, count: 0 }));
+      }
     }
 
-    return safeRender(req, res, "admin/lms_quizzes", { title: "Manage Quizzes", sources: sources || [], tags: tags || [] });
+    return safeRender(req, res, "admin/lms_quizzes", { title: "Manage Quizzes", sources: sources || [], tags: tags || [], deleted: req.query.deleted });
   } catch (err) {
     console.error("[admin/lms/quizzes] error:", err && (err.stack || err));
     return res.status(500).send("Failed to load quizzes");
@@ -325,13 +346,13 @@ router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /**
- * GET /admin/lms/questions
- * Query params:
- *   - ?source=import  => returns list of questions for that source
- *   - ?tag=responsibility => returns questions with that tag
- * Returns JSON or renders a view if needed.
+ * POST /admin/lms/quizzes/delete
+ * Deletes questions by a single source OR a single tag (targeted delete).
+ * Expects body: { type: 'source'|'tag', value: '<name>' }
+ *
+ * This route is intended for the per-row "Delete" buttons in the Manage UI.
  */
-router.get("/lms/questions", ensureAuth, ensureAdmin, async (req, res) => {
+router.post("/lms/quizzes/delete", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     let Question;
     try {
@@ -341,55 +362,54 @@ router.get("/lms/questions", ensureAuth, ensureAdmin, async (req, res) => {
     }
 
     if (!Question) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(500).send("Question model not found on server; cannot delete from DB.");
+      }
       return res.status(500).json({ error: "Question model not found" });
     }
 
-    const { source, tag } = req.query;
-    const filter = {};
-    if (source) filter.source = source;
-    if (tag) filter.tags = tag;
+    const type = (req.body && req.body.type) || (req.query && req.query.type);
+    const value = (req.body && req.body.value) || (req.query && req.query.value);
 
-    const questions = await Question.find(filter).select("text choices correctIndex source tags createdAt").sort({ createdAt: -1 }).lean();
+    if (!type || !value) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).send("Missing type or value for deletion.");
+      }
+      return res.status(400).json({ error: "Missing type or value" });
+    }
+
+    let filter = {};
+    if (type === "source") {
+      filter = { source: value };
+    } else if (type === "tag") {
+      // remove any document where tags array contains the value
+      filter = { tags: value };
+    } else {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).send("Invalid type. Use 'source' or 'tag'.");
+      }
+      return res.status(400).json({ error: "Invalid type. Use 'source' or 'tag'." });
+    }
+
+    const deleteRes = await Question.deleteMany(filter);
+    console.log(`[admin/lms/quizzes/delete] deleted ${deleteRes.deletedCount} questions (type=${type}, value=${value})`);
+
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      // if you want an HTML view, create admin/lms_questions.hbs and render here
-      return safeRender(req, res, "admin/lms_questions", { title: "Questions", questions, filter });
+      return res.redirect("/admin/lms/quizzes?deleted=" + encodeURIComponent(deleteRes.deletedCount));
     }
-    return res.json({ count: questions.length, questions });
+    return res.json({ deleted: deleteRes.deletedCount, filter });
   } catch (err) {
-    console.error("[admin/lms/questions] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "failed to query questions", detail: String(err.message || err) });
-  }
-});
-
-/**
- * POST /admin/lms/question/delete
- * Body: { id: "<questionId>" }
- * Deletes a single question by _id
- */
-router.post("/lms/question/delete", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    let Question;
-    try {
-      Question = (await import("../models/question.js")).default;
-    } catch (e) {
-      Question = null;
+    console.error("[admin/lms/quizzes/delete] error:", err && (err.stack || err));
+    if (req.headers.accept && req.headers.accept.includes("text/html")) {
+      return res.status(500).send("Failed to delete questions");
     }
-    if (!Question) return res.status(500).json({ error: "Question model not found" });
-
-    const id = (req.body && req.body.id) || (req.query && req.query.id);
-    if (!id) return res.status(400).json({ error: "Missing id" });
-
-    const del = await Question.deleteOne({ _id: id });
-    return res.json({ deleted: del.deletedCount || 0 });
-  } catch (err) {
-    console.error("[admin/lms/question/delete] error:", err && (err.stack || err));
     return res.status(500).json({ error: "delete failed", detail: String(err.message || err) });
   }
 });
 
 /**
  * POST /admin/lms/quizzes/delete-all
- * (keeps your existing behavior) — deletes by source, tag, or everything.
+ * Legacy/bulk deletion: deletes by filter or all if none provided.
  */
 router.post("/lms/quizzes/delete-all", ensureAuth, ensureAdmin, async (req, res) => {
   try {
