@@ -1,5 +1,6 @@
 // routes/lms.js
 import { Router } from "express";
+import { ensureAuth } from "../middleware/authGuard.js"; 
 const router = Router();
 
 // Home (optional) — renders views/lms/index.hbs if present
@@ -13,7 +14,7 @@ router.get("/", (req, res) => {
 });
 
 // QUIZ UI page
-router.get("/quiz", (req, res) => {
+router.get("/quiz",ensureAuth, (req, res) => {
   try {
     return res.render("lms/quiz", { user: req.user || null });
   } catch (err) {
