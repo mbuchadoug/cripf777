@@ -1,6 +1,6 @@
 // routes/lmsAdmin.js
 import { Router } from "express";
-import QuizQuestion from "../models/quizQuestion.js";
+import QuizQuestion from "../models/quizQuestionF.js";
 
 const router = Router();
 

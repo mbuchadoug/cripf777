@@ -15,10 +15,10 @@ import passport from "passport";
 import trackRouter from "./routes/track.js";
 import lmsRoutes from "./routes/lms.js";
 import apiLmsRoutes from "./routes/api_lms.js";
-import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
+import adminRoutes from "./routes/adminF.js"; // merged admin (includes import/upload UI)
 import User from "./models/user.js";
 import configurePassport from "./config/passport.js";
-import authRoutes from "./routes/auth.js";
+import authRoutes from "./routes/authF.js";
 
 dotenv.config();
 

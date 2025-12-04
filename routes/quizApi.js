@@ -1,6 +1,6 @@
 // routes/quizApi.js
 import { Router } from "express";
-import QuizQuestion from "../models/quizQuestion.js";
+import QuizQuestion from "../models/quizQuestionF.js";
 import crypto from "crypto";
 
 const router = Router();

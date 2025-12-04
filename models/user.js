@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 
 const UserSchema = new mongoose.Schema({
   googleId: { type: String, unique: true, index: true },
+  // in existing UserSchema add fields:
+organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
+role: { type: String, enum: ["employee","org_admin","super_admin"], default: "employee", index: true },
+
   displayName: String,
   firstName: String,
   lastName: String,

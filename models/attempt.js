@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 const AttemptSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
-  quizId: { type: mongoose.Schema.Types.ObjectId, ref: "Quiz", index: true },
-  answers: [{ questionId: mongoose.Schema.Types.ObjectId, answer: mongoose.Schema.Types.Mixed }],
+  organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true },
+  module: String,
+  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }], // questions served
+  answers: [{ questionId: mongoose.Schema.Types.ObjectId, choiceIndex: Number }],
   score: Number,
   maxScore: Number,
   passed: Boolean,
