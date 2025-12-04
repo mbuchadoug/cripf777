@@ -14,20 +14,34 @@
     .secondary{background:#eee;color:#222;border:1px solid #ccc}
     .links{margin-top:12px}
     pre.block{background:#f7f7f7;border:1px solid #e6e6e6;padding:12px;border-radius:6px;white-space:pre-wrap}
+    select,input[type=text]{padding:8px;width:100%;border-radius:6px;border:1px solid #ccc;margin-top:6px;margin-bottom:12px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Import LMS Questions (paste)</h1>
+    <h1>Import LMS Questions</h1>
 
     <p class="note">
-      Upload a plain text file (.txt) containing multiple-choice questions in the format used in your spec (number, a) b) c) d), and a "Correct Answer:" line).
-      Alternatively paste the content into the textarea and click <strong>Import</strong>.
-      The importer saves a fallback file to <code>/mnt/data/responsibilityQuiz.txt</code> so the quiz API can pick it up.
+      Upload a plain text file (.txt) or paste quiz questions.  
+      Now you can categorize questions by <strong>Organization</strong> and <strong>Module</strong>.
     </p>
 
     <form method="post" enctype="multipart/form-data" action="/admin/lms/import">
-      <div style="margin-bottom:12px">
+
+      {{!-- ORGANIZATION DROPDOWN --}}
+      <label><strong>Organization</strong></label>
+      <select name="orgId">
+        <option value="">Global (all organizations)</option>
+        {{#each organizations}}
+          <option value="{{this._id}}">{{this.name}}</option>
+        {{/each}}
+      </select>
+
+      {{!-- MODULE --}}
+      <label><strong>Module</strong></label>
+      <input type="text" name="module" placeholder="e.g. safety, hr, onboarding, etc." required />
+
+      <div style="margin-bottom:12px; margin-top:16px;">
         <label><strong>Upload .txt file</strong></label><br/>
         <input type="file" name="file" accept=".txt" />
       </div>
@@ -40,7 +54,9 @@
       </div>
 
       <div style="margin-top:10px">
-        <label style="font-weight:700"><input type="checkbox" name="save" value="1" /> Also save parsed questions to DB (Question model)</label>
+        <label style="font-weight:700">
+          <input type="checkbox" name="save" value="1" /> Save parsed questions to database
+        </label>
       </div>
 
       <div style="margin-top:14px">
@@ -51,9 +67,8 @@
 
     <div class="links">
       <p>
-        After importing you can visit <a href="/admin/lms/questions">Manage Questions</a> (admin) or open the quiz UI at <a href="/lms/quiz">/lms/quiz</a>.
+        After importing you can visit <a href="/admin/lms/questions">Manage Questions</a> or test quizzes at <a href="/lms/quiz">/lms/quiz</a>.
       </p>
-      <p style="color:#777;font-size:13px">Note: if "save to DB" is checked the server will attempt to insert parsed questions into the Questions collection (requires a Question model at <code>models/question.js</code>).</p>
     </div>
   </div>
 </body>

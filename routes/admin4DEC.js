@@ -4,11 +4,9 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { fileURLToPath } from "url";
-import mongoose from "mongoose";
 import User from "../models/user.js";
 import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
-import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -204,14 +202,8 @@ function parseQuestionBlocks(raw) {
 const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
 
 // GET import page (render a simple importer)
-router.get("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const organizations = await Organization.find().select("_id name slug").sort({ name: 1 }).lean();
-    return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)", organizations });
-  } catch (err) {
-    console.error("[admin/lms/import GET] failed to load organizations:", err && (err.stack || err));
-    return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)", organizations: [] });
-  }
+router.get("/lms/import", ensureAuth, ensureAdmin, (req, res) => {
+  return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)" });
 });
 
 /**
@@ -252,17 +244,6 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     // parse blocks
     const blocks = parseQuestionBlocks(content);
     console.log(`[admin/lms/import] parsed ${blocks.length} question blocks`);
-
-    // read orgId + module from the form
-    let orgId = null;
-    if (req.body && req.body.orgId && String(req.body.orgId).trim()) {
-      try {
-        orgId = mongoose.Types.ObjectId(String(req.body.orgId).trim());
-      } catch (e) {
-        orgId = null; // invalid id -> treat as global
-      }
-    }
-    const moduleName = (req.body && req.body.module) ? String(req.body.module).trim() : "general";
 
     // If admin requested to "save" to DB, attempt to insert into Question collection
     const saveToDb = req.body && (req.body.save === "1" || req.body.save === "true" || req.body.save === "on");
@@ -308,14 +289,10 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
               text: qtext || "Question",
               choices,
               correctIndex: ci,
-              tags: ["responsibility"].concat(Array.isArray(b.tags) ? b.tags : []),
+              tags: ["responsibility"],
               source: req.body.source || "import",
               raw: b.rawBlock,
-              createdAt: new Date(),
-
-              // NEW organization + module fields
-              organization: orgId,          // null for global (usable by all orgs)
-              module: moduleName || "general"
+              createdAt: new Date()
             };
           });
 
@@ -337,9 +314,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
         savedToDb: saveToDb && !dbSkipped && !dbErr,
         inserted,
         dbSkipped,
-        dbErr,
-        selectedOrgId: req.body && req.body.orgId ? req.body.orgId : null,
-        selectedModule: moduleName
+        dbErr
       });
     }
 

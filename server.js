@@ -19,6 +19,11 @@ import adminRoutes from "./routes/admin.js"; // merged admin (includes import/up
 import User from "./models/user.js";
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/authF.js";
+import adminOrganizationRoutes from "./routes/admin_organizations.js";
+
+import orgManagementRoutes from "./routes/org_management.js";
+
+
 
 dotenv.config();
 
@@ -104,7 +109,8 @@ app.use("/api", trackRouter);
 
 // Public LMS pages
 app.use("/lms", lmsRoutes);
-
+app.use(adminOrganizationRoutes);
+app.use(orgManagementRoutes);
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {

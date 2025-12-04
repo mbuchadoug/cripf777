@@ -1,0 +1,27 @@
+{{!-- admin/org_modules.hbs --}}
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Modules for {{org.name}}</title></head>
+<body>
+  {{> navbar}}
+  <main>
+    <h1>Modules — {{org.name}}</h1>
+    <a href="/admin/orgs/{{org.slug}}/modules/create">Create Module</a>
+    <table border="1" cellpadding="8" style="margin-top:12px;">
+      <tr><th>Slug</th><th>Title</th><th>Actions</th></tr>
+      {{#each modules}}
+        <tr>
+          <td>{{this.slug}}</td>
+          <td>{{this.title}}</td>
+          <td>
+            <a href="/admin/orgs/{{../org.slug}}/modules/{{this.slug}}/edit">Edit</a>
+            <form method="post" action="/admin/orgs/{{../org.slug}}/modules/{{this.slug}}/delete" style="display:inline">
+              <button type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {{/each}}
+    </table>
+  </main>
+</body>
+</html>
