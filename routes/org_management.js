@@ -36,53 +36,55 @@ function ensureAdminEmails(req, res, next) {
 }
 
 /**
- * Create / configure nodemailer transporter.
- *
- * Supports both:
- *  - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
- * and/or
- *  - MAIL_HOST, MAIL_PORT, MAIL_USER, MAIL_PASS
- *
- * Use whichever is present.
+ * Create / configure nodemailer transporter if SMTP env is present.
+ * Required env:
+ *  - SMTP_HOST
+ *  - SMTP_PORT (optional, default 587)
+ *  - SMTP_SECURE ("true"/"false"; optional)
+ *  - SMTP_USER
+ *  - SMTP_PASS
+ * Optional:
+ *  - SMTP_FROM (fallback to SMTP_USER)
  */
 function createTransporter() {
-  const host =
-    process.env.SMTP_HOST || process.env.MAIL_HOST;
-  const user =
-    process.env.SMTP_USER || process.env.MAIL_USER;
-  const pass =
-    process.env.SMTP_PASS || process.env.MAIL_PASS;
-
-  const port = Number(
-    process.env.SMTP_PORT || process.env.MAIL_PORT || 465
-  );
-  const secure = port === 465; // true for 465, false for 587 etc.
-
-  if (!host || !user || !pass) {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn(
-      "[mailer] No SMTP/Mail env set; invite emails will NOT be sent",
-      { host, userPresent: !!user, passPresent: !!pass }
+      "[invite email] SMTP_HOST / SMTP_USER / SMTP_PASS missing, transporter not created"
     );
     return null;
   }
 
-  console.log("[mailer] Creating transporter with", {
-    host,
-    port,
-    secure,
-    user,
-  });
+  const secure =
+    String(process.env.SMTP_SECURE || "")
+      .trim()
+      .toLowerCase() === "true";
+
+  const port =
+    Number(process.env.SMTP_PORT || (secure ? 465 : 587));
+
+  console.log(
+    `[invite email] creating transporter host=${process.env.SMTP_HOST} port=${port} secure=${secure}`
+  );
 
   return nodemailer.createTransport({
-    host,
+    host: process.env.SMTP_HOST,
     port,
-    secure,
-    auth: { user, pass },
+    secure, // true for 465, false for 587
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
   });
 }
 
 const transporter = createTransporter();
-const BASE_URL = process.env.BASE_URL || "";
+const BASE_URL = (process.env.BASE_URL || "").trim();
+
+if (!BASE_URL) {
+  console.warn(
+    "[invite email] BASE_URL is missing or empty; invite links will be broken and email sending may be skipped"
+  );
+}
 
 /**
  * ADMIN: Send invite (POST)
@@ -96,19 +98,13 @@ router.post(
   async (req, res) => {
     try {
       const slug = String(req.params.slug || "").trim();
-      const email = String(req.body.email || "")
-        .trim()
-        .toLowerCase();
+      const email = String(req.body.email || "").trim().toLowerCase();
       const role = String(req.body.role || "employee");
 
-      if (!email) {
-        return res.status(400).json({ error: "email required" });
-      }
+      if (!email) return res.status(400).json({ error: "email required" });
 
       const org = await Organization.findOne({ slug }).lean();
-      if (!org) {
-        return res.status(404).json({ error: "org not found" });
-      }
+      if (!org) return res.status(404).json({ error: "org not found" });
 
       const token = crypto.randomBytes(16).toString("hex");
       const invite = await OrgInvite.create({
@@ -119,38 +115,22 @@ router.post(
       });
 
       // Attempt to send email (best-effort)
-      if (!BASE_URL) {
-        console.warn(
-          "[invite email] BASE_URL is missing, invite link will be broken and no email is sent"
-        );
-      }
-
       if (transporter && BASE_URL) {
-        const inviteUrl = `${BASE_URL.replace(
-          /\/$/,
-          ""
-        )}/org/join/${token}`;
-
+        const inviteUrl = `${BASE_URL.replace(/\/$/, "")}/org/join/${token}`;
         try {
-          const fromAddress =
-            process.env.SMTP_FROM ||
-            process.env.SMTP_USER ||
-            process.env.MAIL_USER;
-
           await transporter.sendMail({
-            from: fromAddress,
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
             subject: `Invite to join ${org.name}`,
             text: `You've been invited to join organization ${org.name}. Click to accept: ${inviteUrl}`,
             html: `<p>You've been invited to join <strong>${org.name}</strong>.</p>
                    <p><a href="${inviteUrl}">Click here to accept the invite</a></p>`,
           });
-
           console.log("[invite email] sent to", email);
         } catch (e) {
-          console.error(
+          console.warn(
             "[invite email] send failed:",
-            e && (e.stack || e)
+            (e && e.stack) || e
           );
         }
       } else {
@@ -159,7 +139,6 @@ router.post(
         );
       }
 
-      // Even if email fails, the invite itself is created
       return res.json({ ok: true, token: invite.token });
     } catch (err) {
       console.error(
@@ -187,9 +166,7 @@ router.get(
       const invites = await OrgInvite.find({ orgId: org._id })
         .sort({ createdAt: -1 })
         .lean();
-      const memberships = await OrgMembership.find({
-        org: org._id,
-      })
+      const memberships = await OrgMembership.find({ org: org._id })
         .populate("user")
         .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
@@ -219,13 +196,8 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const token = String(req.params.token || "");
     if (!token) return res.status(400).send("token required");
 
-    const invite = await OrgInvite.findOne({
-      token,
-      used: false,
-    }).lean();
-    if (!invite) {
-      return res.status(404).send("invite not found or used");
-    }
+    const invite = await OrgInvite.findOne({ token, used: false }).lean();
+    if (!invite) return res.status(404).send("invite not found or used");
 
     // attach membership
     await OrgMembership.findOneAndUpdate(
@@ -242,10 +214,7 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const org = await Organization.findById(invite.orgId).lean();
     return res.redirect(`/org/${org.slug}/dashboard`);
   } catch (err) {
-    console.error(
-      "[org/join] error:",
-      err && (err.stack || err)
-    );
+    console.error("[org/join] error:", err && (err.stack || err));
     return res.status(500).send("join failed");
   }
 });
@@ -267,9 +236,7 @@ router.post(
       const role = String(req.body.role || "manager");
 
       const org = await Organization.findOne({ slug }).lean();
-      if (!org) {
-        return res.status(404).json({ error: "org not found" });
-      }
+      if (!org) return res.status(404).json({ error: "org not found" });
 
       if (action === "remove") {
         await OrgMembership.deleteOne({ org: org._id, user: userId });
@@ -321,14 +288,13 @@ router.post(
         count = 20,
         expiresMinutes = 60,
       } = req.body || {};
+
       if (!Array.isArray(userIds) || !userIds.length) {
         return res.status(400).json({ error: "userIds required" });
       }
 
       const org = await Organization.findOne({ slug }).lean();
-      if (!org) {
-        return res.status(404).json({ error: "org not found" });
-      }
+      if (!org) return res.status(404).json({ error: "org not found" });
 
       // prepare candidate pool: org-specific + global
       const match = {
@@ -344,10 +310,7 @@ router.post(
           {
             $match: {
               module: String(module).trim(),
-              $or: [
-                { organization: org._id },
-                { organization: null },
-              ],
+              $or: [{ organization: org._id }, { organization: null }],
             },
           },
           { $sample: { size: Number(count) } },
@@ -363,14 +326,15 @@ router.post(
       const assigned = [];
       for (const uId of userIds) {
         try {
-          // build choicesOrder per question
           const questionIds = [];
           const choicesOrder = [];
+
           for (const q of docs) {
             questionIds.push(q._id);
             const n = (q.choices || []).length;
             const indices = Array.from({ length: n }, (_, i) => i);
-            // shuffle
+
+            // shuffle indices
             for (let i = indices.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -382,6 +346,7 @@ router.post(
           const expiresAt = new Date(
             Date.now() + Number(expiresMinutes) * 60 * 1000
           );
+
           await ExamInstance.create({
             examId,
             org: org._id,
@@ -414,7 +379,7 @@ router.post(
           console.warn(
             "[assign-quiz] user assign failed",
             uId,
-            e && (e.stack || e)
+            (e && e.stack) || e
           );
         }
       }
@@ -446,19 +411,15 @@ router.get(
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).send("org not found");
 
-      // sound assumption: Attempt model stores organization, module, userId, score, maxScore, passed, timestamps
       const filter = { organization: org._id };
       if (module) filter.module = module;
+
       const attempts = await Attempt.find(filter)
         .populate("userId")
         .sort({ createdAt: -1 })
         .lean();
 
-      // build CSV
-      res.setHeader(
-        "Content-Type",
-        "text/csv; charset=utf-8"
-      );
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="attempts_${org.slug}_${
@@ -466,7 +427,6 @@ router.get(
         }.csv"`
       );
 
-      // header
       res.write(
         "userId,userEmail,module,score,maxScore,passed,startedAt,finishedAt\n"
       );
@@ -500,7 +460,7 @@ router.get(
 
 /**
  * ORG DASHBOARD for employees and managers
- * GET /org/:slug/dashboard  (kept simple)
+ * GET /org/:slug/dashboard
  */
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
