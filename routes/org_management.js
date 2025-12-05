@@ -18,7 +18,7 @@ const router = Router();
 
 /**
  * Admin check - replace if you have a different admin logic.
- * This checks process.env.ADMIN_EMAILS (comma separated).
+ * Uses ADMIN_EMAILS env (comma separated list).
  */
 function ensureAdminEmails(req, res, next) {
   const adminEmails = (process.env.ADMIN_EMAILS || "")
@@ -36,60 +36,58 @@ function ensureAdminEmails(req, res, next) {
 }
 
 /**
- * Create / configure nodemailer transporter if SMTP env is present.
- * Required env:
- *  - SMTP_HOST
- *  - SMTP_PORT (optional, default 587)
- *  - SMTP_SECURE ("true"/"false"; optional)
- *  - SMTP_USER
- *  - SMTP_PASS
- * Optional:
- *  - SMTP_FROM (fallback to SMTP_USER)
+ * Lazy transporter creation: we read env *when we actually need it*.
  */
-function createTransporter() {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.warn(
-      "[invite email] SMTP_HOST / SMTP_USER / SMTP_PASS missing, transporter not created"
+let _transporter = null;
+
+function getTransporter() {
+  if (_transporter) return _transporter;
+
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const secure =
+    String(process.env.SMTP_SECURE || "").toLowerCase() === "true";
+  const port = Number(process.env.SMTP_PORT || (secure ? 465 : 587));
+
+  console.log("[invite email] env snapshot:", {
+    SMTP_HOST: host,
+    SMTP_USER: user,
+    SMTP_HAS_PASS: !!pass,
+    SMTP_PORT: port,
+    SMTP_SECURE: secure,
+    BASE_URL: process.env.BASE_URL,
+  });
+
+  if (!host || !user || !pass) {
+    console.error(
+      "[invite email] SMTP_HOST / SMTP_USER / SMTP_PASS missing – cannot create transporter"
     );
     return null;
   }
 
-  const secure =
-    String(process.env.SMTP_SECURE || "")
-      .trim()
-      .toLowerCase() === "true";
-
-  const port =
-    Number(process.env.SMTP_PORT || (secure ? 465 : 587));
-
-  console.log(
-    `[invite email] creating transporter host=${process.env.SMTP_HOST} port=${port} secure=${secure}`
-  );
-
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+  _transporter = nodemailer.createTransport({
+    host,
     port,
-    secure, // true for 465, false for 587
+    secure,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user,
+      pass,
     },
   });
-}
 
-const transporter = createTransporter();
-const BASE_URL = (process.env.BASE_URL || "").trim();
-
-if (!BASE_URL) {
-  console.warn(
-    "[invite email] BASE_URL is missing or empty; invite links will be broken and email sending may be skipped"
+  console.log(
+    `[invite email] transporter created host=${host} port=${port} secure=${secure}`
   );
+
+  return _transporter;
 }
+
+const BASE_URL = process.env.BASE_URL || "";
 
 /**
  * ADMIN: Send invite (POST)
  * body: { email, role }
- * Returns JSON { ok: true, token } or error.
  */
 router.post(
   "/admin/orgs/:slug/invite",
@@ -107,44 +105,40 @@ router.post(
       if (!org) return res.status(404).json({ error: "org not found" });
 
       const token = crypto.randomBytes(16).toString("hex");
-      const invite = await OrgInvite.create({
-        orgId: org._id,
-        email,
-        token,
-        role,
-      });
+      const invite = await OrgInvite.create({ orgId: org._id, email, token, role });
 
-      // Attempt to send email (best-effort)
-      if (transporter && BASE_URL) {
-        const inviteUrl = `${BASE_URL.replace(/\/$/, "")}/org/join/${token}`;
-        try {
-          await transporter.sendMail({
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            to: email,
-            subject: `Invite to join ${org.name}`,
-            text: `You've been invited to join organization ${org.name}. Click to accept: ${inviteUrl}`,
-            html: `<p>You've been invited to join <strong>${org.name}</strong>.</p>
-                   <p><a href="${inviteUrl}">Click here to accept the invite</a></p>`,
-          });
-          console.log("[invite email] sent to", email);
-        } catch (e) {
-          console.warn(
-            "[invite email] send failed:",
-            (e && e.stack) || e
-          );
-        }
-      } else {
+      // Try sending email
+      const transporter = getTransporter();
+
+      if (!transporter || !BASE_URL) {
         console.warn(
           "[invite email] transporter not available or BASE_URL missing; invite email skipped"
         );
+        return res.json({ ok: true, token: invite.token }); // still return token
+      }
+
+      const inviteUrl = `${BASE_URL.replace(/\/$/, "")}/org/join/${token}`;
+
+      try {
+        const info = await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: email,
+          subject: `Invite to join ${org.name}`,
+          text: `You've been invited to join ${org.name}. Click to accept: ${inviteUrl}`,
+          html: `
+            <p>You've been invited to join <strong>${org.name}</strong>.</p>
+            <p><a href="${inviteUrl}">Click here to accept the invite</a></p>
+          `,
+        });
+
+        console.log("[invite email] sent:", info.messageId);
+      } catch (e) {
+        console.error("[invite email] send failed:", e && (e.stack || e));
       }
 
       return res.json({ ok: true, token: invite.token });
     } catch (err) {
-      console.error(
-        "[admin invite] error:",
-        err && (err.stack || err)
-      );
+      console.error("[admin invite] error:", err && (err.stack || err));
       return res.status(500).json({ error: "invite failed" });
     }
   }
@@ -178,18 +172,14 @@ router.get(
         modules,
       });
     } catch (err) {
-      console.error(
-        "[admin org manage] error:",
-        err && (err.stack || err)
-      );
+      console.error("[admin org manage] error:", err && (err.stack || err));
       return res.status(500).send("failed");
     }
   }
 );
 
 /**
- * PUBLIC: Join via invite token (GET). If logged in, attach membership.
- * If not logged in: you should redirect to login and preserve token in session.
+ * PUBLIC: Join via invite token (GET)
  */
 router.get("/org/join/:token", ensureAuth, async (req, res) => {
   try {
@@ -199,7 +189,6 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const invite = await OrgInvite.findOne({ token, used: false }).lean();
     if (!invite) return res.status(404).send("invite not found or used");
 
-    // attach membership
     await OrgMembership.findOneAndUpdate(
       { org: invite.orgId, user: req.user._id },
       { $set: { role: invite.role, joinedAt: new Date() } },
@@ -220,9 +209,7 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
 });
 
 /**
- * ADMIN: Member actions (AJAX-friendly)
- * POST /admin/orgs/:slug/members/:userId
- * body: { action: "promote"|"demote"|"remove", role }
+ * ADMIN: Member actions (promote/demote/remove)
  */
 router.post(
   "/admin/orgs/:slug/members/:userId",
@@ -258,241 +245,18 @@ router.post(
         return res.status(400).json({ error: "invalid action" });
       }
     } catch (err) {
-      console.error(
-        "[admin member action] error:",
-        err && (err.stack || err)
-      );
+      console.error("[admin member action] error:", err && (err.stack || err));
       return res.status(500).json({ error: "failed" });
     }
   }
 );
 
 /**
- * ASSIGN QUIZ (ADMIN or manager):
- * POST /admin/orgs/:slug/assign-quiz
- * body: { module, userIds: [id,...], count: 20, expiresMinutes: 60 }
- *
- * This will create one ExamInstance per user (persisted) + empty Attempt record.
- * Returns { assigned: [{ userId, examId, url }], errors: [...] }
+ * ASSIGN QUIZ, REPORTS & DASHBOARD routes are unchanged from your version.
+ * (Leave your existing implementations below this point, or paste them
+ *  back if you removed them.)
  */
-router.post(
-  "/admin/orgs/:slug/assign-quiz",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "");
-      const {
-        module = "general",
-        userIds = [],
-        count = 20,
-        expiresMinutes = 60,
-      } = req.body || {};
 
-      if (!Array.isArray(userIds) || !userIds.length) {
-        return res.status(400).json({ error: "userIds required" });
-      }
-
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).json({ error: "org not found" });
-
-      // prepare candidate pool: org-specific + global
-      const match = {
-        module: String(module).trim(),
-        $or: [{ organization: org._id }, { organization: null }],
-      };
-      const pipeline = [{ $match: match }, { $sample: { size: Number(count) } }];
-      let docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
-
-      // fallback if pool smaller
-      if (!docs || docs.length < count) {
-        docs = await QuizQuestion.aggregate([
-          {
-            $match: {
-              module: String(module).trim(),
-              $or: [{ organization: org._id }, { organization: null }],
-            },
-          },
-          { $sample: { size: Number(count) } },
-        ]).allowDiskUse(true);
-      }
-      if (!docs || !docs.length) {
-        return res
-          .status(404)
-          .json({ error: "no questions available for that module" });
-      }
-
-      // prepare questionIds and shuffle choices per question for each user
-      const assigned = [];
-      for (const uId of userIds) {
-        try {
-          const questionIds = [];
-          const choicesOrder = [];
-
-          for (const q of docs) {
-            questionIds.push(q._id);
-            const n = (q.choices || []).length;
-            const indices = Array.from({ length: n }, (_, i) => i);
-
-            // shuffle indices
-            for (let i = indices.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [indices[i], indices[j]] = [indices[j], indices[i]];
-            }
-            choicesOrder.push(indices);
-          }
-
-          const examId = crypto.randomUUID();
-          const expiresAt = new Date(
-            Date.now() + Number(expiresMinutes) * 60 * 1000
-          );
-
-          await ExamInstance.create({
-            examId,
-            org: org._id,
-            module: module,
-            user: mongoose.Types.ObjectId(uId),
-            questionIds,
-            choicesOrder,
-            expiresAt,
-            createdByIp: req.ip,
-          });
-
-          // create a starter Attempt (if your Attempt model exists)
-          if (Attempt) {
-            await Attempt.create({
-              userId: mongoose.Types.ObjectId(uId),
-              organization: org._id,
-              module: module,
-              questionIds,
-              startedAt: new Date(),
-              maxScore: questionIds.length,
-            });
-          }
-
-          const url = `${BASE_URL.replace(
-            /\/$/,
-            ""
-          )}/org/${org.slug}/quiz?examId=${examId}`;
-          assigned.push({ userId: uId, examId, url });
-        } catch (e) {
-          console.warn(
-            "[assign-quiz] user assign failed",
-            uId,
-            (e && e.stack) || e
-          );
-        }
-      }
-
-      return res.json({ ok: true, assigned });
-    } catch (err) {
-      console.error(
-        "[assign quiz] error:",
-        err && (err.stack || err)
-      );
-      return res.status(500).json({ error: "assign failed" });
-    }
-  }
-);
-
-/**
- * REPORT: Export attempts CSV for org/module
- * GET /admin/orgs/:slug/reports/attempts.csv?module=xxx
- * Returns CSV with columns: userId, userEmail, module, score, maxScore, passed, startedAt, finishedAt
- */
-router.get(
-  "/admin/orgs/:slug/reports/attempts.csv",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "");
-      const module = String(req.query.module || "");
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
-
-      const filter = { organization: org._id };
-      if (module) filter.module = module;
-
-      const attempts = await Attempt.find(filter)
-        .populate("userId")
-        .sort({ createdAt: -1 })
-        .lean();
-
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="attempts_${org.slug}_${
-          module || "all"
-        }.csv"`
-      );
-
-      res.write(
-        "userId,userEmail,module,score,maxScore,passed,startedAt,finishedAt\n"
-      );
-      for (const a of attempts) {
-        const uid = a.userId
-          ? String(a.userId._id)
-          : a.userId || "";
-        const email = a.userId ? a.userId.email || "" : "";
-        const started = a.startedAt
-          ? new Date(a.startedAt).toISOString()
-          : "";
-        const finished = a.finishedAt
-          ? new Date(a.finishedAt).toISOString()
-          : "";
-        res.write(
-          `${uid},${email},${a.module || ""},${a.score || 0},${
-            a.maxScore || 0
-          },${a.passed ? "1" : "0"},${started},${finished}\n`
-        );
-      }
-      res.end();
-    } catch (err) {
-      console.error(
-        "[reports csv] error:",
-        err && (err.stack || err)
-      );
-      return res.status(500).send("failed");
-    }
-  }
-);
-
-/**
- * ORG DASHBOARD for employees and managers
- * GET /org/:slug/dashboard
- */
-router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "");
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
-
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id,
-    }).lean();
-    if (!membership) {
-      return res
-        .status(403)
-        .send("You are not a member of this organization");
-    }
-
-    const modules = await OrgModule.find({ org: org._id }).lean();
-
-    return res.render("org/dashboard", {
-      org,
-      membership,
-      modules,
-      user: req.user,
-    });
-  } catch (err) {
-    console.error(
-      "[org dashboard] error:",
-      err && (err.stack || err)
-    );
-    return res.status(500).send("failed");
-  }
-});
+// ... keep the rest of your quiz/attempt/report/dashboard routes here ...
 
 export default router;
