@@ -20,8 +20,10 @@ import User from "./models/user.js";
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/authF.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
+
 import orgManagementRoutes from "./routes/org_management.js";
-import { ensureAuth } from "./middleware/authGuard.js";
+
+
 
 dotenv.config();
 
@@ -44,28 +46,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// -------------------------------
-// 🧱 Handlebars setup (with helpers)
-// -------------------------------
-const hbsHelpers = {
-  eq: (a, b) => a === b,
-  ne: (a, b) => a !== b,
-  lt: (a, b) => a < b,
-  gt: (a, b) => a > b,
-  lte: (a, b) => a <= b,
-  gte: (a, b) => a >= b,
-  and: (a, b) => a && b,
-  or: (a, b) => a || b,
-};
-
-app.engine(
-  "hbs",
-  engine({
-    extname: ".hbs",
-    defaultLayout: "main", // adjust if your layout name is different
-    helpers: hbsHelpers,
-  })
-);
+// Handlebars setup
+app.engine("hbs", engine({ extname: ".hbs" }));
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
@@ -74,11 +56,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Ensure data folder exists
 const dataPath = path.join(process.cwd(), "data", "scoi.json");
-if (!fs.existsSync(path.dirname(dataPath))) {
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true });
-}
+if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 
-// --------- MONGOOSE connect ----------
+// --------- MONGOOSE connect (optional but useful for sessions) ----------
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
   console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
@@ -89,10 +69,11 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
+      // continue running (sessions will fail if DB required)
     });
 }
 
-// ---------- SESSIONS ----------
+// ---------- SESSIONS (must be before passport.initialize/session) ----------
 const sessionSecret = process.env.SESSION_SECRET || "change_this_secret_for_dev_only";
 app.use(
   session({
@@ -109,7 +90,7 @@ app.use(
 );
 
 // ---------- PASSPORT setup ----------
-configurePassport(); // config/passport.js should set up strategies + serialize/deserialize
+configurePassport(); // expects config/passport.js to call passport.use(...) and serialize/deserialize
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -117,9 +98,10 @@ app.use(passport.session());
 app.use("/auth", authRoutes);
 
 // ADMIN (single mount for admin UI & import routes)
+// Ensure routes/admin.js contains everything admin-related (user management + lms imports)
 app.use("/admin", adminRoutes);
 
-// API routes — keep LMS API on /api/lms so quiz UI fetches work
+// API routes — keep LMS API on /api/lms so quiz UI fetches work: GET /api/lms/quiz and POST /api/lms/quiz/submit
 app.use("/api/lms", apiLmsRoutes);
 
 // Other API-level routes (tracking, etc.)
@@ -127,11 +109,8 @@ app.use("/api", trackRouter);
 
 // Public LMS pages
 app.use("/lms", lmsRoutes);
-
-// Org-related routes
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
-
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
@@ -152,17 +131,7 @@ function cleanAIText(text) {
 
 // Helper: format SCOI audit
 function formatSCOI(entityData, entity) {
-  const {
-    visibility,
-    contribution,
-    ERF,
-    adjustedSCOI,
-    visibilityRationale,
-    contributionRationale,
-    scoiInterpretation,
-    ERFRationale,
-    commentary,
-  } = entityData;
+  const { visibility, contribution, ERF, adjustedSCOI, visibilityRationale, contributionRationale, scoiInterpretation, ERFRationale, commentary } = entityData;
   const rawSCOI = (contribution / visibility).toFixed(3);
   const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
 
@@ -223,6 +192,7 @@ app.get("/contact", (req, res) => {
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page (protected)
 // -------------------------------
+import { ensureAuth } from "./middleware/authGuard.js";
 app.get("/audit", ensureAuth, (req, res) => {
   res.render("chat", {
     title: "CRIPFCnt SCOI Audit",
@@ -233,6 +203,7 @@ app.get("/audit", ensureAuth, (req, res) => {
 
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
+// (kept as-is from your original file)
 // -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   // Require authentication
@@ -242,13 +213,13 @@ app.post("/api/chat-stream", async (req, res) => {
 
   const user = req.user;
   const userId = user && user._id;
-  const userEmail = ((user && (user.email || "")) || "").toLowerCase();
+  const userEmail = (user && (user.email || "") || "").toLowerCase();
 
   // Admin bypass set
   const adminSet = new Set(
     (process.env.ADMIN_EMAILS || "")
       .split(",")
-      .map((s) => String(s || "").trim().toLowerCase())
+      .map(s => String(s || "").trim().toLowerCase())
       .filter(Boolean)
   );
   const isAdmin = userEmail && adminSet.has(userEmail);
@@ -256,11 +227,13 @@ app.post("/api/chat-stream", async (req, res) => {
   const DAILY_LIMIT = parseInt(process.env.SEARCH_DAILY_LIMIT || "3", 10);
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
+  // ensure keepAlive variable exists in outer scope so catch can clear it
   let keepAlive;
 
   try {
     // enforce daily limit for non-admins
     if (!isAdmin) {
+      // Attempt to increment if already today and below limit
       const incResult = await User.findOneAndUpdate(
         { _id: userId, searchCountDay: today, searchCount: { $lt: DAILY_LIMIT } },
         { $inc: { searchCount: 1 }, $set: { lastLogin: new Date() } },
@@ -268,6 +241,7 @@ app.post("/api/chat-stream", async (req, res) => {
       );
 
       if (!incResult) {
+        // If not today's day (or not set), reset to today and set to 1
         const resetResult = await User.findOneAndUpdate(
           { _id: userId, $or: [{ searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } }] },
           { $set: { searchCountDay: today, searchCount: 1, lastLogin: new Date() } },
@@ -275,9 +249,11 @@ app.post("/api/chat-stream", async (req, res) => {
         );
 
         if (!resetResult) {
+          // both attempts failed - likely limit reached
           const current = await User.findById(userId);
-          const used = current && current.searchCountDay === today ? current.searchCount || 0 : 0;
+          const used = (current && current.searchCountDay === today) ? (current.searchCount || 0) : 0;
 
+          // compute next UTC midnight for a friendly reset time
           const resetAtDate = new Date();
           resetAtDate.setUTCHours(24, 0, 0, 0);
           const resetAtISO = resetAtDate.toISOString();
@@ -287,15 +263,14 @@ app.post("/api/chat-stream", async (req, res) => {
             message: `You have reached your daily limit of ${DAILY_LIMIT} searches (used: ${used}). Please try again tomorrow or contact support.`,
             used,
             limit: DAILY_LIMIT,
-            friendly: `You’ve used ${used} of ${DAILY_LIMIT} free audits today. Your free quota will reset at ${resetAtDate.toLocaleString(
-              "en-GB",
-              { timeZone: "UTC" }
-            )} (UTC). If you need more audits today, contact ${SUPPORT_EMAIL}.`,
+            friendly: `You’ve used ${used} of ${DAILY_LIMIT} free audits today. Your free quota will reset at ${resetAtDate.toLocaleString('en-GB', { timeZone: 'UTC' })} (UTC). If you need more audits today, contact ${SUPPORT_EMAIL}.`,
             resetAt: resetAtISO,
-            support: SUPPORT_EMAIL,
+            support: SUPPORT_EMAIL
           });
         }
+        // resetResult success -> consumed 1 credit
       }
+      // incResult success -> consumed 1 credit
     }
 
     // Setup SSE headers & keep-alive after credit has been consumed
@@ -305,9 +280,7 @@ app.post("/api/chat-stream", async (req, res) => {
     if (typeof res.flushHeaders === "function") res.flushHeaders();
 
     keepAlive = setInterval(() => {
-      try {
-        res.write(":\n\n");
-      } catch (e) {}
+      try { res.write(":\n\n"); } catch (e) {}
     }, 15000);
 
     const { entity } = req.body || {};
@@ -332,15 +305,13 @@ Follow this structure exactly:
 Return the audit as readable text.
 `;
 
+    // call OpenAI (streaming)
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       stream: true,
       messages: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.`,
-        },
+        { role: "user", content: `Perform a full CRIPFCnt SCOI Audit for: "${entity}". Include all scores, adjusted SCOI, and interpretive commentary.` },
       ],
     });
 
@@ -361,9 +332,7 @@ Return the audit as readable text.
     res.end();
   } catch (err) {
     console.error("Stream / credits handler error:", err && (err.stack || err));
-    try {
-      if (keepAlive) clearInterval(keepAlive);
-    } catch (e) {}
+    try { if (keepAlive) clearInterval(keepAlive); } catch (e) {}
 
     const msg = String(err?.message || err || "unknown error").replace(/\r?\n/g, " ");
     if (!res.headersSent) {
@@ -400,27 +369,19 @@ app.get("/api/audits", (req, res) => {
   res.json({
     framework: "CRIPFCnt SCOI Audit System",
     author: "Donald Mataranyika",
-    description:
-      "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
+    description: "Civilization-level audit system measuring organizational Visibility, Contribution, and Placement under global volatility.",
     formula: "Adjusted SCOI = Raw SCOI × Environmental Resilience Factor (ERF)",
     data: scoiAudits,
   });
 });
 
 app.get("/api/search-quota", (req, res) => {
-  if (!(req.isAuthenticated && req.isAuthenticated()))
-    return res.json({ authenticated: false, isAdmin: false, remaining: 0, limit: 0 });
-
+  if (!(req.isAuthenticated && req.isAuthenticated())) return res.json({ authenticated: false, isAdmin: false, remaining: 0, limit: 0 });
   const user = req.user;
-  const isAdmin = new Set(
-    (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-  ).has((user.email || "").toLowerCase());
-
+  const isAdmin = (new Set((process.env.ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()))).has((user.email || "").toLowerCase());
   const limit = parseInt(process.env.SEARCH_DAILY_LIMIT || "3", 10);
-  const today = new Date().toISOString().slice(0, 10);
-  const used = user.searchCountDay === today ? user.searchCount || 0 : 0;
+  const today = new Date().toISOString().slice(0,10);
+  const used = (user.searchCountDay === today) ? (user.searchCount || 0) : 0;
   const remaining = isAdmin ? Infinity : Math.max(0, limit - used);
   return res.json({ authenticated: true, isAdmin, used, remaining, limit });
 });
