@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <title>Add Module</title>
+</head>
+<body>
+  {{> navbar}}
+
+  <h1>Add Module — {{org.name}}</h1>
+
+  <form method="POST" action="/admin/orgs/{{org.slug}}/modules">
+    <div>
+      <label>Title</label><br>
+      <input type="text" name="title" required>
+    </div>
+
+    <div>
+      <label>Slug</label><br>
+      <input type="text" name="slug" required placeholder="e.g. safety-training">
+    </div>
+
+    <div>
+      <label>Description</label><br>
+      <textarea name="description"></textarea>
+    </div>
+
+    <br>
+    <button type="submit">Save Module</button>
+  </form>
+</body>
+</html>

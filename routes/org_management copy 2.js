@@ -444,8 +444,6 @@ router.get(
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
 
-// routes/org_management.js
-// ORG DASHBOARD for employees and managers
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -457,148 +455,23 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       user: req.user._id,
     }).lean();
     if (!membership) {
-      return res.status(403).send("You are not a member of this organization");
+      return res
+        .status(403)
+        .send("You are not a member of this organization");
     }
 
-    // All modules for this org
     const modules = await OrgModule.find({ org: org._id }).lean();
-
-    // All quiz instances assigned to THIS user in THIS org
-    const exams = await ExamInstance.find({
-      org: org._id,
-      user: req.user._id,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Group quizzes by module slug
-    const quizzesByModule = {};
-    const now = new Date();
-
-    for (const ex of exams) {
-      const key = ex.module || "general";
-      if (!quizzesByModule[key]) quizzesByModule[key] = [];
-
-      let status = "pending";
-      if (ex.finishedAt) status = "completed";
-      else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
-
-      quizzesByModule[key].push({
-        examId: ex.examId,
-        module: ex.module,
-        createdAt: ex.createdAt,
-        expiresAt: ex.expiresAt,
-        finishedAt: ex.finishedAt,
-        status,
-      });
-    }
 
     return res.render("org/dashboard", {
       org,
       membership,
       modules,
       user: req.user,
-      quizzesByModule, // <-- new
     });
   } catch (err) {
     console.error("[org dashboard] error:", err && (err.stack || err));
     return res.status(500).send("failed");
   }
 });
-
-
-
-// view a single module's learning material
-router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "");
-    const moduleSlug = String(req.params.moduleSlug || "");
-
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
-
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id,
-    }).lean();
-    if (!membership) return res.status(403).send("You are not a member of this organization");
-
-    const moduleDoc = await OrgModule.findOne({
-      org: org._id,
-      slug: moduleSlug,
-    }).lean();
-    if (!moduleDoc) return res.status(404).send("module not found");
-
-    return res.render("org/module_detail", {
-      org,
-      membership,
-      module: moduleDoc,
-      user: req.user,
-    });
-  } catch (err) {
-    console.error("[org module detail] error:", err && (err.stack || err));
-    return res.status(500).send("failed");
-  }
-});
-
-
-router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "");
-    const moduleSlug = String(req.params.moduleSlug || "");
-
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
-
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id,
-    }).lean();
-    if (!membership) return res.status(403).send("You are not a member of this organization");
-
-    const moduleDoc = await OrgModule.findOne({
-      org: org._id,
-      slug: moduleSlug,
-    }).lean();
-    if (!moduleDoc) return res.status(404).send("module not found");
-
-    return res.render("org/module_detail", {
-      org,
-      membership,
-      module: moduleDoc,
-      user: req.user,
-    });
-  } catch (err) {
-    console.error("[org module detail] error:", err && (err.stack || err));
-    return res.status(500).send("failed");
-  }
-});
-
-
-router.get("/admin/orgs/:slug/modules/new", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const org = await Organization.findOne({ slug: req.params.slug }).lean();
-  if (!org) return res.status(404).send("org not found");
-
-  res.render("admin/module_new", { org });
-});
-
-
-router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const { title, slug, description } = req.body;
-
-  const org = await Organization.findOne({ slug: req.params.slug });
-  if (!org) return res.status(404).send("org not found");
-
-  await OrgModule.create({
-    org: org._id,
-    title,
-    slug,
-    description,
-    createdAt: new Date()
-  });
-
-  res.redirect(`/org/${org.slug}/dashboard`);
-});
-
 
 export default router;
