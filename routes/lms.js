@@ -15,45 +15,30 @@ router.get("/", (req, res) => {
 });
 
 // QUIZ UI (demo OR org, same page)
-/*router.get("/quiz", ensureAuth, (req, res) => {
+router.get("/quiz", ensureAuth, (req, res) => {
   try {
+    // e.g. ?module=Responsibility&org=muono
     const rawModule = String(req.query.module || "Responsibility").trim();
-    const moduleKey = rawModule.toLowerCase();
+    const moduleKey = rawModule.toLowerCase();     // used for DB filtering
     const orgSlug = String(req.query.org || "").trim();
 
     const isOrg = !!orgSlug;
-    const quizCount = isOrg ? 20 : 5; // 👈 20 for org, 5 for demo
-
-    const displayModule = isOrg ? rawModule : `${rawModule} (demo)`;
+    const quizCount = isOrg ? 20 : 5;             // 20 for org, 5 for demo
+    const moduleLabel = isOrg
+      ? rawModule
+      : `${rawModule} (demo)`;                    // what appears in heading
 
     return res.render("lms/quiz", {
       user: req.user || null,
-      quizCount,          // number of questions UI should load
-      displayModule,      // text used in the heading
-      moduleKey,          // lower-cased key used for DB filter
-      orgSlug,            // org slug (or empty)
-      isOrg               // boolean flag
-    });
-  } catch (err) {
-    console.error("[lms/quiz] render error:", err && (err.stack || err));
-    return res.status(500).send("Failed to render quiz page");
-  }
-});*/
-
-// DEMO quiz: always 5 questions, global pool
-router.get("/quiz", ensureAuth, (req, res) => {
-  try {
-    return res.render("lms/quiz", {
-      user: req.user || null,
-      quizCount: 5,                    // 👈 demo = 5
-      module: "Responsibility (demo)", // label only
-      orgSlug: "",                     // no org
+      quizCount,
+      module: moduleLabel,                        // display title
+      moduleKey,                                  // internal key for API
+      orgSlug,
     });
   } catch (err) {
     console.error("[lms/quiz] render error:", err && (err.stack || err));
     return res.status(500).send("Failed to render quiz page");
   }
 });
-
 
 export default router;

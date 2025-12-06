@@ -612,9 +612,15 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       if (ex.finishedAt) status = "completed";
       else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
-      const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(
-        ex.examId
-      )}`;
+           // ex.module is stored lower-case (e.g. "responsibility")
+      const moduleKey = (ex.module || "responsibility").toLowerCase();
+      const moduleLabel =
+        moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
+
+      // Org quiz: 20 questions, filtered by module + org
+      const openUrl = `/lms/quiz?module=${encodeURIComponent(
+        moduleLabel
+      )}&org=${encodeURIComponent(org.slug)}`;
 
       quizzesByModule[key].push({
         examId: ex.examId,
@@ -623,8 +629,9 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         expiresAt: ex.expiresAt,
         finishedAt: ex.finishedAt,
         status,
-        openUrl,           // <-- prebuilt URL
+        openUrl,
       });
+
     }
 
     return res.render("org/dashboard", {

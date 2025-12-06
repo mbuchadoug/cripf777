@@ -60,12 +60,12 @@
         {{#each this}}
           <div class="quiz-block">
             <div>
-              <strong>Assigned quiz:</strong> {{examId}}
+                      <strong>Assigned quiz:</strong> {{examId}}
               &nbsp;—&nbsp;
-              {{!-- This URL should point to the org quiz view (20 questions) --}}
-              <a href="/org/{{../../org.slug}}/quiz?examId={{examId}}">
+              <a href="{{openUrl}}">
                 Open assigned 20-question quiz
               </a>
+
             </div>
             <div class="quiz-status">
               Status: {{status}}

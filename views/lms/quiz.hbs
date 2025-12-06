@@ -86,8 +86,10 @@
 <body
   data-quiz-count="{{quizCount}}"
   data-module="{{module}}"
+  data-module-key="{{moduleKey}}"
   data-org="{{orgSlug}}"
 >
+
   <div class="page">
     <div class="card" role="main" aria-labelledby="quiz-title">
       <h1 id="quiz-title">
@@ -128,6 +130,9 @@
 
     const body = document.body;
     const DEFAULT_COUNT = Number(body.dataset.quizCount || '5') || 5;
+    const MODULE_KEY = body.dataset.moduleKey || "";
+    const ORG_SLUG = body.dataset.org || "";
+
 
     let examId = null;
     let series = [];
@@ -228,9 +233,13 @@
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        const params = new URLSearchParams();
+                const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
+        if (MODULE_KEY) params.set('module', MODULE_KEY);
+        if (ORG_SLUG) params.set('org', ORG_SLUG);
+
         const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
+
         if (!res.ok) {
           const t = await res.text().catch(()=>null);
           throw new Error(t || res.statusText || 'failed to fetch quiz');
