@@ -657,7 +657,7 @@ router.get(
   }
 );
 
-// Handle create module
+// Create / update a module for an org
 router.post(
   "/admin/orgs/:slug/modules",
   ensureAuth,
@@ -665,13 +665,20 @@ router.post(
   async (req, res) => {
     try {
       const slug = String(req.params.slug || "");
-      const { moduleSlug, title, description } = req.body || {};
-
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).send("org not found");
 
+      // Read and sanitize the incoming fields
+      const moduleSlug = String(req.body.moduleSlug || req.body.slug || "").trim().toLowerCase();
+      const title = String(req.body.title || "").trim();
+      const description = String(req.body.description || "").trim();
+
+      console.log("[modules POST] body =", req.body);
+      console.log("[modules POST] moduleSlug =", moduleSlug);
+
+      // Validate before hitting Mongo
       if (!moduleSlug || !title) {
-        return res.status(400).send("module slug and title are required");
+        return res.status(400).send("Module slug and title are required");
       }
 
       await OrgModule.findOneAndUpdate(
@@ -679,12 +686,12 @@ router.post(
         {
           $set: {
             org: org._id,
-            slug: moduleSlug,
+            slug: moduleSlug,       // <- this is what Mongoose needs
             title,
-            description: description || "",
+            description,
           },
         },
-        { upsert: true }
+        { upsert: true, runValidators: true }
       );
 
       return res.redirect(`/admin/orgs/${org.slug}/modules`);
