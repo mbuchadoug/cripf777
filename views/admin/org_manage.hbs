@@ -122,43 +122,48 @@
     <hr/>
 
     <section>
-      <h2>Assign Quiz (bulk)</h2>
-      <p class="muted small">Select members to assign a 20-question quiz for the chosen module. This will create an exam instance per selected user.</p>
+     <h2>Assign Quiz (bulk)</h2>
 
-      <form id="assignQuizForm" onsubmit="return assignQuiz(this);" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
-        <label style="display:block;margin-bottom:6px">
-          Module:
-          <select name="module" required>
-            {{#if modules.length}}
-              {{#each modules}}<option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>{{/each}}
-            {{else}}
-              <option value="general">General</option>
-            {{/if}}
-          </select>
-        </label>
+<form method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
+  <p>Select members to assign a {{count}}-question quiz for the chosen module.
+     This will create an exam instance per selected user.</p>
 
-        <label style="display:block;margin-bottom:6px">
-          Users:
-          <br>
-          <select name="userIds" id="userSelect" multiple size="6" style="width:100%;min-height:120px;padding:8px">
-            {{#each memberships}}
-              <option value="{{this.user._id}}">{{this.user.fullName}} — {{this.user.email}}</option>
-            {{/each}}
-          </select>
-        </label>
+  <div class="field">
+    <label for="module">Module:</label>
+    <select id="module" name="module">
+      {{#each modules}}
+        <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
+      {{/each}}
+    </select>
+  </div>
 
-        <label style="display:inline-block;margin-right:8px">
-          Count:
-          <input type="number" name="count" value="20" min="1" max="50" style="width:80px" />
-        </label>
+  <div class="field">
+    <label for="userIds">Users:</label>
+    <select id="userIds" name="userIds" multiple size="6" required>
+      {{#each memberships}}
+        {{#if this.user}}
+          <option value="{{this.user._id}}">
+            {{this.user.email}} ({{this.role}})
+          </option>
+        {{/if}}
+      {{/each}}
+    </select>
+    <p><small>Hold Ctrl/Cmd to select multiple users.</small></p>
+  </div>
 
-        <label style="display:inline-block;margin-right:8px">
-          Expires (mins):
-          <input type="number" name="expiresMinutes" value="60" min="5" style="width:80px" />
-        </label>
+  <div class="field">
+    <label for="count">Count:</label>
+    <input id="count" name="count" type="number" min="1" max="100" value="20">
+  </div>
 
-        <button type="submit">Assign Quiz</button>
-      </form>
+  <div class="field">
+    <label for="expiresMinutes">Expires (mins):</label>
+    <input id="expiresMinutes" name="expiresMinutes" type="number" min="5" max="1440" value="60">
+  </div>
+
+  <button type="submit">Assign Quiz</button>
+</form>
+
 
       <div id="assignResult" class="notice"></div>
     </section>
