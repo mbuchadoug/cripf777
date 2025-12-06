@@ -1,9 +1,14 @@
-{{!-- views/lms/quiz.hbs --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Responsibility (demo) — Quick Quiz</title>
+  <title>
+    {{#if orgSlug}}
+      {{module}} — {{orgSlug}} Quiz
+    {{else}}
+      Responsibility (demo) — Quick Quiz
+    {{/if}}
+  </title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{
@@ -19,78 +24,56 @@
       --wrong-grad: linear-gradient(90deg,#3b0b0b,#611215);
     }
 
-    html,body{
-      height:100%;
-      margin:0;
-      background:var(--bg);
-      color:#fff;
-      font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial
-    }
+    html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
     .page{max-width:980px;margin:28px auto;padding:18px}
-    .card{
-      background:linear-gradient(180deg,var(--card),#070707);
-      padding:22px;border-radius:12px;
-      border:1px solid rgba(255,255,255,0.02);
-      box-shadow:0 8px 30px rgba(0,0,0,0.6)
-    }
+    .card{background:linear-gradient(180deg,var(--card),#070707);padding:22px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);box-shadow:0 8px 30px rgba(0,0,0,0.6)}
     h1{margin:0 0 8px 0;color:var(--gold);font-size:34px}
     .muted{color:var(--muted);font-size:14px;margin-bottom:10px}
 
-    /* question block */
     .q{margin-top:18px;padding:18px;border-radius:10px;background:var(--panel);border:1px solid rgba(255,255,255,0.02)}
     .q-head{font-weight:800;font-size:18px;margin-bottom:12px}
     .choices{display:flex;flex-direction:column;gap:10px}
     .choice{
-      display:flex;align-items:center;gap:12px;padding:14px;border-radius:10px;
-      background:var(--choice-bg);
-      border:1px solid var(--choice-border);
-      cursor:pointer;transition:all .12s ease;
+      display:flex;align-items:center;gap:12px;padding:14px;border-radius:10px;background:var(--choice-bg);
+      border:1px solid var(--choice-border);cursor:pointer;transition:all .12s ease;
       user-select:none;
     }
     .choice:hover{transform:translateY(-2px)}
     .choice .badge{
-      min-width:36px;height:36px;border-radius:10px;background:rgba(0,0,0,0.35);
-      display:flex;align-items:center;justify-content:center;font-weight:800;
+      min-width:36px;height:36px;border-radius:10px;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-weight:800;
       color:var(--muted);font-size:14px;border:1px solid rgba(255,255,255,0.03)
     }
     .choice .text{flex:1;color:rgba(255,255,255,0.92)}
-    .choice.selected{
-      outline:3px solid var(--selected-outline);
-      background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)
-    }
+    .choice.selected{outline:3px solid var(--selected-outline);background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)}
 
-    /* controls */
     .controls{display:flex;align-items:center;gap:12px;margin-top:16px}
     .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--gold);color:#000;font-weight:800;border:none;cursor:pointer}
     .small{padding:8px 12px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
 
-    /* result */
     .score{margin-top:14px;padding:12px;border-radius:8px;background:linear-gradient(90deg,#051117,#07121a);border:1px solid rgba(255,255,255,0.02)}
+    .detail-block{margin-top:10px;padding:12px;border-radius:8px;background:#0b0b0b;border:1px solid rgba(255,255,255,0.02)}
 
-    /* feedback blocks */
+    /* feedback block colours */
     .fb-question{margin-top:12px}
     .fb-qtitle{font-weight:700;margin-bottom:8px}
     .fb-choice{
-      display:flex;align-items:center;gap:12px;
-      padding:10px;border-radius:8px;margin-top:8px;
-      background:#0e0e0f;border:1px solid rgba(255,255,255,0.02);
-      color:#ddd;
+      display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;margin-top:8px;
+      background:#0e0e0f;border:1px solid rgba(255,255,255,0.02);color:#ddd;
     }
     .fb-label{
-      display:inline-block;min-width:28px;text-align:center;
-      margin-right:8px;color:#ddd;background:rgba(255,255,255,0.04);
-      border-radius:6px;padding:4px 6px;font-weight:800;
+      min-width:28px;text-align:center;padding:6px;border-radius:6px;
+      background:rgba(0,0,0,0.25);font-weight:800;color:#ccc;
     }
     .fb-choice.correct{
       background:var(--correct-grad);
       color:#e6ffea;
-      border-color:rgba(0,150,50,0.4);
+      border-color: rgba(0,150,50,0.25);
       font-weight:700;
     }
     .fb-choice.wrong{
       background:var(--wrong-grad);
       color:#ffdada;
-      border-color:rgba(200,30,30,0.4);
+      border-color: rgba(200,30,30,0.25);
       font-weight:700;
     }
 
@@ -100,12 +83,27 @@
     }
   </style>
 </head>
-<body>
+<body
+  data-quiz-count="{{quizCount}}"
+  data-module="{{module}}"
+  data-org="{{orgSlug}}"
+>
   <div class="page">
     <div class="card" role="main" aria-labelledby="quiz-title">
-      <h1 id="quiz-title">Responsibility (demo) — Quick Quiz</h1>
+      <h1 id="quiz-title">
+        {{#if orgSlug}}
+          {{module}} — {{orgSlug}} Quiz
+        {{else}}
+          Responsibility (demo) — Quick Quiz
+        {{/if}}
+      </h1>
+
       <div class="muted">
-        Each quiz pulls random questions from the bank. Answer 5 questions below and submit to see your score.
+        {{#if orgSlug}}
+          You’re taking a module quiz for <strong>{{orgSlug}}</strong>. You’ll receive {{quizCount}} questions for this module.
+        {{else}}
+          Each quiz pulls random questions from the bank. Answer {{quizCount}} questions below and submit to see your score.
+        {{/if}}
       </div>
 
       <div id="quizArea" aria-live="polite"></div>
@@ -128,11 +126,12 @@
     const status = document.getElementById('status');
     const result = document.getElementById('result');
 
-    let examId = null;
-    let series = [];   // questions as rendered
-    let answers = {};  // qid -> chosen index
+    const body = document.body;
+    const DEFAULT_COUNT = Number(body.dataset.quizCount || '5') || 5;
 
-    const QUIZ_COUNT = 5;  // demo always 5
+    let examId = null;
+    let series = [];
+    let answers = {};
 
     function letterForIndex(i){ return ['a','b','c','d','e'][i] || String.fromCharCode(97+i); }
     function normalizeChoice(c){
@@ -157,23 +156,20 @@
         return;
       }
 
-      series = [];
-
       list.forEach((rawQ, idx) => {
         const q = repairBlock(rawQ);
-        const qid = q.id || q._id || `q${idx}`;
+        const qid = q.id || q._id || 'q' + idx;
         const choices = (q.choices || []).map(normalizeChoice);
 
         const block = document.createElement('div');
         block.className = 'q';
-
         const qnum = idx + 1;
-        const qHeadText = q.text && String(q.text).trim()
-          ? escapeHtml(q.text.trim())
-          : `Q${qnum}. Choose the best option`;
         const head = document.createElement('div');
         head.className = 'q-head';
-        head.innerHTML = `<span style="font-weight:800">Q${qnum}.</span> ${qHeadText}`;
+        const text = q.text && String(q.text).trim()
+          ? escapeHtml(q.text.trim())
+          : 'Choose the best option';
+        head.innerHTML = '<span style="font-weight:800">Q' + qnum + '.</span> ' + text;
         block.appendChild(head);
 
         const choicesWrap = document.createElement('div');
@@ -225,14 +221,16 @@
 
         q.id = qid;
         q.choices = choices;
-        series.push(q);
+        series[idx] = q;
       });
     }
 
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        const res = await fetch('/api/lms/quiz?count=' + encodeURIComponent(count), { cache: 'no-store' });
+        const params = new URLSearchParams();
+        params.set('count', String(count || DEFAULT_COUNT));
+        const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
         if (!res.ok) {
           const t = await res.text().catch(()=>null);
           throw new Error(t || res.statusText || 'failed to fetch quiz');
@@ -241,7 +239,8 @@
         examId = payload.examId || null;
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
-        renderQuiz(rawSeries);
+        series = rawSeries.map(s => Object.assign({}, s));
+        renderQuiz(series);
         status.textContent = '';
       } catch (e) {
         status.textContent = 'Error loading quiz: ' + (e.message || e);
@@ -252,16 +251,15 @@
     submitBtn.addEventListener('click', async () => {
       const answered = Object.keys(answers).length;
       if (answered < series.length) {
-        if (!confirm(`You answered ${answered} of ${series.length}. Submit anyway?`)) return;
+        if (!confirm('You answered ' + answered + ' of ' + series.length + '. Submit anyway?')) return;
       }
 
       const payload = { examId, answers: [] };
       for (const s of series) {
+        const id = s.id || s._id || null;
         payload.answers.push({
-          questionId: s.id || s._id || null,
-          choiceIndex: typeof answers[s.id || s._id] === 'number'
-            ? answers[s.id || s._id]
-            : null
+          questionId: id,
+          choiceIndex: (typeof answers[id] === 'number') ? answers[id] : null
         });
       }
 
@@ -287,19 +285,16 @@
       }
     });
 
-    reloadBtn.addEventListener('click', () => loadQuiz(QUIZ_COUNT));
+    reloadBtn.addEventListener('click', () => loadQuiz(DEFAULT_COUNT));
 
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
-        `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
-         <div style="margin-top:8px">${resp.passed
-           ? '<strong style="color:#bfffb1">PASSED</strong>'
-           : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
-         <div style="margin-top:10px">Detailed feedback below:</div>`;
-
-      // remove any previous correct/wrong styling from main choices
-      document.querySelectorAll('.choice').forEach(n => n.classList.remove('correct','wrong'));
+        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
+        '<div style="margin-top:8px">' +
+        (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
+        ' (pass ' + resp.passThreshold + '%)</div>' +
+        '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
       list.style.marginTop = '12px';
@@ -307,22 +302,22 @@
       (resp.details || []).forEach(d => {
         const q = series.find(s => (s.id || s._id) === d.questionId) || null;
 
-        const qBlock = document.createElement('div');
-        qBlock.className = 'fb-question';
+        const block = document.createElement('div');
+        block.className = 'fb-question';
 
         const title = document.createElement('div');
         title.className = 'fb-qtitle';
-        title.textContent = q ? (q.text || d.question || '') : (d.question || d.questionId || '');
-        qBlock.appendChild(title);
+        title.textContent = q ? (q.text || '') : (d.questionId || '');
+        block.appendChild(title);
 
         const choicesContainer = document.createElement('div');
-        const choiceSource = (q && q.choices && q.choices.length)
+        const srcChoices = (q && q.choices && q.choices.length)
           ? q.choices
           : (d.choices || []);
 
-        choiceSource.forEach((c, i) => {
-          const el = document.createElement('div');
-          el.className = 'fb-choice';
+        srcChoices.forEach((c, i) => {
+          const row = document.createElement('div');
+          row.className = 'fb-choice';
 
           const label = document.createElement('div');
           label.className = 'fb-label';
@@ -331,21 +326,21 @@
           const txt = document.createElement('div');
           txt.textContent = (typeof c === 'string') ? c : (c.text || '');
 
-          el.appendChild(label);
-          el.appendChild(txt);
+          row.appendChild(label);
+          row.appendChild(txt);
 
           if (typeof d.correctIndex === 'number' && i === d.correctIndex) {
-            el.classList.add('correct');
+            row.classList.add('correct');
           }
           if (typeof d.yourIndex === 'number' && i === d.yourIndex && !d.correct) {
-            el.classList.add('wrong');
+            row.classList.add('wrong');
           }
 
-          choicesContainer.appendChild(el);
+          choicesContainer.appendChild(row);
         });
 
-        qBlock.appendChild(choicesContainer);
-        list.appendChild(qBlock);
+        block.appendChild(choicesContainer);
+        list.appendChild(block);
       });
 
       result.appendChild(list);
@@ -362,8 +357,7 @@
         .replace(/'/g,'&#039;');
     }
 
-    // initial load
-    loadQuiz(QUIZ_COUNT);
+    loadQuiz(DEFAULT_COUNT);
   })();
   </script>
 </body>

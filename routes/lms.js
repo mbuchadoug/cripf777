@@ -15,7 +15,7 @@ router.get("/", (req, res) => {
 });
 
 // QUIZ UI (demo OR org, same page)
-router.get("/quiz", ensureAuth, (req, res) => {
+/*router.get("/quiz", ensureAuth, (req, res) => {
   try {
     const rawModule = String(req.query.module || "Responsibility").trim();
     const moduleKey = rawModule.toLowerCase();
@@ -38,6 +38,22 @@ router.get("/quiz", ensureAuth, (req, res) => {
     console.error("[lms/quiz] render error:", err && (err.stack || err));
     return res.status(500).send("Failed to render quiz page");
   }
+});*/
+
+// DEMO quiz: always 5 questions, global pool
+router.get("/quiz", ensureAuth, (req, res) => {
+  try {
+    return res.render("lms/quiz", {
+      user: req.user || null,
+      quizCount: 5,                    // 👈 demo = 5
+      module: "Responsibility (demo)", // label only
+      orgSlug: "",                     // no org
+    });
+  } catch (err) {
+    console.error("[lms/quiz] render error:", err && (err.stack || err));
+    return res.status(500).send("Failed to render quiz page");
+  }
 });
+
 
 export default router;
