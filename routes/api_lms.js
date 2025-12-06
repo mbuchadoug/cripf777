@@ -1,186 +1,213 @@
 // routes/api_lms.js
 import { Router } from "express";
+import mongoose from "mongoose";
+import QuizQuestion from "../models/quizQuestionF.js";   // <— use the same model as admin import
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import mongoose from "mongoose";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const router = Router();
 
-// fallback file path (importer writes here)
-const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
-
-// Try to load Question model lazily (works if you have models/question.js)
-let QuestionModel = null;
-async function loadQuestionModel() {
-  if (QuestionModel) return QuestionModel;
+/**
+ * Fetch random questions from DB, optionally filtered by module.
+ * `moduleName` is matched case-insensitively.
+ */
+async function fetchRandomQuestionsFromDB(count = 20, moduleName = "") {
   try {
-    const mod = await import("../models/question.js");
-    QuestionModel = mod.default || mod;
-    return QuestionModel;
-  } catch (e) {
-    // model not present
-    QuestionModel = null;
+    const match = {};
+    if (moduleName) {
+      match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
+    }
+
+    const pipeline = [];
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+    pipeline.push({ $sample: { size: Number(count) } });
+
+    const docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+
+    return docs.map((d) => ({
+      id: String(d._id),
+      text: d.text,
+      choices: (d.choices || []).map((c) => ({ text: c.text })),
+      // support either answerIndex or correctIndex
+      correctIndex:
+        typeof d.answerIndex === "number"
+          ? d.answerIndex
+          : typeof d.correctIndex === "number"
+          ? d.correctIndex
+          : null,
+      tags: d.tags || [],
+      difficulty: d.difficulty || "medium",
+    }));
+  } catch (err) {
+    console.error("[fetchRandomQuestionsFromDB] error:", err && (err.stack || err));
     return null;
   }
 }
 
-/**
- * Parse fallback text into blocks — same format used in your importer.
- */
-function parseQuestionBlocks(raw) {
-  if (!raw || typeof raw !== "string") return [];
-  const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
-  const parsed = [];
-  for (const block of blocks) {
-    const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) continue;
-    // strip leading number
-    if (/^\d+\.\s*/.test(lines[0])) lines[0] = lines[0].replace(/^\d+\.\s*/, "");
-    const questionText = lines[0];
-    const choiceLines = lines.filter(l => /^[a-d]\)/i.test(l)).slice(0,4);
-    const choices = choiceLines.map(cl => cl.replace(/^[a-d]\)\s*/i, "").trim());
-    // find correct index if present
-    let correctIndex = null;
-    const correctLine = lines.find(l => /Correct Answer:/i.test(l) || /✅ Correct Answer:/i.test(l));
-    if (correctLine) {
-      const m = correctLine.match(/Correct Answer:\s*([a-d])/i);
-      if (m) correctIndex = { a:0,b:1,c:2,d:3 }[m[1].toLowerCase()];
-      else {
-        const txt = correctLine.replace(/Correct Answer:\s*/i,"").trim();
-        const found = choices.findIndex(c => c.toLowerCase().startsWith(txt.toLowerCase()) || c.toLowerCase() === txt.toLowerCase());
-        if (found>=0) correctIndex = found;
-      }
+// fallback: load static file data/data_questions.json if DB missing (dev only)
+function fetchRandomQuestionsFromFile(count = 5) {
+  try {
+    const p = path.join(process.cwd(), "data", "data_questions.json");
+    if (!fs.existsSync(p)) return [];
+    const raw = fs.readFileSync(p, "utf8");
+    const all = JSON.parse(raw);
+
+    // shuffle
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
     }
-    if (!questionText || choices.length===0) continue;
-    parsed.push({ text: questionText, choices: choices.map(t=>({text:t})), correctIndex });
+
+    return all.slice(0, count).map((d) => ({
+      id:
+        d.id ||
+        d._id ||
+        d.uuid ||
+        "fid-" + Math.random().toString(36).slice(2, 9),
+      text: d.text,
+      choices: (d.choices || []).map((c) => ({ text: c.text || c })),
+      correctIndex:
+        typeof d.correctIndex === "number" ? d.correctIndex : null,
+      tags: d.tags || [],
+      difficulty: d.difficulty || "medium",
+    }));
+  } catch (err) {
+    console.error("[fetchRandomQuestionsFromFile] error:", err && (err.stack || err));
+    return [];
   }
-  return parsed;
 }
 
 /**
- * GET /api/lms/quiz?count=5
- * Return random `count` questions.
+ * GET /api/lms/quiz?count=20&module=Responsibility
+ * Returns: { examId, series: [...] }
  */
 router.get("/quiz", async (req, res) => {
+  // default to 20, cap at 20, min 1
+  let rawCount = parseInt(req.query.count || "20", 10);
+  if (!Number.isFinite(rawCount)) rawCount = 20;
+  const count = Math.max(1, Math.min(20, rawCount));
+
+  const moduleName = String(req.query.module || "").trim();
+
   try {
-    const count = Math.max(1, Math.min(20, parseInt(req.query.count || "5", 10)));
-    // 1) try DB
-    const Question = await loadQuestionModel();
-    if (Question) {
-      // return random docs (Mongo $sample)
-      const agg = await Question.aggregate([{ $sample: { size: count } }]).allowDiskUse(true);
-      if (agg && agg.length) {
-        const series = agg.map(q => ({
-          id: String(q._id),
-          text: q.text || q.question || "",
-          choices: (q.choices || []).slice(0,4).map(c => ({ text: (typeof c === "string" ? c : (c && c.text) || "" ) })),
-          tags: q.tags || []
-        }));
-        return res.json({ examId: `db-${Date.now()}`, series, total: series.length });
-      }
+    // try DB first (your 70 uploaded questions live here)
+    const dbResult = await fetchRandomQuestionsFromDB(count, moduleName);
+    let series = [];
+    if (dbResult && dbResult.length >= 1) {
+      series = dbResult;
+    } else {
+      // fallback to file (dev only)
+      series = fetchRandomQuestionsFromFile(count);
     }
 
-    // 2) fallback file
-    if (fs.existsSync(FALLBACK_PATH)) {
-      const raw = fs.readFileSync(FALLBACK_PATH, "utf8");
-      const parsed = parseQuestionBlocks(raw);
-      if (parsed.length) {
-        // pick random sample from parsed
-        const shuffled = parsed.sort(()=>0.5-Math.random());
-        const pick = shuffled.slice(0, count);
-        const series = pick.map((p, i) => ({ id: `f-${i}-${Date.now()}`, text: p.text, choices: p.choices, tags: ["fallback"] }));
-        return res.json({ examId: `file-${Date.now()}`, series, total: series.length });
-      }
-    }
+    // don’t expose correctIndex to the client
+    const publicSeries = series.map((q) => ({
+      id: q.id,
+      text: q.text,
+      choices: q.choices.map((c) => ({ text: c.text })),
+      tags: q.tags || [],
+      difficulty: q.difficulty || "medium",
+    }));
 
-    return res.status(404).json({ error: "No quiz questions available. Import questions in Admin or place a file at " + FALLBACK_PATH });
+    const examId = "exam-" + Date.now().toString(36);
+    return res.json({ examId, series: publicSeries });
   } catch (err) {
-    console.error("[api_lms] /quiz error:", err && (err.stack || err));
-    return res.status(500).json({ error: "Server error", detail: String(err.message || err) });
+    console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
+    return res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
 
 /**
  * POST /api/lms/quiz/submit
- * Body: { examId, answers: [ {questionId, choiceIndex} ] }
- * Grades and returns details (correctIndex, yourIndex, correct boolean)
- *
- * NOTE: If question came from fallback file there is no persisted correctIndex
- * unless you inserted into DB. But we attempt to resolve if fallback contains correctIndex
- * by re-reading fallback file and matching text.
+ * Body: { examId, answers: [{ questionId, choiceIndex }] }
  */
 router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
-    if (!answers.length) return res.status(400).json({ error: "No answers provided" });
+    if (!answers.length) {
+      return res.status(400).json({ error: "No answers provided" });
+    }
 
-    // Build lookup for correct answers from DB if possible
-    const Question = await loadQuestionModel();
-    const details = [];
+    // gather ids
+    const qIds = answers
+      .map((a) => a.questionId)
+      .filter(Boolean)
+      .map(String);
+    const validDbIds = qIds.filter((id) => mongoose.isValidObjectId(id));
+    const byId = {};
+
+    // fetch DB docs only for valid object ids
+    if (validDbIds.length) {
+      try {
+        const docs = await QuizQuestion.find({
+          _id: { $in: validDbIds },
+        })
+          .lean()
+          .exec();
+        for (const d of docs) byId[String(d._id)] = d;
+      } catch (e) {
+        console.error("[quiz/submit] DB lookup failed:", e && (e.stack || e));
+      }
+    }
+
+    // (fallback file logic can stay as in your original code if you want it)
+
     let score = 0;
+    const details = [];
 
-    // If DB model present, fetch docs for ids found
-    const dbLookup = {};
-    if (Question) {
-      const ids = answers.map(a => (a.questionId ? a.questionId : null)).filter(Boolean);
-      if (ids.length) {
-        // try to find by _id
-        const docs = await Question.find({ _id: { $in: ids } }).lean();
-        for (const d of docs) {
-          dbLookup[String(d._id)] = { correctIndex: typeof d.correctIndex === "number" ? d.correctIndex : null };
-        }
-      }
-    }
+    for (const a of answers) {
+      const qid = String(a.questionId || "");
+      const yourIndex =
+        typeof a.choiceIndex === "number" ? a.choiceIndex : null;
+      const q = byId[qid];
 
-    // fallback parse (if fallback file exists) to map by question text
-    let fallbackMap = {};
-    if (fs.existsSync(FALLBACK_PATH)) {
-      const raw = fs.readFileSync(FALLBACK_PATH, "utf8");
-      const parsed = parseQuestionBlocks(raw);
-      for (const p of parsed) {
-        // use trimmed question text as key
-        fallbackMap[(p.text || "").trim()] = p;
-      }
-    }
-
-    for (const ans of answers) {
-      const qid = ans.questionId;
-      const yourIndex = typeof ans.choiceIndex === "number" ? ans.choiceIndex : null;
       let correctIndex = null;
-      // 1) DB lookup
-      if (qid && dbLookup[qid] && typeof dbLookup[qid].correctIndex === "number") {
-        correctIndex = dbLookup[qid].correctIndex;
-      }
-      // 2) fallback: try to match by question text if provided in payload (some UIs send question text too)
-      if (correctIndex === null && ans.questionText) {
-        const key = (ans.questionText || "").trim();
-        if (fallbackMap[key] && typeof fallbackMap[key].correctIndex === "number") correctIndex = fallbackMap[key].correctIndex;
-      }
-      // 3) last resort: try to find by small text match in fallback map keys
-      if (correctIndex === null && qid && qid.startsWith("f-")) {
-        // attempt to use qid index position - not guaranteed
+      if (q) {
+        if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
+        else if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
+        else if (typeof q.correct === "number") correctIndex = q.correct;
       }
 
-      const correct = (typeof correctIndex === "number" && yourIndex === correctIndex);
+      const correct =
+        correctIndex !== null &&
+        yourIndex !== null &&
+        correctIndex === yourIndex;
+
       if (correct) score++;
-      details.push({ questionId: qid, yourIndex, correctIndex, correct });
+      details.push({
+        questionId: qid,
+        correctIndex: correctIndex !== null ? correctIndex : null,
+        yourIndex,
+        correct: !!correct,
+      });
     }
 
     const total = answers.length;
-    const percentage = total ? Math.round((score/total)*100) : 0;
-    // default pass threshold 60%
-    const passThreshold = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
+    const percentage = Math.round((score / Math.max(1, total)) * 100);
+    const passThreshold = parseInt(
+      process.env.QUIZ_PASS_THRESHOLD || "60",
+      10
+    );
     const passed = percentage >= passThreshold;
 
-    return res.json({ score, total, percentage, passThreshold, passed, details });
+    return res.json({
+      score,
+      total,
+      percentage,
+      passThreshold,
+      passed,
+      details,
+    });
   } catch (err) {
-    console.error("[api_lms] /quiz/submit error:", err && (err.stack || err));
-    return res.status(500).json({ error: "Submit failed", detail: String(err.message || err) });
+    console.error(
+      "[api_lms] /quiz/submit unexpected error:",
+      err && (err.stack || err)
+    );
+    return res.status(500).json({
+      error: "Submit failed",
+      detail: String(err && (err.stack || err.message || err)),
+    });
   }
 });
 
