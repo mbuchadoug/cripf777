@@ -388,6 +388,7 @@ router.post(
 );*/
 
 // ADMIN: Assign quiz to employees
+// ADMIN: Assign quiz to employees
 router.post(
   "/admin/orgs/:slug/assign-quiz",
   ensureAuth,
@@ -511,7 +512,6 @@ router.post(
     }
   }
 );
-
 
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Export attempts CSV                                        */
