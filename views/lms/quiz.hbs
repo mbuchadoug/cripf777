@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{{moduleLabel}}</title>
+  <title>{{displayModule}} — {{#if isOrg}}{{orgSlug}} Quiz{{else}}Quick Quiz{{/if}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{
@@ -15,8 +15,8 @@
       --choice-bg:#0f1112;
       --choice-border: rgba(255,255,255,0.03);
       --selected-outline: rgba(212,175,55,0.9);
-      --correct-grad: linear-gradient(90deg,#06360b,#084d18);
-      --wrong-grad: linear-gradient(90deg,#3b0b0b,#611215);
+      --correct: linear-gradient(90deg,#06360b,#084d18);
+      --wrong: linear-gradient(90deg,#3b0b0b,#611215);
     }
 
     html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
@@ -40,8 +40,8 @@
     }
     .choice .text{flex:1;color:rgba(255,255,255,0.92)}
     .choice.selected{outline:3px solid var(--selected-outline);background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)}
-    .choice.correct{background:var(--correct-grad);border-color:rgba(0,0,0,0.3)}
-    .choice.wrong{background:var(--wrong-grad);border-color:rgba(0,0,0,0.3)}
+    .choice.correct{background:var(--correct);border-color:rgba(0,0,0,0.3)}
+    .choice.wrong{background:var(--wrong);border-color:rgba(0,0,0,0.3)}
 
     .controls{display:flex;align-items:center;gap:12px;margin-top:16px}
     .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--gold);color:#000;font-weight:800;border:none;cursor:pointer}
@@ -59,18 +59,18 @@
 <body>
   <div class="page">
     <div class="card" role="main" aria-labelledby="quiz-title">
-      <h1 id="quiz-title">{{moduleLabel}}</h1>
-      {{#if orgSlug}}
-        <div class="muted">
-          You’re taking a module quiz for <strong>{{orgSlug}}</strong>. 
-          You’ll receive <strong>{{quizCount}}</strong> questions for this module.
-        </div>
-      {{else}}
-        <div class="muted">
-          Each quiz pulls random questions from the bank. 
-          Answer {{quizCount}} questions below and submit to see your score.
-        </div>
-      {{/if}}
+      <h1 id="quiz-title">
+        {{displayModule}}
+        {{#if isOrg}} — {{orgSlug}} Quiz{{else}} — Quick Quiz{{/if}}
+      </h1>
+
+      <div class="muted">
+        {{#if isOrg}}
+          You’re taking a module quiz for <strong>{{orgSlug}}</strong>. You’ll receive {{quizCount}} questions for this module.
+        {{else}}
+          Each quiz pulls random questions from the bank. Answer {{quizCount}} questions below and submit to see your score.
+        {{/if}}
+      </div>
 
       <div id="quizArea" aria-live="polite"></div>
 
@@ -86,9 +86,10 @@
 
   <script>
   (function(){
-    const QUIZ_COUNT = Number("{{quizCount}}" || 5);
-    const MODULE_KEY = "{{moduleKey}}";   // e.g. "responsibility"
-    const ORG_SLUG   = "{{orgSlug}}";     // e.g. "muono"
+    const QUIZ_COUNT = Number({{quizCount}});
+    const MODULE_KEY = "{{moduleKey}}";
+    const ORG_SLUG = "{{orgSlug}}";
+    const IS_ORG = {{#if isOrg}}true{{else}}false{{/if}};
 
     const quizArea = document.getElementById('quizArea');
     const submitBtn = document.getElementById('submitBtn');
@@ -108,6 +109,13 @@
       return { text: String(c) };
     }
 
+    function repairBlock(q){
+      if (!q || typeof q !== 'object') return q;
+      const out = Object.assign({}, q);
+      out.choices = (out.choices || []).map(normalizeChoice);
+      return out;
+    }
+
     function renderQuiz(list){
       quizArea.innerHTML = '';
       answers = {};
@@ -116,75 +124,82 @@
         return;
       }
 
-      series = [];
-
       list.forEach((rawQ, idx) => {
-        const q = Object.assign({}, rawQ);
+        const q = repairBlock(rawQ);
         const qid = q.id || q._id || `q${idx}`;
         const choices = (q.choices || []).map(normalizeChoice);
 
         const block = document.createElement('div');
         block.className = 'q';
         const qnum = idx + 1;
+        const qHeadText = q.text && String(q.text).trim() ? escapeHtml(q.text.trim()) : `Q${qnum}. Choose the best option`;
         const head = document.createElement('div');
         head.className = 'q-head';
-        head.innerHTML = `<span style="font-weight:800">Q${qnum}.</span> ${escapeHtml(q.text || '')}`;
+        head.innerHTML = `<span style="font-weight:800">Q${qnum}.</span> ${qHeadText}`;
         block.appendChild(head);
 
         const choicesWrap = document.createElement('div');
         choicesWrap.className = 'choices';
 
-        choices.forEach((c, ci) => {
-          const btn = document.createElement('div');
-          btn.className = 'choice';
-          btn.setAttribute('role','button');
-          btn.setAttribute('tabindex','0');
-          btn.dataset.qid = qid;
-          btn.dataset.index = ci;
+        if (!choices.length) {
+          const p = document.createElement('div');
+          p.className = 'muted';
+          p.textContent = 'No choices available for this question.';
+          choicesWrap.appendChild(p);
+        } else {
+          choices.forEach((c, ci) => {
+            const btn = document.createElement('div');
+            btn.className = 'choice';
+            btn.setAttribute('role','button');
+            btn.setAttribute('tabindex','0');
+            btn.dataset.qid = qid;
+            btn.dataset.index = ci;
 
-          const badge = document.createElement('div');
-          badge.className = 'badge';
-          badge.textContent = letterForIndex(ci);
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.textContent = letterForIndex(ci);
 
-          const txt = document.createElement('div');
-          txt.className = 'text';
-          txt.textContent = c.text || '';
+            const txt = document.createElement('div');
+            txt.className = 'text';
+            txt.textContent = c.text || '';
 
-          btn.appendChild(badge);
-          btn.appendChild(txt);
+            btn.appendChild(badge);
+            btn.appendChild(txt);
 
-          btn.addEventListener('click', () => {
-            choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
-            btn.classList.add('selected');
-            answers[qid] = ci;
+            btn.addEventListener('click', () => {
+              choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
+              btn.classList.add('selected');
+              answers[qid] = ci;
+            });
+            btn.addEventListener('keydown', (ev) => {
+              if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                btn.click();
+              }
+            });
+
+            choicesWrap.appendChild(btn);
           });
-          btn.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-              ev.preventDefault();
-              btn.click();
-            }
-          });
-
-          choicesWrap.appendChild(btn);
-        });
+        }
 
         block.appendChild(choicesWrap);
         quizArea.appendChild(block);
 
         q.id = qid;
         q.choices = choices;
-        series.push(q);
+        series[idx] = q;
       });
     }
 
-    async function loadQuiz(count, moduleKey, orgSlug){
+    async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        let url = '/api/lms/quiz?count=' + encodeURIComponent(count);
-        if (moduleKey) url += '&module=' + encodeURIComponent(moduleKey);
-        if (orgSlug)   url += '&org=' + encodeURIComponent(orgSlug);
+        const params = new URLSearchParams();
+        params.set('count', count);
+        if (MODULE_KEY) params.set('module', MODULE_KEY);
+        if (IS_ORG && ORG_SLUG) params.set('org', ORG_SLUG);
 
-        const res = await fetch(url, { cache: 'no-store' });
+        const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
         if (!res.ok) {
           const t = await res.text().catch(()=>null);
           throw new Error(t || res.statusText || 'failed to fetch quiz');
@@ -193,7 +208,8 @@
         examId = payload.examId || null;
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
-        renderQuiz(rawSeries);
+        series = rawSeries.map(s => Object.assign({}, s));
+        renderQuiz(series);
         status.textContent = '';
       } catch (e) {
         status.textContent = 'Error loading quiz: ' + (e.message || e);
@@ -209,10 +225,9 @@
 
       const payload = { examId, answers: [] };
       for (const s of series) {
-        const key = s.id || s._id;
         payload.answers.push({
-          questionId: key,
-          choiceIndex: typeof answers[key] === 'number' ? answers[key] : null
+          questionId: s.id || s._id || null,
+          choiceIndex: typeof answers[s.id || s._id] === 'number' ? answers[s.id || s._id] : null
         });
       }
 
@@ -238,7 +253,7 @@
       }
     });
 
-    reloadBtn.addEventListener('click', () => loadQuiz(QUIZ_COUNT, MODULE_KEY, ORG_SLUG));
+    reloadBtn.addEventListener('click', () => loadQuiz(QUIZ_COUNT));
 
     function showResult(resp){
       result.style.display = 'block';
@@ -252,34 +267,31 @@
       list.style.marginTop = '12px';
 
       (resp.details || []).forEach(d => {
-        const q = series.find(s => (s.id || s._id) === d.questionId) || null;
-        const block = document.createElement('div');
-        block.className = 'detail-block';
+        const q = series.find(s => (s.id || s._id) === d.questionId) || series.find(s => s.id === d.questionId) || null;
+        const header = document.createElement('div');
+        header.className = 'detail-block';
+        const qText = q ? q.text : d.questionId;
+        header.innerHTML = `<div style="font-weight:700">${escapeHtml(qText)}</div>`;
 
-        const title = document.createElement('div');
-        title.style.fontWeight = '700';
-        title.textContent = q ? (q.text || d.questionId) : d.questionId;
-        block.appendChild(title);
-
-        const choices = (q && q.choices) ? q.choices : [];
-        choices.forEach((c,i) => {
-          const row = document.createElement('div');
-          row.style.padding = '8px';
-          row.style.borderRadius = '8px';
-          row.style.marginTop = '6px';
-          row.style.background = '#0e0e0f';
-          row.style.border = '1px solid rgba(255,255,255,0.02)';
-          row.textContent = `${letterForIndex(i)}. ${c.text || ''}`;
-          if (i === d.correctIndex) row.classList.add('correct');
-          if (i === d.yourIndex && !d.correct) row.classList.add('wrong');
-          block.appendChild(row);
+        const choicesContainer = document.createElement('div');
+        choicesContainer.style.marginTop = '8px';
+        (q && q.choices ? q.choices : (d.choices || [])).forEach((c,i) => {
+          const el = document.createElement('div');
+          el.style.padding = '8px';
+          el.style.borderRadius = '8px';
+          el.style.marginTop = '6px';
+          el.style.background = '#0e0e0f';
+          el.style.border = '1px solid rgba(255,255,255,0.02)';
+          el.textContent = `${letterForIndex(i)}. ${ (typeof c === 'string') ? c : (c.text || '') }`;
+          if (i === d.correctIndex) el.classList.add('correct');
+          if (i === d.yourIndex && !d.correct) el.classList.add('wrong');
+          choicesContainer.appendChild(el);
         });
-
-        list.appendChild(block);
+        header.appendChild(choicesContainer);
+        list.appendChild(header);
       });
 
       result.appendChild(list);
-      result.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function escapeHtml(s){
@@ -288,7 +300,7 @@
     }
 
     // initial load
-    loadQuiz(QUIZ_COUNT, MODULE_KEY, ORG_SLUG);
+    loadQuiz(QUIZ_COUNT);
   })();
   </script>
 </body>

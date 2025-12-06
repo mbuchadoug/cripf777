@@ -1,9 +1,10 @@
 // routes/lms.js
 import { Router } from "express";
 import { ensureAuth } from "../middleware/authGuard.js";
+
 const router = Router();
 
-// simple landing page
+// LMS home
 router.get("/", (req, res) => {
   try {
     return res.render("lms/index", { user: req.user || null, courses: [] });
@@ -13,15 +14,25 @@ router.get("/", (req, res) => {
   }
 });
 
-// DEMO quiz: 5 questions, global pool
+// QUIZ UI (demo OR org, same page)
 router.get("/quiz", ensureAuth, (req, res) => {
   try {
+    const rawModule = String(req.query.module || "Responsibility").trim();
+    const moduleKey = rawModule.toLowerCase();
+    const orgSlug = String(req.query.org || "").trim();
+
+    const isOrg = !!orgSlug;
+    const quizCount = isOrg ? 20 : 5; // 👈 20 for org, 5 for demo
+
+    const displayModule = isOrg ? rawModule : `${rawModule} (demo)`;
+
     return res.render("lms/quiz", {
       user: req.user || null,
-      quizCount: 5,                // <= 5 questions
-      moduleLabel: "Responsibility (demo) — Quick Quiz",
-      moduleKey: "",               // no module filter
-      orgSlug: "",                 // no org filter
+      quizCount,          // number of questions UI should load
+      displayModule,      // text used in the heading
+      moduleKey,          // lower-cased key used for DB filter
+      orgSlug,            // org slug (or empty)
+      isOrg               // boolean flag
     });
   } catch (err) {
     console.error("[lms/quiz] render error:", err && (err.stack || err));
