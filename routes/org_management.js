@@ -269,7 +269,6 @@ router.post(
 /*  ADMIN: Assign quiz to employees                                   */
 /*  POST /admin/orgs/:slug/assign-quiz                                */
 /* ------------------------------------------------------------------ */
-
 router.post(
   "/admin/orgs/:slug/assign-quiz",
   ensureAuth,
@@ -279,14 +278,21 @@ router.post(
       const slug = String(req.params.slug || "");
       const {
         module = "general",
-        userIds = [],
         count = 20,
         expiresMinutes = 60,
       } = req.body || {};
 
-      if (!Array.isArray(userIds) || !userIds.length) {
+      // --- NORMALISE userIds coming from the form ---
+      let userIdsRaw = req.body.userIds || [];
+      // if only one was selected, Express gives a string, not an array
+      const userIds = Array.isArray(userIdsRaw)
+        ? userIdsRaw.filter(Boolean)
+        : [userIdsRaw].filter(Boolean);
+
+      if (!userIds.length) {
         return res.status(400).json({ error: "userIds required" });
       }
+      // ----------------------------------------------
 
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).json({ error: "org not found" });
@@ -329,6 +335,7 @@ router.post(
             questionIds.push(q._id);
             const n = (q.choices || []).length;
             const indices = Array.from({ length: n }, (_, i) => i);
+            // shuffle choices
             for (let i = indices.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -366,15 +373,13 @@ router.post(
           const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
           assigned.push({ userId: uId, examId, url });
         } catch (e) {
-          console.warn(
-            "[assign-quiz] user assign failed",
-            uId,
-            e && (e.stack || e)
-          );
+          console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
         }
       }
 
-      return res.json({ ok: true, assigned });
+      // for now just redirect back to manage page with a simple message via query
+      return res.redirect(`/admin/orgs/${slug}/manage?assigned=${assigned.length}`);
+      // (if you prefer JSON, you can instead: res.json({ ok: true, assigned });
     } catch (err) {
       console.error("[assign quiz] error:", err && (err.stack || err));
       return res.status(500).json({ error: "assign failed" });
