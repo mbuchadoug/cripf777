@@ -1,15 +1,14 @@
 // routes/api_lms.js
 import { Router } from "express";
 import mongoose from "mongoose";
-import QuizQuestion from "../models/quizQuestionF.js";   // <— use the same model as admin import
+import QuizQuestion from "../models/quizQuestion.js";
 import fs from "fs";
 import path from "path";
 
 const router = Router();
 
 /**
- * Fetch random questions from DB, optionally filtered by module.
- * `moduleName` is matched case-insensitively.
+ * Fetch random questions from DB, optionally filtered by module (case-insensitive).
  */
 async function fetchRandomQuestionsFromDB(count = 20, moduleName = "") {
   try {
@@ -28,7 +27,6 @@ async function fetchRandomQuestionsFromDB(count = 20, moduleName = "") {
       id: String(d._id),
       text: d.text,
       choices: (d.choices || []).map((c) => ({ text: c.text })),
-      // support either answerIndex or correctIndex
       correctIndex:
         typeof d.answerIndex === "number"
           ? d.answerIndex
@@ -79,10 +77,10 @@ function fetchRandomQuestionsFromFile(count = 5) {
 
 /**
  * GET /api/lms/quiz?count=20&module=Responsibility
- * Returns: { examId, series: [...] }
+ * - for /lms/quiz -> count=5, no module (global)
+ * - for /lms/quiz?module=Responsibility&org=muono -> count=20, module filter
  */
 router.get("/quiz", async (req, res) => {
-  // default to 20, cap at 20, min 1
   let rawCount = parseInt(req.query.count || "20", 10);
   if (!Number.isFinite(rawCount)) rawCount = 20;
   const count = Math.max(1, Math.min(20, rawCount));
@@ -90,17 +88,14 @@ router.get("/quiz", async (req, res) => {
   const moduleName = String(req.query.module || "").trim();
 
   try {
-    // try DB first (your 70 uploaded questions live here)
     const dbResult = await fetchRandomQuestionsFromDB(count, moduleName);
     let series = [];
     if (dbResult && dbResult.length >= 1) {
       series = dbResult;
     } else {
-      // fallback to file (dev only)
       series = fetchRandomQuestionsFromFile(count);
     }
 
-    // don’t expose correctIndex to the client
     const publicSeries = series.map((q) => ({
       id: q.id,
       text: q.text,
@@ -129,7 +124,6 @@ router.post("/quiz/submit", async (req, res) => {
       return res.status(400).json({ error: "No answers provided" });
     }
 
-    // gather ids
     const qIds = answers
       .map((a) => a.questionId)
       .filter(Boolean)
@@ -137,7 +131,6 @@ router.post("/quiz/submit", async (req, res) => {
     const validDbIds = qIds.filter((id) => mongoose.isValidObjectId(id));
     const byId = {};
 
-    // fetch DB docs only for valid object ids
     if (validDbIds.length) {
       try {
         const docs = await QuizQuestion.find({
@@ -150,8 +143,6 @@ router.post("/quiz/submit", async (req, res) => {
         console.error("[quiz/submit] DB lookup failed:", e && (e.stack || e));
       }
     }
-
-    // (fallback file logic can stay as in your original code if you want it)
 
     let score = 0;
     const details = [];
@@ -192,6 +183,7 @@ router.post("/quiz/submit", async (req, res) => {
     const passed = percentage >= passThreshold;
 
     return res.json({
+      examId: payload.examId || "exam-" + Date.now().toString(36),
       score,
       total,
       percentage,

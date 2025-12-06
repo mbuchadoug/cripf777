@@ -1,6 +1,7 @@
 // routes/lms.js
 import { Router } from "express";
-import { ensureAuth } from "../middleware/authGuard.js"; 
+import { ensureAuth } from "../middleware/authGuard.js";
+
 const router = Router();
 
 router.get("/", (req, res) => {
@@ -12,14 +13,28 @@ router.get("/", (req, res) => {
   }
 });
 
-// DEMO quiz: always 5 questions, global pool
+// /lms/quiz
+// - if called as /lms/quiz           -> 5-question global demo
+// - if called as /lms/quiz?module=Responsibility&org=muono -> 20-question org quiz
 router.get("/quiz", ensureAuth, (req, res) => {
   try {
+    const orgSlug = (req.query.org || "").trim() || null;
+    const moduleFromQuery = (req.query.module || "").trim();
+
+    const isOrgMode = !!orgSlug && !!moduleFromQuery;
+
+    const quizCount = isOrgMode ? 20 : 5;
+
+    // for display heading on the page
+    const moduleLabel = isOrgMode
+      ? moduleFromQuery
+      : "Responsibility (demo)";
+
     return res.render("lms/quiz", {
       user: req.user || null,
-      quizCount: 5,                    // 👈 this is important
-      module: "Responsibility (demo)", // just a label
-      orgSlug: null
+      quizCount,
+      module: moduleLabel, // used for title/description
+      orgSlug             // used to decide “org mode” in JS
     });
   } catch (err) {
     console.error("[lms/quiz] render error:", err && (err.stack || err));
