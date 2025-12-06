@@ -777,5 +777,35 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
 });
 
 
+// ORG QUIZ: employees/managers take module quiz (20 questions)
+router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "");
+    const moduleName = String(req.query.module || "Responsibility");
+
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("org not found");
+
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id,
+    }).lean();
+    if (!membership) {
+      return res.status(403).send("You are not a member of this organization");
+    }
+
+    // reuse the SAME quiz UI, but with 20 questions
+    return res.render("lms/quiz", {
+      user: req.user,
+      quizCount: 20,           // 👈 ORG = 20 questions
+      module: moduleName,
+      orgSlug: org.slug,
+    });
+  } catch (err) {
+    console.error("[org quiz] error:", err && (err.stack || err));
+    return res.status(500).send("failed");
+  }
+});
+
 
 export default router;
