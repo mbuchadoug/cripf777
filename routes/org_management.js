@@ -625,4 +625,75 @@ router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (r
 });
 
 
+
+// routes/org_management.js
+// ...top of file already has:
+// import OrgModule from "../models/orgModule.js";
+// import { ensureAuth } from "../middleware/authGuard.js";
+// function ensureAdminEmails(...) { ... }
+
+// ======================
+// ADMIN: ORG MODULES UI
+// ======================
+
+// Show "Manage Modules" page for an org
+router.get(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
+      const modules = await OrgModule.find({ org: org._id }).sort({ slug: 1 }).lean();
+
+      return res.render("admin/org_modules", { org, modules });
+    } catch (err) {
+      console.error("[admin org modules GET] error:", err && (err.stack || err));
+      return res.status(500).send("failed");
+    }
+  }
+);
+
+// Handle create module
+router.post(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const { moduleSlug, title, description } = req.body || {};
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
+      if (!moduleSlug || !title) {
+        return res.status(400).send("module slug and title are required");
+      }
+
+      await OrgModule.findOneAndUpdate(
+        { org: org._id, slug: moduleSlug },
+        {
+          $set: {
+            org: org._id,
+            slug: moduleSlug,
+            title,
+            description: description || "",
+          },
+        },
+        { upsert: true }
+      );
+
+      return res.redirect(`/admin/orgs/${org.slug}/modules`);
+    } catch (err) {
+      console.error("[admin org modules POST] error:", err && (err.stack || err));
+      return res.status(500).send("failed");
+    }
+  }
+);
+
+
 export default router;
