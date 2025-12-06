@@ -5,7 +5,10 @@
   <title>{{org.name}} — Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:system-ui, -apple-system, "Segoe UI", Arial;margin:20px}
+    body{
+      font-family:system-ui, -apple-system, "Segoe UI", Arial;
+      margin:20px;
+    }
     h1{font-size:32px;margin-bottom:8px}
     h2{margin-top:24px}
     .module-block,
@@ -17,6 +20,7 @@
       max-width:640px;
     }
     .quiz-status{font-size:14px;color:#555}
+    .links-row a + a{margin-left:12px}
   </style>
 </head>
 <body>
@@ -32,8 +36,16 @@
         <div class="module-block">
           <div><strong>{{this.title}}</strong></div>
           <div>Module slug: <code>{{this.slug}}</code></div>
-          <div style="margin-top:6px;">
-            <a href="/org/{{../org.slug}}/modules/{{this.slug}}">View learning material</a>
+
+          <div class="links-row" style="margin-top:6px;">
+            <a href="/org/{{../org.slug}}/modules/{{this.slug}}">
+              View learning material
+            </a>
+
+            {{!-- ORG QUIZ (20 questions per attempt) --}}
+            <a href="/lms/quiz?module={{this.slug}}&org={{../org.slug}}">
+              Start a new 20-question quiz for this module
+            </a>
           </div>
         </div>
       {{/each}}
@@ -48,9 +60,12 @@
         {{#each this}}
           <div class="quiz-block">
             <div>
-              <strong>Quiz:</strong> {{examId}}
+              <strong>Assigned quiz:</strong> {{examId}}
               &nbsp;—&nbsp;
-              <a href="{{openUrl}}">Open quiz</a>
+              {{!-- This URL should point to the org quiz view (20 questions) --}}
+              <a href="/org/{{../../org.slug}}/quiz?examId={{examId}}">
+                Open assigned 20-question quiz
+              </a>
             </div>
             <div class="quiz-status">
               Status: {{status}}
