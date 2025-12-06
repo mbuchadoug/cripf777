@@ -89,7 +89,6 @@ function getTransporter() {
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Send invite                                                */
 /*  POST /admin/orgs/:slug/invite                                     */
-/*  body: { email, role }                                             */
 /* ------------------------------------------------------------------ */
 
 router.post(
@@ -108,9 +107,13 @@ router.post(
       if (!org) return res.status(404).json({ error: "org not found" });
 
       const token = crypto.randomBytes(16).toString("hex");
-      const invite = await OrgInvite.create({ orgId: org._id, email, token, role });
+      const invite = await OrgInvite.create({
+        orgId: org._id,
+        email,
+        token,
+        role,
+      });
 
-      // IMPORTANT: read BASE_URL at runtime (not once at module load)
       const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
       const transporter = getTransporter();
 
@@ -119,7 +122,6 @@ router.post(
           "[invite email] transporter not available or BASE_URL missing; invite email skipped",
           { hasTransporter: !!transporter, baseUrl }
         );
-        // Still return token so you can copy it manually if needed
         return res.json({ ok: true, token: invite.token });
       }
 
@@ -199,7 +201,6 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const invite = await OrgInvite.findOne({ token, used: false }).lean();
     if (!invite) return res.status(404).send("invite not found or used");
 
-    // attach membership
     await OrgMembership.findOneAndUpdate(
       { org: invite.orgId, user: req.user._id },
       { $set: { role: invite.role, joinedAt: new Date() } },
@@ -328,7 +329,6 @@ router.post(
             questionIds.push(q._id);
             const n = (q.choices || []).length;
             const indices = Array.from({ length: n }, (_, i) => i);
-            // shuffle
             for (let i = indices.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -444,8 +444,6 @@ router.get(
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
 
-// routes/org_management.js
-// ORG DASHBOARD for employees and managers
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -460,10 +458,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
-    // All modules for this org
     const modules = await OrgModule.find({ org: org._id }).lean();
-
-    // All quiz instances assigned to THIS user in THIS org
     const exams = await ExamInstance.find({
       org: org._id,
       user: req.user._id,
@@ -471,7 +466,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Group quizzes by module slug
     const quizzesByModule = {};
     const now = new Date();
 
@@ -498,7 +492,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       membership,
       modules,
       user: req.user,
-      quizzesByModule, // <-- new
+      quizzesByModule,
     });
   } catch (err) {
     console.error("[org dashboard] error:", err && (err.stack || err));
@@ -506,9 +500,11 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------------ */
+/*  ORG: View a single module's learning material                     */
+/*  GET /org/:slug/modules/:moduleSlug                                */
+/* ------------------------------------------------------------------ */
 
-
-// view a single module's learning material
 router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -521,7 +517,10 @@ router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
       org: org._id,
       user: req.user._id,
     }).lean();
-    if (!membership) return res.status(403).send("You are not a member of this organization");
+    if (!membership)
+      return res
+        .status(403)
+        .send("You are not a member of this organization");
 
     const moduleDoc = await OrgModule.findOne({
       org: org._id,
@@ -541,144 +540,68 @@ router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------------ */
+/*  ADMIN: ORG MODULES UI                                             */
+/*  GET  /admin/orgs/:slug/modules                                    */
+/*  POST /admin/orgs/:slug/modules (create/update)                    */
+/* ------------------------------------------------------------------ */
 
-router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "");
-    const moduleSlug = String(req.params.moduleSlug || "");
+router.get(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("Org not found");
 
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
+      const modules = await OrgModule.find({ org: org._id }).lean();
 
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id,
-    }).lean();
-    if (!membership) return res.status(403).send("You are not a member of this organization");
-
-    const moduleDoc = await OrgModule.findOne({
-      org: org._id,
-      slug: moduleSlug,
-    }).lean();
-    if (!moduleDoc) return res.status(404).send("module not found");
-
-    return res.render("org/module_detail", {
-      org,
-      membership,
-      module: moduleDoc,
-      user: req.user,
-    });
-  } catch (err) {
-    console.error("[org module detail] error:", err && (err.stack || err));
-    return res.status(500).send("failed");
-  }
-});
-
-
-router.get("/admin/orgs/:slug/modules/new", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const org = await Organization.findOne({ slug: req.params.slug }).lean();
-  if (!org) return res.status(404).send("org not found");
-
-  res.render("admin/module_new", { org });
-});
-
-
-router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const { title, slug, description } = req.body;
-
-  const org = await Organization.findOne({ slug: req.params.slug });
-  if (!org) return res.status(404).send("org not found");
-
-  await OrgModule.create({
-    org: org._id,
-    title,
-    slug,
-    description,
-    createdAt: new Date()
-  });
-
-  res.redirect(`/org/${org.slug}/dashboard`);
-});
-
-
-router.get("/admin/orgs/:slug/modules/new", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const org = await Organization.findOne({ slug: req.params.slug }).lean();
-  if (!org) return res.status(404).send("org not found");
-  res.render("admin/module_new", { org });
-});
-
-
-router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
-  const { title, slug, description } = req.body;
-  const org = await Organization.findOne({ slug: req.params.slug });
-  if (!org) return res.status(404).send("org not found");
-
-  await OrgModule.create({
-    org: org._id,
-    title,
-    slug,
-    description,
-    createdAt: new Date()
-  });
-
-  res.redirect(`/org/${org.slug}/dashboard`);
-});
-
-
-
-// routes/org_management.js
-// ...top of file already has:
-// import OrgModule from "../models/orgModule.js";
-// import { ensureAuth } from "../middleware/authGuard.js";
-// function ensureAdminEmails(...) { ... }
-
-// ======================
-// ADMIN: ORG MODULES UI
-// ======================
-
-router.get("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
-  try {
-    const slug = req.params.slug;
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("Org not found");
-
-    const modules = await OrgModule.find({ org: org._id }).lean();
-
-    res.render("admin/org_modules", {
-      org,
-      modules
-    });
-  } catch (err) {
-    console.error("Load modules error:", err);
-    res.status(500).send("Failed to load modules");
-  }
-});
-
-
-// Create / update a module for an org
-router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
-  try {
-    const orgSlug = req.params.slug;
-    const { slug, title, description } = req.body;
-
-    if (!slug || !title) {
-      return res.status(400).send("Module slug and title are required");
+      res.render("admin/org_modules", {
+        org,
+        modules,
+      });
+    } catch (err) {
+      console.error("Load modules error:", err);
+      res.status(500).send("Failed to load modules");
     }
-
-    const org = await Organization.findOne({ slug: orgSlug });
-    if (!org) return res.status(404).send("Org not found");
-
-    await OrgModule.findOneAndUpdate(
-      { org: org._id, slug },
-      { title, description },
-      { upsert: true, new: true }
-    );
-
-    res.redirect(`/admin/orgs/${orgSlug}/modules`);
-  } catch (err) {
-    console.error("Save module error:", err);
-    res.status(500).send("Failed to save module");
   }
-});
+);
+
+router.post(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const orgSlug = req.params.slug;
+      const { slug, title, description } = req.body;
+
+      if (!slug || !title) {
+        return res.status(400).send("Module slug and title are required");
+      }
+
+      const org = await Organization.findOne({ slug: orgSlug });
+      if (!org) return res.status(404).send("Org not found");
+
+      await OrgModule.findOneAndUpdate(
+        { org: org._id, slug },
+        { title, description },
+        { upsert: true, new: true }
+      );
+
+      res.redirect(`/admin/orgs/${orgSlug}/modules`);
+    } catch (err) {
+      if (err.code === 11000) {
+        console.warn("[modules] duplicate org/slug ignored", err.keyValue);
+        return res.redirect(`/admin/orgs/${req.params.slug}/modules?dup=1`);
+      }
+
+      console.error("Save module error:", err);
+      res.status(500).send("Failed to save module");
+    }
+  }
+);
 
 export default router;
