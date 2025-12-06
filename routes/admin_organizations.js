@@ -85,4 +85,44 @@ router.post("/admin/orgs/:slug/edit", ensureAuth, ensureAdmin, async (req, res) 
   res.redirect("/admin/orgs/" + req.params.slug);
 });
 
+
+
+
+// simple admin check using ADMIN_EMAILS
+function ensureAdminEmails(req, res, next) {
+  const adminEmails = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!req.user || !req.user.email) {
+    return res.status(403).send("Admins only");
+  }
+  if (!adminEmails.includes(req.user.email.toLowerCase())) {
+    return res.status(403).send("Admins only");
+  }
+  next();
+}
+
+/**
+ * ADMIN ORG DASHBOARD
+ * GET /admin/orgs
+ * Lists all organizations with actions:
+ *  - Manage org
+ *  - Manage modules
+ *  - Add module
+ *  - Open org dashboard (employee view)
+ */
+router.get("/admin/orgs", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const orgs = await Organization.find().sort({ createdAt: -1 }).lean();
+    res.render("admin/orgs_index", { orgs });
+  } catch (err) {
+    console.error("[admin orgs index] error:", err && (err.stack || err));
+    res.status(500).send("Failed to load organizations");
+  }
+});
+
+
+
 export default router;

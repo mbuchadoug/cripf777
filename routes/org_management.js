@@ -601,4 +601,28 @@ router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (r
 });
 
 
+router.get("/admin/orgs/:slug/modules/new", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const org = await Organization.findOne({ slug: req.params.slug }).lean();
+  if (!org) return res.status(404).send("org not found");
+  res.render("admin/module_new", { org });
+});
+
+
+router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
+  const { title, slug, description } = req.body;
+  const org = await Organization.findOne({ slug: req.params.slug });
+  if (!org) return res.status(404).send("org not found");
+
+  await OrgModule.create({
+    org: org._id,
+    title,
+    slug,
+    description,
+    createdAt: new Date()
+  });
+
+  res.redirect(`/org/${org.slug}/dashboard`);
+});
+
+
 export default router;

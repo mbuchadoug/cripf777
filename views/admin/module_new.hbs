@@ -1,31 +1,36 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <title>Add Module</title>
+  <meta charset="utf-8">
+  <title>Add Module — {{org.name}}</title>
 </head>
 <body>
   {{> navbar}}
 
-  <h1>Add Module — {{org.name}}</h1>
+  <main style="max-width: 720px; margin: 2rem auto;">
+    <h1>Add Module — {{org.name}}</h1>
 
-  <form method="POST" action="/admin/orgs/{{org.slug}}/modules">
-    <div>
-      <label>Title</label><br>
-      <input type="text" name="title" required>
-    </div>
+    <form method="POST" action="/admin/orgs/{{org.slug}}/modules">
+      <div>
+        <label>Title</label><br>
+        <input type="text" name="title" required style="width:100%;">
+      </div>
 
-    <div>
-      <label>Slug</label><br>
-      <input type="text" name="slug" required placeholder="e.g. safety-training">
-    </div>
+      <div style="margin-top: 1rem;">
+        <label>Slug</label><br>
+        <input type="text" name="slug" required placeholder="e.g. safety-training" style="width:100%;">
+      </div>
 
-    <div>
-      <label>Description</label><br>
-      <textarea name="description"></textarea>
-    </div>
+      <div style="margin-top: 1rem;">
+        <label>Description</label><br>
+        <textarea name="description" rows="4" style="width:100%;"></textarea>
+      </div>
 
-    <br>
-    <button type="submit">Save Module</button>
-  </form>
+      <div style="margin-top: 1.5rem;">
+        <button type="submit">Save Module</button>
+        <a href="/admin/orgs/{{org.slug}}/manage" style="margin-left: 1rem;">Cancel</a>
+      </div>
+    </form>
+  </main>
 </body>
 </html>
