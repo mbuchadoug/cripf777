@@ -777,11 +777,13 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
 });
 
 
+// ... all your other code above unchanged ...
+
 // ORG QUIZ: employees/managers take module quiz (20 questions)
 router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
-    const moduleName = String(req.query.module || "Responsibility");
+    const moduleNameRaw = String(req.query.module || "Responsibility").trim();
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -794,11 +796,13 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
-    // reuse the SAME quiz UI, but with 20 questions
+    const moduleKey = moduleNameRaw.toLowerCase(); // how you stored it in DB
+
     return res.render("lms/quiz", {
       user: req.user,
-      quizCount: 20,           // 👈 ORG = 20 questions
-      module: moduleName,
+      quizCount: 20,                                // <= 20 questions
+      moduleLabel: `${moduleNameRaw} — ${org.slug} Quiz`,
+      moduleKey,                                    // used for filtering in API
       orgSlug: org.slug,
     });
   } catch (err) {
@@ -806,6 +810,8 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
     return res.status(500).send("failed");
   }
 });
+
+// export default router at bottom of file (already present)
 
 
 export default router;

@@ -1,37 +1,56 @@
 // routes/api_lms.js
 import { Router } from "express";
 import mongoose from "mongoose";
-import QuizQuestion from "../models/quizQuestion.js";
+import Question from "../models/question.js";
+import Organization from "../models/organization.js";
 import fs from "fs";
 import path from "path";
 
 const router = Router();
 
-/**
- * Fetch random questions from DB, optionally filtered by module (case-insensitive).
- */
-async function fetchRandomQuestionsFromDB(count = 20, moduleName = "") {
+// helper: sample N random docs using Mongo's aggregation if available
+async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
+  const { moduleName = "", orgSlug = "" } = opts;
+
   try {
     const match = {};
+
+    // module filter (case-insensitive) e.g. "responsibility"
     if (moduleName) {
       match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
+    }
+
+    // org filter: org-specific OR global (organization: null / missing)
+    if (orgSlug) {
+      const org = await Organization.findOne({ slug: orgSlug }).lean();
+      if (org) {
+        match.$or = [
+          { organization: org._id },
+          { organization: null },
+          { organization: { $exists: false } },
+        ];
+      }
     }
 
     const pipeline = [];
     if (Object.keys(match).length) pipeline.push({ $match: match });
     pipeline.push({ $sample: { size: Number(count) } });
 
-    const docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+    const docs = await Question.aggregate(pipeline).allowDiskUse(true);
 
     return docs.map((d) => ({
       id: String(d._id),
       text: d.text,
-      choices: (d.choices || []).map((c) => ({ text: c.text })),
+      // choices in DB can be [{ text }] or ["A", "B", ...]
+      choices: (d.choices || []).map((c) =>
+        typeof c === "string" ? { text: c } : { text: c.text }
+      ),
+      // may be correctIndex or answerIndex – we only need this for scoring
       correctIndex:
-        typeof d.answerIndex === "number"
-          ? d.answerIndex
-          : typeof d.correctIndex === "number"
+        typeof d.correctIndex === "number"
           ? d.correctIndex
+          : typeof d.answerIndex === "number"
+          ? d.answerIndex
           : null,
       tags: d.tags || [],
       difficulty: d.difficulty || "medium",
@@ -57,15 +76,17 @@ function fetchRandomQuestionsFromFile(count = 5) {
     }
 
     return all.slice(0, count).map((d) => ({
-      id:
-        d.id ||
-        d._id ||
-        d.uuid ||
-        "fid-" + Math.random().toString(36).slice(2, 9),
+      id: d.id || d._id || d.uuid || "fid-" + Math.random().toString(36).slice(2, 9),
       text: d.text,
-      choices: (d.choices || []).map((c) => ({ text: c.text || c })),
+      choices: (d.choices || []).map((c) =>
+        typeof c === "string" ? { text: c } : { text: c.text || c }
+      ),
       correctIndex:
-        typeof d.correctIndex === "number" ? d.correctIndex : null,
+        typeof d.correctIndex === "number"
+          ? d.correctIndex
+          : typeof d.answerIndex === "number"
+          ? d.answerIndex
+          : null,
       tags: d.tags || [],
       difficulty: d.difficulty || "medium",
     }));
@@ -76,26 +97,34 @@ function fetchRandomQuestionsFromFile(count = 5) {
 }
 
 /**
- * GET /api/lms/quiz?count=20&module=Responsibility
- * - for /lms/quiz -> count=5, no module (global)
- * - for /lms/quiz?module=Responsibility&org=muono -> count=20, module filter
+ * GET /api/lms/quiz?count=5&module=Responsibility&org=muono
+ * Returns: { examId, series: [...] }
  */
 router.get("/quiz", async (req, res) => {
-  let rawCount = parseInt(req.query.count || "20", 10);
-  if (!Number.isFinite(rawCount)) rawCount = 20;
+  // default 5, max 20, min 1
+  let rawCount = parseInt(req.query.count || "5", 10);
+  if (!Number.isFinite(rawCount)) rawCount = 5;
   const count = Math.max(1, Math.min(20, rawCount));
 
-  const moduleName = String(req.query.module || "").trim();
+  const moduleName = String(req.query.module || "").trim(); // e.g. "Responsibility"
+  const orgSlug = String(req.query.org || "").trim();       // e.g. "muono"
 
   try {
-    const dbResult = await fetchRandomQuestionsFromDB(count, moduleName);
+    // try DB first (your imported questions live here)
+    const dbResult = await fetchRandomQuestionsFromDB(count, {
+      moduleName,
+      orgSlug,
+    });
+
     let series = [];
     if (dbResult && dbResult.length >= 1) {
       series = dbResult;
     } else {
+      // fallback to file (dev only)
       series = fetchRandomQuestionsFromFile(count);
     }
 
+    // don’t expose correctIndex to the client
     const publicSeries = series.map((q) => ({
       id: q.id,
       text: q.text,
@@ -120,43 +149,31 @@ router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
-    if (!answers.length) {
-      return res.status(400).json({ error: "No answers provided" });
-    }
+    if (!answers.length)
+      return res.status(400).json({ error: "No answers submitted" });
 
     const qIds = answers
       .map((a) => a.questionId)
       .filter(Boolean)
       .map(String);
-    const validDbIds = qIds.filter((id) => mongoose.isValidObjectId(id));
-    const byId = {};
 
-    if (validDbIds.length) {
-      try {
-        const docs = await QuizQuestion.find({
-          _id: { $in: validDbIds },
-        })
-          .lean()
-          .exec();
-        for (const d of docs) byId[String(d._id)] = d;
-      } catch (e) {
-        console.error("[quiz/submit] DB lookup failed:", e && (e.stack || e));
-      }
-    }
+    const docs = await Question.find({ _id: { $in: qIds } }).lean().exec();
+    const byId = {};
+    for (const q of docs) byId[String(q._id)] = q;
 
     let score = 0;
+    const total = answers.length;
     const details = [];
 
     for (const a of answers) {
-      const qid = String(a.questionId || "");
+      const q = byId[String(a.questionId)];
       const yourIndex =
         typeof a.choiceIndex === "number" ? a.choiceIndex : null;
-      const q = byId[qid];
 
       let correctIndex = null;
       if (q) {
-        if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-        else if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
+        if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
+        else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
         else if (typeof q.correct === "number") correctIndex = q.correct;
       }
 
@@ -166,15 +183,15 @@ router.post("/quiz/submit", async (req, res) => {
         correctIndex === yourIndex;
 
       if (correct) score++;
+
       details.push({
-        questionId: qid,
-        correctIndex: correctIndex !== null ? correctIndex : null,
+        questionId: a.questionId,
+        correctIndex,
         yourIndex,
         correct: !!correct,
       });
     }
 
-    const total = answers.length;
     const percentage = Math.round((score / Math.max(1, total)) * 100);
     const passThreshold = parseInt(
       process.env.QUIZ_PASS_THRESHOLD || "60",
@@ -184,8 +201,8 @@ router.post("/quiz/submit", async (req, res) => {
 
     return res.json({
       examId: payload.examId || "exam-" + Date.now().toString(36),
-      score,
       total,
+      score,
       percentage,
       passThreshold,
       passed,
@@ -193,13 +210,10 @@ router.post("/quiz/submit", async (req, res) => {
     });
   } catch (err) {
     console.error(
-      "[api_lms] /quiz/submit unexpected error:",
+      "[POST /api/lms/quiz/submit] error:",
       err && (err.stack || err)
     );
-    return res.status(500).json({
-      error: "Submit failed",
-      detail: String(err && (err.stack || err.message || err)),
-    });
+    return res.status(500).json({ error: "Failed to score quiz" });
   }
 });
 

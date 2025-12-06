@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Take Quiz — Responsibility LMS</title>
+  <title>{{moduleLabel}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{
@@ -50,28 +50,6 @@
     .score{margin-top:14px;padding:12px;border-radius:8px;background:linear-gradient(90deg,#051117,#07121a);border:1px solid rgba(255,255,255,0.02)}
     .detail-block{margin-top:10px;padding:12px;border-radius:8px;background:#0b0b0b;border:1px solid rgba(255,255,255,0.02)}
 
-    .fb-question{margin-top:12px}
-    .fb-question .fb-qtitle{font-weight:700;margin-bottom:8px}
-    .fb-choice{
-      display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;margin-top:8px;
-      background:#0e0e0f;border:1px solid rgba(255,255,255,0.02);color:#ddd;
-    }
-    .fb-choice .fb-label{
-      display:inline-block;min-width:28px;text-align:center;margin-right:8px;color:#111;background:rgba(0,0,0,0.25);border-radius:6px;padding:6px;font-weight:800;
-    }
-    .fb-choice.correct{
-      background:var(--correct-grad);
-      color:#e6ffea;
-      border-color: rgba(0,150,50,0.25);
-      font-weight:700;
-    }
-    .fb-choice.wrong{
-      background:var(--wrong-grad);
-      color:#ffdada;
-      border-color: rgba(200,30,30,0.25);
-      font-weight:700;
-    }
-
     @media (max-width:720px){
       .page{padding:12px}
       h1{font-size:28px}
@@ -81,25 +59,18 @@
 <body>
   <div class="page">
     <div class="card" role="main" aria-labelledby="quiz-title">
-      <h1 id="quiz-title">
-        {{#if orgSlug}}
-          {{module}} — {{orgSlug}} Quiz
-        {{else}}
-          {{#if module}}
-            {{module}} — Quick Quiz
-          {{else}}
-            Responsibility — Quick Quiz
-          {{/if}}
-        {{/if}}
-      </h1>
-
-      <div class="muted">
-        {{#if orgSlug}}
-          You’re taking a module quiz for <strong>{{orgSlug}}</strong>. You’ll receive <strong>{{quizCount}}</strong> questions for this module.
-        {{else}}
-          Each quiz pulls random questions from the bank. Answer {{quizCount}} questions below and submit to see your score.
-        {{/if}}
-      </div>
+      <h1 id="quiz-title">{{moduleLabel}}</h1>
+      {{#if orgSlug}}
+        <div class="muted">
+          You’re taking a module quiz for <strong>{{orgSlug}}</strong>. 
+          You’ll receive <strong>{{quizCount}}</strong> questions for this module.
+        </div>
+      {{else}}
+        <div class="muted">
+          Each quiz pulls random questions from the bank. 
+          Answer {{quizCount}} questions below and submit to see your score.
+        </div>
+      {{/if}}
 
       <div id="quizArea" aria-live="polite"></div>
 
@@ -114,21 +85,16 @@
   </div>
 
   <script>
-  // config from server
-  window.QUIZ_COUNT = {{#if quizCount}}{{quizCount}}{{else}}5{{/if}};
-  window.MODULE_NAME = "{{module}}";
-  window.ORG_SLUG = "{{orgSlug}}";
-
   (function(){
+    const QUIZ_COUNT = Number("{{quizCount}}" || 5);
+    const MODULE_KEY = "{{moduleKey}}";   // e.g. "responsibility"
+    const ORG_SLUG   = "{{orgSlug}}";     // e.g. "muono"
+
     const quizArea = document.getElementById('quizArea');
     const submitBtn = document.getElementById('submitBtn');
     const reloadBtn = document.getElementById('reloadBtn');
     const status = document.getElementById('status');
     const result = document.getElementById('result');
-
-    const QUIZ_COUNT = Number(window.QUIZ_COUNT || 5);
-    const MODULE_NAME = window.MODULE_NAME || "";
-    const ORG_SLUG = window.ORG_SLUG || "";
 
     let examId = null;
     let series = [];
@@ -142,42 +108,6 @@
       return { text: String(c) };
     }
 
-    function repairBlock(q){
-      if (!q || typeof q !== 'object') return q;
-      const out = Object.assign({}, q);
-      out.choices = (out.choices || []).map(normalizeChoice);
-
-      if (typeof out.text === 'string' && (/(?:\n|^)[a-d][\)\.]/i.test(out.text) || /^[a-d][\)\.]/i.test(out.text) )) {
-        const txt = out.text.replace(/\r/g,'\n');
-        const lines = txt.split(/\n/).map(s=>s.trim()).filter(Boolean);
-        const qLine = lines.find(l => !/^[a-d][\)\.]/i.test(l));
-        const choiceLines = lines.filter(l => /^[a-d][\)\.]/i.test(l));
-        if (qLine) out.text = qLine;
-        choiceLines.forEach(cl => {
-          const clean = cl.replace(/^[a-d][\)\.]\s*/i,'').trim();
-          if (clean && !out.choices.some(c => c.text.trim() === clean)) {
-            out.choices.push({ text: clean });
-          }
-        });
-      }
-
-      if ((!out.choices || out.choices.length === 0) && typeof out.text === 'string' && out.text.includes('\n')) {
-        const parts = out.text.split('\n').map(s => s.trim()).filter(Boolean);
-        const maybeQuestion = parts[0];
-        const maybeChoices = parts.slice(1).filter(p => p.length);
-        if (maybeChoices.length >= 2) {
-          out.text = maybeQuestion;
-          out.choices = maybeChoices.map(normalizeChoice);
-        }
-      }
-
-      if (out.choices.length && out.text && out.choices.some(c => c.text.trim() === out.text.trim())) {
-        out.text = `Choose the best option`;
-      }
-
-      return out;
-    }
-
     function renderQuiz(list){
       quizArea.innerHTML = '';
       answers = {};
@@ -189,84 +119,72 @@
       series = [];
 
       list.forEach((rawQ, idx) => {
-        const q = repairBlock(rawQ);
+        const q = Object.assign({}, rawQ);
         const qid = q.id || q._id || `q${idx}`;
         const choices = (q.choices || []).map(normalizeChoice);
 
         const block = document.createElement('div');
         block.className = 'q';
         const qnum = idx + 1;
-        const qHeadText = q.text && String(q.text).trim() ? escapeHtml(q.text.trim()) : `Q${qnum}. Choose the best option`;
         const head = document.createElement('div');
         head.className = 'q-head';
-        head.innerHTML = `<span style="font-weight:800">Q${qnum}.</span> ${qHeadText}`;
+        head.innerHTML = `<span style="font-weight:800">Q${qnum}.</span> ${escapeHtml(q.text || '')}`;
         block.appendChild(head);
 
         const choicesWrap = document.createElement('div');
         choicesWrap.className = 'choices';
 
-        if (!choices.length) {
-          const p = document.createElement('div');
-          p.className = 'muted';
-          p.textContent = 'No choices available for this question.';
-          choicesWrap.appendChild(p);
-        } else {
-          choices.forEach((c, ci) => {
-            const btn = document.createElement('div');
-            btn.className = 'choice';
-            btn.setAttribute('role','button');
-            btn.setAttribute('tabindex','0');
-            btn.dataset.qid = qid;
-            btn.dataset.index = ci;
+        choices.forEach((c, ci) => {
+          const btn = document.createElement('div');
+          btn.className = 'choice';
+          btn.setAttribute('role','button');
+          btn.setAttribute('tabindex','0');
+          btn.dataset.qid = qid;
+          btn.dataset.index = ci;
 
-            const badge = document.createElement('div');
-            badge.className = 'badge';
-            badge.textContent = letterForIndex(ci);
+          const badge = document.createElement('div');
+          badge.className = 'badge';
+          badge.textContent = letterForIndex(ci);
 
-            const txt = document.createElement('div');
-            txt.className = 'text';
-            txt.textContent = c.text || '';
+          const txt = document.createElement('div');
+          txt.className = 'text';
+          txt.textContent = c.text || '';
 
-            btn.appendChild(badge);
-            btn.appendChild(txt);
+          btn.appendChild(badge);
+          btn.appendChild(txt);
 
-            btn.addEventListener('click', () => {
-              choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
-              btn.classList.add('selected');
-              answers[qid] = ci;
-            });
-            btn.addEventListener('keydown', (ev) => {
-              if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault();
-                btn.click();
-              }
-            });
-
-            choicesWrap.appendChild(btn);
+          btn.addEventListener('click', () => {
+            choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
+            btn.classList.add('selected');
+            answers[qid] = ci;
           });
-        }
+          btn.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              btn.click();
+            }
+          });
+
+          choicesWrap.appendChild(btn);
+        });
 
         block.appendChild(choicesWrap);
         quizArea.appendChild(block);
 
         q.id = qid;
         q.choices = choices;
-        series[idx] = q;
+        series.push(q);
       });
     }
 
-    async function loadQuiz(countArg){
-      const c = Number(countArg || QUIZ_COUNT || 5);
+    async function loadQuiz(count, moduleKey, orgSlug){
       status.textContent = 'Loading quiz...';
       try {
-        const params = new URLSearchParams();
-        params.set('count', String(c));
-        // Only filter by module for ORG mode (when orgSlug is set)
-        if (ORG_SLUG && MODULE_NAME) {
-          params.set('module', MODULE_NAME.replace(/ \\(demo\\)$/i, ''));
-        }
+        let url = '/api/lms/quiz?count=' + encodeURIComponent(count);
+        if (moduleKey) url += '&module=' + encodeURIComponent(moduleKey);
+        if (orgSlug)   url += '&org=' + encodeURIComponent(orgSlug);
 
-        const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
+        const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) {
           const t = await res.text().catch(()=>null);
           throw new Error(t || res.statusText || 'failed to fetch quiz');
@@ -291,10 +209,10 @@
 
       const payload = { examId, answers: [] };
       for (const s of series) {
-        const id = s.id || s._id;
+        const key = s.id || s._id;
         payload.answers.push({
-          questionId: id || null,
-          choiceIndex: typeof answers[id] === 'number' ? answers[id] : null
+          questionId: key,
+          choiceIndex: typeof answers[key] === 'number' ? answers[key] : null
         });
       }
 
@@ -320,7 +238,7 @@
       }
     });
 
-    reloadBtn.addEventListener('click', () => loadQuiz());
+    reloadBtn.addEventListener('click', () => loadQuiz(QUIZ_COUNT, MODULE_KEY, ORG_SLUG));
 
     function showResult(resp){
       result.style.display = 'block';
@@ -335,37 +253,29 @@
 
       (resp.details || []).forEach(d => {
         const q = series.find(s => (s.id || s._id) === d.questionId) || null;
-
-        const qBlock = document.createElement('div');
-        qBlock.className = 'fb-question';
+        const block = document.createElement('div');
+        block.className = 'detail-block';
 
         const title = document.createElement('div');
-        title.className = 'fb-qtitle';
-        title.textContent = q ? (q.text || d.questionId || '') : (d.questionId || '');
-        qBlock.appendChild(title);
+        title.style.fontWeight = '700';
+        title.textContent = q ? (q.text || d.questionId) : d.questionId;
+        block.appendChild(title);
 
-        const choicesContainer = document.createElement('div');
-        const choiceSource = (q && q.choices && q.choices.length) ? q.choices : (d.choices || []);
-        choiceSource.forEach((c, i) => {
-          const el = document.createElement('div');
-          el.className = 'fb-choice';
-          const label = document.createElement('div');
-          label.className = 'fb-label';
-          label.textContent = letterForIndex(i) + '.';
-          const txt = document.createElement('div');
-          txt.textContent = (typeof c === 'string') ? c : (c.text || '');
-
-          el.appendChild(label);
-          el.appendChild(txt);
-
-          if (typeof d.correctIndex === 'number' && i === d.correctIndex) el.classList.add('correct');
-          if (typeof d.yourIndex === 'number' && i === d.yourIndex && !d.correct) el.classList.add('wrong');
-
-          choicesContainer.appendChild(el);
+        const choices = (q && q.choices) ? q.choices : [];
+        choices.forEach((c,i) => {
+          const row = document.createElement('div');
+          row.style.padding = '8px';
+          row.style.borderRadius = '8px';
+          row.style.marginTop = '6px';
+          row.style.background = '#0e0e0f';
+          row.style.border = '1px solid rgba(255,255,255,0.02)';
+          row.textContent = `${letterForIndex(i)}. ${c.text || ''}`;
+          if (i === d.correctIndex) row.classList.add('correct');
+          if (i === d.yourIndex && !d.correct) row.classList.add('wrong');
+          block.appendChild(row);
         });
 
-        qBlock.appendChild(choicesContainer);
-        list.appendChild(qBlock);
+        list.appendChild(block);
       });
 
       result.appendChild(list);
@@ -374,15 +284,11 @@
 
     function escapeHtml(s){
       if (!s) return '';
-      return String(s).replace(/&/g,'&amp;')
-                      .replace(/</g,'&lt;')
-                      .replace(/>/g,'&gt;')
-                      .replace(/"/g,'&quot;')
-                      .replace(/'/g,'&#039;');
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
     }
 
     // initial load
-    loadQuiz();
+    loadQuiz(QUIZ_COUNT, MODULE_KEY, ORG_SLUG);
   })();
   </script>
 </body>
