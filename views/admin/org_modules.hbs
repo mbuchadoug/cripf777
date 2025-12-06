@@ -1,27 +1,55 @@
-{{!-- admin/org_modules.hbs --}}
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Modules for {{org.name}}</title></head>
+<head>
+  <meta charset="utf-8" />
+  <title>Manage Modules — {{org.name}}</title>
+</head>
 <body>
   {{> navbar}}
-  <main>
-    <h1>Modules — {{org.name}}</h1>
-    <a href="/admin/orgs/{{org.slug}}/modules/create">Create Module</a>
-    <table border="1" cellpadding="8" style="margin-top:12px;">
-      <tr><th>Slug</th><th>Title</th><th>Actions</th></tr>
-      {{#each modules}}
-        <tr>
-          <td>{{this.slug}}</td>
-          <td>{{this.title}}</td>
-          <td>
-            <a href="/admin/orgs/{{../org.slug}}/modules/{{this.slug}}/edit">Edit</a>
-            <form method="post" action="/admin/orgs/{{../org.slug}}/modules/{{this.slug}}/delete" style="display:inline">
-              <button type="submit">Delete</button>
-            </form>
-          </td>
-        </tr>
-      {{/each}}
-    </table>
+
+  <main class="container">
+    <h1>Manage Modules — {{org.name}}</h1>
+    <p><a href="/admin/orgs/{{org.slug}}/manage">← Back to org admin</a></p>
+
+    <section>
+      <h2>Add / Update Module</h2>
+      <form method="post" action="/admin/orgs/{{org.slug}}/modules">
+        <div>
+          <label>Module slug (e.g. <code>general</code>):</label><br>
+          <input type="text" name="moduleSlug" required />
+        </div>
+
+        <div>
+          <label>Title:</label><br>
+          <input type="text" name="title" required />
+        </div>
+
+        <div>
+          <label>Description (optional):</label><br>
+          <textarea name="description" rows="3"></textarea>
+        </div>
+
+        <button type="submit">Save Module</button>
+      </form>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>Existing Modules</h2>
+      {{#if modules.length}}
+        <ul>
+          {{#each modules}}
+            <li>
+              <strong>{{this.title}}</strong>
+              (<code>{{this.slug}}</code>) – {{this.description}}
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        <p>No modules defined yet.</p>
+      {{/if}}
+    </section>
   </main>
 </body>
 </html>
