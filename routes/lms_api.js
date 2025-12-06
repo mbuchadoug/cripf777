@@ -97,75 +97,77 @@ router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
-    if (!answers.length) return res.status(400).json({ error: "No answers provided" });
+    if (!answers.length) return res.status(400).json({ error: "No answers submitted" });
 
-    // gather ids
-    const qIds = answers.map(a => a.questionId).filter(Boolean).map(String);
-    const validDbIds = qIds.filter(id => mongoose.isValidObjectId(id));
+    // For each questionId we need the correctIndex
+    const qIds = answers.map(a => a.questionId).filter(Boolean);
+    const results = [];
+
+    // fetch from DB for those IDs
+    const fromDb = await Question.find({ _id: { $in: qIds } }).lean().exec();
     const byId = {};
+    for (const q of fromDb) {
+      byId[String(q._id)] = q;
+    }
 
-    // fetch DB docs only for valid object ids
-    if (validDbIds.length) {
+    // fallback: if not found in DB maybe question came from static file - try loading file
+    let fileQuestions = null;
+    const missingIds = qIds.filter(id => !byId[id]);
+    if (missingIds.length) {
+      // load static file only once
       try {
-        const docs = await Question.find({ _id: { $in: validDbIds } }).lean().exec();
-        for (const d of docs) byId[String(d._id)] = d;
-      } catch (e) {
-        console.error("[quiz/submit] DB lookup failed:", e && (e.stack || e));
-      }
-    }
-
-    // fallback: load file-based questions into byId (only for ids not found in DB)
-    try {
-      const p = path.join(process.cwd(), "data", "data_questions.json");
-      if (fs.existsSync(p)) {
-        const fileQuestions = JSON.parse(fs.readFileSync(p, "utf8"));
-        for (const fq of fileQuestions) {
-          const fid = String(fq.id || fq._id || fq.uuid || "");
-          if (fid && !byId[fid]) byId[fid] = fq;
+        const p = path.join(process.cwd(), "data", "data_questions.json");
+        if (fs.existsSync(p)) {
+          fileQuestions = JSON.parse(fs.readFileSync(p, "utf8"));
+          for (const fq of fileQuestions) {
+            const fid = String(fq.id || fq._id || fq.uuid);
+            if (!byId[fid]) {
+              byId[fid] = fq; // not mongoose doc but has correctIndex if present
+            }
+          }
         }
-      } else if (fs.existsSync(FALLBACK_PATH)) {
-        const raw = fs.readFileSync(FALLBACK_PATH, "utf8");
-        const parsed = parseQuestionBlocks(raw);
-        // IMPORTANT: you must key parsed items using the exact ids you used when building the quiz series
-        // If your quiz generation used ids like `f-${i}-${Date.now()}` then ensure the same id scheme is used here.
-        parsed.forEach((p, i) => {
-          const fid = `f-${i}-${ /* fallback key - ideally deterministic */ 1764669588737 }`;
-          if (!byId[fid]) byId[fid] = p;
-        });
+      } catch (e) {
+        console.error("[quiz/submit] file load err:", e && (e.stack || e));
       }
-    } catch (e) {
-      console.error("[quiz/submit] fallback file parse error:", e && (e.stack || e));
     }
 
-    // scoring
     let score = 0;
+    const total = answers.length;
     const details = [];
+
     for (const a of answers) {
-      const qid = String(a.questionId || "");
-      const yourIndex = typeof a.choiceIndex === "number" ? a.choiceIndex : null;
-      const q = byId[qid];
-      let correctIndex = null;
-      if (q) {
-        if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
-        else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-        else if (typeof q.correct === "number") correctIndex = q.correct;
-      }
+      const q = byId[String(a.questionId)];
+      const yourIndex = (typeof a.choiceIndex === "number") ? a.choiceIndex : null;
+      const correctIndex = q && (typeof q.correctIndex === "number") ? q.correctIndex : (q && q.correct && typeof q.correct === "number" ? q.correct : null);
+
       const correct = (correctIndex !== null && yourIndex !== null && correctIndex === yourIndex);
       if (correct) score++;
-      details.push({ questionId: qid, correctIndex: correctIndex !== null ? correctIndex : null, yourIndex, correct: !!correct });
+
+      details.push({
+        questionId: a.questionId,
+        correctIndex: correctIndex,
+        yourIndex: yourIndex,
+        correct: !!correct,
+      });
     }
 
-    const total = answers.length;
     const percentage = Math.round((score / Math.max(1, total)) * 100);
-    const passThreshold = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
+    const passThreshold = 60; // configurable if you want
     const passed = percentage >= passThreshold;
 
-    return res.json({ score, total, percentage, passThreshold, passed, details });
+    return res.json({
+      examId: payload.examId || ("exam-" + Date.now().toString(36)),
+      total,
+      score,
+      percentage,
+      passThreshold,
+      passed,
+      details,
+    });
   } catch (err) {
-    console.error("[api_lms] /quiz/submit unexpected error:", err && (err.stack || err));
-    return res.status(500).json({ error: "Submit failed", detail: String(err && (err.stack || err.message || err)) });
+    console.error("[POST /api/lms/quiz/submit] error:", err && (err.stack || err));
+    return res.status(500).json({ error: "Failed to score quiz" });
   }
 });
-
 
 export default router;
