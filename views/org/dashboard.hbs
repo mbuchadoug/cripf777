@@ -1,63 +1,69 @@
-{{!-- views/org/dashboard.hbs --}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   <title>{{org.name}} — Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui, -apple-system, "Segoe UI", Arial;margin:20px}
+    h1{font-size:32px;margin-bottom:8px}
+    h2{margin-top:24px}
+    .module-block,
+    .quiz-block{
+      margin-top:10px;
+      padding:10px 14px;
+      border-radius:8px;
+      border:1px solid #ddd;
+      max-width:640px;
+    }
+    .quiz-status{font-size:14px;color:#555}
+  </style>
 </head>
 <body>
   {{> navbar}}
 
   <main>
     <h1>{{org.name}} — Dashboard</h1>
-    <p>{{org.description}}</p>
     <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
 
-    <section>
-      <h2>Modules</h2>
+    <h2>Modules</h2>
+    {{#if modules.length}}
+      {{#each modules}}
+        <div class="module-block">
+          <div><strong>{{this.title}}</strong></div>
+          <div>Module slug: <code>{{this.slug}}</code></div>
+          <div style="margin-top:6px;">
+            <a href="/org/{{../org.slug}}/modules/{{this.slug}}">View learning material</a>
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <p>No modules have been configured yet.</p>
+    {{/if}}
 
-      {{#if modules.length}}
-        {{#each modules}}
-          <article style="margin-bottom: 2rem;">
-            <h3>{{this.title}}</h3>
-            <p>Module slug: <code>{{this.slug}}</code></p>
-
-            <p>
-              <a href="/org/{{../org.slug}}/modules/{{this.slug}}">
-                View learning material
-              </a>
-            </p>
-
-            <p>
-              <a href="/lms/quiz?module={{this.slug}}&org={{../org.slug}}">
-                Start a new quiz for this module
-              </a>
-            </p>
-
-            {{!-- Assigned quizzes for this module --}}
-            {{#with (lookup ../quizzesByModule this.slug)}}
-              {{#if this.length}}
-                <h4>Assigned quizzes</h4>
-                <ul>
-                  {{#each this}}
-                    <li>
-                      Status: {{status}}
-                      {{#if expiresAt}} • Expires: {{expiresAt}}{{/if}}
-                      {{#if finishedAt}} • Finished: {{finishedAt}}{{/if}}
-
-                      • <a href="{{openUrl}}">Open quiz</a>
-                      {{!-- openUrl already includes /org/{{org.slug}}/quiz?examId=... --}}
-                    </li>
-                  {{/each}}
-                </ul>
+    <h2>Assigned quizzes</h2>
+    {{#if quizzesByModule}}
+      {{#each quizzesByModule}}
+        <h3>{{@key}}</h3>
+        {{#each this}}
+          <div class="quiz-block">
+            <div>
+              <strong>Quiz:</strong> {{examId}}
+              &nbsp;—&nbsp;
+              <a href="{{openUrl}}">Open quiz</a>
+            </div>
+            <div class="quiz-status">
+              Status: {{status}}
+              {{#if expiresAt}}
+                &nbsp;|&nbsp; Expires: {{expiresAt}}
               {{/if}}
-            {{/with}}
-          </article>
+            </div>
+          </div>
         {{/each}}
-      {{else}}
-        <p>No modules defined yet. Ask your org admin to create modules.</p>
-      {{/if}}
-    </section>
+      {{/each}}
+    {{else}}
+      <p>No quizzes have been assigned to you yet.</p>
+    {{/if}}
   </main>
 </body>
 </html>

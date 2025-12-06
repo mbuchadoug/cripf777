@@ -255,14 +255,34 @@
 
     reloadBtn.addEventListener('click', () => loadQuiz(QUIZ_COUNT));
 
-    function showResult(resp){
+       function showResult(resp){
+      // show top summary
       result.style.display = 'block';
       result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
                           <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
                           <div style="margin-top:10px">Detailed feedback below:</div>`;
 
+      // 1) clear any old markings on the main quiz choices
       document.querySelectorAll('.choice').forEach(n => n.classList.remove('correct','wrong'));
 
+      // 2) mark correct / wrong on the MAIN quiz options
+      (resp.details || []).forEach(d => {
+        const qid = String(d.questionId || '');
+        const correctIndex = (typeof d.correctIndex === 'number') ? d.correctIndex : null;
+        const yourIndex = (typeof d.yourIndex === 'number') ? d.yourIndex : null;
+
+        if (correctIndex !== null) {
+          const correctEl = document.querySelector(`.choice[data-qid="${qid}"][data-index="${correctIndex}"]`);
+          if (correctEl) correctEl.classList.add('correct');
+        }
+
+        if (yourIndex !== null && yourIndex !== correctIndex) {
+          const wrongEl = document.querySelector(`.choice[data-qid="${qid}"][data-index="${yourIndex}"]`);
+          if (wrongEl) wrongEl.classList.add('wrong');
+        }
+      });
+
+      // 3) build detailed feedback list under the score
       const list = document.createElement('div');
       list.style.marginTop = '12px';
 
@@ -283,8 +303,11 @@
           el.style.background = '#0e0e0f';
           el.style.border = '1px solid rgba(255,255,255,0.02)';
           el.textContent = `${letterForIndex(i)}. ${ (typeof c === 'string') ? c : (c.text || '') }`;
+
+          // add same visual hints in the feedback block if you want
           if (i === d.correctIndex) el.classList.add('correct');
           if (i === d.yourIndex && !d.correct) el.classList.add('wrong');
+
           choicesContainer.appendChild(el);
         });
         header.appendChild(choicesContainer);
@@ -292,6 +315,7 @@
       });
 
       result.appendChild(list);
+      result.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function escapeHtml(s){
