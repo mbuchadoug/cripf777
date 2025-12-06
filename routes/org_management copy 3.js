@@ -448,7 +448,7 @@ router.get(
 /*  ORG DASHBOARD (employees/managers)                                */
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
-// ORG DASHBOARD for employees and managers
+
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -463,10 +463,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
-    // All modules for this org
     const modules = await OrgModule.find({ org: org._id }).lean();
-
-    // All quiz instances assigned to THIS user in THIS org
     const exams = await ExamInstance.find({
       org: org._id,
       user: req.user._id,
@@ -474,7 +471,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Group quizzes by module slug
     const quizzesByModule = {};
     const now = new Date();
 
@@ -486,10 +482,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       if (ex.finishedAt) status = "completed";
       else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
-      const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(
-        ex.examId
-      )}`;
-
       quizzesByModule[key].push({
         examId: ex.examId,
         module: ex.module,
@@ -497,7 +489,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         expiresAt: ex.expiresAt,
         finishedAt: ex.finishedAt,
         status,
-        openUrl,           // <-- prebuilt URL
       });
     }
 
@@ -629,20 +620,26 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
     const slug = String(req.params.slug || "");
     const examId = String(req.query.examId || "");
 
-    if (!examId) return res.status(400).send("Missing examId");
+    if (!examId) {
+      return res.status(400).send("Missing examId");
+    }
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
+    // Ensure this user belongs to the org
     const membership = await OrgMembership.findOne({
       org: org._id,
       user: req.user._id,
     }).lean();
+
     if (!membership) {
-      return res.status(403).send("You are not a member of this organization");
+      return res
+        .status(403)
+        .send("You are not a member of this organization");
     }
 
-    // Use existing LMS quiz UI
+    // Hand off to the existing LMS quiz UI, which already uses /api/lms/quiz
     return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}`);
   } catch (err) {
     console.error("[org quiz] error:", err && (err.stack || err));
