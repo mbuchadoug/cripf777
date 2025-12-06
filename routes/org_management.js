@@ -636,71 +636,49 @@ router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (r
 // ADMIN: ORG MODULES UI
 // ======================
 
-// Show "Manage Modules" page for an org
-router.get(
-  "/admin/orgs/:slug/modules",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "");
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
+router.get("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("Org not found");
 
-      const modules = await OrgModule.find({ org: org._id }).sort({ slug: 1 }).lean();
+    const modules = await OrgModule.find({ org: org._id }).lean();
 
-      return res.render("admin/org_modules", { org, modules });
-    } catch (err) {
-      console.error("[admin org modules GET] error:", err && (err.stack || err));
-      return res.status(500).send("failed");
-    }
+    res.render("admin/org_modules", {
+      org,
+      modules
+    });
+  } catch (err) {
+    console.error("Load modules error:", err);
+    res.status(500).send("Failed to load modules");
   }
-);
+});
+
 
 // Create / update a module for an org
-router.post(
-  "/admin/orgs/:slug/modules",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "");
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
+router.post("/admin/orgs/:slug/modules", ensureAuth, ensureAdminEmails, async (req, res) => {
+  try {
+    const orgSlug = req.params.slug;
+    const { slug, title, description } = req.body;
 
-      // Read and sanitize the incoming fields
-      const moduleSlug = String(req.body.moduleSlug || req.body.slug || "").trim().toLowerCase();
-      const title = String(req.body.title || "").trim();
-      const description = String(req.body.description || "").trim();
-
-      console.log("[modules POST] body =", req.body);
-      console.log("[modules POST] moduleSlug =", moduleSlug);
-
-      // Validate before hitting Mongo
-      if (!moduleSlug || !title) {
-        return res.status(400).send("Module slug and title are required");
-      }
-
-      await OrgModule.findOneAndUpdate(
-        { org: org._id, slug: moduleSlug },
-        {
-          $set: {
-            org: org._id,
-            slug: moduleSlug,       // <- this is what Mongoose needs
-            title,
-            description,
-          },
-        },
-        { upsert: true, runValidators: true }
-      );
-
-      return res.redirect(`/admin/orgs/${org.slug}/modules`);
-    } catch (err) {
-      console.error("[admin org modules POST] error:", err && (err.stack || err));
-      return res.status(500).send("failed");
+    if (!slug || !title) {
+      return res.status(400).send("Module slug and title are required");
     }
-  }
-);
 
+    const org = await Organization.findOne({ slug: orgSlug });
+    if (!org) return res.status(404).send("Org not found");
+
+    await OrgModule.findOneAndUpdate(
+      { org: org._id, slug },
+      { title, description },
+      { upsert: true, new: true }
+    );
+
+    res.redirect(`/admin/orgs/${orgSlug}/modules`);
+  } catch (err) {
+    console.error("Save module error:", err);
+    res.status(500).send("Failed to save module");
+  }
+});
 
 export default router;

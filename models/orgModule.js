@@ -2,13 +2,13 @@
 import mongoose from "mongoose";
 
 const OrgModuleSchema = new mongoose.Schema({
-  org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, required: true },
-  slug: { type: String, required: true },
+  org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true },
+
+  slug: { type: String, required: true },     // ✅ REQUIRED
   title: { type: String, required: true },
-  description: { type: String, default: "" },
-  createdAt: { type: Date, default: () => new Date() }
+  description: { type: String },
+
+  createdAt: { type: Date, default: Date.now }
 });
 
-OrgModuleSchema.index({ org: 1, slug: 1 }, { unique: true });
-
-export default mongoose.models.OrgModule || mongoose.model("OrgModule", OrgModuleSchema);
+export default mongoose.model("OrgModule", OrgModuleSchema);
