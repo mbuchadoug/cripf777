@@ -808,7 +808,7 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
     return res.render("lms/quiz", {
       user: req.user,
       quizCount: 20,                                // <= 20 questions
-      moduleLabel: `${moduleNameRaw} — ${org.slug} Quiz`,
+      moduleLabel: `${moduleNameRaw} | ${org.slug} Quiz`,
       moduleKey,                                    // used for filtering in API
       orgSlug: org.slug,
     });

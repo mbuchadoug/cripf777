@@ -20,9 +20,8 @@ async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
       match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
     }
 
-    // org filter
+    // org filter: org-specific OR global (organization: null / missing)
     if (orgSlug) {
-      // ORG quiz -> org-specific OR global
       const org = await Organization.findOne({ slug: orgSlug }).lean();
       if (org) {
         match.$or = [
@@ -31,12 +30,6 @@ async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
           { organization: { $exists: false } },
         ];
       }
-    } else {
-      // DEMO quiz (no org param) -> ONLY global questions
-      match.$or = [
-        { organization: null },
-        { organization: { $exists: false } },
-      ];
     }
 
     const pipeline = [];
@@ -63,10 +56,7 @@ async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
       difficulty: d.difficulty || "medium",
     }));
   } catch (err) {
-    console.error(
-      "[fetchRandomQuestionsFromDB] error:",
-      err && (err.stack || err)
-    );
+    console.error("[fetchRandomQuestionsFromDB] error:", err && (err.stack || err));
     return null;
   }
 }
@@ -101,10 +91,7 @@ function fetchRandomQuestionsFromFile(count = 5) {
       difficulty: d.difficulty || "medium",
     }));
   } catch (err) {
-    console.error(
-      "[fetchRandomQuestionsFromFile] error:",
-      err && (err.stack || err)
-    );
+    console.error("[fetchRandomQuestionsFromFile] error:", err && (err.stack || err));
     return [];
   }
 }
