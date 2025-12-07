@@ -3,13 +3,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Manage Modules — {{org.name}}</title>
+  <title>Manage Modules | {{org.name}}</title>
 </head>
 <body>
   {{> navbar}}
 
   <main>
-    <h1>Manage Modules — {{org.name}}</h1>
+    <h1>Manage Modules | {{org.name}}</h1>
     <a href="/admin/orgs/{{org.slug}}/manage">← Back to org admin</a>
 
     <hr>
@@ -39,7 +39,7 @@
           <li>
             <strong>{{this.title}}</strong>
             ({{this.slug}})
-            — {{this.description}}
+            | {{this.description}}
           </li>
         {{/each}}
       </ul>

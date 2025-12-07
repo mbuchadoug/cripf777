@@ -70,7 +70,7 @@
         <section id="cert" style="margin-top:8px">
           <h3>Certification Pathway</h3>
           <ol style="color:#555">
-            <li>Intro — 15 minutes</li>
+            <li>Intro | 15 minutes</li>
             <li>Placement Responsibility Modules</li>
             <li>Decision Simulations</li>
             <li>Final Exam — pass to receive certificate</li>
@@ -86,7 +86,7 @@
         const res = await fetch('/api/lms/enroll', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ courseId })});
         const j = await res.json();
         if (j && j.success) {
-          alert('Enrolled — open first lesson from Modules.');
+          alert('Enrolled | open first lesson from Modules.');
           location.reload();
         } else {
           alert('Enroll failed: ' + (j && j.error));
