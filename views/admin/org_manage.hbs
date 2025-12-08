@@ -55,9 +55,9 @@
         {{#each invites}}
           <li data-invite-id="{{this._id}}">
             <span class="small">{{this.email}}</span>
-            <span class="muted"> — token: <code>{{this.token}}</code></span>
+            <span class="muted"> | token: <code>{{this.token}}</code></span>
             <span class="badge">{{#if this.used}}Used{{else}}Pending{{/if}}</span>
-            <span class="muted"> — created {{this.createdAt}}</span>
+            <span class="muted"> | created {{this.createdAt}}</span>
           </li>
         {{/each}}
       </ul>
