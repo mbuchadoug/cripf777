@@ -215,7 +215,7 @@
           // append to invites list
           const ul = document.getElementById('invitesList');
           const li = document.createElement('li');
-          li.innerHTML = `${payload.email} — token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
+          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
           ul.prepend(li);
           f.reset();
         } catch (e) {
