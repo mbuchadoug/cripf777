@@ -34,40 +34,6 @@ function ensureAdminEmails(req, res, next) {
   next();
 }
 
-// helper: check platform admin boolean
-function isPlatformAdmin(req) {
-  const adminEmails = (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return !!(req.user && req.user.email && adminEmails.includes(req.user.email.toLowerCase()));
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helper: allow platform admin OR org manager (role)                 */
-/* ------------------------------------------------------------------ */
-async function allowPlatformAdminOrOrgManager(req, res, next) {
-  try {
-    if (isPlatformAdmin(req)) return next();
-
-    // not platform admin -> check org membership role
-    const slug = String(req.params.slug || "").trim();
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
-
-    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
-    if (!membership) return res.status(403).send("Admins only (org membership required)");
-
-    const role = String(membership.role || "").toLowerCase();
-    if (role === "manager" || role === "admin") return next();
-
-    return res.status(403).send("Admins only (insufficient role)");
-  } catch (e) {
-    console.error("[allowPlatformAdminOrOrgManager] error:", e && (e.stack || e));
-    return res.status(500).send("server error");
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /*  Nodemailer transporter helper                                     */
 /* ------------------------------------------------------------------ */
@@ -223,146 +189,6 @@ router.get(
 );
 
 /* ------------------------------------------------------------------ */
-/*  ADMIN: View attempts list (platform admins OR org managers)       */
-/*  GET /admin/orgs/:slug/attempts                                    */
-/* ------------------------------------------------------------------ */
-router.get(
-  "/admin/orgs/:slug/attempts",
-  ensureAuth,
-  allowPlatformAdminOrOrgManager,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "").trim();
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
-
-      // optional module filter
-      const moduleFilter = req.query.module ? String(req.query.module).trim() : null;
-
-      const filter = { organization: org._id };
-      if (moduleFilter) filter.module = moduleFilter;
-
-      const attempts = await Attempt.find(filter)
-        .populate("userId")
-        .sort({ createdAt: -1 })
-        .lean();
-
-      // shape some display fields
-      const rows = attempts.map(a => ({
-        _id: a._id,
-        userName: a.userId ? (a.userId.displayName || a.userId.name || a.userId.email || "") : "",
-        userEmail: a.userId ? a.userId.email || "" : "",
-        module: a.module || "",
-        score: a.score || 0,
-        maxScore: a.maxScore || 0,
-        passed: !!a.passed,
-        startedAt: a.startedAt,
-        finishedAt: a.finishedAt,
-        createdAt: a.createdAt
-      }));
-
-      // try render a template (admin/org_attempts) if available, else fallback to JSON
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.render("admin/org_attempts", { org, attempts: rows, moduleFilter: moduleFilter || "" });
-      }
-      return res.json({ org: org.slug, attempts: rows });
-    } catch (e) {
-      console.error("[admin attempts list] error:", e && (e.stack || e));
-      return res.status(500).send("failed to load attempts");
-    }
-  }
-);
-
-/* ------------------------------------------------------------------ */
-/*  ADMIN: View single attempt detail                                 */
-/*  GET /admin/orgs/:slug/attempts/:attemptId                         */
-/* ------------------------------------------------------------------ */
-router.get(
-  "/admin/orgs/:slug/attempts/:attemptId",
-  ensureAuth,
-  allowPlatformAdminOrOrgManager,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "").trim();
-      const attemptId = String(req.params.attemptId || "").trim();
-
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
-
-      const attempt = await Attempt.findById(attemptId).lean();
-      if (!attempt) return res.status(404).send("attempt not found");
-
-      // load questions referenced in attempt (if available)
-      const qIds = Array.isArray(attempt.questionIds) ? attempt.questionIds.map(String) : [];
-      let qDocs = [];
-      if (qIds.length) {
-        qDocs = await QuizQuestion.find({ _id: { $in: qIds } }).lean();
-      }
-
-      const qById = {};
-      for (const q of qDocs) qById[String(q._id)] = q;
-
-      // map answers array into lookup
-      const answersLookup = {};
-      if (Array.isArray(attempt.answers)) {
-        for (const a of attempt.answers) {
-          if (!a || !a.questionId) continue;
-          answersLookup[String(a.questionId)] = (typeof a.choiceIndex === "number") ? a.choiceIndex : null;
-        }
-      }
-
-      // Build details array preserving order of questionIds in attempt
-      const details = [];
-      for (const qid of qIds) {
-        const q = qById[qid] || null;
-        const yourIndex = answersLookup[qid] !== undefined ? answersLookup[qid] : null;
-
-        let correctIndex = null;
-        if (q) {
-          if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
-          else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-          else if (typeof q.correct === "number") correctIndex = q.correct;
-        }
-
-        const choices = (q && Array.isArray(q.choices)) ? q.choices.map(c => (typeof c === "string" ? c : c.text || "")) : [];
-
-        details.push({
-          questionId: qid,
-          text: q ? q.text : "(question not in DB)",
-          choices,
-          yourIndex,
-          correctIndex,
-          correct: (correctIndex !== null && yourIndex !== null) ? (correctIndex === yourIndex) : null
-        });
-      }
-
-      // attempt user info (populate if needed)
-      let userInfo = null;
-      if (attempt.userId) {
-        try {
-          const u = await User.findById(attempt.userId).lean();
-          if (u) userInfo = { _id: u._id, name: u.displayName || u.name || "", email: u.email || "" };
-        } catch (e) { /* ignore */ }
-      }
-
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.render("admin/org_attempt_detail", {
-          org,
-          attempt,
-          user: userInfo,
-          details
-        });
-      }
-
-      return res.json({ attemptId: attempt._id, org: org.slug, user: userInfo, score: attempt.score, maxScore: attempt.maxScore, details });
-    } catch (e) {
-      console.error("[admin attempt detail] error:", e && (e.stack || e));
-      return res.status(500).send("failed to load attempt details");
-    }
-  }
-);
-
-/* ------------------------------------------------------------------ */
 /*  PUBLIC: Join via invite token (must be logged in)                 */
 /*  GET /org/join/:token                                              */
 /* ------------------------------------------------------------------ */
@@ -414,7 +240,7 @@ router.post(
       if (!org) return res.status(404).json({ error: "org not found" });
 
       if (action === "remove") {
-        await OrgMembership.deleteOne({ org: org._1d, user: userId });
+        await OrgMembership.deleteOne({ org: org._id, user: userId });
         return res.json({ ok: true, action: "removed" });
       } else if (action === "promote") {
         await OrgMembership.findOneAndUpdate(
@@ -442,12 +268,250 @@ router.post(
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Assign quiz to employees                                   */
 /*  POST /admin/orgs/:slug/assign-quiz                                */
-/*  (kept unchanged except minor style)                               */
 /* ------------------------------------------------------------------ */
+/*router.post(
+  "/admin/orgs/:slug/assign-quiz",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const {
+        module = "general",
+        count = 20,
+        expiresMinutes = 60,
+      } = req.body || {};
 
-// (Keep your existing assign-quiz code here — I left it unchanged in your original file.)
-// For brevity in this file I will reuse the code block you already had above in your original file.
-// If you want me to paste the full assign-quiz implementation here too, tell me and I'll include it exactly as before.
+      // --- NORMALISE userIds coming from the form ---
+      let userIdsRaw = req.body.userIds || [];
+      // if only one was selected, Express gives a string, not an array
+      const userIds = Array.isArray(userIdsRaw)
+        ? userIdsRaw.filter(Boolean)
+        : [userIdsRaw].filter(Boolean);
+
+      if (!userIds.length) {
+        return res.status(400).json({ error: "userIds required" });
+      }
+      // ----------------------------------------------
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      const match = {
+        module: String(module).trim(),
+        $or: [{ organization: org._id }, { organization: null }],
+      };
+
+      const pipeline = [{ $match: match }, { $sample: { size: Number(count) } }];
+      let docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+
+      if (!docs || docs.length < count) {
+        docs = await QuizQuestion.aggregate([
+          {
+            $match: {
+              module: String(module).trim(),
+              $or: [{ organization: org._id }, { organization: null }],
+            },
+          },
+          { $sample: { size: Number(count) } },
+        ]).allowDiskUse(true);
+      }
+
+      if (!docs || !docs.length) {
+        return res
+          .status(404)
+          .json({ error: "no questions available for that module" });
+      }
+
+      const assigned = [];
+      const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
+
+      for (const uId of userIds) {
+        try {
+          const questionIds = [];
+          const choicesOrder = [];
+
+          for (const q of docs) {
+            questionIds.push(q._id);
+            const n = (q.choices || []).length;
+            const indices = Array.from({ length: n }, (_, i) => i);
+            // shuffle choices
+            for (let i = indices.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            choicesOrder.push(indices);
+          }
+
+          const examId = crypto.randomUUID();
+          const expiresAt = new Date(
+            Date.now() + Number(expiresMinutes) * 60 * 1000
+          );
+
+          await ExamInstance.create({
+            examId,
+            org: org._id,
+            module,
+            user: mongoose.Types.ObjectId(uId),
+            questionIds,
+            choicesOrder,
+            expiresAt,
+            createdByIp: req.ip,
+          });
+
+          if (Attempt) {
+            await Attempt.create({
+              userId: mongoose.Types.ObjectId(uId),
+              organization: org._id,
+              module,
+              questionIds,
+              startedAt: new Date(),
+              maxScore: questionIds.length,
+            });
+          }
+
+          const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
+          assigned.push({ userId: uId, examId, url });
+        } catch (e) {
+          console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
+        }
+      }
+
+      // for now just redirect back to manage page with a simple message via query
+      return res.redirect(`/admin/orgs/${slug}/manage?assigned=${assigned.length}`);
+      // (if you prefer JSON, you can instead: res.json({ ok: true, assigned });
+    } catch (err) {
+      console.error("[assign quiz] error:", err && (err.stack || err));
+      return res.status(500).json({ error: "assign failed" });
+    }
+  }
+);*/
+
+// ADMIN: Assign quiz to employees
+// ADMIN: Assign quiz to employees
+router.post(
+  "/admin/orgs/:slug/assign-quiz",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      let { module = "general", userIds = [], count = 20, expiresMinutes = 60 } =
+        req.body || {};
+
+      // userIds from <select multiple> come as a flat array of strings
+      if (!Array.isArray(userIds) || !userIds.length) {
+        return res.status(400).json({ error: "userIds required" });
+      }
+
+      // normalize module to lowercase
+      const moduleKey = String(module).trim().toLowerCase();
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      // case-insensitive match on module + org/global questions
+      const match = {
+        $or: [{ organization: org._id }, { organization: null }],
+        module: { $regex: new RegExp(`^${moduleKey}$`, "i") },
+      };
+
+      // how many questions exist for debugging
+      const totalAvailable = await QuizQuestion.countDocuments(match);
+      console.log(
+        "[assign quiz] available questions:",
+        totalAvailable,
+        "for module=",
+        moduleKey,
+        "org=",
+        org._id.toString()
+      );
+
+      if (!totalAvailable) {
+        return res
+          .status(404)
+          .json({ error: "no questions available for that module" });
+      }
+
+      // we cannot take more than we actually have
+      count = Math.min(Number(count) || 1, totalAvailable);
+
+      // sample `count` questions
+      const pipeline = [{ $match: match }, { $sample: { size: count } }];
+      const docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+
+      if (!docs || !docs.length) {
+        return res
+          .status(404)
+          .json({ error: "no questions returned from sampling" });
+      }
+
+      const assigned = [];
+      const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
+
+      for (const uId of userIds) {
+        try {
+          const questionIds = [];
+          const choicesOrder = [];
+
+          for (const q of docs) {
+            questionIds.push(q._id);
+            const n = (q.choices || []).length;
+            const indices = Array.from({ length: n }, (_, i) => i);
+            // shuffle choices
+            for (let i = indices.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            choicesOrder.push(indices);
+          }
+
+          const examId = crypto.randomUUID();
+          const expiresAt = new Date(
+            Date.now() + Number(expiresMinutes) * 60 * 1000
+          );
+
+          await ExamInstance.create({
+            examId,
+            org: org._id,
+            module: moduleKey,
+            user: mongoose.Types.ObjectId(uId),
+            questionIds,
+            choicesOrder,
+            expiresAt,
+            createdAt: new Date(),
+            createdByIp: req.ip,
+          });
+
+          if (Attempt) {
+            await Attempt.create({
+              userId: mongoose.Types.ObjectId(uId),
+              organization: org._id,
+              module: moduleKey,
+              questionIds,
+              startedAt: new Date(),
+              maxScore: questionIds.length,
+            });
+          }
+
+          const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
+          assigned.push({ userId: uId, examId, url });
+        } catch (e) {
+          console.warn(
+            "[assign-quiz] user assign failed",
+            uId,
+            e && (e.stack || e)
+          );
+        }
+      }
+
+      return res.json({ ok: true, assigned, countUsed: count });
+    } catch (err) {
+      console.error("[assign quiz] error:", err && (err.stack || err));
+      return res.status(500).json({ error: "assign failed" });
+    }
+  }
+);
 
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Export attempts CSV                                        */
@@ -510,6 +574,7 @@ router.get(
 /*  ORG DASHBOARD (employees/managers)                                */
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
+// ORG DASHBOARD for employees and managers
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -547,6 +612,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       if (ex.finishedAt) status = "completed";
       else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
+           // ex.module is stored lower-case (e.g. "responsibility")
       const moduleKey = (ex.module || "responsibility").toLowerCase();
       const moduleLabel =
         moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
@@ -565,13 +631,8 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         status,
         openUrl,
       });
-    }
 
-    // compute isAdmin for template: platform admin OR org manager/admin
-    const platformAdmin = isPlatformAdmin(req);
-    const orgRole = String(membership.role || "").toLowerCase();
-    const isOrgManager = orgRole === "manager" || orgRole === "admin";
-    const isAdmin = !!(platformAdmin || isOrgManager);
+    }
 
     return res.render("org/dashboard", {
       org,
@@ -579,7 +640,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       modules,
       user: req.user,
       quizzesByModule,
-      isAdmin
     });
   } catch (err) {
     console.error("[org dashboard] error:", err && (err.stack || err));
@@ -628,10 +688,75 @@ router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Member-facing quiz launcher for an org                             */
-/*  GET /org/:slug/quiz?examId=...                                     */
+/*  ADMIN: ORG MODULES UI                                             */
+/*  GET  /admin/orgs/:slug/modules                                    */
+/*  POST /admin/orgs/:slug/modules (create/update)                    */
 /* ------------------------------------------------------------------ */
 
+router.get(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("Org not found");
+
+      const modules = await OrgModule.find({ org: org._id }).lean();
+
+      res.render("admin/org_modules", {
+        org,
+        modules,
+      });
+    } catch (err) {
+      console.error("Load modules error:", err);
+      res.status(500).send("Failed to load modules");
+    }
+  }
+);
+
+router.post(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const orgSlug = req.params.slug;
+      const { slug, title, description } = req.body;
+
+      if (!slug || !title) {
+        return res.status(400).send("Module slug and title are required");
+      }
+
+      const org = await Organization.findOne({ slug: orgSlug });
+      if (!org) return res.status(404).send("Org not found");
+
+      await OrgModule.findOneAndUpdate(
+        { org: org._id, slug },
+        { title, description },
+        { upsert: true, new: true }
+      );
+
+      res.redirect(`/admin/orgs/${orgSlug}/modules`);
+    } catch (err) {
+      if (err.code === 11000) {
+        console.warn("[modules] duplicate org/slug ignored", err.keyValue);
+        return res.redirect(`/admin/orgs/${req.params.slug}/modules?dup=1`);
+      }
+
+      console.error("Save module error:", err);
+      res.status(500).send("Failed to save module");
+    }
+  }
+);
+
+
+
+
+
+// Member-facing quiz launcher for an org
+// Member-facing quiz launcher for an org
 router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -658,9 +783,10 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   }
 });
 
-/* ------------------------------------------------------------------ */
-/*  ORG QUIZ: employees/managers take module quiz (20 questions)       */
-/* ------------------------------------------------------------------ */
+
+// ... all your other code above unchanged ...
+
+// ORG QUIZ: employees/managers take module quiz (20 questions)
 router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
@@ -677,13 +803,13 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
-    const moduleKey = moduleNameRaw.toLowerCase();
+    const moduleKey = moduleNameRaw.toLowerCase(); // how you stored it in DB
 
     return res.render("lms/quiz", {
       user: req.user,
-      quizCount: 20,
+      quizCount: 20,                                // <= 20 questions
       moduleLabel: `${moduleNameRaw} | ${org.slug} Quiz`,
-      moduleKey,
+      moduleKey,                                    // used for filtering in API
       orgSlug: org.slug,
     });
   } catch (err) {
@@ -692,5 +818,7 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   }
 });
 
-// export default router
+// export default router at bottom of file (already present)
+
+
 export default router;

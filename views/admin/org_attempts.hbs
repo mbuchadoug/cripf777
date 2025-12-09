@@ -1,0 +1,42 @@
+{{!-- views/admin/org_attempts.hbs --}}
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Attempts — {{org.name}}</title></head>
+<body style="font-family:system-ui, Arial; padding:20px;">
+  <h1>Attempts for {{org.name}}</h1>
+  <p><a href="/admin/orgs/{{org.slug}}/manage">Back to org</a></p>
+
+  {{#if attempts.length}}
+    <table style="border-collapse:collapse; width:100%; max-width:1000px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd">When</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd">User</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd">Module</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd">Score</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd">Status</th>
+          <th style="padding:8px; border-bottom:1px solid #ddd">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each attempts}}
+          <tr>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">{{createdAt}}</td>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">{{#if this.userId}}{{this.userId.name}}<br><small>{{this.userId.email}}</small>{{else}}Unknown{{/if}}</td>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">{{this.module}}</td>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">{{this.score}} / {{this.maxScore}}</td>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">{{#if this.finishedAt}}Finished{{else}}In Progress{{/if}}</td>
+            <td style="padding:8px; border-bottom:1px solid #f1f1f1">
+              <a href="/admin/orgs/{{../org.slug}}/attempts/{{this._id}}">View</a>
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  {{else}}
+    <p>No attempts found.</p>
+  {{/if}}
+</body>
+</html>
+
+

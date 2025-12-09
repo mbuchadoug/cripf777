@@ -17,6 +17,9 @@ import lmsRoutes from "./routes/lms.js";
 import apiLmsRoutes from "./routes/api_lms.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import User from "./models/user.js";
+import adminAttempts from "./routes/admin_attempts.js";
+
+
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
@@ -122,6 +125,8 @@ app.use("/admin", adminRoutes);
 // API routes — keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", apiLmsRoutes);
 
+
+app.use("/", adminAttempts);
 // Other API-level routes (tracking, etc.)
 app.use("/api", trackRouter);
 

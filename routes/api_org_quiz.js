@@ -82,6 +82,8 @@ router.post("/:slug/quiz/generate", ensureAuth, async (req, res) => {
 });
 
 // POST /api/org/:slug/quiz/submit
+
+/*
 router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
@@ -138,6 +140,104 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
     console.error("[api_org_quiz/submit] error:", e && e.stack);
     return res.status(500).json({ error: "submit failed" });
   }
+});*/
+
+
+// routes/api_org_quiz.js — replace the existing POST "/:slug/quiz/submit" handler with this
+
+router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "").trim();
+    const { examId, answers = [] } = req.body || {};
+    if (!examId) return res.status(400).json({ error: "examId required" });
+    if (!Array.isArray(answers) || !answers.length) return res.status(400).json({ error: "answers required" });
+
+    const exam = await ExamInstance.findOne({ examId }).lean();
+    if (!exam) return res.status(404).json({ error: "exam not found" });
+    if (exam.expiresAt && new Date() > new Date(exam.expiresAt)) return res.status(400).json({ error: "exam expired" });
+
+    // ensure membership and ownership
+    const org = await Organization.findById(exam.org).lean();
+    if (!org) return res.status(404).json({ error: "org not found" });
+    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+    if (!membership) return res.status(403).json({ error: "not a member" });
+
+    // load questions
+    const qDocs = await QuizQuestion.find({ _id: { $in: exam.questionIds } }).lean();
+    const qById = {};
+    for (const q of qDocs) qById[String(q._id)] = q;
+
+    // compute score by mapping shown-index -> original-index using choicesOrder
+    let correct = 0;
+    const details = [];
+
+    for (let i = 0; i < exam.questionIds.length; i++) {
+      const qid = String(exam.questionIds[i]);
+      const q = qById[qid];
+      const mapping = Array.isArray(exam.choicesOrder && exam.choicesOrder[i]) ? exam.choicesOrder[i] : null;
+      const given = answers.find(a => String(a.questionId) === qid);
+      const yourShownIndex = (given && Number.isFinite(Number(given.choiceIndex))) ? Number(given.choiceIndex) : null;
+
+      // map shown -> original index
+      const mappedIndex = (mapping && yourShownIndex !== null && mapping[yourShownIndex] !== undefined) ? mapping[yourShownIndex] : null;
+      const correctIndex = (q && (typeof q.answerIndex === "number" || typeof q.answerIndex === "string")) ? Number(q.answerIndex) : null;
+      const isCorrect = (mappedIndex !== null && correctIndex !== null && mappedIndex === correctIndex);
+      if (isCorrect) correct++;
+
+      // For admin review, record the textual choices where available
+      const shownChoiceText = (mapping && yourShownIndex !== null && q && q.choices && q.choices[mapping[yourShownIndex]] !== undefined)
+        ? q.choices[mapping[yourShownIndex]]
+        : null;
+      const correctChoiceText = (q && q.choices && typeof correctIndex === "number" && q.choices[correctIndex] !== undefined)
+        ? q.choices[correctIndex]
+        : null;
+
+      details.push({
+        questionId: qid,
+        questionText: q ? q.text : null,
+        yourShownIndex,
+        mappedIndex,
+        correctIndex,
+        yourAnswerText: shownChoiceText,
+        correctAnswerText: correctChoiceText,
+        correct: !!isCorrect
+      });
+    }
+
+    const total = exam.questionIds.length;
+    const percentage = Math.round((correct / Math.max(1, total)) * 100);
+    const passThreshold = Number(process.env.LMS_PASS_PERCENT || 60);
+    const passed = percentage >= passThreshold;
+
+    // update Attempt record (latest one) to include details & finished flag
+    await Attempt.findOneAndUpdate(
+      { userId: req.user._id, organization: org._id, module: exam.module },
+      {
+        $set: {
+          finishedAt: new Date(),
+          score: correct,
+          maxScore: total,
+          passed,
+          answers: details.map(d => ({
+            questionId: d.questionId,
+            yourShownIndex: d.yourShownIndex,
+            mappedIndex: d.mappedIndex,
+            correctIndex: d.correctIndex,
+            yourAnswerText: d.yourAnswerText,
+            correctAnswerText: d.correctAnswerText,
+            correct: d.correct
+          }))
+        }
+      },
+      { sort: { createdAt: -1 }, upsert: false }
+    );
+
+    return res.json({ examId, score: correct, total, percentage, passed, details });
+  } catch (e) {
+    console.error("[api_org_quiz/submit] error:", e && e.stack);
+    return res.status(500).json({ error: "submit failed" });
+  }
 });
+
 
 export default router;

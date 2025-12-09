@@ -21,7 +21,6 @@
     }
     .quiz-status{font-size:14px;color:#555}
     .links-row a + a{margin-left:12px}
-    .admin-link { display:inline-block; margin-left:12px; padding:6px 10px; border-radius:6px; background:#1e90ff; color:#fff; text-decoration:none; font-size:14px; }
   </style>
 </head>
 <body>
@@ -30,14 +29,6 @@
   <main>
     <h1>{{org.name}} | Dashboard</h1>
     <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
-
-    {{!-- Admin area link (visible only when server sets isAdmin=true) --}}
-    {{#if isAdmin}}
-      <p>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">Admin · Manage</a>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">Admin · View Attempts</a>
-      </p>
-    {{/if}}
 
     <h2>Modules</h2>
     {{#if modules.length}}
@@ -69,11 +60,12 @@
         {{#each this}}
           <div class="quiz-block">
             <div>
-              <strong>Assigned quiz:</strong> {{examId}}
+                      <strong>Assigned quiz:</strong> {{examId}}
               &nbsp;|&nbsp;
               <a href="{{openUrl}}">
                 Open assigned 20-question quiz
               </a>
+
             </div>
             <div class="quiz-status">
               Status: {{status}}
