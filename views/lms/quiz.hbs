@@ -133,7 +133,6 @@
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
 
-
     let examId = null;
     let series = [];
     let answers = {};
@@ -233,7 +232,7 @@
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-                const params = new URLSearchParams();
+        const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
@@ -275,20 +274,32 @@
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
       try {
-        const res = await fetch('/api/lms/quiz/submit', {
+        // choose correct submit URL:
+        // - org quiz -> POST /api/org/:slug/quiz/submit
+        // - demo -> POST /api/lms/quiz/submit
+        let submitUrl = '/api/lms/quiz/submit';
+        if (ORG_SLUG && ORG_SLUG.trim()) {
+          submitUrl = '/api/org/' + encodeURIComponent(ORG_SLUG) + '/quiz/submit';
+        }
+
+        const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+
         if (!res.ok) {
-          const t = await res.json().catch(()=>null);
-          throw new Error((t && (t.error || t.message)) || 'submit failed');
+          let t;
+          try { t = await res.json(); } catch(e) { t = await res.text().catch(()=>null); }
+          throw new Error((t && (t.error || t.message)) || t || res.statusText || 'submit failed');
         }
+
         const out = await res.json();
         showResult(out);
         status.textContent = '';
       } catch (err) {
         status.textContent = 'Error: ' + (err.message || err);
+        console.error("[quiz submit] error:", err);
       } finally {
         submitBtn.disabled = false;
       }
@@ -302,7 +313,7 @@
         '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
-        ' (pass ' + resp.passThreshold + '%)</div>' +
+        ' (pass ' + (resp.passThreshold || resp.passThreshold === 0 ? resp.passThreshold : (resp.passThreshold || 60)) + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
