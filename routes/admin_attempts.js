@@ -64,7 +64,7 @@ router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth, async (req, res)
       .populate("user", "email name")
       .lean();
 
-    res.render("admin/org_attempt_review", {
+    res.render("admin/org_attempt_detail", {
       org,
       attempt,
       exam,
