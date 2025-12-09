@@ -145,7 +145,6 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
 
 // routes/api_org_quiz.js — replace the existing POST "/:slug/quiz/submit" handler with this
 
-// POST /api/org/:slug/quiz/submit  (replace the old handler with this)
 router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
@@ -153,62 +152,44 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
     if (!examId) return res.status(400).json({ error: "examId required" });
     if (!Array.isArray(answers) || !answers.length) return res.status(400).json({ error: "answers required" });
 
-    // find the exam instance (must exist)
     const exam = await ExamInstance.findOne({ examId }).lean();
     if (!exam) return res.status(404).json({ error: "exam not found" });
+    if (exam.expiresAt && new Date() > new Date(exam.expiresAt)) return res.status(400).json({ error: "exam expired" });
 
-    // check expiry
-    if (exam.expiresAt && new Date() > new Date(exam.expiresAt)) {
-      return res.status(400).json({ error: "exam expired" });
-    }
-
-    // ensure membership (user must belong to org)
+    // ensure membership and ownership
     const org = await Organization.findById(exam.org).lean();
     if (!org) return res.status(404).json({ error: "org not found" });
-
     const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
     if (!membership) return res.status(403).json({ error: "not a member" });
 
-    // load the quiz questions referenced in the exam
+    // load questions
     const qDocs = await QuizQuestion.find({ _id: { $in: exam.questionIds } }).lean();
     const qById = {};
     for (const q of qDocs) qById[String(q._id)] = q;
 
-    // score: map shownIndex -> originalIndex using exam.choicesOrder
-    let correctCount = 0;
+    // compute score by mapping shown-index -> original-index using choicesOrder
+    let correct = 0;
     const details = [];
 
-    for (let i = 0; i < (exam.questionIds || []).length; i++) {
+    for (let i = 0; i < exam.questionIds.length; i++) {
       const qid = String(exam.questionIds[i]);
-      const q = qById[qid] || null;
-
-      // mapping: for question i, exam.choicesOrder[i] gives mapping shownIndex -> originalIndex
+      const q = qById[qid];
       const mapping = Array.isArray(exam.choicesOrder && exam.choicesOrder[i]) ? exam.choicesOrder[i] : null;
-
-      // find the submitted answer for this question (answers array contains objects with questionId + choiceIndex (shown index) )
       const given = answers.find(a => String(a.questionId) === qid);
       const yourShownIndex = (given && Number.isFinite(Number(given.choiceIndex))) ? Number(given.choiceIndex) : null;
 
-      // mappedIndex = original index in the stored question choices array
-      const mappedIndex = (mapping && yourShownIndex !== null && mapping[yourShownIndex] !== undefined)
-        ? mapping[yourShownIndex]
-        : null;
-
-      // get the canonical correct index from question doc (answerIndex / correctIndex)
-      const correctIndex = (q && (typeof q.answerIndex === "number" || typeof q.answerIndex === "string"))
-        ? Number(q.answerIndex)
-        : (q && typeof q.correctIndex === "number" ? q.correctIndex : null);
-
+      // map shown -> original index
+      const mappedIndex = (mapping && yourShownIndex !== null && mapping[yourShownIndex] !== undefined) ? mapping[yourShownIndex] : null;
+      const correctIndex = (q && (typeof q.answerIndex === "number" || typeof q.answerIndex === "string")) ? Number(q.answerIndex) : null;
       const isCorrect = (mappedIndex !== null && correctIndex !== null && mappedIndex === correctIndex);
-      if (isCorrect) correctCount++;
+      if (isCorrect) correct++;
 
-      // textual choices (original stored choices)
-      const correctChoiceText = (q && Array.isArray(q.choices) && typeof correctIndex === "number" && q.choices[correctIndex] !== undefined)
-        ? (typeof q.choices[correctIndex] === "string" ? q.choices[correctIndex] : (q.choices[correctIndex].text || q.choices[correctIndex]))
+      // For admin review, record the textual choices where available
+      const shownChoiceText = (mapping && yourShownIndex !== null && q && q.choices && q.choices[mapping[yourShownIndex]] !== undefined)
+        ? q.choices[mapping[yourShownIndex]]
         : null;
-
-      const yourAnswerText = (q && Array.isArray(q.choices) && mappedIndex !== null && q.choices[mappedIndex] !== undefined)
-        ? (typeof q.choices[mappedIndex] === "string" ? q.choices[mappedIndex] : (q.choices[mappedIndex].text || q.choices[mappedIndex]))
+      const correctChoiceText = (q && q.choices && typeof correctIndex === "number" && q.choices[correctIndex] !== undefined)
+        ? q.choices[correctIndex]
         : null;
 
       details.push({
@@ -217,88 +198,46 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
         yourShownIndex,
         mappedIndex,
         correctIndex,
-        yourAnswerText,
+        yourAnswerText: shownChoiceText,
         correctAnswerText: correctChoiceText,
         correct: !!isCorrect
       });
     }
 
-    const total = (exam.questionIds || []).length;
-    const percentage = Math.round((correctCount / Math.max(1, total)) * 100);
+    const total = exam.questionIds.length;
+    const percentage = Math.round((correct / Math.max(1, total)) * 100);
     const passThreshold = Number(process.env.LMS_PASS_PERCENT || 60);
     const passed = percentage >= passThreshold;
 
-    // 1) Update ExamInstance (mark finished + store summary)
-    try {
-      await ExamInstance.updateOne(
-        { _id: exam._id },
-        {
-          $set: {
-            finishedAt: new Date(),
-            score: correctCount,
-            percentage,
-            passed,
-            finishedByIp: req.ip,
-            // small summary for quick admin list checks
-            answersSummary: details.map(d => ({
-              questionId: d.questionId,
-              yourShownIndex: d.yourShownIndex,
-              mappedIndex: d.mappedIndex,
-              correct: d.correct
-            }))
-          }
+    // update Attempt record (latest one) to include details & finished flag
+    await Attempt.findOneAndUpdate(
+      { userId: req.user._id, organization: org._id, module: exam.module },
+      {
+        $set: {
+          finishedAt: new Date(),
+          score: correct,
+          maxScore: total,
+          passed,
+          answers: details.map(d => ({
+            questionId: d.questionId,
+            yourShownIndex: d.yourShownIndex,
+            mappedIndex: d.mappedIndex,
+            correctIndex: d.correctIndex,
+            yourAnswerText: d.yourAnswerText,
+            correctAnswerText: d.correctAnswerText,
+            correct: d.correct
+          }))
         }
-      );
-    } catch (e) {
-      console.warn("[submit] failed updating ExamInstance:", e && (e.stack || e));
-    }
+      },
+      { sort: { createdAt: -1 }, upsert: false }
+    );
 
-    // 2) Update the Attempt record (latest attempt for that user/org/module)
-    // Save an answers array that includes `choiceIndex` so the admin view can read it.
-    try {
-      const attemptAnswers = details.map(d => ({
-        questionId: d.questionId,
-        // preserve the shown index selection so admin UI (which expects choiceIndex) can show what the user clicked
-        choiceIndex: (d.yourShownIndex !== undefined && d.yourShownIndex !== null) ? d.yourShownIndex : null,
-        mappedIndex: d.mappedIndex,
-        correctIndex: d.correctIndex,
-        yourAnswerText: d.yourAnswerText,
-        correctAnswerText: d.correctAnswerText,
-        correct: d.correct
-      }));
-
-      await Attempt.findOneAndUpdate(
-        { userId: req.user._id, organization: org._id, module: exam.module },
-        {
-          $set: {
-            finishedAt: new Date(),
-            score: correctCount,
-            maxScore: total,
-            passed,
-            answers: attemptAnswers
-          }
-        },
-        { sort: { createdAt: -1 }, upsert: false }
-      );
-    } catch (e) {
-      console.warn("[submit] failed updating Attempt:", e && (e.stack || e));
-    }
-
-    // final response
-    return res.json({
-      examId,
-      score: correctCount,
-      total,
-      percentage,
-      passed,
-      details
-    });
+    return res.json({ examId, score: correct, total, percentage, passed, details });
   } catch (e) {
-    console.error("[api_org_quiz/submit] error:", e && (e.stack || e));
+    console.error("[api_org_quiz/submit] error:", e && e.stack);
     return res.status(500).json({ error: "submit failed" });
   }
 });
-
 
 
 export default router;
