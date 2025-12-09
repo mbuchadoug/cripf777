@@ -1,10 +1,13 @@
-// routes/lms_api.js  (REPLACE WHOLE FILE)
+// routes/lms_api.js
 import { Router } from "express";
 import mongoose from "mongoose";
 import Question from "../models/question.js";
 import Organization from "../models/organization.js";
+import ExamInstance from "../models/examInstance.js";
+import Attempt from "../models/attempt.js";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -36,6 +39,9 @@ function fetchRandomQuestionsFromFile(count = 5) {
 
 /**
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
+ *
+ * - returns { examId, series }
+ * - persists an ExamInstance (org quizzes) and a starter Attempt record so admin can later view attempts
  */
 router.get("/quiz", async (req, res) => {
   let count = parseInt(req.query.count || "5", 10);
@@ -88,7 +94,47 @@ router.get("/quiz", async (req, res) => {
       series = fetchRandomQuestionsFromFile(count);
     }
 
-    const examId = "exam-" + Date.now().toString(36);
+    // Create an examId
+    const examId = "exam-" + crypto.randomBytes(8).toString("hex");
+
+    // Persist an ExamInstance for org quizzes (helps mapping when submit occurs)
+    try {
+      const qIds = series
+        .map(s => {
+          // if id looks like an ObjectId, keep it; otherwise leave null.
+          return mongoose.isValidObjectId(s.id) ? mongoose.Types.ObjectId(s.id) : null;
+        })
+        .filter(Boolean);
+
+      // For org quizzes, create an ExamInstance so we can enforce ownership/expiry later
+      if (orgId) {
+        await ExamInstance.create({
+          examId,
+          org: orgId,
+          module: moduleKey || "general",
+          user: (req.user && req.user._id) || undefined,
+          questionIds: qIds,
+          choicesOrder: [], // left empty for now - you may fill with randomized mapping later
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60), // 1 hour default
+          createdByIp: req.ip,
+        });
+      }
+
+      // always create a starter Attempt record (useful for recording progress and for admin view)
+      await Attempt.create({
+        userId: (req.user && req.user._id) || undefined,
+        organization: orgId || undefined,
+        module: moduleKey || "general",
+        questionIds: qIds,
+        answers: [], // fill on submit
+        startedAt: new Date(),
+        maxScore: qIds.length || series.length,
+      });
+    } catch (e) {
+      // log but don't block client — fallback behavior still works
+      console.warn("[/api/lms/quiz] failed to persist exam/attempt starter:", e && e.stack);
+    }
+
     return res.json({ examId, series });
   } catch (err) {
     console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
@@ -99,6 +145,9 @@ router.get("/quiz", async (req, res) => {
 /**
  * POST /api/lms/quiz/submit
  * Body: { examId, answers: [{ questionId, choiceIndex }] }
+ *
+ * - If examId maps to an ExamInstance, we use that to map question order and update Attempt linked to this user/org
+ * - Otherwise fall back to legacy scoring (lookup questions in DB or static file)
  */
 router.post("/quiz/submit", async (req, res) => {
   try {
@@ -106,8 +155,21 @@ router.post("/quiz/submit", async (req, res) => {
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
     if (!answers.length) return res.status(400).json({ error: "No answers submitted" });
 
-    const qIds = answers.map((a) => a.questionId).filter(Boolean).map(String);
-    const dbIds = qIds.filter((id) => mongoose.isValidObjectId(id));
+    const examId = payload.examId || null;
+
+    // Try find exam instance if examId provided
+    let exam = null;
+    if (examId) {
+      try {
+        exam = await ExamInstance.findOne({ examId }).lean();
+      } catch (e) {
+        console.warn("[quiz/submit] ExamInstance lookup failed:", e && e.stack);
+      }
+    }
+
+    // Build a question lookup (by DB id or fallback file)
+    const qIds = answers.map(a => String(a.questionId)).filter(Boolean);
+    const dbIds = qIds.filter(id => mongoose.isValidObjectId(id));
 
     const byId = {};
     if (dbIds.length) {
@@ -119,9 +181,9 @@ router.post("/quiz/submit", async (req, res) => {
       }
     }
 
-    // optional file fallback (keep old behaviour)
+    // file fallback for any missing questions
     try {
-      const missing = qIds.filter((id) => !byId[id]);
+      const missing = qIds.filter(id => !byId[id]);
       if (missing.length) {
         const p = path.join(process.cwd(), "data", "data_questions.json");
         if (fs.existsSync(p)) {
@@ -136,43 +198,122 @@ router.post("/quiz/submit", async (req, res) => {
       console.error("[quiz/submit] file fallback error:", e && (e.stack || e));
     }
 
+    // if we have an exam instance that provides questionIds ordering, prefer that
+    const examQIds = Array.isArray(exam && exam.questionIds) ? exam.questionIds.map(String) : null;
+
+    // score
     let score = 0;
     const details = [];
 
-    for (const a of answers) {
-      const q = byId[String(a.questionId)];
-      const yourIndex =
-        typeof a.choiceIndex === "number" ? a.choiceIndex : null;
-
-      let correctIndex = null;
-      if (q) {
-        if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
-        else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-        else if (typeof q.correct === "number") correctIndex = q.correct;
-      }
-
-      const correct =
-        correctIndex !== null &&
-        yourIndex !== null &&
-        correctIndex === yourIndex;
-
-      if (correct) score++;
-
-      details.push({
-        questionId: a.questionId,
-        correctIndex: correctIndex !== null ? correctIndex : null,
-        yourIndex,
-        correct: !!correct,
-      });
+    // helper to pull correctIndex from a question document (DB or file)
+    function getCorrectIndex(q) {
+      if (!q) return null;
+      if (typeof q.correctIndex === "number") return q.correctIndex;
+      if (typeof q.answerIndex === "number") return q.answerIndex;
+      if (typeof q.correct === "number") return q.correct;
+      return null;
     }
 
-    const total = answers.length;
+    // Process used question list: if examQIds exists, iterate that to preserve order and mapping.
+    if (examQIds && examQIds.length) {
+      for (let i = 0; i < examQIds.length; i++) {
+        const qid = examQIds[i];
+        const q = byId[qid] || null;
+        const given = answers.find(a => String(a.questionId) === qid);
+        const yourIndex = (given && Number.isFinite(Number(given.choiceIndex))) ? Number(given.choiceIndex) : null;
+
+        const correctIndex = getCorrectIndex(q);
+        const isCorrect = (correctIndex !== null && yourIndex !== null && correctIndex === yourIndex);
+        if (isCorrect) score++;
+
+        details.push({
+          questionId: qid,
+          questionText: q ? q.text : null,
+          correctIndex: correctIndex !== null ? correctIndex : null,
+          yourIndex,
+          correct: !!isCorrect
+        });
+      }
+    } else {
+      // No exam instance: iterate answers array as provided
+      for (const a of answers) {
+        const qid = String(a.questionId);
+        const q = byId[qid] || null;
+        const yourIndex = (typeof a.choiceIndex === "number") ? a.choiceIndex : null;
+        const correctIndex = getCorrectIndex(q);
+        const isCorrect = (correctIndex !== null && yourIndex !== null && correctIndex === yourIndex);
+        if (isCorrect) score++;
+
+        details.push({
+          questionId: qid,
+          questionText: q ? q.text : null,
+          correctIndex: correctIndex !== null ? correctIndex : null,
+          yourIndex,
+          correct: !!isCorrect
+        });
+      }
+    }
+
+    const total = Math.max(1, details.length);
     const percentage = Math.round((score / Math.max(1, total)) * 100);
-    const passThreshold = 60;
+    const passThreshold = Number(process.env.QUIZ_PASS_THRESHOLD || 60);
     const passed = percentage >= passThreshold;
 
+    // Persist results to an Attempt record (try to update latest attempt for this user/org/module)
+    try {
+      // find a recent attempt for this user/org/module (if user available)
+      const filter = {};
+      if (req.user && req.user._id) filter.userId = req.user._id;
+      if (exam && exam.org) filter.organization = exam.org;
+      if (exam && exam.module) filter.module = exam.module;
+
+      // if no user (anonymous), attempt to match by startedAt window and module/org may be omitted
+      const update = {
+        $set: {
+          finishedAt: new Date(),
+          score,
+          maxScore: total,
+          passed,
+          answers: details.map(d => ({
+            questionId: mongoose.isValidObjectId(d.questionId) ? mongoose.Types.ObjectId(d.questionId) : d.questionId,
+            choiceIndex: d.yourIndex,
+            correctIndex: d.correctIndex,
+            correct: d.correct
+          }))
+        }
+      };
+
+      // try to update most recent Attempt matching the filter and not finished
+      const attempt = await Attempt.findOneAndUpdate(
+        Object.assign({}, filter, { finishedAt: { $exists: false } }),
+        update,
+        { sort: { createdAt: -1 }, new: true }
+      );
+
+      // If we didn't find an open attempt, create a new one
+      if (!attempt) {
+        await Attempt.create({
+          userId: (req.user && req.user._id) || undefined,
+          organization: (exam && exam.org) || undefined,
+          module: (exam && exam.module) || undefined,
+          questionIds: (examQIds && examQIds.map(id => (mongoose.isValidObjectId(id) ? mongoose.Types.ObjectId(id) : id))) || (qIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id))),
+          answers: update.$set.answers.map(a => ({ questionId: a.questionId, choiceIndex: a.choiceIndex })),
+          score,
+          maxScore: total,
+          passed,
+          startedAt: new Date(), // we didn't have startedAt — set to now
+          finishedAt: new Date()
+        });
+      }
+    } catch (e) {
+      console.warn("[quiz/submit] failed to persist attempt result:", e && e.stack);
+    }
+
+    // If this exam maps to an ExamInstance, optionally mark it finished or remove it (don't delete, just leave)
+    // You might want to set a finishedAt or mark exam as used — left intentionally simple here.
+
     return res.json({
-      examId: payload.examId || ("exam-" + Date.now().toString(36)),
+      examId: examId || ("exam-" + Date.now().toString(36)),
       total,
       score,
       percentage,
