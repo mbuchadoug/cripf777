@@ -133,11 +133,8 @@
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
 
-    // If page URL includes examId (e.g. ?examId=...), capture it so we include it in submit payload
-    const urlParams = new URLSearchParams(window.location.search || "");
-    const URL_EXAM_ID = (urlParams.get('examId') || '').trim() || null;
 
-    let examId = URL_EXAM_ID || null; // will be overwritten by API response if not provided
+    let examId = null;
     let series = [];
     let answers = {};
 
@@ -236,14 +233,10 @@
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        const params = new URLSearchParams();
+                const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
-
-        // If there's an examId in URL we still call the same endpoint (server may ignore/generate),
-        // but keep the examId param visible so we include it in submission later.
-        if (URL_EXAM_ID) params.set('examId', URL_EXAM_ID);
 
         const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
 
@@ -252,9 +245,7 @@
           throw new Error(t || res.statusText || 'failed to fetch quiz');
         }
         const payload = await res.json();
-        // If the API returned an examId use it (this is the demo sampling route).
-        // For org-assigned flow you may have examId from URL (URL_EXAM_ID)
-        if (payload.examId) examId = payload.examId;
+        examId = payload.examId || null;
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
         series = rawSeries.map(s => Object.assign({}, s));
@@ -283,14 +274,8 @@
 
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
-
-      // Use org submit endpoint when orgSlug exists, otherwise demo submit
-      const SUBMIT_URL = ORG_SLUG
-        ? `/api/org/${encodeURIComponent(ORG_SLUG)}/quiz/submit`
-        : `/api/lms/quiz/submit`;
-
       try {
-        const res = await fetch(SUBMIT_URL, {
+        const res = await fetch('/api/lms/quiz/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -314,10 +299,10 @@
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
-        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + (resp.percentage || 0) + '%</div>' +
+        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
-        ((resp.passed) ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
-        ' (pass ' + (resp.passThreshold || resp.passThreshold === 0 ? resp.passThreshold : (window.LMS_PASS_PERCENT || 60)) + '%)</div>' +
+        (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
+        ' (pass ' + resp.passThreshold + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
@@ -381,7 +366,6 @@
         .replace(/'/g,'&#039;');
     }
 
-    // initial load
     loadQuiz(DEFAULT_COUNT);
   })();
   </script>
