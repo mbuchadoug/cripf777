@@ -1,134 +1,78 @@
-// routes/admin_attempts.js — updated attempt detail viewer
-import { Router } from "express";
-import mongoose from "mongoose";
-import fs from "fs";
-import path from "path";
-import Organization from "../models/organization.js";
+import express from "express";
 import Attempt from "../models/attempt.js";
 import ExamInstance from "../models/examInstance.js";
-import Question from "../models/question.js";
+import Organization from "../models/organization.js";
+import User from "../models/user.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
-function getAdminSet() {
-  return new Set(
-    (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-function ensureAdminEmails(req, res, next) {
-  const adminEmails = Array.from(getAdminSet());
-  if (!req.user || !req.user.email) return res.status(403).send("Admins only");
-  if (!adminEmails.includes(req.user.email.toLowerCase())) return res.status(403).send("Admins only");
-  next();
-}
+const router = express.Router();
 
-const router = Router();
-
-router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth, ensureAdminEmails, async (req, res) => {
+// -------------------------------
+// LIST ATTEMPTS FOR AN ORG
+// -------------------------------
+router.get("/admin/orgs/:slug/attempts", ensureAuth, async (req, res) => {
   try {
-    const slug = String(req.params.slug || "");
-    const attemptId = String(req.params.attemptId || "");
+    const slug = req.params.slug;
     const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
 
-    if (!mongoose.isValidObjectId(attemptId)) return res.status(400).send("invalid attempt id");
+    if (!org) return res.status(404).send("Org not found.");
 
-    // load attempt
-    const attempt = await Attempt.findById(attemptId).lean();
-    if (!attempt) return res.status(404).send("attempt not found");
+    // 🔥 FIX: populate("userId")
+    const attempts = await Attempt.find({ organization: org._id })
+      .sort({ createdAt: -1 })
+      .populate("userId", "email name")   // <---- THIS IS THE FIX
+      .lean();
 
-    // Prefer question IDs stored on the attempt; if not present try ExamInstance
-    let qIdList = Array.isArray(attempt.questionIds) ? attempt.questionIds.map(String) : [];
+    // also load exam map for fallback
+    const examIds = attempts.map(a => a.examId);
+    const exams = await ExamInstance.find({ examId: { $in: examIds } })
+      .populate("user", "email name")
+      .lean();
 
-    if ((!qIdList || qIdList.length === 0) && attempt.examId) {
-      // try to find exam instance for fallback
-      const exam = await ExamInstance.findOne({ examId: attempt.examId }).lean().catch(() => null);
-      if (exam && Array.isArray(exam.questionIds)) qIdList = exam.questionIds.map(String);
-    }
+    const examMap = {};
+    for (const e of exams) examMap[e.examId] = e;
 
-    // try to load question docs from DB for any ObjectIds
-    const byId = {};
-    if (qIdList && qIdList.length) {
-      const dbIds = qIdList.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-      if (dbIds.length) {
-        const qDocs = await Question.find({ _id: { $in: dbIds } }).lean().exec();
-        for (const q of qDocs) byId[String(q._id)] = q;
-      }
-    }
+    res.render("admin/org_attempts", {
+      org,
+      attempts,
+      examMap,
+    });
 
-    // fallback to file data_questions.json if some questions not found in DB
-    try {
-      const p = path.join(process.cwd(), "data", "data_questions.json");
-      if (fs.existsSync(p)) {
-        const fileQ = JSON.parse(fs.readFileSync(p, "utf8"));
-        for (const fq of fileQ) {
-          const fid = String(fq.id || fq._id || fq.uuid || "");
-          if (fid && !byId[fid]) byId[fid] = fq;
-        }
-      }
-    } catch (e) {
-      console.error("[admin attempts] file fallback error:", e && (e.stack || e));
-    }
+  } catch (err) {
+    console.error("Admin attempts error:", err);
+    res.status(500).send("Server error");
+  }
+});
 
-    // Build QA array in the original question order (qIdList)
-    const answersArray = Array.isArray(attempt.answers) ? attempt.answers : [];
-    const answerMap = {};
-    for (const a of answersArray) {
-      const qid = String(a.questionId || "");
-      answerMap[qid] = a; // last one wins if duplicates
-    }
+// -------------------------------
+// VIEW SPECIFIC ATTEMPT
+// -------------------------------
+router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth, async (req, res) => {
+  try {
+    const { slug, attemptId } = req.params;
 
-    // For display: an ordered list of { index, questionId, text, choices, correctIndex, yourIndex, yourText, correct }
-    const qa = [];
-    for (let i = 0; i < qIdList.length; i++) {
-      const qid = String(qIdList[i] || "");
-      const q = byId[qid] || null;
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("Org not found");
 
-      // canonicalize choices array: DB may store [{text}] or ["A", "B"]
-      let choices = [];
-      let correctIndex = null;
-      let qText = "(question text unavailable)";
-      if (q) {
-        qText = q.text || q.title || q.question || qText;
-        if (Array.isArray(q.choices)) {
-          choices = q.choices.map(c => (typeof c === "string" ? { text: c } : { text: c.text || "" }));
-        }
-        // try multiple correct fields
-        if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
-        else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-        else if (typeof q.correct === "number") correctIndex = q.correct;
-      }
+    const attempt = await Attempt.findById(attemptId)
+      .populate("userId", "email name")
+      .lean();
 
-      const stored = answerMap[qid] || {}; // may be undefined if answers not persisted
-      const yourIndex = (typeof stored.choiceIndex === "number") ? stored.choiceIndex : null;
-      const yourText = (yourIndex !== null && Array.isArray(choices) && choices[yourIndex]) ? choices[yourIndex].text : null;
-      const isCorrect = (correctIndex !== null && yourIndex !== null && correctIndex === yourIndex);
+    if (!attempt) return res.status(404).send("Attempt not found");
 
-      qa.push({
-        index: i + 1,
-        questionId: qid,
-        text: qText,
-        choices,
-        correctIndex: correctIndex !== null ? correctIndex : null,
-        yourIndex,
-        yourText,
-        correct: !!isCorrect
-      });
-    }
+    const exam = await ExamInstance.findOne({ examId: attempt.examId })
+      .populate("user", "email name")
+      .lean();
 
-    // render template with attempt, qa list, and user
-    return res.render("admin/org_attempt_detail", {
+    res.render("admin/org_attempt_review", {
       org,
       attempt,
-      answers: answersArray,
-      qa,
-      user: attempt.userId
+      exam,
     });
+
   } catch (err) {
-    console.error("[admin attempt detail] error:", err && err.stack);
-    return res.status(500).send("failed");
+    console.error(err);
+    res.status(500).send("Error loading attempt");
   }
 });
 
