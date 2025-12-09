@@ -136,6 +136,8 @@ router.get("/quiz", async (req, res) => {
 router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
+    console.log("[quiz/submit] payload:", JSON.stringify(payload).slice(0, 2000)); // truncated log
+
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
     if (!answers.length) return res.status(400).json({ error: "No answers submitted" });
 
@@ -145,28 +147,33 @@ router.post("/quiz/submit", async (req, res) => {
 
     // Build set of question ids user submitted
     const qIds = answers.map(a => a.questionId).filter(Boolean).map(String);
+    console.log("[quiz/submit] qIds:", qIds.length, qIds.slice(0,10));
 
     // Try to find an ExamInstance if examId provided
     let exam = null;
     if (examId) {
-      exam = await ExamInstance.findOne({ examId }).lean().exec().catch(() => null);
+      exam = await ExamInstance.findOne({ examId }).lean().exec().catch(e => {
+        console.error("[quiz/submit] exam lookup error:", e && e.stack);
+        return null;
+      });
+      console.log("[quiz/submit] exam found?:", !!exam, examId);
     }
 
-    // Map to store question data
     const byId = {};
 
-    // 1) Load DB questions for any ObjectId-like ids
+    // load DB question docs for ObjectId-like ids
     const dbIds = qIds.filter(id => mongoose.isValidObjectId(id));
     if (dbIds.length) {
       try {
         const qDocs = await Question.find({ _id: { $in: dbIds } }).lean().exec();
         for (const q of qDocs) byId[String(q._id)] = q;
+        console.log("[quiz/submit] loaded DB questions:", Object.keys(byId).length);
       } catch (e) {
         console.error("[quiz/submit] DB lookup error:", e && (e.stack || e));
       }
     }
 
-    // 2) File fallback: load data_questions.json and map by id fields if missing
+    // file fallback
     try {
       const p = path.join(process.cwd(), "data", "data_questions.json");
       if (fs.existsSync(p)) {
@@ -175,15 +182,16 @@ router.post("/quiz/submit", async (req, res) => {
           const fid = String(fq.id || fq._id || fq.uuid || "");
           if (fid && !byId[fid]) byId[fid] = fq;
         }
+        console.log("[quiz/submit] file fallback entries:", Object.keys(byId).length);
       }
     } catch (e) {
       console.error("[quiz/submit] file fallback error:", e && (e.stack || e));
     }
 
-    // Score loop & detail building
+    // scoring
     let score = 0;
     const details = [];
-    const savedAnswers = []; // canonical answers we'll persist
+    const savedAnswers = [];
 
     for (const a of answers) {
       const qid = String(a.questionId || "");
@@ -195,11 +203,9 @@ router.post("/quiz/submit", async (req, res) => {
         if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
         else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
         else if (typeof q.correct === "number") correctIndex = q.correct;
-        // if stored as text or other shape, adapt accordingly
       }
 
       const correct = (correctIndex !== null && yourIndex !== null && correctIndex === yourIndex);
-
       if (correct) score++;
 
       details.push({
@@ -209,7 +215,6 @@ router.post("/quiz/submit", async (req, res) => {
         correct: !!correct,
       });
 
-      // Build answer record for persistent attempt (store as ObjectId if possible)
       const qObjId = mongoose.isValidObjectId(qid) ? mongoose.Types.ObjectId(qid) : qid;
       savedAnswers.push({
         questionId: qObjId,
@@ -222,21 +227,18 @@ router.post("/quiz/submit", async (req, res) => {
     const passThreshold = 60;
     const passed = percentage >= passThreshold;
 
-    // Persist: either update an existing attempt for this examId/user/org or create a new one.
-    // Try to locate an existing attempt by examId OR by (user+organization+startedAt recent)
+    // find existing attempt (prefer examId)
     let attemptFilter = {};
     if (examId) attemptFilter.examId = examId;
     else {
-      // fallback: try user + org + module and recently created attempt
       attemptFilter = {
         userId: (req.user && req.user._id) ? req.user._id : undefined,
         organization: (exam && exam.org) ? exam.org : undefined,
         module: exam ? exam.module : (moduleKey || undefined)
       };
     }
-
-    // Clean undefined keys
     Object.keys(attemptFilter).forEach(k => attemptFilter[k] === undefined && delete attemptFilter[k]);
+    console.log("[quiz/submit] attemptFilter:", attemptFilter);
 
     let attempt = null;
     try {
@@ -246,9 +248,9 @@ router.post("/quiz/submit", async (req, res) => {
     } catch (e) {
       console.error("[quiz/submit] attempt lookup error:", e && (e.stack || e));
     }
+    console.log("[quiz/submit] attempt found?:", !!attempt, attempt ? attempt._id : null);
 
     const now = new Date();
-
     const attemptDoc = {
       examId: examId || ("exam-" + Date.now().toString(36)),
       userId: (req.user && req.user._id) ? req.user._id : (exam && exam.user) ? exam.user : null,
@@ -266,23 +268,35 @@ router.post("/quiz/submit", async (req, res) => {
       createdAt: attempt ? attempt.createdAt : now
     };
 
+    let savedAttempt = null;
     if (attempt) {
-      // update attempt
       try {
         await Attempt.updateOne({ _id: attempt._id }, { $set: attemptDoc }).exec();
+        savedAttempt = await Attempt.findById(attempt._id).lean().exec();
+        console.log("[quiz/submit] updated attempt:", attempt._id);
       } catch (e) {
         console.error("[quiz/submit] attempt update failed:", e && (e.stack || e));
       }
     } else {
-      // create new attempt doc
       try {
-        await Attempt.create(attemptDoc);
+        const newA = await Attempt.create(attemptDoc);
+        savedAttempt = await Attempt.findById(newA._id).lean().exec();
+        console.log("[quiz/submit] created attempt:", newA._id);
       } catch (e) {
         console.error("[quiz/submit] attempt create failed:", e && (e.stack || e));
       }
     }
 
-    // Respond with summary expected by frontend
+    // also update ExamInstance (optional) to mark it used/finished
+    if (exam) {
+      try {
+        await ExamInstance.updateOne({ examId: exam.examId }, { $set: { updatedAt: now, expiresAt: now } }).exec();
+      } catch (e) {
+        console.error("[quiz/submit] failed to update examInstance:", e && (e.stack || e));
+      }
+    }
+
+    // Return full summary + saved attempt (debug)
     return res.json({
       examId: attemptDoc.examId,
       total,
@@ -290,13 +304,19 @@ router.post("/quiz/submit", async (req, res) => {
       percentage,
       passThreshold,
       passed,
-      details
+      details,
+      debug: {
+        examFound: !!exam,
+        attemptSaved: !!savedAttempt,
+        attempt: savedAttempt
+      }
     });
   } catch (err) {
     console.error("[POST /api/lms/quiz/submit] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "Failed to score quiz" });
+    return res.status(500).json({ error: "Failed to score quiz", detail: String(err && err.message) });
   }
 });
+
 
 
 export default router;
