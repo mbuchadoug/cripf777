@@ -233,7 +233,7 @@
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        const params = new URLSearchParams();
+                const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
@@ -275,12 +275,7 @@
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
       try {
-        // ---- CHANGED: choose org-specific submit URL when ORG_SLUG present ----
-        const submitUrl = ORG_SLUG
-          ? `/api/org/${encodeURIComponent(ORG_SLUG)}/quiz/submit`
-          : '/api/lms/quiz/submit';
-
-        const res = await fetch(submitUrl, {
+        const res = await fetch('/api/lms/quiz/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
