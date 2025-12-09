@@ -1,73 +1,87 @@
 {{!-- views/admin/org_attempt_detail.hbs --}}
-<a href="/admin/orgs/{{org.slug}}/attempts">← Back to attempts</a>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Attempt Review — {{org.name}}</title>
+  <style>
+    body { font-family: system-ui, Arial; padding: 20px; max-width: 1000px; }
+    a.back { display:inline-block; margin-bottom: 16px; color: #4b2dbb; text-decoration: none; }
+    .meta { background:#f7f7f7; padding:12px; border-radius:6px; margin:12px 0; }
+    .question { background:#0b0b0b; color:#fff; padding:20px; border-radius:12px; margin:20px 0; }
+    .choice { background:#111; padding:12px 16px; border-radius:8px; margin:8px 0; color:#ddd; display:flex; align-items:center; }
+    .choice.correct { background:#136f2f; color:#eaffea; } /* green */
+    .choice.wrong { background:#7a1d1d; color:#ffdfe0; } /* red */
+    .choice .label { width:36px; height:36px; border-radius:10px; background:#0b0b0b; display:inline-flex; align-items:center; justify-content:center; margin-right:12px; font-weight:bold; color:#fff; }
+    small.meta { color:#666; display:block; margin-top:6px; }
+    .no-data { color:#666; padding:12px; border-radius:8px; background:#fff; margin-top:12px; }
+  </style>
+</head>
+<body>
+  <a class="back" href="/admin/orgs/{{org.slug}}/attempts">← Back to attempts</a>
 
-<h1>Attempt Review — {{org.name}}</h1>
+  <h1>Attempt Review — {{org.name}}</h1>
+  <p>User: {{#if user}}{{#if user.name}}{{user.name}} <small>({{user.email}})</small>{{else}}{{user.email}}{{/if}}{{else}}(unknown){{/if}}</p>
 
-{{#if user}}
-  <p>User: ({{user.email}})</p>
-{{else}}
-  <p>User: (unknown)</p>
-{{/if}}
-
-<div class="meta" style="margin:1rem 0; padding:1rem; border-radius:6px; background:#f7f7f7;">
-  <strong>Module:</strong> {{attempt.module}} &nbsp;
-  <strong>Score:</strong> {{attempt.score}} / {{attempt.maxScore}} &nbsp;
-  <strong>Passed:</strong> {{#if attempt.passed}}Yes{{else}}No{{/if}}
-  <div style="margin-top:0.5rem; font-size:0.9rem; color:#555;">
-    Started: {{attempt.startedAt}} &nbsp; Finished: {{attempt.finishedAt}}
+  <div class="meta">
+    <strong>Module:</strong> {{attempt.module}} &nbsp;
+    <strong>Score:</strong> {{attempt.score}} / {{attempt.maxScore}} &nbsp;
+    <strong>Passed:</strong> {{#if attempt.passed}}Yes{{else}}No{{/if}}<br>
+    <small class="meta">Started: {{attempt.startedAt}} &nbsp; Finished: {{attempt.finishedAt}}</small>
   </div>
-</div>
 
-{{#if qa}}
-  {{#each qa}}
-    <section style="margin-bottom:1.25rem; border-radius:10px; padding:1rem; background:#0f0f10; color:#fff;">
-      <h3 style="margin:0 0 0.5rem 0; font-size:1.15rem;">Q{{index}}. {{text}}</h3>
+  {{#if details.length}}
+    {{#each details}}
+      <div class="question">
+        <h3>Q{{qIndex}}. {{questionText}}</h3>
 
-      {{#if choices}}
-        <div class="choices" style="margin-top:0.5rem;">
+        {{#if choices.length}}
           {{#each choices}}
-            {{!-- @index is the numeric index for this choice --}}
-            <div style="padding:0.6rem; border-radius:6px; margin-bottom:0.5rem;
-                        {{#if (eq ../yourIndex @index)}} box-shadow: inset 0 0 0 3px rgba(34,197,94,0.2); background:#114d12; {{else}}{{/if}}
-                        {{#if (eq ../correctIndex @index)}} border:2px solid rgba(34,197,94,0.12); {{else}} border:1px solid rgba(255,255,255,0.03); {{/if}}">
-              <strong style="display:inline-block; width:2rem;">{{letters @index}}.</strong>
-              <span>{{text}}</span>
-
-              {{#if (eq ../correctIndex @index)}}
-                <span style="margin-left:1rem; color:#8ff2a0; font-weight:600;">✔ correct</span>
-              {{/if}}
-              {{#if (eq ../yourIndex @index)}}
-                <span style="margin-left:1rem; color:#ffd28a; font-weight:600;">● your answer</span>
-              {{/if}}
-            </div>
+            {{!-- compute index for label: @index --}}
+            {{!-- determine classes: correct if @index == ../correctIndex, wrong if @index == ../yourIndex and not equal to correctIndex --}}
+            {{!-- We can't compute complex expressions in plain Handlebars; derive classes with simple checks --}}
+            {{#if (eq @index ../correctIndex)}}
+              <div class="choice correct">
+                <div class="label">{{letters @index}}</div>
+                <div>{{text}}</div>
+              </div>
+            {{else if (eq @index ../yourIndex)}}
+              <div class="choice wrong">
+                <div class="label">{{letters @index}}</div>
+                <div>{{text}}</div>
+              </div>
+            {{else}}
+              <div class="choice">
+                <div class="label">{{letters @index}}</div>
+                <div>{{text}}</div>
+              </div>
+            {{/if}}
           {{/each}}
-        </div>
-      {{else}}
-        <div style="color:#bbb">No choices available for this question.</div>
-      {{/if}}
+        {{else}}
+          <div class="no-data">Choice text not available for this question.</div>
+        {{/if}}
 
-      <p style="margin-top:0.75rem; color:#ddd; font-size:0.95rem;">
-        Your answer:
-        {{#if yourText}}{{yourText}}{{else}}<em>No answer</em>{{/if}}<br>
-        Correct answer:
-        {{#if (isNumber correctIndex)}}
-          {{#if choices.[correctIndex]}}
-            {{choices.[correctIndex].text}}
+        <p style="margin-top:8px;">
+          Your answer:
+          {{#if (isNumber yourIndex)}}
+            {{letters yourIndex}}. (choice text {{#if choices.yourIndex}}available{{else}}unavailable{{/if}})
+          {{else}}
+            <em>No answer</em>
+          {{/if}}
+          <br>
+          Correct answer:
+          {{#if (isNumber correctIndex)}}
+            {{letters correctIndex}}.
           {{else}}
             (not available)
           {{/if}}
-        {{else}}
-          (not available)
-        {{/if}}<br>
-        Result:
-        {{#if correct}}
-          <span style="color:#8ff2a0; font-weight:700;">Correct ✅</span>
-        {{else}}
-          <span style="color:#ff9b9b; font-weight:700;">Wrong ❌</span>
-        {{/if}}
-      </p>
-    </section>
-  {{/each}}
-{{else}}
-  <p>No per-question answer details are available for this attempt.</p>
-{{/if}}
+          <br>
+          Result: {{#if correct}}<span style="color:green">Correct ✅</span>{{else}}<span style="color:#b81d1d">Wrong ✖</span>{{/if}}
+        </p>
+      </div>
+    {{/each}}
+  {{else}}
+    <p class="no-data">No per-question answer details are available for this attempt.</p>
+  {{/if}}
+</body>
+</html>
