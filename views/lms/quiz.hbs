@@ -46,7 +46,7 @@
     .choice .text{flex:1;color:rgba(255,255,255,0.92)}
     .choice.selected{outline:3px solid var(--selected-outline);background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)}
 
-    .controls{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+    .controls{display:flex;align-items:center;gap:12px;margin-top:16px}
     .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--gold);color:#000;font-weight:800;border:none;cursor:pointer}
     .small{padding:8px 12px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
 
@@ -77,6 +77,8 @@
       font-weight:700;
     }
 
+    .errorText{color:#ff9b9b;margin-left:6px}
+
     @media (max-width:720px){
       .page{padding:12px}
       h1{font-size:28px}
@@ -100,7 +102,7 @@
         {{/if}}
       </h1>
 
-      <div class="muted">
+      <div class="muted" id="mutedInfo">
         {{#if orgSlug}}
           You’re taking a module quiz for <strong>{{orgSlug}}</strong>. You’ll receive {{quizCount}} questions for this module.
         {{else}}
@@ -114,6 +116,7 @@
         <button id="submitBtn" class="btn">Submit Answers</button>
         <button id="reloadBtn" class="small" type="button">Reload Quiz</button>
         <span id="status" class="muted" aria-atomic="true"></span>
+        <span id="errorMsg" class="errorText" aria-live="assertive"></span>
       </div>
 
       <div id="result" style="display:none" class="score" aria-live="polite"></div>
@@ -126,22 +129,14 @@
     const submitBtn = document.getElementById('submitBtn');
     const reloadBtn = document.getElementById('reloadBtn');
     const status = document.getElementById('status');
+    const errorMsg = document.getElementById('errorMsg');
     const result = document.getElementById('result');
+    const mutedInfo = document.getElementById('mutedInfo');
 
     const body = document.body;
     const DEFAULT_COUNT = Number(body.dataset.quizCount || '5') || 5;
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
-
-    // decide submit endpoint depending on org presence
-    function submitEndpointForOrg(orgSlug) {
-      if (orgSlug && orgSlug.trim()) {
-        // org API expects POST /api/org/:slug/quiz/submit
-        return `/api/org/${encodeURIComponent(orgSlug)}/quiz/submit`;
-      }
-      // demo API
-      return "/api/lms/quiz/submit";
-    }
 
     let examId = null;
     let series = [];
@@ -241,6 +236,7 @@
 
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
+      errorMsg.textContent = '';
       try {
         const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
@@ -254,13 +250,21 @@
           throw new Error(t || res.statusText || 'failed to fetch quiz');
         }
         const payload = await res.json();
+
+        // persist examId from backend here so submit uses same id
         examId = payload.examId || null;
+        if (examId) {
+          // also write to body dataset for debugging / server-render fallback
+          body.dataset.examId = examId;
+        }
+
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
         series = rawSeries.map(s => Object.assign({}, s));
         renderQuiz(series);
         status.textContent = '';
       } catch (e) {
+        console.error('loadQuiz error:', e);
         status.textContent = 'Error loading quiz: ' + (e.message || e);
         quizArea.innerHTML = '<div class="muted">Unable to load quiz questions. Check that questions were imported and that /api/lms/quiz returns data.</div>';
       }
@@ -272,7 +276,7 @@
         if (!confirm('You answered ' + answered + ' of ' + series.length + '. Submit anyway?')) return;
       }
 
-      const endpoint = submitEndpointForOrg(ORG_SLUG);
+      // build payload
       const payload = { examId, answers: [] };
       for (const s of series) {
         const id = s.id || s._id || null;
@@ -284,39 +288,42 @@
 
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
-
+      errorMsg.textContent = '';
       try {
-        const fetchOptions = {
+        // Always post to the canonical API path you shared
+        const res = await fetch('/api/lms/quiz/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          // include cookies for same-origin auth — important for org routes using sessions
-          credentials: 'same-origin'
-        };
-
-        const res = await fetch(endpoint, fetchOptions);
+          body: JSON.stringify(payload)
+        });
 
         if (!res.ok) {
-          // try to pull good error text from JSON or plain text
-          let bodyText = null;
+          // try to get JSON body, otherwise text
+          let bodyText = '';
           try {
-            const json = await res.json().catch(()=>null);
-            if (json && (json.error || json.message)) bodyText = (json.error || json.message);
-          } catch (e) { /* ignore */ }
-          if (!bodyText) {
-            try { bodyText = await res.text(); } catch (e) { bodyText = res.statusText || 'submit failed'; }
+            const j = await res.json().catch(()=>null);
+            bodyText = j ? (j.error || j.message || JSON.stringify(j)) : await res.text().catch(()=>null);
+          } catch (ee) {
+            bodyText = (ee && ee.message) || 'unknown';
           }
-          throw new Error((bodyText || `Status ${res.status}`));
+
+          const msg = `submit failed (${res.status}) — ${bodyText || res.statusText}`;
+          console.warn('Submit response not ok:', res.status, bodyText);
+          status.textContent = '';
+          errorMsg.textContent = msg;
+          // also output to console for easier debugging
+          console.error('Quiz submit failed:', res.status, bodyText);
+          return;
         }
 
         const out = await res.json();
+        console.log('Quiz submit success:', out);
         showResult(out);
         status.textContent = '';
       } catch (err) {
-        // show helpful error to the user and console.log details for debugging
-        const msg = (err && err.message) ? err.message : String(err);
-        status.textContent = 'Error: ' + msg;
-        console.error('[quiz submit] error:', err);
+        console.error('submit error:', err);
+        status.textContent = '';
+        errorMsg.textContent = 'Error: ' + (err.message || err);
       } finally {
         submitBtn.disabled = false;
       }
@@ -330,7 +337,7 @@
         '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
-        ' (pass ' + (resp.passThreshold || 60) + '%)</div>' +
+        ' (pass ' + resp.passThreshold + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
@@ -394,6 +401,7 @@
         .replace(/'/g,'&#039;');
     }
 
+    // initial load
     loadQuiz(DEFAULT_COUNT);
   })();
   </script>
