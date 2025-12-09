@@ -13,8 +13,17 @@ import passport from "passport";
 
 // routes & utils
 import trackRouter from "./routes/track.js";
+/*import lmsRoutes from "./routes/lms.js";
+import apiLmsRoutes from "./routes/api_lms.js";*/
+
+// routes & utils
 import lmsRoutes from "./routes/lms.js";
-import apiLmsRoutes from "./routes/api_lms.js";
+// use the lms_api file that contains examInstance + attempt persistence
+import lmsApiRoutes from "./routes/lms_api.js";   // <--- changed import
+
+// API routes — mount the persistence-enabled LMS API
+              // <--- mount that router
+
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
@@ -129,9 +138,9 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
 // API routes — keep LMS API on /api/lms so quiz UI fetches work
-app.use("/api/lms", apiLmsRoutes);
+//app.use("/api/lms", apiLmsRoutes);
 
-
+app.use("/api/lms", lmsApiRoutes); 
 app.use("/", adminAttempts);
 // Other API-level routes (tracking, etc.)
 app.use("/api", trackRouter);
