@@ -130,9 +130,13 @@
 
     const body = document.body;
     const DEFAULT_COUNT = Number(body.dataset.quizCount || '5') || 5;
+    // moduleKey from server (if provided) — used as query param when fetching demo or org questions
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
 
+    // examId may be passed via URL: /lms/quiz?examId=...
+    const urlParams = new URLSearchParams(window.location.search);
+    let examIdFromQuery = urlParams.get('examId') || null;
 
     let examId = null;
     let series = [];
@@ -230,10 +234,36 @@
       });
     }
 
+    // Decide which endpoint to call for fetching questions:
+    // - If examIdFromQuery is present and ORG_SLUG present, we'll try to fetch the exam instance (server must provide endpoint)
+    // - Otherwise, fall back to the generic /api/lms/quiz (demo or org filtered by org param)
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-                const params = new URLSearchParams();
+        // If an examId is present in the URL and an org is present, try org exam fetch endpoint
+        if (ORG_SLUG && examIdFromQuery) {
+          // try to fetch the exam series from a likely endpoint (server may need to implement /api/org/:slug/quiz?examId=...)
+          const fetchUrl = '/api/org/' + encodeURIComponent(ORG_SLUG) + '/quiz?examId=' + encodeURIComponent(examIdFromQuery);
+          const res = await fetch(fetchUrl, { cache: 'no-store' });
+          if (res.ok) {
+            const payload = await res.json();
+            // If server returns { examId, series } or { series, ... }
+            examId = payload.examId || examIdFromQuery;
+            const rawSeries = payload.series || payload.questions || payload.items || payload.data || [];
+            if (!Array.isArray(rawSeries)) throw new Error('unexpected exam format from server');
+            series = rawSeries.map(s => Object.assign({}, s));
+            renderQuiz(series);
+            status.textContent = '';
+            return;
+          } else {
+            // Not found or not implemented — fall through to generic loader
+            console.warn('[loadQuiz] org exam fetch failed', res.status, await res.text().catch(()=>null));
+            // continue to fallback
+          }
+        }
+
+        // Generic loader — asks the public API (works for demo or org-filtered random)
+        const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
@@ -245,13 +275,14 @@
           throw new Error(t || res.statusText || 'failed to fetch quiz');
         }
         const payload = await res.json();
-        examId = payload.examId || null;
+        examId = payload.examId || examIdFromQuery || null;
         const rawSeries = payload.series || payload.questions || payload.items || [];
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
         series = rawSeries.map(s => Object.assign({}, s));
         renderQuiz(series);
         status.textContent = '';
       } catch (e) {
+        console.error('[loadQuiz] error:', e && (e.stack || e));
         status.textContent = 'Error loading quiz: ' + (e.message || e);
         quizArea.innerHTML = '<div class="muted">Unable to load quiz questions. Check that questions were imported and that /api/lms/quiz returns data.</div>';
       }
@@ -274,21 +305,45 @@
 
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
+
       try {
-        const res = await fetch('/api/lms/quiz/submit', {
+        // choose submit endpoint: org route if org present, else generic
+        let submitUrl = '/api/lms/quiz/submit';
+        if (ORG_SLUG) {
+          submitUrl = '/api/org/' + encodeURIComponent(ORG_SLUG) + '/quiz/submit';
+        }
+
+        const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+
         if (!res.ok) {
-          const t = await res.json().catch(()=>null);
-          throw new Error((t && (t.error || t.message)) || 'submit failed');
+          // try to parse JSON error body
+          let bodyText = null;
+          try {
+            const json = await res.json();
+            bodyText = (json && (json.error || json.message)) || JSON.stringify(json);
+          } catch (e) {
+            bodyText = await res.text().catch(()=>null);
+          }
+
+          const errorMsg = `submit failed (${res.status}${bodyText ? ': ' + bodyText : ''})`;
+          console.error('[quiz submit] server error:', res.status, bodyText);
+          status.textContent = 'Error: ' + errorMsg;
+          throw new Error(errorMsg);
         }
+
         const out = await res.json();
+        // make sure we set examId if server returned it
+        examId = out.examId || examId;
         showResult(out);
         status.textContent = '';
       } catch (err) {
-        status.textContent = 'Error: ' + (err.message || err);
+        console.error('[submitBtn] error:', err && (err.stack || err));
+        // status already updated above with useful text; ensure a fallback message
+        if (!status.textContent) status.textContent = 'Error: submit failed';
       } finally {
         submitBtn.disabled = false;
       }
@@ -366,6 +421,7 @@
         .replace(/'/g,'&#039;');
     }
 
+    // initial load
     loadQuiz(DEFAULT_COUNT);
   })();
   </script>
