@@ -133,8 +133,11 @@
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
 
+    // read examId from URL query param if present
+    const urlParams = new URLSearchParams(window.location.search);
+    let urlExamId = urlParams.get('examId') || null;
 
-    let examId = null;
+    let examId = null;     // set by server-provided exam or generated (for demo)
     let series = [];
     let answers = {};
 
@@ -163,7 +166,7 @@
 
       list.forEach((rawQ, idx) => {
         const q = repairBlock(rawQ);
-        const qid = q.id || q._id || 'q' + idx;
+        const qid = q.id || q._id || q.questionId || 'q' + idx;
         const choices = (q.choices || []).map(normalizeChoice);
 
         const block = document.createElement('div');
@@ -230,16 +233,37 @@
       });
     }
 
+    // decide which endpoint to call for loading the quiz:
+    // - If orgSlug & urlExamId present -> fetch stored exam for that user/examId
+    // - else -> fallback to public /api/lms/quiz?module=..&org=.. (demo/random)
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-                const params = new URLSearchParams();
-        params.set('count', String(count || DEFAULT_COUNT));
+        const cnt = count || DEFAULT_COUNT;
+
+        if (ORG_SLUG && urlExamId) {
+          // fetch the stored exam series for this examId (server should return the shown choices order)
+          const endpoint = `/api/org/${encodeURIComponent(ORG_SLUG)}/quiz?examId=${encodeURIComponent(urlExamId)}`;
+          const res = await fetch(endpoint, { cache: 'no-store', credentials: 'same-origin' });
+          if (!res.ok) {
+            const t = await res.json().catch(()=>null) || await res.text().catch(()=>null);
+            throw new Error(t && (t.error || t.message) ? (t.error || t.message) : (typeof t === 'string' ? t : res.statusText));
+          }
+          const payload = await res.json();
+          examId = payload.examId || urlExamId || null;
+          series = (payload.series || []).map(s => Object.assign({}, s));
+          renderQuiz(series);
+          status.textContent = '';
+          return;
+        }
+
+        // fallback: call the public demo/random endpoint
+        const params = new URLSearchParams();
+        params.set('count', String(cnt));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
 
-        const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
-
+        const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store', credentials: 'same-origin' });
         if (!res.ok) {
           const t = await res.text().catch(()=>null);
           throw new Error(t || res.statusText || 'failed to fetch quiz');
@@ -252,8 +276,9 @@
         renderQuiz(series);
         status.textContent = '';
       } catch (e) {
+        console.error('[loadQuiz] error:', e && (e.stack || e));
         status.textContent = 'Error loading quiz: ' + (e.message || e);
-        quizArea.innerHTML = '<div class="muted">Unable to load quiz questions. Check that questions were imported and that /api/lms/quiz returns data.</div>';
+        quizArea.innerHTML = '<div class="muted">Unable to load quiz questions. Check that questions were imported and that the API returns data.</div>';
       }
     }
 
@@ -263,9 +288,11 @@
         if (!confirm('You answered ' + answered + ' of ' + series.length + '. Submit anyway?')) return;
       }
 
-      const payload = { examId, answers: [] };
+      // Build payload matching server expectations:
+      // For org-submits we will POST to /api/org/:slug/quiz/submit with examId + answers[]
+      const payload = { examId: examId || urlExamId || null, answers: [] };
       for (const s of series) {
-        const id = s.id || s._id || null;
+        const id = s.questionId || s.id || s._id || null;
         payload.answers.push({
           questionId: id,
           choiceIndex: (typeof answers[id] === 'number') ? answers[id] : null
@@ -275,19 +302,34 @@
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
       try {
-        const res = await fetch('/api/lms/quiz/submit', {
+        // pick the right submit url depending on org
+        const submitUrl = (ORG_SLUG && (examId || urlExamId))
+          ? `/api/org/${encodeURIComponent(ORG_SLUG)}/quiz/submit`
+          : '/api/lms/quiz/submit';
+
+        const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',    // important: send session cookie for ensureAuth
           body: JSON.stringify(payload)
         });
+
+        // helpful debug info if status isn't OK
         if (!res.ok) {
-          const t = await res.json().catch(()=>null);
-          throw new Error((t && (t.error || t.message)) || 'submit failed');
+          // attempt to parse JSON error body
+          let t = null;
+          try { t = await res.json(); } catch(e) { t = await res.text().catch(()=>null); }
+          const msg = (t && (t.error || t.message)) ? (t.error || t.message) : (typeof t === 'string' ? t : `Status ${res.status}`);
+          throw new Error(msg || 'submit failed');
         }
+
         const out = await res.json();
+        // If the server returned examId (persisted) update local examId so reloads reference it
+        if (out && out.examId) examId = out.examId;
         showResult(out);
-        status.textContent = '';
+        status.textContent = 'Submitted';
       } catch (err) {
+        console.error('[submit] error:', err && (err.stack || err));
         status.textContent = 'Error: ' + (err.message || err);
       } finally {
         submitBtn.disabled = false;
@@ -299,17 +341,17 @@
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
-        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
+        '<div style="font-weight:800;font-size:16px">Score: ' + (resp.score == null ? 'N/A' : resp.score) + ' / ' + (resp.total == null ? series.length : resp.total) + ' — ' + (resp.percentage == null ? '0' : resp.percentage) + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
-        ' (pass ' + resp.passThreshold + '%)</div>' +
+        ' (pass ' + (resp.passThreshold || 'N/A') + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
       list.style.marginTop = '12px';
 
       (resp.details || []).forEach(d => {
-        const q = series.find(s => (s.id || s._id) === d.questionId) || null;
+        const q = series.find(s => (s.questionId || s.id || s._id) === d.questionId) || null;
 
         const block = document.createElement('div');
         block.className = 'fb-question';
@@ -320,6 +362,7 @@
         block.appendChild(title);
 
         const choicesContainer = document.createElement('div');
+        // prefer shown choices from series; else fallback to details.choices
         const srcChoices = (q && q.choices && q.choices.length)
           ? q.choices
           : (d.choices || []);
@@ -366,6 +409,7 @@
         .replace(/'/g,'&#039;');
     }
 
+    // initial load
     loadQuiz(DEFAULT_COUNT);
   })();
   </script>
