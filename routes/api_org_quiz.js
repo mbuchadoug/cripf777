@@ -301,4 +301,75 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
 
 
 
+// INSERT into routes/api_org_quiz.js (near other handlers)
+// requires ExamInstance and QuizQuestion imported at top of file
+// ensure ensureAuth is applied
+
+// GET /api/org/:slug/quiz?examId=...
+router.get("/:slug/quiz", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "").trim();
+    const examId = String(req.query.examId || "").trim();
+    if (!examId) return res.status(400).json({ error: "examId required" });
+
+    // find exam instance
+    const exam = await ExamInstance.findOne({ examId }).lean();
+    if (!exam) return res.status(404).json({ error: "exam not found" });
+
+    // verify org slug matches exam.org
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).json({ error: "org not found" });
+    if (String(exam.org) !== String(org._id)) {
+      return res.status(403).json({ error: "exam not for this org" });
+    }
+
+    // ensure user is the owner (or platform admin) - optional but recommended
+    if (!String(exam.user).startsWith(String(req.user && req.user._id))) {
+      // allow platform admin to fetch others if you want; otherwise block
+      // return res.status(403).json({ error: "not exam owner" });
+    }
+
+    // load questions referenced by the exam
+    const qIds = Array.isArray(exam.questionIds) ? exam.questionIds : [];
+    const questions = await QuizQuestion.find({ _id: { $in: qIds } }).lean();
+
+    // build lookup
+    const qById = {};
+    for (const q of questions) qById[String(q._id)] = q;
+
+    // build series using choicesOrder so shown choices match original mapping
+    const series = [];
+    for (let i = 0; i < qIds.length; i++) {
+      const qid = String(qIds[i]);
+      const q = qById[qid];
+      const mapping = Array.isArray(exam.choicesOrder && exam.choicesOrder[i]) ? exam.choicesOrder[i] : null;
+      const shownChoices = [];
+
+      if (q && Array.isArray(q.choices) && mapping) {
+        for (let si = 0; si < mapping.length; si++) {
+          const originalIndex = mapping[si];
+          const text = q.choices[originalIndex]; // your model stores choice as string OR object; adapt if object
+          shownChoices.push(typeof text === "string" ? { text } : { text: (text && (text.text || "")) });
+        }
+      } else if (q && Array.isArray(q.choices)) {
+        // no mapping — present original order
+        for (const c of q.choices) shownChoices.push(typeof c === "string" ? { text: c } : { text: (c.text || "") });
+      }
+
+      series.push({
+        questionId: qid,
+        text: q ? q.text : "(question missing)",
+        choices: shownChoices
+      });
+    }
+
+    return res.json({ examId: exam.examId, series, expiresAt: exam.expiresAt || null });
+  } catch (err) {
+    console.error("[GET /api/org/:slug/quiz] error:", err && (err.stack || err));
+    return res.status(500).json({ error: "failed to load exam" });
+  }
+});
+
+
+
 export default router;
