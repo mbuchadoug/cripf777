@@ -692,5 +692,131 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   }
 });
 
+
+router.post(
+  "/admin/orgs/:slug/assign-quiz",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      let { module = "general", userIds = [], count = 20, expiresMinutes = 60 } =
+        req.body || {};
+
+      // userIds from <select multiple> come as a flat array of strings
+      if (!Array.isArray(userIds) || !userIds.length) {
+        return res.status(400).json({ error: "userIds required" });
+      }
+
+      // normalize module to lowercase
+      const moduleKey = String(module).trim().toLowerCase();
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      // case-insensitive match on module + org/global questions
+      const match = {
+        $or: [{ organization: org._id }, { organization: null }],
+        module: { $regex: new RegExp(`^${moduleKey}$`, "i") },
+      };
+
+      // how many questions exist for debugging
+      const totalAvailable = await QuizQuestion.countDocuments(match);
+      console.log(
+        "[assign quiz] available questions:",
+        totalAvailable,
+        "for module=",
+        moduleKey,
+        "org=",
+        org._id.toString()
+      );
+
+      if (!totalAvailable) {
+        return res
+          .status(404)
+          .json({ error: "no questions available for that module" });
+      }
+
+      // we cannot take more than we actually have
+      count = Math.min(Number(count) || 1, totalAvailable);
+
+      // sample `count` questions
+      const pipeline = [{ $match: match }, { $sample: { size: count } }];
+      const docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+
+      if (!docs || !docs.length) {
+        return res
+          .status(404)
+          .json({ error: "no questions returned from sampling" });
+      }
+
+      const assigned = [];
+      const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
+
+      for (const uId of userIds) {
+        try {
+          const questionIds = [];
+          const choicesOrder = [];
+
+          for (const q of docs) {
+            questionIds.push(q._id);
+            const n = (q.choices || []).length;
+            const indices = Array.from({ length: n }, (_, i) => i);
+            // shuffle choices
+            for (let i = indices.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            choicesOrder.push(indices);
+          }
+
+          const examId = crypto.randomUUID();
+          const expiresAt = new Date(
+            Date.now() + Number(expiresMinutes) * 60 * 1000
+          );
+
+          await ExamInstance.create({
+            examId,
+            org: org._id,
+            module: moduleKey,
+            user: mongoose.Types.ObjectId(uId),
+            questionIds,
+            choicesOrder,
+            expiresAt,
+            createdAt: new Date(),
+            createdByIp: req.ip,
+          });
+
+          if (Attempt) {
+            await Attempt.create({
+              userId: mongoose.Types.ObjectId(uId),
+              organization: org._id,
+              module: moduleKey,
+              questionIds,
+              startedAt: new Date(),
+              maxScore: questionIds.length,
+            });
+          }
+
+          const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
+          assigned.push({ userId: uId, examId, url });
+        } catch (e) {
+          console.warn(
+            "[assign-quiz] user assign failed",
+            uId,
+            e && (e.stack || e)
+          );
+        }
+      }
+
+      return res.json({ ok: true, assigned, countUsed: count });
+    } catch (err) {
+      console.error("[assign quiz] error:", err && (err.stack || err));
+      return res.status(500).json({ error: "assign failed" });
+    }
+  }
+);
+
+
 // export default router
 export default router;
