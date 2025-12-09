@@ -13,27 +13,14 @@ import passport from "passport";
 
 // routes & utils
 import trackRouter from "./routes/track.js";
-/*import lmsRoutes from "./routes/lms.js";
-import apiLmsRoutes from "./routes/api_lms.js";*/
-
-// routes & utils
 import lmsRoutes from "./routes/lms.js";
 // use the lms_api file that contains examInstance + attempt persistence
-import lmsApiRoutes from "./routes/lms_api.js";   // <--- changed import
-
-// API routes — mount the persistence-enabled LMS API
-              // <--- mount that router
-
+import lmsApiRoutes from "./routes/lms_api.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
-// at top with other route imports
+// org-specific quiz API (if present)
 import apiOrgQuizRoutes from "./routes/api_org_quiz.js";
-
-// ... later after you've mounted other API routes
-// mount org API routes (this provides /api/org/:slug/quiz/submit)
-
-
 
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
@@ -77,19 +64,46 @@ const hbsHelpers = {
   not: (v) => !v,
   isNull: (v) => v === null || v === undefined,
   isNumber: (v) => typeof v === "number",
+
+  // letters helper: 0 => a, 1 => b, ...
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
     const seq = "abcdefghijklmnopqrstuvwxyz";
     return seq.charAt(i) || String.fromCharCode(97 + i);
+  },
+
+  // increment helper (useful for 1-based numbering)
+  inc: (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? (n + 1) : v;
+  },
+
+  // Basic let helper: usage {{#let "x" value=...}} ... use {{x}} inside block
+  // This implementation clones current context and injects the named var for the block.
+  let: function(varNameOrOptions, maybeOptions) {
+    let varName = null;
+    let options = maybeOptions;
+    if (typeof varNameOrOptions === "string") {
+      varName = varNameOrOptions;
+    } else {
+      options = varNameOrOptions;
+    }
+    options = options || {};
+    const value = options.hash ? options.hash.value : undefined;
+
+    // shallow-copy context and add variable
+    const ctx = Object.assign({}, this);
+    if (varName) ctx[varName] = value;
+
+    return (options.fn) ? options.fn(ctx) : "";
   }
 };
-
 
 app.engine(
   "hbs",
   engine({
     extname: ".hbs",
-    defaultLayout: "main", // adjust if your layout name is different
+    defaultLayout: "main",
     helpers: hbsHelpers,
   })
 );
@@ -147,10 +161,11 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
 // API routes — keep LMS API on /api/lms so quiz UI fetches work
-//app.use("/api/lms", apiLmsRoutes);
+app.use("/api/lms", lmsApiRoutes);
 
-app.use("/api/lms", lmsApiRoutes); 
+// Admin attempts UI
 app.use("/", adminAttempts);
+
 // Other API-level routes (tracking, etc.)
 app.use("/api", trackRouter);
 
@@ -162,6 +177,7 @@ app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
+
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
