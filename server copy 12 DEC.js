@@ -74,16 +74,7 @@ const hbsHelpers = {
   gte: (a, b) => a >= b,
   and: (a, b) => a && b,
   or: (a, b) => a || b,
-  not: (v) => !v,
-  isNull: (v) => v === null || v === undefined,
-  isNumber: (v) => typeof v === "number",
-  letters: (i) => {
-    if (typeof i !== "number" || i < 0) return "";
-    const seq = "abcdefghijklmnopqrstuvwxyz";
-    return seq.charAt(i) || String.fromCharCode(97 + i);
-  }
 };
-
 
 app.engine(
   "hbs",
