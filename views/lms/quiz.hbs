@@ -46,7 +46,7 @@
     .choice .text{flex:1;color:rgba(255,255,255,0.92)}
     .choice.selected{outline:3px solid var(--selected-outline);background:linear-gradient(90deg, rgba(212,175,55,0.04), transparent)}
 
-    .controls{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+    .controls{display:flex;align-items:center;gap:12px;margin-top:16px}
     .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--gold);color:#000;font-weight:800;border:none;cursor:pointer}
     .small{padding:8px 12px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
 
@@ -133,15 +133,6 @@
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
 
-    // decide submit endpoint depending on org presence
-    function submitEndpointForOrg(orgSlug) {
-      if (orgSlug && orgSlug.trim()) {
-        // org API expects POST /api/org/:slug/quiz/submit
-        return `/api/org/${encodeURIComponent(orgSlug)}/quiz/submit`;
-      }
-      // demo API
-      return "/api/lms/quiz/submit";
-    }
 
     let examId = null;
     let series = [];
@@ -242,7 +233,7 @@
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       try {
-        const params = new URLSearchParams();
+                const params = new URLSearchParams();
         params.set('count', String(count || DEFAULT_COUNT));
         if (MODULE_KEY) params.set('module', MODULE_KEY);
         if (ORG_SLUG) params.set('org', ORG_SLUG);
@@ -272,7 +263,6 @@
         if (!confirm('You answered ' + answered + ' of ' + series.length + '. Submit anyway?')) return;
       }
 
-      const endpoint = submitEndpointForOrg(ORG_SLUG);
       const payload = { examId, answers: [] };
       for (const s of series) {
         const id = s.id || s._id || null;
@@ -284,39 +274,21 @@
 
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
-
       try {
-        const fetchOptions = {
+        const res = await fetch('/api/lms/quiz/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          // include cookies for same-origin auth — important for org routes using sessions
-          credentials: 'same-origin'
-        };
-
-        const res = await fetch(endpoint, fetchOptions);
-
+          body: JSON.stringify(payload)
+        });
         if (!res.ok) {
-          // try to pull good error text from JSON or plain text
-          let bodyText = null;
-          try {
-            const json = await res.json().catch(()=>null);
-            if (json && (json.error || json.message)) bodyText = (json.error || json.message);
-          } catch (e) { /* ignore */ }
-          if (!bodyText) {
-            try { bodyText = await res.text(); } catch (e) { bodyText = res.statusText || 'submit failed'; }
-          }
-          throw new Error((bodyText || `Status ${res.status}`));
+          const t = await res.json().catch(()=>null);
+          throw new Error((t && (t.error || t.message)) || 'submit failed');
         }
-
         const out = await res.json();
         showResult(out);
         status.textContent = '';
       } catch (err) {
-        // show helpful error to the user and console.log details for debugging
-        const msg = (err && err.message) ? err.message : String(err);
-        status.textContent = 'Error: ' + msg;
-        console.error('[quiz submit] error:', err);
+        status.textContent = 'Error: ' + (err.message || err);
       } finally {
         submitBtn.disabled = false;
       }
@@ -330,7 +302,7 @@
         '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
-        ' (pass ' + (resp.passThreshold || 60) + '%)</div>' +
+        ' (pass ' + resp.passThreshold + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
       const list = document.createElement('div');
