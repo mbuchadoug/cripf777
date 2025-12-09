@@ -18,6 +18,12 @@ import apiLmsRoutes from "./routes/api_lms.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
+// at top with other route imports
+import apiOrgQuizRoutes from "./routes/api_org_quiz.js";
+
+// ... later after you've mounted other API routes
+// mount org API routes (this provides /api/org/:slug/quiz/submit)
+
 
 
 import configurePassport from "./config/passport.js";
@@ -137,6 +143,7 @@ app.use("/lms", lmsRoutes);
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 
+app.use("/api/org", apiOrgQuizRoutes);
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
