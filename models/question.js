@@ -2,46 +2,40 @@
 import mongoose from "mongoose";
 
 const ChoiceSchema = new mongoose.Schema({
-  label: String,    // optional, you aren't using label but keeping for compatibility
+  label: String,
   text: String
 }, { _id: false });
 
 const QuestionSchema = new mongoose.Schema({
   text: { type: String, required: true },
-  choices: [ChoiceSchema],
-  correctIndex: { type: Number, required: true },
 
-  // NEW FIELDS FOR ORGANIZATION / MODULE SUPPORT
+  // for regular questions
+  choices: [ChoiceSchema],
+  correctIndex: { type: Number, required: function() { return this.type !== 'comprehension'; } },
+
+  // NEW: comprehension parent support
+  type: { type: String, enum: ["question","comprehension"], default: "question", index: true },
+  passage: { type: String, default: null }, // full passage for comprehension parent
+  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }], // child IDs for parent
+
+  // metadata
   organization: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "Organization",
     default: null,
-    index: true                       // makes org-level quiz filtering faster
+    index: true
   },
-
   module: {
     type: String,
     default: "general",
-    index: true                       // required to filter module-specific questions
+    index: true
   },
 
   tags: [String],
   difficulty: { type: String, default: null },
   source: { type: String, default: "import" },
-  raw: { type: String, default: null },       // optional: store raw block for debugging
-
-  // --- COMPREHENSION / PARENT FIELDS ---
-  // 'type' can be 'comprehension' for a passage parent, otherwise absent or 'question'
-  type: { type: String, enum: ["comprehension", "question"], default: "question", index: true },
-
-  // full passage text for comprehension parents (not used for normal questions)
-  passage: { type: String, default: null },
-
-  // array of Question._id values (child questions). Parents should include child ids here.
-  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
-
-  // --- bookkeeping ---
+  raw: { type: String, default: null },
   createdAt: { type: Date, default: () => new Date() }
-}, { strict: true });
+});
 
 export default mongoose.models.Question || mongoose.model("Question", QuestionSchema);
