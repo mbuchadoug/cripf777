@@ -553,9 +553,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
 
       // Org quiz: 20 questions, filtered by module + org
-      const openUrl = `/lms/quiz?module=${encodeURIComponent(
+     /* const openUrl = `/lms/quiz?module=${encodeURIComponent(
         moduleLabel
-      )}&org=${encodeURIComponent(org.slug)}`;
+      )}&org=${encodeURIComponent(org.slug)}`;*/
+      // replacement (correct)
+const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
+
 
       quizzesByModule[key].push({
         examId: ex.examId,
