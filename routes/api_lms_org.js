@@ -1,6 +1,6 @@
 // routes/api_lms_org.js
 import { Router } from "express";
-import QuizQuestion from "../models/quizQuestionF.js";
+import QuizQuestion from "../models/quizQuestion.js";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
 import mongoose from "mongoose";

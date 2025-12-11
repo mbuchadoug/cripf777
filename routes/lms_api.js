@@ -1,12 +1,13 @@
 // routes/lms_api.js
 import { Router } from "express";
 import mongoose from "mongoose";
-import Question from "../models/question.js";
-import Organization from "../models/organization.js";
-import ExamInstance from "../models/examInstance.js";
-import Attempt from "../models/attempt.js";
 import fs from "fs";
 import path from "path";
+
+import Organization from "../models/organization.js";
+import Question from "../models/question.js";         // Question model (used throughout)
+import ExamInstance from "../models/examInstance.js";
+import Attempt from "../models/attempt.js";
 
 const router = Router();
 
@@ -44,7 +45,6 @@ function fetchRandomQuestionsFromFile(count = 5) {
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
  * create small ExamInstance that contains questionIds and (optionally) choicesOrder
  */
-// routes/lms_api.js (replace existing GET /quiz handler with this)
 router.get("/quiz", async (req, res) => {
   try {
     // primary keys
@@ -67,7 +67,7 @@ router.get("/quiz", async (req, res) => {
         const objIds = qIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
         let docs = [];
         if (objIds.length) {
-          docs = await QuizQuestion.find({ _id: { $in: objIds } }).lean();
+          docs = await Question.find({ _id: { $in: objIds } }).lean();
         }
         // map by id so we preserve order
         const byId = {};
@@ -90,7 +90,7 @@ router.get("/quiz", async (req, res) => {
             const childObjIds = childIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
             let children = [];
             if (childObjIds.length) {
-              children = await QuizQuestion.find({ _id: { $in: childObjIds } }).lean();
+              children = await Question.find({ _id: { $in: childObjIds } }).lean();
             }
             // return parent with children full objects
             series.push({
@@ -144,7 +144,7 @@ router.get("/quiz", async (req, res) => {
 
     let docs = [];
     try {
-      docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+      docs = await Question.aggregate(pipeline).allowDiskUse(true);
     } catch (e) {
       console.error("[/api/lms/quiz] aggregate error:", e && (e.stack || e));
     }
@@ -153,12 +153,13 @@ router.get("/quiz", async (req, res) => {
     const series = (docs || []).map((d) => {
       const isComp = (d && d.type === "comprehension");
       if (isComp) {
-        // if comprehension parent encountered in sampling, attempt to fetch child questions
+        // if comprehension parent encountered in sampling, attempt to fetch child questions lazily is expensive,
+        // so keep children empty in sampling mode (client can warn)
         return {
           id: String(d._id),
           type: "comprehension",
           passage: d.passage || "",
-          children: [], // keep empty in sampling mode to avoid heavy lookups
+          children: [],
           tags: d.tags || [],
           difficulty: d.difficulty || 'medium'
         };
@@ -179,22 +180,13 @@ router.get("/quiz", async (req, res) => {
   }
 });
 
-
 /**
  * POST /api/lms/quiz/submit
  * Body: { examId, answers: [{ questionId, choiceIndex }] }
- *
- * Important:
- * - if the client shuffled choices and stored mapping in ExamInstance.choicesOrder,
- *   we must map the submitted shown-index back to original index before comparing.
- * - Save richer answer objects so admin UI can show selectedText, correctIndex, etc.
  */
 router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
-    // (quick debug log if needed)
-    // console.log("[quiz/submit] payload keys:", Object.keys(payload));
-
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
     if (!answers.length) return res.status(400).json({ error: "No answers submitted" });
 
@@ -215,7 +207,7 @@ router.post("/quiz/submit", async (req, res) => {
       }
     }
 
-    // load DB questions for any ObjectId-like ids
+    // load DB questions for any ObjectId-like ids (use Question model)
     const byId = {};
     const dbIds = qIds.filter(id => mongoose.isValidObjectId(id));
     if (dbIds.length) {
@@ -259,17 +251,13 @@ router.post("/quiz/submit", async (req, res) => {
 
     for (const a of answers) {
       const qid = String(a.questionId || "");
-      // 'shown' index = index position user clicked in UI
       const shownIndex = (typeof a.choiceIndex === "number") ? a.choiceIndex : null;
 
-      // default canonicalIndex (original order) = shownIndex (if no remap available)
       let canonicalIndex = (typeof shownIndex === "number") ? shownIndex : null;
 
-      // remap if exam instance has mapping for this question
       if (exam && examIndexMap.hasOwnProperty(qid)) {
         const qPos = examIndexMap[qid];
         const mapping = Array.isArray(examChoicesOrder[qPos]) ? examChoicesOrder[qPos] : null;
-        // mapping is expected as array: shownIndex -> originalIndex
         if (mapping && typeof shownIndex === "number") {
           const mapped = mapping[shownIndex];
           if (typeof mapped === "number") canonicalIndex = mapped;
@@ -278,7 +266,6 @@ router.post("/quiz/submit", async (req, res) => {
 
       const qdoc = byId[qid] || null;
 
-      // determine correctIndex from question doc if available
       let correctIndex = null;
       if (qdoc) {
         if (typeof qdoc.correctIndex === "number") correctIndex = qdoc.correctIndex;
@@ -286,11 +273,9 @@ router.post("/quiz/submit", async (req, res) => {
         else if (typeof qdoc.correct === "number") correctIndex = qdoc.correct;
       }
 
-      // determine selectedText (guard against different shapes)
       let selectedText = "";
       if (qdoc) {
         const choices = qdoc.choices || [];
-        // choices may be array of strings or objects { text }
         const tryChoice = (idx) => {
           if (idx === null || idx === undefined) return "";
           const c = choices[idx];
@@ -310,7 +295,6 @@ router.post("/quiz/submit", async (req, res) => {
         correct: !!correct
       });
 
-      // persist answer — store questionId as ObjectId if valid, otherwise keep string id
       const qObjId = mongoose.isValidObjectId(qid) ? mongoose.Types.ObjectId(qid) : qid;
       savedAnswers.push({
         questionId: qObjId,

@@ -1,12 +1,12 @@
-// routes/api_lms.js
+// --- put these imports at the top of the file (replace any old ones) ---
 import { Router } from "express";
 import mongoose from "mongoose";
-import Question from "../models/question.js";
 import Organization from "../models/organization.js";
-import fs from "fs";
-import path from "path";
-
+import Question from "../models/question.js";         // the Question model (was referenced as QuizQuestion)
+import ExamInstance from "../models/examInstance.js";
 const router = Router();
+// ----------------------------------------------------------------------
+
 
 // helper: sample N random docs using Mongo's aggregation if available
 async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
