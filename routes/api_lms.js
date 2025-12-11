@@ -113,44 +113,206 @@ function fetchRandomQuestionsFromFile(count = 5) {
  * GET /api/lms/quiz?count=5&module=Responsibility&org=muono
  * Returns: { examId, series: [...] }
  */
+// Replace existing GET /quiz handler with this in routes/api_lms.js (or routes/lms_api.js)
 router.get("/quiz", async (req, res) => {
-  // default 5, max 20, min 1
-  let rawCount = parseInt(req.query.count || "5", 10);
-  if (!Number.isFinite(rawCount)) rawCount = 5;
-  const count = Math.max(1, Math.min(20, rawCount));
-
-  const moduleName = String(req.query.module || "").trim(); // e.g. "Responsibility"
-  const orgSlug = String(req.query.org || "").trim();       // e.g. "muono"
-
   try {
-    // try DB first (your imported questions live here)
-    const dbResult = await fetchRandomQuestionsFromDB(count, {
-      moduleName,
-      orgSlug,
-    });
+    // prefer explicit examId (assigned quizzes)
+    const examId = String(req.query.examId || "").trim() || null;
 
-    let series = [];
-    if (dbResult && dbResult.length >= 1) {
-      series = dbResult;
-    } else {
-      // fallback to file (dev only)
-      series = fetchRandomQuestionsFromFile(count);
+    // fallback sampling params
+    let rawCount = parseInt(req.query.count || "5", 10);
+    if (!Number.isFinite(rawCount)) rawCount = 5;
+    const count = Math.max(1, Math.min(50, rawCount));
+
+    const moduleName = String(req.query.module || "").trim(); // e.g. "Responsibility"
+    const orgSlug = String(req.query.org || "").trim();       // e.g. "muono"
+
+    // models assumed imported at top of file:
+    // import ExamInstance from "../models/examInstance.js";
+    // import Question from "../models/question.js";
+    // import Organization from "../models/organization.js";
+
+    // If examId was provided -> return that exact exam + question docs (preserve order)
+    if (examId) {
+      console.log("[/api/lms/quiz] loading examId:", examId);
+      try {
+        const exam = await ExamInstance.findOne({ examId }).lean().exec();
+        if (!exam) {
+          console.warn("[/api/lms/quiz] examId not found:", examId);
+          return res.status(404).json({ error: "exam not found" });
+        }
+
+        // Ensure questionIds array exists
+        const qIds = Array.isArray(exam.questionIds) ? exam.questionIds.map(String) : [];
+
+        // Load question docs from DB (these may include comprehension parents and/or child questions)
+        const dbDocs = qIds.length
+          ? await Question.find({ _id: { $in: qIds } }).lean().exec()
+          : [];
+
+        // Also load any parent comprehension docs referenced by these ids (in case parent IDs were used)
+        // We'll build a map by _id for quick lookup
+        const byId = {};
+        for (const d of dbDocs) byId[String(d._id)] = d;
+
+        // For completeness: if exam.questionIds includes some ids that are comprehension parent ids,
+        // and those parents have questionIds (children), we should load those children and return parent with children.
+        // Also if some docs returned are parents, fetch their children.
+        const parentIdsToFetchChildren = [];
+        for (const id of qIds) {
+          const doc = byId[id];
+          if (doc && (doc.type === "comprehension" || (doc.passage && Array.isArray(doc.questionIds) && doc.questionIds.length))) {
+            parentIdsToFetchChildren.push(id);
+          }
+        }
+
+        // collect child ids to fetch
+        const childIdsSet = new Set();
+        for (const pid of parentIdsToFetchChildren) {
+          const parentDoc = byId[pid];
+          const children = Array.isArray(parentDoc.questionIds) ? parentDoc.questionIds.map(String) : [];
+          children.forEach(c => childIdsSet.add(c));
+        }
+
+        let childDocs = [];
+        if (childIdsSet.size) {
+          const childIds = Array.from(childIdsSet);
+          childDocs = await Question.find({ _id: { $in: childIds } }).lean().exec();
+          for (const c of childDocs) byId[String(c._id)] = c;
+        }
+
+        // Build series to return in the same order as exam.questionIds
+        const series = [];
+        for (const qid of qIds) {
+          const doc = byId[qid];
+          if (!doc) {
+            // doc missing (maybe it was a file-fallback item) — skip or include placeholder
+            continue;
+          }
+
+          // If this doc is a comprehension parent, include its passage + children (full objects)
+          const isParent = doc.type === "comprehension" || (doc.passage && Array.isArray(doc.questionIds) && doc.questionIds.length);
+          if (isParent) {
+            const childIds = (doc.questionIds || []).map(String).filter(Boolean);
+            const children = childIds.map(id => {
+              const c = byId[id];
+              if (!c) return null;
+              // normalize choices shape for client
+              const choices = (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) }));
+              return {
+                id: String(c._id),
+                text: c.text,
+                choices,
+                tags: c.tags || [],
+                difficulty: c.difficulty || "medium"
+              };
+            }).filter(Boolean);
+
+            series.push({
+              id: String(doc._id),
+              type: "comprehension",
+              passage: doc.passage || doc.text || "",
+              children,
+              tags: doc.tags || [],
+              difficulty: doc.difficulty || "medium"
+            });
+          } else {
+            // normal question
+            const choices = (doc.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) }));
+            series.push({
+              id: String(doc._id),
+              text: doc.text,
+              choices,
+              tags: doc.tags || [],
+              difficulty: doc.difficulty || "medium"
+            });
+          }
+        }
+
+        return res.json({ examId: exam.examId, series });
+      } catch (err) {
+        console.error("[/api/lms/quiz] exam load error:", err && (err.stack || err));
+        return res.status(500).json({ error: "failed to load exam", detail: String(err && err.message) });
+      }
     }
 
-    // don’t expose correctIndex to the client
-    const publicSeries = series.map((q) => ({
-      id: q.id,
-      text: q.text,
-      choices: q.choices.map((c) => ({ text: c.text })),
-      tags: q.tags || [],
-      difficulty: q.difficulty || "medium",
-    }));
+    // ---------- No examId: sampling mode (old behavior) ----------
+    try {
+      // build module + org match
+      const match = {};
+      if (moduleName) match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
 
-    const examId = "exam-" + Date.now().toString(36);
-    return res.json({ examId, series: publicSeries });
+      if (orgSlug) {
+        const org = await Organization.findOne({ slug: orgSlug }).lean();
+        if (org) {
+          match.$or = [{ organization: org._id }, { organization: null }, { organization: { $exists: false } }];
+        } else {
+          // org requested but not found -> default to global only
+          match.$or = [{ organization: null }, { organization: { $exists: false } }];
+        }
+      } else {
+        // demo — global only
+        match.$or = [{ organization: null }, { organization: { $exists: false } }];
+      }
+
+      const pipeline = [];
+      if (Object.keys(match).length) pipeline.push({ $match: match });
+      pipeline.push({ $sample: { size: Number(count) } });
+
+      const docs = await Question.aggregate(pipeline).allowDiskUse(true);
+
+      // Map docs into series (handle comprehension parent detection as in other code)
+      const series = [];
+      for (const d of docs) {
+        const isComprehension = d.type === "comprehension" || (d.passage && Array.isArray(d.questionIds) && d.questionIds.length);
+        if (isComprehension) {
+          // fetch children
+          let children = [];
+          try {
+            const ids = (d.questionIds || []).filter(Boolean).map(String).filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+            if (ids.length) {
+              const cs = await Question.find({ _id: { $in: ids } }).lean().exec();
+              children = cs.map(c => ({
+                id: String(c._id),
+                text: c.text,
+                choices: (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) })),
+                tags: c.tags || [],
+                difficulty: c.difficulty || "medium"
+              }));
+            }
+          } catch (e) {
+            console.warn("[/api/lms/quiz] failed to load children for parent:", d._id, e && e.message);
+          }
+
+          series.push({
+            id: String(d._id),
+            type: "comprehension",
+            passage: d.passage || d.text || "",
+            children,
+            tags: d.tags || [],
+            difficulty: d.difficulty || "medium"
+          });
+        } else {
+          series.push({
+            id: String(d._id),
+            text: d.text,
+            choices: (d.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) })),
+            tags: d.tags || [],
+            difficulty: d.difficulty || "medium"
+          });
+        }
+      }
+
+      // If sampling produced fewer than requested, still return what we have
+      const examIdOut = "exam-" + Date.now().toString(36);
+      return res.json({ examId: examIdOut, series });
+    } catch (err) {
+      console.error("[/api/lms/quiz] sampling error:", err && (err.stack || err));
+      return res.status(500).json({ error: "failed to sample questions", detail: String(err && err.message) });
+    }
   } catch (err) {
-    console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "Failed to fetch quiz" });
+    console.error("[/api/lms/quiz] unexpected error:", err && (err.stack || err));
+    return res.status(500).json({ error: "unexpected error", detail: String(err && err.message) });
   }
 });
 
