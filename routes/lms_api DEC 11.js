@@ -76,88 +76,24 @@ router.get("/quiz", async (req, res) => {
 
     let series = [];
     let questionIdsForInstance = [];
-    let choicesOrder = []; // if you randomize choices, store mapping here (shownIndex -> originalIndex)
+    let choicesOrder = []; // if we randomize choices, store mapping here (shownIndex -> originalIndex)
 
     if (docs && docs.length) {
-      // Helper to normalize choices into { text } objects
-      const normalizeChoiceObj = (c) => {
-        if (typeof c === "string") return { text: c };
-        if (c && typeof c.text === "string") return { text: c.text };
-        return { text: String(c || "") };
-      };
-
-      for (const d of docs) {
-        try {
-          // Detect comprehension parent: either explicit type or passage+questionIds
-          const isComprehension =
-            (d && d.type === "comprehension") ||
-            (d && d.passage && Array.isArray(d.questionIds) && d.questionIds.length > 0);
-
-          if (isComprehension) {
-            // load child question docs (they are stored in the same Question collection)
-            let children = [];
-            try {
-              const ids = (d.questionIds || []).filter(Boolean).map(String);
-              const objIds = ids.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-              if (objIds.length) {
-                children = await Question.find({ _id: { $in: objIds } }).lean().exec();
-              } else {
-                // possibly some ids are non-ObjectId strings; try matching by string _id
-                if (ids.length) {
-                  const qdocs = await Question.find({ _id: { $in: ids } }).lean().exec();
-                  children = qdocs;
-                }
-              }
-            } catch (e) {
-              console.error("[/api/lms/quiz] failed to load comprehension children:", e && (e.stack || e));
-            }
-
-            // push child ids into questionIdsForInstance (so submit maps to child ids)
-            for (const c of children) {
-              questionIdsForInstance.push(String(c._id));
-            }
-
-            // normalize children choices
-            const childItems = (children || []).map((c) => ({
-              id: String(c._id),
-              text: c.text,
-              choices: (c.choices || []).map(normalizeChoiceObj),
-              tags: c.tags || [],
-              difficulty: c.difficulty || "medium",
-            }));
-
-            // include parent with passage + children for the client
-            series.push({
-              id: String(d._id),
-              type: "comprehension",
-              passage: d.passage || "",
-              children: childItems,
-              tags: d.tags || [],
-              difficulty: d.difficulty || "medium",
-            });
-
-            choicesOrder.push([]); // placeholder for parent (no choices)
-          } else {
-            // standard single question doc
-            questionIdsForInstance.push(String(d._id));
-            const originalChoices = (d.choices || []).map((c) =>
-              (typeof c === "string" ? { text: c } : { text: c.text || c })
-            );
-            // keep choicesOrder placeholder empty unless you randomize server-side
-            choicesOrder.push([]);
-
-            series.push({
-              id: String(d._id),
-              text: d.text,
-              choices: originalChoices.map((c) => ({ text: c.text })),
-              tags: d.tags || [],
-              difficulty: d.difficulty || "medium",
-            });
-          }
-        } catch (e) {
-          console.warn("[/api/lms/quiz] mapping doc failed:", e && e.message);
-        }
-      }
+      series = docs.map((d) => {
+        // collect question id for instance
+        questionIdsForInstance.push(String(d._id));
+        // optional: if you randomize choice order here, build mapping and include in response
+        const originalChoices = (d.choices || []).map((c) => (typeof c === "string" ? { text: c } : { text: c.text || c }));
+        // For now we will not randomize server-side (client may randomize). Keep choicesOrder empty.
+        choicesOrder.push([]); // placeholder — kept to match index positions
+        return {
+          id: String(d._id),
+          text: d.text,
+          choices: originalChoices.map((c) => ({ text: c.text })),
+          tags: d.tags || [],
+          difficulty: d.difficulty || "medium",
+        };
+      });
     } else {
       // fallback to file
       series = fetchRandomQuestionsFromFile(count);
