@@ -221,8 +221,6 @@ router.get("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
  *   - or pasted text in textarea (field 'text')
  * If 'save' param present (save=1), attempt to save parsed questions to DB (Questions collection).
  */
-// REPLACE the existing router.post("/lms/import", ...) handler with the following:
-
 router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async (req, res) => {
   try {
     // prefer uploaded file -> fallback to textarea 'text'
@@ -230,12 +228,8 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
     if (req.file && req.file.buffer && req.file.buffer.length) {
       content = req.file.buffer.toString("utf8");
-      console.log("[admin/lms/import] received uploaded file:", req.file.originalname, "size:", req.file.size);
     } else if (req.body && typeof req.body.text === "string" && req.body.text.trim().length) {
       content = req.body.text;
-      console.log("[admin/lms/import] received pasted text (body.text)");
-    } else {
-      console.log("[admin/lms/import] no content provided");
     }
 
     if (!content || !content.trim()) {
@@ -255,10 +249,9 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       console.error("[admin/lms/import] failed to write fallback file:", err && (err.stack || err));
     }
 
-    // Detect comprehension delimiter: a line containing 3+ hyphens on its own
-    const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    const delimRegex = /^\s*-{3,}\s*$/m;
-    const isComprehension = !!normalized.match(delimRegex);
+    // parse blocks
+    const blocks = parseQuestionBlocks(content);
+    console.log(`[admin/lms/import] parsed ${blocks.length} question blocks`);
 
     // read orgId + module from the form
     let orgId = null;
@@ -266,193 +259,99 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       try {
         orgId = mongoose.Types.ObjectId(String(req.body.orgId).trim());
       } catch (e) {
-        orgId = null;
+        orgId = null; // invalid id -> treat as global
       }
     }
-    const moduleName = (req.body && req.body.module) ? String(req.body.module).trim().toLowerCase() : "general";
+    const moduleName = (req.body && req.body.module) ? String(req.body.module).trim() : "general";
 
-    // should we save to DB?
+    // If admin requested to "save" to DB, attempt to insert into Question collection
     const saveToDb = req.body && (req.body.save === "1" || req.body.save === "true" || req.body.save === "on");
-    console.log("[admin/lms/import] saveToDb=", saveToDb, "module=", moduleName, "orgId=", String(orgId));
 
-    // dynamic import of Question model
-    let QuestionModel = null;
-    try {
-      QuestionModel = (await import("../models/question.js")).default;
-    } catch (e) {
-      console.warn("[admin/lms/import] could not import Question model:", e && e.message);
-      QuestionModel = null;
-    }
+    let inserted = 0;
+    let dbSkipped = false;
+    let dbErr = null;
 
-    let parsedCount = 0;
-    let insertedParents = 0;
-    let insertedChildren = 0;
-    const allErrors = [];
-    const previewBlocks = [];
-
-    if (isComprehension) {
-      console.log("[admin/lms/import] detected comprehension delimiter; parsing as passage + questions");
-
-      // split passage and question block at the first delimiter line
-      const idx = normalized.search(delimRegex);
-      const passage = normalized.slice(0, idx).trim();
-      const after = normalized.slice(idx).replace(delimRegex, '').trim();
-
-      if (!passage) {
-        allErrors.push({ reason: "Detected delimiter but passage is empty" });
-        console.warn("[admin/lms/import] passage empty after delimiter detection");
-      } else if (!after) {
-        allErrors.push({ reason: "Detected delimiter but question block is empty" });
-        console.warn("[admin/lms/import] question block empty after delimiter detection");
-      } else {
-        // Use existing parseQuestionBlocks to parse the questions portion
-        const questionBlocks = parseQuestionBlocks(after);
-        console.log(`[admin/lms/import] comprehension parsed ${questionBlocks.length} child question blocks`);
-
-        if (!questionBlocks.length) {
-          allErrors.push({ reason: "No valid child questions parsed for comprehension" });
-        } else {
-          parsedCount += questionBlocks.length;
-          previewBlocks.push(passage.slice(0, 400));
-
-          if (!saveToDb) {
-            console.log("[admin/lms/import] saveToDb=false; skipping DB inserts, returning preview");
-          } else if (!QuestionModel) {
-            allErrors.push({ reason: "Question model not available; cannot save to DB" });
-            console.warn("[admin/lms/import] Question model missing; skipping DB insert for comprehension");
-          } else {
-            // build child docs from parsed blocks
-            const childDocs = questionBlocks.map(b => {
-              // ensure choices shape [{text}]
-              const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(Boolean);
-              let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
-              if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
-              return {
-                text: (b.text || "Question").trim(),
-                choices,
-                correctIndex: ci,
-                tags: Array.isArray(b.tags) ? b.tags : [],
-                difficulty: b.difficulty || "medium",
-                source: "import",
-                organization: orgId,
-                module: moduleName,
-                raw: b.rawBlock || "",
-                createdAt: new Date()
-              };
-            });
-
-            try {
-              const inserted = await QuestionModel.insertMany(childDocs, { ordered: true });
-              const childIds = inserted.map(x => x._id);
-              console.log("[admin/lms/import] inserted child question IDs:", childIds.slice(0, 10));
-
-              // create parent comprehension doc
-              const parentDoc = {
-                text: passage.split("\n").slice(0,1).join(" ").slice(0,120) || "Comprehension passage",
-                type: "comprehension",
-                passage,
-                questionIds: childIds,
-                tags: [],
-                source: "import",
-                organization: orgId,
-                module: moduleName,
-                createdAt: new Date()
-              };
-
-              const parent = await QuestionModel.create(parentDoc);
-              console.log("[admin/lms/import] created comprehension parent ID:", parent._id);
-
-              // optionally tag children for easy lookup
-              await QuestionModel.updateMany({ _id: { $in: childIds } }, { $addToSet: { tags: `comprehension-${parent._id}` } }).exec();
-
-              insertedParents++;
-              insertedChildren += childIds.length;
-            } catch (e) {
-              console.error("[admin/lms/import] DB insert failed for comprehension:", e && (e.stack || e));
-              allErrors.push({ reason: "DB insert failed for comprehension", error: String(e && e.message) });
-            }
-          } // end saveToDb && QuestionModel
-        } // end has question blocks
-      } // end passage/after check
-
-    } else {
-      // fallback: parse as single-question blocks
-      console.log("[admin/lms/import] no comprehension delimiter found; parsing single-question blocks");
-      const blocks = parseQuestionBlocks(content);
-      console.log(`[admin/lms/import] parseQuestionBlocks returned ${blocks.length} blocks`);
-      parsedCount += blocks.length;
-      previewBlocks.push(...blocks.slice(0,5).map(b => b.text));
-
-      if (blocks.length === 0) {
-        allErrors.push({ reason: "No valid question blocks parsed" });
-      } else if (saveToDb && QuestionModel) {
-        // prepare docs and insert
-        const toInsert = blocks.map(b => {
-          const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(Boolean);
-          let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
-          if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
-          return {
-            text: (b.text || "Question").trim(),
-            choices,
-            correctIndex: ci,
-            tags: ["imported"],
-            source: "import",
-            raw: b.rawBlock || "",
-            organization: orgId,
-            module: moduleName,
-            createdAt: new Date()
-          };
-        });
-
+    if (saveToDb && blocks.length) {
+      try {
+        // import Question model if present (best-effort)
+        let Question;
         try {
-          const inserted = await QuestionModel.insertMany(toInsert, { ordered: true });
-          console.log("[admin/lms/import] inserted single-question IDs (sample):", inserted.slice(0,10).map(x => x._id));
-          insertedChildren += inserted.length;
+          Question = (await import("../models/question.js")).default;
         } catch (e) {
-          console.error("[admin/lms/import] DB insert failed for single questions:", e && (e.stack || e));
-          allErrors.push({ reason: "DB insert failed for single questions", error: String(e && e.message) });
+          try {
+            Question = (await import("../models/question/index.js")).default;
+          } catch (e2) {
+            Question = null;
+          }
         }
-      } else if (saveToDb && !QuestionModel) {
-        allErrors.push({ reason: "Question model not available; cannot save to DB" });
-        console.warn("[admin/lms/import] cannot save single questions: Question model missing");
-      } else {
-        console.log("[admin/lms/import] saveToDb=false; not saving single questions to DB");
+
+        if (!Question) {
+          dbSkipped = true;
+          console.warn("[admin/lms/import] Question model not found — skipping DB insert");
+        } else {
+          // make sure we insert valid shapes: text (string), choices (embedded docs), correctIndex (number)
+          const toInsert = blocks.map(b => {
+            // ensure question text exists (fallback to raw block first non-choice line)
+            let qtext = (b.text || "").trim();
+            if (!qtext) {
+              const firstLine = (b.rawBlock || "").split("\n").map(s => s.trim()).find(l => l && !/^[a-d][\.\)]/i.test(l));
+              if (firstLine) qtext = firstLine.replace(/^\d+\.\s*/, "").trim();
+            }
+
+            const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : "" })).filter(c => c.text);
+
+            // ensure correctIndex is numeric and within bounds otherwise default 0
+            let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
+            if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
+
+            return {
+              text: qtext || "Question",
+              choices,
+              correctIndex: ci,
+              tags: ["responsibility"].concat(Array.isArray(b.tags) ? b.tags : []),
+              source: req.body.source || "import",
+              raw: b.rawBlock,
+              createdAt: new Date(),
+
+              // NEW organization + module fields
+              organization: orgId,          // null for global (usable by all orgs)
+              module: moduleName || "general"
+            };
+          });
+
+          const result = await Question.insertMany(toInsert);
+          inserted = result.length || 0;
+        }
+      } catch (err) {
+        console.error("[admin/lms/import] DB insert error:", err && (err.stack || err));
+        dbErr = String(err.message || err);
       }
     }
 
-    // build summary
-    const summary = {
-      parsedFiles: 1,
-      parsedItems: parsedCount,
-      insertedParents,
-      insertedChildren,
-      errors: allErrors
-    };
-
-    console.log("[admin/lms/import] summary:", summary);
-
-    // render the existing admin view summary (the app uses admin/lms_import_summary or admin/lms_import)
+    // Render preview page (if HTML) with summary
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return safeRender(req, res, "admin/lms_import_summary", {
         title: "Import summary",
-        detected: parsedCount,
-        blocks: previewBlocks,
-        savedToDb: saveToDb && (insertedParents + insertedChildren) > 0 && allErrors.length === 0,
-        inserted: insertedParents + insertedChildren,
-        dbSkipped: !saveToDb,
-        dbErr: allErrors.length ? allErrors : null,
+        detected: blocks.length,
+        blocks,
+        savedToDb: saveToDb && !dbSkipped && !dbErr,
+        inserted,
+        dbSkipped,
+        dbErr,
         selectedOrgId: req.body && req.body.orgId ? req.body.orgId : null,
         selectedModule: moduleName
       });
     }
 
-    return res.json({ success: true, parsed: parsedCount, savedToDb: saveToDb, inserted: insertedParents + insertedChildren, errors: allErrors });
+    // JSON response for API callers
+    return res.json({ success: true, parsed: blocks.length, savedToDb: saveToDb && !dbSkipped && !dbErr, inserted, dbSkipped, dbErr });
+
   } catch (err) {
-    console.error("[admin/lms/import] unexpected error:", err && (err.stack || err));
+    console.error("[admin/lms/import] error:", err && (err.stack || err));
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return res.status(500).send("Import failed");
     }
-    return res.status(500).json({ error: "Import failed", detail: String(err && err.message) });
+    return res.status(500).json({ error: "Import failed", detail: String(err.message || err) });
   }
 });
 
