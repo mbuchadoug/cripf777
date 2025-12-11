@@ -104,8 +104,8 @@ router.post("/import", upload.single("file"), async (req, res) => {
           // insert child question docs with org/module metadata
           const childDocs = comp.questions.map(q => ({
             text: q.text,
-            choices: q.choices,               // array of strings
-            answerIndex: typeof q.answerIndex === "number" ? q.answerIndex : undefined,
+            choices: (q.choices || []).map(c => (typeof c === "string" ? c : (c.text || String(c)))),
+            answerIndex: typeof q.answerIndex === "number" ? q.answerIndex : 0, // ensure required field present
             tags: q.tags || [],
             difficulty: q.difficulty || "medium",
             instructions: q.instructions || "",
@@ -122,6 +122,8 @@ router.post("/import", upload.single("file"), async (req, res) => {
           // create parent comprehension doc
           const parentDoc = {
             text: (comp.passage || "").split("\n").slice(0, 1).join(" ").slice(0, 120) || "Comprehension passage",
+            choices: [], // parent has no choices
+            answerIndex: 0, // placeholder so schema requirements are satisfied
             type: "comprehension",
             passage: comp.passage,
             questionIds: childIds,
@@ -132,8 +134,18 @@ router.post("/import", upload.single("file"), async (req, res) => {
             createdAt: new Date()
           };
 
+          // create parent (if model/schema doesn't accept some fields they will be ignored;
+          // ideally your QuizQuestion schema includes `type`, `passage`, `questionIds`)
           const insertedParent = await QuizQuestion.create(parentDoc);
           insertedParents.push(insertedParent);
+
+          // help future diagnostics: add tag linking children to parent
+          try {
+            await QuizQuestion.updateMany({ _id: { $in: childIds } }, { $addToSet: { tags: `comprehension-${insertedParent._id}` } }).exec();
+          } catch (tErr) {
+            // non-fatal
+            console.warn("[import] tagging children failed", tErr && tErr.message);
+          }
         } catch (e) {
           console.error("[import comprehension insert] failed:", e && (e.stack || e));
           combinedErrors.push({ reason: "DB insert failed for a comprehension", error: String(e && e.message) });
@@ -159,8 +171,8 @@ router.post("/import", upload.single("file"), async (req, res) => {
     // Insert into DB but mark source 'import' and attach org/module
     const toInsert = parsed.map(p => ({
       text: p.text,
-      choices: p.choices,
-      answerIndex: typeof p.answerIndex === "number" ? p.answerIndex : undefined,
+      choices: (p.choices || []).map(c => (typeof c === "string" ? c : (c.text || String(c)))),
+      answerIndex: typeof p.answerIndex === "number" ? p.answerIndex : 0, // ensure required
       tags: p.tags || [],
       difficulty: p.difficulty || "medium",
       instructions: p.instructions || "",

@@ -29,19 +29,7 @@ const QuestionSchema = new mongoose.Schema({
   difficulty: { type: String, default: null },
   source: { type: String, default: "import" },
   raw: { type: String, default: null },       // optional: store raw block for debugging
-
-  // --- COMPREHENSION / PARENT FIELDS ---
-  // 'type' can be 'comprehension' for a passage parent, otherwise absent or 'question'
-  type: { type: String, enum: ["comprehension", "question"], default: "question", index: true },
-
-  // full passage text for comprehension parents (not used for normal questions)
-  passage: { type: String, default: null },
-
-  // array of Question._id values (child questions). Parents should include child ids here.
-  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
-
-  // --- bookkeeping ---
   createdAt: { type: Date, default: () => new Date() }
-}, { strict: true });
+});
 
 export default mongoose.models.Question || mongoose.model("Question", QuestionSchema);
