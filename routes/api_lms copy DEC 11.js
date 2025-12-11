@@ -117,7 +117,7 @@ function fetchRandomQuestionsFromFile(count = 5) {
 router.get("/quiz", async (req, res) => {
   try {
     // prefer explicit examId (assigned quizzes)
-    const examIdParam = String(req.query.examId || "").trim() || null;
+    const examId = String(req.query.examId || "").trim() || null;
 
     // fallback sampling params
     let rawCount = parseInt(req.query.count || "5", 10);
@@ -127,232 +127,114 @@ router.get("/quiz", async (req, res) => {
     const moduleName = String(req.query.module || "").trim(); // e.g. "Responsibility"
     const orgSlug = String(req.query.org || "").trim();       // e.g. "muono"
 
-    // helper: try to read file fallback questions once (map by id)
-    const fileQuestionsMap = {};
-    try {
-      const p = path.join(process.cwd(), "data", "data_questions.json");
-      if (fs.existsSync(p)) {
-        const raw = fs.readFileSync(p, "utf8");
-        const arr = JSON.parse(raw);
-        for (const fq of arr) {
-          const fid = String(fq.id || fq._id || fq.uuid || "");
-          if (fid) fileQuestionsMap[fid] = fq;
-        }
-      }
-    } catch (e) {
-      // non-fatal
-      console.warn("[/api/lms/quiz] file fallback load failed:", e && e.message);
-    }
-
-    // Normalizer for exam.questionIds (handles array, JSON-stringified array, single string, etc)
-    function normalizeExamQuestionIds(raw) {
-      if (!raw && raw !== 0) return [];
-      if (Array.isArray(raw)) return raw.map(String);
-      if (typeof raw === "string") {
-        const trimmed = raw.trim();
-        // attempt JSON parse if it looks like an array
-        if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || trimmed.includes("','") || trimmed.includes('", "')) {
-          try {
-            const parsed = JSON.parse(trimmed);
-            if (Array.isArray(parsed)) return parsed.map(String);
-          } catch (e) {
-            // fallback to try to extract parent:... and ids via regex
-            const items = [];
-            // find parent:... tokens and hex ids
-            const parentMatches = trimmed.match(/parent:\s*([0-9a-fA-F]{24})/g) || [];
-            parentMatches.forEach(m => {
-              const parts = m.split(':');
-              if (parts[1]) items.push(`parent:${parts[1].replace(/[^0-9a-fA-F]/g,'')}`);
-            });
-            // extract 24-hex object ids
-            const objMatches = trimmed.match(/[0-9a-fA-F]{24}/g) || [];
-            objMatches.forEach(m => items.push(String(m)));
-            return items;
-          }
-        }
-        // otherwise return single string as an array
-        return [trimmed];
-      }
-      // fallback: coerce to string
-      return [String(raw)];
-    }
+    // models assumed imported at top of file:
+    // import ExamInstance from "../models/examInstance.js";
+    // import Question from "../models/question.js";
+    // import Organization from "../models/organization.js";
 
     // If examId was provided -> return that exact exam + question docs (preserve order)
-    if (examIdParam) {
-      console.log("[/api/lms/quiz] loading examId:", examIdParam);
+    if (examId) {
+      console.log("[/api/lms/quiz] loading examId:", examId);
       try {
-        const exam = await ExamInstance.findOne({ examId: examIdParam }).lean().exec();
+        const exam = await ExamInstance.findOne({ examId }).lean().exec();
         if (!exam) {
-          console.warn("[/api/lms/quiz] examId not found:", examIdParam);
+          console.warn("[/api/lms/quiz] examId not found:", examId);
           return res.status(404).json({ error: "exam not found" });
         }
 
-        // Normalize questionIds array
-        const rawQIds = normalizeExamQuestionIds(exam.questionIds || []);
-        const qIds = rawQIds.map(String).filter(Boolean);
+        // Ensure questionIds array exists
+        const qIds = Array.isArray(exam.questionIds) ? exam.questionIds.map(String) : [];
 
-        // Partition qIds into parent markers, DB ObjectId-like ids, and non-ObjectId file ids
-        const parentMarkers = [];
-        const dbIdStrs = [];
-        const fileIds = []; // non-ObjectId ids (e.g. fid-xxx or other string ids)
+        // Load question docs from DB (these may include comprehension parents and/or child questions)
+        const dbDocs = qIds.length
+          ? await Question.find({ _id: { $in: qIds } }).lean().exec()
+          : [];
 
+        // Also load any parent comprehension docs referenced by these ids (in case parent IDs were used)
+        // We'll build a map by _id for quick lookup
+        const byId = {};
+        for (const d of dbDocs) byId[String(d._id)] = d;
+
+        // For completeness: if exam.questionIds includes some ids that are comprehension parent ids,
+        // and those parents have questionIds (children), we should load those children and return parent with children.
+        // Also if some docs returned are parents, fetch their children.
+        const parentIdsToFetchChildren = [];
         for (const id of qIds) {
-          if (typeof id === "string" && id.startsWith("parent:")) {
-            const pid = id.split(":")[1] || "";
-            if (mongoose.isValidObjectId(pid)) parentMarkers.push(pid);
-            else parentMarkers.push(pid); // still keep it, will attempt findById
+          const doc = byId[id];
+          if (doc && (doc.type === "comprehension" || (doc.passage && Array.isArray(doc.questionIds) && doc.questionIds.length))) {
+            parentIdsToFetchChildren.push(id);
+          }
+        }
+
+        // collect child ids to fetch
+        const childIdsSet = new Set();
+        for (const pid of parentIdsToFetchChildren) {
+          const parentDoc = byId[pid];
+          const children = Array.isArray(parentDoc.questionIds) ? parentDoc.questionIds.map(String) : [];
+          children.forEach(c => childIdsSet.add(c));
+        }
+
+        let childDocs = [];
+        if (childIdsSet.size) {
+          const childIds = Array.from(childIdsSet);
+          childDocs = await Question.find({ _id: { $in: childIds } }).lean().exec();
+          for (const c of childDocs) byId[String(c._id)] = c;
+        }
+
+        // Build series to return in the same order as exam.questionIds
+        const series = [];
+        for (const qid of qIds) {
+          const doc = byId[qid];
+          if (!doc) {
+            // doc missing (maybe it was a file-fallback item) — skip or include placeholder
             continue;
           }
-          if (mongoose.isValidObjectId(id)) dbIdStrs.push(id);
-          else fileIds.push(id);
-        }
 
-        // Fetch DB docs for all parent + direct ids
-        const toFetchIds = Array.from(new Set([...parentMarkers, ...dbIdStrs])); // unique strings
-        const toFetchObjIds = toFetchIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-
-        let fetchedDocs = [];
-        if (toFetchObjIds.length) {
-          fetchedDocs = await Question.find({ _id: { $in: toFetchObjIds } }).lean().exec();
-        }
-
-        // Build lookup map by id string
-        const byId = {};
-        for (const d of fetchedDocs) byId[String(d._id)] = d;
-
-        // For each parent doc we fetched, collect child ids to fetch
-        const childIdSet = new Set();
-        for (const pid of parentMarkers) {
-          const pdoc = byId[pid];
-          if (pdoc && Array.isArray(pdoc.questionIds)) {
-            for (const cid of pdoc.questionIds.map(String)) {
-              if (cid) childIdSet.add(cid);
-            }
-          }
-        }
-
-        // Also, a parent marker might refer to a parent not in fetchedDocs (if not ObjectId-like earlier),
-        // attempt a DB fetch for any parentMarkers not already fetched (best-effort).
-        const missingParentMarkers = parentMarkers.filter(pid => !byId[pid] && mongoose.isValidObjectId(pid));
-        if (missingParentMarkers.length) {
-          const missObjIds = missingParentMarkers.map(id => mongoose.Types.ObjectId(id));
-          try {
-            const miss = await Question.find({ _id: { $in: missObjIds } }).lean().exec();
-            for (const d of miss) {
-              byId[String(d._id)] = d;
-              if (Array.isArray(d.questionIds)) d.questionIds.map(String).forEach(cid => childIdSet.add(cid));
-            }
-          } catch (e) {
-            console.warn("[/api/lms/quiz] extra parent fetch failed:", e && e.message);
-          }
-        }
-
-        // Fetch child docs (DB)
-        if (childIdSet.size) {
-          const childObjIds = Array.from(childIdSet).filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-          if (childObjIds.length) {
-            const childDocs = await Question.find({ _id: { $in: childObjIds } }).lean().exec();
-            for (const c of childDocs) byId[String(c._id)] = c;
-          }
-        }
-
-        // Build series preserving the exact order in qIds.
-        const series = [];
-        for (const rawId of qIds) {
-          if (!rawId) continue;
-          const id = String(rawId);
-
-          if (id.startsWith("parent:")) {
-            const pid = id.split(":")[1] || "";
-            const parentDoc = byId[pid];
-            if (!parentDoc) {
-              // parent not found in DB -> skip but log
-              console.warn("[/api/lms/quiz] parent marker found but parent doc missing:", pid);
-              continue;
-            }
-
-            // build ordered children list from parentDoc.questionIds
-            const orderedChildIds = Array.isArray(parentDoc.questionIds) ? parentDoc.questionIds.map(String) : [];
-            const orderedChildren = orderedChildIds.map(cid => {
-              // try DB doc first
-              if (byId[cid]) {
-                const cdoc = byId[cid];
-                return {
-                  id: String(cdoc._id),
-                  text: cdoc.text,
-                  choices: (cdoc.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || "") })),
-                  tags: cdoc.tags || [],
-                  difficulty: cdoc.difficulty || "medium"
-                };
-              }
-              // fallback to file questions if present
-              if (fileQuestionsMap[cid]) {
-                const fq = fileQuestionsMap[cid];
-                return {
-                  id: String(cid),
-                  text: fq.text,
-                  choices: (fq.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: (c.text || "") })),
-                  tags: fq.tags || [],
-                  difficulty: fq.difficulty || "medium"
-                };
-              }
-              // missing child -> skip
-              console.warn("[/api/lms/quiz] child missing for parent", pid, "childId:", cid);
-              return null;
+          // If this doc is a comprehension parent, include its passage + children (full objects)
+          const isParent = doc.type === "comprehension" || (doc.passage && Array.isArray(doc.questionIds) && doc.questionIds.length);
+          if (isParent) {
+            const childIds = (doc.questionIds || []).map(String).filter(Boolean);
+            const children = childIds.map(id => {
+              const c = byId[id];
+              if (!c) return null;
+              // normalize choices shape for client
+              const choices = (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) }));
+              return {
+                id: String(c._id),
+                text: c.text,
+                choices,
+                tags: c.tags || [],
+                difficulty: c.difficulty || "medium"
+              };
             }).filter(Boolean);
 
             series.push({
-              id: String(parentDoc._id),
+              id: String(doc._id),
               type: "comprehension",
-              passage: parentDoc.passage || parentDoc.text || "",
-              children: orderedChildren,
-              tags: parentDoc.tags || [],
-              difficulty: parentDoc.difficulty || "medium"
+              passage: doc.passage || doc.text || "",
+              children,
+              tags: doc.tags || [],
+              difficulty: doc.difficulty || "medium"
             });
-            continue;
-          }
-
-          // normal direct id (could be DB ObjectId or a file id)
-          if (mongoose.isValidObjectId(id)) {
-            const doc = byId[id];
-            if (doc) {
-              series.push({
-                id: String(doc._id),
-                text: doc.text,
-                choices: (doc.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || "") })),
-                tags: doc.tags || [],
-                difficulty: doc.difficulty || "medium"
-              });
-            } else {
-              // DB id not found -> skip
-              console.warn("[/api/lms/quiz] direct DB question id not found:", id);
-            }
-            continue;
-          }
-
-          // non-ObjectId string id -> attempt file fallback
-          if (fileQuestionsMap[id]) {
-            const fq = fileQuestionsMap[id];
+          } else {
+            // normal question
+            const choices = (doc.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) }));
             series.push({
-              id: String(id),
-              text: fq.text,
-              choices: (fq.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: (c.text || "") })),
-              tags: fq.tags || [],
-              difficulty: fq.difficulty || "medium"
+              id: String(doc._id),
+              text: doc.text,
+              choices,
+              tags: doc.tags || [],
+              difficulty: doc.difficulty || "medium"
             });
-            continue;
           }
-
-          // Unknown id format -> skip with a debug log
-          console.warn("[/api/lms/quiz] unknown question id format (skipping):", id);
-        } // end for qIds
+        }
 
         return res.json({ examId: exam.examId, series });
       } catch (err) {
         console.error("[/api/lms/quiz] exam load error:", err && (err.stack || err));
         return res.status(500).json({ error: "failed to load exam", detail: String(err && err.message) });
       }
-    } // end examId branch
+    }
 
     // ---------- No examId: sampling mode (old behavior) ----------
     try {
@@ -384,23 +266,19 @@ router.get("/quiz", async (req, res) => {
       for (const d of docs) {
         const isComprehension = d.type === "comprehension" || (d.passage && Array.isArray(d.questionIds) && d.questionIds.length);
         if (isComprehension) {
-          // fetch children (best-effort; may return empty)
+          // fetch children
           let children = [];
           try {
             const ids = (d.questionIds || []).filter(Boolean).map(String).filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
             if (ids.length) {
               const cs = await Question.find({ _id: { $in: ids } }).lean().exec();
-              children = ids.map(idStr => {
-                const found = cs.find(x => String(x._id) === String(idStr));
-                if (!found) return null;
-                return {
-                  id: String(found._id),
-                  text: found.text,
-                  choices: (found.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || "") })),
-                  tags: found.tags || [],
-                  difficulty: found.difficulty || "medium"
-                };
-              }).filter(Boolean);
+              children = cs.map(c => ({
+                id: String(c._id),
+                text: c.text,
+                choices: (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: (ch.text || ch) })),
+                tags: c.tags || [],
+                difficulty: c.difficulty || "medium"
+              }));
             }
           } catch (e) {
             console.warn("[/api/lms/quiz] failed to load children for parent:", d._id, e && e.message);
@@ -425,6 +303,7 @@ router.get("/quiz", async (req, res) => {
         }
       }
 
+      // If sampling produced fewer than requested, still return what we have
       const examIdOut = "exam-" + Date.now().toString(36);
       return res.json({ examId: examIdOut, series });
     } catch (err) {
