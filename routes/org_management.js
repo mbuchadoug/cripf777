@@ -695,7 +695,7 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
 
 
 // --- REPLACE assign-quiz handler in routes/org_management.js ---
-// --- Replace the existing assign-quiz handler with this ---
+// Diagnostic assign-quiz handler (paste in place of existing)
 router.post(
   "/admin/orgs/:slug/assign-quiz",
   ensureAuth,
@@ -705,73 +705,61 @@ router.post(
       const slug = String(req.params.slug || "").trim();
       let { module = "general", userIds = [], count = 20, expiresMinutes = 60, passageId = null } = req.body || {};
 
-      if (!Array.isArray(userIds) || !userIds.length) {
-        return res.status(400).json({ error: "userIds required" });
+      console.log("[assign-quiz] incoming payload:", { module, userIds, count, expiresMinutes, passageId });
+
+      // normalize userIds: allow single string -> array
+      if (!Array.isArray(userIds)) {
+        if (typeof userIds === "string" && userIds.trim()) userIds = [userIds];
+        else userIds = [];
+      }
+      if (!userIds.length) {
+        return res.status(400).json({ error: "userIds required", received: req.body });
       }
 
       const moduleKey = String(module || "general").trim().toLowerCase();
-
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).json({ error: "org not found" });
 
       const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
-      const assigned = [];
+      const results = { assigned: [], failures: [] };
 
-      // If a specific passageId was provided -> assign ONLY that passage and its children
+      // PASSAGE FLOW: when passageId provided, assign only passage marker + child ids
       if (passageId) {
-        // normalize ObjectId if possible
         const pid = String(passageId).trim();
         if (!pid) return res.status(400).json({ error: "invalid passageId" });
 
-        // Load parent comprehension doc
         const parent = await Question.findById(pid).lean().exec();
         if (!parent) return res.status(404).json({ error: "passage not found" });
 
-        // Ensure it has children
         const childIds = Array.isArray(parent.questionIds) ? parent.questionIds.map(String).filter(Boolean) : [];
         if (!childIds.length) {
           return res.status(400).json({ error: "passage has no child questions" });
         }
 
-        // Build canonical questionIds for exam instance:
-        // [ "parent:<parentId>", ObjectId(child1), ObjectId(child2), ... ]
-        const examQuestionIds = [];
-        const examChoicesOrder = [];
+        const qIdsForExam = [];
+        const choicesOrder = [];
+        qIdsForExam.push(`parent:${String(parent._id)}`);
+        choicesOrder.push([]);
 
-        // parent marker
-        examQuestionIds.push(`parent:${String(parent._id)}`);
-        examChoicesOrder.push([]); // placeholder for parent marker
-
-        // For each child, push its ObjectId and compute a shuffled choicesOrder array
         for (const cid of childIds) {
-          // push child id as ObjectId
-          if (mongoose.isValidObjectId(cid)) {
-            examQuestionIds.push(mongoose.Types.ObjectId(cid));
-          } else {
-            // fallback, push raw string id (shouldn't happen for DB-stored docs)
-            examQuestionIds.push(cid);
-          }
-
-          // try to load child doc to determine number of choices
+          qIdsForExam.push(mongoose.isValidObjectId(cid) ? mongoose.Types.ObjectId(cid) : cid);
+          // get number of choices for child
           let nChoices = 0;
           try {
-            const childDoc = await Question.findById(cid).lean().exec();
-            if (childDoc && Array.isArray(childDoc.choices)) nChoices = childDoc.choices.length;
-          } catch (e) {
-            /* ignore - assume 0 choices */
-          }
-
+            const cdoc = await Question.findById(cid).lean().exec();
+            if (cdoc && Array.isArray(cdoc.choices)) nChoices = cdoc.choices.length;
+          } catch (e) { /* ignore */ }
           const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
           for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
           }
-          examChoicesOrder.push(indices);
+          choicesOrder.push(indices);
         }
 
-        // Now create an ExamInstance per user with exactly these questionIds
         for (const uId of userIds) {
           try {
+            console.log("[assign-quiz][passage] assigning to", uId);
             const examId = crypto.randomUUID();
             const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
@@ -780,84 +768,75 @@ router.post(
               org: org._id,
               module: moduleKey,
               user: mongoose.Types.ObjectId(uId),
-              questionIds: examQuestionIds,
-              choicesOrder: examChoicesOrder,
+              questionIds: qIdsForExam,
+              choicesOrder,
               expiresAt,
               createdAt: new Date(),
               createdByIp: req.ip,
             });
 
-            // optionally create an Attempt doc so it shows up in admin attempts (you already do this)
             if (Attempt) {
               await Attempt.create({
                 userId: mongoose.Types.ObjectId(uId),
                 organization: org._id,
                 module: moduleKey,
-                questionIds: examQuestionIds,
+                questionIds: qIdsForExam,
                 startedAt: new Date(),
-                maxScore: examQuestionIds.length,
+                maxScore: qIdsForExam.length,
               });
             }
 
             const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
-            assigned.push({ userId: uId, examId, url });
+            results.assigned.push({ userId: uId, examId, url });
+            console.log("[assign-quiz][passage] success", uId, examId);
           } catch (e) {
-            console.warn("[assign-quiz][passage] user assign failed", uId, e && (e.stack || e));
+            console.error("[assign-quiz][passage] failed for user", uId, e && (e.stack || e));
+            results.failures.push({ userId: uId, error: String(e && e.message) });
           }
         }
 
-        return res.json({ ok: true, assigned, mode: "passage", passageId: pid, childCount: childIds.length });
-      } // end passage flow
+        return res.json({ ok: true, mode: "passage", passageId: pid, childCount: childIds.length, ...results });
+      }
 
-      // ----- sampling flow (no passage requested) -----
-      // case-insensitive match on module + org/global questions
+      // SAMPLING FLOW (no passageId) - fallback to sampling existing behavior
       const match = {
         $or: [{ organization: org._id }, { organization: null }],
         module: { $regex: new RegExp(`^${moduleKey}$`, "i") },
       };
 
       const totalAvailable = await Question.countDocuments(match);
-      console.log("[assign quiz] available questions:", totalAvailable, "for module=", moduleKey, "org=", org._id.toString());
+      console.log("[assign-quiz] available questions:", totalAvailable);
 
-      if (!totalAvailable) {
-        return res.status(404).json({ error: "no questions available for that module" });
-      }
+      if (!totalAvailable) return res.status(404).json({ error: "no questions available for that module" });
 
       count = Math.max(1, Math.min(Number(count) || 1, totalAvailable));
       const pipeline = [{ $match: match }, { $sample: { size: count } }];
       const docs = await Question.aggregate(pipeline).allowDiskUse(true);
 
-      if (!docs || !docs.length) {
-        return res.status(404).json({ error: "no questions returned from sampling" });
-      }
+      if (!docs || !docs.length) return res.status(404).json({ error: "no questions returned from sampling" });
 
-      // For each user, expand sampled docs (including comprehension parents) as before
       for (const uId of userIds) {
         try {
           const questionIds = [];
           const choicesOrder = [];
 
           for (const q of docs) {
-            const isComprehension = (q && (q.type === "comprehension" || (q.passage && Array.isArray(q.questionIds) && q.questionIds.length)));
-
+            const isComprehension = q && (q.type === "comprehension" || (q.passage && Array.isArray(q.questionIds) && q.questionIds.length));
             if (isComprehension) {
               questionIds.push(`parent:${String(q._id)}`);
               choicesOrder.push([]);
-
               const childIds = Array.isArray(q.questionIds) ? q.questionIds.map(String) : [];
-              if (childIds.length) {
-                for (const cid of childIds) {
-                  questionIds.push(mongoose.Types.ObjectId(cid));
-                  let nChoices = 0;
-                  const childDoc = await Question.findById(cid).lean().exec();
-                  if (childDoc) nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
-                  const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
-                  for (let i = indices.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [indices[i], indices[j]] = [indices[j], indices[i]];
-                  }
-                  choicesOrder.push(indices);
+              for (const cid of childIds) {
+                questionIds.push(mongoose.Types.ObjectId(cid));
+                let nChoices = 0;
+                const childDoc = await Question.findById(cid).lean().exec();
+                if (childDoc) nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
+                const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
+                for (let i = indices.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [indices[i], indices[j]] = [indices[j], indices[i]];
                 }
+                choicesOrder.push(indices);
               }
             } else {
               questionIds.push(q._id);
@@ -869,7 +848,7 @@ router.post(
               }
               choicesOrder.push(indices);
             }
-          } // end for docs
+          }
 
           const examId = crypto.randomUUID();
           const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
@@ -898,16 +877,17 @@ router.post(
           }
 
           const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
-          assigned.push({ userId: uId, examId, url });
+          results.assigned.push({ userId: uId, examId, url });
         } catch (e) {
-          console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
+          console.error("[assign-quiz] failed for user", uId, e && (e.stack || e));
+          results.failures.push({ userId: uId, error: String(e && e.message) });
         }
-      } // end for userIds
+      }
 
-      return res.json({ ok: true, assigned, countUsed: docs.length });
+      return res.json({ ok: true, mode: "sample", countUsed: docs.length, ...results });
     } catch (err) {
-      console.error("[assign quiz] error:", err && (err.stack || err));
-      return res.status(500).json({ error: "assign failed" });
+      console.error("[assign quiz] fatal error:", err && (err.stack || err));
+      return res.status(500).json({ error: "assign failed", detail: String(err && err.message) });
     }
   }
 );
