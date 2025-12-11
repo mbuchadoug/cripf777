@@ -633,31 +633,6 @@ router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
 /*  GET /org/:slug/quiz?examId=...                                     */
 /* ------------------------------------------------------------------ */
 
-router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "");
-    const examId = String(req.query.examId || "");
-
-    if (!examId) return res.status(400).send("Missing examId");
-
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("org not found");
-
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id,
-    }).lean();
-    if (!membership) {
-      return res.status(403).send("You are not a member of this organization");
-    }
-
-    // Use existing LMS quiz UI
-    return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}`);
-  } catch (err) {
-    console.error("[org quiz] error:", err && (err.stack || err));
-    return res.status(500).send("failed");
-  }
-});
 
 /* ------------------------------------------------------------------ */
 /*  ORG QUIZ: employees/managers take module quiz (20 questions)       */
