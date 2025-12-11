@@ -18,7 +18,12 @@
     .hint{font-size:13px;color:#666;margin-top:6px}
     .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     @media(max-width:720px){ .two-col{grid-template-columns:1fr} }
+    .summary{border-left:4px solid #0b6fb7;padding:12px;background:#fbfbfb;margin-top:18px;border-radius:6px}
+    .success{color:green;font-weight:700}
+    .error{color:#b00020}
     ul { margin-top:6px; margin-bottom:6px; }
+    .preview-wrap{margin-top:12px}
+    .preview-item{background:#fff;border:1px solid #e6e6e6;border-radius:8px;padding:14px;margin-bottom:12px}
   </style>
 </head>
 <body>
@@ -27,12 +32,12 @@
 
     <p class="note">
       Upload plain text files (.txt) or paste quiz questions.  
-      You can now import comprehension passages (passage + questions) in two ways:
+      You can import comprehension passages (passage + questions) either as a single combined file or as two separate files (passage + questions).
     </p>
 
     <ul class="note">
       <li><strong>Single combined file</strong>: upload or paste a file that contains the passage, a delimiter line of <code>---</code>, then the questions (passage first, then <code>---</code>, then question blocks).</li>
-      <li><strong>Two-file upload</strong>: upload the passage as <strong>Passage file</strong> and the questions as <strong>Questions file</strong> (recommended for long passages).</li>
+      <li><strong>Two-file upload</strong>: upload the passage as <strong>Passage file</strong> and the questions as <strong>Questions file</strong> (recommended for very long passages).</li>
     </ul>
 
     <form method="post" enctype="multipart/form-data" action="/admin/lms/import">
@@ -56,4 +61,93 @@
           <div>
             <label>Passage file (.txt)</label><br/>
             <input type="file" name="passageFile" accept=".txt" />
-            <div class="hint">If you have a
+            <div class="hint">If you have a long passage, upload it here. Leave empty if using a single combined file.</div>
+          </div>
+          <div>
+            <label>Questions file (.txt)</label><br/>
+            <input type="file" name="file" accept=".txt" />
+            <div class="hint">This file should contain the question blocks (a)-d) format). If uploading a passageFile, this file should only contain the questions.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin:14px 0;color:#888">— or —</div>
+
+      <div>
+        <label><strong>Single file or paste text</strong></label>
+        <textarea name="text" placeholder="Either paste the passage + --- + questions, or just the questions (if you used the Passage file above)">{{{text}}}</textarea>
+        <div class="hint">To use a combined file: place the passage first, then a line with three or more dashes (<code>---</code>), then the questions blocks.</div>
+      </div>
+
+      <div style="margin-top:10px">
+        <label style="font-weight:700">
+          <input type="checkbox" name="save" value="1" /> Save parsed questions to database
+        </label>
+        <div class="hint">If unchecked the parser will run and show a preview but will not save.</div>
+      </div>
+
+      <div style="margin-top:14px">
+        <button class="btn" type="submit">Import</button>
+        <button class="btn secondary" type="reset" style="margin-left:8px">Reset</button>
+      </div>
+    </form>
+
+    {{!-- Result / Preview area (rendered by server when returning to this view) --}}
+    {{#if result}}
+      <div class="summary" role="status" aria-live="polite">
+        <div>
+          {{#if result.parsed}}
+            <div>Detected <strong>{{result.parsed}}</strong> question block{{#if (gt result.parsed 1)}}s{{/if}}.</div>
+          {{/if}}
+
+          {{#if result.inserted}}
+            <div class="success">Saved to DB: inserted {{result.inserted}} question{{#if (gt result.inserted 1)}}s{{/if}}.</div>
+          {{/if}}
+
+          {{#if result.insertedParents}}
+            <div class="success">Saved to DB: inserted {{result.insertedParents}} comprehension passage{{#if (gt result.insertedParents 1)}}s{{/if}} (parents).</div>
+          {{/if}}
+
+          {{#if result.insertedParents}}
+            <div style="margin-top:8px;color:#444">Imported as comprehension parent(s) + child questions.</div>
+          {{/if}}
+
+          {{#if result.errors}}
+            <div style="margin-top:8px">
+              <div class="error">Errors detected: {{result.errors.length}}</div>
+              <ul>
+                {{#each result.errors}}
+                  <li>{{this.reason}}{{#if this.error}} — {{this.error}}{{/if}}</li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+        </div>
+
+        {{!-- Optional preview blocks if server included them --}}
+        {{#if preview}}
+          <div class="preview-wrap">
+            <h3>Preview (first {{preview.length}} block{{#if (gt preview.length 1)}}s{{/if}})</h3>
+            {{#each preview}}
+              <div class="preview-item">
+                <pre class="block">{{this}}</pre>
+              </div>
+            {{/each}}
+          </div>
+        {{/if}}
+      </div>
+    {{/if}}
+
+    <div class="links">
+      <p>
+        After importing you can visit <a href="/admin/lms/questions">Manage Questions</a> or test quizzes at <a href="/lms/quiz">/lms/quiz</a>.
+      </p>
+    </div>
+  </div>
+
+  {{!-- small helper for Handlebars unless your server already registers helpers (gt). If you don't have a helper you can remove usage above; it's harmless --}}
+  <script>
+    /* Nothing required client-side; preview is rendered server-side */
+  </script>
+</body>
+</html>
