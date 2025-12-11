@@ -46,8 +46,7 @@ function fetchRandomQuestionsFromFile(count = 5) {
  * create small ExamInstance that contains questionIds and (optionally) choicesOrder
  */
 // GET /api/lms/quiz?count=5&module=responsibility&org=muono
-// GET /api/lms/quiz?count=5&module=responsibility&org=muono or ?examId=...
-// GET /api/lms/quiz?count=5&module=responsibility&org=muono OR ?examId=...
+// GET /api/lms/quiz?count=5&module=...&org=...  OR  /api/lms/quiz?examId=...
 router.get("/quiz", async (req, res) => {
   try {
     const examIdParam = String(req.query.examId || "").trim();
@@ -58,201 +57,311 @@ router.get("/quiz", async (req, res) => {
     const moduleName = String(req.query.module || "").trim();
     const orgSlug = String(req.query.org || "").trim();
 
-    // helper: load file fallback questions (data/data_questions.json)
-    function loadFileQuestions() {
+    // helper to load file fallback
+    function loadFileQuestionsMap() {
+      const map = {};
       try {
         const p = path.join(process.cwd(), "data", "data_questions.json");
-        if (!fs.existsSync(p)) return [];
-        const raw = fs.readFileSync(p, "utf8");
-        return JSON.parse(raw);
+        if (!fs.existsSync(p)) return map;
+        const arr = JSON.parse(fs.readFileSync(p, "utf8"));
+        for (const q of arr) {
+          const id = String(q.id || q._id || q.uuid || "");
+          if (id) map[id] = q;
+        }
       } catch (e) {
-        console.error("[loadFileQuestions] error:", e && (e.stack || e));
-        return [];
+        console.warn("[/api/lms/quiz] file fallback load failed:", e && e.message);
       }
+      return map;
+    }
+    const fileQuestionsMap = loadFileQuestionsMap();
+
+    // Normalize exam.questionIds that might be stored as array or JSON string
+    function normalizeIds(raw) {
+      if (raw === undefined || raw === null) return [];
+      if (Array.isArray(raw)) return raw.map(String);
+      if (typeof raw === "string") {
+        const t = raw.trim();
+        if (!t) return [];
+        try {
+          const parsed = JSON.parse(t);
+          if (Array.isArray(parsed)) return parsed.map(String);
+        } catch (e) {
+          // fallback to split tokens / extract tokens
+          // first capture parent:... tokens and 24-hex ids
+          const tokens = [];
+          const parentMatches = t.match(/parent:([0-9a-fA-F]{24})/g) || [];
+          parentMatches.forEach(m => {
+            const pid = m.split(':')[1].replace(/[^0-9a-fA-F]/g,'');
+            if (pid) tokens.push(`parent:${pid}`);
+          });
+          const objMatches = t.match(/[0-9a-fA-F]{24}/g) || [];
+          objMatches.forEach(m => tokens.push(m));
+          // also add comma/space separated parts
+          const parts = t.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+          for (const p of parts) if (!tokens.includes(p)) tokens.push(p);
+          return tokens;
+        }
+      }
+      return [String(raw)];
     }
 
-    // -----------------------
-    // If examId requested -> return exam instance exactly (with parent markers handled)
-    // -----------------------
+    // If examId was supplied: return exact exam spec, expanding parents inline
     if (examIdParam) {
-      const ex = await ExamInstance.findOne({ examId: examIdParam }).lean();
-      if (!ex) return res.status(404).json({ error: "exam instance not found" });
+      try {
+        const exam = await ExamInstance.findOne({ examId: examIdParam }).lean();
+        if (!exam) return res.status(404).json({ error: "exam instance not found" });
 
-      // ensure exam.questionIds is an array
-      const qIdsRaw = Array.isArray(ex.questionIds) ? ex.questionIds.map(String) : [];
+        const rawList = normalizeIds(exam.questionIds || []);
+        // We'll collect DB ids to fetch (parents + children + normal q ids)
+        const dbIdSet = new Set();
+        const parentTokens = []; // keep list of parent ids encountered in order
 
-      // prepare DB lookup for objectId question ids (exclude parent:<id> markers)
-      const objIds = qIdsRaw
-        .filter(id => id && !id.startsWith("parent:") && mongoose.isValidObjectId(id))
-        .map(id => mongoose.Types.ObjectId(id));
-
-      let docs = [];
-      if (objIds.length) {
-        docs = await Question.find({ _id: { $in: objIds } }).lean();
-      }
-      const dbById = {};
-      for (const d of docs) dbById[String(d._id)] = d;
-
-      // file-backed questions map (for fid-... or other string ids)
-      const fileQs = loadFileQuestions();
-      const fileById = {};
-      for (const fq of fileQs) {
-        const fid = String(fq.id || fq._id || fq.uuid || "");
-        if (fid) fileById[fid] = fq;
-      }
-
-      const series = [];
-
-      // iterate exam.questionIds in order and output either a comprehension parent (with children) or single question
-      for (const rawId of qIdsRaw) {
-        if (!rawId) continue;
-
-        // parent marker handling (format: "parent:<parentId>")
-        if (String(rawId).startsWith("parent:")) {
-          const parentId = String(rawId).slice("parent:".length);
-
-          // try DB first
-          let parent = null;
-          if (mongoose.isValidObjectId(parentId)) {
-            parent = await Question.findById(parentId).lean();
-          } else if (fileById[parentId]) {
-            parent = fileById[parentId];
+        // First pass: collect object ids we may need to fetch
+        for (const token of rawList) {
+          if (!token) continue;
+          if (String(token).startsWith("parent:")) {
+            const pid = String(token).split(":")[1] || "";
+            parentTokens.push(pid);
+            if (mongoose.isValidObjectId(pid)) dbIdSet.add(pid);
+          } else if (mongoose.isValidObjectId(token)) {
+            dbIdSet.add(token);
+          } else {
+            // non-ObjectId tokens map to fileQuestionsMap maybe
           }
-
-          if (!parent) {
-            // gracefully skip if parent missing
-            continue;
-          }
-
-          // collect child ids from parent.questionIds
-          const childIds = Array.isArray(parent.questionIds) ? parent.questionIds.map(String) : [];
-
-          // load DB children
-          const childObjIds = childIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-          let children = [];
-          if (childObjIds.length) children = await Question.find({ _id: { $in: childObjIds } }).lean();
-
-          // include file-backed children if any
-          const fileChildren = childIds
-            .filter(id => !mongoose.isValidObjectId(id) && fileById[id])
-            .map(id => fileById[id]);
-
-          // map children to canonical shape
-          const mappedChildren = (children || []).map(c => ({
-            id: String(c._id),
-            text: c.text,
-            choices: (c.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
-            tags: c.tags || [],
-            difficulty: c.difficulty || 'medium'
-          })).concat(fileChildren.map(c => ({
-            id: String(c.id || c._id || ""),
-            text: c.text,
-            choices: (c.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
-            tags: c.tags || [],
-            difficulty: c.difficulty || 'medium'
-          })));
-
-          series.push({
-            id: String(parent._id || parent.id || ""),
-            type: "comprehension",
-            passage: parent.passage || parent.text || "",
-            children: mappedChildren,
-            tags: parent.tags || [],
-            difficulty: parent.difficulty || 'medium'
-          });
-
-          // parent marker already represents parent+children; continue to next rawId
-          continue;
         }
 
-        // normal question entry: DB or file fallback
-        if (mongoose.isValidObjectId(rawId)) {
-          const qdoc = dbById[String(rawId)] || null;
-          if (!qdoc) {
-            // skip missing DB doc
+        // Fetch all referenced DB docs (parents and any direct question ids)
+        let fetched = [];
+        if (dbIdSet.size) {
+          const objIds = Array.from(dbIdSet).map(id => mongoose.Types.ObjectId(id));
+          fetched = await Question.find({ _id: { $in: objIds } }).lean().exec();
+        }
+        const byId = {};
+        for (const d of fetched) byId[String(d._id)] = d;
+
+        // For each parent, collect its child IDs and fetch children as needed
+        const childIdSet = new Set();
+        for (const pid of parentTokens) {
+          const pdoc = byId[pid];
+          if (pdoc && Array.isArray(pdoc.questionIds)) {
+            for (const cid of pdoc.questionIds.map(String)) {
+              if (cid) childIdSet.add(cid);
+            }
+          } else if (fileQuestionsMap[`parent:${pid}`]) {
+            // unlikely, but keep for completeness
+          }
+        }
+
+        // Fetch child docs if they look like ObjectIds
+        const childObjIds = Array.from(childIdSet).filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+        if (childObjIds.length) {
+          const childDocs = await Question.find({ _id: { $in: childObjIds } }).lean().exec();
+          for (const c of childDocs) byId[String(c._id)] = c;
+        }
+
+        // Build the output series while preserving order and avoiding duplicates:
+        const emittedChildIds = new Set(); // used to skip duplicates if child appears later in rawList
+        const series = [];
+
+        for (const token of rawList) {
+          if (!token) continue;
+
+          // parent marker --> expand into a comprehension entry with ordered children
+          if (String(token).startsWith("parent:")) {
+            const pid = String(token).split(":")[1] || "";
+            // prefer DB parent doc, otherwise try file fallback keyed by plain id
+            const parentDoc = byId[pid] || fileQuestionsMap[pid] || null;
+            if (!parentDoc) {
+              // skip if missing
+              continue;
+            }
+
+            // produce ordered children list (preserve parent's questionIds order)
+            const orderedChildIds = Array.isArray(parentDoc.questionIds) ? parentDoc.questionIds.map(String) : [];
+            const orderedChildren = [];
+            for (const cid of orderedChildIds) {
+              if (!cid) continue;
+              // skip child if we've already emitted it (prevents duplicates)
+              if (emittedChildIds.has(cid)) continue;
+
+              // prefer DB doc if present
+              if (byId[cid]) {
+                const c = byId[cid];
+                orderedChildren.push({
+                  id: String(c._id),
+                  text: c.text,
+                  choices: (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" })),
+                  tags: c.tags || [],
+                  difficulty: c.difficulty || "medium"
+                });
+                emittedChildIds.add(cid);
+                continue;
+              }
+
+              // fallback to file map
+              if (fileQuestionsMap[cid]) {
+                const fq = fileQuestionsMap[cid];
+                orderedChildren.push({
+                  id: cid,
+                  text: fq.text,
+                  choices: (fq.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" })),
+                  tags: fq.tags || [],
+                  difficulty: fq.difficulty || "medium"
+                });
+                emittedChildIds.add(cid);
+                continue;
+              }
+
+              // If child missing, skip gracefully
+            }
+
+            series.push({
+              id: String(parentDoc._id || parentDoc.id || pid),
+              type: "comprehension",
+              passage: parentDoc.passage || parentDoc.text || "",
+              children: orderedChildren,
+              tags: parentDoc.tags || [],
+              difficulty: parentDoc.difficulty || "medium"
+            });
+
             continue;
           }
-          series.push({
-            id: String(qdoc._id),
-            text: qdoc.text,
-            choices: (qdoc.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
-            tags: qdoc.tags || [],
-            difficulty: qdoc.difficulty || 'medium'
-          });
-        } else {
-          // string id - try file-backed
-          const fq = fileById[rawId];
-          if (fq) {
+
+          // Normal question token (DB id or file id)
+          // If token corresponds to a child that was already emitted as part of a parent, skip it
+          if (emittedChildIds.has(String(token))) {
+            // skip duplicate child
+            continue;
+          }
+
+          if (mongoose.isValidObjectId(token)) {
+            const qdoc = byId[token];
+            if (!qdoc) {
+              // question missing from DB (skip)
+              continue;
+            }
             series.push({
-              id: String(fq.id || fq._id || ""),
+              id: String(qdoc._id),
+              text: qdoc.text,
+              choices: (qdoc.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' })),
+              tags: qdoc.tags || [],
+              difficulty: qdoc.difficulty || 'medium'
+            });
+            continue;
+          }
+
+          // Non-object token -> file fallback
+          if (fileQuestionsMap[token]) {
+            const fq = fileQuestionsMap[token];
+            // ensure not duplicate
+            if (emittedChildIds.has(token)) continue;
+            series.push({
+              id: token,
               text: fq.text,
-              choices: (fq.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
+              choices: (fq.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' })),
               tags: fq.tags || [],
               difficulty: fq.difficulty || 'medium'
             });
-          } else {
-            // unknown id -> skip
+            emittedChildIds.add(token);
             continue;
           }
-        }
-      } // end for
 
-      return res.json({ examId: ex.examId, series, expiresAt: ex.expiresAt || null });
+          // unknown token -> skip
+        }
+
+        return res.json({ examId: exam.examId, series });
+      } catch (e) {
+        console.error("[/api/lms/quiz] exam load error:", e && (e.stack || e));
+        return res.status(500).json({ error: "failed to load exam instance" });
+      }
     } // end examId branch
 
-    // -----------------------
-    // Sampling branch (no examId) - keep original behaviour
-    // -----------------------
-    let orgId = null;
-    if (orgSlug) {
-      const org = await Organization.findOne({ slug: orgSlug }).lean();
-      if (org) orgId = org._id;
-    }
-
-    const match = {};
-    if (moduleName) match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
-    if (orgId) match.$or = [{ organization: orgId }, { organization: null }];
-    else match.$or = [{ organization: null }, { organization: { $exists: false } }];
-
-    const pipeline = [];
-    if (Object.keys(match).length) pipeline.push({ $match: match });
-    pipeline.push({ $sample: { size: Math.max(1, Math.min(50, count)) } });
-
-    let docs = [];
+    // ----- Sampling branch (no examId) -----
     try {
-      docs = await Question.aggregate(pipeline).allowDiskUse(true);
-    } catch (e) {
-      console.error("[/api/lms/quiz] aggregate error (sampling):", e && (e.stack || e));
-    }
+      // org filter
+      const match = {};
+      if (moduleName) match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
 
-    const series = (docs || []).map((d) => {
-      const isComp = (d && d.type === "comprehension");
-      if (isComp) {
-        // sampling: return parent with empty children to avoid heavy fetches
-        return {
-          id: String(d._id),
-          type: "comprehension",
-          passage: d.passage || "",
-          children: [],
-          tags: d.tags || [],
-          difficulty: d.difficulty || 'medium'
-        };
+      if (orgSlug) {
+        const org = await Organization.findOne({ slug: orgSlug }).lean();
+        if (org) match.$or = [{ organization: org._id }, { organization: null }, { organization: { $exists: false } }];
+        else match.$or = [{ organization: null }, { organization: { $exists: false } }];
+      } else {
+        match.$or = [{ organization: null }, { organization: { $exists: false } }];
       }
-      return {
-        id: String(d._id),
-        text: d.text,
-        choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
-        tags: d.tags || [],
-        difficulty: d.difficulty || 'medium'
-      };
-    });
 
-    return res.json({ examId: null, series });
+      const pipeline = [];
+      if (Object.keys(match).length) pipeline.push({ $match: match });
+      pipeline.push({ $sample: { size: Math.max(1, Math.min(50, count)) } });
+
+      let docs = [];
+      try {
+        docs = await Question.aggregate(pipeline).allowDiskUse(true);
+      } catch (e) {
+        console.error("[/api/lms/quiz] aggregate error (sampling):", e && (e.stack || e));
+      }
+
+      if (!docs || !docs.length) {
+        // fallback to file questions
+        const fallback = fetchRandomQuestionsFromFile(count);
+        const series = fallback.map(d => ({ id: d.id, text: d.text, choices: d.choices, tags: d.tags, difficulty: d.difficulty }));
+        return res.json({ examId: null, series });
+      }
+
+      // For sampling we will attempt to include children for any comprehension found,
+      // but we do not expand parent markers because sampling returns question docs directly.
+      const outSeries = [];
+      for (const d of docs) {
+        const isComp = (d && d.type === "comprehension");
+        if (isComp) {
+          // try to fetch children (best effort) and preserve order
+          let children = [];
+          try {
+            const cids = Array.isArray(d.questionIds) ? d.questionIds.map(String) : [];
+            if (cids.length) {
+              const objIds = cids.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+              if (objIds.length) {
+                const cs = await Question.find({ _id: { $in: objIds } }).lean().exec();
+                children = cids.map(cid => {
+                  const f = cs.find(x => String(x._id) === String(cid));
+                  if (!f) return null;
+                  return {
+                    id: String(f._id),
+                    text: f.text,
+                    choices: (f.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
+                    tags: f.tags || [],
+                    difficulty: f.difficulty || 'medium'
+                  };
+                }).filter(Boolean);
+              }
+            }
+          } catch (e) {
+            console.warn("[/api/lms/quiz] failed to load children for sampled parent:", d._id, e && e.message);
+          }
+
+          outSeries.push({ id: String(d._id), type: "comprehension", passage: d.passage || d.text || "", children, tags: d.tags || [], difficulty: d.difficulty || 'medium' });
+        } else {
+          outSeries.push({
+            id: String(d._id),
+            text: d.text,
+            choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
+            tags: d.tags || [],
+            difficulty: d.difficulty || 'medium'
+          });
+        }
+      }
+
+      return res.json({ examId: null, series: outSeries });
+    } catch (e) {
+      console.error("[/api/lms/quiz] sampling error:", e && (e.stack || e));
+      return res.status(500).json({ error: "failed to sample questions" });
+    }
   } catch (err) {
-    console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
+    console.error("[GET /api/lms/quiz] unexpected error:", err && (err.stack || err));
     return res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
+
 
 
 /**
