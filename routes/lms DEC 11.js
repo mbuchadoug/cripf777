@@ -15,14 +15,12 @@ router.get("/", (req, res) => {
 });
 
 // QUIZ UI (demo OR org, same page)
-// QUIZ UI (demo OR org, same page)
 router.get("/quiz", ensureAuth, (req, res) => {
   try {
-    // e.g. ?module=Responsibility&org=muono&examId=...
+    // e.g. ?module=Responsibility&org=muono
     const rawModule = String(req.query.module || "Responsibility").trim();
     const moduleKey = rawModule.toLowerCase();     // used for DB filtering
     const orgSlug = String(req.query.org || "").trim();
-    const examId = String(req.query.examId || "").trim();
 
     const isOrg = !!orgSlug;
     const quizCount = isOrg ? 20 : 5;             // 20 for org, 5 for demo
@@ -36,7 +34,6 @@ router.get("/quiz", ensureAuth, (req, res) => {
       module: moduleLabel,                        // display title
       moduleKey,                                  // internal key for API
       orgSlug,
-      examId // <- pass examId to the template
     });
   } catch (err) {
     console.error("[lms/quiz] render error:", err && (err.stack || err));

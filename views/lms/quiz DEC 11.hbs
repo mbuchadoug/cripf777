@@ -90,7 +90,6 @@
   data-module="{{module}}"
   data-module-key="{{moduleKey}}"
   data-org="{{orgSlug}}"
-  data-exam-id="{{examId}}"
 >
 
   <div class="page">
@@ -138,9 +137,8 @@
     const DEFAULT_COUNT = Number(body.dataset.quizCount || '5') || 5;
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
-    const INITIAL_EXAM_ID = body.dataset.examId || "";
 
-    let examId = INITIAL_EXAM_ID || null;
+    let examId = null;
     let series = [];
     let answers = {};
 
@@ -230,7 +228,7 @@
       return q;
     }
 
-    // --- Render quiz including comprehension parents (with children) ---
+    // --- Replace your old renderQuiz with this one ---
     function renderQuiz(list){
       quizArea.innerHTML = '';
       answers = {};
@@ -294,25 +292,14 @@
       });
     }
 
-    // --- Updated loadQuiz: request by examId when present, otherwise sampling ---
     async function loadQuiz(count){
       status.textContent = 'Loading quiz...';
       errorMsg.textContent = '';
       try {
-        // Determine effective examId: dataset OR URL param
-        const urlExamId = (new URLSearchParams(window.location.search)).get('examId');
-        const effectiveExamId = examId || urlExamId || null;
-
         const params = new URLSearchParams();
-
-        if (effectiveExamId) {
-          // ask server for the specific exam instance (will return exact question order + children)
-          params.set('examId', effectiveExamId);
-        } else {
-          params.set('count', String(count || DEFAULT_COUNT));
-          if (MODULE_KEY) params.set('module', MODULE_KEY);
-          if (ORG_SLUG) params.set('org', ORG_SLUG);
-        }
+        params.set('count', String(count || DEFAULT_COUNT));
+        if (MODULE_KEY) params.set('module', MODULE_KEY);
+        if (ORG_SLUG) params.set('org', ORG_SLUG);
 
         const res = await fetch('/api/lms/quiz?' + params.toString(), { cache: 'no-store' });
 
@@ -323,7 +310,7 @@
         const payload = await res.json();
 
         // persist examId from backend here so submit uses same id
-        examId = payload.examId || effectiveExamId || null;
+        examId = payload.examId || null;
         if (examId) {
           // also write to body dataset for debugging / server-render fallback
           body.dataset.examId = examId;

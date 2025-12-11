@@ -44,89 +44,15 @@ function fetchRandomQuestionsFromFile(count = 5) {
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
  * create small ExamInstance that contains questionIds and (optionally) choicesOrder
  */
-// routes/lms_api.js (replace existing GET /quiz handler with this)
 router.get("/quiz", async (req, res) => {
+  let count = parseInt(req.query.count || "5", 10);
+  if (!Number.isFinite(count)) count = 5;
+  count = Math.max(1, Math.min(50, count));
+
+  const moduleKey = String(req.query.module || "").trim().toLowerCase();
+  const orgSlug = String(req.query.org || "").trim();
+
   try {
-    // primary keys
-    const examIdParam = String(req.query.examId || "").trim();
-    let count = parseInt(req.query.count || "5", 10);
-    if (!Number.isFinite(count)) count = 5;
-    count = Math.max(1, Math.min(50, count));
-
-    const moduleName = String(req.query.module || "").trim(); // optional
-    const orgSlug = String(req.query.org || "").trim();      // optional
-
-    // If client asked for a specific exam instance, return it exactly
-    if (examIdParam) {
-      try {
-        const ex = await ExamInstance.findOne({ examId: examIdParam }).lean();
-        if (!ex) return res.status(404).json({ error: "exam instance not found" });
-
-        // load docs for each questionId in exam.questionIds
-        const qIds = Array.isArray(ex.questionIds) ? ex.questionIds.map(String) : [];
-        const objIds = qIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-        let docs = [];
-        if (objIds.length) {
-          docs = await QuizQuestion.find({ _id: { $in: objIds } }).lean();
-        }
-        // map by id so we preserve order
-        const byId = {};
-        for (const d of docs) byId[String(d._id)] = d;
-
-        const series = [];
-        // Walk the exam.questionIds in order and push either question or comprehension parent with children
-        for (const qid of qIds) {
-          const d = byId[qid];
-          if (!d) {
-            // If a missing question (maybe non-ObjectId fallback) skip
-            continue;
-          }
-
-          const isComprehension = (d.type === "comprehension") || (d.passage && Array.isArray(d.questionIds) && d.questionIds.length > 0);
-
-          if (isComprehension) {
-            // load children by IDs
-            const childIds = Array.isArray(d.questionIds) ? d.questionIds.map(String) : [];
-            const childObjIds = childIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
-            let children = [];
-            if (childObjIds.length) {
-              children = await QuizQuestion.find({ _id: { $in: childObjIds } }).lean();
-            }
-            // return parent with children full objects
-            series.push({
-              id: String(d._id),
-              type: "comprehension",
-              passage: d.passage || "",
-              children: (children || []).map(c => ({
-                id: String(c._id),
-                text: c.text,
-                choices: (c.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
-                tags: c.tags || [],
-                difficulty: c.difficulty || 'medium'
-              })),
-              tags: d.tags || [],
-              difficulty: d.difficulty || 'medium'
-            });
-          } else {
-            series.push({
-              id: String(d._id),
-              text: d.text,
-              choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
-              tags: d.tags || [],
-              difficulty: d.difficulty || 'medium'
-            });
-          }
-        } // end for qIds
-
-        return res.json({ examId: ex.examId, series });
-      } catch (e) {
-        console.error("[/api/lms/quiz] examId handling error:", e && (e.stack || e));
-        return res.status(500).json({ error: "failed to load exam instance" });
-      }
-    }
-
-    // --- No examId: fall back to sampling (existing behavior) ----
-    // org filter
     let orgId = null;
     if (orgSlug) {
       const org = await Organization.findOne({ slug: orgSlug }).lean();
@@ -134,51 +60,135 @@ router.get("/quiz", async (req, res) => {
     }
 
     const match = {};
-    if (moduleName) match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
+    if (moduleKey) match.module = { $regex: new RegExp(`^${moduleKey}$`, "i") };
     if (orgId) match.$or = [{ organization: orgId }, { organization: null }];
-    else match.$or = [{ organization: null }, { organization: { $exists: false } }];
 
     const pipeline = [];
     if (Object.keys(match).length) pipeline.push({ $match: match });
-    pipeline.push({ $sample: { size: Math.max(1, Math.min(50, count)) } });
+    pipeline.push({ $sample: { size: count } });
 
     let docs = [];
     try {
-      docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
+      docs = await Question.aggregate(pipeline).allowDiskUse(true);
     } catch (e) {
       console.error("[/api/lms/quiz] aggregate error:", e && (e.stack || e));
     }
 
-    // map docs into series (no comprehension children in sampling mode)
-    const series = (docs || []).map((d) => {
-      const isComp = (d && d.type === "comprehension");
-      if (isComp) {
-        // if comprehension parent encountered in sampling, attempt to fetch child questions
-        return {
-          id: String(d._id),
-          type: "comprehension",
-          passage: d.passage || "",
-          children: [], // keep empty in sampling mode to avoid heavy lookups
-          tags: d.tags || [],
-          difficulty: d.difficulty || 'medium'
-        };
-      }
-      return {
-        id: String(d._id),
-        text: d.text,
-        choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
-        tags: d.tags || [],
-        difficulty: d.difficulty || 'medium'
-      };
-    });
+    let series = [];
+    let questionIdsForInstance = [];
+    let choicesOrder = []; // if you randomize choices, store mapping here (shownIndex -> originalIndex)
 
-    return res.json({ examId: null, series });
+    if (docs && docs.length) {
+      // Helper to normalize choices into { text } objects
+      const normalizeChoiceObj = (c) => {
+        if (typeof c === "string") return { text: c };
+        if (c && typeof c.text === "string") return { text: c.text };
+        return { text: String(c || "") };
+      };
+
+      for (const d of docs) {
+        try {
+          // Detect comprehension parent: either explicit type or passage+questionIds
+          const isComprehension =
+            (d && d.type === "comprehension") ||
+            (d && d.passage && Array.isArray(d.questionIds) && d.questionIds.length > 0);
+
+          if (isComprehension) {
+            // load child question docs (they are stored in the same Question collection)
+            let children = [];
+            try {
+              const ids = (d.questionIds || []).filter(Boolean).map(String);
+              const objIds = ids.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+              if (objIds.length) {
+                children = await Question.find({ _id: { $in: objIds } }).lean().exec();
+              } else {
+                // possibly some ids are non-ObjectId strings; try matching by string _id
+                if (ids.length) {
+                  const qdocs = await Question.find({ _id: { $in: ids } }).lean().exec();
+                  children = qdocs;
+                }
+              }
+            } catch (e) {
+              console.error("[/api/lms/quiz] failed to load comprehension children:", e && (e.stack || e));
+            }
+
+            // push child ids into questionIdsForInstance (so submit maps to child ids)
+            for (const c of children) {
+              questionIdsForInstance.push(String(c._id));
+            }
+
+            // normalize children choices
+            const childItems = (children || []).map((c) => ({
+              id: String(c._id),
+              text: c.text,
+              choices: (c.choices || []).map(normalizeChoiceObj),
+              tags: c.tags || [],
+              difficulty: c.difficulty || "medium",
+            }));
+
+            // include parent with passage + children for the client
+            series.push({
+              id: String(d._id),
+              type: "comprehension",
+              passage: d.passage || "",
+              children: childItems,
+              tags: d.tags || [],
+              difficulty: d.difficulty || "medium",
+            });
+
+            choicesOrder.push([]); // placeholder for parent (no choices)
+          } else {
+            // standard single question doc
+            questionIdsForInstance.push(String(d._id));
+            const originalChoices = (d.choices || []).map((c) =>
+              (typeof c === "string" ? { text: c } : { text: c.text || c })
+            );
+            // keep choicesOrder placeholder empty unless you randomize server-side
+            choicesOrder.push([]);
+
+            series.push({
+              id: String(d._id),
+              text: d.text,
+              choices: originalChoices.map((c) => ({ text: c.text })),
+              tags: d.tags || [],
+              difficulty: d.difficulty || "medium",
+            });
+          }
+        } catch (e) {
+          console.warn("[/api/lms/quiz] mapping doc failed:", e && e.message);
+        }
+      }
+    } else {
+      // fallback to file
+      series = fetchRandomQuestionsFromFile(count);
+      // leave questionIdsForInstance empty for fallback items (they use fid-... strings)
+    }
+
+    const examId = "exam-" + Date.now().toString(36);
+
+    // create ExamInstance so submit can remap/validate
+    try {
+      await ExamInstance.create({
+        examId,
+        org: orgId || null,
+        module: moduleKey || "general",
+        user: req.user && req.user._id ? req.user._id : null,
+        questionIds: questionIdsForInstance,
+        choicesOrder, // empty unless you server-randomize choices
+        createdAt: new Date(),
+        // expiresAt: new Date(Date.now() + (1000 * 60 * 60)), // optional
+      });
+    } catch (e) {
+      console.error("[/api/lms/quiz] failed to create ExamInstance:", e && (e.stack || e));
+      // not fatal — still serve the quiz
+    }
+
+    return res.json({ examId, series });
   } catch (err) {
     console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
     return res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
-
 
 /**
  * POST /api/lms/quiz/submit

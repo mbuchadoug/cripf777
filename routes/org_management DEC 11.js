@@ -798,9 +798,7 @@ router.post(
             });
           }
 
-          //const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
-          const url = `${baseUrl}/lms/quiz?examId=${examId}&org=${encodeURIComponent(org.slug)}`;
-
+          const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
           assigned.push({ userId: uId, examId, url });
         } catch (e) {
           console.warn(
