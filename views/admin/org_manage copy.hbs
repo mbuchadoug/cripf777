@@ -20,8 +20,6 @@
     .success{color:green}
     .error{color:red}
     .notice{margin-top:8px;color:#333}
-    .panel{padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee;margin-bottom:12px}
-    label.block{display:block;margin-bottom:8px}
   </style>
 </head>
 <body>
@@ -31,6 +29,7 @@
 
     <section>
       <h2>Invites</h2>
+
       <!-- AJAX invite form -->
       <form class="row" data-ajax="invite" method="post" action="/admin/orgs/{{org.slug}}/invite">
         <label style="flex:1">
@@ -125,106 +124,48 @@
     <section>
      <h2>Assign Quiz (bulk)</h2>
 
-     <div class="panel">
-       <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
-         <p>Select members to assign a quiz for the chosen module. This creates an exam instance per selected user.</p>
+<form method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
+  <p>Select members to assign a {{count}}-question quiz for the chosen module.
+     This will create an exam instance per selected user.</p>
 
-         <label class="block">
-           Module:
-           <select id="module" name="module">
-             {{#each modules}}
-               <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
-             {{/each}}
-           </select>
-         </label>
+  <div class="field">
+    <label for="module">Module:</label>
+    <select id="module" name="module">
+      {{#each modules}}
+        <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
+      {{/each}}
+    </select>
+  </div>
 
-         <label class="block">
-           Users:
-           <select id="userIds" name="userIds" multiple size="6" required>
-             {{#each memberships}}
-               {{#if this.user}}
-                 <option value="{{this.user._id}}">{{this.user.email}} ({{this.role}})</option>
-               {{/if}}
-             {{/each}}
-           </select>
-           <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
-         </label>
+  <div class="field">
+    <label for="userIds">Users:</label>
+    <select id="userIds" name="userIds" multiple size="6" required>
+      {{#each memberships}}
+        {{#if this.user}}
+          <option value="{{this.user._id}}">
+            {{this.user.email}} ({{this.role}})
+          </option>
+        {{/if}}
+      {{/each}}
+    </select>
+    <p><small>Hold Ctrl/Cmd to select multiple users.</small></p>
+  </div>
 
-         <label class="block">
-           <input type="checkbox" id="usePassage" name="usePassage" value="1" /> Assign a specific passage (passage quiz)
-         </label>
+  <div class="field">
+    <label for="count">Count:</label>
+    <input id="count" name="count" type="number" min="1" max="100" value="20">
+  </div>
 
-         <label class="block" id="passageWrap" style="display:none">
-           Passage to assign:
-           <select id="passageSelect" name="passageId">
-             <option value="">-- choose passage --</option>
-             {{!-- server should provide `passages` array: each { _id, title, childCount, module, organization } --}}
-             {{#if passages}}
-               {{#each passages}}
-                 <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
-                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} — org{{/if}}
-                 </option>
-               {{/each}}
-             {{/if}}
-           </select>
-           <div class="muted small">When a passage is selected the Count will be set to the passage's child question count.</div>
-         </label>
+  <div class="field">
+    <label for="expiresMinutes">Expires (mins):</label>
+    <input id="expiresMinutes" name="expiresMinutes" type="number" min="5" max="1440" value="60">
+  </div>
 
-         <label class="block">
-           Count:
-           <input id="count" name="count" type="number" min="1" max="100" value="20">
-         </label>
+  <button type="submit">Assign Quiz</button>
+</form>
 
-         <label class="block">
-           Expires (mins):
-           <input id="expiresMinutes" name="expiresMinutes" type="number" min="5" max="1440" value="60">
-         </label>
 
-         <div style="margin-top:8px">
-           <button id="assignBtn" type="submit">Assign Quiz</button>
-         </div>
-       </form>
-
-       <div id="assignResult" class="notice"></div>
-     </div>
-
-     <div class="panel">
-       <h3>Create Passage Quiz (for this organization)</h3>
-       <p class="muted">Paste passage text, then paste the child questions (each block separated by a blank line). The created passage will be saved with <code>organization</code> set to this company.</p>
-
-       <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
-         <label class="block">
-           Title (short):
-           <input id="passageTitle" name="title" placeholder="Passage title (e.g. Responsibility passage 1)">
-         </label>
-
-         <label class="block">
-           Module:
-           <select id="passageModule" name="module">
-             {{#each modules}}
-               <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
-             {{/each}}
-           </select>
-         </label>
-
-         <label class="block">
-           Passage text:
-           <textarea id="passageText" name="passage" rows="6" style="width:100%" placeholder="Paste the passage here..." required></textarea>
-         </label>
-
-         <label class="block">
-           Child questions (plain text, same format as Import): 
-           <textarea id="passageQuestions" name="questions" rows="8" style="width:100%" placeholder="Question line\n a) option\n b) option\nCorrect Answer: a\n\nNext question..." required></textarea>
-         </label>
-
-         <div>
-           <button type="submit">Create Passage Quiz</button>
-         </div>
-       </form>
-
-       <div id="createPassageResult" class="notice"></div>
-     </div>
-
+      <div id="assignResult" class="notice"></div>
     </section>
 
   </main>
@@ -236,13 +177,14 @@
       const obj = {};
       for (const [k, v] of fd.entries()) {
         if (obj[k] !== undefined) {
+          // convert to array
           if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
           obj[k].push(v);
         } else {
           obj[k] = v;
         }
       }
-      // handle multi-select named "userIds"
+      // handle multi-select named "userIds" which may be multiple values
       if (form.querySelector('[name="userIds"]')) {
         const select = form.querySelector('[name="userIds"]');
         const vals = Array.from(select.selectedOptions).map(o => o.value);
@@ -250,46 +192,6 @@
       }
       return obj;
     }
-
-    // hide/show passage selector + auto count
-    const usePassageCb = document.getElementById('usePassage');
-    const passageWrap = document.getElementById('passageWrap');
-    const passageSelect = document.getElementById('passageSelect');
-    const countInput = document.getElementById('count');
-    const moduleSelect = document.getElementById('module');
-
-    usePassageCb.addEventListener('change', () => {
-      passageWrap.style.display = usePassageCb.checked ? 'block' : 'none';
-      if (!usePassageCb.checked) {
-        passageSelect.value = '';
-        countInput.removeAttribute('disabled');
-      }
-    });
-
-    passageSelect.addEventListener('change', () => {
-      const opt = passageSelect.selectedOptions[0];
-      if (!opt || !opt.value) {
-        countInput.removeAttribute('disabled');
-        return;
-      }
-      const childCount = parseInt(opt.dataset.childCount || '0', 10) || 0;
-      const passageModule = opt.dataset.module;
-      if (childCount > 0) {
-        countInput.value = childCount;
-        countInput.setAttribute('disabled','disabled');
-      } else {
-        countInput.removeAttribute('disabled');
-      }
-      // if passage has module, set the module select to match (optional convenience)
-      if (passageModule) {
-        for (const o of moduleSelect.options) {
-          if (o.value === passageModule) {
-            moduleSelect.value = passageModule;
-            break;
-          }
-        }
-      }
-    });
 
     // AJAX invite form
     document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
@@ -310,6 +212,7 @@
             return;
           }
           fb.innerHTML = '<span class="success">Invite created. Token: <code>' + (data.token || '') + '</code></span>';
+          // append to invites list
           const ul = document.getElementById('invitesList');
           const li = document.createElement('li');
           li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
@@ -341,6 +244,7 @@
             return;
           }
           fb.innerHTML = '<span class="success">Action: ' + (data.action || 'ok') + '</span>';
+          // update UI accordingly
           const row = f.closest('tr');
           if (data.action === 'removed') {
             if (row) row.remove();
@@ -357,24 +261,12 @@
       });
     });
 
-    // Assign Quiz (AJAX) — includes optional passageId when chosen
-    document.getElementById('assignForm').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
+    // Assign quiz (AJAX)
+    async function assignQuiz(form) {
       const url = form.action;
       const payload = formToObject(form);
       // ensure userIds is array
       if (!Array.isArray(payload.userIds)) payload.userIds = payload.userIds ? [payload.userIds] : [];
-      // If usePassage checked and passage selected, include passageId and set count to childCount
-      if (usePassageCb.checked) {
-        const sel = passageSelect.selectedOptions[0];
-        if (!sel || !sel.value) {
-          document.getElementById('assignResult').innerHTML = '<span class="error">Please choose a passage to assign.</span>';
-          return;
-        }
-        payload.passageId = sel.value;
-        payload.count = parseInt(sel.dataset.childCount || payload.count || '1', 10) || 1;
-      }
       document.getElementById('assignResult').textContent = 'Assigning...';
       try {
         const resp = await fetch(url, {
@@ -385,57 +277,17 @@
         const data = await resp.json();
         if (!resp.ok) {
           document.getElementById('assignResult').innerHTML = '<span class="error">Assign failed: ' + (data.error || 'unknown') + '</span>';
-          return;
+          return false;
         }
         document.getElementById('assignResult').innerHTML = '<span class="success">Assigned ' + (data.assigned ? data.assigned.length : 0) + ' users.</span>';
         console.log('assigned details', data.assigned);
+        return false;
       } catch (e) {
         console.error(e);
         document.getElementById('assignResult').innerHTML = '<span class="error">Assign failed (network)</span>';
+        return false;
       }
-    });
-
-    // Create Passage Quiz (AJAX) — posts to /admin/orgs/:slug/passages
-    document.getElementById('createPassageForm').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
-      const url = form.action;
-      const payload = formToObject(form);
-      // payload keys: title, module, passage, questions
-      document.getElementById('createPassageResult').textContent = 'Creating passage...';
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        document.getElementById('createPassageResult').innerHTML = '<span class="success">Passage created.</span>';
-        // If server returns new passage metadata, append to passageSelect
-        if (data.passage && data.passage._id) {
-          const opt = document.createElement('option');
-          opt.value = data.passage._id;
-          opt.textContent = (data.passage.title || 'Passage') + ' (' + (data.passage.childCount || 0) + ' q)';
-          opt.dataset.childCount = data.passage.childCount || 0;
-          opt.dataset.module = data.passage.module || '';
-          passageSelect.appendChild(opt);
-          // select it automatically and toggle UI
-          usePassageCb.checked = true;
-          passageWrap.style.display = 'block';
-          passageSelect.value = data.passage._id;
-          passageSelect.dispatchEvent(new Event('change'));
-        }
-        form.reset();
-      } catch (e) {
-        console.error(e);
-        document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed (network)</span>';
-      }
-    });
-
+    }
   </script>
 </body>
 </html>

@@ -693,6 +693,7 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
 });
 
 
+// --- REPLACE assign-quiz handler in routes/org_management.js ---
 router.post(
   "/admin/orgs/:slug/assign-quiz",
   ensureAuth,
@@ -703,12 +704,11 @@ router.post(
       let { module = "general", userIds = [], count = 20, expiresMinutes = 60 } =
         req.body || {};
 
-      // userIds from <select multiple> come as a flat array of strings
       if (!Array.isArray(userIds) || !userIds.length) {
         return res.status(400).json({ error: "userIds required" });
       }
 
-      // normalize module to lowercase
+      // normalize module
       const moduleKey = String(module).trim().toLowerCase();
 
       const org = await Organization.findOne({ slug }).lean();
@@ -722,32 +722,22 @@ router.post(
 
       // how many questions exist for debugging
       const totalAvailable = await QuizQuestion.countDocuments(match);
-      console.log(
-        "[assign quiz] available questions:",
-        totalAvailable,
-        "for module=",
-        moduleKey,
-        "org=",
-        org._id.toString()
-      );
+      console.log("[assign quiz] available questions:", totalAvailable, "for module=", moduleKey, "org=", org._id.toString());
 
       if (!totalAvailable) {
-        return res
-          .status(404)
-          .json({ error: "no questions available for that module" });
+        return res.status(404).json({ error: "no questions available for that module" });
       }
 
-      // we cannot take more than we actually have
-      count = Math.min(Number(count) || 1, totalAvailable);
+      // clamp count to available (but we'll handle comprehension expansion below)
+      count = Math.max(1, Math.min(Number(count) || 1, totalAvailable));
 
-      // sample `count` questions
+      // sample `count` top-level docs (these may include comprehension parents)
+      // we sample `count` parents/items — if some are comprehension they may expand to more items
       const pipeline = [{ $match: match }, { $sample: { size: count } }];
       const docs = await QuizQuestion.aggregate(pipeline).allowDiskUse(true);
 
       if (!docs || !docs.length) {
-        return res
-          .status(404)
-          .json({ error: "no questions returned from sampling" });
+        return res.status(404).json({ error: "no questions returned from sampling" });
       }
 
       const assigned = [];
@@ -758,22 +748,58 @@ router.post(
           const questionIds = [];
           const choicesOrder = [];
 
+          // iterate docs in the sampled order. If a doc is a comprehension parent, expand into:
+          //  - push a marker string `parent:<parentId>` so the API can render the passage, then
+          //  - push each child id (so total question count may increase)
+          // For normal questions push the question _id as usual.
           for (const q of docs) {
-            questionIds.push(q._id);
-            const n = (q.choices || []).length;
-            const indices = Array.from({ length: n }, (_, i) => i);
-            // shuffle choices
-            for (let i = indices.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [indices[i], indices[j]] = [indices[j], indices[i]];
+            const isComprehension = (q && (q.type === "comprehension" || (q.passage && Array.isArray(q.questionIds) && q.questionIds.length)));
+
+            if (isComprehension) {
+              // mark parent (string) so API later knows to fetch the passage + children
+              questionIds.push(`parent:${String(q._id)}`);
+              choicesOrder.push([]); // placeholder for parent marker
+
+              // try to load child ids (from q.questionIds if present)
+              const childIds = Array.isArray(q.questionIds) ? q.questionIds.map(String) : [];
+
+              if (childIds.length) {
+                // push each child _id into the exam sequence
+                for (const cid of childIds) {
+                  questionIds.push(mongoose.Types.ObjectId(cid));
+                  // create a shuffled mapping for choicesOrder placeholder for child (optional)
+                  let nChoices = 0;
+                  const childDoc = await QuizQuestion.findById(cid).lean().exec();
+                  if (childDoc) nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
+                  const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
+                  for (let i = indices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [indices[i], indices[j]] = [indices[j], indices[i]];
+                  }
+                  choicesOrder.push(indices);
+                }
+              } else {
+                // no childIds found — treat parent as no-children (still keep marker)
+              }
+            } else {
+              // regular question: push id and a shuffled choicesOrder
+              questionIds.push(q._id);
+              const n = Array.isArray(q.choices) ? q.choices.length : 0;
+              const indices = Array.from({ length: Math.max(0, n) }, (_, i) => i);
+              for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+              }
+              choicesOrder.push(indices);
             }
-            choicesOrder.push(indices);
-          }
+          } // end for docs
+
+          // If you want EXACTLY `count` *final* questions (not parents), you'd need to sample differently:
+          // For simplicity we sampled `count` top-level items. If you need stricter matching (e.g. exactly 5 child questions),
+          // tell me and I'll add a sampling loop that ensures the final expanded length <= count by sampling differently.
 
           const examId = crypto.randomUUID();
-          const expiresAt = new Date(
-            Date.now() + Number(expiresMinutes) * 60 * 1000
-          );
+          const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
           await ExamInstance.create({
             examId,
@@ -798,20 +824,14 @@ router.post(
             });
           }
 
-          //const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
-          const url = `${baseUrl}/lms/quiz?examId=${examId}&org=${encodeURIComponent(org.slug)}`;
-
+          const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
           assigned.push({ userId: uId, examId, url });
         } catch (e) {
-          console.warn(
-            "[assign-quiz] user assign failed",
-            uId,
-            e && (e.stack || e)
-          );
+          console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
         }
-      }
+      } // end for userIds
 
-      return res.json({ ok: true, assigned, countUsed: count });
+      return res.json({ ok: true, assigned, countUsed: docs.length });
     } catch (err) {
       console.error("[assign quiz] error:", err && (err.stack || err));
       return res.status(500).json({ error: "assign failed" });
@@ -874,6 +894,219 @@ router.post(
 
       console.error("Save module error:", err);
       res.status(500).send("Failed to save module");
+    }
+  }
+);
+
+
+
+// POST /admin/orgs/:slug/passages
+// Create a comprehension (passage) + child questions for an organization
+// POST /admin/orgs/:slug/passages
+// Creates a comprehension parent + child questions (organization-scoped)
+router.post(
+  "/admin/orgs/:slug/passages",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").trim();
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      const payload = req.body || {};
+      const title = String(payload.title || "").trim();
+      const moduleKey = String(payload.module || "general").trim().toLowerCase();
+      const passage = String(payload.passage || "").trim();
+      const questionsText = String(payload.questions || "").trim();
+
+      if (!title) return res.status(400).json({ error: "title required" });
+      if (!passage) return res.status(400).json({ error: "passage text required" });
+      if (!questionsText) return res.status(400).json({ error: "questions text required" });
+
+      // Helper: parseQuestionBlocks (same logic as your importer)
+      function parseQuestionBlocks(raw) {
+        if (!raw || typeof raw !== "string") return [];
+        const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+        const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+        const parsed = [];
+
+        for (const block of blocks) {
+          const lines = block.split("\n").map(l => l.replace(/\t/g, ' ').trim()).filter(Boolean);
+          if (lines.length === 0) continue;
+
+          const isChoiceLine = (s) => /^[a-d][\.\)]\s+/i.test(s) || /^\([a-d]\)\s+/i.test(s) || /^[A-D]\)\s+/i.test(s);
+          const isCorrectLine = (s) => /Correct Answer:/i.test(s) || /✅\s*Correct Answer:/i.test(s);
+
+          let firstChoiceIdx = lines.findIndex(isChoiceLine);
+          if (firstChoiceIdx === -1) {
+            firstChoiceIdx = lines.findIndex(l => /^[a-d]\s+/.test(l) || /^[A-D]\)\s+/.test(l));
+          }
+
+          let questionLines = [];
+          let choiceLines = [];
+          let footerLines = [];
+
+          if (firstChoiceIdx > 0) {
+            questionLines = lines.slice(0, firstChoiceIdx);
+            let i = firstChoiceIdx;
+            for (; i < lines.length; i++) {
+              const line = lines[i];
+              if (isCorrectLine(line)) {
+                footerLines.push(line);
+                i++;
+                break;
+              }
+              if (isChoiceLine(line) || /^[a-d]\s+/.test(line) || /^[A-D]\)\s+/.test(line)) {
+                choiceLines.push(line);
+              } else {
+                if (choiceLines.length) {
+                  choiceLines[choiceLines.length - 1] += " " + line;
+                } else {
+                  questionLines.push(line);
+                }
+              }
+            }
+            for (let j = i; j < lines.length; j++) footerLines.push(lines[j]);
+          } else {
+            questionLines = [lines[0]];
+            for (let i = 1; i < lines.length; i++) {
+              const l = lines[i];
+              if (isChoiceLine(l) || /^[a-d]\s+/.test(l) || /^[A-D]\)\s+/.test(l)) {
+                choiceLines.push(l);
+              } else if (isCorrectLine(l)) {
+                footerLines.push(l);
+              } else {
+                if (choiceLines.length === 0) questionLines.push(l);
+                else choiceLines[choiceLines.length - 1] += " " + l;
+              }
+            }
+          }
+
+          let questionText = questionLines.join(" ").trim();
+          questionText = questionText.replace(/^\d+\.\s*/, "").trim();
+
+          const choices = choiceLines.map(cl => {
+            const txt = cl.replace(/^[\(\[]?[a-d][\)\.\]]?\s*/i, "").trim();
+            return { text: txt };
+          });
+
+          let correctIndex = null;
+          const footer = footerLines.join(" ").trim();
+          if (footer) {
+            const m = footer.match(/Correct Answer:\s*[:\-]?\s*([a-d])\b/i);
+            if (m) correctIndex = { a:0,b:1,c:2,d:3 }[m[1].toLowerCase()];
+            else {
+              const m2 = footer.match(/([a-d])\)/i);
+              if (m2) correctIndex = { a:0,b:1,c:2,d:3 }[m2[1].toLowerCase()];
+              else {
+                const stripped = footer.replace(/Correct Answer:/i, "").replace(/✅/g, "").trim();
+                const found = choices.findIndex(c => {
+                  const lc = (c.text||"").toLowerCase();
+                  const sc = stripped.toLowerCase();
+                  return lc.startsWith(sc) || lc === sc || sc.startsWith(lc);
+                });
+                if (found >= 0) correctIndex = found;
+              }
+            }
+          }
+
+          if (!questionText) {
+            const possible = block.split("\n").map(s => s.trim()).filter(Boolean);
+            const fallback = possible.find(l => !isChoiceLine(l) && !isCorrectLine(l));
+            if (fallback) questionText = fallback.replace(/^\d+\.\s*/, "").trim();
+          }
+
+          if (!questionText) continue;
+          if (!choices.length) continue;
+
+          parsed.push({
+            text: questionText,
+            choices,
+            correctIndex: typeof correctIndex === "number" ? correctIndex : null,
+            rawBlock: block
+          });
+        }
+        return parsed;
+      }
+
+      // parse questions text
+      const blocks = parseQuestionBlocks(questionsText);
+      if (!blocks || !blocks.length) {
+        return res.status(400).json({ error: "No valid child questions parsed from 'questions' text" });
+      }
+
+      // Build child docs
+      const childDocs = blocks.map(b => {
+        const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(c => c.text);
+        let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
+        if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
+        return {
+          text: (b.text || "Question").trim(),
+          choices,
+          correctIndex: ci,
+          tags: Array.isArray(b.tags) ? b.tags : [],
+          source: "passage-import",
+          organization: org._id,
+          module: moduleKey || "general",
+          raw: b.rawBlock || "",
+          createdAt: new Date()
+        };
+      });
+
+      // Insert children
+      let insertedChildren = [];
+      try {
+        insertedChildren = await Question.insertMany(childDocs, { ordered: true });
+      } catch (e) {
+        console.error("[create passage] failed to insert child questions:", e && (e.stack || e));
+        return res.status(500).json({ error: "Failed to save child questions", detail: String(e && e.message) });
+      }
+
+      const childIds = insertedChildren.map(c => c._id);
+
+      // Create parent comprehension doc (use text to store title)
+      const parentDoc = {
+        text: title || (String(passage || "").slice(0, 120) || "Comprehension passage"),
+        type: "comprehension",
+        passage,
+        questionIds: childIds,
+        tags: [],
+        source: "passage-import",
+        organization: org._id,
+        module: moduleKey || "general",
+        createdAt: new Date()
+      };
+
+      let parent = null;
+      try {
+        parent = await Question.create(parentDoc);
+      } catch (e) {
+        console.error("[create passage] failed to create parent doc:", e && (e.stack || e));
+        // Attempt cleanup of inserted children if parent creation failed
+        try { await Question.deleteMany({ _id: { $in: childIds } }); } catch(_) {}
+        return res.status(500).json({ error: "Failed to create parent passage", detail: String(e && e.message) });
+      }
+
+      // Optionally add a tag on children for quick lookup (e.g. comprehension-<parentId>)
+      try {
+        await Question.updateMany({ _id: { $in: childIds } }, { $addToSet: { tags: `comprehension-${parent._id}` } }).exec();
+      } catch (e) {
+        console.warn("[create passage] failed to tag children:", e && e.message);
+      }
+
+      // Return a small metadata object for client to append to passage select
+      return res.json({
+        passage: {
+          _id: String(parent._id),
+          title: parent.text,
+          childCount: childIds.length,
+          module: parent.module || moduleKey || "general"
+        }
+      });
+    } catch (err) {
+      console.error("[POST /admin/orgs/:slug/passages] error:", err && (err.stack || err));
+      return res.status(500).json({ error: "failed", detail: String(err && err.message) });
     }
   }
 );
