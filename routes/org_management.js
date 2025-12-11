@@ -662,10 +662,12 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /*  ORG QUIZ: employees/managers take module quiz (20 questions)       */
 /* ------------------------------------------------------------------ */
+// REPLACE the later duplicate handler with this version
 router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
-    const slug = String(req.params.slug || "");
+    const slug = String(req.params.slug || "").trim();
     const moduleNameRaw = String(req.query.module || "Responsibility").trim();
+    const examId = String(req.query.examId || "").trim(); // <-- respect examId if provided
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -678,6 +680,13 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
+    // If an examId was supplied, redirect to the LMS page with that examId so client requests exact exam instance
+    if (examId) {
+      // preserve examId in query so /lms/quiz uses it
+      return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}&org=${encodeURIComponent(org.slug)}`);
+    }
+
+    // No examId: render the normal org module quiz UI (sampling mode / 20 questions)
     const moduleKey = moduleNameRaw.toLowerCase();
 
     return res.render("lms/quiz", {
@@ -686,12 +695,14 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
       moduleLabel: `${moduleNameRaw} | ${org.slug} Quiz`,
       moduleKey,
       orgSlug: org.slug,
+      examId: ""
     });
   } catch (err) {
     console.error("[org quiz] error:", err && (err.stack || err));
     return res.status(500).send("failed");
   }
 });
+
 
 // REPLACE assign-quiz handler
 router.post(
