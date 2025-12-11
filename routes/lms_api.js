@@ -46,7 +46,7 @@ function fetchRandomQuestionsFromFile(count = 5) {
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
  * create small ExamInstance that contains questionIds and (optionally) choicesOrder
  */
-router.get("/quiz", ensureAuth, async (req, res) => {
+router.get("/quiz", async (req, res) => {
   try {
     const examId = String(req.query.examId || "").trim();
     if (!examId) return res.status(400).json({ error: "examId required" });
