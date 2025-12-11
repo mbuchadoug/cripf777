@@ -58,9 +58,6 @@ router.get("/quiz", async (req, res) => {
     const moduleName = String(req.query.module || "").trim();
     const orgSlug = String(req.query.org || "").trim();
 
-    const fs = require("fs");
-    const path = require("path");
-
     // helper: load file fallback questions (data/data_questions.json)
     function loadFileQuestions() {
       try {
