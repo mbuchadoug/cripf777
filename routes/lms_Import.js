@@ -46,11 +46,16 @@ router.get("/import", ensureAuth, ensureAdmin, async (req, res) => {
 
 /**
  * POST /admin/lms/import
- * Accepts form-data 'file' (text/plain) or a JSON body 'text' to parse directly.
- * Supports comprehension format (passage + --- delimiter + questions) and single-question blocks.
+ * Accepts multiple files (upload.array("files")) or a textarea 'text'.
+ * Supports:
+ *  - single combined file (passage + --- + questions)
+ *  - two-file upload (passageFile + file) — handled by upload.array reading any uploaded text files
+ *  - multiple question files uploaded together
+ *
+ * The route will try comprehension parsing first (passage + --- + questions); if none found it falls back
+ * to single-question block parsing. Inserted children are standard Question docs; comprehension parent is
+ * saved as a Question doc with type:'comprehension' and questionIds linking to children.
  */
-// replace your existing router.post("/import", ...) with this
-// routes/admin/lms_import.js (only the POST /admin/lms/import part shown - replace existing POST handler)
 router.post("/import", ensureAuth, ensureAdmin, upload.array("files", 6), async (req, res) => {
   try {
     // Collect text from either uploaded files OR the textarea 'text' (fallback)
@@ -59,30 +64,32 @@ router.post("/import", ensureAuth, ensureAdmin, upload.array("files", 6), async 
     // multer puts files in req.files when using upload.array(...)
     if (Array.isArray(req.files) && req.files.length) {
       for (const f of req.files) {
-        // ensure we only accept text files
-        const mimetype = (f.mimetype || "").toLowerCase();
-        const name = String(f.originalname || "file");
+        // only accept text-like files
         const buf = f.buffer ? f.buffer.toString("utf8") : "";
         if (!buf) continue;
-        texts.push({ filename: name, text: buf });
+        texts.push({ filename: f.originalname || "file", text: buf });
       }
     }
 
-    // also accept a single pasted text in textarea field 'text' (if supplied)
-    if (!texts.length && req.body && req.body.text) {
+    // also accept named fields commonly used: 'passageFile' + 'file' — multer.array will include them in req.files
+    // If nothing uploaded but textarea supplied, use that
+    if (!texts.length && req.body && req.body.text && String(req.body.text).trim()) {
       texts.push({ filename: "pasted", text: String(req.body.text) });
     }
 
-    if (!texts.length) {
-      // if user sent a single-file using field name 'file' (legacy) try req.file
-      if (req.file && req.file.buffer) {
-        texts.push({ filename: req.file.originalname || "file", text: req.file.buffer.toString("utf8") });
-      }
+    // legacy: if user posted single file using single-field middleware (req.file)
+    if (!texts.length && req.file && req.file.buffer) {
+      texts.push({ filename: req.file.originalname || "file", text: req.file.buffer.toString("utf8") });
     }
 
     if (!texts.length) {
       const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
-      return res.render("admin/lms_import", { title: "Import Results", result: { parsed: 0, inserted: 0, errors: [{ reason: "No file or text provided" }] }, user: req.user, organizations });
+      return res.render("admin/lms_import", {
+        title: "Import Results",
+        result: { parsed: 0, inserted: 0, errors: [{ reason: "No file or text provided" }] },
+        user: req.user,
+        organizations
+      });
     }
 
     // optional org/module inputs from the form
@@ -96,7 +103,7 @@ router.post("/import", ensureAuth, ensureAdmin, upload.array("files", 6), async 
 
     // process each uploaded text file independently
     for (const item of texts) {
-      const rawText = item.text || "";
+      const rawText = String(item.text || "");
 
       // First try comprehension parser (passage + --- delimiter)
       const { parsedComprehensions = [], errors: compErrors = [] } = parseComprehensionFromText(rawText);
@@ -207,7 +214,257 @@ router.post("/import", ensureAuth, ensureAdmin, upload.array("files", 6), async 
   }
 });
 
+/* ------------------------------------------------------------------
+ * Parser helpers (kept robust to common formats)
+ * ------------------------------------------------------------------ */
+
+/**
+ * parseComprehensionFromText(raw)
+ * - expects a passage at top, then a delimiter line of dashes (---...), then question blocks
+ * - returns { parsedComprehensions: [ { passage, questions: [ { text, choices, answerIndex, tags, difficulty, instructions } ] } ], errors: [...] }
+ */
+function parseComprehensionFromText(raw) {
+  const errors = [];
+  const parsedComprehensions = [];
+
+  if (!raw || typeof raw !== "string") return { parsedComprehensions, errors };
+
+  // normalize newlines
+  const text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // split on a line that contains 3+ dashes (and optional spaces)
+  const parts = text.split(/^\s*-{3,}\s*$/m).map(p => p.trim()).filter(Boolean);
+
+  if (parts.length < 2) {
+    // no delimiter found — not a comprehension formatted file
+    return { parsedComprehensions: [], errors };
+  }
+
+  // Treat first part as passage, the rest joined as quiz block(s)
+  const passage = parts[0];
+  const quizBlock = parts.slice(1).join("\n\n");
+
+  // helper: letter -> index (a..z)
+  const letterToIndex = (letter) => {
+    if (!letter) return -1;
+    const m = letter.trim().toLowerCase().match(/^([a-z])/);
+    if (!m) return -1;
+    return "abcdefghijklmnopqrstuvwxyz".indexOf(m[1]);
+  };
+
+  // split quizBlock into question blocks separated by two or more newlines
+  const qBlocks = quizBlock.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  const questions = [];
+
+  for (const block of qBlocks) {
+    try {
+      // find question line (optional leading number)
+      const qMatch = block.match(/^\s*(?:\d+\s*[\.\)]\s*)?(.+?)(?=\n|$)/);
+      if (!qMatch) {
+        errors.push({ block: block.slice(0, 120), reason: "No question line found" });
+        continue;
+      }
+      const qText = qMatch[1].trim();
+
+      // find labeled choices (a) b) c) ... )
+      const choiceRegex = /^[ \t]*([a-zA-Z])[\.\)]\s*(.+)$/gm;
+      const choices = [];
+      let m;
+      while ((m = choiceRegex.exec(block)) !== null) {
+        choices.push(m[2].trim());
+      }
+
+      if (choices.length < 2) {
+        errors.push({ question: qText, reason: `Expected labelled choices. Found ${choices.length}.` });
+        continue;
+      }
+
+      // find answer line
+      let answerIndex = -1;
+      const ansMatch =
+        block.match(/✅\s*Correct Answer\s*:\s*(.+)$/im) ||
+        block.match(/Correct Answer\s*:\s*(.+)$/im) ||
+        block.match(/Answer\s*:\s*(.+)$/im);
+
+      if (ansMatch) {
+        const ansText = ansMatch[1].trim();
+        const lm = ansText.match(/^([a-zA-Z])[\.\)]?/);
+        if (lm) {
+          answerIndex = letterToIndex(lm[1]);
+        } else {
+          // try matching by normalized text
+          const normalize = s => String(s||"").replace(/[^a-z0-9]+/gi," ").trim().toLowerCase();
+          const found = choices.findIndex(c => normalize(c) === normalize(ansText) || c.toLowerCase().startsWith(ansText.toLowerCase()) || ansText.toLowerCase().startsWith(c.toLowerCase()));
+          if (found >= 0) answerIndex = found;
+        }
+      }
+
+      if (answerIndex < 0 || answerIndex >= choices.length) {
+        errors.push({ question: qText, reason: "Could not determine correct answer" });
+        continue;
+      }
+
+      // optional difficulty/tags/instructions
+      let difficulty = "medium";
+      const diffMatch = block.match(/difficulty\s*[:\-]\s*(easy|medium|hard)/i) || block.match(/\[(easy|medium|hard)\]/i);
+      if (diffMatch) difficulty = diffMatch[1].toLowerCase();
+
+      const tags = [];
+      const tagMatch = block.match(/tags?\s*[:\-]\s*([a-zA-Z0-9,\s\-]+)/i);
+      if (tagMatch) {
+        tagMatch[1].split(",").map(t => t.trim()).filter(Boolean).forEach(t => tags.push(t));
+      }
+
+      let instructions = "";
+      const instrQ = block.match(/Instructions?:\s*([\s\S]+?)$/i);
+      if (instrQ) instructions = instrQ[1].trim();
+
+      questions.push({
+        text: qText,
+        choices,
+        answerIndex,
+        tags,
+        difficulty,
+        instructions
+      });
+    } catch (e) {
+      errors.push({ block: block.slice(0, 120), reason: e.message || String(e) });
+    }
+  }
+
+  if (questions.length) {
+    parsedComprehensions.push({
+      passage,
+      questions
+    });
+  } else {
+    errors.push({ reason: "No valid sub-questions parsed from quiz block." });
+  }
+
+  return { parsedComprehensions, errors };
+}
+
+/* ------------------------------------------------------------------
+ * Existing single-question parser (kept mostly intact)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Parser: Accepts raw text and returns { parsed: [ { text, choices, answerIndex, tags, difficulty, instructions } ], errors: [...] }
+ */
+function parseQuestionsFromText(raw) {
+  const errors = [];
+  const parsed = [];
+
+  if (!raw || typeof raw !== "string") return { parsed, errors };
+
+  // Normalize line endings:
+  const text = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // Optional: If file contains a top-level "Instructions:" section, capture it
+  let globalInstructions = "";
+  const instrMatch = text.match(/(?:^|\n)Instructions:\s*([\s\S]*?)(?=\n\s*\n|$)/i);
+  if (instrMatch) {
+    globalInstructions = instrMatch[1].trim();
+  }
+
+  // Split into blocks separated by two or more newlines
+  const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
+  // Helper to extract a choice label -> index
+  const choiceLetterToIndex = (letter) => {
+    if (!letter) return -1;
+    const m = letter.trim().toLowerCase().match(/^([a-d])/);
+    if (!m) return -1;
+    return "abcd".indexOf(m[1]);
+  };
+
+  for (const block of blocks) {
+    try {
+      // skip pure "Instructions" block if it was captured already
+      if (/^Instructions?:/i.test(block)) continue;
+
+      // Try to find the question line (start with optional number and dot)
+      const qMatch = block.match(/^\s*(?:\d+\s*[\.\)]\s*)?(.+?)(?=\n|$)/);
+      if (!qMatch) {
+        errors.push({ block: block.slice(0, 120), reason: "No question line found" });
+        continue;
+      }
+      let qText = qMatch[1].trim();
+
+      // Now extract choices a) b) c) d)
+      const choiceRegex = /^[ \t]*([a-dA-D])[\.\)]\s*(.+)$/gm;
+      const choices = [];
+      let m;
+      while ((m = choiceRegex.exec(block)) !== null) {
+        choices.push(m[2].trim());
+      }
+
+      if (choices.length < 2) {
+        errors.push({ question: qText, reason: `Expected labelled choices a)-d). Found ${choices.length}.` });
+        continue;
+      }
+
+      // find answer line
+      let answerIndex = -1;
+      let ansMatch = block.match(/✅\s*Correct Answer\s*:\s*(.+)$/im) || block.match(/Correct Answer\s*:\s*(.+)$/im) || block.match(/Answer\s*:\s*(.+)$/im);
+      if (ansMatch) {
+        const ansText = ansMatch[1].trim();
+        const letterMatch = ansText.match(/^([a-dA-D])[\.\)]?/);
+        if (letterMatch) {
+          answerIndex = choiceLetterToIndex(letterMatch[1]);
+        } else {
+          const found = choices.findIndex(c => {
+            return normalizeForCompare(c) === normalizeForCompare(ansText) || c.toLowerCase().startsWith(ansText.toLowerCase()) || ansText.toLowerCase().startsWith(c.toLowerCase());
+          });
+          if (found >= 0) answerIndex = found;
+          else {
+            const insideLetter = ansText.match(/\(([a-dA-D])\)/);
+            if (insideLetter) answerIndex = choiceLetterToIndex(insideLetter[1]);
+          }
+        }
+      }
+
+      if (answerIndex < 0 || answerIndex >= choices.length) {
+        errors.push({ question: qText, reason: `Could not determine correct answer from block. Choices found: ${choices.length}` });
+        continue;
+      }
+
+      // optional difficulty/tags: not required
+      let difficulty = "medium";
+      const diffMatch = block.match(/difficulty\s*[:\-]\s*(easy|medium|hard)/i) || block.match(/\[(easy|medium|hard)\]/i);
+      if (diffMatch) difficulty = diffMatch[1].toLowerCase();
+
+      const tags = [];
+      const tagMatch = block.match(/tags?\s*[:\-]\s*([a-zA-Z0-9,\s\-]+)/i);
+      if (tagMatch) {
+        tagMatch[1].split(",").map(t => t.trim()).filter(Boolean).forEach(t => tags.push(t));
+      }
+
+      // optional per-question instructions
+      let instructions = "";
+      const instrQ = block.match(/Instructions?:\s*([\s\S]+?)$/i);
+      if (instrQ) instructions = instrQ[1].trim();
+
+      parsed.push({
+        text: qText,
+        choices,
+        answerIndex,
+        tags,
+        difficulty,
+        instructions: instructions || globalInstructions || ""
+      });
+
+    } catch (e) {
+      errors.push({ block: block.slice(0, 120), reason: e.message || String(e) });
+    }
+  }
+
+  return { parsed, errors };
+}
 
 function normalizeForCompare(s) {
   return String(s || "").replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase();
 }
+
+export default router;
