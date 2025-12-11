@@ -558,47 +558,33 @@ router.get("/org/:slug/modules/:moduleSlug", ensureAuth, async (req, res) => {
 /*  ORG QUIZ VIEW (20-question LMS UI for orgs)                       */
 /*  GET /org/:slug/quiz                                               */
 /* ------------------------------------------------------------------ */
-// Replace your existing /org/:slug/quiz handler with this single handler:
+
 router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
-    const slug = String(req.params.slug || "").trim();
-    const examId = String(req.query.examId || "").trim();   // may be empty
+    const slug = String(req.params.slug || "");
     const moduleNameRaw = String(req.query.module || "Responsibility").trim();
 
-    console.log(`[org quiz] request slug=${slug} examId=${examId} module=${moduleNameRaw} user=${req.user?._id||'anon'}`);
-
     const org = await Organization.findOne({ slug }).lean();
-    if (!org) {
-      console.warn("[org quiz] org not found", slug);
-      return res.status(404).send("org not found");
-    }
+    if (!org) return res.status(404).send("org not found");
 
-    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id,
+    }).lean();
     if (!membership) {
-      console.warn("[org quiz] membership missing for user", req.user?._id);
       return res.status(403).send("You are not a member of this organization");
     }
 
-    // If an examId was supplied, redirect to the LMS UI with examId and org so the client calls the exact exam
-    if (examId) {
-      console.log("[org quiz] redirecting to /lms/quiz with examId and org", examId, org.slug);
-      return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}&org=${encodeURIComponent(org.slug)}`);
-    }
-
-    // No examId -> render the normal org module quiz UI (sampling mode / 20 questions)
     return res.render("lms/quiz", {
       user: req.user,
-      quizCount: 20,
-      module: moduleNameRaw,
-      moduleKey: moduleNameRaw.toLowerCase ? moduleNameRaw.toLowerCase() : "",
-      orgSlug: org.slug,
-      examId: "" // ensure template has examId field (empty)
+      quizCount: 20,                 // 20-question quiz for orgs
+      module: moduleNameRaw,         // label used in the view
+      orgSlug: org.slug,             // so the HBS can show org name
     });
   } catch (err) {
     console.error("[org quiz] error:", err && (err.stack || err));
     return res.status(500).send("failed");
   }
 });
-
 
 export default router;
