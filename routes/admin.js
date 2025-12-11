@@ -288,7 +288,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     let insertedParents = 0;
     let insertedChildren = 0;
     const allErrors = [];
-    const previewBlocks = [];
+    const previewBlocks = []; // will be array of { rawBlock: "..." }
 
     if (isComprehension) {
       console.log("[admin/lms/import] detected comprehension delimiter; parsing as passage + questions");
@@ -313,7 +313,13 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
           allErrors.push({ reason: "No valid child questions parsed for comprehension" });
         } else {
           parsedCount += questionBlocks.length;
-          previewBlocks.push(passage.slice(0, 400));
+
+          // Preview: include passage then the raw blocks for children
+          previewBlocks.push({ rawBlock: passage });
+          questionBlocks.slice(0, 20).forEach(b => {
+            // ensure each preview block is object { rawBlock }
+            previewBlocks.push({ rawBlock: b.rawBlock || (b.text || "").slice(0, 400) });
+          });
 
           if (!saveToDb) {
             console.log("[admin/lms/import] saveToDb=false; skipping DB inserts, returning preview");
@@ -324,7 +330,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
             // build child docs from parsed blocks
             const childDocs = questionBlocks.map(b => {
               // ensure choices shape [{text}]
-              const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(Boolean);
+              const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(ch => ch.text);
               let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
               if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
               return {
@@ -381,14 +387,16 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
       const blocks = parseQuestionBlocks(content);
       console.log(`[admin/lms/import] parseQuestionBlocks returned ${blocks.length} blocks`);
       parsedCount += blocks.length;
-      previewBlocks.push(...blocks.slice(0,5).map(b => b.text));
+
+      // preview: map to { rawBlock } objects
+      blocks.slice(0, 20).forEach(b => previewBlocks.push({ rawBlock: b.rawBlock || (b.text || "").slice(0, 400) }));
 
       if (blocks.length === 0) {
         allErrors.push({ reason: "No valid question blocks parsed" });
       } else if (saveToDb && QuestionModel) {
         // prepare docs and insert
         const toInsert = blocks.map(b => {
-          const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(Boolean);
+          const choices = (b.choices || []).map(c => ({ text: (c && c.text) ? String(c.text).trim() : String(c).trim() })).filter(ch => ch.text);
           let ci = (typeof b.correctIndex === "number") ? b.correctIndex : null;
           if (ci === null || ci < 0 || ci >= choices.length) ci = 0;
           return {
@@ -431,22 +439,27 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
 
     console.log("[admin/lms/import] summary:", summary);
 
+    // Compute flags for rendering
+    const totalInserted = insertedParents + insertedChildren;
+    const savedToDbFlag = saveToDb && totalInserted > 0 && allErrors.length === 0;
+    const dbErrForRender = allErrors.length ? allErrors : null;
+
     // render the existing admin view summary (the app uses admin/lms_import_summary or admin/lms_import)
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
       return safeRender(req, res, "admin/lms_import_summary", {
         title: "Import summary",
         detected: parsedCount,
-        blocks: previewBlocks,
-        savedToDb: saveToDb && (insertedParents + insertedChildren) > 0 && allErrors.length === 0,
-        inserted: insertedParents + insertedChildren,
+        blocks: previewBlocks, // array of { rawBlock: "..." } matching the template
+        savedToDb: savedToDbFlag,
+        inserted: totalInserted,
         dbSkipped: !saveToDb,
-        dbErr: allErrors.length ? allErrors : null,
+        dbErr: dbErrForRender,
         selectedOrgId: req.body && req.body.orgId ? req.body.orgId : null,
         selectedModule: moduleName
       });
     }
 
-    return res.json({ success: true, parsed: parsedCount, savedToDb: saveToDb, inserted: insertedParents + insertedChildren, errors: allErrors });
+    return res.json({ success: true, parsed: parsedCount, savedToDb: savedToDbFlag, inserted: totalInserted, errors: allErrors });
   } catch (err) {
     console.error("[admin/lms/import] unexpected error:", err && (err.stack || err));
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
@@ -455,6 +468,7 @@ router.post("/lms/import", ensureAuth, ensureAdmin, upload.single("file"), async
     return res.status(500).json({ error: "Import failed", detail: String(err && err.message) });
   }
 });
+
 
 /**
  * GET /admin/lms/quizzes
