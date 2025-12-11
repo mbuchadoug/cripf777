@@ -15,6 +15,9 @@
     .links{margin-top:12px}
     pre.block{background:#f7f7f7;border:1px solid #e6e6e6;padding:12px;border-radius:6px;white-space:pre-wrap}
     select,input[type=text]{padding:8px;width:100%;border-radius:6px;border:1px solid #ccc;margin-top:6px;margin-bottom:12px}
+    .hint{font-size:13px;color:#666;margin-top:6px}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:720px){ .two-col{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
@@ -22,8 +25,13 @@
     <h1>Import LMS Questions</h1>
 
     <p class="note">
-      Upload a plain text file (.txt) or paste quiz questions.  
-      Now you can categorize questions by <strong>Organization</strong> and <strong>Module</strong>.
+      Upload plain text files (.txt) or paste quiz questions.  
+      You can now import comprehension passages (passage + questions) in two ways:
+      <ul>
+        <li><strong>Single combined file</strong>: paste or upload a file that contains the passage, a delimiter line of <code>---</code>, then the questions.</li>
+        <li><strong>Two-file upload</strong>: upload the passage as <strong>Passage file</strong> and the questions as <strong>Questions file</strong> (recommended for long passages).</li>
+      </ul>
+      You can also assign an <strong>Organization</strong> and a <strong>Module</strong> for imported questions.
     </p>
 
     <form method="post" enctype="multipart/form-data" action="/admin/lms/import">
@@ -39,24 +47,37 @@
 
       {{!-- MODULE --}}
       <label><strong>Module</strong></label>
-      <input type="text" name="module" placeholder="e.g. safety, hr, onboarding, etc." required />
+      <input type="text" name="module" placeholder="e.g. safety, hr, onboarding, comprehension" required />
 
-      <div style="margin-bottom:12px; margin-top:16px;">
-        <label><strong>Upload .txt file</strong></label><br/>
-        <input type="file" name="file" accept=".txt" />
+      <div style="margin-top:14px">
+        <strong>Two-file upload (passage + questions)</strong>
+        <div class="two-col" style="margin-top:8px">
+          <div>
+            <label>Passage file (.txt)</label><br/>
+            <input type="file" name="passageFile" accept=".txt" />
+            <div class="hint">If you have a long passage, upload it here. Leave empty if using single combined file.</div>
+          </div>
+          <div>
+            <label>Questions file (.txt)</label><br/>
+            <input type="file" name="file" accept=".txt" />
+            <div class="hint">This file should contain the question blocks (a)-d) format). If also uploading a passageFile, this file should only contain the questions.</div>
+          </div>
+        </div>
       </div>
 
-      <div style="text-align:center;margin:8px 0;color:#888">— or —</div>
+      <div style="text-align:center;margin:14px 0;color:#888">— or —</div>
 
       <div>
-        <label><strong>Paste questions (text)</strong></label>
-        <textarea name="text" placeholder="Paste the quiz text here...">{{{text}}}</textarea>
+        <label><strong>Single file or paste text</strong></label>
+        <textarea name="text" placeholder="Either paste the passage + --- + questions, or just the questions (if you used the Passage file above)">{{{text}}}</textarea>
+        <div class="hint">To use a combined file: place the passage first, then a line with three or more dashes (<code>---</code>), then the questions blocks.</div>
       </div>
 
       <div style="margin-top:10px">
         <label style="font-weight:700">
           <input type="checkbox" name="save" value="1" /> Save parsed questions to database
         </label>
+        <div class="hint">If unchecked the parser will run and show a preview (if you render that in UI) but not save.</div>
       </div>
 
       <div style="margin-top:14px">
