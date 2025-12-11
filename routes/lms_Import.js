@@ -1,4 +1,4 @@
-// routes/lms_import.js
+// routes/admin/lms_import.js
 import { Router } from "express";
 import multer from "multer";
 import mongoose from "mongoose";
@@ -8,13 +8,10 @@ import Organization from "../../models/organization.js";
 
 const router = Router();
 
-// multer memory storage
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 1024 * 1024 * 12 } // 12MB
-});
+// multer memory storage - we use upload.any() in-route to avoid Unexpected field
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 12 } });
 
-/* Simple ensureAdmin - replace with your project's if you have one */
+/* Basic ensureAdmin - adjust if you have your own implementation */
 function ensureAdmin(req, res, next) {
   try {
     const email = (req.user && (req.user.email || req.user.username) || "").toLowerCase();
@@ -36,7 +33,7 @@ function ensureAdmin(req, res, next) {
   }
 }
 
-/* GET import form */
+/* GET form */
 router.get("/import", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
@@ -49,19 +46,19 @@ router.get("/import", ensureAuth, ensureAdmin, async (req, res) => {
 
 /**
  * POST /admin/lms/import
- * We explicitly call upload.any() inside the route so we can catch multer errors and log them.
+ * - accepts files (any fieldnames) or textarea 'text'
+ * - tries comprehension parsing first; if found, creates child Question docs then a parent doc with type:'comprehension'
+ * - fallback to single-question parsing
+ * - respects textarea + file pairing: if you upload passageFile + file it will combine them
+ * - logs detailed info to server console for debugging
  */
 router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
-  // call multer explicitly so we capture multer errors here
-  upload.any()(req, res, async function (multerErr) {
-    // ALWAYS log header/body to help debug multipart issues
+  // call multer.any() explicitly so we can catch Multer errors here
+  upload.any()(req, res, async (multerErr) => {
     console.log("========== [IMPORT] START ==========");
-    console.log("[IMPORT] Request headers:", Object.assign({}, req.headers));
     try {
       if (multerErr) {
-        console.error("[MULTER ERROR] code:", multerErr.code, "message:", multerErr.message);
-        // log full error stack
-        console.error(multerErr && (multerErr.stack || multerErr));
+        console.error("[MULTER ERROR]", multerErr && (multerErr.stack || multerErr));
         const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
         return res.render("admin/lms_import", {
           title: "Import Results",
@@ -71,71 +68,52 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
         });
       }
 
-      console.log("[IMPORT] req.files present:", Array.isArray(req.files) ? req.files.length : 0);
-      if (Array.isArray(req.files)) {
-        req.files.forEach((f, i) => {
-          console.log(`[IMPORT] file[${i}] field=${f.fieldname} original=${f.originalname} mime=${f.mimetype} size=${f.size}`);
-          // preview first 200 chars of file text (if text-like)
-          try {
-            const txt = f.buffer ? f.buffer.toString("utf8") : "";
-            const trimmed = txt.replace(/\s+/g, " ").trim().slice(0, 200);
-            if (trimmed.length) console.log(`[IMPORT] file[${i}] preview: "${trimmed.replace(/\n/g, ' ')}"`);
-          } catch (e) {
-            console.warn("[IMPORT] could not preview file content:", e && e.message);
-          }
-        });
+      console.log("[IMPORT] files count:", Array.isArray(req.files) ? req.files.length : 0);
+      (Array.isArray(req.files) ? req.files : []).forEach((f, i) => {
+        console.log(`[IMPORT] file[${i}] field=${f.fieldname} name=${f.originalname} mime=${f.mimetype} size=${f.size}`);
+        try {
+          const preview = f.buffer ? f.buffer.toString("utf8").replace(/\s+/g, " ").slice(0, 200) : "";
+          if (preview) console.log(`[IMPORT] preview[${i}]: "${preview}"`);
+        } catch (e) { /* ignore preview errors */ }
+      });
+
+      console.log("[IMPORT] body keys:", Object.keys(req.body || {}));
+      if (req.body && typeof req.body.text === "string") {
+        console.log("[IMPORT] body.text preview:", String(req.body.text).replace(/\s+/g, " ").slice(0, 200));
       }
 
-      console.log("[IMPORT] req.body keys:", Object.keys(req.body || {}));
-      if (req.body && Object.keys(req.body).length) {
-        // log some fields but avoid dumping huge textarea contents fully
-        for (const k of Object.keys(req.body)) {
-          if (k === 'text') {
-            const preview = String(req.body.text || "").replace(/\s+/g, " ").trim().slice(0, 200);
-            console.log(`[IMPORT] body.text preview: "${preview}"`);
-            continue;
-          }
-          console.log(`[IMPORT] body.${k} =`, req.body[k]);
-        }
-      }
-
-      // collect texts
+      // collect text sources (filename + text)
       const texts = [];
 
-      // pair passageFile + question files if present
-      if (Array.isArray(req.files) && req.files.length) {
-        const passageFile = req.files.find(f => f.fieldname === "passageFile");
-        const questionFiles = req.files.filter(f => ["file", "files", "questions", "qfile"].includes(f.fieldname));
+      // pairing: if passageFile uploaded and questions file(s) uploaded, combine them
+      const filesArr = Array.isArray(req.files) ? req.files : [];
+      const passageFile = filesArr.find(f => f.fieldname === "passageFile");
+      const questionFiles = filesArr.filter(f => ["file", "files", "questions", "qfile"].includes(f.fieldname));
 
-        if (passageFile && questionFiles.length) {
-          const passageText = passageFile.buffer ? passageFile.buffer.toString("utf8") : "";
-          console.log(`[IMPORT] found passageFile (${passageFile.originalname}) and ${questionFiles.length} question file(s).`);
-          for (const qf of questionFiles) {
-            const qText = qf.buffer ? qf.buffer.toString("utf8") : "";
-            texts.push({ filename: `${passageFile.originalname}+${qf.originalname}`, text: passageText + "\n\n---\n\n" + qText });
-          }
-        }
-
-        // add any standalone files not used in pairing
-        for (const f of req.files) {
-          const wasPaired = passageFile && (f === passageFile || questionFiles.includes(f));
-          if (wasPaired) continue;
-          const buf = f.buffer ? f.buffer.toString("utf8") : "";
-          if (!buf.trim()) {
-            console.log(`[IMPORT] skipping empty uploaded file ${f.originalname}`);
-            continue;
-          }
-          texts.push({ filename: f.originalname || f.fieldname, text: buf });
+      if (passageFile && questionFiles.length) {
+        const passageText = passageFile.buffer ? passageFile.buffer.toString("utf8") : "";
+        for (const qf of questionFiles) {
+          const qtext = qf.buffer ? qf.buffer.toString("utf8") : "";
+          if (!qtext.trim()) continue;
+          texts.push({ filename: `${passageFile.originalname}+${qf.originalname}`, text: passageText + "\n\n---\n\n" + qtext });
         }
       }
 
-      // fallback to textarea text
+      // add any standalone uploaded files not used in pair
+      for (const f of filesArr) {
+        const usedInPair = passageFile && (f === passageFile || questionFiles.includes(f));
+        if (usedInPair) continue;
+        const txt = f.buffer ? f.buffer.toString("utf8") : "";
+        if (!txt.trim()) { console.log(`[IMPORT] skipping empty file ${f.originalname}`); continue; }
+        texts.push({ filename: f.originalname || f.fieldname, text: txt });
+      }
+
+      // fallback to pasted textarea
       if (!texts.length && req.body && req.body.text && String(req.body.text).trim()) {
         texts.push({ filename: "pasted", text: String(req.body.text) });
       }
 
       if (!texts.length) {
-        console.log("[IMPORT] No text sources found after processing files/body.");
         const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
         return res.render("admin/lms_import", {
           title: "Import Results",
@@ -145,33 +123,36 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
         });
       }
 
-      // log how many "text sources" we'll process
-      console.log(`[IMPORT] Text sources to process: ${texts.length} (filenames: ${texts.map(t => t.filename).join(", ")})`);
+      console.log(`[IMPORT] processing ${texts.length} text source(s): ${texts.map(t => t.filename).join(", ")}`);
 
-      // org/module
+      // check save checkbox - only save if user checked 'save'
+      const shouldSave = !!req.body.save || req.body.save === "1" || req.body.save === "on";
+      console.log("[IMPORT] shouldSave:", shouldSave);
+
+      // optional org/module
       const orgId = req.body.orgId && mongoose.isValidObjectId(req.body.orgId) ? mongoose.Types.ObjectId(req.body.orgId) : null;
       const moduleName = String(req.body.module || "general").trim().toLowerCase();
-      console.log(`[IMPORT] orgId: ${orgId}, module: ${moduleName}`);
+      console.log("[IMPORT] orgId:", String(orgId), "module:", moduleName);
 
-      // counters/errors
-      let parsedCount = 0;
+      // counters and logging
+      let parsedItems = 0;
       let insertedParents = 0;
       let insertedChildren = 0;
       const allErrors = [];
       const preview = [];
 
-      // Process each text
+      // helper: normalize weird dashes to hyphen sequences is done inside parser
+
       for (const item of texts) {
-        console.log(`--- [IMPORT] processing file: ${item.filename} (len ${String(item.text).length}) ---`);
-        const rawText = item.text || "";
-        if (!rawText.trim()) {
-          console.log(`[IMPORT] ${item.filename} is empty - skipping.`);
+        console.log(`--- [IMPORT] file: ${item.filename} length=${String(item.text).length} ---`);
+        const raw = item.text || "";
+        if (!raw.trim()) {
           allErrors.push({ file: item.filename, reason: "Empty content" });
           continue;
         }
 
-        // try comprehension
-        const { parsedComprehensions = [], errors: compErrors = [] } = parseComprehensionFromText(rawText);
+        // try comprehension parse first
+        const { parsedComprehensions, errors: compErrors } = parseComprehensionFromText(raw);
         if (compErrors && compErrors.length) {
           compErrors.forEach(e => {
             allErrors.push({ file: item.filename, ...e });
@@ -180,27 +161,35 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
         }
 
         if (parsedComprehensions && parsedComprehensions.length) {
-          console.log(`[IMPORT] parsed ${parsedComprehensions.length} comprehension block(s) in ${item.filename}`);
+          console.log(`[IMPORT] parsed ${parsedComprehensions.length} comprehension(s) from ${item.filename}`);
           for (const comp of parsedComprehensions) {
-            try {
-              const childDocs = (comp.questions || []).map(q => ({
-                text: q.text,
-                choices: (q.choices || []).map(c => ({ text: c })),
-                correctIndex: typeof q.answerIndex === "number" ? q.answerIndex : 0,
-                tags: q.tags || [],
-                difficulty: q.difficulty || "medium",
-                source: "import",
-                organization: orgId,
-                module: moduleName,
-                raw: '',
-                createdAt: new Date()
-              }));
+            parsedItems++;
+            preview.push((comp.passage || "").slice(0, 400));
+            if (!shouldSave) {
+              console.log("[IMPORT] preview only (not saving) for comprehension in", item.filename);
+              continue;
+            }
 
-              console.log("[IMPORT] inserting children count:", childDocs.length);
+            // build child docs
+            const childDocs = (comp.questions || []).map(q => ({
+              text: q.text,
+              choices: (q.choices || []).map(c => ({ text: c })),
+              correctIndex: typeof q.answerIndex === "number" ? q.answerIndex : 0,
+              tags: q.tags || [],
+              difficulty: q.difficulty || "medium",
+              source: "import",
+              organization: orgId,
+              module: moduleName,
+              raw: '',
+              createdAt: new Date()
+            }));
+
+            try {
               const inserted = await Question.insertMany(childDocs, { ordered: true });
               const childIds = inserted.map(d => d._id);
               console.log("[IMPORT] inserted children IDs:", childIds);
 
+              // create parent doc with type: 'comprehension'
               const parentDoc = {
                 text: (comp.passage || "").split("\n").slice(0, 1).join(" ").slice(0, 120) || "Comprehension passage",
                 type: "comprehension",
@@ -213,36 +202,42 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
                 createdAt: new Date()
               };
 
-              const insertedParent = await Question.create(parentDoc);
-              console.log("[IMPORT] inserted parent ID:", insertedParent._id);
+              const parent = await Question.create(parentDoc);
+              console.log("[IMPORT] inserted parent ID:", parent._id);
 
-              // optionally tag children with parent reference
-              await Question.updateMany({ _id: { $in: childIds } }, { $addToSet: { tags: `comprehension-${insertedParent._id}` } }).exec();
+              // tag children with a parent tag for easier querying if desired
+              await Question.updateMany({ _id: { $in: childIds } }, { $addToSet: { tags: `comprehension-${parent._id}` } }).exec();
 
-              parsedCount++;
               insertedParents++;
               insertedChildren += childIds.length;
-              preview.push((comp.passage || "").slice(0, 500));
             } catch (e) {
               console.error("[IMPORT] DB insert for comprehension failed:", e && (e.stack || e));
               allErrors.push({ file: item.filename, reason: "DB insert failed for comprehension", error: String(e && e.message) });
             }
-          }
-          continue; // next text
-        }
+          } // end each comprehension
+          continue; // next text source
+        } // end if comprehension found
 
-        // fallback to single-question parser
-        const { parsed, errors } = parseQuestionsFromText(rawText);
+        // fallback: single-question parser
+        const { parsed, errors } = parseQuestionsFromText(raw);
         if (errors && errors.length) {
           errors.forEach(e => {
             allErrors.push({ file: item.filename, ...e });
-            console.log("[IMPORT] single-question parse error:", e);
+            console.log("[IMPORT] single parse error:", e);
           });
         }
 
-        if (!parsed.length) {
-          console.log(`[IMPORT] no parsed questions in ${item.filename}`);
+        if (!parsed || !parsed.length) {
+          console.log(`[IMPORT] no questions parsed from ${item.filename}`);
           allErrors.push({ file: item.filename, reason: "No valid questions parsed" });
+          continue;
+        }
+
+        parsedItems += parsed.length;
+        preview.push(parsed.slice(0, 3).map(q => q.text).join("\n---\n"));
+
+        if (!shouldSave) {
+          console.log("[IMPORT] preview only (not saving) for single-question file", item.filename);
           continue;
         }
 
@@ -261,21 +256,18 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
         }));
 
         try {
-          console.log(`[IMPORT] inserting ${toInsert.length} single questions from ${item.filename}`);
           const inserted = await Question.insertMany(toInsert, { ordered: true });
-          console.log("[IMPORT] inserted single-question IDs (first 5):", inserted.slice(0,5).map(d => d._id));
-          parsedCount += parsed.length;
+          console.log("[IMPORT] inserted single-question IDs (first up to 5):", inserted.slice(0,5).map(x => x._id));
           insertedChildren += inserted.length;
-          preview.push(parsed.slice(0, 3).map(q => q.text).join("\n---\n"));
         } catch (e) {
-          console.error("[IMPORT] single-question insert failed:", e && (e.stack || e));
+          console.error("[IMPORT] insert single questions failed:", e && (e.stack || e));
           allErrors.push({ file: item.filename, reason: "DB insert failed for single questions", error: String(e && e.message) });
         }
       } // end for texts
 
       const summary = {
         parsedFiles: texts.length,
-        parsedItems: parsedCount,
+        parsedItems,
         insertedParents,
         insertedChildren,
         errors: allErrors
@@ -283,16 +275,15 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
 
       console.log("========== [IMPORT] SUMMARY ==========");
       console.log(JSON.stringify(summary, null, 2));
-      if (allErrors.length) console.log("[IMPORT] first error:", allErrors[0]);
-
       const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
       return res.render("admin/lms_import", { title: "Import Results", result: summary, preview: preview.slice(0,5), user: req.user, organizations });
-    } catch (topErr) {
-      console.error("[IMPORT] unexpected error:", topErr && (topErr.stack || topErr));
+
+    } catch (err) {
+      console.error("[IMPORT] unexpected error:", err && (err.stack || err));
       const organizations = await Organization.find().sort({ name: 1 }).lean().exec();
       return res.render("admin/lms_import", {
         title: "Import Results",
-        result: { parsed: 0, inserted: 0, errors: [{ reason: "Unexpected server error", error: String(topErr && topErr.message) }] },
+        result: { parsed: 0, inserted: 0, errors: [{ reason: "Unexpected server error", error: String(err && err.message) }] },
         user: req.user,
         organizations
       });
@@ -302,16 +293,17 @@ router.post("/import", ensureAuth, ensureAdmin, (req, res) => {
   });
 });
 
-/* ------------------------------------------------------------------
- * Parsers (same robust versions as before)
- * ------------------------------------------------------------------ */
+/* -------------------- Parsers -------------------- */
 
 function parseComprehensionFromText(raw) {
   const errors = [];
   const parsedComprehensions = [];
   if (!raw || typeof raw !== "string") return { parsedComprehensions, errors };
 
+  // normalize line endings and replace fancy dashes with hyphens
   const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/[\u2013\u2014\u2015\u2212]+/g, '-');
+
+  // find delimiter line with 3+ hyphens on its own line
   const delimRegex = /^[ \t]*-{3,}[ \t]*$/m;
   const delimMatch = normalized.match(delimRegex);
   if (!delimMatch) return { parsedComprehensions: [], errors };
@@ -325,6 +317,7 @@ function parseComprehensionFromText(raw) {
   }
 
   const qBlocks = after.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+
   const alphabet = "abcdefghijklmnopqrstuvwxyz";
   const letterToIndex = (letter) => {
     if (!letter) return -1;
@@ -343,21 +336,22 @@ function parseComprehensionFromText(raw) {
       const choiceRegex = /^[ \t]*([a-zA-Z])[\.\)]\s*(.+)$/gm;
       const choices = [];
       let m;
-      while ((m = choiceRegex.exec(block)) !== null) { choices.push(m[2].trim()); }
+      while ((m = choiceRegex.exec(block)) !== null) choices.push(m[2].trim());
 
       if (choices.length < 2) { errors.push({ question: qText, reason: `Expected labeled choices. Found ${choices.length}.` }); continue; }
 
       let answerIndex = -1;
-      const ansMatch = block.match(/✅\s*Correct Answer\s*[:\-]?\s*(.+)$/im) ||
-                       block.match(/Correct Answer\s*[:\-]?\s*(.+)$/im) ||
-                       block.match(/Answer\s*[:\-]?\s*(.+)$/im);
+      const ansMatch =
+        block.match(/✅\s*Correct Answer\s*[:\-]?\s*(.+)$/im) ||
+        block.match(/Correct Answer\s*[:\-]?\s*(.+)$/im) ||
+        block.match(/Answer\s*[:\-]?\s*(.+)$/im);
 
       if (ansMatch) {
         const ansText = ansMatch[1].trim();
         const lm = ansText.match(/^([a-zA-Z])[\.\)]?/);
         if (lm) answerIndex = letterToIndex(lm[1]);
         else {
-          const normalize = s => String(s || '').replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+          const normalize = s => String(s||'').replace(/[^a-z0-9]+/gi,' ').trim().toLowerCase();
           const found = choices.findIndex(c => normalize(c) === normalize(ansText) || c.toLowerCase().startsWith(ansText.toLowerCase()) || ansText.toLowerCase().startsWith(c.toLowerCase()));
           if (found >= 0) answerIndex = found;
         }
@@ -410,9 +404,11 @@ function parseQuestionsFromText(raw) {
       if (choices.length < 2) { errors.push({ question: qText, reason: `Expected labelled choices a)-d). Found ${choices.length}.` }); continue; }
 
       let answerIndex = -1;
-      const ansMatch = block.match(/✅\s*Correct Answer\s*[:\-]?\s*(.+)$/im) ||
-                       block.match(/Correct Answer\s*[:\-]?\s*(.+)$/im) ||
-                       block.match(/Answer\s*[:\-]?\s*(.+)$/im);
+      const ansMatch =
+        block.match(/✅\s*Correct Answer\s*[:\-]?\s*(.+)$/im) ||
+        block.match(/Correct Answer\s*[:\-]?\s*(.+)$/im) ||
+        block.match(/Answer\s*[:\-]?\s*(.+)$/im);
+
       if (ansMatch) {
         const ansText = ansMatch[1].trim();
         const letterMatch = ansText.match(/^([a-dA-D])[\.\)]?/);
@@ -446,6 +442,7 @@ function parseQuestionsFromText(raw) {
       errors.push({ block: block.slice(0,120), reason: String(e && e.message) });
     }
   }
+
   return { parsed, errors };
 }
 
