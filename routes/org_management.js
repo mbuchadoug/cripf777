@@ -818,5 +818,64 @@ router.post(
 );
 
 
+router.get(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("Org not found");
+
+      const modules = await OrgModule.find({ org: org._id }).lean();
+
+      res.render("admin/org_modules", {
+        org,
+        modules,
+      });
+    } catch (err) {
+      console.error("Load modules error:", err);
+      res.status(500).send("Failed to load modules");
+    }
+  }
+);
+
+router.post(
+  "/admin/orgs/:slug/modules",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const orgSlug = req.params.slug;
+      const { slug, title, description } = req.body;
+
+      if (!slug || !title) {
+        return res.status(400).send("Module slug and title are required");
+      }
+
+      const org = await Organization.findOne({ slug: orgSlug });
+      if (!org) return res.status(404).send("Org not found");
+
+      await OrgModule.findOneAndUpdate(
+        { org: org._id, slug },
+        { title, description },
+        { upsert: true, new: true }
+      );
+
+      res.redirect(`/admin/orgs/${orgSlug}/modules`);
+    } catch (err) {
+      if (err.code === 11000) {
+        console.warn("[modules] duplicate org/slug ignored", err.keyValue);
+        return res.redirect(`/admin/orgs/${req.params.slug}/modules?dup=1`);
+      }
+
+      console.error("Save module error:", err);
+      res.status(500).send("Failed to save module");
+    }
+  }
+);
+
+
 // export default router
 export default router;
