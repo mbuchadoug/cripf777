@@ -11,6 +11,7 @@ import OrgModule from "../models/orgModule.js";
 import User from "../models/user.js";
 import ExamInstance from "../models/examInstance.js";
 import QuizQuestion from "../models/question.js";
+import Question from "../models/question.js";
 import Attempt from "../models/attempt.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
