@@ -8,7 +8,7 @@ import Organization from "../models/organization.js";
 import Question from "../models/question.js";         // Question model (used throughout)
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
-
+import { ensureAuth } from "../middleware/authGuard.js";
 const router = Router();
 
 // fallback file loader
