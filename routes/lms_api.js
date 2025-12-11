@@ -8,7 +8,7 @@ import Organization from "../models/organization.js";
 import Question from "../models/question.js";         // Question model (used throughout)
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
-import { ensureAuth } from "../middleware/authGuard.js";
+
 const router = Router();
 
 // fallback file loader
@@ -43,125 +43,146 @@ function fetchRandomQuestionsFromFile(count = 5) {
 
 /**
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
- * If examId is supplied, return the exact ExamInstance ordering (with comprehension parents expanded to include children).
- * Otherwise sample up to `count` questions (module/org-aware).
+ * create small ExamInstance that contains questionIds and (optionally) choicesOrder
  */
-router.get("/quiz", ensureAuth, async (req, res) => {
+router.get("/quiz", async (req, res) => {
   try {
-    const examId = String(req.query.examId || "").trim();
-    const orgSlug = String(req.query.org || "").trim();
+    // primary keys
+    const examIdParam = String(req.query.examId || "").trim();
+    let count = parseInt(req.query.count || "5", 10);
+    if (!Number.isFinite(count)) count = 5;
+    count = Math.max(1, Math.min(50, count));
 
-    if (!examId) return res.status(400).json({ error: "examId required" });
+    const moduleName = String(req.query.module || "").trim(); // optional
+    const orgSlug = String(req.query.org || "").trim();      // optional
 
-    // find exam instance
-    const exam = await ExamInstance.findOne({ examId }).lean();
-    if (!exam) return res.status(404).json({ error: "exam not found" });
+    // If client asked for a specific exam instance, return it exactly
+    if (examIdParam) {
+      try {
+        const ex = await ExamInstance.findOne({ examId: examIdParam }).lean();
+        if (!ex) return res.status(404).json({ error: "exam instance not found" });
 
-    // optional: verify org slug if provided
+        // load docs for each questionId in exam.questionIds
+        const qIds = Array.isArray(ex.questionIds) ? ex.questionIds.map(String) : [];
+        const objIds = qIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+        let docs = [];
+        if (objIds.length) {
+          docs = await Question.find({ _id: { $in: objIds } }).lean();
+        }
+        // map by id so we preserve order
+        const byId = {};
+        for (const d of docs) byId[String(d._id)] = d;
+
+        const series = [];
+        // Walk the exam.questionIds in order and push either question or comprehension parent with children
+        for (const qid of qIds) {
+          const d = byId[qid];
+          if (!d) {
+            // If a missing question (maybe non-ObjectId fallback) skip
+            continue;
+          }
+
+          const isComprehension = (d.type === "comprehension") || (d.passage && Array.isArray(d.questionIds) && d.questionIds.length > 0);
+
+          if (isComprehension) {
+            // load children by IDs
+            const childIds = Array.isArray(d.questionIds) ? d.questionIds.map(String) : [];
+            const childObjIds = childIds.filter(id => mongoose.isValidObjectId(id)).map(id => mongoose.Types.ObjectId(id));
+            let children = [];
+            if (childObjIds.length) {
+              children = await Question.find({ _id: { $in: childObjIds } }).lean();
+            }
+            // return parent with children full objects
+            series.push({
+              id: String(d._id),
+              type: "comprehension",
+              passage: d.passage || "",
+              children: (children || []).map(c => ({
+                id: String(c._id),
+                text: c.text,
+                choices: (c.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
+                tags: c.tags || [],
+                difficulty: c.difficulty || 'medium'
+              })),
+              tags: d.tags || [],
+              difficulty: d.difficulty || 'medium'
+            });
+          } else {
+            series.push({
+              id: String(d._id),
+              text: d.text,
+              choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
+              tags: d.tags || [],
+              difficulty: d.difficulty || 'medium'
+            });
+          }
+        } // end for qIds
+
+        return res.json({ examId: ex.examId, series });
+      } catch (e) {
+        console.error("[/api/lms/quiz] examId handling error:", e && (e.stack || e));
+        return res.status(500).json({ error: "failed to load exam instance" });
+      }
+    }
+
+    // --- No examId: fall back to sampling (existing behavior) ----
+    // org filter
+    let orgId = null;
     if (orgSlug) {
       const org = await Organization.findOne({ slug: orgSlug }).lean();
-      if (!org) return res.status(404).json({ error: "org not found" });
-      if (String(exam.org) !== String(org._id)) {
-        return res.status(403).json({ error: "exam not for this org" });
-      }
+      if (org) orgId = org._id;
     }
 
-    // optionally check ownership or membership (you may relax this if you want admins to fetch)
-    // if you want to restrict to exam owner only, uncomment:
-    // if (String(exam.user) !== String(req.user._id)) return res.status(403).json({ error: "not exam owner" });
+    const match = {};
+    if (moduleName) match.module = { $regex: new RegExp(`^${moduleName}$`, "i") };
+    if (orgId) match.$or = [{ organization: orgId }, { organization: null }];
+    else match.$or = [{ organization: null }, { organization: { $exists: false } }];
 
-    // load referenced questions
-    const qIds = Array.isArray(exam.questionIds) ? exam.questionIds.filter(Boolean) : [];
+    const pipeline = [];
+    if (Object.keys(match).length) pipeline.push({ $match: match });
+    pipeline.push({ $sample: { size: Math.max(1, Math.min(50, count)) } });
 
-    // collect only real ObjectId question ids (skip 'parent:...' markers)
-    const realIds = qIds
-      .filter(id => typeof id === "string" && !id.startsWith("parent:"))
-      .map(id => {
-        try { return mongoose.Types.ObjectId(String(id)); } catch (e) { return null; }
-      })
-      .filter(Boolean);
-
-    const questions = realIds.length ? await QuizQuestion.find({ _id: { $in: realIds } }).lean() : [];
-    const qById = {};
-    for (const q of questions) qById[String(q._id)] = q;
-
-    // build series: for each entry in exam.questionIds
-    const series = [];
-    for (let i = 0; i < qIds.length; i++) {
-      const rawId = String(qIds[i]);
-
-      // handle parent marker: include a passage marker object
-      if (rawId.startsWith("parent:")) {
-        const parentId = rawId.replace(/^parent:/, "");
-        // try to load parent doc (may be in same collection)
-        const parentDoc = questions.find(q => String(q._id) === String(parentId)) || null;
-        // if parent not in `questions` array (we only loaded realIds) try fetch it
-        let parent = parentDoc;
-        if (!parent) {
-          try {
-            parent = await QuizQuestion.findById(parentId).lean();
-          } catch (e) { parent = null; }
-        }
-
-        if (parent) {
-          // include a passage-type item that the client can detect (client already has logic for comprehension)
-          series.push({
-            questionId: `parent:${String(parent._id)}`,
-            type: "passage",
-            passage: parent.passage || parent.text || "",
-            text: parent.text || "Passage",
-            // children are not expanded here to keep payload small; LMS client handles parent marker by showing passage and expecting subsequent child items
-            children: Array.isArray(parent.questionIds) ? parent.questionIds.map(String) : []
-          });
-        } else {
-          // fallback marker (if parent missing)
-          series.push({ questionId: rawId, type: "passage", passage: "(passage not found)", children: [] });
-        }
-        continue;
-      }
-
-      // normal question id
-      const q = qById[rawId] || null;
-
-      // exam.choicesOrder may exist: mapping array for question i
-      const mapping = Array.isArray(exam.choicesOrder && exam.choicesOrder[i]) ? exam.choicesOrder[i] : null;
-
-      const shownChoices = [];
-
-      if (q && Array.isArray(q.choices) && mapping && mapping.length) {
-        for (let si = 0; si < mapping.length; si++) {
-          const originalIndex = mapping[si];
-          const text = q.choices[originalIndex];
-          shownChoices.push({ text: typeof text === "string" ? text : (text && (text.text || "")) || "" });
-        }
-      } else if (q && Array.isArray(q.choices)) {
-        for (const c of q.choices) {
-          shownChoices.push({ text: typeof c === "string" ? c : (c && (c.text || "")) || "" });
-        }
-      }
-
-      series.push({
-        questionId: rawId,
-        text: q ? q.text : "(question missing)",
-        choices: shownChoices
-      });
+    let docs = [];
+    try {
+      docs = await Question.aggregate(pipeline).allowDiskUse(true);
+    } catch (e) {
+      console.error("[/api/lms/quiz] aggregate error:", e && (e.stack || e));
     }
 
-    return res.json({ examId: exam.examId, series, expiresAt: exam.expiresAt || null });
+    // map docs into series (no comprehension children in sampling mode)
+    const series = (docs || []).map((d) => {
+      const isComp = (d && d.type === "comprehension");
+      if (isComp) {
+        // if comprehension parent encountered in sampling, attempt to fetch child questions lazily is expensive,
+        // so keep children empty in sampling mode (client can warn)
+        return {
+          id: String(d._id),
+          type: "comprehension",
+          passage: d.passage || "",
+          children: [],
+          tags: d.tags || [],
+          difficulty: d.difficulty || 'medium'
+        };
+      }
+      return {
+        id: String(d._id),
+        text: d.text,
+        choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
+        tags: d.tags || [],
+        difficulty: d.difficulty || 'medium'
+      };
+    });
+
+    return res.json({ examId: null, series });
   } catch (err) {
     console.error("[GET /api/lms/quiz] error:", err && (err.stack || err));
-    return res.status(500).json({ error: "failed to load exam" });
+    return res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
 
 /**
  * POST /api/lms/quiz/submit
  * Body: { examId, answers: [{ questionId, choiceIndex }] }
- *
- * This implementation:
- * - looks up DB question docs for ObjectId-like ids using Question model
- * - falls back to file-based questions for non-DB ids
- * - maps submitted shownIndex -> canonicalIndex using ExamInstance.choicesOrder (if available)
  */
 router.post("/quiz/submit", async (req, res) => {
   try {
@@ -234,7 +255,6 @@ router.post("/quiz/submit", async (req, res) => {
 
       let canonicalIndex = (typeof shownIndex === "number") ? shownIndex : null;
 
-      // remap if exam instance has mapping for this question
       if (exam && examIndexMap.hasOwnProperty(qid)) {
         const qPos = examIndexMap[qid];
         const mapping = Array.isArray(examChoicesOrder[qPos]) ? examChoicesOrder[qPos] : null;
