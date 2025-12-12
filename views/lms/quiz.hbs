@@ -144,6 +144,11 @@
     let series = [];
     let answers = {};
 
+    // NEW: local cache of user's shown answers (qid -> shownIndex)
+    // We save this just before submit and use it for review highlighting
+    // so the review always shows exactly what the user clicked.
+    let localUserAnswers = {};
+
     function letterForIndex(i){ return ['a','b','c','d','e'][i] || String.fromCharCode(97+i); }
     function normalizeChoice(c){
       if (!c) return { text: '' };
@@ -163,6 +168,7 @@
     // positionLabel is optional — used to show numbering (Q1, Q2, ...)
     function renderSingleQuestion(qObj, positionLabel) {
       const q = repairBlock(qObj);
+      // ensure we preserve any server-provided id (_id or id). If missing, generate local id.
       const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
       const choices = (q.choices || []).map(normalizeChoice);
 
@@ -235,6 +241,7 @@
       quizArea.innerHTML = '';
       answers = {};
       series = [];
+      localUserAnswers = {}; // reset local cache on new quiz load
 
       if (!Array.isArray(list) || list.length === 0) {
         quizArea.innerHTML = '<div class="muted">No quiz questions found. Please import questions in Admin.</div>';
@@ -357,6 +364,9 @@
         });
       }
 
+      // SAVE a copy of what the user actually clicked (shown indexes)
+      localUserAnswers = Object.assign({}, answers);
+
       submitBtn.disabled = true;
       status.textContent = 'Submitting answers...';
       errorMsg.textContent = '';
@@ -402,7 +412,12 @@
 
     reloadBtn.addEventListener('click', () => loadQuiz(DEFAULT_COUNT));
 
-    // --- Fix: make review/highlighting use the user's shown index when available ---
+    // helper to normalize strings for loose matching
+    function normStr(s) {
+      if (!s && s !== 0) return '';
+      return String(s).trim().replace(/\s+/g,' ').toLowerCase();
+    }
+
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
@@ -412,17 +427,36 @@
         ' (pass ' + resp.passThreshold + '%)</div>' +
         '<div style="margin-top:10px">Detailed feedback below:</div>';
 
+      // If server provided a certificate URL for passed attempts, show it here
+      if (resp.passed && resp.certificateUrl) {
+        const certHtml = document.createElement('div');
+        certHtml.style.marginTop = '12px';
+        certHtml.innerHTML = `
+          <div style="margin-bottom:8px; font-weight:700">Certificate</div>
+          <div style="margin-bottom:8px">You passed — download your certificate below:</div>
+          <div><a href="${escapeHtmlAttr(resp.certificateUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--gold); font-weight:800; text-decoration:underline;">Download Certificate</a></div>
+        `;
+        result.appendChild(certHtml);
+      }
+
       const list = document.createElement('div');
       list.style.marginTop = '12px';
 
       (resp.details || []).forEach(d => {
-        // find the question in the rendered series by id first
+        // try to find matching question in series:
+        // 1) match by id/_id
+        // 2) if not found, fallback to matching by question text (loose)
         let q = series.find(s => String(s.id || s._id) === String(d.questionId));
-        // if not found, try fuzzy/text match (keeps existing behavior)
-        if (!q && d.question) {
-          const target = ('' + d.question).trim().toLowerCase();
-          q = series.find(s => (s.text || '').trim().toLowerCase() === target);
-          if (!q) q = series.find(s => (s.text || '').trim().toLowerCase().includes(target) || target.includes((s.text || '').trim().toLowerCase()));
+        if (!q) {
+          // fallback: compare normalized text
+          const targetText = normStr(d.questionText || d.question || '');
+          if (targetText) {
+            q = series.find(s => normStr(s.text || '') === targetText);
+          }
+          // if still not found, try fuzzy substring match on text
+          if (!q && targetText) {
+            q = series.find(s => normStr(s.text || '').includes(targetText) || targetText.includes(normStr(s.text || '')));
+          }
         }
 
         const block = document.createElement('div');
@@ -430,20 +464,34 @@
 
         const title = document.createElement('div');
         title.className = 'fb-qtitle';
-        title.textContent = q ? (q.text || '') : (d.question || d.questionId || '');
+        title.textContent = q ? (q.text || '') : (d.questionId || d.question || '');
         block.appendChild(title);
 
         const choicesContainer = document.createElement('div');
-        // prefer the choices we rendered (so indexes align with what user saw), otherwise fall back to server-sent choices
-        const srcChoices = (q && q.choices && q.choices.length) ? q.choices : (d.choices || []);
+        const srcChoices = (q && q.choices && q.choices.length)
+          ? q.choices
+          : (d.choices || []);
 
-        // Determine the index to highlight as the user's answer:
-        // prefer d.shownIndex / d.shown (what user saw when answering) -> this reflects UI order
-        // fallback to d.yourIndex (canonical index) if shownIndex isn't provided.
-        const userShownIndex = (typeof d.shownIndex === 'number') ? d.shownIndex
-                              : (typeof d.shown === 'number') ? d.shown
-                              : (typeof d.yourIndex === 'number') ? d.yourIndex
-                              : null;
+        // Determine which index to treat as the user's shown index:
+        // Prefer localUserAnswers (what the user actually clicked) if we have it.
+        // Fallbacks: server-provided shownIndex / shown / yourIndex.
+        let userShownIndex = null;
+        try {
+          if (q && typeof localUserAnswers[q.id] === 'number') {
+            userShownIndex = localUserAnswers[q.id];
+          } else if (typeof d.shownIndex === 'number') {
+            userShownIndex = d.shownIndex;
+          } else if (typeof d.shown === 'number') {
+            userShownIndex = d.shown;
+          } else if (typeof d.yourIndex === 'number') {
+            // server sometimes returns canonical yourIndex; use it only as last resort
+            userShownIndex = d.yourIndex;
+          } else {
+            userShownIndex = null;
+          }
+        } catch (e) {
+          userShownIndex = (typeof d.yourIndex === 'number') ? d.yourIndex : null;
+        }
 
         const correctIndex = (typeof d.correctIndex === 'number') ? d.correctIndex : null;
 
@@ -461,7 +509,7 @@
           row.appendChild(label);
           row.appendChild(txt);
 
-          // mark correct and wrong using the determined indexes
+          // Mark correct and wrong — use localUserAnswers (shown index) when possible
           if (correctIndex !== null && i === correctIndex) {
             row.classList.add('correct');
           }
@@ -488,6 +536,11 @@
         .replace(/>/g,'&gt;')
         .replace(/"/g,'&quot;')
         .replace(/'/g,'&#039;');
+    }
+
+    function escapeHtmlAttr(s) {
+      if (s === undefined || s === null) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,"&#039;").replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     // initial load
