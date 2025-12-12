@@ -11,7 +11,6 @@ const router = Router();
 // helper: sample N random docs using Mongo's aggregation if available
 async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
   const { moduleName = "", orgSlug = "" } = opts;
-
   try {
     const match = {};
 
