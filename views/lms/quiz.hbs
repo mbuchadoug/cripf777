@@ -418,6 +418,7 @@
       return String(s).trim().replace(/\s+/g,' ').toLowerCase();
     }
 
+    // UPDATED showResult: translates canonical correctIndex to displayed index for review highlights
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
@@ -467,14 +468,42 @@
         title.textContent = q ? (q.text || '') : (d.questionId || d.question || '');
         block.appendChild(title);
 
-        const choicesContainer = document.createElement('div');
-        const srcChoices = (q && q.choices && q.choices.length)
-          ? q.choices
-          : (d.choices || []);
+        const displayedChoices = (q && q.choices && q.choices.length) ? q.choices : (d.choices || []);
 
-        // Determine which index to treat as the user's shown index:
-        // Prefer localUserAnswers (what the user actually clicked) if we have it.
-        // Fallbacks: server-provided shownIndex / shown / yourIndex.
+        // helper to read text from a choice object/string
+        const choiceText = (ch) => (typeof ch === 'string') ? ch : (ch && (ch.text || '')) || '';
+
+        // Determine displayedCorrectIndex:
+        // 1) if q contains choicesOrder mapping (display->original) and server returned canonical d.correctIndex, use it
+        // 2) else try to match canonical choice text (d.choices[d.correctIndex]) against displayedChoices
+        // 3) else fall back to using d.correctIndex directly
+        let displayedCorrectIndex = null;
+        const canonicalCorrect = (typeof d.correctIndex === 'number') ? d.correctIndex : null;
+
+        try {
+          if (q && Array.isArray(q.choicesOrder) && canonicalCorrect !== null) {
+            // q.choicesOrder: mapping[displayIndex] = originalIndex
+            for (let di = 0; di < q.choicesOrder.length; di++) {
+              if (q.choicesOrder[di] === canonicalCorrect) { displayedCorrectIndex = di; break; }
+            }
+          }
+
+          if (displayedCorrectIndex === null && Array.isArray(d.choices) && canonicalCorrect !== null) {
+            const canonicalChoice = d.choices[canonicalCorrect];
+            const canonicalText = choiceText(canonicalChoice);
+            for (let i = 0; i < displayedChoices.length; i++) {
+              if (choiceText(displayedChoices[i]) === canonicalText) { displayedCorrectIndex = i; break; }
+            }
+          }
+
+          if (displayedCorrectIndex === null && canonicalCorrect !== null && displayedChoices.length > canonicalCorrect) {
+            displayedCorrectIndex = canonicalCorrect;
+          }
+        } catch (e) {
+          displayedCorrectIndex = (canonicalCorrect !== null && displayedChoices.length > canonicalCorrect) ? canonicalCorrect : null;
+        }
+
+        // Determine which index to treat as the user's shown index (what they actually clicked)
         let userShownIndex = null;
         try {
           if (q && typeof localUserAnswers[q.id] === 'number') {
@@ -484,7 +513,7 @@
           } else if (typeof d.shown === 'number') {
             userShownIndex = d.shown;
           } else if (typeof d.yourIndex === 'number') {
-            // server sometimes returns canonical yourIndex; use it only as last resort
+            // server sometimes returns canonical yourIndex; use only as last resort
             userShownIndex = d.yourIndex;
           } else {
             userShownIndex = null;
@@ -493,9 +522,8 @@
           userShownIndex = (typeof d.yourIndex === 'number') ? d.yourIndex : null;
         }
 
-        const correctIndex = (typeof d.correctIndex === 'number') ? d.correctIndex : null;
-
-        srcChoices.forEach((c, i) => {
+        const choicesContainer = document.createElement('div');
+        displayedChoices.forEach((c, i) => {
           const row = document.createElement('div');
           row.className = 'fb-choice';
 
@@ -504,15 +532,16 @@
           label.textContent = letterForIndex(i) + '.';
 
           const txt = document.createElement('div');
-          txt.textContent = (typeof c === 'string') ? c : (c.text || '');
+          txt.textContent = choiceText(c);
 
           row.appendChild(label);
           row.appendChild(txt);
 
-          // Mark correct and wrong — use localUserAnswers (shown index) when possible
-          if (correctIndex !== null && i === correctIndex) {
+          // mark correct using the displayedCorrectIndex
+          if (displayedCorrectIndex !== null && i === displayedCorrectIndex) {
             row.classList.add('correct');
           }
+          // mark wrong if this is what the user clicked but the attempt is not correct
           if (userShownIndex !== null && i === userShownIndex && !d.correct) {
             row.classList.add('wrong');
           }
