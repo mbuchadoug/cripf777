@@ -136,8 +136,7 @@ router.get("/quiz", async (req, res) => {
           fetched = await Question.find({ _id: { $in: objIds } }).lean().exec();
         }
         const byId = {};
-        for (const d of fetched) byId[String(d._1d || d._id)] = d;
-        // note: small defensive fix above in case of accidental property naming, but normally byId[String(d._id)] = d;
+        for (const d of fetched) byId[String(d._id)] = d;
 
         // For each parent, collect its child IDs and fetch children as needed
         const childIdSet = new Set();
@@ -164,62 +163,17 @@ router.get("/quiz", async (req, res) => {
         const series = [];
 
         // helper to apply saved choicesOrder mapping for a question's choices
-        // This version accepts either mapping shape:
-        //  - mapping[displayIndex] = originalIndex  (display->original)  OR
-        //  - mapping[originalIndex] = displayIndex  (original->display)
-        // It normalizes to display->original and returns the displayed choices array.
         function applyChoicesOrder(originalChoices, mapping) {
+          // originalChoices: array of choice objects { text }
+          // mapping: array where mapping[displayIndex] = originalIndex
           if (!Array.isArray(originalChoices)) return [];
-
-          // normalize original choices to objects { text }
-          const norm = originalChoices.map(c =>
-            (typeof c === 'string' ? { text: c } : (c && c.text ? { text: c.text } : { text: String(c || '') }))
-          );
-
-          // if mapping absent or not an array, return original order
+          const norm = originalChoices.map(c => (typeof c === 'string' ? { text: c } : (c && c.text ? { text: c.text } : { text: String(c || '') })));
           if (!Array.isArray(mapping) || mapping.length === 0) return norm;
-
-          // if lengths differ, ignore mapping
           if (mapping.length !== norm.length) return norm;
-
-          // desired: displayToOriginal[displayIndex] = originalIndex
-          let displayToOriginal = mapping.slice();
-
-          // validate permutation helper
-          function isValidPermutation(arr) {
-            const n = arr.length;
-            const seen = new Array(n).fill(false);
-            for (let i = 0; i < n; i++) {
-              const v = arr[i];
-              if (typeof v !== 'number' || v < 0 || v >= n || !Number.isInteger(v)) return false;
-              if (seen[v]) return false;
-              seen[v] = true;
-            }
-            return true;
-          }
-
-          if (!isValidPermutation(displayToOriginal)) {
-            // try invert mapping assuming mapping[original] = display
-            const inv = new Array(mapping.length).fill(undefined);
-            let ok = true;
-            for (let orig = 0; orig < mapping.length; orig++) {
-              const disp = mapping[orig];
-              if (typeof disp !== 'number' || disp < 0 || disp >= mapping.length || !Number.isInteger(disp)) { ok = false; break; }
-              if (typeof inv[disp] !== 'undefined') { ok = false; break; } // duplicate target
-              inv[disp] = orig;
-            }
-            if (ok && inv.every(x => typeof x === 'number')) {
-              displayToOriginal = inv;
-            } else {
-              // malformed mapping - fallback
-              return norm;
-            }
-          }
-
           const out = [];
-          for (let i = 0; i < displayToOriginal.length; i++) {
-            const origIdx = displayToOriginal[i];
-            if (typeof origIdx === 'number' && typeof norm[origIdx] !== 'undefined') out.push(norm[origIdx]);
+          for (let i = 0; i < mapping.length; i++) {
+            const idx = mapping[i];
+            if (typeof idx === 'number' && typeof norm[idx] !== 'undefined') out.push(norm[idx]);
             else out.push({ text: '' });
           }
           return out;
@@ -689,20 +643,8 @@ router.post("/quiz/submit", async (req, res) => {
         const qPos = examIndexMap[qid];
         const mapping = Array.isArray(examChoicesOrder[qPos]) ? examChoicesOrder[qPos] : null;
         if (mapping && typeof shownIndex === "number") {
-          // mapping may be display->original or original->display.
-          // Prefer mapping[shownIndex] if it yields a number and in-range.
-          let mapped = mapping[shownIndex];
-          if (typeof mapped === "number") {
-            canonicalIndex = mapped;
-          } else {
-            // try invert: mapping[original] = display -> find original such that mapping[original] === shownIndex
-            for (let orig = 0; orig < mapping.length; orig++) {
-              if (mapping[orig] === shownIndex) {
-                canonicalIndex = orig;
-                break;
-              }
-            }
-          }
+          const mapped = mapping[shownIndex];
+          if (typeof mapped === "number") canonicalIndex = mapped;
         }
       }
 
