@@ -1,3 +1,4 @@
+// routes/lms_api.js
 import { Router } from "express";
 import mongoose from "mongoose";
 import fs from "fs";
@@ -162,23 +163,6 @@ router.get("/quiz", async (req, res) => {
         const emittedChildIds = new Set(); // used to skip duplicates if child appears later in rawList
         const series = [];
 
-        // helper to apply saved choicesOrder mapping for a question's choices
-        function applyChoicesOrder(originalChoices, mapping) {
-          // originalChoices: array of choice objects { text }
-          // mapping: array where mapping[displayIndex] = originalIndex
-          if (!Array.isArray(originalChoices)) return [];
-          const norm = originalChoices.map(c => (typeof c === 'string' ? { text: c } : (c && c.text ? { text: c.text } : { text: String(c || '') })));
-          if (!Array.isArray(mapping) || mapping.length === 0) return norm;
-          if (mapping.length !== norm.length) return norm;
-          const out = [];
-          for (let i = 0; i < mapping.length; i++) {
-            const idx = mapping[i];
-            if (typeof idx === 'number' && typeof norm[idx] !== 'undefined') out.push(norm[idx]);
-            else out.push({ text: '' });
-          }
-          return out;
-        }
-
         for (const token of rawList) {
           if (!token) continue;
 
@@ -203,24 +187,10 @@ router.get("/quiz", async (req, res) => {
               // prefer DB doc if present
               if (byId[cid]) {
                 const c = byId[cid];
-
-                // build original choices
-                const originalChoices = (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" }));
-
-                // find position of this question in the exam.questionIds to pick mapping
-                let qPos = null;
-                if (Array.isArray(exam.questionIds)) {
-                  for (let ii = 0; ii < exam.questionIds.length; ii++) {
-                    if (String(exam.questionIds[ii]) === String(cid)) { qPos = ii; break; }
-                  }
-                }
-                const mapping = (Array.isArray(exam.choicesOrder) && qPos !== null) ? exam.choicesOrder[qPos] : null;
-                const displayedChoices = applyChoicesOrder(originalChoices, mapping);
-
                 orderedChildren.push({
                   id: String(c._id),
                   text: c.text,
-                  choices: displayedChoices,
+                  choices: (c.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" })),
                   tags: c.tags || [],
                   difficulty: c.difficulty || "medium"
                 });
@@ -270,24 +240,10 @@ router.get("/quiz", async (req, res) => {
               // question missing from DB (skip)
               continue;
             }
-
-            // build original choices
-            const originalChoices = (qdoc.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' }));
-
-            // find q position in exam.questionIds
-            let qPos = null;
-            if (Array.isArray(exam.questionIds)) {
-              for (let ii = 0; ii < exam.questionIds.length; ii++) {
-                if (String(exam.questionIds[ii]) === String(token)) { qPos = ii; break; }
-              }
-            }
-            const mapping = (Array.isArray(exam.choicesOrder) && qPos !== null) ? exam.choicesOrder[qPos] : null;
-            const displayedChoices = applyChoicesOrder(originalChoices, mapping);
-
             series.push({
               id: String(qdoc._id),
               text: qdoc.text,
-              choices: displayedChoices,
+              choices: (qdoc.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' })),
               tags: qdoc.tags || [],
               difficulty: qdoc.difficulty || 'medium'
             });
@@ -405,6 +361,8 @@ router.get("/quiz", async (req, res) => {
     return res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
+
+
 
 /**
  * POST /api/lms/quiz/submit
