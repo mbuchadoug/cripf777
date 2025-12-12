@@ -136,8 +136,8 @@ router.get("/quiz", async (req, res) => {
           fetched = await Question.find({ _id: { $in: objIds } }).lean().exec();
         }
         const byId = {};
-        for (const d of fetched) byId[String(d._1d || d._id)] = d;
-        // note: small defensive fix above in case of accidental property naming, but normally byId[String(d._id)] = d;
+        // FIX: correct property name and populate byId correctly
+        for (const d of fetched) byId[String(d._id)] = d;
 
         // For each parent, collect its child IDs and fetch children as needed
         const childIdSet = new Set();
@@ -167,62 +167,55 @@ router.get("/quiz", async (req, res) => {
         // This version accepts either mapping shape:
         //  - mapping[displayIndex] = originalIndex  (display->original)  OR
         //  - mapping[originalIndex] = displayIndex  (original->display)
-        // It normalizes to display->original and returns the displayed choices array.
+        // It normalizes to display->original and returns both displayedChoices and the mapping.
         function applyChoicesOrder(originalChoices, mapping) {
-          if (!Array.isArray(originalChoices)) return [];
-
-          // normalize original choices to objects { text }
-          const norm = originalChoices.map(c =>
+          // normalize original choices to objects
+          const norm = (originalChoices || []).map(c =>
             (typeof c === 'string' ? { text: c } : (c && c.text ? { text: c.text } : { text: String(c || '') }))
           );
 
-          // if mapping absent or not an array, return original order
-          if (!Array.isArray(mapping) || mapping.length === 0) return norm;
+          const n = norm.length;
+          // identity mapping
+          const identityOrder = Array.from({ length: n }, (_, i) => i);
 
-          // if lengths differ, ignore mapping
-          if (mapping.length !== norm.length) return norm;
-
-          // desired: displayToOriginal[displayIndex] = originalIndex
-          let displayToOriginal = mapping.slice();
+          if (!Array.isArray(mapping) || mapping.length !== n) {
+            return { displayedChoices: norm, choicesOrder: identityOrder };
+          }
 
           // validate permutation helper
           function isValidPermutation(arr) {
-            const n = arr.length;
-            const seen = new Array(n).fill(false);
-            for (let i = 0; i < n; i++) {
+            const seen = new Array(arr.length).fill(false);
+            for (let i = 0; i < arr.length; i++) {
               const v = arr[i];
-              if (typeof v !== 'number' || v < 0 || v >= n || !Number.isInteger(v)) return false;
+              if (typeof v !== 'number' || v < 0 || v >= arr.length || !Number.isInteger(v)) return false;
               if (seen[v]) return false;
               seen[v] = true;
             }
             return true;
           }
 
+          // mapping might already be display->original (mapping[display]=original)
+          let displayToOriginal = mapping.slice();
           if (!isValidPermutation(displayToOriginal)) {
-            // try invert mapping assuming mapping[original] = display
-            const inv = new Array(mapping.length).fill(undefined);
+            // try invert: mapping[original] = display -> produce display->original
+            const inv = new Array(n).fill(undefined);
             let ok = true;
             for (let orig = 0; orig < mapping.length; orig++) {
               const disp = mapping[orig];
-              if (typeof disp !== 'number' || disp < 0 || disp >= mapping.length || !Number.isInteger(disp)) { ok = false; break; }
-              if (typeof inv[disp] !== 'undefined') { ok = false; break; } // duplicate target
+              if (typeof disp !== 'number' || !Number.isInteger(disp) || disp < 0 || disp >= n) { ok = false; break; }
+              if (typeof inv[disp] !== 'undefined') { ok = false; break; }
               inv[disp] = orig;
             }
             if (ok && inv.every(x => typeof x === 'number')) {
               displayToOriginal = inv;
             } else {
-              // malformed mapping - fallback
-              return norm;
+              // malformed mapping -> return identity
+              return { displayedChoices: norm, choicesOrder: identityOrder };
             }
           }
 
-          const out = [];
-          for (let i = 0; i < displayToOriginal.length; i++) {
-            const origIdx = displayToOriginal[i];
-            if (typeof origIdx === 'number' && typeof norm[origIdx] !== 'undefined') out.push(norm[origIdx]);
-            else out.push({ text: '' });
-          }
-          return out;
+          const displayedChoices = displayToOriginal.map(origIdx => norm[origIdx] || { text: '' });
+          return { displayedChoices, choicesOrder: displayToOriginal };
         }
 
         for (const token of rawList) {
@@ -261,12 +254,13 @@ router.get("/quiz", async (req, res) => {
                   }
                 }
                 const mapping = (Array.isArray(exam.choicesOrder) && qPos !== null) ? exam.choicesOrder[qPos] : null;
-                const displayedChoices = applyChoicesOrder(originalChoices, mapping);
+                const { displayedChoices, choicesOrder } = applyChoicesOrder(originalChoices, mapping || null);
 
                 orderedChildren.push({
                   id: String(c._id),
                   text: c.text,
                   choices: displayedChoices,
+                  choicesOrder: Array.isArray(choicesOrder) ? choicesOrder : null,
                   tags: c.tags || [],
                   difficulty: c.difficulty || "medium"
                 });
@@ -277,10 +271,14 @@ router.get("/quiz", async (req, res) => {
               // fallback to file map
               if (fileQuestionsMap[cid]) {
                 const fq = fileQuestionsMap[cid];
+                const origChoices = (fq.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" }));
+                const { displayedChoices, choicesOrder } = applyChoicesOrder(origChoices, null);
+
                 orderedChildren.push({
                   id: cid,
                   text: fq.text,
-                  choices: (fq.choices || []).map(ch => (typeof ch === "string" ? { text: ch } : { text: ch.text || "" })),
+                  choices: displayedChoices,
+                  choicesOrder: Array.isArray(choicesOrder) ? choicesOrder : null,
                   tags: fq.tags || [],
                   difficulty: fq.difficulty || "medium"
                 });
@@ -328,12 +326,13 @@ router.get("/quiz", async (req, res) => {
               }
             }
             const mapping = (Array.isArray(exam.choicesOrder) && qPos !== null) ? exam.choicesOrder[qPos] : null;
-            const displayedChoices = applyChoicesOrder(originalChoices, mapping);
+            const { displayedChoices, choicesOrder } = applyChoicesOrder(originalChoices, mapping || null);
 
             series.push({
               id: String(qdoc._id),
               text: qdoc.text,
               choices: displayedChoices,
+              choicesOrder: Array.isArray(choicesOrder) ? choicesOrder : null,
               tags: qdoc.tags || [],
               difficulty: qdoc.difficulty || 'medium'
             });
@@ -345,10 +344,13 @@ router.get("/quiz", async (req, res) => {
             const fq = fileQuestionsMap[token];
             // ensure not duplicate
             if (emittedChildIds.has(token)) continue;
+            const origChoices = (fq.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' }));
+            const { displayedChoices, choicesOrder } = applyChoicesOrder(origChoices, null);
             series.push({
               id: token,
               text: fq.text,
-              choices: (fq.choices || []).map(c => (typeof c === "string" ? { text: c } : { text: c.text || '' })),
+              choices: displayedChoices,
+              choicesOrder: Array.isArray(choicesOrder) ? choicesOrder : null,
               tags: fq.tags || [],
               difficulty: fq.difficulty || 'medium'
             });
@@ -415,10 +417,15 @@ router.get("/quiz", async (req, res) => {
                 children = cids.map(cid => {
                   const f = cs.find(x => String(x._id) === String(cid));
                   if (!f) return null;
+                  // apply default (identity) choicesOrder for sampled children
+                  const origChoices = (f.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' }));
+                  const displayed = origChoices.map(c => c);
+                  const choicesOrder = Array.from({ length: displayed.length }, (_, i) => i);
                   return {
                     id: String(f._id),
                     text: f.text,
-                    choices: (f.choices || []).map(ch => (typeof ch === 'string' ? { text: ch } : { text: ch.text || '' })),
+                    choices: displayed,
+                    choicesOrder,
                     tags: f.tags || [],
                     difficulty: f.difficulty || 'medium'
                   };
@@ -431,10 +438,13 @@ router.get("/quiz", async (req, res) => {
 
           outSeries.push({ id: String(d._id), type: "comprehension", passage: d.passage || d.text || "", children, tags: d.tags || [], difficulty: d.difficulty || 'medium' });
         } else {
+          const origChoices = (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' }));
+          const choicesOrder = Array.from({ length: origChoices.length }, (_, i) => i);
           outSeries.push({
             id: String(d._id),
             text: d.text,
-            choices: (d.choices || []).map(c => (typeof c === 'string' ? { text: c } : { text: c.text || '' })),
+            choices: origChoices,
+            choicesOrder,
             tags: d.tags || [],
             difficulty: d.difficulty || 'medium'
           });
@@ -529,9 +539,6 @@ async function generateCertificatePdf({ name, orgName, moduleName, score, percen
   try {
     let puppeteer = null;
     try {
-      // prefer puppeteer if installed
-      // dynamic import handles ESM/CJS cases
-      // eslint-disable-next-line no-eval
       puppeteer = (await import("puppeteer")).default || (await import("puppeteer"));
     } catch (e) {
       try { puppeteer = (await import("puppeteer-core")).default || (await import("puppeteer-core")); } catch (e2) { puppeteer = null; }
@@ -540,7 +547,6 @@ async function generateCertificatePdf({ name, orgName, moduleName, score, percen
     if (puppeteer) {
       const launchOpts = { args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] };
       if (process.env.PUPPETEER_EXECUTABLE_PATH) launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      // allow extra opts via env (JSON)
       if (process.env.PUPPETEER_LAUNCH_OPTS) {
         try { Object.assign(launchOpts, JSON.parse(process.env.PUPPETEER_LAUNCH_OPTS)); } catch (e) {}
       }
@@ -605,7 +611,6 @@ async function generateCertificatePdf({ name, orgName, moduleName, score, percen
     });
   } catch (err) {
     console.warn("generateCertificatePdf: pdfkit fallback failed:", err && (err.stack || err.message || err));
-    // last resort: return null (no certificate)
     return null;
   }
 }
@@ -685,28 +690,34 @@ router.post("/quiz/submit", async (req, res) => {
 
       let canonicalIndex = (typeof shownIndex === "number") ? shownIndex : null;
 
-      if (exam && examIndexMap.hasOwnProperty(qid)) {
+      const qdoc = byId[qid] || null;
+
+      // PREF: per-question mapping (if question object contained choicesOrder in quiz response or file fallback)
+      if (qdoc && Array.isArray(qdoc.choicesOrder) && typeof shownIndex === "number") {
+        const map = qdoc.choicesOrder;
+        if (typeof map[shownIndex] === 'number') {
+          canonicalIndex = map[shownIndex];
+        } else {
+          // try invert mapping (original->display)
+          for (let orig = 0; orig < map.length; orig++) {
+            if (map[orig] === shownIndex) { canonicalIndex = orig; break; }
+          }
+        }
+      } else if (exam && examIndexMap.hasOwnProperty(qid)) {
+        // fallback: use the exam-level mapping
         const qPos = examIndexMap[qid];
         const mapping = Array.isArray(examChoicesOrder[qPos]) ? examChoicesOrder[qPos] : null;
         if (mapping && typeof shownIndex === "number") {
-          // mapping may be display->original or original->display.
-          // Prefer mapping[shownIndex] if it yields a number and in-range.
           let mapped = mapping[shownIndex];
           if (typeof mapped === "number") {
             canonicalIndex = mapped;
           } else {
-            // try invert: mapping[original] = display -> find original such that mapping[original] === shownIndex
             for (let orig = 0; orig < mapping.length; orig++) {
-              if (mapping[orig] === shownIndex) {
-                canonicalIndex = orig;
-                break;
-              }
+              if (mapping[orig] === shownIndex) { canonicalIndex = orig; break; }
             }
           }
         }
       }
-
-      const qdoc = byId[qid] || null;
 
       let correctIndex = null;
       if (qdoc) {
