@@ -163,7 +163,6 @@
     // positionLabel is optional — used to show numbering (Q1, Q2, ...)
     function renderSingleQuestion(qObj, positionLabel) {
       const q = repairBlock(qObj);
-      // ensure we preserve any server-provided id (_id or id). If missing, generate local id.
       const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
       const choices = (q.choices || []).map(normalizeChoice);
 
@@ -403,12 +402,6 @@
 
     reloadBtn.addEventListener('click', () => loadQuiz(DEFAULT_COUNT));
 
-    // helper to normalize strings for loose matching
-    function normStr(s) {
-      if (!s && s !== 0) return '';
-      return String(s).trim().replace(/\s+/g,' ').toLowerCase();
-    }
-
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
@@ -434,28 +427,14 @@
       list.style.marginTop = '12px';
 
       (resp.details || []).forEach(d => {
-        // try to find matching question in series:
-        // 1) match by id/_id
-        // 2) if not found, fallback to matching by question text (loose)
-        let q = series.find(s => String(s.id || s._id) === String(d.questionId));
-        if (!q) {
-          // fallback: compare normalized text
-          const targetText = normStr(d.questionText || d.question || '');
-          if (targetText) {
-            q = series.find(s => normStr(s.text || '') === targetText);
-          }
-          // if still not found, try fuzzy substring match on text
-          if (!q && targetText) {
-            q = series.find(s => normStr(s.text || '').includes(targetText) || targetText.includes(normStr(s.text || '')));
-          }
-        }
+        const q = series.find(s => (s.id || s._id) === d.questionId) || null;
 
         const block = document.createElement('div');
         block.className = 'fb-question';
 
         const title = document.createElement('div');
         title.className = 'fb-qtitle';
-        title.textContent = q ? (q.text || '') : (d.questionId || d.question || '');
+        title.textContent = q ? (q.text || '') : (d.questionId || '');
         block.appendChild(title);
 
         const choicesContainer = document.createElement('div');
@@ -464,12 +443,14 @@
           : (d.choices || []);
 
         // Determine which index to treat as the user's shown index:
-        // prefer server-provided shownIndex (d.shownIndex) if present; otherwise fall back to d.yourIndex
+        // prefer server-provided shownIndex (d.shownIndex) if present; otherwise fall back to yourIndex
         const userShownIndex = (typeof d.shownIndex === 'number') ? d.shownIndex
                               : (typeof d.shown === 'number') ? d.shown
                               : (typeof d.yourIndex === 'number') ? d.yourIndex
                               : null;
 
+        // Determine correct index to mark: prefer d.correctIndex (if server returned index that matches the displayed choices).
+        // If the server returns canonical indices but no mapping, this may not line up — but preferring server fields is safest.
         const correctIndex = (typeof d.correctIndex === 'number') ? d.correctIndex : null;
 
         srcChoices.forEach((c, i) => {
