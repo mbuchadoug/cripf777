@@ -210,25 +210,6 @@ function parseQuestionBlocks(raw) {
 const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
 
 // GET import page (render a simple importer)
-router.get("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
-  try {
-    const organizations = await Organization.find().select("_id name slug").sort({ name: 1 }).lean();
-    return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)", organizations });
-  } catch (err) {
-    console.error("[admin/lms/import GET] failed to load organizations:", err && (err.stack || err));
-    return safeRender(req, res, "admin/lms_import", { title: "Import LMS Questions (paste)", organizations: [] });
-  }
-});
-
-/**
- * POST /admin/lms/import
- * Accepts:
- *   - file upload (field 'file')
- *   - or pasted text in textarea (field 'text')
- * If 'save' param present (save=1), attempt to save parsed questions to DB (Questions collection).
- */
-// REPLACE the existing router.post("/lms/import", ...) handler with the following:
-
 
 /**
  * GET /admin/lms/quizzes
