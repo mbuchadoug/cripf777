@@ -21,16 +21,7 @@
     }
     .quiz-status{font-size:14px;color:#555}
     .links-row a + a{margin-left:12px}
-    .admin-link {
-      display:inline-block;
-      margin-left:12px;
-      padding:6px 10px;
-      border-radius:6px;
-      background:#1e90ff;
-      color:#fff;
-      text-decoration:none;
-      font-size:14px;
-    }
+    .admin-link { display:inline-block; margin-left:12px; padding:6px 10px; border-radius:6px; background:#1e90ff; color:#fff; text-decoration:none; font-size:14px; }
   </style>
 </head>
 <body>
@@ -40,15 +31,11 @@
     <h1>{{org.name}} | Dashboard</h1>
     <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
 
-    {{!-- Admin area link --}}
+    {{!-- Admin area link (visible only when server sets isAdmin=true) --}}
     {{#if isAdmin}}
       <p>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">
-          Admin · Manage
-        </a>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">
-          Admin · View Attempts
-        </a>
+        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">Admin · Manage</a>
+        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">Admin · View Attempts</a>
       </p>
     {{/if}}
 
@@ -64,6 +51,7 @@
               View learning material
             </a>
 
+            {{!-- ORG QUIZ (20 questions per attempt) --}}
             <a href="/lms/quiz?module={{this.slug}}&org={{../org.slug}}">
               Start a new 20-question quiz for this module
             </a>
@@ -75,25 +63,25 @@
     {{/if}}
 
     <h2>Assigned quizzes</h2>
-
-    {{#if hasAssignedQuizzes}}
+    {{#if quizzesByModule}}
       {{#each quizzesByModule}}
         <h3>{{@key}}</h3>
-
         {{#each this}}
           <div class="quiz-block">
             <div>
-              <strong>{{quizTitle}}</strong>
-              &nbsp;|&nbsp;
-              {{questionCount}} questions
-            </div>
+            <div>
+  <strong>{{quizTitle}}</strong>
+  &nbsp;|&nbsp;
+  {{questionCount}} questions
+</div>
 
-            <div style="margin-top:4px;">
-              <a href="{{openUrl}}">
-                Open quiz
-              </a>
-            </div>
+<div style="margin-top:4px;">
+  <a href="{{openUrl}}">
+    Open quiz
+  </a>
+</div>
 
+            </div>
             <div class="quiz-status">
               Status: {{status}}
               {{#if expiresAt}}

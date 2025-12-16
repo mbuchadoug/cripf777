@@ -11,8 +11,6 @@ import OrgMembership from "../models/orgMembership.js";
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 
-
-
 const router = Router();
 
 /* ------------------------------------------------------------------ */
@@ -160,6 +158,7 @@ router.post(
           createdBy: "import",
         });
 
+        // keep Attempt in sync so dashboard + attempts work
         await Attempt.create({
           userId: m.user,
           organization: orgId,

@@ -564,6 +564,7 @@ const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&m
 
     // derive quiz title + real question count
 // derive quiz title + real question count
+
 let quizTitle = `${moduleLabel} Quiz`;
 let questionCount = 0;
 
@@ -616,6 +617,7 @@ quizzesByModule[key].push({
     const orgRole = String(membership.role || "").toLowerCase();
     const isOrgManager = orgRole === "manager" || orgRole === "admin";
     const isAdmin = !!(platformAdmin || isOrgManager);
+    const hasAssignedQuizzes = Object.keys(quizzesByModule).length > 0;
 
     return res.render("org/dashboard", {
       org,
@@ -623,6 +625,7 @@ quizzesByModule[key].push({
       modules,
       user: req.user,
       quizzesByModule,
+        hasAssignedQuizzes,
       isAdmin
     });
   } catch (err) {
