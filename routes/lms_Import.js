@@ -86,10 +86,6 @@ router.post(
 
       const moduleKey = String(req.body.module || "general").toLowerCase();
 
-      const quizTitle =
-        String(req.body.quizTitle || "").trim() ||
-        `${moduleKey} Quiz`;
-
       const orgId =
         req.body.orgId && mongoose.isValidObjectId(req.body.orgId)
           ? new mongoose.Types.ObjectId(req.body.orgId)
@@ -154,8 +150,7 @@ router.post(
           examId,
           org: orgId,
           module: moduleKey,
-          quizTitle, // ✅ THIS FIXES DASHBOARD VISIBILITY
-          user: m.user,
+          user: mongoose.Types.ObjectId(m.user), // ✅ CRITICAL FIX
           questionIds,
           choicesOrder,
           createdAt: new Date(),
@@ -163,7 +158,7 @@ router.post(
         });
 
         await Attempt.create({
-          userId: m.user,
+          userId: mongoose.Types.ObjectId(m.user), // keep types consistent
           organization: orgId,
           module: moduleKey,
           questionIds,
