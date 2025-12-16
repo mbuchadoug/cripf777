@@ -211,11 +211,13 @@ router.get(
       const modules = await OrgModule.find({ org: org._id }).lean();
 
       return res.render("admin/org_manage", {
-        org,
-        invites,
-        memberships,
-        modules,
-      });
+  org,
+  invites,
+  memberships,
+  modules,
+  user: req.user,
+  isAdmin: true
+});
     } catch (err) {
       console.error("[admin org manage] error:", err && (err.stack || err));
       return res.status(500).send("failed");
