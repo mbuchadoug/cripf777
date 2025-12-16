@@ -86,6 +86,10 @@ router.post(
 
       const moduleKey = String(req.body.module || "general").toLowerCase();
 
+      const quizTitle =
+        String(req.body.quizTitle || "").trim() ||
+        `${moduleKey} Quiz`;
+
       const orgId =
         req.body.orgId && mongoose.isValidObjectId(req.body.orgId)
           ? new mongoose.Types.ObjectId(req.body.orgId)
@@ -136,7 +140,6 @@ router.post(
             (_, i) => i
           );
 
-          // shuffle choices
           for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -151,6 +154,7 @@ router.post(
           examId,
           org: orgId,
           module: moduleKey,
+          quizTitle, // ✅ THIS FIXES DASHBOARD VISIBILITY
           user: m.user,
           questionIds,
           choicesOrder,
@@ -158,7 +162,6 @@ router.post(
           createdBy: "import",
         });
 
-        // keep Attempt in sync so dashboard + attempts work
         await Attempt.create({
           userId: m.user,
           organization: orgId,
