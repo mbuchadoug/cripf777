@@ -390,7 +390,7 @@
             bodyText = (ee && ee.message) || 'unknown';
           }
 
-          const msg = `submit failed (${res.status}) — ${bodyText || res.statusText}`;
+          const msg = `submit failed (${res.status}) - ${bodyText || res.statusText}`;
           console.warn('Submit response not ok:', res.status, bodyText);
           status.textContent = '';
           errorMsg.textContent = msg;
@@ -424,7 +424,7 @@
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
-        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
+        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' - ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
         ' (pass ' + resp.passThreshold + '%)</div>' +
@@ -436,7 +436,7 @@
         certHtml.style.marginTop = '12px';
         certHtml.innerHTML = `
           <div style="margin-bottom:8px; font-weight:700">Certificate</div>
-          <div style="margin-bottom:8px">You passed — download your certificate below:</div>
+          <div style="margin-bottom:8px">You passed - download your certificate below:</div>
           <div><a href="${escapeHtmlAttr(resp.certificateUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--gold); font-weight:800; text-decoration:underline;">Download Certificate</a></div>
         `;
         result.appendChild(certHtml);
