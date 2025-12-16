@@ -88,6 +88,12 @@ router.post(
         return res.send("Preview completed (not saved)");
       }
 
+      /* ✅ NEW: read quiz title safely */
+      const quizTitle =
+        typeof req.body.quizTitle === "string" && req.body.quizTitle.trim()
+          ? req.body.quizTitle.trim()
+          : `${moduleKey} Imported Quiz`;
+
       /* ---------------- Parse ---------------- */
       const parsed = parseQuestionsFromText(content);
       if (!parsed.length) {
@@ -110,7 +116,7 @@ router.post(
 
       /* ---------------- Create PARENT comprehension ---------------- */
       const parent = await Question.create({
-        text: `${moduleKey} Imported Quiz`,
+        text: quizTitle,              // ✅ FIXED (was hardcoded)
         type: "comprehension",
         passage: "Imported LMS quiz",
         questionIds: childIds,
@@ -180,6 +186,7 @@ router.post(
     }
   }
 );
+
 
 /* ------------------------------------------------------------------ */
 /*  Parser                                                           */
