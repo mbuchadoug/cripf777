@@ -11,12 +11,6 @@ import UniqueVisit from "../models/uniqueVisit.js";
 import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
-import OrgMembership from "../../models/orgMembership.js";
-import ExamInstance from "../../models/examInstance.js";
-import Attempt from "../../models/attempt.js";
-import crypto from "crypto";
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
