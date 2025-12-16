@@ -519,35 +519,26 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
-    const platformAdmin = isPlatformAdmin(req);
-
-    let membership = null;
-
-    // 🔒 Only require membership if NOT platform admin
-    if (!platformAdmin) {
-      membership = await OrgMembership.findOne({
-        org: org._id,
-        user: req.user._id,
-      }).lean();
-
-      if (!membership) {
-        return res.status(403).send("You are not a member of this organization");
-      }
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id,
+    }).lean();
+    if (!membership) {
+      return res.status(403).send("You are not a member of this organization");
     }
 
     // All modules for this org
     const modules = await OrgModule.find({ org: org._id }).lean();
 
-    // 🔑 Platform admins see ALL exams in org
-    // 👤 Members see ONLY their own
-    const exams = await ExamInstance.find(
-      platformAdmin
-        ? { org: org._id }
-        : { org: org._id, user: req.user._id }
-    )
+    // All quiz instances assigned to THIS user in THIS org
+    const exams = await ExamInstance.find({
+      org: org._id,
+      user: req.user._id,
+    })
       .sort({ createdAt: -1 })
       .lean();
 
+    // Group quizzes by module slug
     const quizzesByModule = {};
     const now = new Date();
 
@@ -563,59 +554,69 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       const moduleLabel =
         moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
 
-      const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(
-        ex.examId
-      )}&module=${encodeURIComponent(moduleLabel)}`;
+      // Org quiz: 20 questions, filtered by module + org
+     /* const openUrl = `/lms/quiz?module=${encodeURIComponent(
+        moduleLabel
+      )}&org=${encodeURIComponent(org.slug)}`;*/
+      // replacement (correct)
+const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
 
-      let quizTitle = `${moduleLabel} Quiz`;
-      let questionCount = 0;
 
-      if (Array.isArray(ex.questionIds)) {
-        questionCount = ex.questionIds.filter(
-          q => !String(q).startsWith("parent:")
-        ).length;
+    // derive quiz title + real question count
+// derive quiz title + real question count
 
-        const parentMarker = ex.questionIds.find(q =>
-          String(q).startsWith("parent:")
-        );
+let quizTitle = `${moduleLabel} Quiz`;
+let questionCount = 0;
 
-        if (parentMarker) {
-          const parentId = String(parentMarker).replace("parent:", "");
-          try {
-            const parentDoc = await QuizQuestion.findById(parentId)
-              .select("title text")
-              .lean();
+if (Array.isArray(ex.questionIds)) {
+  // exclude parent markers from count
+  questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
 
-            if (parentDoc) {
-              quizTitle =
-                parentDoc.title ||
-                parentDoc.text ||
-                "Comprehension Quiz";
-            }
-          } catch (e) {
-            console.warn("[dashboard] failed to load passage title:", e.message);
-          }
-        }
+  // detect passage parent
+  const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
+  if (parentMarker) {
+    const parentId = String(parentMarker).replace("parent:", "");
+
+    try {
+      const parentDoc = await QuizQuestion.findById(parentId)
+        .select("title text")
+        .lean();
+
+      if (parentDoc) {
+        quizTitle =
+          parentDoc.title ||
+          parentDoc.text ||
+          "Comprehension Quiz";
+      } else {
+        quizTitle = "Comprehension Quiz";
       }
+    } catch (e) {
+      console.warn("[dashboard] failed to load passage title:", e.message);
+      quizTitle = "Comprehension Quiz";
+    }
+  }
+}
 
-      quizzesByModule[key].push({
-        examId: ex.examId,
-        module: ex.module,
-        createdAt: ex.createdAt,
-        expiresAt: ex.expiresAt,
-        finishedAt: ex.finishedAt,
-        status,
-        openUrl,
-        quizTitle,
-        questionCount,
-        userId: ex.user, // useful for admin visibility
-      });
+
+quizzesByModule[key].push({
+  examId: ex.examId,
+  module: ex.module,
+  createdAt: ex.createdAt,
+  expiresAt: ex.expiresAt,
+  finishedAt: ex.finishedAt,
+  status,
+  openUrl,
+  quizTitle,
+  questionCount
+});
+
     }
 
-    // ✅ Admin logic
-    const orgRole = membership ? String(membership.role || "").toLowerCase() : "";
+    // compute isAdmin for template: platform admin OR org manager/admin
+    const platformAdmin = isPlatformAdmin(req);
+    const orgRole = String(membership.role || "").toLowerCase();
     const isOrgManager = orgRole === "manager" || orgRole === "admin";
-    const isAdmin = platformAdmin || isOrgManager;
+    const isAdmin = !!(platformAdmin || isOrgManager);
     const hasAssignedQuizzes = Object.keys(quizzesByModule).length > 0;
 
     return res.render("org/dashboard", {
@@ -624,16 +625,14 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       modules,
       user: req.user,
       quizzesByModule,
-      hasAssignedQuizzes,
-      isAdmin,
-      platformAdmin,
+        hasAssignedQuizzes,
+      isAdmin
     });
   } catch (err) {
-    console.error("[org dashboard] error:", err && err.stack);
+    console.error("[org dashboard] error:", err && (err.stack || err));
     return res.status(500).send("failed");
   }
 });
-
 
 /* ------------------------------------------------------------------ */
 /*  ORG: View a single module's learning material                     */
