@@ -12,6 +12,12 @@ import MongoStore from "connect-mongo";
 import passport from "passport";
 
 // routes & utils
+import lmsLoginRoutes from "./routes/lms_login.js";
+import portalRoutes from "./routes/portal.js";
+
+
+
+
 import trackRouter from "./routes/track.js";
 import lmsRoutes from "./routes/lms.js";
 // use the lms_api file that contains examInstance + attempt persistence
@@ -172,6 +178,8 @@ app.use("/api", trackRouter);
 // Public LMS pages
 app.use("/lms", lmsRoutes);
 
+//app.use(lmsLoginRoutes);
+app.use(portalRoutes);
 // Org-related routes
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
