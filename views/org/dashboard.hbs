@@ -40,15 +40,10 @@
     <h1>{{org.name}} | Dashboard</h1>
     <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
 
-    {{!-- Admin area link --}}
     {{#if isAdmin}}
       <p>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">
-          Admin · Manage
-        </a>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">
-          Admin · View Attempts
-        </a>
+        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">Admin · Manage</a>
+        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">Admin · View Attempts</a>
       </p>
     {{/if}}
 
@@ -62,10 +57,6 @@
           <div class="links-row" style="margin-top:6px;">
             <a href="/org/{{../org.slug}}/modules/{{this.slug}}">
               View learning material
-            </a>
-
-            <a href="/lms/quiz?module={{this.slug}}&org={{../org.slug}}">
-              Start a new 20-question quiz for this module
             </a>
           </div>
         </div>
@@ -88,7 +79,7 @@
               {{questionCount}} questions
             </div>
 
-            <div style="margin-top:4px;">
+            <div style="margin-top:6px;">
               <a href="{{openUrl}}">
                 Open quiz
               </a>
@@ -102,6 +93,7 @@
             </div>
           </div>
         {{/each}}
+
       {{/each}}
     {{else}}
       <p>No quizzes have been assigned to you yet.</p>
