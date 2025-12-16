@@ -560,35 +560,15 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
 
 
-    // derive quiz title + real question count
-let quizTitle = "Quiz";
-let questionCount = 0;
-
-if (Array.isArray(ex.questionIds)) {
-  // exclude parent: markers from count
-  questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
-
-  // if passage quiz, extract parent id and fetch title later
-  const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
-  if (parentMarker) {
-    quizTitle = "Comprehension Quiz";
-  } else {
-    quizTitle = `${moduleLabel} Quiz`;
-  }
-}
-
-quizzesByModule[key].push({
-  examId: ex.examId,
-  module: ex.module,
-  createdAt: ex.createdAt,
-  expiresAt: ex.expiresAt,
-  finishedAt: ex.finishedAt,
-  status,
-  openUrl,
-  quizTitle,
-  questionCount
-});
-
+      quizzesByModule[key].push({
+        examId: ex.examId,
+        module: ex.module,
+        createdAt: ex.createdAt,
+        expiresAt: ex.expiresAt,
+        finishedAt: ex.finishedAt,
+        status,
+        openUrl,
+      });
     }
 
     // compute isAdmin for template: platform admin OR org manager/admin

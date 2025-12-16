@@ -69,18 +69,11 @@
         {{#each this}}
           <div class="quiz-block">
             <div>
-            <div>
-  <strong>{{quizTitle}}</strong>
-  &nbsp;|&nbsp;
-  {{questionCount}} questions
-</div>
-
-<div style="margin-top:4px;">
-  <a href="{{openUrl}}">
-    Open quiz
-  </a>
-</div>
-
+              <strong>Assigned quiz:</strong> {{examId}}
+              &nbsp;|&nbsp;
+              <a href="{{openUrl}}">
+                Open assigned 20-question quiz
+              </a>
             </div>
             <div class="quiz-status">
               Status: {{status}}
