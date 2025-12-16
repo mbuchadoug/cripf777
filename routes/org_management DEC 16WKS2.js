@@ -563,39 +563,21 @@ const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&m
 
 
     // derive quiz title + real question count
-// derive quiz title + real question count
-let quizTitle = `${moduleLabel} Quiz`;
+let quizTitle = "Quiz";
 let questionCount = 0;
 
 if (Array.isArray(ex.questionIds)) {
-  // exclude parent markers from count
+  // exclude parent: markers from count
   questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
 
-  // detect passage parent
+  // if passage quiz, extract parent id and fetch title later
   const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
   if (parentMarker) {
-    const parentId = String(parentMarker).replace("parent:", "");
-
-    try {
-      const parentDoc = await QuizQuestion.findById(parentId)
-        .select("title text")
-        .lean();
-
-      if (parentDoc) {
-        quizTitle =
-          parentDoc.title ||
-          parentDoc.text ||
-          "Comprehension Quiz";
-      } else {
-        quizTitle = "Comprehension Quiz";
-      }
-    } catch (e) {
-      console.warn("[dashboard] failed to load passage title:", e.message);
-      quizTitle = "Comprehension Quiz";
-    }
+    quizTitle = "Comprehension Quiz";
+  } else {
+    quizTitle = `${moduleLabel} Quiz`;
   }
 }
-
 
 quizzesByModule[key].push({
   examId: ex.examId,

@@ -5,6 +5,9 @@ const ExamInstanceSchema = new mongoose.Schema(
   {
     examId: { type: String, required: true, index: true, unique: true },
 
+    title: { type: String, default: null },
+
+
     // Organization that owns this exam (nullable for platform/global)
     org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
 

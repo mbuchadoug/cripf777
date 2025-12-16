@@ -12,6 +12,8 @@ const QuestionSchema = new mongoose.Schema({
   // for regular questions
   choices: [ChoiceSchema],
   correctIndex: { type: Number, required: function() { return this.type !== 'comprehension'; } },
+  title: { type: String, default: null },
+
 
   // NEW: comprehension parent support
   type: { type: String, enum: ["question","comprehension"], default: "question", index: true },
