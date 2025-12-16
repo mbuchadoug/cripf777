@@ -4,6 +4,7 @@ import multer from "multer";
 import mongoose from "mongoose";
 import crypto from "crypto";
 
+
 import { ensureAuth } from "../middleware/authGuard.js";
 
 import Question from "../models/question.js";
@@ -40,7 +41,7 @@ function ensureAdmin(req, res, next) {
 /* ------------------------------------------------------------------ */
 /*  GET import page                                                   */
 /* ------------------------------------------------------------------ */
-router.get("/admin/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
+router.get("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
   const organizations = await Organization.find()
     .select("_id name slug")
     .sort({ name: 1 })
@@ -57,7 +58,7 @@ router.get("/admin/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
 /*  POST import + ASSIGN (PASSAGE-STYLE)                              */
 /* ------------------------------------------------------------------ */
 router.post(
-  "/admin/lms/import",
+  "/lms/import",
   ensureAuth,
   ensureAdmin,
   upload.any(),
