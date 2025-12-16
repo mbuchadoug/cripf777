@@ -16,6 +16,10 @@ import lmsLoginRoutes from "./routes/lms_login.js";
 import portalRoutes from "./routes/portal.js";
 
 import lmsImportRoutes from "./routes/lms_Import.js";
+import adminCertificateRoutes from "./routes/admin_certificates.js";
+
+
+
 
 
 
@@ -183,6 +187,7 @@ app.use("/api", trackRouter);
 // Public LMS pages
 app.use("/lms", lmsRoutes);
 app.use("/admin", lmsImportRoutes);
+app.use(adminCertificateRoutes);
 //app.use(lmsLoginRoutes);
 app.use(portalRoutes);
 // Org-related routes
