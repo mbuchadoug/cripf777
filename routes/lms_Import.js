@@ -14,7 +14,7 @@ import Attempt from "../models/attempt.js";
 const router = Router();
 
 /* ------------------------------------------------------------------ */
-/*  Multer (memory storage)                                            */
+/*  Multer                                                            */
 /* ------------------------------------------------------------------ */
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,7 +22,7 @@ const upload = multer({
 });
 
 /* ------------------------------------------------------------------ */
-/*  Platform admin check                                               */
+/*  Admin check                                                       */
 /* ------------------------------------------------------------------ */
 function ensureAdmin(req, res, next) {
   const email = (req.user?.email || "").toLowerCase();
@@ -32,15 +32,12 @@ function ensureAdmin(req, res, next) {
       .map(e => e.trim().toLowerCase())
       .filter(Boolean)
   );
-
-  if (!admins.has(email)) {
-    return res.status(403).send("Admins only");
-  }
+  if (!admins.has(email)) return res.status(403).send("Admins only");
   next();
 }
 
 /* ------------------------------------------------------------------ */
-/*  GET import page                                                    */
+/*  GET import page                                                   */
 /* ------------------------------------------------------------------ */
 router.get("/admin/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
   const organizations = await Organization.find()
@@ -56,7 +53,7 @@ router.get("/admin/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  POST import + AUTO ASSIGN                                          */
+/*  POST import + ASSIGN (PASSAGE-STYLE)                              */
 /* ------------------------------------------------------------------ */
 router.post(
   "/admin/lms/import",
@@ -65,7 +62,6 @@ router.post(
   upload.any(),
   async (req, res) => {
     try {
-      /* ---------------- Read content ---------------- */
       let content = "";
 
       if (req.files?.length) {
@@ -78,12 +74,7 @@ router.post(
         return res.status(400).send("No content provided");
       }
 
-      /* ---------------- Options ---------------- */
-      const shouldSave =
-        req.body.save === "1" ||
-        req.body.save === "on" ||
-        req.body.save === "true";
-
+      const saveToDb = req.body.save === "1" || req.body.save === "on";
       const moduleKey = String(req.body.module || "general").toLowerCase();
 
       const orgId =
@@ -91,34 +82,43 @@ router.post(
           ? new mongoose.Types.ObjectId(req.body.orgId)
           : null;
 
-      if (!shouldSave || !orgId) {
+      if (!saveToDb || !orgId) {
         return res.send("Preview completed (not saved)");
       }
 
-      /* ---------------- Parse questions ---------------- */
+      /* ---------------- Parse ---------------- */
       const parsed = parseQuestionsFromText(content);
-
       if (!parsed.length) {
         return res.status(400).send("No valid questions parsed");
       }
 
-      /* ---------------- Insert questions ---------------- */
-      const insertedQuestions = await Question.insertMany(
-        parsed.map(q => ({
-          text: q.text,
-          choices: q.choices.map(c => ({ text: c })),
-          correctIndex: q.answerIndex,
-          organization: orgId,
-          module: moduleKey,
-          source: "import",
-          createdAt: new Date(),
-        }))
-      );
+      /* ---------------- Insert CHILD questions ---------------- */
+      const childDocs = parsed.map(q => ({
+        text: q.text,
+        choices: q.choices.map(c => ({ text: c })),
+        correctIndex: q.answerIndex,
+        organization: orgId,
+        module: moduleKey,
+        source: "import",
+        createdAt: new Date(),
+      }));
 
-      /* ================================================== */
-      /* 🔥 AUTO-ASSIGN TO ALL ORG MEMBERS 🔥               */
-      /* ================================================== */
+      const insertedChildren = await Question.insertMany(childDocs);
+      const childIds = insertedChildren.map(q => q._id);
 
+      /* ---------------- Create PARENT comprehension ---------------- */
+      const parent = await Question.create({
+        text: `${moduleKey} Imported Quiz`,
+        type: "comprehension",
+        passage: "Imported LMS quiz",
+        questionIds: childIds,
+        organization: orgId,
+        module: moduleKey,
+        source: "import",
+        createdAt: new Date(),
+      });
+
+      /* ---------------- Assign EXACTLY like passage ---------------- */
       const members = await OrgMembership.find({
         org: orgId,
         role: { $in: ["employee", "manager", "admin"] },
@@ -128,19 +128,21 @@ router.post(
         const questionIds = [];
         const choicesOrder = [];
 
-        for (const q of insertedQuestions) {
+        // parent marker (CRITICAL)
+        questionIds.push(`parent:${parent._id}`);
+        choicesOrder.push([]);
+
+        for (const q of insertedChildren) {
           questionIds.push(String(q._id));
 
           const indices = Array.from(
             { length: q.choices.length },
             (_, i) => i
           );
-
           for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
           }
-
           choicesOrder.push(indices);
         }
 
@@ -150,7 +152,7 @@ router.post(
           examId,
           org: orgId,
           module: moduleKey,
-          user: mongoose.Types.ObjectId(m.user), // ✅ CRITICAL FIX
+          user: mongoose.Types.ObjectId(m.user),
           questionIds,
           choicesOrder,
           createdAt: new Date(),
@@ -158,17 +160,17 @@ router.post(
         });
 
         await Attempt.create({
-          userId: mongoose.Types.ObjectId(m.user), // keep types consistent
+          userId: mongoose.Types.ObjectId(m.user),
           organization: orgId,
           module: moduleKey,
           questionIds,
           startedAt: new Date(),
-          maxScore: questionIds.length,
+          maxScore: childIds.length,
         });
       }
 
       return res.send(
-        `✅ Imported ${insertedQuestions.length} questions and assigned to ${members.length} users`
+        `✅ Imported ${childIds.length} questions and assigned to ${members.length} users`
       );
     } catch (err) {
       console.error("[LMS IMPORT] error:", err && err.stack);
@@ -178,7 +180,7 @@ router.post(
 );
 
 /* ------------------------------------------------------------------ */
-/*  SIMPLE QUESTION PARSER                                             */
+/*  Parser                                                           */
 /* ------------------------------------------------------------------ */
 function parseQuestionsFromText(raw) {
   const blocks = raw
