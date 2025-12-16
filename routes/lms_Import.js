@@ -4,7 +4,8 @@ import multer from "multer";
 import mongoose from "mongoose";
 import crypto from "crypto";
 
-import ensureAuth from "../middleware/authGuard.js";
+import { ensureAuth } from "../middleware/authGuard.js";
+
 import Question from "../models/question.js";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
