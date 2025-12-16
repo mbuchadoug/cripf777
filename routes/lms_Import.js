@@ -47,11 +47,13 @@ router.get("/lms/import", ensureAuth, ensureAdmin, async (req, res) => {
     .sort({ name: 1 })
     .lean();
 
-  res.render("admin/lms_import", {
-    title: "Import LMS Questions",
-    user: req.user,
-    organizations,
-  });
+res.render("admin/lms_import", {
+  title: "Import LMS Questions",
+  user: req.user,
+  organizations,
+  isAdmin: true // 👈 enables admin navbar links
+});
+
 });
 
 /* ------------------------------------------------------------------ */
