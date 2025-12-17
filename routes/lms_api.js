@@ -476,165 +476,57 @@ async function ensureCertificatesDir() {
 /**
  * Helper: generate certificate HTML given details
  */
-function buildCertificateHtml({ name, orgName, moduleName, score, percentage, date, baseUrl }) {
-
-  const esc = (s) =>
-    (s === undefined || s === null)
-      ? ""
-      : String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-
-  // 🔹 BRAND LOGIC (ADD THIS)
-  const isNyaradzo = orgName && /nyaradzo/i.test(orgName);
-
-  const brand = isNyaradzo
-    ? {
-        primary: "#0f3d2e",   // Nyaradzo green
-        accent: "#c9a227",    // Nyaradzo gold
-        logo: `${baseUrl}/assets/orgs/nyaradzo/logo.png`,
-        title: "Nyaradzo Group Training Certificate"
-      }
-    : {
-        primary: "#222",
-        accent: "#f1b000",
-        logo: "",
-        title: "Certificate of Completion"
-      };
-
+function buildCertificateHtml({ name, orgName, moduleName, score, percentage, date }) {
+  const esc = (s) => (s === undefined || s === null) ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   return `
 <!doctype html>
 <html>
-
 <head>
-<meta charset="utf-8"/>
-<title>${esc(brand.title)}</title>
-<style>
-@page { margin: 0; }
-body {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  margin:0;
-  background:#f6f6f8;
-}
-.wrap {
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:40px;
-}
-.card {
-  width:100%;
-  max-width:900px;
-  background:white;
-  padding:52px;
-  border-radius:10px;
-  text-align:center;
-  border-top:14px solid ${brand.primary};
-  box-shadow:0 10px 40px rgba(0,0,0,0.1);
-}
-.logo img {
-  max-height:70px;
-  margin-bottom:20px;
-}
-h1 {
-  margin:0;
-  font-size:30px;
-  color:${brand.primary};
-}
-.subtitle {
-  margin-top:8px;
-  font-size:14px;
-  color:#666;
-}
-.recipient {
-  margin-top:30px;
-  font-size:28px;
-  font-weight:800;
-  color:#111;
-}
-.quiz {
-  margin-top:14px;
-  font-size:18px;
-  font-weight:700;
-  color:${brand.primary};
-}
-.details {
-  margin-top:30px;
-  display:flex;
-  justify-content:center;
-  gap:30px;
-}
-.detail .val {
-  font-size:20px;
-  font-weight:800;
-}
-.footer {
-  margin-top:40px;
-  font-size:12px;
-  color:#777;
-}
-.seal {
-  display:inline-block;
-  margin-top:20px;
-  padding:10px 18px;
-  background:${brand.accent};
-  font-weight:800;
-  border-radius:6px;
-}
-</style>
+  <meta charset="utf-8"/>
+  <title>Certificate of Completion</title>
+  <style>
+    @page { margin: 0; }
+    body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; margin:0; padding:0; }
+    .wrap { box-sizing:border-box; width:100%; height:100vh; display:flex; align-items:center; justify-content:center; background: #f6f6f8; padding:40px; }
+    .card { width:100%; max-width: 900px; background: white; padding:48px; border-radius:8px; box-shadow: 0 8px 40px rgba(0,0,0,0.08); border:1px solid rgba(0,0,0,0.04); text-align:center; }
+    .logo { margin-bottom:18px; }
+    h1 { margin:0; font-size:28px; color:#222; letter-spacing:0.4px; }
+    .subtitle { margin-top:8px; color:#666; font-size:14px; }
+    .recipient { margin-top:28px; font-size:26px; font-weight:700; color:#111; }
+    .meta { margin-top:14px; color:#444; font-size:16px; }
+    .details { margin-top:28px; display:flex; justify-content:center; gap:24px; color:#333; }
+    .detail { text-align:center; }
+    .detail .val { font-weight:700; font-size:18px; }
+    .footer { margin-top:36px; color:#777; font-size:12px; }
+    .seal { display:inline-block; margin-top:22px; padding:12px 18px; border-radius:6px; background:linear-gradient(180deg,#ffd27f,#f1b000); color:#000; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+  </style>
 </head>
-
 <body>
-<div class="wrap">
-  <div class="card">
+  <div class="wrap">
+    <div class="card">
+      <div class="logo"><img src="" onerror="this.style.display='none'" alt="" style="max-height:56px" /></div>
+      <h1>Certificate of Completion</h1>
+      <div class="subtitle">This certifies that</div>
+      <div class="recipient">${esc(name)}</div>
+      <div class="meta">has successfully completed the module</div>
+      <div style="margin-top:8px; font-weight:700; font-size:18px; color:#0b0b0b">${esc(moduleName || "")}</div>
 
-    ${brand.logo ? `
-    <div class="logo">
-      <img src="${brand.logo}" />
-    </div>` : ""}
-
-    <h1>${esc(brand.title)}</h1>
-    <div class="subtitle">This certifies that</div>
-
-    <div class="recipient">${esc(name)}</div>
-
-    <div class="subtitle">has successfully completed the quiz</div>
-
-    <div class="quiz">${esc(quizTitle || moduleName || "")}</div>
-
-    <div class="details">
-      <div class="detail">
-        <div class="val">${esc(score)}</div>
-        <div>Score</div>
+      <div class="details">
+        <div class="detail"><div class="val">${esc(String(score || 0))}</div><div>Score</div></div>
+        <div class="detail"><div class="val">${esc(String(percentage || 0))}%</div><div>Percentage</div></div>
+        <div class="detail"><div class="val">${esc(String(date ? (new Date(date)).toISOString().slice(0,10) : new Date().toISOString().slice(0,10)))}</div><div>Date</div></div>
       </div>
-      <div class="detail">
-        <div class="val">${esc(percentage)}%</div>
-        <div>Percentage</div>
-      </div>
-      <div class="detail">
-        <div class="val">${esc(
-          date
-            ? new Date(date).toISOString().slice(0,10)
-            : new Date().toISOString().slice(0,10)
-        )}</div>
-        <div>Date</div>
+
+      <div class="footer">
+        Awarded by ${esc(orgName || "Your Organization")} 
+        <div style="margin-top:12px"><span class="seal">Verified</span></div>
       </div>
     </div>
-
-    <div class="footer">
-      Awarded by ${esc(orgName || "Organization")}
-      <div class="seal">Verified</div>
-    </div>
-
   </div>
-</div>
 </body>
 </html>
 `;
 }
-
 
 /**
  * Try to generate certificate PDF using Puppeteer (if available) otherwise fallback to pdfkit.
@@ -990,12 +882,6 @@ if (passed) {
       }
     };
 
-    // 🔹 Base URL for logos & certificate links
-const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-const baseForMedia =
-  site ||
-  `${req.get("x-forwarded-proto") || req.protocol}://${req.get("host")}`;
-
     // If passed, attempt to generate certificate PDF and attach URL to response
     if (passed) {
       try {
@@ -1025,19 +911,16 @@ const baseForMedia =
 
         const moduleNameForCert = (exam && exam.module) ? exam.module : (moduleKey || "");
 
-       const certResult = await generateCertificatePdf({
+        const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
   moduleName: moduleNameForCert,
-  quizTitle: moduleNameForCert,
+  quizTitle: moduleNameForCert, // 👈 added
   score,
   percentage,
   date: now,
-  req,
-  baseUrl: baseForMedia   // ✅ now defined
+  req
 });
-
-
 
 
         if (certResult && certResult.filename) {
