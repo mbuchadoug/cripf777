@@ -357,7 +357,13 @@
       }
 
       // build payload
-      const payload = { examId, answers: [] };
+      //const payload = { examId, answers: [] };
+      const payload = {
+  examId,
+  quizTitle: QUIZ_TITLE, // ✅ send quiz title to backend
+  answers: []
+};
+
       for (const s of series) {
         const id = s.id || s._id || null;
         payload.answers.push({

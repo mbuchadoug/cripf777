@@ -559,8 +559,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         moduleLabel
       )}&org=${encodeURIComponent(org.slug)}`;*/
       // replacement (correct)
-const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
+//const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
 
+const openUrl =
+  `/org/${org.slug}/quiz` +
+  `?examId=${encodeURIComponent(ex.examId)}` +
+  `&module=${encodeURIComponent(moduleLabel)}` +
+  `&quizTitle=${encodeURIComponent(quizTitle)}`;
 
     // derive quiz title + real question count
 // derive quiz title + real question count

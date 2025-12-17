@@ -1030,6 +1030,15 @@ if (passed) {
 
         const moduleNameForCert = (exam && exam.module) ? exam.module : (moduleKey || "");
 
+console.log("CERT DEBUG:", {
+  examTitle: exam?.title,
+  examQuizTitle: exam?.quizTitle,
+  examName: exam?.name,
+  moduleKey,
+  examModule: exam?.module
+});
+
+
         const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
