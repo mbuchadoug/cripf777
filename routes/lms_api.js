@@ -480,10 +480,11 @@ function buildCertificateHtml({
   name,
   orgName,
   moduleName,
+    quizTitle, 
   score,
   percentage,
   date,
-  quizTitle
+ 
 }) {
   const esc = (s) =>
     (s === undefined || s === null)
@@ -650,7 +651,7 @@ h1 {
  * Try to generate certificate PDF using Puppeteer (if available) otherwise fallback to pdfkit.
  * Returns { filepath, filename, method }
  */
-async function generateCertificatePdf({ name, orgName, moduleName, score, percentage, date, req }) {
+async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  score, percentage, date, req }) {
   const certsDir = await ensureCertificatesDir();
   const filename = `certificate-${Date.now().toString(36)}.pdf`;
   const filepath = path.join(certsDir, filename);
@@ -1033,7 +1034,12 @@ if (passed) {
   name: recipientName,
   orgName,
   moduleName: moduleNameForCert,
-  quizTitle: moduleNameForCert, // 👈 added
+ // quizTitle: moduleNameForCert, // 👈 added
+ quizTitle:
+  exam?.title ||
+  exam?.quizTitle ||
+  exam?.name ||
+  moduleNameForCert,
   score,
   percentage,
   date: now,
