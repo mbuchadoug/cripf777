@@ -6,8 +6,7 @@ import Question from "../models/question.js";         // the Question model (was
 import ExamInstance from "../models/examInstance.js";
 const router = Router();
 // ----------------------------------------------------------------------
-import Certificate from "../models/certificate.js";
-import crypto from "crypto";
+
 
 // helper: sample N random docs using Mongo's aggregation if available
 async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
@@ -399,77 +398,6 @@ router.get("/quiz", async (req, res) => {
  * POST /api/lms/quiz/submit
  * Body: { examId, answers: [{ questionId, choiceIndex }] }
  */
-/*router.post("/quiz/submit", async (req, res) => {
-  try {
-    const payload = req.body || {};
-    const answers = Array.isArray(payload.answers) ? payload.answers : [];
-    if (!answers.length)
-      return res.status(400).json({ error: "No answers submitted" });
-
-    const qIds = answers
-      .map((a) => a.questionId)
-      .filter(Boolean)
-      .map(String);
-
-    const docs = await Question.find({ _id: { $in: qIds } }).lean().exec();
-    const byId = {};
-    for (const q of docs) byId[String(q._id)] = q;
-
-    let score = 0;
-    const total = answers.length;
-    const details = [];
-
-    for (const a of answers) {
-      const q = byId[String(a.questionId)];
-      const yourIndex =
-        typeof a.choiceIndex === "number" ? a.choiceIndex : null;
-
-      let correctIndex = null;
-      if (q) {
-        if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
-        else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
-        else if (typeof q.correct === "number") correctIndex = q.correct;
-      }
-
-      const correct =
-        correctIndex !== null &&
-        yourIndex !== null &&
-        correctIndex === yourIndex;
-
-      if (correct) score++;
-
-      details.push({
-        questionId: a.questionId,
-        correctIndex,
-        yourIndex,
-        correct: !!correct,
-      });
-    }
-
-    const percentage = Math.round((score / Math.max(1, total)) * 100);
-    const passThreshold = parseInt(
-      process.env.QUIZ_PASS_THRESHOLD || "60",
-      10
-    );
-    const passed = percentage >= passThreshold;
-
-    return res.json({
-      examId: payload.examId || "exam-" + Date.now().toString(36),
-      total,
-      score,
-      percentage,
-      passThreshold,
-      passed,
-      details,
-    });
-  } catch (err) {
-    console.error(
-      "[POST /api/lms/quiz/submit] error:",
-      err && (err.stack || err)
-    );
-    return res.status(500).json({ error: "Failed to score quiz" });
-  }
-});*/
 router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
@@ -524,36 +452,6 @@ router.post("/quiz/submit", async (req, res) => {
     );
     const passed = percentage >= passThreshold;
 
-    /* ================= CERTIFICATE ISSUE (PATCH) ================= */
-
-    let certificateUrl = null;
-
-    if (passed && payload.examId && req.user?._id) {
-      const serial =
-        "CERT-" + crypto.randomBytes(4).toString("hex").toUpperCase();
-
-      const cert = await Certificate.findOneAndUpdate(
-        {
-          examId: payload.examId,
-          userId: req.user._id,
-        },
-        {
-          userId: req.user._id,
-          examId: payload.examId,
-          courseTitle: payload.module || "Quiz Completion",
-          score,
-          percentage,
-          serial,
-          issuedAt: new Date(),
-        },
-        { upsert: true, new: true }
-      );
-
-      certificateUrl = `/certificates/${cert.serial}`;
-    }
-
-    /* ============================================================= */
-
     return res.json({
       examId: payload.examId || "exam-" + Date.now().toString(36),
       total,
@@ -562,7 +460,6 @@ router.post("/quiz/submit", async (req, res) => {
       passThreshold,
       passed,
       details,
-      certificateUrl, // 👈 frontend can show download link
     });
   } catch (err) {
     console.error(
@@ -572,6 +469,5 @@ router.post("/quiz/submit", async (req, res) => {
     return res.status(500).json({ error: "Failed to score quiz" });
   }
 });
-
 
 export default router;
