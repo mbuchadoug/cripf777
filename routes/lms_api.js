@@ -716,7 +716,7 @@ async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  sc
         doc.moveDown(0.8);
         doc.fontSize(12).fillColor("#444").text(`has successfully completed the module`, { align: "center" });
         doc.moveDown(0.6);
-        doc.fontSize(14).fillColor("#000").text(moduleName || "", { align: "center" });
+        doc.fontSize(14).fillColor("#000").text(quizTitle || "", { align: "center" });
         doc.moveDown(1.2);
 
         doc.fontSize(11).fillColor("#333").text(`Score: ${score || 0}`, { align: "center" });
@@ -1068,4 +1068,3 @@ if (passed) {
 });
 
 export default router;
-8
