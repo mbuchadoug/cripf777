@@ -990,6 +990,12 @@ if (passed) {
       }
     };
 
+    // 🔹 Base URL for logos & certificate links
+const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+const baseForMedia =
+  site ||
+  `${req.get("x-forwarded-proto") || req.protocol}://${req.get("host")}`;
+
     // If passed, attempt to generate certificate PDF and attach URL to response
     if (passed) {
       try {
@@ -1019,7 +1025,7 @@ if (passed) {
 
         const moduleNameForCert = (exam && exam.module) ? exam.module : (moduleKey || "");
 
-        const certResult = await generateCertificatePdf({
+       const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
   moduleName: moduleNameForCert,
@@ -1028,8 +1034,9 @@ if (passed) {
   percentage,
   date: now,
   req,
-  baseUrl: baseForMedia   // ✅ ADD THIS
+  baseUrl: baseForMedia   // ✅ now defined
 });
+
 
 
 
