@@ -476,35 +476,24 @@ async function ensureCertificatesDir() {
 /**
  * Helper: generate certificate HTML given details
  */
-function buildCertificateHtml({
-  name,
-  orgName,
-  moduleName,
-  score,
-  percentage,
-  date,
-  quizTitle
-}) {
+function buildCertificateHtml({ name, orgName, moduleName, score, percentage, date, baseUrl }) {
+
   const esc = (s) =>
     (s === undefined || s === null)
       ? ""
       : String(s)
-          .replace(/&/g,"&amp;")
-          .replace(/</g,"&lt;")
-          .replace(/>/g,"&gt;");
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
-  const isNyaradzo =
-    orgName &&
-    /nyaradzo/i.test(orgName);
+  // 🔹 BRAND LOGIC (ADD THIS)
+  const isNyaradzo = orgName && /nyaradzo/i.test(orgName);
 
-  /* ===============================
-     🎨 BRAND CONFIG
-  =============================== */
   const brand = isNyaradzo
     ? {
-        primary: "#0b3b2e",
-        accent: "#c9a227",
-        logo: "/assets/orgs/nyaradzo/logo.png",
+        primary: "#0f3d2e",   // Nyaradzo green
+        accent: "#c9a227",    // Nyaradzo gold
+        logo: `${baseUrl}/assets/orgs/nyaradzo/logo.png`,
         title: "Nyaradzo Group Training Certificate"
       }
     : {
@@ -517,6 +506,7 @@ function buildCertificateHtml({
   return `
 <!doctype html>
 <html>
+
 <head>
 <meta charset="utf-8"/>
 <title>${esc(brand.title)}</title>
@@ -1000,6 +990,12 @@ if (passed) {
       }
     };
 
+    // 🔹 Base URL for logos & certificate links
+const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+const baseForMedia =
+  site ||
+  `${req.get("x-forwarded-proto") || req.protocol}://${req.get("host")}`;
+
     // If passed, attempt to generate certificate PDF and attach URL to response
     if (passed) {
       try {
@@ -1029,7 +1025,7 @@ if (passed) {
 
         const moduleNameForCert = (exam && exam.module) ? exam.module : (moduleKey || "");
 
-        const certResult = await generateCertificatePdf({
+       const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
   moduleName: moduleNameForCert,
@@ -1038,8 +1034,9 @@ if (passed) {
   percentage,
   date: now,
   req,
-  baseUrl: baseForMedia   // ✅ ADD THIS
+  baseUrl: baseForMedia   // ✅ now defined
 });
+
 
 
 
