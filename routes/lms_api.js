@@ -675,7 +675,7 @@ async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  sc
       const browser = await puppeteer.launch(launchOpts);
       try {
         const page = await browser.newPage();
-        const html = buildCertificateHtml({ name, orgName, moduleName, score, percentage, date });
+        const html = buildCertificateHtml({ name, orgName, moduleName,quizTitle, score, percentage, date });
         await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
         await page.emulateMediaType("screen");
         await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "20mm", bottom: "20mm", left: "20mm", right: "20mm" } });
@@ -1068,3 +1068,4 @@ if (passed) {
 });
 
 export default router;
+8
