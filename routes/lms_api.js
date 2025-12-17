@@ -743,6 +743,11 @@ async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  sc
 router.post("/quiz/submit", async (req, res) => {
   try {
     const payload = req.body || {};
+    const quizTitleFromClient =
+  typeof payload.quizTitle === "string" && payload.quizTitle.trim()
+    ? payload.quizTitle.trim()
+    : null;
+
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
     if (!answers.length) return res.status(400).json({ error: "No answers submitted" });
 
@@ -1031,29 +1036,30 @@ if (passed) {
         const moduleNameForCert = (exam && exam.module) ? exam.module : (moduleKey || "");
 
 console.log("CERT DEBUG:", {
+  quizTitleFromClient,
   examTitle: exam?.title,
   examQuizTitle: exam?.quizTitle,
   examName: exam?.name,
-  moduleKey,
   examModule: exam?.module
 });
 
 
-        const certResult = await generateCertificatePdf({
+   const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
   moduleName: moduleNameForCert,
- // quizTitle: moduleNameForCert, // 👈 added
- quizTitle:
-  exam?.title ||
-  exam?.quizTitle ||
-  exam?.name ||
-  moduleNameForCert,
+  quizTitle:
+    quizTitleFromClient ||
+    exam?.title ||
+    exam?.quizTitle ||
+    exam?.name ||
+    moduleNameForCert,
   score,
   percentage,
   date: now,
   req
 });
+
 
 
         if (certResult && certResult.filename) {
