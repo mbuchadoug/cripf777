@@ -1,0 +1,23 @@
+<h1>Issued Certificates</h1>
+
+<table>
+  <tr>
+    <th>User</th>
+    <th>Course</th>
+    <th>Score</th>
+    <th>Link</th>
+  </tr>
+
+  {{#each certs}}
+  <tr>
+    <td>{{this.userId.displayName}}</td>
+    <td>{{this.courseTitle}}</td>
+    <td>{{this.percentage}}%</td>
+    <td>
+      <a href="/certificates/{{this.serial}}" target="_blank">
+        Download
+      </a>
+    </td>
+  </tr>
+  {{/each}}
+</table>

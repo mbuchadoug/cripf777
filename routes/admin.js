@@ -216,6 +216,24 @@ const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
  * Build a sources/tags summary with counts that matches the admin template shape:
  * sources: [{ source, count }], tags: [{ tag, count }]
  */
+
+router.get(
+  "/certificates",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    const certs = await Certificate
+      .find()
+      .populate("userId")
+      .sort({ issuedAt: -1 })
+      .lean();
+
+    res.render("admin/certificates", { certs });
+  }
+);
+
+
+
 router.get("/lms/quizzes", ensureAuth, ensureAdmin, async (req, res) => {
   try {
     let Question;

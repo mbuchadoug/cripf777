@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <title>Certificate {{cert.serial}}</title>
+  <style>
+    body { font-family: Georgia; background:#f4f4f4; padding:40px }
+    .cert {
+      max-width:900px;
+      margin:auto;
+      background:white;
+      padding:60px;
+      border:10px solid #d4af37;
+      text-align:center;
+    }
+    h1 { color:#d4af37; }
+    .serial { margin-top:30px; font-size:12px; color:#555 }
+  </style>
+</head>
+<body>
+  <div class="cert">
+    <h1>Certificate of Completion</h1>
+
+    <p>This certifies that</p>
+    <h2>{{user.displayName}}</h2>
+
+    <p>has successfully completed</p>
+    <h3>{{cert.courseTitle}}</h3>
+
+    <p>Score: {{cert.percentage}}%</p>
+
+    <p class="serial">
+      Certificate ID: {{cert.serial}}<br/>
+      Issued: {{cert.issuedAt}}
+    </p>
+
+    <button onclick="window.print()">Download / Print</button>
+  </div>
+</body>
+</html>
