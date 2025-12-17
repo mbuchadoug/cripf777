@@ -8,6 +8,9 @@ import Question from "../models/question.js";         // Question model (used th
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 
+import Certificate from "../models/certificate.js";
+import crypto from "crypto";
+
 const router = Router();
 
 // fallback file loader
