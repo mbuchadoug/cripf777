@@ -10,7 +10,7 @@ import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
 import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
-
+import Certificate from "../models/certificate.js";
 import OrgMembership from "../models/orgMembership.js";
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
