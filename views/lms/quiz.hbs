@@ -141,6 +141,11 @@
     const MODULE_KEY = body.dataset.moduleKey || "";
     const ORG_SLUG = body.dataset.org || "";
     const INITIAL_EXAM_ID = body.dataset.examId || "";
+    // ✅ Read quiz title from URL
+const QUIZ_TITLE =
+  new URLSearchParams(window.location.search).get("quizTitle") || "";
+
+
 
     let examId = INITIAL_EXAM_ID || null;
     let series = [];

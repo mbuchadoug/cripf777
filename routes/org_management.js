@@ -562,11 +562,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 //const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
 let quizTitle = `${moduleLabel} Quiz`;
 let questionCount = 0;
-const openUrl =
-  `/org/${org.slug}/quiz` +
-  `?examId=${encodeURIComponent(ex.examId)}` +
-  `&module=${encodeURIComponent(moduleLabel)}` +
-  `&quizTitle=${encodeURIComponent(quizTitle)}`;
+
 
     // derive quiz title + real question count
 // derive quiz title + real question count
@@ -602,6 +598,11 @@ if (Array.isArray(ex.questionIds)) {
   }
 }
 
+const openUrl =
+  `/org/${org.slug}/quiz` +
+  `?examId=${encodeURIComponent(ex.examId)}` +
+  `&module=${encodeURIComponent(moduleLabel)}` +
+  `&quizTitle=${encodeURIComponent(quizTitle)}`;
 
 quizzesByModule[key].push({
   examId: ex.examId,
