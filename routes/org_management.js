@@ -560,7 +560,8 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       )}&org=${encodeURIComponent(org.slug)}`;*/
       // replacement (correct)
 //const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
-
+let quizTitle = `${moduleLabel} Quiz`;
+let questionCount = 0;
 const openUrl =
   `/org/${org.slug}/quiz` +
   `?examId=${encodeURIComponent(ex.examId)}` +
@@ -570,8 +571,7 @@ const openUrl =
     // derive quiz title + real question count
 // derive quiz title + real question count
 
-let quizTitle = `${moduleLabel} Quiz`;
-let questionCount = 0;
+
 
 if (Array.isArray(ex.questionIds)) {
   // exclude parent markers from count
