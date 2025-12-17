@@ -220,7 +220,7 @@ const FALLBACK_PATH = "/mnt/data/responsibilityQuiz.txt";
 router.get(
   "/certificates",
   ensureAuth,
-  ensureAdminEmails,
+  ensureAdmin,
   async (req, res) => {
     const certs = await Certificate
       .find()
