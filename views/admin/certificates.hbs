@@ -1,23 +1,35 @@
-<h1>Issued Certificates</h1>
+<h1>🎓 Issued Certificates</h1>
 
-<table>
-  <tr>
-    <th>User</th>
-    <th>Course</th>
-    <th>Score</th>
-    <th>Link</th>
-  </tr>
-
-  {{#each certs}}
-  <tr>
-    <td>{{this.userId.displayName}}</td>
-    <td>{{this.courseTitle}}</td>
-    <td>{{this.percentage}}%</td>
-    <td>
-      <a href="/certificates/{{this.serial}}" target="_blank">
-        Download
-      </a>
-    </td>
-  </tr>
-  {{/each}}
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Serial</th>
+      <th>User</th>
+      <th>Course</th>
+      <th>Score</th>
+      <th>Issued</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each certs}}
+      <tr>
+        <td>{{serial}}</td>
+        <td>
+          {{#if userId}}
+            {{userId.name}}<br/>
+            <small>{{userId.email}}</small>
+          {{else}}
+            Anonymous
+          {{/if}}
+        </td>
+        <td>{{courseTitle}}</td>
+        <td>{{score}} ({{percentage}}%)</td>
+        <td>{{issuedAt}}</td>
+        <td>
+          <a href="/admin/certificates/{{_id}}/download">Download</a>
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
 </table>

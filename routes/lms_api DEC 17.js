@@ -766,42 +766,6 @@ router.post("/quiz/submit", async (req, res) => {
     const passThreshold = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
     const passed = percentage >= passThreshold;
 
-    // ===============================
-// 🎓 SAVE CERTIFICATE (NO PDF)
-// ===============================
-let savedCertificate = null;
-
-if (passed) {
-  try {
-    // generate readable but unique serial
-    const serial =
-      "CERT-" +
-      Date.now().toString(36).toUpperCase() +
-      "-" +
-      Math.random().toString(36).slice(2, 6).toUpperCase();
-
-    savedCertificate = await Certificate.create({
-      userId: (req.user && req.user._id)
-        ? req.user._id
-        : (exam && exam.user) || null,
-
-      orgId: (exam && exam.org) || null,
-      examId: examId || ("exam-" + Date.now().toString(36)),
-
-      courseTitle: (exam && exam.module)
-        ? exam.module
-        : (moduleKey || "Quiz"),
-
-      score,
-      percentage,
-      serial,
-    });
-  } catch (e) {
-    console.error("[quiz/submit] certificate save failed:", e);
-  }
-}
-
-
     // Find / update or create Attempt
     let attemptFilter = {};
     if (examId) attemptFilter.examId = examId;

@@ -1,66 +1,43 @@
-import { Router } from "express";
-import fs from "fs";
-import path from "path";
-import archiver from "archiver";
-
+import express from "express";
 import Certificate from "../models/certificate.js";
+import User from "../models/user.js";
+import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
-const router = Router();
+const router = express.Router();
 
-/* ------------------------------------------------ */
-/*  ADMIN: Download ALL certificates as ZIP         */
-/*  GET /admin/certificates/download-all            */
-/* ------------------------------------------------ */
-router.get(
-  "/admin/certificates/download-all",
-  ensureAuth,
-  async (req, res) => {
-    try {
-      // OPTIONAL: restrict to platform admins
-      const admins = (process.env.ADMIN_EMAILS || "")
-        .split(",")
-        .map(e => e.trim().toLowerCase())
-        .filter(Boolean);
+/**
+ * View all certificates
+ */
+router.get("/admin/certificates", ensureAuth, async (req, res) => {
+  const certs = await Certificate.find()
+    .sort({ issuedAt: -1 })
+    .populate("userId", "name email")
+    .populate("orgId", "name slug")
+    .lean();
 
-      if (!admins.includes((req.user?.email || "").toLowerCase())) {
-        return res.status(403).send("Admins only");
-      }
+  res.render("admin/certificates", {
+    title: "Certificates",
+    certs
+  });
+});
 
-      const certificates = await Certificate.find().lean();
-      if (!certificates.length) {
-        return res.status(404).send("No certificates found");
-      }
+/**
+ * Download certificate as JSON (simple + safe)
+ */
+router.get("/admin/certificates/:id/download", ensureAuth, async (req, res) => {
+  const cert = await Certificate.findById(req.params.id)
+    .populate("userId", "name email")
+    .populate("orgId", "name slug")
+    .lean();
 
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="certificates_${Date.now()}.zip"`
-      );
+  if (!cert) return res.status(404).send("Certificate not found");
 
-      const archive = archiver("zip", { zlib: { level: 9 } });
-      archive.pipe(res);
-
-      for (const cert of certificates) {
-        if (!cert.pdfPath) continue;
-
-        const fullPath = path.resolve(cert.pdfPath);
-        if (!fs.existsSync(fullPath)) continue;
-
-        const filename =
-          cert.serial
-            ? `certificate_${cert.serial}.pdf`
-            : path.basename(fullPath);
-
-        archive.file(fullPath, { name: filename });
-      }
-
-      await archive.finalize();
-    } catch (err) {
-      console.error("[DOWNLOAD CERTIFICATES] error:", err);
-      return res.status(500).send("Failed to download certificates");
-    }
-  }
-);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=${cert.serial}.json`
+  );
+  res.json(cert);
+});
 
 export default router;
