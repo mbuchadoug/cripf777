@@ -504,7 +504,10 @@ function buildCertificateHtml({
     ? {
         primary: "#0a2e5c",   // Nyaradzo blue
         accent: "#c9a227",    // Gold
-        logo: "/assets/nyaradzo-logo.png",
+        logo: isNyaradzo
+  ? `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`
+  : "",
+
         title: "Nyaradzo Group Training Certificate"
       }
     : {
