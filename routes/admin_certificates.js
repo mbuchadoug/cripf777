@@ -34,7 +34,8 @@ router.get("/admin/certificates", ensureAuth, async (req, res) => {
  */
 router.get("/admin/certificates/:id/download", ensureAuth, async (req, res) => {
   const cert = await Certificate.findById(req.params.id)
-    .populate("userId", "name email")
+    //.populate("userId", "name email")
+    .populate("userId", "displayName firstName lastName email")
     .populate("orgId", "name slug")
     .lean();
 
@@ -56,7 +57,8 @@ router.get(
   ensureAuth,
   async (req, res) => {
     const cert = await Certificate.findById(req.params.id)
-      .populate("userId", "name email")
+      //.populate("userId", "name email")
+      .populate("userId", "displayName firstName lastName email")
       .populate("orgId", "name slug")
       .lean();
 
@@ -65,12 +67,14 @@ router.get(
     /*const recipientName =
       cert.userId?.name || cert.userId?.email || "Learner";*/
 
-
-      const recipientName =
+const recipientName =
   cert.userId?.displayName ||
-  [cert.userId?.firstName, cert.userId?.lastName].filter(Boolean).join(" ") ||
+  [cert.userId?.firstName, cert.userId?.lastName]
+    .filter(Boolean)
+    .join(" ") ||
   cert.userId?.email ||
   "Learner";
+
 
 
     const orgName = cert.orgId?.name || "Organization";
