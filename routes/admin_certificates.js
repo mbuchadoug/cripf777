@@ -23,7 +23,9 @@ router.get("/admin/certificates", ensureAuth, async (req, res) => {
 
   res.render("admin/certificates", {
     title: "Certificates",
-    certs
+    certs,
+      user: req.user,
+    isAdmin: true
   });
 });
 
