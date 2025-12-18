@@ -1112,4 +1112,8 @@ console.log("CERT DEBUG:", {
   }
 });
 
+export {
+  generateCertificatePdf,
+};
+
 export default router;
