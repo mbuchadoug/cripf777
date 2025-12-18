@@ -480,10 +480,11 @@ function buildCertificateHtml({
   name,
   orgName,
   moduleName,
-  quizTitle,
+    quizTitle, 
   score,
   percentage,
   date,
+ 
 }) {
   const esc = (s) =>
     (s === undefined || s === null)
@@ -502,9 +503,9 @@ function buildCertificateHtml({
   =============================== */
   const brand = isNyaradzo
     ? {
-        primary: "#0a2e5c",   // Nyaradzo blue
-        accent: "#c9a227",    // Gold
-        logo: "/assets/nyaradzo-logo.png",
+        primary: "#0b3b2e",
+        accent: "#c9a227",
+        logo: "/assets/orgs/nyaradzo/logo.png",
         title: "Nyaradzo Group Training Certificate"
       }
     : {
@@ -520,13 +521,12 @@ function buildCertificateHtml({
 <head>
 <meta charset="utf-8"/>
 <title>${esc(brand.title)}</title>
-
 <style>
 @page { margin: 0; }
 body {
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin:0;
-  background:#f2f2f5;
+  background:#f6f6f8;
 }
 .wrap {
   min-height:100vh;
@@ -539,98 +539,60 @@ body {
   width:100%;
   max-width:900px;
   background:white;
-  padding:60px 52px 52px;
-  border-radius:14px;
+  padding:52px;
+  border-radius:10px;
   text-align:center;
-  box-shadow:0 12px 50px rgba(0,0,0,0.12);
-  position:relative;
-  overflow:hidden;
+  border-top:14px solid ${brand.primary};
+  box-shadow:0 10px 40px rgba(0,0,0,0.1);
 }
-
-/* 🔵 TOP BLUE BAR */
-.card::before {
-  content:"";
-  position:absolute;
-  top:0;
-  left:0;
-  right:0;
-  height:36px;
-  background:linear-gradient(
-    90deg,
-    ${brand.primary},
-    #143f7a
-  );
-}
-
-/* 🟡 GOLD STRIPE */
-.card::after {
-  content:"";
-  position:absolute;
-  top:36px;
-  left:0;
-  right:0;
-  height:6px;
-  background:${brand.accent};
-}
-
 .logo img {
-  max-height:80px;
-  margin:20px auto 10px;
+  max-height:70px;
+  margin-bottom:20px;
 }
-
 h1 {
-  margin:20px 0 6px;
-  font-size:34px;
+  margin:0;
+  font-size:30px;
   color:${brand.primary};
-  font-weight:800;
 }
-
 .subtitle {
   margin-top:8px;
   font-size:14px;
   color:#666;
 }
-
 .recipient {
   margin-top:30px;
-  font-size:30px;
-  font-weight:900;
+  font-size:28px;
+  font-weight:800;
   color:#111;
 }
-
 .quiz {
-  margin-top:16px;
-  font-size:20px;
-  font-weight:800;
+  margin-top:14px;
+  font-size:18px;
+  font-weight:700;
   color:${brand.primary};
 }
-
 .details {
-  margin-top:36px;
+  margin-top:30px;
   display:flex;
   justify-content:center;
-  gap:60px;
+  gap:30px;
 }
-
 .detail .val {
-  font-size:22px;
-  font-weight:900;
+  font-size:20px;
+  font-weight:800;
 }
-
 .footer {
-  margin-top:46px;
-  font-size:13px;
+  margin-top:40px;
+  font-size:12px;
   color:#777;
 }
-
 .seal {
   display:inline-block;
-  margin-top:14px;
-  padding:10px 20px;
+  margin-top:20px;
+  padding:10px 18px;
   background:${brand.accent};
-  color:#222;
-  font-weight:900;
-  border-radius:8px;
+  font-weight:800;
+  border-radius:6px;
 }
 </style>
 </head>
