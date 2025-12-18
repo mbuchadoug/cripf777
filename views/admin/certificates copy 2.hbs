@@ -1,0 +1,70 @@
+<h1>🎓 Issued Certificates</h1>
+
+<table border="1" cellpadding="8" cellspacing="0" width="100%">
+  <thead>
+    <tr>
+      <th>Serial</th>
+      <th>User</th>
+      <th>Quiz / Course</th>
+      <th>Score</th>
+      <th>Issued</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {{#each certs}}
+      <tr>
+        <td>
+          <strong>{{serial}}</strong>
+        </td>
+
+        <td>
+          {{#if userId}}
+            {{userId.name}}<br/>
+            <small>{{userId.email}}</small>
+          {{else}}
+            <em>Anonymous</em>
+          {{/if}}
+        </td>
+
+        <td>
+          {{#if quizTitle}}
+            {{quizTitle}}
+          {{else}}
+            {{courseTitle}}
+          {{/if}}
+        </td>
+
+        <td>
+          {{score}} / 100<br/>
+          <strong>{{percentage}}%</strong>
+        </td>
+
+        <td>
+          {{issuedAt}}
+        </td>
+
+        <td>
+          <!-- PDF download (PRIMARY) -->
+          <a
+            href="/admin/certificates/{{_id}}/download/pdf"
+            target="_blank"
+            style="font-weight:700"
+          >
+            📄 PDF
+          </a>
+
+        
+
+          <!-- JSON download (SECONDARY / DEBUG)
+          <a
+            href="/admin/certificates/{{_id}}/download"
+          >
+            🧾 JSON
+          </a> -->
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>

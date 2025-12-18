@@ -1,70 +1,120 @@
-<h1>🎓 Issued Certificates</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Certificates | Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-<table border="1" cellpadding="8" cellspacing="0" width="100%">
-  <thead>
-    <tr>
-      <th>Serial</th>
-      <th>User</th>
-      <th>Quiz / Course</th>
-      <th>Score</th>
-      <th>Issued</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
+  <style>
+    body{
+      font-family:system-ui, -apple-system, "Segoe UI", Arial;
+      margin:20px;
+    }
 
-  <tbody>
-    {{#each certs}}
-      <tr>
-        <td>
-          <strong>{{serial}}</strong>
-        </td>
+    h1{
+      font-size:32px;
+      margin-bottom:12px;
+    }
 
-        <td>
-          {{#if userId}}
-            {{userId.name}}<br/>
-            <small>{{userId.email}}</small>
-          {{else}}
-            <em>Anonymous</em>
-          {{/if}}
-        </td>
+    table{
+      border-collapse:collapse;
+      width:100%;
+      max-width:1000px;
+    }
 
-        <td>
-          {{#if quizTitle}}
-            {{quizTitle}}
-          {{else}}
-            {{courseTitle}}
-          {{/if}}
-        </td>
+    th, td{
+      padding:10px 12px;
+      border:1px solid #ddd;
+      text-align:left;
+      vertical-align:top;
+      font-size:14px;
+    }
 
-        <td>
-          {{score}} / 100<br/>
-          <strong>{{percentage}}%</strong>
-        </td>
+    th{
+      background:#f4f4f4;
+      font-weight:700;
+    }
 
-        <td>
-          {{issuedAt}}
-        </td>
+    tr:nth-child(even){
+      background:#fafafa;
+    }
 
-        <td>
-          <!-- PDF download (PRIMARY) -->
-          <a
-            href="/admin/certificates/{{_id}}/download/pdf"
-            target="_blank"
-            style="font-weight:700"
-          >
-            📄 PDF
-          </a>
+    a{
+      color:#1e90ff;
+      font-weight:600;
+      text-decoration:none;
+    }
 
-          &nbsp;|&nbsp;
+    a:hover{
+      text-decoration:underline;
+    }
 
-          <!-- JSON download (SECONDARY / DEBUG) -->
-          <a
-            href="/admin/certificates/{{_id}}/download"
-          >
-            🧾 JSON
-          </a>
-        </td>
-      </tr>
-    {{/each}}
-  </tbody>
-</table>
+    small{
+      color:#555;
+    }
+  </style>
+</head>
+
+<body>
+  {{> navbar}}
+
+  <main>
+    <h1>🎓 Issued Certificates</h1>
+
+    {{#if certs.length}}
+      <table>
+        <thead>
+          <tr>
+            <th>Serial</th>
+            <th>User</th>
+            <th>Quiz</th>
+            <th>Score</th>
+            <th>Issued</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each certs}}
+            <tr>
+              <td>{{serial}}</td>
+
+              <td>
+                {{#if userId}}
+                  {{userId.name}}<br/>
+                  <small>{{userId.email}}</small>
+                {{else}}
+                  Anonymous
+                {{/if}}
+              </td>
+
+              <td>
+                {{#if quizTitle}}
+                  {{quizTitle}}
+                {{else}}
+                  {{courseTitle}}
+                {{/if}}
+              </td>
+
+              <td>
+                {{score}} ({{percentage}}%)
+              </td>
+
+              <td>
+                {{issuedAt}}
+              </td>
+
+              <td>
+                <a href="/admin/certificates/{{_id}}/download">
+                  Download
+                </a>
+              </td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    {{else}}
+      <p>No certificates issued yet.</p>
+    {{/if}}
+  </main>
+</body>
+</html>
