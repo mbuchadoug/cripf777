@@ -493,27 +493,22 @@ function buildCertificateHtml({
           .replace(/</g,"&lt;")
           .replace(/>/g,"&gt;");
 
-  const org = (orgName || "").toLowerCase();
-
-  const isNyaradzo = /nyaradzo/.test(org);
-  const isCripfcnt = /cripfcnt/.test(org);
+  const isNyaradzo =
+    orgName &&
+    /nyaradzo/i.test(orgName);
 
   /* ===============================
      🎨 BRAND CONFIG
   =============================== */
   const brand = isNyaradzo
     ? {
-        primary: "#0a2e5c",          // Nyaradzo blue
-        accent: "#c9a227",           // Gold
-        logo: `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`,
+        primary: "#0a2e5c",   // Nyaradzo blue
+        accent: "#c9a227",    // Gold
+        logo: isNyaradzo
+  ? `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`
+  : "",
+
         title: "Nyaradzo Group Training Certificate"
-      }
-    : isCripfcnt
-    ? {
-        primary: "#0f5132",          // Deep green (CRIPFCNT)
-        accent: "#20c997",           // Teal accent
-        logo: `${process.env.SITE_URL || ""}/assets/cripfcnt-logo.png`,
-        title: "CRIPFCNT Training Certificate"
       }
     : {
         primary: "#222",
@@ -555,7 +550,7 @@ body {
   overflow:hidden;
 }
 
-/* TOP BAR */
+/* 🔵 TOP BLUE BAR */
 .card::before {
   content:"";
   position:absolute;
@@ -566,11 +561,11 @@ body {
   background:linear-gradient(
     90deg,
     ${brand.primary},
-    ${brand.primary}cc
+    #143f7a
   );
 }
 
-/* ACCENT STRIPE */
+/* 🟡 GOLD STRIPE */
 .card::after {
   content:"";
   position:absolute;
@@ -636,7 +631,7 @@ h1 {
   margin-top:14px;
   padding:10px 20px;
   background:${brand.accent};
-  color:#111;
+  color:#222;
   font-weight:900;
   border-radius:8px;
 }
@@ -691,7 +686,6 @@ h1 {
 </html>
 `;
 }
-
 
 
 /**
