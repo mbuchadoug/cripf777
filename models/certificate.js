@@ -1,18 +1,25 @@
 import mongoose from "mongoose";
 
-const CertificateSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  orgId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization" },
-  examId: { type: String, index: true },
+const CertificateSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    orgId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization" },
 
-  courseTitle: String,
-  score: Number,
-  percentage: Number,
+    examId: { type: String, index: true },
 
-  serial: { type: String, unique: true, index: true }, // public reference
-  issuedAt: { type: Date, default: Date.now },
+    // 🔹 ADD THESE
+    quizTitle: { type: String, trim: true },
+    moduleName: { type: String, trim: true },
 
-}, { timestamps: true });
+    courseTitle: { type: String }, // (you can keep for backward compatibility)
 
-export default mongoose.models.Certificate ||
-  mongoose.model("Certificate", CertificateSchema);
+    score: Number,
+    percentage: Number,
+    serial: { type: String, unique: true },
+
+    issuedAt: { type: Date, default: Date.now }
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("Certificate", CertificateSchema);

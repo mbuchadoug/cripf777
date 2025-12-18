@@ -904,7 +904,7 @@ if (passed) {
       "-" +
       Math.random().toString(36).slice(2, 6).toUpperCase();
 
-    savedCertificate = await Certificate.create({
+   /* savedCertificate = await Certificate.create({
       userId: (req.user && req.user._id)
         ? req.user._id
         : (exam && exam.user) || null,
@@ -919,7 +919,37 @@ if (passed) {
       score,
       percentage,
       serial,
-    });
+    });*/
+
+    savedCertificate = await Certificate.create({
+  userId: (req.user && req.user._id)
+    ? req.user._id
+    : (exam && exam.user) || null,
+
+  orgId: (exam && exam.org) || null,
+  examId: examId || ("exam-" + Date.now().toString(36)),
+
+  // ✅ STORE REAL QUIZ TITLE
+  quizTitle:
+    quizTitleFromClient ||
+    exam?.title ||
+    exam?.quizTitle ||
+    exam?.name ||
+    null,
+
+  // optional but useful
+  moduleName: (exam && exam.module) ? exam.module : (moduleKey || null),
+
+  // legacy support
+  courseTitle: (exam && exam.module)
+    ? exam.module
+    : (moduleKey || "Quiz"),
+
+  score,
+  percentage,
+  serial,
+});
+
   } catch (e) {
     console.error("[quiz/submit] certificate save failed:", e);
   }
