@@ -710,7 +710,16 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
     // If an examId was supplied, redirect to the LMS page with that examId so client requests exact exam instance
     if (examId) {
       // preserve examId in query so /lms/quiz uses it
-      return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}&org=${encodeURIComponent(org.slug)}`);
+     // return res.redirect(`/lms/quiz?examId=${encodeURIComponent(examId)}&org=${encodeURIComponent(org.slug)}`);
+
+     const quizTitle = req.query.quizTitle
+  ? `&quizTitle=${encodeURIComponent(req.query.quizTitle)}`
+  : "";
+
+return res.redirect(
+  `/lms/quiz?examId=${encodeURIComponent(examId)}&org=${encodeURIComponent(org.slug)}${quizTitle}`
+);
+
     }
 
     // No examId: render the normal org module quiz UI (sampling mode / 20 questions)
