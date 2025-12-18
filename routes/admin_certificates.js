@@ -62,8 +62,16 @@ router.get(
 
     if (!cert) return res.status(404).send("Certificate not found");
 
-    const recipientName =
-      cert.userId?.name || cert.userId?.email || "Learner";
+    /*const recipientName =
+      cert.userId?.name || cert.userId?.email || "Learner";*/
+
+
+      const recipientName =
+  cert.userId?.displayName ||
+  [cert.userId?.firstName, cert.userId?.lastName].filter(Boolean).join(" ") ||
+  cert.userId?.email ||
+  "Learner";
+
 
     const orgName = cert.orgId?.name || "Organization";
 
