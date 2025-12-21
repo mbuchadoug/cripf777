@@ -80,35 +80,10 @@
             </div>
 
             <div style="margin-top:6px;">
-  <a href="{{openUrl}}">
-    Open quiz
-  </a>
-
-  {{#if ../../isAdmin}}
-    &nbsp;|&nbsp;
-    <form
-      method="POST"
-      action="/admin/orgs/{{../../org.slug}}/quizzes/{{examId}}/delete"
-      style="display:inline"
-      onsubmit="return confirm('Delete this quiz? This cannot be undone.');"
-    >
-      <button
-        type="submit"
-        style="
-          background:none;
-          border:none;
-          color:#c00;
-          cursor:pointer;
-          font-size:14px;
-          padding:0;
-        "
-      >
-        Delete
-      </button>
-    </form>
-  {{/if}}
-</div>
-
+              <a href="{{openUrl}}">
+                Open quiz
+              </a>
+            </div>
 
             <div class="quiz-status">
               Status: {{status}}

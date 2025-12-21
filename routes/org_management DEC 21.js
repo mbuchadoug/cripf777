@@ -640,46 +640,6 @@ quizzesByModule[key].push({
   }
 });
 
-
-// ------------------------------------------------------------------
-// ADMIN: Delete assigned quiz (exam instance)
-// POST /admin/orgs/:slug/quizzes/:examId/delete
-// ------------------------------------------------------------------
-router.post(
-  "/admin/orgs/:slug/quizzes/:examId/delete",
-  ensureAuth,
-  allowPlatformAdminOrOrgManager,
-  async (req, res) => {
-    try {
-      const slug = String(req.params.slug || "").trim();
-      const examId = String(req.params.examId || "").trim();
-
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
-
-      // delete exam instance
-      const exam = await ExamInstance.findOneAndDelete({
-        examId,
-        org: org._id
-      });
-
-      if (!exam) {
-        return res.status(404).send("quiz not found");
-      }
-
-      // delete related attempts
-      await Attempt.deleteMany({ examId });
-
-      return res.redirect(`/org/${org.slug}/dashboard`);
-    } catch (err) {
-      console.error("[delete quiz] error:", err && err.stack);
-      return res.status(500).send("failed to delete quiz");
-    }
-  }
-);
-
-
-
 /* ------------------------------------------------------------------ */
 /*  ORG: View a single module's learning material                     */
 /*  GET /org/:slug/modules/:moduleSlug                                */
