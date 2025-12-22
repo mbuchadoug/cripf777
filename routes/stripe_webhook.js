@@ -3,6 +3,10 @@ import Stripe from "stripe";
 import User from "../models/user.js";
 
 const router = express.Router();
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error("❌ STRIPE_SECRET_KEY is missing at runtime");
+}
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 router.post("/", async (req, res) => {

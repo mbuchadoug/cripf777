@@ -61,7 +61,10 @@ const app = express();
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 
 // ⚠️ STRIPE WEBHOOK — MUST COME FIRST
-
+app.use(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" })
+);
 
 // Normal parsers for everything else
 /*app.use(express.json());
@@ -210,7 +213,7 @@ app.use(portalRoutes);
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 // ⚠️ must be before express.json()
-app.use("/stripe/webhook", stripeWebhookRoutes);
+//app.use("/stripe", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
