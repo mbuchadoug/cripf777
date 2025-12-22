@@ -67,8 +67,8 @@ app.use(
 );
 
 // Normal parsers for everything else
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+/*app.use(express.json());
+app.use(express.urlencoded({ extended: true }));*/
 
 
 
@@ -213,7 +213,7 @@ app.use(portalRoutes);
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 // ⚠️ must be before express.json()
-app.use("/stripe", stripeWebhookRoutes);
+//app.use("/stripe", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);

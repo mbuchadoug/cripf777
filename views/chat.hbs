@@ -86,6 +86,27 @@
 
   <div id="output"></div>
 
+  <div id="paymentSuccess" style="display:none; margin-top:16px;">
+  <div style="
+    background:#e8f5e9;
+    border:1px solid #c8e6c9;
+    color:#1b5e20;
+    padding:14px 16px;
+    border-radius:10px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  ">
+    <span style="font-size:20px;">✅</span>
+    <span>
+      Payment successful! Your audit credits have been added.
+      You can continue using CRIPFCnt.
+    </span>
+  </div>
+</div>
+
+
   <script>
     // small helper: escape HTML
     function escapeHtml(s){
@@ -332,5 +353,22 @@ if (res.status === 429) {
       }
     }
   </script>
+
+
+  <script>
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paid") === "1") {
+      const banner = document.getElementById("paymentSuccess");
+      if (banner) banner.style.display = "block";
+
+      // Optional: remove ?paid=1 from URL after showing message
+      const url = new URL(window.location.href);
+      url.searchParams.delete("paid");
+      window.history.replaceState({}, document.title, url.pathname);
+    }
+  })();
+</script>
+
 </body>
 </html>
