@@ -1,7 +1,8 @@
 import express from "express";
 import Stripe from "stripe";
+import dotenv from "dotenv";
 import User from "../models/user.js";
-
+dotenv.config();
 const router = express.Router();
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error("❌ STRIPE_SECRET_KEY is missing at runtime");
