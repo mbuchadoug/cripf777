@@ -60,6 +60,18 @@ const app = express();
 // friendly support contact (configurable via .env)
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 
+// ⚠️ STRIPE WEBHOOK — MUST COME FIRST
+app.use(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" })
+);
+
+// Normal parsers for everything else
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+
+
 // Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
