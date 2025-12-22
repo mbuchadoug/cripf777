@@ -1,11 +1,10 @@
 import express from "express";
 import Stripe from "stripe";
-import User from "../models/user.js";
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-router.post("/", async (req, res) => {
+router.post("/", (req, res) => {
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -13,30 +12,21 @@ router.post("/", async (req, res) => {
 
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,   // ✅ RAW BUFFER
+      req.body,          // ✅ RAW BUFFER
       sig,
       endpointSecret
     );
   } catch (err) {
-    console.error("❌ Webhook verification failed:", err.message);
+    console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ✅ PAYMENT SUCCESS
+  // ✅ VERIFIED EVENT
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    const userId = session.metadata?.userId;
-    const credits = Number(session.metadata?.credits || 0);
-
-    if (userId && credits > 0) {
-      await User.findByIdAndUpdate(userId, {
-        $inc: { auditCredits: credits },
-        $set: { paidAt: new Date() }
-      });
-
-      console.log(`✅ Added ${credits} credits to user ${userId}`);
-    }
+    console.log("✅ Checkout completed:", session.id);
+    // TODO: credit user here
   }
 
   res.json({ received: true });
