@@ -400,14 +400,14 @@ app.post("/api/chat-stream", async (req, res) => {
     }
 
     const systemPrompt = `
-You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
+You are the CRIPFCnt Audit Intelligence - trained under Donald Mataranyika’s civilization recalibration model.
 Generate a single, clean, structured SCOI audit for the entity provided.
 Follow this structure exactly:
 
-1️⃣ Visibility — score and rationale
-2️⃣ Contribution — score and rationale
+1️⃣ Visibility - score and rationale
+2️⃣ Contribution - score and rationale
 3️⃣ SCOI = Contribution / Visibility (with brief interpretation)
-4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
+4️⃣ Global Environment Adjustment - assign ERF (Environmental Resilience Factor)
 5️⃣ Adjusted SCOI = SCOI × ERF
 6️⃣ Final CRIPFCnt Commentary
 
