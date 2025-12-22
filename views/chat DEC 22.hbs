@@ -164,77 +164,34 @@
             throw new Error("Server error: " + (txt || `${res.status} ${res.statusText}`));
           }
 
-// 🔒 PAYMENT REQUIRED (PAID CREDITS)
-if (res.status === 402) {
-  output.innerHTML = `
-    <div class="quota-banner">
-      <div style="font-size:22px;font-weight:800;color:#d32f2f;">🔒</div>
-      <div style="flex:1">
-        <div style="font-weight:800;color:#2b2b2b;margin-bottom:6px">
-          Payment required
-        </div>
-        <div style="color:#444;margin-bottom:8px">
-          You’ve used all your free SCOI audits.
-          Purchase credits to continue using CRIPFCnt.
-        </div>
-        <div style="font-size:13px;color:#444">
-          Credits are applied instantly and never expire.
-        </div>
-      </div>
-      <div>
-        <a class="cta" href="/billing">Buy credits</a>
-      </div>
-    </div>
-  `;
-  return;
-}
+          if (res.status === 429) {
+            const used = payload.used ?? 0;
+            const limit = payload.limit ?? 3;
+            const resetAtIso = payload.resetAt || null;
+            const support = payload.support || "support@cripfcnt.com";
+            let resetText = "tomorrow";
+            if (resetAtIso) {
+              try {
+                const dt = new Date(resetAtIso);
+                resetText = dt.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', timeZone: 'UTC' }) + " (UTC)";
+              } catch (e) {}
+            }
 
-// ⏳ DAILY FREE LIMIT REACHED
-if (res.status === 429) {
-  const used = payload.used ?? 0;
-  const limit = payload.limit ?? 3;
-  const resetAtIso = payload.resetAt || null;
-  const support = payload.support || "support@cripfcnt.com";
-
-  let resetText = "tomorrow";
-  if (resetAtIso) {
-    try {
-      const dt = new Date(resetAtIso);
-      resetText = dt.toLocaleString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        day: 'numeric',
-        month: 'short',
-        timeZone: 'UTC'
-      }) + " (UTC)";
-    } catch (e) {}
-  }
-
-  output.innerHTML = `
-    <div class="quota-banner">
-      <div style="font-size:20px;font-weight:800;color:#d32f2f;">✖</div>
-      <div style="flex:1">
-        <div style="font-weight:800;color:#2b2b2b;margin-bottom:6px">
-          Daily free audits used up
-        </div>
-        <div style="color:#444;margin-bottom:8px">
-          You’ve used <strong>${used}</strong> of <strong>${limit}</strong> free audits today.
-          Your quota resets at <strong>${resetText}</strong>.
-        </div>
-        <div style="font-size:13px;color:#444">
-          Need more audits today? Contact
-          <a href="mailto:${support}" style="color:#0a66c2;text-decoration:none">
-            ${support}
-          </a>
-        </div>
-      </div>
-      <div>
-        <a class="cta" href="mailto:${support}">Contact support</a>
-      </div>
-    </div>
-  `;
-  return;
-}
+            output.innerHTML = `
+              <div class="quota-banner">
+                <div style="font-size:20px;font-weight:800;color:#d32f2f;">✖</div>
+                <div style="flex:1">
+                  <div style="font-weight:800;color:#2b2b2b;margin-bottom:6px">Daily free audits used up</div>
+                  <div style="color:#444;margin-bottom:8px">You’ve used <strong>${used}</strong> of <strong>${limit}</strong> free audits for today. Your quota resets at <strong>${resetText}</strong>.</div>
+                  <div style="font-size:13px;color:#444">If you need immediate access to additional audits, contact <a href="mailto:${support}" style="color:#0a66c2;text-decoration:none">${support}</a> to discuss a temporary increase or paid plan.</div>
+                </div>
+                <div>
+                  <a class="cta" href="mailto:${support}">Contact support</a>
+                </div>
+              </div>
+            `;
+            return;
+          }
 
           throw new Error(payload && (payload.message || payload.error) ? (payload.message || payload.error) : "Server error");
         }

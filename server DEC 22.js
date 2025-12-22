@@ -18,9 +18,6 @@ import portalRoutes from "./routes/portal.js";
 import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
 
-import stripeWebhookRoutes from "./routes/stripe_webhook.js";
-
-
 
 
 
@@ -199,8 +196,6 @@ app.use(portalRoutes);
 // Org-related routes
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
-// ⚠️ must be before express.json()
-app.use("/stripe", stripeWebhookRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
 
@@ -350,22 +345,23 @@ app.post("/api/chat-stream", async (req, res) => {
           const current = await User.findById(userId);
           const used = current && current.searchCountDay === today ? current.searchCount || 0 : 0;
 
-         // No free quota left — try paid credits
-if (current.auditCredits && current.auditCredits > 0) {
-  await User.findByIdAndUpdate(userId, {
-    $inc: { auditCredits: -1 },
-    $set: { lastLogin: new Date() }
-  });
-  // ✅ allow request to continue (DO NOT return)
-} else {
-  // ❌ no free quota, no credits → paywall
-  return res.status(402).json({
-    error: "Payment required",
-    message: "You’ve used all free audits for today. Purchase credits to continue.",
-    paywall: true
-  });
-}
+          const resetAtDate = new Date();
+          resetAtDate.setUTCHours(24, 0, 0, 0);
+          const resetAtISO = resetAtDate.toISOString();
 
+          
+          return res.status(429).json({
+            error: "Daily search limit reached",
+            message: `You have reached your daily limit of ${DAILY_LIMIT} searches (used: ${used}). Please try again tomorrow or contact support.`,
+            used,
+            limit: DAILY_LIMIT,
+            friendly: `You’ve used ${used} of ${DAILY_LIMIT} free audits today. Your free quota will reset at ${resetAtDate.toLocaleString(
+              "en-GB",
+              { timeZone: "UTC" }
+            )} (UTC). If you need more audits today, contact ${SUPPORT_EMAIL}.`,
+            resetAt: resetAtISO,
+            support: SUPPORT_EMAIL,
+          });
         }
       }
     }

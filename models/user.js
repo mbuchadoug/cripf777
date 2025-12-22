@@ -22,6 +22,9 @@ role: { type: String, enum: ["employee","org_admin","super_admin"], default: "em
   // 'searchCount' stores how many searches used on that day.
   searchCountDay: { type: String, index: true, default: null },
   searchCount: { type: Number, default: 0 },
+  // add to UserSchema
+auditCredits: { type: Number, default: 0 },
+paidAt: { type: Date, default: null },
 }, { strict: true });
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
