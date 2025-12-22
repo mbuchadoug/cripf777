@@ -67,6 +67,11 @@ const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 /*app.use(express.json());
 app.use(express.urlencoded({ extended: true }));*/
 
+// 1️⃣ Stripe webhook FIRST (raw body)
+app.use("/stripe/webhook", express.raw({ type: "application/json" }));
+app.use("/stripe/webhook", stripeWebhookRoutes);
+
+
 
 
 // Basic middleware
@@ -210,7 +215,7 @@ app.use(portalRoutes);
 app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 // ⚠️ must be before express.json()
-app.use("/stripe/webhook", stripeWebhookRoutes);
+//app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
@@ -343,43 +348,37 @@ app.post("/api/chat-stream", async (req, res) => {
 
   try {
     // enforce daily limit for non-admins
-    if (!isAdmin) {
-      const incResult = await User.findOneAndUpdate(
-        { _id: userId, searchCountDay: today, searchCount: { $lt: DAILY_LIMIT } },
-        { $inc: { searchCount: 1 }, $set: { lastLogin: new Date() } },
-        { new: true }
-      );
+ if (!isAdmin) {
+  const current = await User.findById(userId);
 
-      if (!incResult) {
-        const resetResult = await User.findOneAndUpdate(
-          { _id: userId, $or: [{ searchCountDay: { $exists: false } }, { searchCountDay: { $ne: today } }] },
-          { $set: { searchCountDay: today, searchCount: 1, lastLogin: new Date() } },
-          { new: true }
-        );
+  // 🔁 Reset daily quota if new day
+  if (current.searchCountDay !== today) {
+    current.searchCountDay = today;
+    current.searchCount = 0;
+  }
 
-        if (!resetResult) {
-          const current = await User.findById(userId);
-          const used = current && current.searchCountDay === today ? current.searchCount || 0 : 0;
-
-         // No free quota left — try paid credits
-if (current.auditCredits && current.auditCredits > 0) {
-  await User.findByIdAndUpdate(userId, {
-    $inc: { auditCredits: -1 },
-    $set: { lastLogin: new Date() }
-  });
-  // ✅ allow request to continue (DO NOT return)
-} else {
-  // ❌ no free quota, no credits → paywall
-  return res.status(402).json({
-    error: "Payment required",
-    message: "You’ve used all free audits for today. Purchase credits to continue.",
-    paywall: true
-  });
+  // ✅ USE FREE DAILY QUOTA FIRST
+  if (current.searchCount < DAILY_LIMIT) {
+    current.searchCount += 1;
+    current.lastLogin = new Date();
+    await current.save();
+  }
+  // ✅ THEN USE PAID CREDITS
+  else if (current.auditCredits > 0) {
+    current.auditCredits -= 1;
+    current.lastLogin = new Date();
+    await current.save();
+  }
+  // ❌ NOTHING LEFT
+  else {
+    return res.status(402).json({
+      error: "Payment required",
+      message: "You’ve used all free audits and credits. Purchase more to continue.",
+      paywall: true
+    });
+  }
 }
 
-        }
-      }
-    }
 
     // Setup SSE headers & keep-alive after credit has been consumed
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
