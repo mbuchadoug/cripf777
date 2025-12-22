@@ -19,6 +19,7 @@ import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
 
 import stripeWebhookRoutes from "./routes/stripe_webhook.js";
+import billingRoutes from "./routes/billing.js";
 
 
 
@@ -201,6 +202,7 @@ app.use(adminOrganizationRoutes);
 app.use(orgManagementRoutes);
 // ⚠️ must be before express.json()
 app.use("/stripe", stripeWebhookRoutes);
+app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
 

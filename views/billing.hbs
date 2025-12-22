@@ -1,0 +1,38 @@
+<div style="max-width:720px;margin:40px auto;padding:20px;">
+  <h1>Buy SCOI Audit Credits</h1>
+
+  <p>
+    Credits unlock additional CRIPFCnt SCOI audits.
+    They never expire and are applied instantly.
+  </p>
+
+  <hr />
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap">
+
+    <!-- Starter -->
+    <div style="border:1px solid #ddd;padding:20px;border-radius:8px;flex:1">
+      <h3>Starter</h3>
+      <p><strong>$5</strong> — 20 audits</p>
+      <button onclick="buyPlan('starter')">Buy Starter</button>
+    </div>
+
+    <!-- Pro -->
+    <div style="border:1px solid #ddd;padding:20px;border-radius:8px;flex:1">
+      <h3>Pro</h3>
+      <p><strong>$15</strong> — 100 audits</p>
+      <button onclick="buyPlan('pro')">Buy Pro</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+async function buyPlan(plan) {
+  alert(
+    "Payment flow placeholder.\n\n" +
+    "Plan selected: " + plan + "\n\n" +
+    "Next step: Stripe Checkout or PaymentIntent."
+  );
+}
+</script>
