@@ -36,6 +36,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.17.2",
     "puppeteer": "^19.7.2",
+    "stripe": "^20.1.0",
     "tavily": "^1.0.2",
     "undici": "^7.16.0"
   }

@@ -560,10 +560,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       )}&org=${encodeURIComponent(org.slug)}`;*/
       // replacement (correct)
 //const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
-//let quizTitle = `${moduleLabel} Quiz`;
-
-let quizTitle = ex.title || `${moduleLabel} Quiz`;
-
+let quizTitle = `${moduleLabel} Quiz`;
 let questionCount = 0;
 
 
@@ -864,19 +861,18 @@ router.post(
             const examId = crypto.randomUUID();
             const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
-         await ExamInstance.create({
-  examId,
-  title: parent.text || "Comprehension Quiz",   // ✅ ADD THIS
-  org: org._id,
-  module: moduleKey,
-  user: mongoose.Types.ObjectId(uId),
-  questionIds,
-  choicesOrder,
-  expiresAt,
-  createdAt: new Date(),
-  createdByIp: req.ip,
-});
-
+            await ExamInstance.create({
+              examId,
+              org: org._id,
+              module: moduleKey,
+              user: mongoose.Types.ObjectId(uId),
+              // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
+              questionIds,
+              choicesOrder,
+              expiresAt,
+              createdAt: new Date(),
+              createdByIp: req.ip,
+            });
 
             if (Attempt) {
               await Attempt.create({
@@ -963,19 +959,17 @@ router.post(
           const examId = crypto.randomUUID();
           const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
-         await ExamInstance.create({
-  examId,
-  title: parent.text || "Comprehension Quiz",   // ✅ ADD THIS
-  org: org._id,
-  module: moduleKey,
-  user: mongoose.Types.ObjectId(uId),
-  questionIds,
-  choicesOrder,
-  expiresAt,
-  createdAt: new Date(),
-  createdByIp: req.ip,
-});
-
+          await ExamInstance.create({
+            examId,
+            org: org._id,
+            module: moduleKey,
+            user: mongoose.Types.ObjectId(uId),
+            questionIds,
+            choicesOrder,
+            expiresAt,
+            createdAt: new Date(),
+            createdByIp: req.ip,
+          });
 
           if (Attempt) {
             await Attempt.create({

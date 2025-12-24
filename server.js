@@ -158,7 +158,7 @@ if (!fs.existsSync(path.dirname(dataPath))) {
 // --------- MONGOOSE connect ----------
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — sessions will not be persisted to MongoDB.");
+  console.error("❌ MONGODB_URI missing in .env - sessions will not be persisted to MongoDB.");
 } else {
   mongoose.set("strictQuery", true);
   mongoose
@@ -255,17 +255,17 @@ function formatSCOI(entityData, entity) {
   const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
 
   return `
-### SCOI Audit — ${entity}
+### SCOI Audit - ${entity}
 
 ---
 
-**1️⃣ Visibility — Score: ${visibility} / 10**  
+**1️⃣ Visibility - Score: ${visibility} / 10**  
 **Rationale:**  
 ${visibilityRationale}
 
 ---
 
-**2️⃣ Contribution — Score: ${contribution} / 10**  
+**2️⃣ Contribution - Score: ${contribution} / 10**  
 **Rationale:**  
 ${contributionRationale}
 
