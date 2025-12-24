@@ -92,7 +92,7 @@ app.use((req, res, next) => {
 
 function renderPage(res, view, req, canonicalPath, extra = {}) {
   res.render(view, {
-    siteUrl: SITE_URL,
+    siteUrl: process.env.SITE_URL ,
     canonicalPath,
     isHome: canonicalPath === "/",
     user: req.user || null,
