@@ -89,17 +89,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
-function renderPage(res, view, req, canonicalPath, extra = {}) {
-  res.render(view, {
-    siteUrl: SITE_URL,
-    canonicalPath,
-    isHome: canonicalPath === "/",
-    user: req.user || null,
-    ...extra,
-  });
-}
-
 // -------------------------------
 // 🧱 Handlebars setup (with helpers)
 // -------------------------------
@@ -314,21 +303,17 @@ ${commentary}
 
 // Public pages
 app.get("/", (req, res) => {
-  renderPage(res, "website/index", req, "/");
+  res.render("website/index", { user: req.user || null });
 });
-
 app.get("/about", (req, res) => {
-  renderPage(res, "website/about", req, "/about");
+  res.render("website/about", { user: req.user || null });
 });
-
 app.get("/services", (req, res) => {
-  renderPage(res, "website/services", req, "/services");
+  res.render("website/services", { user: req.user || null });
 });
-
 app.get("/contact", (req, res) => {
-  renderPage(res, "website/contact", req, "/contact");
+  res.render("website/contact", { user: req.user || null });
 });
-
 
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page (protected)
