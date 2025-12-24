@@ -208,58 +208,47 @@
   </section>
 
   <!-- PRODUCTS -->
-  <section class="products">
-    <h2>Available SCOI Audits</h2>
+<!-- PRODUCTS -->
+<section class="products">
+  <h2>Available Archived SCOI Audits</h2>
 
+  {{#if audits.length}}
     <div class="product-grid">
+      {{#each audits}}
+        <div class="product">
+          <div>
+            <h3>{{this.subject.name}}</h3>
 
-      <!-- ARCHIVED -->
-      <div class="product">
-        <div>
-          <h3>Archived Placement Audit</h3>
-          <div class="price">$149</div>
-          <ul>
-            <li>Historical structural snapshot</li>
-            <li>Immutable, non-retroactive</li>
-            <li>Includes Placement & Grid SCOI</li>
-            <li>Formal narrative & diagnosis</li>
-          </ul>
+            <p style="color:var(--muted);font-size:14px;margin-top:6px">
+              Assessment Window: {{this.assessmentWindow.label}}
+            </p>
+
+            <div class="price">${{../price}}</div>
+
+            <ul>
+              <li>Archived, immutable placement audit</li>
+              <li>Includes Placement & Grid SCOI</li>
+              <li>Structural diagnosis & narrative</li>
+              <li>Historical reference (non-retroactive)</li>
+            </ul>
+          </div>
+
+          <form method="POST" action="/scoi/checkout">
+            <input type="hidden" name="auditId" value="{{this._id}}">
+            <button class="btn btn-primary" type="submit">
+              Purchase Audit
+            </button>
+          </form>
         </div>
-        <a class="btn btn-outline" href="/checkout/archived">Purchase Audit</a>
-      </div>
-
-      <!-- ACTIVE -->
-      <div class="product">
-        <div>
-          <h3>Active Placement Audit</h3>
-          <div class="price">$299</div>
-          <ul>
-            <li>Current placement intelligence</li>
-            <li>Rolling revision framework</li>
-            <li>Strategic risk indicators</li>
-            <li>Executive-grade report</li>
-          </ul>
-        </div>
-        <a class="btn btn-primary" href="/checkout/active">Purchase Audit</a>
-      </div>
-
-      <!-- CUSTOM -->
-      <div class="product">
-        <div>
-          <h3>Institutional / Custom Audit</h3>
-          <div class="price">By Request</div>
-          <ul>
-            <li>Multi-entity analysis</li>
-            <li>Board & policy alignment</li>
-            <li>Scenario-based diagnosis</li>
-            <li>Direct CRIPFCnt involvement</li>
-          </ul>
-        </div>
-        <a class="btn btn-outline" href="/contact">Request Consultation</a>
-      </div>
-
+      {{/each}}
     </div>
-  </section>
+  {{else}}
+    <p style="color:var(--muted)">
+      No archived SCOI audits are currently available.
+    </p>
+  {{/if}}
+</section>
+
 
   <!-- FOOTER NOTE -->
   <div class="note">
