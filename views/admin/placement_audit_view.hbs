@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>CRIPFCnt SCOI Audit — {{audit.subject.name}}</title>
+  <title>CRIPFCnt SCOI Audit | {{audit.subject.name}}</title>
 
   <style>
     body {
@@ -191,12 +191,12 @@
     <div class="subtitle">Structural Placement Assessment</div>
 
     <div class="audit-meta">
-      <div><span>Subject</span>{{audit.subject.name}}</div>
-      <div><span>Audit Type</span>Dual Matrix (Visibility × Contribution)</div>
-      <div><span>Assessment Window</span>{{audit.assessmentWindow.label}}</div>
-      <div><span>Status</span>{{audit.status}}</div>
-      <div><span>Revision Policy</span>{{audit.revisionPolicy}}</div>
-      <div><span>Author</span>{{audit.author}}</div>
+      <div><span>Subject :</span>{{audit.subject.name}}</div>
+      <div><span>Audit Type :</span>Dual Matrix (Visibility × Contribution)</div>
+      <div><span>Assessment Window :</span>{{audit.assessmentWindow.label}}</div>
+      <div><span>Status :</span>{{audit.status}}</div>
+      <div><span>Revision Policy :</span>{{audit.revisionPolicy}}</div>
+      <div><span>Author :</span>{{audit.author}}</div>
     </div>
   </header>
 
@@ -206,7 +206,7 @@
   </section>
 
   <section>
-    <h2>Context — {{audit.context.period}}</h2>
+    <h2>Context - {{audit.context.period}}</h2>
     <ul>
       {{#each audit.context.conditions}}
         <li>{{this}}</li>
@@ -280,7 +280,7 @@
   </section>
 
   <footer class="audit-footer">
-    CRIPFCnt SCOI Framework — Archived Placement Audit
+    CRIPFCnt SCOI Framework | Archived Placement Audit
   </footer>
 
 </article>
