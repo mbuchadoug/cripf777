@@ -5,9 +5,6 @@ import { ensureAuth } from "../middleware/authGuard.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = Router();
 
-/**
- * Create checkout for SCOI audit report
- */
 router.post("/scoi/checkout", ensureAuth, async (req, res) => {
   const { auditId, type } = req.body;
 
@@ -17,7 +14,7 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
   };
 
   if (!pricing[type]) {
-    return res.status(400).json({ error: "Invalid audit type" });
+    return res.status(400).send("Invalid audit type");
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -29,24 +26,24 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
         price_data: {
           currency: "usd",
           product_data: {
-            name: `CRIPFCnt ${type} SCOI Audit Report`,
+            name: `CRIPFCnt ${type} SCOI Audit Report`
           },
-          unit_amount: pricing[type],
+          unit_amount: pricing[type]
         },
-        quantity: 1,
-      },
+        quantity: 1
+      }
     ],
     metadata: {
-      type: "scoi_audit_report",   // 🔑 webhook switch
+      type: "scoi_audit_report",
       auditId,
-      userId: req.user._id.toString(),
-      price: pricing[type] / 100
+      userId: req.user._id.toString()
     },
     success_url: `${process.env.SITE_URL}/scoi/purchased`,
-    cancel_url: `${process.env.SITE_URL}/scoi`,
+    cancel_url: `${process.env.SITE_URL}/scoi`
   });
 
-  res.json({ url: session.url });
+  // ✅ IMPORTANT FIX
+  res.redirect(session.url);
 });
 
 export default router;

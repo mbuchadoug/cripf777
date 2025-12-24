@@ -233,12 +233,15 @@
             </ul>
           </div>
 
-        <a
-  class="btn btn-primary"
-  href="/scoi/checkout/{{this._id}}"
->
-  Purchase Audit
-</a>
+ <form method="POST" action="/scoi/checkout">
+  <input type="hidden" name="auditId" value="{{this._id}}">
+  <input type="hidden" name="type" value="archived">
+
+  <button class="btn btn-primary" type="submit">
+    Purchase Audit
+  </button>
+</form>
+
 
         </div>
       {{/each}}
