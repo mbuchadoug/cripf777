@@ -1,118 +1,93 @@
-<a href="/admin/placement-audits">← Back to list</a>
+<pre style="white-space:pre-wrap;font-family:Inter,monospace">
 
-<h1>{{framework}}</h1>
+{{framework}} AUDIT
+Subject: {{subject.name}}
+Audit Type: {{matrix}} Matrix (Visibility × Contribution)
+Assessment Window: {{assessmentWindow.label}}
+Status: {{status}}
+Revision: {{revisionPolicy}}
 
-<hr />
+--------------------------------------------
+PURPOSE OF AUDIT
+--------------------------------------------
+{{purposeText}}
 
-<h3>Subject</h3>
-<p><strong>Name:</strong> {{audit.subject.name}}</p>
-<p><strong>Type:</strong> {{audit.subject.entityType}}</p>
+--------------------------------------------
+{{context.title}}
+--------------------------------------------
+{{#each context.bullets}}
+- {{this}}
+{{/each}}
 
-<p><strong>Status:</strong> {{audit.status}}</p>
-<p><strong>Audit Type:</strong> {{audit.auditType}}</p>
-<p><strong>Matrix:</strong> {{audit.matrix}}</p>
-<p><strong>Assessment Window:</strong> {{audit.assessmentWindow.label}}</p>
+--------------------------------------------
+CORE SCOI SCORES
+--------------------------------------------
 
-<hr />
+{{coreScores.visibility.scoreLabel}}: {{coreScores.visibility.value}} / {{coreScores.visibility.scale}}
 
-{{#if audit.purpose}}
-<h2>Purpose</h2>
-<p>{{audit.purpose}}</p>
-<hr />
-{{/if}}
+{{coreScores.visibility.definition}}
+{{#each coreScores.visibility.narrative}}
+- {{this}}
+{{/each}}
 
-{{#if audit.context}}
-<h2>Context</h2>
+Interpretation:
+{{coreScores.visibility.interpretation}}
 
-{{#if audit.context.period}}
-<p><strong>Period:</strong> {{audit.context.period}}</p>
-{{/if}}
+--------------------------------------------
 
-{{#if audit.context.conditions.length}}
-<ul>
-  {{#each audit.context.conditions}}
-    <li>{{this}}</li>
-  {{/each}}
-</ul>
-{{/if}}
+{{coreScores.contribution.scoreLabel}}: {{coreScores.contribution.value}} / {{coreScores.contribution.scale}}
 
-<hr />
-{{/if}}
+{{coreScores.contribution.definition}}
+{{#each coreScores.contribution.narrative}}
+- {{this}}
+{{/each}}
 
-{{#if audit.scores.visibility}}
-<h2>1️⃣ Visibility</h2>
-<p>
-  <strong>Score:</strong>
-  {{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}
-</p>
+Limiting factors:
+{{#each coreScores.contribution.limitations}}
+- {{this}}
+{{/each}}
 
-{{#if audit.scores.visibility.interpretation}}
-<p>{{audit.scores.visibility.interpretation}}</p>
-{{/if}}
+Interpretation:
+{{coreScores.contribution.interpretation}}
 
-<hr />
-{{/if}}
+--------------------------------------------
+{{calculations.placementSCOI.title}}
+--------------------------------------------
 
-{{#if audit.scores.contribution}}
-<h2>2️⃣ Contribution</h2>
-<p>
-  <strong>Score:</strong>
-  {{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}
-</p>
+{{calculations.placementSCOI.formulaText}}
+{{calculations.placementSCOI.workedExample}}
 
-{{#if audit.scores.contribution.interpretation}}
-<p>{{audit.scores.contribution.interpretation}}</p>
-{{/if}}
+{{#each calculations.placementSCOI.meaning}}
+{{this}}
+{{/each}}
 
-{{#if audit.scores.contribution.limitations.length}}
-<h4>Limitations</h4>
-<ul>
-  {{#each audit.scores.contribution.limitations}}
-    <li>{{this}}</li>
-  {{/each}}
-</ul>
-{{/if}}
+--------------------------------------------
+{{calculations.gridSCOI.title}}
+--------------------------------------------
 
-<hr />
-{{/if}}
+{{calculations.gridSCOI.formulaText}}
+{{calculations.gridSCOI.workedExample}}
 
-{{#if audit.calculations}}
-<h2>3️⃣ Placement SCOI</h2>
+{{#each calculations.gridSCOI.meaning}}
+{{this}}
+{{/each}}
 
-{{#if audit.calculations.placementSCOI}}
-<p><strong>Formula:</strong> {{audit.calculations.placementSCOI.formula}}</p>
-<p><strong>Value:</strong> {{audit.calculations.placementSCOI.value}}</p>
-{{/if}}
+--------------------------------------------
+STRUCTURAL DIAGNOSIS
+--------------------------------------------
+{{#each structuralDiagnosis.bullets}}
+- {{this}}
+{{/each}}
 
-<hr />
+--------------------------------------------
+FINAL PLACEMENT STATEMENT
+--------------------------------------------
+{{finalPlacementStatement}}
 
-<h2>4️⃣ Grid SCOI (Inverse)</h2>
+--------------------------------------------
+TEMPORAL NOTICE
+--------------------------------------------
+{{temporalNotice}}
 
-{{#if audit.calculations.gridSCOI}}
-<p><strong>Formula:</strong> {{audit.calculations.gridSCOI.formula}}</p>
-<p><strong>Value:</strong> {{audit.calculations.gridSCOI.value}}</p>
-{{/if}}
-
-<hr />
-{{/if}}
-
-{{#if audit.confidenceLevel}}
-<h2>Confidence Level</h2>
-<p>{{audit.confidenceLevel}}</p>
-<hr />
-{{/if}}
-
-{{#if audit.citations.length}}
-<h2>Citations</h2>
-<ul>
-  {{#each audit.citations}}
-    <li>{{this}}</li>
-  {{/each}}
-</ul>
-<hr />
-{{/if}}
-
-<h3>Metadata</h3>
-<p><strong>Author:</strong> {{audit.author}}</p>
-<p><strong>Revision Policy:</strong> {{audit.revisionPolicy}}</p>
-<p><strong>Created At:</strong> {{audit.createdAt}}</p>
+End of Archived Audit.
+</pre>
