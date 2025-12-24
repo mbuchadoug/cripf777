@@ -209,6 +209,10 @@ router.get(
         .populate("user")
         .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
+console.log("ORG ID:", org._id.toString());
+
+const sample = await Question.findOne({ type: "comprehension" }).lean();
+console.log("SAMPLE PASSAGE ORG:", sample?.organization?.toString());
 
       return res.render("admin/org_manage", {
   org,
