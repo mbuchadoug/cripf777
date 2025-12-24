@@ -1,21 +1,22 @@
-<pre style="white-space:pre-wrap;font-family:Inter,monospace">
+<pre style="font-family: monospace; white-space: pre-wrap; line-height:1.6">
 
-{{framework}} AUDIT
-Subject: {{subject.name}}
-Audit Type: {{matrix}} Matrix (Visibility × Contribution)
-Assessment Window: {{assessmentWindow.label}}
-Status: {{status}}
-Revision: {{revisionPolicy}}
+CRIPFCnt SCOI AUDIT
+
+Subject: {{audit.subject.name}}
+Audit Type: Dual Matrix (Visibility × Contribution)
+Assessment Window: {{audit.assessmentWindow.label}}
+Status: {{audit.status}}
+Revision: {{audit.revisionPolicy}}
 
 --------------------------------------------
 PURPOSE OF AUDIT
 --------------------------------------------
-{{purposeText}}
+{{audit.purpose}}
 
 --------------------------------------------
-{{context.title}}
+CONTEXT — {{audit.context.period}}
 --------------------------------------------
-{{#each context.bullets}}
+{{#each audit.context.conditions}}
 - {{this}}
 {{/each}}
 
@@ -23,71 +24,70 @@ PURPOSE OF AUDIT
 CORE SCOI SCORES
 --------------------------------------------
 
-{{coreScores.visibility.scoreLabel}}: {{coreScores.visibility.value}} / {{coreScores.visibility.scale}}
+VISIBILITY SCORE (V): {{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}
 
-{{coreScores.visibility.definition}}
-{{#each coreScores.visibility.narrative}}
-- {{this}}
-{{/each}}
+{{audit.scores.visibility.definition}}
+
+{{audit.scores.visibility.narrative}}
 
 Interpretation:
-{{coreScores.visibility.interpretation}}
+{{audit.scores.visibility.interpretation}}
 
 --------------------------------------------
 
-{{coreScores.contribution.scoreLabel}}: {{coreScores.contribution.value}} / {{coreScores.contribution.scale}}
+CONTRIBUTION SCORE (C): {{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}
 
-{{coreScores.contribution.definition}}
-{{#each coreScores.contribution.narrative}}
-- {{this}}
-{{/each}}
+{{audit.scores.contribution.definition}}
 
+{{audit.scores.contribution.narrative}}
+
+{{#if audit.scores.contribution.limitations.length}}
 Limiting factors:
-{{#each coreScores.contribution.limitations}}
+{{#each audit.scores.contribution.limitations}}
 - {{this}}
 {{/each}}
+{{/if}}
 
 Interpretation:
-{{coreScores.contribution.interpretation}}
+{{audit.scores.contribution.interpretation}}
 
 --------------------------------------------
-{{calculations.placementSCOI.title}}
+CRIPFCnt SCOI (PLACEMENT-BOUND)
 --------------------------------------------
 
-{{calculations.placementSCOI.formulaText}}
-{{calculations.placementSCOI.workedExample}}
+CRIPFCnt SCOI = {{audit.calculations.placementSCOI.formula}}
+{{audit.calculations.placementSCOI.working}}
+≈ {{audit.calculations.placementSCOI.value}}
 
-{{#each calculations.placementSCOI.meaning}}
-{{this}}
-{{/each}}
+Meaning:
+{{audit.calculations.placementSCOI.meaning}}
 
 --------------------------------------------
-{{calculations.gridSCOI.title}}
+GRID SCOI (INVERSE / GRID FRIENDLINESS)
 --------------------------------------------
 
-{{calculations.gridSCOI.formulaText}}
-{{calculations.gridSCOI.workedExample}}
+Grid SCOI = {{audit.calculations.gridSCOI.formula}}
+{{audit.calculations.gridSCOI.working}}
+≈ {{audit.calculations.gridSCOI.value}}
 
-{{#each calculations.gridSCOI.meaning}}
-{{this}}
-{{/each}}
+Meaning:
+{{audit.calculations.gridSCOI.meaning}}
 
 --------------------------------------------
 STRUCTURAL DIAGNOSIS
 --------------------------------------------
-{{#each structuralDiagnosis.bullets}}
-- {{this}}
-{{/each}}
+{{audit.structuralDiagnosis}}
 
 --------------------------------------------
 FINAL PLACEMENT STATEMENT
 --------------------------------------------
-{{finalPlacementStatement}}
+{{audit.finalPlacementStatement}}
 
 --------------------------------------------
 TEMPORAL NOTICE
 --------------------------------------------
-{{temporalNotice}}
+{{audit.temporalNotice}}
 
 End of Archived Audit.
+
 </pre>
