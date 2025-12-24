@@ -311,43 +311,7 @@
             fb.innerHTML = '<span class="error">Invite failed: ' + (data.error || 'unknown') + '</span>';
             return;
           }
-    const base =
-  document.querySelector('base')?.href ||
-  `${location.protocol}//${location.host}`;
-
-const inviteLink = `${base}/org/join/${data.token}`;
-
-fb.innerHTML = `
-  <div class="success">
-    <strong>Invite created ✅</strong><br><br>
-
-    <strong>Invite link (for WhatsApp):</strong><br>
-    <input
-      type="text"
-      value="${inviteLink}"
-      readonly
-      style="
-        width:100%;
-        padding:8px;
-        margin-top:6px;
-        border:1px solid #ccc;
-        border-radius:6px;
-        font-size:13px;
-      "
-      onclick="this.select()"
-    />
-
-    <div class="muted small" style="margin-top:6px">
-      Copy this link and send it to the user on WhatsApp
-    </div>
-
-    <div class="muted small">
-      Token: <code>${data.token}</code>
-    </div>
-  </div>
-`;
-
-
+          fb.innerHTML = '<span class="success">Invite created. Token: <code>' + (data.token || '') + '</code></span>';
           const ul = document.getElementById('invitesList');
           const li = document.createElement('li');
           li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
