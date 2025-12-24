@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{audit.subject.name}} | SCOI Audit</title>
+
+  <style>
+    body { font-family: Inter, system-ui, Arial; background:#f6f8fb; margin:0; }
+    main { max-width:900px; margin:40px auto; background:#fff; padding:32px; border-radius:14px; }
+    h1 { margin-top:0; }
+    h2 { margin-top:28px; color:#003366; }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+    .badge { padding:4px 10px; border-radius:14px; background:#eef2ff; font-size:13px; display:inline-block; }
+    .section { margin-top:22px; }
+    .score { font-weight:700; }
+    .calc { background:#f9fafb; padding:14px; border-radius:10px; font-family:monospace; }
+    .note { background:#fff8e1; padding:14px; border-left:4px solid #ffcc00; border-radius:8px; }
+    .muted { color:#555; }
+    a.back { display:inline-block; margin-bottom:18px; text-decoration:none; color:#0b6fb7; font-weight:600; }
+  </style>
+</head>
+
+<body>
+  <main>
+    <a class="back" href="/admin/placement-audits">← Back to list</a>
+
+    <h1>CRIPFCnt SCOI Audit</h1>
+
+    <div class="meta">
+      <div>
+        <strong>Subject:</strong><br>
+        {{audit.subject.name}} ({{audit.subject.entityType}})
+      </div>
+      <div>
+        <strong>Status:</strong><br>
+        <span class="badge">{{audit.status}}</span>
+      </div>
+      <div>
+        <strong>Assessment Window:</strong><br>
+        {{audit.assessmentWindow.label}}
+      </div>
+      <div>
+        <strong>Audit Type:</strong><br>
+        {{audit.auditType}}
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="section">
+      <h2>1️⃣ Visibility</h2>
+      <p class="score">Score: {{audit.visibility.score}} / 10</p>
+      <p>{{audit.visibility.rationale}}</p>
+    </div>
+
+    <div class="section">
+      <h2>2️⃣ Contribution</h2>
+      <p class="score">Score: {{audit.contribution.score}} / 10</p>
+      <p>{{audit.contribution.rationale}}</p>
+    </div>
+
+    <div class="section">
+      <h2>3️⃣ Placement SCOI</h2>
+      <div class="calc">
+        Contribution ÷ Visibility<br>
+        {{audit.contribution.score}} ÷ {{audit.visibility.score}}
+        = <strong>{{audit.calculations.placementSCOI}}</strong>
+      </div>
+      <p>{{audit.interpretations.placementMeaning}}</p>
+    </div>
+
+    <div class="section">
+      <h2>4️⃣ Grid SCOI (Inverse)</h2>
+      <div class="calc">
+        Visibility ÷ Contribution<br>
+        {{audit.visibility.score}} ÷ {{audit.contribution.score}}
+        = <strong>{{audit.calculations.gridSCOI}}</strong>
+      </div>
+      <p>{{audit.interpretations.gridMeaning}}</p>
+    </div>
+
+    <div class="section">
+      <h2>Structural Diagnosis</h2>
+      <p>{{audit.diagnosis}}</p>
+    </div>
+
+    <div class="section">
+      <h2>Final Placement Statement</h2>
+      <p>{{audit.finalStatement}}</p>
+    </div>
+
+    <div class="section note">
+      <strong>Temporal Notice</strong><br>
+      {{audit.temporalNotice}}
+    </div>
+
+  </main>
+</body>
+</html>

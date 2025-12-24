@@ -23,4 +23,26 @@ router.get("/admin/placement-audits", ensureAuth, async (req, res) => {
   }
 });
 
+
+
+router.get(
+  "/admin/placement-audits/:id",
+  ensureAuth,
+  async (req, res) => {
+    try {
+      const audit = await PlacementAudit.findById(req.params.id).lean();
+      if (!audit) return res.status(404).send("Audit not found");
+
+      res.render("admin/placement_audit_view", {
+        audit
+      });
+    } catch (err) {
+      console.error("[placement audit view]", err);
+      res.status(500).send("Failed to load audit");
+    }
+  }
+);
+
+
+
 export default router;
