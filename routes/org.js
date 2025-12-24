@@ -174,38 +174,13 @@ router.get(
         .populate("user")
         .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
-// 🔹 Load passages (comprehension parents) for this org
-const passages = await Question.collection.find({
-  type: "comprehension",
-  $or: [
-    { organization: org._id },
-    { organization: { $exists: false } },
-    { organization: null }
-  ]
-}).toArray()
-.select("_id text module questionIds organization")
-.sort({ createdAt: -1 })
-.lean();
 
-// shape for UI
-const passageOptions = passages.map(p => ({
-  _id: p._id,
-  title: p.text || "Comprehension Passage",
-  childCount: Array.isArray(p.questionIds) ? p.questionIds.length : 0,
-  module: p.module || "general",
-  organization: p.organization || null
-}));
-
-     return res.render("admin/org_manage", {
-  org,
-  invites,
-  memberships,
-  modules,
-  passages: passageOptions,   // ✅ THIS IS THE MISSING PIECE
-  user: req.user,
-  isAdmin: true
-});
-
+      return res.render("admin/org_manage", {
+        org,
+        invites,
+        memberships,
+        modules,
+      });
     } catch (err) {
       console.error("[admin org manage] error:", err && (err.stack || err));
       return res.status(500).send("failed");

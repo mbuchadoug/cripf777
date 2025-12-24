@@ -213,12 +213,34 @@ console.log("ORG ID:", org._id.toString());
 
 const sample = await Question.findOne({ type: "comprehension" }).lean();
 console.log("SAMPLE PASSAGE ORG:", sample?.organization?.toString());
+// Load comprehension passages (org-specific + global)
+const passagesRaw = await Question.find({
+  type: "comprehension",
+  $or: [
+    { organization: org._id },
+    { organization: { $exists: false } },
+    { organization: null }
+  ]
+})
+  .sort({ createdAt: -1 })
+  .select("_id text module questionIds organization")
+  .lean();
+
+// Shape for UI
+const passages = passagesRaw.map(p => ({
+  _id: p._id,
+  title: p.text || "Comprehension Passage",
+  childCount: Array.isArray(p.questionIds) ? p.questionIds.length : 0,
+  module: p.module || "general",
+  organization: p.organization || null
+}));
 
       return res.render("admin/org_manage", {
   org,
   invites,
   memberships,
   modules,
+    passages,  
   user: req.user,
   isAdmin: true
 });
