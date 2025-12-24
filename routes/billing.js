@@ -2,10 +2,60 @@ import { Router } from "express";
 import fetch from "node-fetch";
 import { ensureAuth } from "../middleware/authGuard.js";
 import User from "../models/user.js";
-
+import PlacementAudit from "../models/placementAudit.js";
 import Stripe from "stripe";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = Router();
+
+
+
+// BUY A SPECIFIC SCOI AUDIT REPORT
+router.post(
+  "/create-audit-checkout/:auditId",
+  ensureAuth,
+  async (req, res) => {
+    const audit = await PlacementAudit.findById(req.params.auditId).lean();
+    if (!audit) {
+      return res.status(404).json({ error: "Audit not found" });
+    }
+
+    // price logic (can evolve later)
+    const PRICE_CENTS = 4900; // $49.00 per audit
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: req.user.email,
+
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `CRIPFCnt SCOI Audit — ${audit.subject.name}`,
+              description: `${audit.assessmentWindow.label} · Placement Audit`
+            },
+            unit_amount: PRICE_CENTS
+          },
+          quantity: 1
+        }
+      ],
+
+      metadata: {
+        type: "scoi_audit_report",
+        userId: req.user._id.toString(),
+        auditId: audit._id.toString(),
+        price: PRICE_CENTS
+      },
+
+      success_url: `https://cripfcnt.com/scoi/audits/${audit._id}?paid=1`,
+      cancel_url: `https://cripfcnt.com/scoi`
+    });
+
+    res.json({ url: session.url });
+  }
+);
+
 
 router.get("/", ensureAuth, (req, res) => {
   res.render("billing", { user: req.user });

@@ -24,6 +24,9 @@ import billingRoutes from "./routes/billing.js";
 import adminPlacementImport from "./routes/admin_placement_import.js";
 
 
+import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
+
+import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 
 
 
@@ -234,6 +237,10 @@ app.use(orgManagementRoutes);
 app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
+app.use(scoiMarketplaceRoutes);
+
+app.use(scoiCheckoutRoutes);
+
 app.use(adminPlacementImport);
 
 app.use(placementAuditRoutes);

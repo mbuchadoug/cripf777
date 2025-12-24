@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SCOI Audits | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --black:#000;
+      --charcoal:#141414;
+      --white:#F5F5F5;
+      --muted:#9AA3AD;
+      --radius:14px;
+      --shadow:0 18px 60px rgba(3,7,18,0.45);
+      --maxw:1200px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:linear-gradient(180deg,#050505,#0b0b0b);
+      color:var(--white);
+    }
+    a{color:inherit;text-decoration:none}
+    .container{max-width:var(--maxw);margin:36px auto;padding:0 22px}
+
+    /* HERO */
+    .hero{
+      position:relative;
+      border-radius:18px;
+      padding:64px;
+      background:
+        linear-gradient(180deg,rgba(0,0,0,0.55),rgba(0,0,0,0.85)),
+        url("/pics/pic4.png") center/cover no-repeat;
+      box-shadow:var(--shadow);
+    }
+    .eyebrow{
+      display:inline-block;
+      padding:8px 14px;
+      border-radius:999px;
+      background:rgba(212,175,55,0.12);
+      color:var(--gold);
+      font-weight:800;
+      font-size:13px;
+      letter-spacing:0.4px;
+    }
+    h1{
+      margin:16px 0 12px;
+      font-size:44px;
+      line-height:1.05;
+      color:var(--gold);
+      font-weight:900;
+    }
+    .hero p{
+      max-width:760px;
+      font-size:18px;
+      color:rgba(255,255,255,0.9);
+    }
+
+    /* VALUE GRID */
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:18px;
+      margin-top:28px;
+    }
+    .card{
+      padding:22px;
+      border-radius:14px;
+      background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.12));
+      border:1px solid rgba(255,255,255,0.04);
+    }
+    .card h3{
+      margin:0;
+      color:var(--gold);
+      font-size:16px;
+      font-weight:800;
+    }
+    .card p{
+      margin-top:10px;
+      font-size:14px;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    /* AUDIT PRODUCTS */
+    .products{
+      margin-top:42px;
+    }
+    .products h2{
+      margin:0 0 14px;
+      color:var(--gold);
+      font-size:28px;
+      font-weight:900;
+    }
+    .product-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:20px;
+    }
+    .product{
+      padding:24px;
+      border-radius:16px;
+      background:#070707;
+      border:1px solid rgba(255,255,255,0.05);
+      box-shadow:var(--shadow);
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+    .product h3{
+      margin:0;
+      font-size:18px;
+      color:var(--gold);
+    }
+    .price{
+      margin:14px 0;
+      font-size:32px;
+      font-weight:900;
+      color:#fff;
+    }
+    .product ul{
+      padding-left:18px;
+      margin:10px 0;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.6;
+    }
+    .btn{
+      margin-top:18px;
+      display:inline-block;
+      padding:12px 18px;
+      border-radius:10px;
+      font-weight:800;
+      font-size:14px;
+      text-align:center;
+    }
+    .btn-primary{
+      background:var(--gold);
+      color:#000;
+    }
+    .btn-outline{
+      border:2px solid rgba(212,175,55,0.9);
+      color:var(--gold);
+    }
+
+    /* FOOTER NOTE */
+    .note{
+      margin-top:36px;
+      padding:22px;
+      border-radius:14px;
+      background:linear-gradient(180deg,#060606,#0c0c0c);
+      border:1px solid rgba(255,255,255,0.04);
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.6;
+    }
+
+    @media(max-width:980px){
+      .grid,.product-grid{grid-template-columns:1fr}
+      .hero{padding:36px}
+      h1{font-size:34px}
+    }
+  </style>
+</head>
+<body>
+
+{{> navbar }}
+
+<div class="container">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="eyebrow">CRIPFCnt · SCOI INTELLIGENCE</div>
+    <h1>Placement Intelligence For Those Who Carry Weight</h1>
+    <p>
+      SCOI Audits are not opinions, forecasts, or branding tools.
+      They are **structural intelligence reports** that evaluate how visibility,
+      contribution, and responsibility align - or fail - within civilization-scale systems.
+    </p>
+  </section>
+
+  <!-- VALUE PROPOSITION -->
+  <section class="grid">
+    <div class="card">
+      <h3>What This Is</h3>
+      <p>
+        A formal CRIPFCnt audit that quantifies placement using the
+        Social Contract Obligation Index - visibility versus contribution.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Who It’s For</h3>
+      <p>
+        Executives, boards, founders, public figures, institutions,
+        and systems operating under scrutiny or influence.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Why It Matters</h3>
+      <p>
+        Misaligned placement leads to collapse, backlash, and erosion of trust.
+        SCOI audits identify this before it becomes visible failure.
+      </p>
+    </div>
+  </section>
+
+  <!-- PRODUCTS -->
+  <section class="products">
+    <h2>Available SCOI Audits</h2>
+
+    <div class="product-grid">
+
+      <!-- ARCHIVED -->
+      <div class="product">
+        <div>
+          <h3>Archived Placement Audit</h3>
+          <div class="price">$149</div>
+          <ul>
+            <li>Historical structural snapshot</li>
+            <li>Immutable, non-retroactive</li>
+            <li>Includes Placement & Grid SCOI</li>
+            <li>Formal narrative & diagnosis</li>
+          </ul>
+        </div>
+        <a class="btn btn-outline" href="/checkout/archived">Purchase Audit</a>
+      </div>
+
+      <!-- ACTIVE -->
+      <div class="product">
+        <div>
+          <h3>Active Placement Audit</h3>
+          <div class="price">$299</div>
+          <ul>
+            <li>Current placement intelligence</li>
+            <li>Rolling revision framework</li>
+            <li>Strategic risk indicators</li>
+            <li>Executive-grade report</li>
+          </ul>
+        </div>
+        <a class="btn btn-primary" href="/checkout/active">Purchase Audit</a>
+      </div>
+
+      <!-- CUSTOM -->
+      <div class="product">
+        <div>
+          <h3>Institutional / Custom Audit</h3>
+          <div class="price">By Request</div>
+          <ul>
+            <li>Multi-entity analysis</li>
+            <li>Board & policy alignment</li>
+            <li>Scenario-based diagnosis</li>
+            <li>Direct CRIPFCnt involvement</li>
+          </ul>
+        </div>
+        <a class="btn btn-outline" href="/contact">Request Consultation</a>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FOOTER NOTE -->
+  <div class="note">
+    SCOI audits are analytical instruments, not endorsements.
+    They do not predict outcomes - they diagnose structural alignment.
+    Responsibility remains with the entity assessed.
+  </div>
+
+</div>
+</body>
+</html>
