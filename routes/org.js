@@ -177,11 +177,15 @@ router.get(
 // 🔹 Load passages (comprehension parents) for this org
 const passages = await Question.find({
   type: "comprehension",
-  organization: org._id
+  $or: [
+    { organization: org._id },
+    { organization: { $exists: false } },
+    { organization: null }
+  ]
 })
-  .select("_id text module questionIds organization")
-  .sort({ createdAt: -1 })
-  .lean();
+.select("_id text module questionIds organization")
+.sort({ createdAt: -1 })
+.lean();
 
 // shape for UI
 const passageOptions = passages.map(p => ({
