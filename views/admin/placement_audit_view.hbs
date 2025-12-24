@@ -1,7 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CRIPFCnt SCOI Audit — {{audit.subject.name}}</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      font-family: "Source Serif 4", Georgia, serif;
+      color: #0f172a;
+    }
+
+    .audit-report {
+      max-width: 960px;
+      margin: 60px auto;
+      background: #ffffff;
+      padding: 56px 64px;
+      box-shadow: 0 30px 80px rgba(15, 23, 42, 0.08);
+      border-radius: 14px;
+      line-height: 1.85;
+    }
+
+    /* ---------- HEADER ---------- */
+
+    .audit-header {
+      margin-bottom: 48px;
+    }
+
+    .brand-line {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+
+    .audit-header h1 {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    .subtitle {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 15px;
+      color: #334155;
+      margin-top: 6px;
+    }
+
+    /* ---------- META ---------- */
+
+    .audit-meta {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px 32px;
+      background: linear-gradient(180deg, #f8fafc, #ffffff);
+      padding: 22px 24px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 14px;
+    }
+
+    .audit-meta div span {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    /* ---------- SECTIONS ---------- */
+
+    section {
+      margin-top: 52px;
+    }
+
+    h2 {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    h2::after {
+      content: "";
+      display: block;
+      width: 52px;
+      height: 2px;
+      background: #0b3c5d;
+      margin-top: 6px;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul {
+      margin: 12px 0 0 20px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    /* ---------- SCORES ---------- */
+
+    .score-block {
+      margin-top: 26px;
+      padding-left: 20px;
+      border-left: 3px solid #0b3c5d;
+    }
+
+    .score-title {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .score-value {
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      color: #0b3c5d;
+      margin: 8px 0 12px;
+    }
+
+    .interpretation {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+      font-style: italic;
+      color: #334155;
+    }
+
+    /* ---------- CALCULATIONS ---------- */
+
+    .calc {
+      font-family: Inter, system-ui, sans-serif;
+      font-weight: 700;
+      color: #0b3c5d;
+    }
+
+    /* ---------- TEMPORAL ---------- */
+
+    .temporal-notice {
+      margin-top: 64px;
+      padding: 22px 26px;
+      background: #f8fafc;
+      border-radius: 12px;
+      border-left: 5px solid #0b3c5d;
+    }
+
+    /* ---------- FOOTER ---------- */
+
+    .audit-footer {
+      margin-top: 72px;
+      padding-top: 18px;
+      border-top: 1px solid #e5e7eb;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 13px;
+      color: #64748b;
+      text-align: center;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .audit-report {
+        box-shadow: none;
+        margin: 0;
+        padding: 40px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
 <article class="audit-report">
 
   <header class="audit-header">
-    <h1>CRIPFCnt SCOI Audit</h1>
+    <div class="brand-line">CRIPFCnt Framework</div>
+    <h1>SCOI Audit Report</h1>
+    <div class="subtitle">Structural Placement Assessment</div>
 
     <div class="audit-meta">
       <div><span>Subject</span>{{audit.subject.name}}</div>
@@ -9,6 +196,7 @@
       <div><span>Assessment Window</span>{{audit.assessmentWindow.label}}</div>
       <div><span>Status</span>{{audit.status}}</div>
       <div><span>Revision Policy</span>{{audit.revisionPolicy}}</div>
+      <div><span>Author</span>{{audit.author}}</div>
     </div>
   </header>
 
@@ -30,23 +218,23 @@
     <h2>Core SCOI Scores</h2>
 
     <div class="score-block">
-      <h3>Visibility (V)</h3>
-      <p class="score">{{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}</p>
+      <div class="score-title">Visibility Score (V)</div>
+      <div class="score-value">{{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}</div>
       <p>{{audit.scores.visibility.definition}}</p>
       <p>{{audit.scores.visibility.narrative}}</p>
-      <p class="interpretation">
-        <strong>Interpretation:</strong> {{audit.scores.visibility.interpretation}}
-      </p>
+      <div class="interpretation">
+        {{audit.scores.visibility.interpretation}}
+      </div>
     </div>
 
     <div class="score-block">
-      <h3>Contribution (C)</h3>
-      <p class="score">{{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}</p>
+      <div class="score-title">Contribution Score (C)</div>
+      <div class="score-value">{{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}</div>
       <p>{{audit.scores.contribution.definition}}</p>
       <p>{{audit.scores.contribution.narrative}}</p>
 
       {{#if audit.scores.contribution.limitations.length}}
-        <p><strong>Limiting Factors:</strong></p>
+        <p><strong>Limiting factors:</strong></p>
         <ul>
           {{#each audit.scores.contribution.limitations}}
             <li>{{this}}</li>
@@ -54,25 +242,25 @@
         </ul>
       {{/if}}
 
-      <p class="interpretation">
-        <strong>Interpretation:</strong> {{audit.scores.contribution.interpretation}}
-      </p>
+      <div class="interpretation">
+        {{audit.scores.contribution.interpretation}}
+      </div>
     </div>
   </section>
 
   <section>
     <h2>CRIPFCnt SCOI (Placement-Bound)</h2>
-    <p><strong>Formula:</strong> {{audit.calculations.placementSCOI.formula}}</p>
+    <p class="calc">{{audit.calculations.placementSCOI.formula}}</p>
     <p>{{audit.calculations.placementSCOI.working}}</p>
-    <p class="score">≈ {{audit.calculations.placementSCOI.value}}</p>
+    <p class="calc">≈ {{audit.calculations.placementSCOI.value}}</p>
     <p>{{audit.calculations.placementSCOI.meaning}}</p>
   </section>
 
   <section>
-    <h2>Grid SCOI (Inverse)</h2>
-    <p><strong>Formula:</strong> {{audit.calculations.gridSCOI.formula}}</p>
+    <h2>Grid SCOI (Inverse / Grid Friendliness)</h2>
+    <p class="calc">{{audit.calculations.gridSCOI.formula}}</p>
     <p>{{audit.calculations.gridSCOI.working}}</p>
-    <p class="score">≈ {{audit.calculations.gridSCOI.value}}</p>
+    <p class="calc">≈ {{audit.calculations.gridSCOI.value}}</p>
     <p>{{audit.calculations.gridSCOI.meaning}}</p>
   </section>
 
@@ -92,7 +280,10 @@
   </section>
 
   <footer class="audit-footer">
-    <p>End of Archived Audit.</p>
+    CRIPFCnt SCOI Framework — Archived Placement Audit
   </footer>
 
 </article>
+
+</body>
+</html>
