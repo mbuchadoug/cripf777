@@ -21,6 +21,9 @@ import adminCertificateRoutes from "./routes/admin_certificates.js";
 import stripeWebhookRoutes from "./routes/stripe_webhook.js";
 import billingRoutes from "./routes/billing.js";
 
+import adminPlacementImport from "./routes/admin_placement_import.js";
+
+
 
 
 
@@ -219,7 +222,7 @@ app.use(orgManagementRoutes);
 app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
-
+app.use(adminPlacementImport);
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
