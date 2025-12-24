@@ -49,6 +49,7 @@ import apiOrgQuizRoutes from "./routes/api_org_quiz.js";
 
 import configurePassport from "./config/passport.js";
 import authRoutes from "./routes/auth.js";
+import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
 import { ensureAuth } from "./middleware/authGuard.js";
@@ -223,6 +224,9 @@ app.use("/billing", billingRoutes);
 
 app.use("/api/org", apiOrgQuizRoutes);
 app.use(adminPlacementImport);
+
+app.use(placementAuditRoutes);
+
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {

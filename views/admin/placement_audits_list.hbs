@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Placement SCOI Audits</title>
+  <style>
+    body { font-family: system-ui, Arial; background:#f6f8fb; padding:24px; }
+    h1 { margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
+    th, td { padding:12px; border-bottom:1px solid #e6e6e6; text-align:left; }
+    th { background:#f1f4f9; font-size:13px; text-transform:uppercase; }
+    .badge { padding:4px 8px; border-radius:12px; font-size:12px; background:#eef; }
+    .btn { padding:6px 10px; border-radius:6px; background:#0b6fb7; color:#fff; text-decoration:none; }
+  </style>
+</head>
+<body>
+
+<h1>📊 Placement SCOI Audits</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Subject</th>
+      <th>Type</th>
+      <th>Assessment Window</th>
+      <th>Placement SCOI</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each audits}}
+      <tr>
+        <td><strong>{{this.subject.name}}</strong></td>
+        <td>{{this.subject.entityType}}</td>
+        <td>{{this.assessmentWindow.label}}</td>
+        <td>{{this.calculations.placementSCOI}}</td>
+        <td><span class="badge">{{this.status}}</span></td>
+        <td>
+          <a class="btn" href="/admin/placement-audits/{{this._id}}">
+            View
+          </a>
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+</body>
+</html>
