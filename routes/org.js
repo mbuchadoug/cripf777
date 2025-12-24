@@ -175,14 +175,14 @@ router.get(
         .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
 // 🔹 Load passages (comprehension parents) for this org
-const passages = await Question.find({
+const passages = await Question.collection.find({
   type: "comprehension",
   $or: [
     { organization: org._id },
     { organization: { $exists: false } },
     { organization: null }
   ]
-})
+}).toArray()
 .select("_id text module questionIds organization")
 .sort({ createdAt: -1 })
 .lean();
@@ -193,7 +193,7 @@ const passageOptions = passages.map(p => ({
   title: p.text || "Comprehension Passage",
   childCount: Array.isArray(p.questionIds) ? p.questionIds.length : 0,
   module: p.module || "general",
-  organization: p.organization
+  organization: p.organization || null
 }));
 
      return res.render("admin/org_manage", {
