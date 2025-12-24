@@ -57,18 +57,19 @@ const PlacementAuditSchema = new Schema(
     },
 
     status: {
-      type: String,
-      enum: ["archived_reference"],
-      default: "archived_reference",
-      immutable: true
-    },
+  type: String,
+  enum: ["archived_reference", "active_reference"],
+  default: "archived_reference",
+  immutable: true
+},
 
-    revisionPolicy: {
-      type: String,
-      enum: ["fixed"],
-      default: "fixed",
-      immutable: true
-    },
+revisionPolicy: {
+  type: String,
+  enum: ["fixed", "rolling"],
+  default: "fixed",
+  immutable: true
+},
+
 
     author: {
       type: String,
