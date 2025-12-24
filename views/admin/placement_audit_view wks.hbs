@@ -1,0 +1,93 @@
+<pre style="font-family: monospace; white-space: pre-wrap; line-height:1.6">
+
+CRIPFCnt SCOI AUDIT
+
+Subject: {{audit.subject.name}}
+Audit Type: Dual Matrix (Visibility × Contribution)
+Assessment Window: {{audit.assessmentWindow.label}}
+Status: {{audit.status}}
+Revision: {{audit.revisionPolicy}}
+
+--------------------------------------------
+PURPOSE OF AUDIT
+--------------------------------------------
+{{audit.purpose}}
+
+--------------------------------------------
+CONTEXT — {{audit.context.period}}
+--------------------------------------------
+{{#each audit.context.conditions}}
+- {{this}}
+{{/each}}
+
+--------------------------------------------
+CORE SCOI SCORES
+--------------------------------------------
+
+VISIBILITY SCORE (V): {{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}
+
+{{audit.scores.visibility.definition}}
+
+{{audit.scores.visibility.narrative}}
+
+Interpretation:
+{{audit.scores.visibility.interpretation}}
+
+--------------------------------------------
+
+CONTRIBUTION SCORE (C): {{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}
+
+{{audit.scores.contribution.definition}}
+
+{{audit.scores.contribution.narrative}}
+
+{{#if audit.scores.contribution.limitations.length}}
+Limiting factors:
+{{#each audit.scores.contribution.limitations}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+Interpretation:
+{{audit.scores.contribution.interpretation}}
+
+--------------------------------------------
+CRIPFCnt SCOI (PLACEMENT-BOUND)
+--------------------------------------------
+
+CRIPFCnt SCOI = {{audit.calculations.placementSCOI.formula}}
+{{audit.calculations.placementSCOI.working}}
+≈ {{audit.calculations.placementSCOI.value}}
+
+Meaning:
+{{audit.calculations.placementSCOI.meaning}}
+
+--------------------------------------------
+GRID SCOI (INVERSE / GRID FRIENDLINESS)
+--------------------------------------------
+
+Grid SCOI = {{audit.calculations.gridSCOI.formula}}
+{{audit.calculations.gridSCOI.working}}
+≈ {{audit.calculations.gridSCOI.value}}
+
+Meaning:
+{{audit.calculations.gridSCOI.meaning}}
+
+--------------------------------------------
+STRUCTURAL DIAGNOSIS
+--------------------------------------------
+{{audit.structuralDiagnosis}}
+
+--------------------------------------------
+FINAL PLACEMENT STATEMENT
+--------------------------------------------
+{{audit.finalPlacementStatement}}
+
+--------------------------------------------
+TEMPORAL NOTICE
+--------------------------------------------
+{{audit.temporalNotice}}
+
+End of Archived Audit.
+
+</pre>
