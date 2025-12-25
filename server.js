@@ -337,6 +337,13 @@ app.get("/contact", (req, res) => {
 });
 
 
+app.get("/scoi/purchased", ensureAuth, async (req, res) => {
+  res.render("scoi/purchased", {
+    user: req.user
+  });
+});
+
+
 // -------------------------------
 // 🔹 ROUTE: Render Chat Page (protected)
 // -------------------------------
