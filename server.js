@@ -14,6 +14,11 @@ import passport from "passport";
 // routes & utils
 import lmsLoginRoutes from "./routes/lms_login.js";
 import portalRoutes from "./routes/portal.js";
+import scoiDownloadRoutes from "./routes/scoi_download.js";
+import AuditPurchase from "./models/auditPurchase.js";
+import PlacementAudit from "./models/placementAudit.js";
+
+
 
 import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
@@ -244,6 +249,7 @@ app.use(scoiCheckoutRoutes);
 app.use(adminPlacementImport);
 
 app.use(placementAuditRoutes);
+app.use(scoiDownloadRoutes);
 
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
@@ -338,8 +344,15 @@ app.get("/contact", (req, res) => {
 
 
 app.get("/scoi/purchased", ensureAuth, async (req, res) => {
+  const purchases = await AuditPurchase.find({
+    userId: req.user._id
+  })
+    .populate("auditId")
+    .lean();
+
   res.render("scoi/purchased", {
-    user: req.user
+    user: req.user,
+    purchases
   });
 });
 

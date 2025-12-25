@@ -1,59 +1,32 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Payment Successful | CRIPFCnt</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<div class="container">
+  <h1>Your Purchased SCOI Audits</h1>
 
-  <style>
-    body{
-      margin:0;
-      font-family:Inter,system-ui,Arial;
-      background:#0b0b0b;
-      color:#f5f5f5;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      min-height:100vh;
-    }
-    .card{
-      background:#121212;
-      padding:40px;
-      border-radius:16px;
-      max-width:520px;
-      text-align:center;
-      box-shadow:0 30px 80px rgba(0,0,0,0.5);
-    }
-    h1{
-      color:#D4AF37;
-      margin-bottom:12px;
-    }
-    p{
-      color:#9aa3ad;
-      line-height:1.6;
-    }
-    a{
-      display:inline-block;
-      margin-top:24px;
-      padding:12px 20px;
-      background:#D4AF37;
-      color:#000;
-      font-weight:800;
-      border-radius:10px;
-      text-decoration:none;
-    }
-  </style>
-</head>
+  {{#if purchases.length}}
+    <div class="product-grid">
+      {{#each purchases}}
+        <div class="product">
+          <h3>{{this.auditId.subject.name}}</h3>
 
-<body>
-  <div class="card">
-    <h1>Payment successful</h1>
-    <p>
-      Your SCOI audit report has been unlocked.<br/>
-      You can now view and download the full PDF.
-    </p>
+          <p style="color:#9AA3AD">
+            Assessment Window: {{this.auditId.assessmentWindow.label}}
+          </p>
 
-    <a href="/scoi">Go to SCOI Audits</a>
-  </div>
-</body>
-</html>
+          {{#if this.auditId.pdfUrl}}
+            <a
+              href="/scoi/audits/{{this.auditId._id}}/download"
+              class="btn btn-primary"
+            >
+              Download PDF
+            </a>
+          {{else}}
+            <p style="color:#D4AF37">
+              Preparing report…
+            </p>
+          {{/if}}
+        </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <p>You haven’t purchased any SCOI audits yet.</p>
+  {{/if}}
+</div>
