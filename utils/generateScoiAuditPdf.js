@@ -5,9 +5,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
   const baseDir = path.join(process.cwd(), "public", "docs", "scoi-audits");
   await fs.promises.mkdir(baseDir, { recursive: true });
 
-  const filename =
-    `scoi-${audit._id}-${Date.now().toString(36)}.pdf`;
-
+  const filename = `scoi-${audit._id}-${Date.now().toString(36)}.pdf`;
   const filepath = path.join(baseDir, filename);
 
   let puppeteer;
@@ -24,11 +22,21 @@ export async function generateScoiAuditPdf({ audit, req }) {
   try {
     const page = await browser.newPage();
 
-    // 🔑 Render EXISTING view (same as certificates style)
+    // ✅ CRITICAL FIX:
+    // Convert Mongoose document → plain object
+    const safeAudit =
+      typeof audit.toObject === "function"
+        ? audit.toObject({ getters: true, virtuals: false })
+        : audit;
+
+    // 🔑 Render EXISTING view using safe data
     const html = await new Promise((resolve, reject) => {
       req.app.render(
         "admin/placement_audit_view",
-        { audit },
+        {
+          audit: safeAudit,
+          layout: false // important for clean PDF
+        },
         (err, rendered) => (err ? reject(err) : resolve(rendered))
       );
     });

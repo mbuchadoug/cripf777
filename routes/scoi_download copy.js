@@ -4,10 +4,6 @@ import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
 
-/**
- * DOWNLOAD PDF
- * (safe to use lean because we only redirect)
- */
 router.get("/scoi/audits/:id/download", ensureAuth, async (req, res) => {
   const audit = await PlacementAudit.findById(req.params.id).lean();
 
@@ -18,21 +14,19 @@ router.get("/scoi/audits/:id/download", ensureAuth, async (req, res) => {
   return res.redirect(audit.pdfUrl);
 });
 
-/**
- * VIEW AUDIT (HTML)
- * ❌ DO NOT USE .lean()
- */
+
 router.get("/scoi/audits/:id/view", ensureAuth, async (req, res) => {
-  const audit = await PlacementAudit.findById(req.params.id); // ✅ FIXED
+  const audit = await PlacementAudit.findById(req.params.id).lean();
 
   if (!audit || !audit.isPaid) {
     return res.status(403).send("Audit not available");
   }
 
   res.render("admin/placement_audit_view", {
-    audit,          // full mongoose doc
-    layout: false   // clean view + print
+    audit,
+    layout: false // 🔑 important for clean viewing & printing
   });
 });
+
 
 export default router;
