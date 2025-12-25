@@ -12,12 +12,21 @@
           </p>
 
           {{#if this.auditId.pdfUrl}}
-            <a
+           <!-- <a
               href="/scoi/audits/{{this.auditId._id}}/download"
               class="btn btn-primary"
             >
               Download PDF
-            </a>
+            </a>-->
+
+
+            <a
+  href="/scoi/audits/{{this.auditId._id}}/view"
+  class="btn btn-primary"
+  target="_blank"
+>
+  View Audit
+</a>
           {{else}}
             <p style="color:#D4AF37">
               Preparing report…
