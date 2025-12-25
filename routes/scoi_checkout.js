@@ -9,8 +9,8 @@ router.post("/scoi/checkout", ensureAuth, async (req, res) => {
   const { auditId, type } = req.body;
 
   const pricing = {
-    archived: 14900, // $149
-    active: 29900    // $299
+    archived: 300, // $149
+    active: 300   // $299
   };
 
   if (!pricing[type]) {

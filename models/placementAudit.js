@@ -55,7 +55,15 @@ const PlacementAuditSchema = new Schema(
         type: Date
       }
     },
-
+    isPaid: {
+  type: Boolean,
+  default: false
+}
+,
+pdfUrl: {
+  type: String
+}
+,
     status: {
   type: String,
   enum: ["archived_reference", "active_reference"],

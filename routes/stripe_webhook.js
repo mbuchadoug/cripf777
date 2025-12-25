@@ -1,6 +1,8 @@
 import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
+import PlacementAudit from "../models/placementAudit.js";
+import { generateScoiAuditPdf } from "../utils/generateScoiAuditPdf.js";
 
 import User from "../models/user.js";
 import AuditPurchase from "../models/auditPurchase.js"; // ✅ NEW
@@ -45,6 +47,10 @@ router.post("/", async (req, res) => {
     const session = event.data.object;
     const meta = session.metadata || {};
 
+
+    //const session = event.data.object;
+
+
     /**
      * ─────────────────────────────
      * 1️⃣ LIVE SCOI SEARCH CREDITS
@@ -70,31 +76,53 @@ router.post("/", async (req, res) => {
      * (new asset-based product)
      * ─────────────────────────────
      */
-    if (meta.type === "scoi_audit_report") {
-      const { userId, auditId, price } = meta;
+  if (meta.type === "scoi_audit_report") {
+  const { userId, auditId, price } = meta;
 
-      if (!userId || !auditId) {
-        console.error("❌ Missing metadata for audit purchase");
-      } else {
-        // Prevent duplicate ownership (idempotency safety)
-        const exists = await AuditPurchase.findOne({
-          stripeSessionId: session.id
-        });
+  if (!userId || !auditId) {
+    console.error("❌ Missing metadata for audit purchase");
+    return;
+  }
 
-        if (!exists) {
-          await AuditPurchase.create({
-            userId,
-            auditId,
-            pricePaid: Number(price || 0),
-            stripeSessionId: session.id
-          });
+  // 🔒 Idempotency protection
+  const exists = await AuditPurchase.findOne({
+    stripeSessionId: session.id
+  });
 
-          console.log(
-            `📄 SCOI audit report purchased | user=${userId} audit=${auditId}`
-          );
-        }
-      }
-    }
+  if (exists) {
+    console.log("⚠️ Duplicate webhook ignored:", session.id);
+    return;
+  }
+
+  // 1️⃣ Record ownership
+  await AuditPurchase.create({
+    userId,
+    auditId,
+    pricePaid: Number(price || 0),
+    stripeSessionId: session.id
+  });
+
+  // 2️⃣ Mark audit as paid
+  const audit = await PlacementAudit.findByIdAndUpdate(
+    auditId,
+    { isPaid: true },
+    { new: true }
+  );
+
+  // 3️⃣ Generate PDF ONCE
+  if (audit && !audit.pdfUrl) {
+    const pdf = await generateScoiAuditPdf({ audit, req });
+    audit.pdfUrl = pdf.url;
+    await audit.save();
+
+    console.log("📄 SCOI audit PDF generated:", pdf.url);
+  }
+
+  console.log(
+    `✅ SCOI audit report purchase complete | user=${userId} audit=${auditId}`
+  );
+}
+
   }
 
   res.json({ received: true });
