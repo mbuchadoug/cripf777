@@ -10,6 +10,10 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
+import Handlebars from "handlebars";
+import {
+  allowInsecurePrototypeAccess
+} from "@handlebars/allow-prototype-access";
 
 // routes & utils
 import lmsLoginRoutes from "./routes/lms_login.js";
@@ -158,14 +162,25 @@ const hbsHelpers = {
   }
 };
 
-app.engine(
+/*app.engine(
   "hbs",
   engine({
     extname: ".hbs",
     defaultLayout: "main",
     helpers: hbsHelpers,
   })
+);*/
+
+app.engine(
+  "hbs",
+  engine({
+    extname: ".hbs",
+    defaultLayout: "main",
+    handlebars: allowInsecurePrototypeAccess(Handlebars),
+    helpers: hbsHelpers,
+  })
 );
+
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
