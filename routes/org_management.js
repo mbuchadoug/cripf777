@@ -3,7 +3,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import mongoose from "mongoose";
-
+import Certificate from "../models/certificate.js";
 import Organization from "../models/organization.js";
 import OrgInvite from "../models/orgInvite.js";
 import OrgMembership from "../models/orgMembership.js";
