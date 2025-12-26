@@ -21,13 +21,12 @@ function safeReturnTo(candidate) {
 function encodeState(returnTo) {
   try {
     if (!returnTo) return "";
-    const b = Buffer.from(returnTo, "utf8")
+    return Buffer.from(returnTo, "utf8")
       .toString("base64")
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-    return b;
-  } catch (e) {
+  } catch {
     return "";
   }
 }
@@ -39,7 +38,7 @@ function decodeState(state) {
       state.replace(/-/g, "+").replace(/_/g, "/") +
       "==".slice((2 - state.length * 3) & 3);
     return Buffer.from(base64, "base64").toString("utf8");
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -50,8 +49,9 @@ function decodeState(state) {
 router.get("/google", (req, res, next) => {
   try {
     let candidate = null;
-    if (req.query && req.query.returnTo) candidate = String(req.query.returnTo);
-    else if (req.session && req.session.returnTo) candidate = String(req.session.returnTo);
+
+    if (req.query?.returnTo) candidate = String(req.query.returnTo);
+    else if (req.session?.returnTo) candidate = String(req.session.returnTo);
     else {
       const ref = req.get("referer");
       if (ref) {
@@ -83,7 +83,7 @@ router.get("/google", (req, res, next) => {
       scope: ["profile", "email"],
       state
     })(req, res, next);
-  } catch (e) {
+  } catch {
     return passport.authenticate("google", {
       scope: ["profile", "email"]
     })(req, res, next);
@@ -110,20 +110,26 @@ router.get(
       }
 
       const defaultOrgSlug = "cripfcnt-school";
+      let redirectPath = null;
 
-      // =======================
-      // 🔹 NEW: AUTO ORG MEMBERSHIP
-      // =======================
-      try {
-        const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
+      // 1️⃣ Respect explicit return paths first
+      if (fromState || fromSession) {
+        redirectPath = fromState || fromSession;
+      } else {
+        // 2️⃣ Check if user already belongs to an org
+        const memberships = await OrgMembership
+          .find({ user: req.user._id })
+          .populate("org")
+          .lean();
 
-        if (org && req.user?._id) {
-          const existing = await OrgMembership.findOne({
-            org: org._id,
-            user: req.user._id
-          });
+        if (memberships.length > 0 && memberships[0].org?.slug) {
+          // Existing user → their org dashboard
+          redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
+        } else {
+          // 3️⃣ New user → auto-enrol into default org
+          const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
 
-          if (!existing) {
+          if (org) {
             await OrgMembership.create({
               org: org._id,
               user: req.user._id,
@@ -131,25 +137,20 @@ router.get(
               joinedAt: new Date()
             });
 
-            // mark first login (for welcome banner)
             if (req.session) {
               req.session.isFirstLogin = true;
             }
+
+            redirectPath = `/org/${defaultOrgSlug}/dashboard`;
+          } else {
+            redirectPath = "/";
           }
         }
-      } catch (e) {
-        console.error("[auth] auto org membership failed:", e.message);
       }
-      // =======================
 
-      const final =
-        fromState ||
-        fromSession ||
-        `/org/${defaultOrgSlug}/dashboard`;
+      console.log("[/auth/google/callback] redirecting to:", redirectPath);
 
-      console.log("[/auth/google/callback] redirecting to:", final);
-
-      return res.redirect(final);
+      return res.redirect(redirectPath);
     } catch (e) {
       console.error("[/auth/google/callback] redirect error:", e.message);
       return res.redirect("/audit");

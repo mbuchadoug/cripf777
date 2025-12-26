@@ -652,45 +652,6 @@ quizzesByModule[key].push({
     const hasAssignedQuizzes = Object.keys(quizzesByModule).length > 0;
 const showWelcome = !!req.session.isFirstLogin;
 
-// ----------------------------------
-// 📊 USER ATTEMPTS (THIS ORG)
-// ----------------------------------
-const attempts = await Attempt.find({
-  organization: org._id,
-  userId: req.user._id
-})
-  .sort({ finishedAt: -1 })
-  .lean();
-
-// Shape for UI
-const attemptRows = attempts.map(a => ({
-  quizTitle: a.quizTitle || a.module || "Quiz",
-  module: a.module || "",
-  score: a.score || 0,
-  maxScore: a.maxScore || 0,
-  percentage: a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0,
-  passed: !!a.passed,
-  finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-}));
-
-// ----------------------------------
-// 🎓 USER CERTIFICATES (THIS ORG)
-// ----------------------------------
-const certificates = await Certificate.find({
-  userId: req.user._id,
-  orgId: org._id
-})
-  .sort({ createdAt: -1 })
-  .lean();
-
-const certRows = certificates.map(c => ({
-  quizTitle: c.quizTitle || c.courseTitle || "Quiz",
-  score: c.score,
-  percentage: c.percentage,
-  serial: c.serial,
-  createdAt: c.createdAt
-}));
-
 // clear it immediately (one-time)
 if (req.session?.isFirstLogin) {
   delete req.session.isFirstLogin;
@@ -704,10 +665,7 @@ if (req.session?.isFirstLogin) {
       quizzesByModule,
         hasAssignedQuizzes,
       isAdmin,
-      showWelcome,
-      attemptRows,
-certRows,
-
+      showWelcome
     });
   } catch (err) {
     console.error("[org dashboard] error:", err && (err.stack || err));
