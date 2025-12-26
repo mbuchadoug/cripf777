@@ -228,6 +228,19 @@ configurePassport(); // config/passport.js should set up strategies + serialize/
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    const host = req.headers.host;
+    if (host !== "cripfcnt.com") {
+      return res.redirect(301, "https://cripfcnt.com" + req.originalUrl);
+    }
+    if (req.protocol !== "https") {
+      return res.redirect(301, "https://cripfcnt.com" + req.originalUrl);
+    }
+  }
+  next();
+});
+
 // mount auth routes first (so /auth is available when needed)
 app.use("/auth", authRoutes);
 
