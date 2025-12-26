@@ -650,12 +650,6 @@ quizzesByModule[key].push({
     const isOrgManager = orgRole === "manager" || orgRole === "admin";
     const isAdmin = !!(platformAdmin || isOrgManager);
     const hasAssignedQuizzes = Object.keys(quizzesByModule).length > 0;
-const showWelcome = !!req.session.isFirstLogin;
-
-// clear it immediately (one-time)
-if (req.session?.isFirstLogin) {
-  delete req.session.isFirstLogin;
-}
 
     return res.render("org/dashboard", {
       org,
@@ -664,8 +658,7 @@ if (req.session?.isFirstLogin) {
       user: req.user,
       quizzesByModule,
         hasAssignedQuizzes,
-      isAdmin,
-      showWelcome
+      isAdmin
     });
   } catch (err) {
     console.error("[org dashboard] error:", err && (err.stack || err));

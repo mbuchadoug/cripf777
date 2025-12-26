@@ -37,8 +37,25 @@
   {{> navbar}}
 
   <main>
+{{#if showWelcome}}
+<div style="
+  background: linear-gradient(90deg,#0f0f0f,#1a1a1a);
+  border:1px solid rgba(212,175,55,0.25);
+  padding:16px;
+  border-radius:12px;
+  margin-bottom:20px;
+">
+  <h3 style="margin:0;color:#D4AF37">Welcome to CRIPFCnt 🎓</h3>
+  <p style="margin:6px 0 0;color:#ccc">
+    You’ve been automatically enrolled into the Responsibility LMS.
+    Start with your assigned modules or explore learning materials below.
+  </p>
+</div>
+{{/if}}
+
+
     <h1>{{org.name}} | Dashboard</h1>
-    <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
+    <!--<p>You are a <strong>{{membership.role}}</strong> in this organization.</p>-->
 
     {{#if isAdmin}}
       <p>

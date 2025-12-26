@@ -234,9 +234,13 @@
             Go to Dashboard
           </a>
         {{else}}
-          <a class="btn btn-primary" href="/auth/google">
-            Sign in to Start Learning
-          </a>
+        <a
+  class="btn btn-primary"
+  href="/auth/google?returnTo=/org/cripfcnt-school/dashboard"
+>
+  Sign in to Start Learning
+</a>
+
           <a class="btn btn-outline" href="/lms/quiz">
             Try a 5-Question Preview Quiz
           </a>
@@ -286,9 +290,13 @@
         Open Dashboard
       </a>
     {{else}}
-      <a class="btn btn-primary" href="/auth/google">
-        Sign in
-      </a>
+    <a
+  class="btn btn-primary"
+  href="/auth/google?returnTo=/org/cripfcnt-school/dashboard"
+>
+  Sign in
+</a>
+
     {{/if}}
   </section>
 
