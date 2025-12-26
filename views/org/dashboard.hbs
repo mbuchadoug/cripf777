@@ -1,213 +1,234 @@
-<!doctype html> 
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>{{org.name}} | Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
   <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:12px;
+    }
+
     body{
       font-family:system-ui, -apple-system, "Segoe UI", Arial;
-      margin:20px;
+      margin:0;
+      background:#0b0b0b;
+      color:#fff;
     }
-    h1{font-size:32px;margin-bottom:8px}
-    h2{margin-top:24px}
-    .module-block,
-    .quiz-block{
-      margin-top:10px;
-      padding:10px 14px;
-      border-radius:8px;
-      border:1px solid #ddd;
-      max-width:640px;
+
+    main{
+      max-width:1200px;
+      margin:30px auto;
+      padding:0 20px;
     }
-    .quiz-status{font-size:14px;color:#555}
-    .links-row a + a{margin-left:12px}
-    .admin-link {
+
+    h1{font-size:30px;margin-bottom:6px}
+    h2{font-size:20px;margin:30px 0 12px;color:var(--gold)}
+    h3{font-size:16px;margin:0}
+
+    /* ====== PANELS ====== */
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:16px;
+      margin-bottom:18px;
+    }
+
+    /* ====== GRID ====== */
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:16px;
+    }
+
+    /* ====== MODULE / QUIZ CARDS ====== */
+    .card{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:14px;
+      background:#111;
+    }
+
+    .card small{color:var(--muted)}
+
+    .actions a{
+      color:var(--gold);
+      font-size:14px;
+      margin-right:12px;
+    }
+
+    /* ====== SCROLL AREAS ====== */
+    .scroll-box{
+      max-height:320px;
+      overflow:auto;
+      padding-right:6px;
+    }
+
+    .scroll-box::-webkit-scrollbar{
+      width:6px;
+    }
+    .scroll-box::-webkit-scrollbar-thumb{
+      background:#333;
+      border-radius:10px;
+    }
+
+    /* ====== TAGS ====== */
+    .tag{
       display:inline-block;
-      margin-left:12px;
+      padding:3px 8px;
+      font-size:12px;
+      border-radius:999px;
+      background:#1f1f1f;
+      color:var(--muted);
+      margin-left:6px;
+    }
+
+    /* ====== ADMIN ====== */
+    .admin a{
+      background:#1e90ff;
       padding:6px 10px;
       border-radius:6px;
-      background:#1e90ff;
-      color:#fff;
-      text-decoration:none;
       font-size:14px;
+      color:#fff;
+      margin-right:10px;
+      text-decoration:none;
     }
   </style>
 </head>
+
 <body>
   {{> navbar}}
 
   <main>
-{{#if showWelcome}}
-<div style="
-  background: linear-gradient(90deg,#0f0f0f,#1a1a1a);
-  border:1px solid rgba(212,175,55,0.25);
-  padding:16px;
-  border-radius:12px;
-  margin-bottom:20px;
-">
-  <h3 style="margin:0;color:#D4AF37">Welcome to CRIPFCnt 🎓</h3>
-  <p style="margin:6px 0 0;color:#ccc">
-    You’ve been automatically enrolled into the Responsibility LMS.
-    Start with your assigned modules or explore learning materials below.
-  </p>
-</div>
-{{/if}}
 
-    <h1>{{org.name}} | Dashboard</h1>
+    {{#if showWelcome}}
+    <div class="panel">
+      <h3 style="color:var(--gold)">Welcome to CRIPFCnt 🎓</h3>
+      <p style="color:var(--muted);margin-top:6px">
+        You’ve been enrolled into the Responsibility LMS. Navigate modules, quizzes,
+        certificates and SCOI resources below.
+      </p>
+    </div>
+    {{/if}}
+
+    <h1>{{org.name}} Dashboard</h1>
 
     {{#if isAdmin}}
-      <p>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/manage">Admin · Manage</a>
-        <a class="admin-link" href="/admin/orgs/{{org.slug}}/attempts">Admin · View Attempts</a>
-      </p>
+    <div class="admin panel">
+      <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
+      <a href="/admin/orgs/{{org.slug}}/attempts">View Attempts</a>
+    </div>
     {{/if}}
 
+    <!-- ================= MODULES ================= -->
     <h2>Modules</h2>
-    {{#if modules.length}}
+    <div class="grid">
       {{#each modules}}
-        <div class="module-block">
-          <div><strong>{{this.title}}</strong></div>
-          <div>Module slug: <code>{{this.slug}}</code></div>
-
-          <div class="links-row" style="margin-top:6px;">
-            <a href="/org/{{../org.slug}}/modules/{{this.slug}}">
-              View learning material
-            </a>
-          </div>
+      <div class="card">
+        <h3>{{this.title}}</h3>
+        <small>{{this.slug}}</small>
+        <div class="actions" style="margin-top:8px">
+          <a href="/org/{{../org.slug}}/modules/{{this.slug}}">Open</a>
         </div>
+      </div>
       {{/each}}
-    {{else}}
-      <p>No modules have been configured yet.</p>
-    {{/if}}
+    </div>
 
-    <h2>Assigned quizzes</h2>
+    <!-- ================= ASSIGNED QUIZZES ================= -->
+    <h2>Assigned Quizzes</h2>
 
     {{#if hasAssignedQuizzes}}
       {{#each quizzesByModule}}
-        <h3>{{@key}}</h3>
+        <div class="panel">
+          <h3>{{@key}}</h3>
 
-        {{#each this}}
-          <div class="quiz-block">
-            <div>
+          <div class="scroll-box">
+            {{#each this}}
+              <div class="card" style="margin-top:10px">
+                <strong>{{quizTitle}}</strong>
+                <span class="tag">{{questionCount}} questions</span>
+
+                <div class="actions" style="margin-top:8px">
+                  <a href="{{openUrl}}">Open quiz</a>
+
+                  {{#if ../../isAdmin}}
+                    <form
+                      method="POST"
+                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{examId}}/delete"
+                      style="display:inline"
+                      onsubmit="return confirm('Delete this quiz?');"
+                    >
+                      <button style="background:none;border:none;color:#c00;cursor:pointer;">
+                        Delete
+                      </button>
+                    </form>
+                  {{/if}}
+                </div>
+
+                <small class="tag">Status: {{status}}</small>
+              </div>
+            {{/each}}
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <p>No quizzes assigned.</p>
+    {{/if}}
+
+    <!-- ================= HISTORY + CERTS ================= -->
+    <div class="grid">
+
+      <div class="panel">
+        <h2>Quiz History</h2>
+        <div class="scroll-box">
+          {{#each attemptRows}}
+            <div class="card" style="margin-bottom:10px">
               <strong>{{quizTitle}}</strong>
-              &nbsp;|&nbsp;
-              {{questionCount}} questions
+              <div>
+                {{percentage}}%
+                {{#if passed}}
+                  <span class="tag">Passed</span>
+                {{else}}
+                  <span class="tag">Failed</span>
+                {{/if}}
+              </div>
+              <small>{{finishedAt}}</small>
             </div>
-
-            <div style="margin-top:6px;">
-              <a href="{{openUrl}}">Open quiz</a>
-
-              {{#if ../../isAdmin}}
-                &nbsp;|&nbsp;
-                <form
-                  method="POST"
-                  action="/admin/orgs/{{../../org.slug}}/quizzes/{{examId}}/delete"
-                  style="display:inline"
-                  onsubmit="return confirm('Delete this quiz? This cannot be undone.');"
-                >
-                  <button
-                    type="submit"
-                    style="
-                      background:none;
-                      border:none;
-                      color:#c00;
-                      cursor:pointer;
-                      font-size:14px;
-                      padding:0;
-                    "
-                  >
-                    Delete
-                  </button>
-                </form>
-              {{/if}}
-            </div>
-
-            <div class="quiz-status">
-              Status: {{status}}
-              {{#if expiresAt}}
-                &nbsp;|&nbsp; Expires: {{expiresAt}}
-              {{/if}}
-            </div>
-          </div>
-        {{/each}}
-      {{/each}}
-    {{else}}
-      <p>No quizzes have been assigned to you yet.</p>
-    {{/if}}
-
-    <!-- ========================= -->
-    <!-- 📊 QUIZ HISTORY -->
-    <!-- ========================= -->
-    <h2>Your quiz history</h2>
-
-    {{#if attemptRows.length}}
-      {{#each attemptRows}}
-        <div class="quiz-block">
-          <div>
-            <strong>{{quizTitle}}</strong>
-            {{#if module}} | {{module}}{{/if}}
-          </div>
-
-          <div>
-            Score: {{score}} / {{maxScore}}
-            ({{percentage}}%)
-            {{#if passed}}
-              <strong style="color:green;">✔ Passed</strong>
-            {{else}}
-              <strong style="color:#c00;">✖ Failed</strong>
-            {{/if}}
-          </div>
-
-          <div class="quiz-status">
-            Completed on {{finishedAt}}
-          </div>
+          {{/each}}
         </div>
-      {{/each}}
-    {{else}}
-      <p>You haven’t attempted any quizzes yet.</p>
-    {{/if}}
+      </div>
 
-    <!-- ========================= -->
-    <!-- 🎓 CERTIFICATES -->
-    <!-- ========================= -->
-    <h2>Your certificates</h2>
-
-    {{#if certRows.length}}
-      {{#each certRows}}
-        <div class="quiz-block">
-          <div>
-            <strong>{{quizTitle}}</strong>
-          </div>
-
-          <div>
-            Score: {{score}} ({{percentage}}%)
-          </div>
-
-          <div class="quiz-status">
-            Certificate ID: {{serial}}
-          </div>
-
-          <div style="margin-top:6px;">
-            <a href="/docs/certificates/{{serial}}.pdf" target="_blank">
-              Download certificate
-            </a>
-          </div>
+      <div class="panel">
+        <h2>Certificates</h2>
+        <div class="scroll-box">
+          {{#each certRows}}
+            <div class="card" style="margin-bottom:10px">
+              <strong>{{quizTitle}}</strong>
+              <div>{{percentage}}%</div>
+              <a href="/docs/certificates/{{serial}}.pdf" target="_blank">
+                Download
+              </a>
+            </div>
+          {{/each}}
         </div>
-      {{/each}}
-    {{else}}
-      <p>No certificates earned yet.</p>
-    {{/if}}
+      </div>
 
-    <!-- ========================= -->
-    <!-- 🛒 MARKETPLACE -->
-    <!-- ========================= -->
-    <h2>CRIPFCnt Marketplace</h2>
+    </div>
 
-    <div class="module-block">
-      <div><strong>SCOI Audit Reports</strong></div>
-      <div class="links-row" style="margin-top:6px;">
-        <a href="/scoi">Browse SCOI Audit Marketplace</a>
-        <a href="/scoi/purchased">Your Purchased Audits</a>
+    <!-- ================= MARKETPLACE ================= -->
+    <h2>Marketplace</h2>
+    <div class="panel">
+      <strong>SCOI Audit Reports</strong>
+      <div class="actions" style="margin-top:8px">
+        <a href="/scoi">Browse Marketplace</a>
+        <a href="/scoi/purchased">My Purchases</a>
       </div>
     </div>
 
