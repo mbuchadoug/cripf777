@@ -113,14 +113,7 @@ router.get(
         try { delete req.session.returnTo; } catch (e) {}
       }
 
-     const defaultOrgSlug = "cripfcnt-school";
-
-// If no explicit return path, send user to default org dashboard
-const final =
-  fromState ||
-  fromSession ||
-  `/org/${defaultOrgSlug}/dashboard`;
-
+      const final = fromState || fromSession || "/audit";
 
       // Debug log (remove in production)
       console.log("[/auth/google/callback] redirecting to:", { final, fromState, fromSession, sessionId: req.sessionID });

@@ -1,0 +1,33 @@
+<nav class="lms-nav">
+  <div class="nav-left">
+    <span class="brand">CRIPFCnt LMS</span>
+
+    {{#if user}}
+      {{#if org}}
+        <a href="/org/{{org.slug}}/dashboard">Dashboard</a>
+        <a href="/org/{{org.slug}}/modules">Modules</a>
+        <a href="/org/{{org.slug}}/dashboard#quizzes">Quizzes</a>
+        <a href="/certificates">Certificates</a>
+
+        {{#if isAdmin}}
+          <a href="/admin/orgs/{{org.slug}}/manage">Org Admin</a>
+        {{/if}}
+      {{else}}
+        <!-- edge case: logged in but no org -->
+        <a href="/lms">LMS Home</a>
+      {{/if}}
+    {{else}}
+      <a href="/lms">Home</a>
+      <a href="/lms/quiz">Preview Quiz</a>
+      <a href="/about">About</a>
+    {{/if}}
+  </div>
+
+  <div class="nav-right">
+    {{#if user}}
+      <a href="/auth/logout">Sign out</a>
+    {{else}}
+      <a href="/auth/google">Sign in</a>
+    {{/if}}
+  </div>
+</nav>
