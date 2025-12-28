@@ -1,0 +1,34 @@
+<h1>Special SCOI Audit Reports</h1>
+
+{{#if audits.length}}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Entity</th>
+      <th>Audit Type</th>
+      <th>Assessment Window</th>
+      <th>Price</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each audits}}
+    <tr>
+      <td>{{this.subject.name}}</td>
+      <td>{{this.auditType}}</td>
+      <td>{{this.assessmentWindow.label}}</td>
+      <td>${{divide this.price 100}}</td>
+      <td>{{#if this.isPaid}}Paid{{else}}Locked{{/if}}</td>
+      <td>
+        <a href="/admin/special-scoi-audits/{{this._id}}">
+          View
+        </a>
+      </td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{else}}
+<p>No Special SCOI audits found.</p>
+{{/if}}

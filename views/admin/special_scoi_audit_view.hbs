@@ -1,0 +1,72 @@
+<h1>Special SCOI Audit Report</h1>
+
+<hr>
+
+<h2>{{audit.subject.name}}</h2>
+<p><strong>Audit Type:</strong> {{audit.auditType}}</p>
+<p><strong>Assessment Window:</strong> {{audit.assessmentWindow.label}}</p>
+
+<hr>
+
+<h3>Purpose</h3>
+<p>{{audit.purpose}}</p>
+
+<hr>
+
+<h3>Context</h3>
+{{#if audit.context.conditions}}
+<ul>
+  {{#each audit.context.conditions}}
+  <li>{{this}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+
+<hr>
+
+<h3>Visibility Analysis</h3>
+<p><strong>Score:</strong> {{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}</p>
+<p>{{audit.scores.visibility.narrative}}</p>
+
+<hr>
+
+<h3>Contribution Analysis</h3>
+<p><strong>Score:</strong> {{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}</p>
+<p>{{audit.scores.contribution.narrative}}</p>
+
+<hr>
+
+<h3>SCOI Calculations</h3>
+
+<p>
+<strong>Placement SCOI:</strong>
+{{audit.calculations.placementSCOI.value}}
+</p>
+
+<p>{{audit.calculations.placementSCOI.meaning}}</p>
+
+<hr>
+
+<h3>Structural Diagnosis</h3>
+<p>{{audit.structuralDiagnosis}}</p>
+
+<hr>
+
+<h3>Final Placement Statement</h3>
+<p>{{audit.finalPlacementStatement}}</p>
+
+<hr>
+
+<h3>Confidence Level</h3>
+<p>{{audit.confidenceLevel}}</p>
+
+<hr>
+
+{{#if audit.pdfUrl}}
+<h3>PDF Report</h3>
+<p>
+  <a href="{{audit.pdfUrl}}" target="_blank">
+    Download PDF
+  </a>
+</p>
+{{/if}}

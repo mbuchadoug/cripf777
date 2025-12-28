@@ -14,9 +14,6 @@ import Handlebars from "handlebars";
 import {
   allowInsecurePrototypeAccess
 } from "@handlebars/allow-prototype-access";
-import specialScoiImportRoutes from "./routes/admin_special_scoi_import.js";
-
-
 
 // routes & utils
 import lmsLoginRoutes from "./routes/lms_login.js";
@@ -281,7 +278,6 @@ app.use(adminPlacementImport);
 
 app.use(placementAuditRoutes);
 app.use(scoiDownloadRoutes);
-app.use(specialScoiImportRoutes);
 
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
