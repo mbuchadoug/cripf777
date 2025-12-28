@@ -226,6 +226,9 @@ app.use(
   })
 );
 
+app.use(specialScoiImportRoutes);
+
+
 // ---------- PASSPORT setup ----------
 configurePassport(); // config/passport.js should set up strategies + serialize/deserialize
 app.use(passport.initialize());
@@ -281,7 +284,7 @@ app.use(adminPlacementImport);
 
 app.use(placementAuditRoutes);
 app.use(scoiDownloadRoutes);
-app.use(specialScoiImportRoutes);
+
 
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {
