@@ -22,15 +22,17 @@ const upload = multer({
    GET — Admin Import Page
 ───────────────────────────────────────────── */
 router.get(
-  "/admin/special-scoi-import",
+  "/admin/special-scoi-audits",
   ensureAuth,
-  (req, res) => {
-    res.render("admin/special_scoi_import", {
-      title: "Import Special SCOI Audit Report",
-      user: req.user
-    });
+  async (req, res) => {
+    const audits = await SpecialScoiAudit.find({})
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.render("admin/special_scoi_list", { audits });
   }
 );
+
 
 /* ─────────────────────────────────────────────
    POST — Import Special SCOI JSON
@@ -42,56 +44,75 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).render("admin/special_scoi_import", {
+        return res.render("admin/special_scoi_import", {
           error: "No file uploaded"
         });
       }
 
       const raw = req.file.buffer.toString("utf8");
-      const audit = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
 
-      /* ─────────────── Validation ─────────────── */
-      if (
-        !audit.subject?.name ||
-        !audit.auditType ||
-        !audit.purpose
-      ) {
-        return res.status(400).render("admin/special_scoi_import", {
-          error: "Invalid SCOI report structure (missing subject, auditType, or purpose)"
+      // ✅ Support single object OR array
+      const audits = Array.isArray(parsed) ? parsed : [parsed];
+
+      let imported = 0;
+      let skipped = 0;
+
+      for (const audit of audits) {
+
+        // 🔐 Minimal, correct validation for SPECIAL SCOI
+        if (!audit.auditType || !audit.subject?.name || !audit.purpose) {
+          skipped++;
+          continue;
+        }
+
+        const exists = await SpecialScoiAudit.findOne({
+          "subject.name": audit.subject.name,
+          auditType: audit.auditType
         });
-      }
 
-      /* ─────────────── Duplicate Guard ─────────────── */
-      const exists = await SpecialScoiAudit.findOne({
-        "subject.name": audit.subject.name,
-        "assessmentWindow.label": audit.assessmentWindow?.label
-      });
+        if (exists) {
+          skipped++;
+          continue;
+        }
 
-      if (exists) {
-        return res.render("admin/special_scoi_import", {
-          error: "This Special SCOI Audit already exists"
+        await SpecialScoiAudit.create({
+          framework: "CRIPFCnt SCOI",
+          auditClass: "special_report",
+          price: 29900,
+          isPaid: false,
+          ...audit
         });
-      }
 
-      /* ─────────────── Create Record ─────────────── */
-      await SpecialScoiAudit.create({
-        framework: "CRIPFCnt SCOI",
-        auditClass: "special_report",
-        price: 29900, // 🔒 Fixed premium price
-        isPaid: false,
-        ...audit
-      });
+        imported++;
+      }
 
       return res.render("admin/special_scoi_import", {
-        success: "Special SCOI Audit Report imported successfully"
+        success: `Imported ${imported} Special SCOI Audit(s). Skipped ${skipped}.`
       });
 
     } catch (err) {
       console.error("[special scoi import]", err);
-      return res.status(500).render("admin/special_scoi_import", {
+      return res.render("admin/special_scoi_import", {
         error: err.message || "Import failed"
       });
     }
+  }
+);
+///////////////////////////////
+
+
+router.get(
+  "/admin/special-scoi-audits/:id",
+  ensureAuth,
+  async (req, res) => {
+    const audit = await SpecialScoiAudit.findById(req.params.id).lean();
+    if (!audit) return res.status(404).send("Not found");
+
+    res.render("admin/special_scoi_view", {
+      audit,
+      layout: false
+    });
   }
 );
 

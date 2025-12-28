@@ -36,7 +36,8 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
 
   scores: mongoose.Schema.Types.Mixed,
   findings: mongoose.Schema.Types.Mixed,
-  civilizationRiskSignals: [String],
+civilizationRiskSignals: mongoose.Schema.Types.Mixed,
+
 
   counterfactual: mongoose.Schema.Types.Mixed,
   disclaimers: mongoose.Schema.Types.Mixed,
