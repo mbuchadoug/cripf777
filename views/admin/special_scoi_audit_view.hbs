@@ -1,72 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Special SCOI Audit Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      background: #ffffff;
+      color: #111;
+      margin: 40px;
+      line-height: 1.6;
+    }
+
+    h1, h2, h3 {
+      margin-top: 32px;
+    }
+
+    h1 {
+      border-bottom: 2px solid #000;
+      padding-bottom: 8px;
+    }
+
+    hr {
+      margin: 32px 0;
+    }
+
+    .meta p {
+      margin: 4px 0;
+    }
+
+    .box {
+      background: #f7f7f7;
+      padding: 16px;
+      border-left: 4px solid #000;
+      margin: 16px 0;
+    }
+
+    ul {
+      margin-left: 20px;
+    }
+
+    .label {
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
 <h1>Special SCOI Audit Report</h1>
 
-<hr>
-
 <h2>{{audit.subject.name}}</h2>
-<p><strong>Audit Type:</strong> {{audit.auditType}}</p>
-<p><strong>Assessment Window:</strong> {{audit.assessmentWindow.label}}</p>
+
+<div class="meta">
+  <p><span class="label">Audit Type:</span> {{audit.auditType}}</p>
+  <p><span class="label">Framework:</span> {{audit.framework}}</p>
+  <p><span class="label">Author:</span> {{audit.author}}</p>
+  <p><span class="label">Assessment Window:</span> {{audit.assessmentWindow.label}}</p>
+  <p><span class="label">Status:</span> {{audit.status}}</p>
+</div>
 
 <hr>
 
 <h3>Purpose</h3>
-<p>{{audit.purpose}}</p>
-
-<hr>
-
-<h3>Context</h3>
-{{#if audit.context.conditions}}
-<ul>
-  {{#each audit.context.conditions}}
-  <li>{{this}}</li>
-  {{/each}}
-</ul>
-{{/if}}
+<div class="box">
+  {{audit.purpose}}
+</div>
 
 <hr>
 
 <h3>Visibility Analysis</h3>
-<p><strong>Score:</strong> {{audit.scores.visibility.value}} / {{audit.scores.visibility.scale}}</p>
-<p>{{audit.scores.visibility.narrative}}</p>
+<div class="box">
+  <p><span class="label">Rating:</span> {{audit.scores.visibility_denominator.rating}}</p>
+  <p>
+    <span class="label">Normalized Range:</span>
+    {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+    –
+    {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+  </p>
+
+  <p class="label">Drivers:</p>
+  <ul>
+    {{#each audit.scores.visibility_denominator.drivers}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+</div>
 
 <hr>
 
-<h3>Contribution Analysis</h3>
-<p><strong>Score:</strong> {{audit.scores.contribution.value}} / {{audit.scores.contribution.scale}}</p>
-<p>{{audit.scores.contribution.narrative}}</p>
+<h3>Responsibility Contribution Analysis</h3>
+<div class="box">
+  <p><span class="label">Rating:</span> {{audit.scores.responsibility_numerator.rating}}</p>
+  <p>
+    <span class="label">Normalized Range:</span>
+    {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+    –
+    {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+  </p>
+
+  <p class="label">Observed Signals:</p>
+  <ul>
+    {{#each audit.scores.responsibility_numerator.observedSignals}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+</div>
 
 <hr>
 
-<h3>SCOI Calculations</h3>
+<h3>SCOI Event Result</h3>
+<div class="box">
+  <p>
+    <span class="label">Estimated Range:</span>
+    {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
+    –
+    {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+  </p>
 
-<p>
-<strong>Placement SCOI:</strong>
-{{audit.calculations.placementSCOI.value}}
-</p>
+  <p><span class="label">Placement:</span> {{audit.scores.SCOI_event_result.placement}}</p>
 
-<p>{{audit.calculations.placementSCOI.meaning}}</p>
-
-<hr>
-
-<h3>Structural Diagnosis</h3>
-<p>{{audit.structuralDiagnosis}}</p>
-
-<hr>
-
-<h3>Final Placement Statement</h3>
-<p>{{audit.finalPlacementStatement}}</p>
+  <p>{{audit.scores.SCOI_event_result.interpretation}}</p>
+</div>
 
 <hr>
 
-<h3>Confidence Level</h3>
-<p>{{audit.confidenceLevel}}</p>
+<h3>Findings</h3>
+<div class="box">
+  <p><span class="label">Core Finding:</span></p>
+  <p>{{audit.findings.coreFinding}}</p>
+
+  <p class="label">Secondary Findings:</p>
+  <ul>
+    {{#each audit.findings.secondaryFindings}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+
+  <p>
+    <span class="label">Classification:</span>
+    {{audit.findings.classification.label}}
+  </p>
+  <p>{{audit.findings.classification.definition}}</p>
+</div>
 
 <hr>
 
-{{#if audit.pdfUrl}}
-<h3>PDF Report</h3>
-<p>
-  <a href="{{audit.pdfUrl}}" target="_blank">
-    Download PDF
-  </a>
-</p>
-{{/if}}
+<h3>Civilization Risk Signals</h3>
+<ul>
+  {{#each audit.civilizationRiskSignals}}
+    <li>
+      <strong>{{this.riskLabel}}:</strong>
+      {{this.description}}
+    </li>
+  {{/each}}
+</ul>
+
+<hr>
+
+<h3>Counterfactual Requirements</h3>
+<div class="box">
+  <p><span class="label">Target:</span> {{audit.counterfactual.goal}}</p>
+
+  <ul>
+    {{#each audit.counterfactual.requirements}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+
+  <p>{{audit.counterfactual.note}}</p>
+</div>
+
+<hr>
+
+<h3>Disclaimers</h3>
+<ul>
+  <li>{{audit.disclaimers.nonPersonal}}</li>
+  <li>{{audit.disclaimers.nonLegal}}</li>
+  <li>{{audit.disclaimers.nonFinancialAdvice}}</li>
+  <li>{{audit.disclaimers.dataLimitations}}</li>
+</ul>
+
+<hr>
+
+<h3>Tags</h3>
+<ul>
+  {{#each audit.tags}}
+    <li>{{this}}</li>
+  {{/each}}
+</ul>
+
+</body>
+</html>
