@@ -43,7 +43,7 @@ router.get(
       .sort({ createdAt: -1 })
       .lean();
 
-    res.render("admin/special_scoi_list", { audits });
+    res.render("admin/special_scoi_audits_list", { audits });
   }
 );
 
@@ -135,7 +135,7 @@ router.get(
     const audit = await SpecialScoiAudit.findById(req.params.id).lean();
     if (!audit) return res.status(404).send("Not found");
 
-    res.render("admin/special_scoi_audits_view", {
+    res.render("admin/special_scoi_audit_view", {
       audit,
       layout: false
     });
