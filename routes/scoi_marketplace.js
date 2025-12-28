@@ -7,48 +7,50 @@ const router = Router();
 
 router.get("/scoi", async (req, res) => {
   try {
-    /* ─────────────────────────────────────────
-       1️⃣ Load archived PLACEMENT audits
-    ───────────────────────────────────────── */
+    /* ───────────────────────────────
+       Placement Audits ($149)
+    ─────────────────────────────── */
     const placementAudits = await PlacementAudit.find({
       status: "archived_reference"
     })
       .sort({ "assessmentWindow.label": -1 })
       .lean();
 
-    /* ─────────────────────────────────────────
-       2️⃣ Load SPECIAL SCOI audits (sellable)
-       Only unpaid → marketplace items
-    ───────────────────────────────────────── */
+    const normalizedPlacement = placementAudits.map(a => ({
+      ...a,
+      displayPrice: 149,
+      auditKind: "placement"
+    }));
+
+    /* ───────────────────────────────
+       Special SCOI Audits ($299)
+    ─────────────────────────────── */
     const specialAudits = await SpecialScoiAudit.find({
       isPaid: false
     })
       .sort({ createdAt: -1 })
       .lean();
 
-    /* ─────────────────────────────────────────
-       3️⃣ Normalize for marketplace view
-       (so the SAME template works)
-    ───────────────────────────────────────── */
     const normalizedSpecial = specialAudits.map(a => ({
       ...a,
       assessmentWindow: {
         label: a.assessmentWindow?.label || "Special Audit"
-      }
+      },
+      displayPrice: 299,
+      auditKind: "special"
     }));
 
-    /* ─────────────────────────────────────────
-       4️⃣ Merge both
-    ───────────────────────────────────────── */
+    /* ───────────────────────────────
+       Merge
+    ─────────────────────────────── */
     const audits = [
       ...normalizedSpecial,
-      ...placementAudits
+      ...normalizedPlacement
     ];
 
     res.render("scoi/marketplace", {
       user: req.user || null,
-      audits,
-      price: 149   // UI price remains unchanged (as requested)
+      audits
     });
 
   } catch (err) {

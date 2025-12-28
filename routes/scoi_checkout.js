@@ -1,3 +1,4 @@
+// routes/scoi_checkout.js
 import { Router } from "express";
 import Stripe from "stripe";
 import { ensureAuth } from "../middleware/authGuard.js";
@@ -8,39 +9,55 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = Router();
 
 router.post("/scoi/checkout", ensureAuth, async (req, res) => {
-  const { auditId, auditModel } = req.body;
+  const { auditId } = req.body;
 
   let audit;
   let price;
+  let label;
 
-  if (auditModel === "PlacementAudit") {
-    audit = await PlacementAudit.findById(auditId);
+  /* ───────────────────────────────
+     Try Placement first
+  ─────────────────────────────── */
+  audit = await PlacementAudit.findById(auditId);
+  if (audit) {
     price = 14900;
+    label = "Archived Placement SCOI Audit";
   }
 
-  if (auditModel === "SpecialScoiAudit") {
+  /* ───────────────────────────────
+     Try Special SCOI
+  ─────────────────────────────── */
+  if (!audit) {
     audit = await SpecialScoiAudit.findById(auditId);
-    price = 29900;
+    if (audit) {
+      price = 29900;
+      label = "Special SCOI Audit Report";
+    }
   }
 
-  if (!audit) return res.status(404).send("Audit not found");
+  if (!audit) {
+    return res.status(404).send("Audit not found");
+  }
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    payment_method_types: ["card"],
     customer_email: req.user.email,
-    line_items: [{
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: `CRIPFCnt SCOI Audit`
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: label
+          },
+          unit_amount: price
         },
-        unit_amount: price
-      },
-      quantity: 1
-    }],
+        quantity: 1
+      }
+    ],
     metadata: {
-      auditId,
-      auditModel,
+      auditId: audit._id.toString(),
+      auditType: audit.auditClass || "placement",
       userId: req.user._id.toString()
     },
     success_url: `${process.env.SITE_URL}/scoi/purchased`,
