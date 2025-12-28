@@ -19,21 +19,6 @@ const upload = multer({
 });
 
 /* ─────────────────────────────────────────────
-   GET — Admin Import Page
-───────────────────────────────────────────── */
-router.get(
-  "/admin/special-scoi-audits",
-  ensureAuth,
-  async (req, res) => {
-    const audits = await SpecialScoiAudit.find({})
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.render("admin/special_scoi_list", { audits });
-  }
-);
-
-/* ─────────────────────────────────────────────
    GET — Import Special SCOI Page
 ───────────────────────────────────────────── */
 router.get(
@@ -47,6 +32,20 @@ router.get(
   }
 );
 
+/* ─────────────────────────────────────────────
+   GET — List Special SCOI Audits
+───────────────────────────────────────────── */
+router.get(
+  "/admin/special-scoi-audits",
+  ensureAuth,
+  async (req, res) => {
+    const audits = await SpecialScoiAudit.find({})
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.render("admin/special_scoi_list", { audits });
+  }
+);
 
 /* ─────────────────────────────────────────────
    POST — Import Special SCOI JSON
@@ -66,7 +65,7 @@ router.post(
       const raw = req.file.buffer.toString("utf8");
       const parsed = JSON.parse(raw);
 
-      // ✅ Support single object OR array
+      // ✅ Accept single object OR array
       const audits = Array.isArray(parsed) ? parsed : [parsed];
 
       let imported = 0;
@@ -74,12 +73,23 @@ router.post(
 
       for (const audit of audits) {
 
-        // 🔐 Minimal, correct validation for SPECIAL SCOI
-        if (!audit.auditType || !audit.subject?.name || !audit.purpose) {
+        /* ─────────────── Minimal validation ─────────────── */
+        if (
+          !audit.auditType ||
+          !audit.subject?.name ||
+          !audit.purpose
+        ) {
           skipped++;
           continue;
         }
 
+        /* ─────────────── FIX: reserved keyword "type" ─────────────── */
+        if (audit.assessmentWindow?.type) {
+          audit.assessmentWindow.phase = audit.assessmentWindow.type;
+          delete audit.assessmentWindow.type;
+        }
+
+        /* ─────────────── Duplicate guard ─────────────── */
         const exists = await SpecialScoiAudit.findOne({
           "subject.name": audit.subject.name,
           auditType: audit.auditType
@@ -90,10 +100,11 @@ router.post(
           continue;
         }
 
+        /* ─────────────── Create record ─────────────── */
         await SpecialScoiAudit.create({
           framework: "CRIPFCnt SCOI",
           auditClass: "special_report",
-          price: 29900,
+          price: 29900,      // 🔒 Premium price
           isPaid: false,
           ...audit
         });
@@ -113,9 +124,10 @@ router.post(
     }
   }
 );
-///////////////////////////////
 
-
+/* ─────────────────────────────────────────────
+   GET — View Special SCOI Audit
+───────────────────────────────────────────── */
 router.get(
   "/admin/special-scoi-audits/:id",
   ensureAuth,

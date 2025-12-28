@@ -24,10 +24,15 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
     jurisdiction: String
   },
 
-  assessmentWindow: {
-    label: String,
+ assessmentWindow: {
+  label: {
     type: String
   },
+  phase: {
+    type: String   // ← renamed from "type"
+  }
+}
+,
 
   author: String,
   purpose: String,
