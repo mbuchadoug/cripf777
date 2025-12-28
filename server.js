@@ -115,9 +115,6 @@ function renderPage(res, view, req, canonicalPath, extra = {}) {
   });
 }
 
-// -------------------------------
-// 🧱 Handlebars setup (with helpers)
-// -------------------------------
 const hbsHelpers = {
   eq: (a, b) => a === b,
   ne: (a, b) => a !== b,
@@ -131,22 +128,25 @@ const hbsHelpers = {
   isNull: (v) => v === null || v === undefined,
   isNumber: (v) => typeof v === "number",
 
-  // letters helper: 0 => a, 1 => b, ...
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
     const seq = "abcdefghijklmnopqrstuvwxyz";
     return seq.charAt(i) || String.fromCharCode(97 + i);
   },
 
-  // increment helper (useful for 1-based numbering)
   inc: (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? (n + 1) : v;
   },
 
-  // Basic let helper: usage {{#let "x" value=...}} ... use {{x}} inside block
-  // This implementation clones current context and injects the named var for the block.
-  let: function(varNameOrOptions, maybeOptions) {
+  divide: (a, b) => {
+    const x = Number(a);
+    const y = Number(b);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || y === 0) return null;
+    return (x / y).toFixed(3);
+  },
+
+  let: function (varNameOrOptions, maybeOptions) {
     let varName = null;
     let options = maybeOptions;
     if (typeof varNameOrOptions === "string") {
@@ -157,11 +157,10 @@ const hbsHelpers = {
     options = options || {};
     const value = options.hash ? options.hash.value : undefined;
 
-    // shallow-copy context and add variable
     const ctx = Object.assign({}, this);
     if (varName) ctx[varName] = value;
 
-    return (options.fn) ? options.fn(ctx) : "";
+    return options.fn ? options.fn(ctx) : "";
   }
 };
 
