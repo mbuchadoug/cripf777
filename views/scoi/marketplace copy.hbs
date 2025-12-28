@@ -177,7 +177,7 @@
     <h1>Placement Intelligence For Those Who Carry Weight</h1>
     <p>
       SCOI Audits are not opinions, forecasts, or branding tools.
-      They are <strong>structural intelligence reports</strong> that evaluate how visibility,
+      They are **structural intelligence reports** that evaluate how visibility,
       contribution, and responsibility align - or fail - within civilization-scale systems.
     </p>
   </section>
@@ -207,92 +207,52 @@
     </div>
   </section>
 
-  <!-- EXISTING ARCHIVED AUDITS (UNCHANGED) -->
-  <section class="products">
-    <h2>Available Archived SCOI Audits</h2>
+  <!-- PRODUCTS -->
+<!-- PRODUCTS -->
+<section class="products">
+  <h2>Available Archived SCOI Audits</h2>
 
-    {{#if audits.length}}
-      <div class="product-grid">
-        {{#each audits}}
-          <div class="product">
-            <div>
-              <h3>{{this.subject.name}}</h3>
+  {{#if audits.length}}
+    <div class="product-grid">
+      {{#each audits}}
+        <div class="product">
+          <div>
+            <h3>{{this.subject.name}}</h3>
 
-              <p style="color:var(--muted);font-size:14px;margin-top:6px">
-                Assessment Window: {{this.assessmentWindow.label}}
-              </p>
+            <p style="color:var(--muted);font-size:14px;margin-top:6px">
+              Assessment Window: {{this.assessmentWindow.label}}
+            </p>
 
-              <div class="price">${{../price}}</div>
+            <div class="price">${{../price}}</div>
 
-              <ul>
-                <li>Archived, immutable placement audit</li>
-                <li>Includes Placement & Grid SCOI</li>
-                <li>Structural diagnosis & narrative</li>
-                <li>Historical reference (non-retroactive)</li>
-              </ul>
-            </div>
-
-            <form method="POST" action="/scoi/checkout">
-              <input type="hidden" name="auditId" value="{{this._id}}">
-              <input type="hidden" name="type" value="archived">
-              <button class="btn btn-primary" type="submit">
-                Purchase Audit
-              </button>
-            </form>
-
+            <ul>
+              <li>Archived, immutable placement audit</li>
+              <li>Includes Placement & Grid SCOI</li>
+              <li>Structural diagnosis & narrative</li>
+              <li>Historical reference (non-retroactive)</li>
+            </ul>
           </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <p style="color:var(--muted)">
-        No archived SCOI audits are currently available.
-      </p>
-    {{/if}}
-  </section>
 
-  <!-- ✅ NEW: SPECIAL SCOI AUDITS (ADDED ONLY) -->
-  <section class="products">
-    <h2>Special SCOI Audits (Premium)</h2>
+ <form method="POST" action="/scoi/checkout">
+  <input type="hidden" name="auditId" value="{{this._id}}">
+  <input type="hidden" name="type" value="archived">
 
-    {{#if specialAudits.length}}
-      <div class="product-grid">
-        {{#each specialAudits}}
-          <div class="product">
+  <button class="btn btn-primary" type="submit">
+    Purchase Audit
+  </button>
+</form>
 
-            <div>
-              <h3>{{this.subject.name}}</h3>
 
-              <p style="color:var(--muted);font-size:14px;margin-top:6px">
-                Assessment Window: {{this.assessmentWindow.label}}
-              </p>
+        </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <p style="color:var(--muted)">
+      No archived SCOI audits are currently available.
+    </p>
+  {{/if}}
+</section>
 
-              <div class="price">$299</div>
-
-              <ul>
-                <li>Non-placement structural audit</li>
-                <li>Civilization risk signals</li>
-                <li>Counterfactual responsibility analysis</li>
-                <li>Doctrine-grade systemic diagnosis</li>
-              </ul>
-            </div>
-
-            <form method="POST" action="/scoi/checkout">
-              <input type="hidden" name="auditId" value="{{this._id}}">
-              <input type="hidden" name="auditModel" value="SpecialScoiAudit">
-              <button class="btn btn-primary" type="submit">
-                Purchase Audit
-              </button>
-            </form>
-
-          </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <p style="color:var(--muted)">
-        No Special SCOI audits are currently available.
-      </p>
-    {{/if}}
-  </section>
 
   <!-- FOOTER NOTE -->
   <div class="note">

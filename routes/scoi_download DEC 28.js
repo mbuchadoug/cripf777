@@ -1,11 +1,8 @@
 import { Router } from "express";
 import PlacementAudit from "../models/placementAudit.js";
-import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
-
-
 
 /**
  * DOWNLOAD PDF
@@ -26,22 +23,15 @@ router.get("/scoi/audits/:id/download", ensureAuth, async (req, res) => {
  * ❌ DO NOT USE .lean()
  */
 router.get("/scoi/audits/:id/view", ensureAuth, async (req, res) => {
-
-  let audit = await PlacementAudit.findById(req.params.id);
-  let view = "admin/placement_audit_view";
-
-  if (!audit) {
-    audit = await SpecialScoiAudit.findById(req.params.id);
-    view = "admin/special_scoi_audit_view";
-  }
+  const audit = await PlacementAudit.findById(req.params.id); // ✅ FIXED
 
   if (!audit || !audit.isPaid) {
     return res.status(403).send("Audit not available");
   }
 
-  res.render(view, {
-    audit,
-    layout: false
+  res.render("admin/placement_audit_view", {
+    audit,          // full mongoose doc
+    layout: false   // clean view + print
   });
 });
 

@@ -1,23 +1,22 @@
+// routes/scoi_marketplace.js
 import { Router } from "express";
 import PlacementAudit from "../models/placementAudit.js";
-import SpecialScoiAudit from "../models/specialScoiAudit.js";
 
 const router = Router();
 
 router.get("/scoi", async (req, res) => {
   try {
-    const placementAudits = await PlacementAudit.find({
+    const audits = await PlacementAudit.find({
       status: "archived_reference"
-    }).lean();
-
-    const specialAudits = await SpecialScoiAudit.find({}).lean();
+    })
+      .sort({ "assessmentWindow.label": -1 })
+      .lean();
 
     res.render("scoi/marketplace", {
       user: req.user || null,
-      placementAudits,
-      specialAudits
+      audits,
+      price: 149
     });
-
   } catch (err) {
     console.error("[SCOI marketplace]", err);
     res.status(500).send("Failed to load SCOI marketplace");
