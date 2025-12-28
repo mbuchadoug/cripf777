@@ -33,6 +33,20 @@ router.get(
   }
 );
 
+/* ─────────────────────────────────────────────
+   GET — Import Special SCOI Page
+───────────────────────────────────────────── */
+router.get(
+  "/admin/special-scoi-import",
+  ensureAuth,
+  (req, res) => {
+    res.render("admin/special_scoi_import", {
+      title: "Import Special SCOI Audit",
+      user: req.user
+    });
+  }
+);
+
 
 /* ─────────────────────────────────────────────
    POST — Import Special SCOI JSON
