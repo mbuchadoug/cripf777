@@ -1189,14 +1189,27 @@ router.post(
             continue;
           }
 
-          await User.create({
-            organization: org._id,
-            role: "student",
-            studentId,
-            grade: gradeNum,
-            firstName,
-            lastName
-          });
+        const user = await User.create({
+  organization: org._id,
+  role: "student",
+  studentId,
+  grade: gradeNum,
+  firstName,
+  lastName
+});
+
+// ✅ ALSO create org membership
+await OrgMembership.findOneAndUpdate(
+  { org: org._id, user: user._id },
+  {
+    $set: {
+      role: "student",
+      joinedAt: new Date()
+    }
+  },
+  { upsert: true }
+);
+
 
           created++;
         } catch (e) {
