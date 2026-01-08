@@ -162,6 +162,22 @@
     <section>
      <h2>Assign Quiz (bulk)</h2>
 
+{{#if (eq org.type "school")}}
+<label class="block">
+  Grade:
+  <select id="gradeSelect" name="grade" required>
+    <option value="">-- select grade --</option>
+    <option value="1">Grade 1</option>
+    <option value="2">Grade 2</option>
+    <option value="3">Grade 3</option>
+    <option value="4">Grade 4</option>
+    <option value="5">Grade 5</option>
+    <option value="6">Grade 6</option>
+    <option value="7">Grade 7</option>
+  </select>
+</label>
+{{/if}}
+
      <div class="panel">
        <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
          <p>Select members to assign a quiz for the chosen module. This creates an exam instance per selected user.</p>
@@ -175,7 +191,7 @@
            </select>
          </label>
 
-         <label class="block">
+         <!--<label class="block">
            Users:
            <select id="userIds" name="userIds" multiple size="6" required>
              {{#each memberships}}
@@ -185,7 +201,25 @@
              {{/each}}
            </select>
            <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
-         </label>
+         </label>-->
+
+
+         {{#unless (eq org.type "school")}}
+<label class="block">
+  Users:
+  <select id="userIds" name="userIds" multiple size="6" required>
+    {{#each memberships}}
+      {{#if this.user}}
+        <option value="{{this.user._id}}">
+          {{this.user.email}} ({{this.role}})
+        </option>
+      {{/if}}
+    {{/each}}
+  </select>
+  <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
+</label>
+{{/unless}}
+
 
          <label class="block">
            <input type="checkbox" id="usePassage" name="usePassage" value="1" /> Assign a specific passage (passage quiz)
@@ -431,42 +465,69 @@ fb.innerHTML = `
     });
 
     // Assign Quiz (AJAX) — includes optional passageId when chosen
-    document.getElementById('assignForm').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
-      const url = form.action;
-      const payload = formToObject(form);
-      // ensure userIds is array
-      if (!Array.isArray(payload.userIds)) payload.userIds = payload.userIds ? [payload.userIds] : [];
-      // If usePassage checked and passage selected, include passageId and set count to childCount
-      if (usePassageCb.checked) {
-        const sel = passageSelect.selectedOptions[0];
-        if (!sel || !sel.value) {
-          document.getElementById('assignResult').innerHTML = '<span class="error">Please choose a passage to assign.</span>';
-          return;
-        }
-        payload.passageId = sel.value;
-        payload.count = parseInt(sel.dataset.childCount || payload.count || '1', 10) || 1;
-      }
-      document.getElementById('assignResult').textContent = 'Assigning...';
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          document.getElementById('assignResult').innerHTML = '<span class="error">Assign failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        document.getElementById('assignResult').innerHTML = '<span class="success">Assigned ' + (data.assigned ? data.assigned.length : 0) + ' users.</span>';
-        console.log('assigned details', data.assigned);
-      } catch (e) {
-        console.error(e);
-        document.getElementById('assignResult').innerHTML = '<span class="error">Assign failed (network)</span>';
-      }
+// Assign Quiz (AJAX) — includes optional passageId when chosen
+document.getElementById('assignForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const form = ev.currentTarget;
+  const url = form.action;
+
+  const payload = formToObject(form);
+  const isSchool = "{{org.type}}" === "school";
+
+  if (isSchool) {
+    if (!payload.grade) {
+      document.getElementById('assignResult').innerHTML =
+        '<span class="error">Please select a grade.</span>';
+      return;
+    }
+    delete payload.userIds;
+  } else {
+    if (!Array.isArray(payload.userIds) || !payload.userIds.length) {
+      document.getElementById('assignResult').innerHTML =
+        '<span class="error">Please select at least one user.</span>';
+      return;
+    }
+  }
+
+  // Passage mode
+  if (usePassageCb.checked) {
+    const sel = passageSelect.selectedOptions[0];
+    if (!sel || !sel.value) {
+      document.getElementById('assignResult').innerHTML =
+        '<span class="error">Please choose a passage to assign.</span>';
+      return;
+    }
+    payload.passageId = sel.value;
+    payload.count = parseInt(sel.dataset.childCount || payload.count || '1', 10) || 1;
+  }
+
+  document.getElementById('assignResult').textContent = 'Assigning...';
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      document.getElementById('assignResult').innerHTML =
+        '<span class="error">Assign failed: ' + (data.error || 'unknown') + '</span>';
+      return;
+    }
+
+    document.getElementById('assignResult').innerHTML =
+      '<span class="success">Assigned ' +
+      (data.assigned ? data.assigned.length : 0) +
+      ' students.</span>';
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById('assignResult').innerHTML =
+      '<span class="error">Assign failed (network)</span>';
+  }
+});
 
     // Create Passage Quiz (AJAX) — posts to /admin/orgs/:slug/passages
     document.getElementById('createPassageForm').addEventListener('submit', async (ev) => {
