@@ -109,27 +109,6 @@
     </section>
 
     <hr />
-{{#if (eq org.type "school")}}
-<div class="panel">
-  <h2>Import Students (CSV)</h2>
-
-  <form
-    method="POST"
-    action="/admin/orgs/{{org.slug}}/import-students"
-    enctype="multipart/form-data"
-  >
-    <input type="file" name="csv" accept=".csv" required />
-
-    <p class="muted small">
-      Required columns:
-      <code>studentId, firstName, lastName, grade</code>
-    </p>
-
-    <button class="btn primary">Upload CSV</button>
-  </form>
-</div>
-{{/if}}
-
 
     <section>
       <h2>Modules</h2>

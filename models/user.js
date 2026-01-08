@@ -5,8 +5,12 @@ const UserSchema = new mongoose.Schema({
   googleId: { type: String, unique: true, index: true },
   // in existing UserSchema add fields:
 organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
-role: { type: String, enum: ["employee","org_admin","super_admin"], default: "employee", index: true },
-
+//role: { type: String, enum: ["employee","org_admin","super_admin"], default: "employee", index: true },
+role: {
+  type: String,
+  enum: ["student", "teacher", "employee", "org_admin", "super_admin"]
+}
+,
   displayName: String,
   firstName: String,
   lastName: String,

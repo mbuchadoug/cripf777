@@ -158,6 +158,31 @@ router.get(
   }
 );
 
+
+router.get("/student", (req, res) => {
+  res.render("auth/student_login");
+});
+
+router.post("/student", async (req, res) => {
+  const { schoolCode, studentId } = req.body;
+
+  const org = await Organization.findOne({ slug: schoolCode }).lean();
+  if (!org) return res.status(400).send("Invalid school code");
+
+  const user = await User.findOne({
+    organization: org._id,
+    studentId,
+    role: "student"
+  });
+
+  if (!user) return res.status(401).send("Invalid student ID");
+
+  req.login(user, err => {
+    if (err) return res.status(500).send("Login failed");
+    res.redirect(`/org/${org.slug}/dashboard`);
+  });
+});
+
 // Logout
 router.get("/logout", (req, res, next) => {
   req.logout(function (err) {

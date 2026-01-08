@@ -15,6 +15,15 @@ import Question from "../models/question.js";
 import Attempt from "../models/attempt.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 
+import multer from "multer";
+import fs from "fs";
+import { parse } from "csv-parse";
+
+const upload = multer({
+  dest: "uploads/",
+  limits: { fileSize: 2 * 1024 * 1024 } // 2MB
+});
+
 const router = Router();
 
 /* ------------------------------------------------------------------ */
@@ -31,6 +40,14 @@ function ensureAdminEmails(req, res, next) {
   }
   if (!adminEmails.includes(req.user.email.toLowerCase())) {
     return res.status(403).send("Admins only");
+  }
+  next();
+}
+
+
+function requireTeacherOrAdmin(req, res, next) {
+  if (!["teacher", "org_admin"].includes(req.user.role)) {
+    return res.status(403).send("Forbidden");
   }
   next();
 }
@@ -862,17 +879,61 @@ router.post(
   ensureAdminEmails,
   async (req, res) => {
     try {
-      const slug = String(req.params.slug || "");
-      let { module = "general", userIds = [], count = 20, expiresMinutes = 60, passageId = null } =
-        req.body || {};
+     const slug = String(req.params.slug || "");
 
-      if (!Array.isArray(userIds) || !userIds.length) {
-        return res.status(400).json({ error: "userIds required" });
-      }
+let {
+  module = "general",
+  userIds = [],
+  grade = null,
+  count = 20,
+  expiresMinutes = 60,
+  passageId = null
+} = req.body || {};
 
-      const moduleKey = String(module).trim().toLowerCase();
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).json({ error: "org not found" });
+const moduleKey = String(module).trim().toLowerCase();
+
+// 🔹 Load org FIRST
+const org = await Organization.findOne({ slug }).lean();
+if (!org) return res.status(404).json({ error: "org not found" });
+
+// ----------------------------------
+// 🎓 SCHOOL MODE: resolve users by grade
+// ----------------------------------
+if (org.type === "school") {
+  const gradeNum = Number(grade);
+
+  if (!Number.isInteger(gradeNum) || gradeNum <= 0) {
+    return res.status(400).json({
+      error: "valid grade required for school assignments"
+    });
+  }
+
+  const students = await User.find({
+    organization: org._id,
+    role: "student",
+    grade: gradeNum
+  }).select("_id");
+
+  if (!students.length) {
+    return res.status(404).json({
+      error: `No students found for grade ${gradeNum}`
+    });
+  }
+
+  // ⛔ overwrite userIds completely
+  userIds = students.map(s => String(s._id));
+}
+
+// ----------------------------------
+// NON-SCHOOL ORGS MUST PROVIDE userIds
+// ----------------------------------
+if (org.type !== "school") {
+  if (!Array.isArray(userIds) || !userIds.length) {
+    return res.status(400).json({ error: "userIds required" });
+  }
+}
+
+
 
       const baseUrl = (process.env.BASE_URL || "").replace(/\/$/, "");
       const assigned = [];
@@ -1071,6 +1132,95 @@ router.post(
     }
   }
 );
+
+/////////////import students
+
+router.post(
+  "/admin/orgs/:slug/import-students",
+  ensureAuth,
+  ensureAdminEmails,
+  upload.single("csv"),
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      if (org.type !== "school") {
+        return res.status(400).json({ error: "Only school orgs can import students" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "CSV file required" });
+      }
+
+      let created = 0;
+      let skipped = 0;
+      const errors = [];
+
+      const stream = fs.createReadStream(req.file.path).pipe(
+        parse({
+          columns: true,
+          trim: true,
+          skip_empty_lines: true
+        })
+      );
+
+      for await (const row of stream) {
+        try {
+          const studentId = String(row.studentId || "").trim();
+          const firstName = String(row.firstName || "").trim();
+          const lastName = String(row.lastName || "").trim();
+          const gradeNum = Number(row.grade);
+
+          if (!studentId || !firstName || !lastName || !Number.isInteger(gradeNum)) {
+            skipped++;
+            errors.push({ row, error: "invalid fields" });
+            continue;
+          }
+
+          const exists = await User.findOne({
+            organization: org._id,
+            studentId
+          }).lean();
+
+          if (exists) {
+            skipped++;
+            continue;
+          }
+
+          await User.create({
+            organization: org._id,
+            role: "student",
+            studentId,
+            grade: gradeNum,
+            firstName,
+            lastName
+          });
+
+          created++;
+        } catch (e) {
+          skipped++;
+          errors.push({ row, error: e.message });
+        }
+      }
+
+      fs.unlink(req.file.path, () => {});
+
+      return res.json({ ok: true, created, skipped, errors });
+    } catch (err) {
+      console.error("[import students]", err);
+      return res.status(500).json({ error: "import failed" });
+    }
+  }
+);
+
+
+
+
+
+
+
 
 router.get(
   "/admin/orgs/:slug/modules",
