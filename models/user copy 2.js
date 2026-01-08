@@ -21,6 +21,9 @@ role: {
   createdAt: { type: Date, default: Date.now },
   lastLogin: { type: Date, default: Date.now },
 
+    studentId: { type: String, index: true },
+  grade: { type: Number, index: true },
+
   // NEW: daily search credit tracking
   // 'searchCountDay' stores a YYYY-MM-DD string for the day the counter applies to.
   // 'searchCount' stores how many searches used on that day.
