@@ -160,26 +160,25 @@
     <hr/>
 
     <section>
-     <h2>Assign Quiz (bulk)</h2>
-
-{{#if (eq org.type "school")}}
-<label class="block">
-  Grade:
-  <select id="gradeSelect" name="grade" required>
-    <option value="">-- select grade --</option>
-    <option value="1">Grade 1</option>
-    <option value="2">Grade 2</option>
-    <option value="3">Grade 3</option>
-    <option value="4">Grade 4</option>
-    <option value="5">Grade 5</option>
-    <option value="6">Grade 6</option>
-    <option value="7">Grade 7</option>
-  </select>
-</label>
-{{/if}}
-
+  
      <div class="panel">
        <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
+
+       {{#if (eq org.type "school")}}
+    <label class="block">
+      Grade:
+      <select id="gradeSelect" name="grade" required>
+        <option value="">-- select grade --</option>
+        <option value="1">Grade 1</option>
+        <option value="2">Grade 2</option>
+        <option value="3">Grade 3</option>
+        <option value="4">Grade 4</option>
+        <option value="5">Grade 5</option>
+        <option value="6">Grade 6</option>
+        <option value="7">Grade 7</option>
+      </select>
+    </label>
+    {{/if}}
          <p>Select members to assign a quiz for the chosen module. This creates an exam instance per selected user.</p>
 
          <label class="block">
