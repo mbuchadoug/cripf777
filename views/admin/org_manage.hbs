@@ -78,8 +78,22 @@
         <tbody id="membersTbody">
         {{#each memberships}}
           <tr data-user-id="{{this.user._id}}">
-            <td>{{this.user.fullName}}</td>
-            <td>{{this.user.email}}</td>
+         <td>
+  {{#if this.user.displayName}}
+    {{this.user.displayName}}
+  {{else}}
+    {{this.user.firstName}} {{this.user.lastName}}
+  {{/if}}
+</td>
+
+            <td>
+  {{#if this.user.email}}
+    {{this.user.email}}
+  {{else}}
+    <span class="muted">No email (CSV student)</span>
+  {{/if}}
+</td>
+
             <td class="roleCell">{{this.role}}</td>
             <td>
               <!-- Promote to Manager -->
