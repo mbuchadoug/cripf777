@@ -3,6 +3,7 @@ import { Router } from "express";
 import passport from "passport";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
+import User from "../models/user.js";
 
 const router = Router();
 
