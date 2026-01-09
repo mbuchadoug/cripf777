@@ -164,51 +164,25 @@ router.get("/student", (req, res) => {
   res.render("auth/student_login");
 });
 
-
 router.post("/student", async (req, res) => {
-  try {
-    const { studentId, password } = req.body;
+  const { schoolCode, studentId } = req.body;
 
-    // Find student by ID
-    const user = await User.findOne({
-      studentId,
-      role: "student"
-    });
+  const org = await Organization.findOne({ slug: schoolCode }).lean();
+  if (!org) return res.status(400).send("Invalid school code");
 
-    if (!user) {
-      return res.status(401).send("Invalid student ID");
-    }
+  const user = await User.findOne({
+    organization: org._id,
+    studentId,
+    role: "student"
+  });
 
-    const ok = await user.verifyPassword(password);
-    if (!ok) {
-      return res.status(401).send("Invalid password");
-    }
+  if (!user) return res.status(401).send("Invalid student ID");
 
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Login session
-    req.login(user, async err => {
-      if (err) return res.status(500).send("Login failed");
-
-      // Find org membership for redirect
-      const membership = await OrgMembership
-        .findOne({ user: user._id })
-        .populate("org")
-        .lean();
-
-      if (!membership || !membership.org?.slug) {
-        return res.status(403).send("No organization assigned");
-      }
-
-      res.redirect(`/org/${membership.org.slug}/dashboard`);
-    });
-  } catch (e) {
-    console.error("[student login]", e);
-    res.status(500).send("Login failed");
-  }
+  req.login(user, err => {
+    if (err) return res.status(500).send("Login failed");
+    res.redirect(`/org/${org.slug}/dashboard`);
+  });
 });
-
 
 // Logout
 router.get("/logout", (req, res, next) => {

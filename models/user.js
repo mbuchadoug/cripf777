@@ -1,44 +1,69 @@
-// models/User.js
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const UserSchema = new mongoose.Schema({
-googleId: {
-  type: String,
-  unique: true,
-  sparse: true,   // ⭐ THIS IS CRITICAL
-  index: true
-},
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
 
-  // in existing UserSchema add fields:
-organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
-//role: { type: String, enum: ["employee","org_admin","super_admin"], default: "employee", index: true },
-role: {
-  type: String,
-  enum: ["student", "teacher", "employee", "org_admin", "super_admin"]
-}
-,
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Organization",
+    index: true,
+    default: null
+  },
+
+  role: {
+    type: String,
+    enum: ["student", "teacher", "employee", "org_admin", "super_admin"]
+  },
+
   displayName: String,
   firstName: String,
   lastName: String,
+
   email: { type: String, index: true },
   photo: String,
   locale: String,
   provider: String,
+
+  studentId: { type: String, index: true },
+  grade: { type: Number, index: true },
+
+  passwordHash: { type: String, default: null },
+
   createdAt: { type: Date, default: Date.now },
   lastLogin: { type: Date, default: Date.now },
 
-    studentId: { type: String, index: true },
-  grade: { type: Number, index: true },
-
-  // NEW: daily search credit tracking
-  // 'searchCountDay' stores a YYYY-MM-DD string for the day the counter applies to.
-  // 'searchCount' stores how many searches used on that day.
   searchCountDay: { type: String, index: true, default: null },
   searchCount: { type: Number, default: 0 },
-  // add to UserSchema
-auditCredits: { type: Number, default: 0 },
-paidAt: { type: Date, default: null },
+
+  auditCredits: { type: Number, default: 0 },
+  paidAt: { type: Date, default: null }
 }, { strict: true });
+
+
+// ==============================
+// 🔐 PASSWORD HELPERS (CORRECT PLACE)
+// ==============================
+
+UserSchema.methods.setPassword = async function (plainPassword) {
+  const saltRounds = 10;
+  this.passwordHash = await bcrypt.hash(String(plainPassword), saltRounds);
+};
+
+UserSchema.methods.verifyPassword = async function (plainPassword) {
+  if (!this.passwordHash) return false;
+  return bcrypt.compare(String(plainPassword), this.passwordHash);
+};
+
+
+// ==============================
+// MODEL EXPORT
+// ==============================
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
 export default User;
