@@ -73,32 +73,19 @@
 
       <table>
         <thead>
-          <tr><th>Name</th><th>Email</th><th>Role</th>   {{#if (eq org.type "school")}}
+  <tr>
+    <th>Name</th>
+    <th>Email</th>
+    <th>Role</th>
+
+    {{#if (eq org.type "school")}}
       <th>Student Password</th>
-    {{/if}}  {{#if (eq ../org.type "school")}}
-<td>
-  {{#if (eq this.role "student")}}
-    <form
-      class="inline-form set-password-form"
-      data-user-id="{{this.user._id}}"
-    >
-      <input
-        type="password"
-        name="password"
-        placeholder="New password"
-        required
-        minlength="4"
-        style="width:120px"
-      />
-      <button type="submit">Set</button>
-    </form>
-  {{else}}
-    <span class="muted">—</span>
-  {{/if}}
-</td>
-{{/if}}
-  <th>Actions</th></tr>
-        </thead>
+    {{/if}}
+
+    <th>Actions</th>
+  </tr>
+</thead>
+
         <tbody id="membersTbody">
         {{#each memberships}}
           <tr data-user-id="{{this.user._id}}">
@@ -119,6 +106,30 @@
 </td>
 
             <td class="roleCell">{{this.role}}</td>
+
+            {{#if (eq ../org.type "school")}}
+<td>
+  {{#if (eq this.role "student")}}
+    <form
+      class="inline-form set-password-form"
+      data-user-id="{{this.user._id}}"
+    >
+      <input
+        type="password"
+        name="password"
+        placeholder="New password"
+        required
+        minlength="4"
+        style="width:120px"
+      />
+      <button type="submit">Set</button>
+    </form>
+  {{else}}
+    <span class="muted">|</span>
+  {{/if}}
+</td>
+{{/if}}
+
             <td>
               <!-- Promote to Manager -->
               <form class="inline-form" data-ajax="member" method="post" action="/admin/orgs/{{../org.slug}}/members/{{this.user._id}}">
