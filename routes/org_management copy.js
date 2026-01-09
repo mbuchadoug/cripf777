@@ -1344,5 +1344,49 @@ router.post(
 );
 
 
+
+
+// ------------------------------------------------------------------
+// ADMIN: Set / Reset student password
+// POST /admin/orgs/:slug/students/:userId/set-password
+// ------------------------------------------------------------------
+router.post(
+  "/admin/orgs/:slug/students/:userId/set-password",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const userId = String(req.params.userId || "");
+      const { password } = req.body;
+
+      if (!password || password.length < 4) {
+        return res.status(400).json({ error: "Password too short" });
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      const user = await User.findOne({
+        _id: userId,
+        organization: org._id,
+        role: "student"
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: "student not found" });
+      }
+
+      await user.setPassword(password);
+      await user.save();
+
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[set student password]", err);
+      return res.status(500).json({ error: "failed to set password" });
+    }
+  }
+);
+
 // export default router
 export default router;

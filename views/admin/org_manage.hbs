@@ -73,7 +73,31 @@
 
       <table>
         <thead>
-          <tr><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr>
+          <tr><th>Name</th><th>Email</th><th>Role</th>   {{#if (eq org.type "school")}}
+      <th>Student Password</th>
+    {{/if}}  {{#if (eq ../org.type "school")}}
+<td>
+  {{#if (eq this.role "student")}}
+    <form
+      class="inline-form set-password-form"
+      data-user-id="{{this.user._id}}"
+    >
+      <input
+        type="password"
+        name="password"
+        placeholder="New password"
+        required
+        minlength="4"
+        style="width:120px"
+      />
+      <button type="submit">Set</button>
+    </form>
+  {{else}}
+    <span class="muted">—</span>
+  {{/if}}
+</td>
+{{/if}}
+  <th>Actions</th></tr>
         </thead>
         <tbody id="membersTbody">
         {{#each memberships}}
@@ -570,5 +594,47 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
     });
 
   </script>
+
+
+  <script>
+  document.querySelectorAll('.set-password-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const userId = form.dataset.userId;
+      const password = form.querySelector('input[name="password"]').value;
+
+      if (!password || password.length < 4) {
+        alert("Password must be at least 4 characters");
+        return;
+      }
+
+      try {
+        const resp = await fetch(
+          `/admin/orgs/{{org.slug}}/students/${userId}/password`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password })
+          }
+        );
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          alert(data.error || "Failed to set password");
+          return;
+        }
+
+        alert("✅ Password set successfully");
+        form.reset();
+
+      } catch (err) {
+        console.error(err);
+        alert("Network error");
+      }
+    });
+  });
+</script>
+
 </body>
 </html>
