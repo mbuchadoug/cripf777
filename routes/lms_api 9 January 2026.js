@@ -497,41 +497,30 @@ function buildCertificateHtml({
 
   const isNyaradzo = /nyaradzo/.test(org);
   const isCripfcnt = /cripfcnt/.test(org);
-  const isStEurit =
-  /st[\s\-]?eurit/.test(org) ||
-  /eurit/.test(org);
-
 
   /* ===============================
      🎨 BRAND CONFIG
   =============================== */
- const brand = isStEurit
-  ? {
-      primary: "#111111", // black
-      accent: "#D4AF37",  // gold
-      logo: `${process.env.SITE_URL || ""}/assets/st-eurit-logo.png`,
-      title: "St Eurit International School Certificate"
-    }
-  : isNyaradzo
-  ? {
-      primary: "#0a2e5c",
-      accent: "#c9a227",
-      logo: `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`,
-      title: "Nyaradzo Group Training Certificate"
-    }
-  : isCripfcnt
-  ? {
-      primary: "#0f5132",
-      accent: "#20c997",
-      logo: `${process.env.SITE_URL || ""}/assets/cripfcnt-logo.png`,
-      title: "CRIPFCNT Training Certificate"
-    }
-  : {
-      primary: "#222",
-      accent: "#f1b000",
-      logo: "",
-      title: "Certificate of Completion"
-    };
+  const brand = isNyaradzo
+    ? {
+        primary: "#0a2e5c",          // Nyaradzo blue
+        accent: "#c9a227",           // Gold
+        logo: `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`,
+        title: "Nyaradzo Group Training Certificate"
+      }
+    : isCripfcnt
+    ? {
+        primary: "#0f5132",          // Deep green (CRIPFCNT)
+        accent: "#20c997",           // Teal accent
+        logo: `${process.env.SITE_URL || ""}/assets/cripfcnt-logo.png`,
+        title: "CRIPFCNT Training Certificate"
+      }
+    : {
+        primary: "#222",
+        accent: "#f1b000",
+        logo: "",
+        title: "Certificate of Completion"
+      };
 
   return `
 <!doctype html>
