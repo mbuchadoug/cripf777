@@ -576,7 +576,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     // All quiz instances assigned to THIS user in THIS org
     const exams = await ExamInstance.find({
       org: org._id,
-      user: req.user._id,
+        userId: req.user._id,
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -1001,7 +1001,9 @@ if (org.type !== "school") {
               examId,
               org: org._id,
               module: moduleKey,
-              user: mongoose.Types.ObjectId(uId),
+              //user: mongoose.Types.ObjectId(uId),
+              userId: mongoose.Types.ObjectId(uId),
+
               // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
               questionIds,
               choicesOrder,
