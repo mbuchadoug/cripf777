@@ -564,24 +564,51 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
     const membership = await OrgMembership.findOne({
       org: org._id,
-      user: req.user._id,
+      user: req.user._id
     }).lean();
     if (!membership) {
       return res.status(403).send("You are not a member of this organization");
     }
 
-    // All modules for this org
     const modules = await OrgModule.find({ org: org._id }).lean();
 
-    // All quiz instances assigned to THIS user in THIS org
     const exams = await ExamInstance.find({
       org: org._id,
-        userId: req.user._id,
+      userId: req.user._id
     })
       .sort({ createdAt: -1 })
       .lean();
 
-    // Group quizzes by module slug
+    /* ===============================
+       🔑 PRELOAD ALL PASSAGE PARENTS
+    =============================== */
+    const parentIds = new Set();
+
+    for (const ex of exams) {
+      if (Array.isArray(ex.questionIds)) {
+        for (const q of ex.questionIds) {
+          if (String(q).startsWith("parent:")) {
+            parentIds.add(String(q).replace("parent:", ""));
+          }
+        }
+      }
+    }
+
+    const parentDocs = parentIds.size
+      ? await QuizQuestion.find({ _id: { $in: [...parentIds] } })
+          .select("_id title text")
+          .lean()
+      : [];
+
+    const parentMap = {};
+    for (const p of parentDocs) {
+      parentMap[String(p._id)] =
+        p.title || p.text || "Comprehension Quiz";
+    }
+
+    /* ===============================
+       BUILD DASHBOARD DATA
+    =============================== */
     const quizzesByModule = {};
     const now = new Date();
 
@@ -593,141 +620,54 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       if (ex.finishedAt) status = "completed";
       else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
-      const moduleKey = (ex.module || "responsibility").toLowerCase();
-      const moduleLabel =
-        moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
+      let quizTitle = `${key.charAt(0).toUpperCase() + key.slice(1)} Quiz`;
+      let questionCount = 0;
 
-      // Org quiz: 20 questions, filtered by module + org
-     /* const openUrl = `/lms/quiz?module=${encodeURIComponent(
-        moduleLabel
-      )}&org=${encodeURIComponent(org.slug)}`;*/
-      // replacement (correct)
-//const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&module=${encodeURIComponent(moduleLabel)}`;
-let quizTitle = `${moduleLabel} Quiz`;
-let questionCount = 0;
+      if (Array.isArray(ex.questionIds)) {
+        questionCount = ex.questionIds.filter(
+          q => !String(q).startsWith("parent:")
+        ).length;
 
+        const parentMarker = ex.questionIds.find(q =>
+          String(q).startsWith("parent:")
+        );
 
-    // derive quiz title + real question count
-// derive quiz title + real question count
-
-
-
-if (Array.isArray(ex.questionIds)) {
-  // exclude parent markers from count
-  questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
-
-  // detect passage parent
-  const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
-  if (parentMarker) {
-    const parentId = String(parentMarker).replace("parent:", "");
-
-    try {
-      const parentDoc = await QuizQuestion.findById(parentId)
-        .select("title text")
-        .lean();
-
-      if (parentDoc) {
-        quizTitle =
-          parentDoc.title ||
-          parentDoc.text ||
-          "Comprehension Quiz";
-      } else {
-        quizTitle = "Comprehension Quiz";
+        if (parentMarker) {
+          const parentId = String(parentMarker).replace("parent:", "");
+          quizTitle = parentMap[parentId] || "Comprehension Quiz";
+        }
       }
-    } catch (e) {
-      console.warn("[dashboard] failed to load passage title:", e.message);
-      quizTitle = "Comprehension Quiz";
-    }
-  }
-}
 
-const openUrl =
-  `/org/${org.slug}/quiz` +
-  `?examId=${encodeURIComponent(ex.examId)}` +
-  `&module=${encodeURIComponent(moduleLabel)}` +
-  `&quizTitle=${encodeURIComponent(quizTitle)}`;
+      const openUrl =
+        `/org/${org.slug}/quiz` +
+        `?examId=${encodeURIComponent(ex.examId)}` +
+        `&quizTitle=${encodeURIComponent(quizTitle)}`;
 
-quizzesByModule[key].push({
-  examId: ex.examId,
-  module: ex.module,
-  createdAt: ex.createdAt,
-  expiresAt: ex.expiresAt,
-  finishedAt: ex.finishedAt,
-  status,
-  openUrl,
-  quizTitle,
-  questionCount
-});
-
+      quizzesByModule[key].push({
+        examId: ex.examId,
+        quizTitle,
+        questionCount,
+        status,
+        openUrl,
+        createdAt: ex.createdAt
+      });
     }
 
-    // compute isAdmin for template: platform admin OR org manager/admin
-    const platformAdmin = isPlatformAdmin(req);
-    const orgRole = String(membership.role || "").toLowerCase();
-    const isOrgManager = orgRole === "manager" || orgRole === "admin";
-    const isAdmin = !!(platformAdmin || isOrgManager);
-    const hasAssignedQuizzes = Object.keys(quizzesByModule).length > 0;
-const showWelcome = !!req.session.isFirstLogin;
-
-// ----------------------------------
-// 📊 USER ATTEMPTS (THIS ORG)
-// ----------------------------------
-const attempts = await Attempt.find({
-  organization: org._id,
-  userId: req.user._id
-})
-  .sort({ finishedAt: -1 })
-  .lean();
-
-// Shape for UI
-const attemptRows = attempts.map(a => ({
-  quizTitle: a.quizTitle || a.module || "Quiz",
-  module: a.module || "",
-  score: a.score || 0,
-  maxScore: a.maxScore || 0,
-  percentage: a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0,
-  passed: !!a.passed,
-  finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-}));
-
-// ----------------------------------
-// 🎓 USER CERTIFICATES (THIS ORG)
-// ----------------------------------
-const certificates = await Certificate.find({
-  userId: req.user._id,
-  orgId: org._id
-})
-  .sort({ createdAt: -1 })
-  .lean();
-
-const certRows = certificates.map(c => ({
-  quizTitle: c.quizTitle || c.courseTitle || "Quiz",
-  score: c.score,
-  percentage: c.percentage,
-  serial: c.serial,
-  createdAt: c.createdAt
-}));
-
-// clear it immediately (one-time)
-if (req.session?.isFirstLogin) {
-  delete req.session.isFirstLogin;
-}
+    const isAdmin =
+      ["manager", "admin"].includes(String(membership.role).toLowerCase());
 
     return res.render("org/dashboard", {
       org,
       membership,
       modules,
-      user: req.user,
       quizzesByModule,
-        hasAssignedQuizzes,
+      hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
       isAdmin,
-      showWelcome,
-      attemptRows,
-certRows,
-
+      user: req.user
     });
+
   } catch (err) {
-    console.error("[org dashboard] error:", err && (err.stack || err));
+    console.error("[org dashboard] error:", err);
     return res.status(500).send("failed");
   }
 });
