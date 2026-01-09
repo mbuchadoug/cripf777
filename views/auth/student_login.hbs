@@ -1,15 +1,165 @@
-<h1>Student Login</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Student Login | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<form method="POST" action="/auth/student">
-  <label>
-    Student ID
-    <input name="studentId" required />
-  </label>
+  <style>
+    :root {
+      --primary: #0b6fb7;
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --border: #e2e6ea;
+      --text: #111;
+      --muted: #666;
+      --radius: 12px;
+    }
 
-  <label>
-    Password
-    <input name="password" type="password" required />
-  </label>
+    * {
+      box-sizing: border-box;
+    }
 
-  <button class="btn primary">Login</button>
-</form>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Arial;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+
+    .logo {
+      text-align: center;
+      font-weight: 700;
+      font-size: 22px;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0 0 16px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    label span {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.95;
+    }
+
+    .help-text {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #888;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="login-card">
+    <div class="logo">CRIPFCnt</div>
+    <div class="subtitle">Responsibility Learning Management System</div>
+
+    <h1>Student Login</h1>
+
+    <form method="POST" action="/auth/student">
+      <label>
+        <span>Student ID</span>
+        <input
+          name="studentId"
+          placeholder="e.g. STU-1023"
+          required
+        />
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input
+          name="password"
+          type="password"
+          placeholder="Enter your password"
+          required
+        />
+      </label>
+
+      <button type="submit">Log in</button>
+    </form>
+
+    <div class="help-text">
+      Use the Student ID and password provided by your school.
+    </div>
+  </div>
+
+  <footer>
+    CRIPFCnt · Responsibility LMS
+  </footer>
+
+</body>
+</html>
