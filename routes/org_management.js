@@ -630,13 +630,19 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
        BUILD DASHBOARD DATA (DEDUPED)
     -------------------------------- */
     const quizzesByModule = {};
-    const seenExamIds = new Set();
+    //const seenExamIds = new Set();
+    const seenKeys = new Set();
     const now = new Date();
 
-    for (const ex of exams) {
-      // 🔒 HARD DEDUPE (CRITICAL)
-      if (seenExamIds.has(ex.examId)) continue;
-      seenExamIds.add(ex.examId);
+   for (const ex of exams) {
+  const logicalKey =
+    `${ex.org}_${ex.userId}_${ex.module}_` +
+    (Array.isArray(ex.questionIds)
+      ? ex.questionIds.filter(q => !String(q).startsWith("parent:")).join(",")
+      : "");
+
+  if (seenKeys.has(logicalKey)) continue;
+  seenKeys.add(logicalKey);
 
       const moduleKey = ex.module || "general";
       if (!quizzesByModule[moduleKey]) {
