@@ -558,7 +558,8 @@ router.get(
 /* ------------------------------------------------------------------ */
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
-    const slug = String(req.params.slug || "");
+    const slug = String(req.params.slug || "").trim();
+
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
@@ -566,12 +567,32 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       org: org._id,
       user: req.user._id
     }).lean();
+
     if (!membership) {
       return res.status(403).send("You are not a member of this organization");
     }
 
+    /* -------------------------------
+       ADMIN CHECK (RESTORED)
+    -------------------------------- */
+    const platformAdmin = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(e => e.trim().toLowerCase())
+      .includes(req.user.email?.toLowerCase());
+
+    const role = String(membership.role || "").toLowerCase();
+
+    const isAdmin =
+      platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
+
+    /* -------------------------------
+       LOAD MODULES
+    -------------------------------- */
     const modules = await OrgModule.find({ org: org._id }).lean();
 
+    /* -------------------------------
+       LOAD EXAMS (RAW)
+    -------------------------------- */
     const exams = await ExamInstance.find({
       org: org._id,
       userId: req.user._id
@@ -579,17 +600,16 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    /* ===============================
-       🔑 PRELOAD ALL PASSAGE PARENTS
-    =============================== */
+    /* -------------------------------
+       PRELOAD COMPREHENSION TITLES
+    -------------------------------- */
     const parentIds = new Set();
 
     for (const ex of exams) {
-      if (Array.isArray(ex.questionIds)) {
-        for (const q of ex.questionIds) {
-          if (String(q).startsWith("parent:")) {
-            parentIds.add(String(q).replace("parent:", ""));
-          }
+      if (!Array.isArray(ex.questionIds)) continue;
+      for (const q of ex.questionIds) {
+        if (String(q).startsWith("parent:")) {
+          parentIds.add(String(q).replace("parent:", ""));
         }
       }
     }
@@ -600,27 +620,36 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           .lean()
       : [];
 
-    const parentMap = {};
+    const parentTitleMap = {};
     for (const p of parentDocs) {
-      parentMap[String(p._id)] =
+      parentTitleMap[String(p._id)] =
         p.title || p.text || "Comprehension Quiz";
     }
 
-    /* ===============================
-       BUILD DASHBOARD DATA
-    =============================== */
+    /* -------------------------------
+       BUILD DASHBOARD DATA (DEDUPED)
+    -------------------------------- */
     const quizzesByModule = {};
+    const seenExamIds = new Set();
     const now = new Date();
 
     for (const ex of exams) {
-      const key = ex.module || "general";
-      if (!quizzesByModule[key]) quizzesByModule[key] = [];
+      // 🔒 HARD DEDUPE (CRITICAL)
+      if (seenExamIds.has(ex.examId)) continue;
+      seenExamIds.add(ex.examId);
+
+      const moduleKey = ex.module || "general";
+      if (!quizzesByModule[moduleKey]) {
+        quizzesByModule[moduleKey] = [];
+      }
 
       let status = "pending";
       if (ex.finishedAt) status = "completed";
       else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
-      let quizTitle = `${key.charAt(0).toUpperCase() + key.slice(1)} Quiz`;
+      let quizTitle =
+        moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz";
+
       let questionCount = 0;
 
       if (Array.isArray(ex.questionIds)) {
@@ -634,7 +663,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
         if (parentMarker) {
           const parentId = String(parentMarker).replace("parent:", "");
-          quizTitle = parentMap[parentId] || "Comprehension Quiz";
+          quizTitle = parentTitleMap[parentId] || "Comprehension Quiz";
         }
       }
 
@@ -643,7 +672,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         `?examId=${encodeURIComponent(ex.examId)}` +
         `&quizTitle=${encodeURIComponent(quizTitle)}`;
 
-      quizzesByModule[key].push({
+      quizzesByModule[moduleKey].push({
         examId: ex.examId,
         quizTitle,
         questionCount,
@@ -652,34 +681,67 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         createdAt: ex.createdAt
       });
     }
-const showWelcome = !!req.session?.isFirstLogin;
 
-// Minimal safe defaults
-const attemptRows = [];
-const certRows = [];
+    /* -------------------------------
+       USER ATTEMPTS
+    -------------------------------- */
+    const attempts = await Attempt.find({
+      organization: org._id,
+      userId: req.user._id
+    })
+      .sort({ finishedAt: -1 })
+      .lean();
 
-    const isAdmin =
-      ["manager", "admin"].includes(String(membership.role).toLowerCase());
+    const attemptRows = attempts.map(a => ({
+      quizTitle: a.quizTitle || a.module || "Quiz",
+      module: a.module || "",
+      score: a.score || 0,
+      maxScore: a.maxScore || 0,
+      percentage: a.maxScore
+        ? Math.round((a.score / a.maxScore) * 100)
+        : 0,
+      passed: !!a.passed,
+      finishedAt: a.finishedAt || a.updatedAt || a.createdAt
+    }));
 
-   return res.render("org/dashboard", {
-  org,
-  membership,
-  modules,
-  quizzesByModule,
-  hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
-  isAdmin,
-  showWelcome,
-  attemptRows,
-  certRows,
-  user: req.user
-});
+    /* -------------------------------
+       CERTIFICATES
+    -------------------------------- */
+    const certificates = await Certificate.find({
+      userId: req.user._id,
+      orgId: org._id
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
+    const certRows = certificates.map(c => ({
+      quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+      percentage: c.percentage,
+      serial: c.serial,
+      createdAt: c.createdAt
+    }));
+
+    /* -------------------------------
+       RENDER
+    -------------------------------- */
+    return res.render("org/dashboard", {
+      org,
+      membership,
+      modules,
+      quizzesByModule,
+      hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
+      attemptRows,
+      certRows,
+      isAdmin,
+      user: req.user
+    });
 
   } catch (err) {
     console.error("[org dashboard] error:", err);
     return res.status(500).send("failed");
   }
 });
+
 
 
 // ------------------------------------------------------------------
