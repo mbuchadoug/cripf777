@@ -652,19 +652,28 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         createdAt: ex.createdAt
       });
     }
+const showWelcome = !!req.session?.isFirstLogin;
+
+// Minimal safe defaults
+const attemptRows = [];
+const certRows = [];
 
     const isAdmin =
       ["manager", "admin"].includes(String(membership.role).toLowerCase());
 
-    return res.render("org/dashboard", {
-      org,
-      membership,
-      modules,
-      quizzesByModule,
-      hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
-      isAdmin,
-      user: req.user
-    });
+   return res.render("org/dashboard", {
+  org,
+  membership,
+  modules,
+  quizzesByModule,
+  hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
+  isAdmin,
+  showWelcome,
+  attemptRows,
+  certRows,
+  user: req.user
+});
+
 
   } catch (err) {
     console.error("[org dashboard] error:", err);
