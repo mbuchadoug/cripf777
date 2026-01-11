@@ -217,8 +217,6 @@ router.get(
     try {
       const slug = String(req.params.slug || "");
       const org = await Organization.findOne({ slug }).lean();
-      const isSchool = org.type === "school";
-
       if (!org) return res.status(404).send("org not found");
 
       const invites = await OrgInvite.find({ orgId: org._id })
@@ -254,7 +252,7 @@ const passages = passagesRaw.map(p => ({
   organization: p.organization || null
 }));
 
-     /* return res.render("admin/org_manage", {
+      return res.render("admin/org_manage", {
   org,
   invites,
   memberships,
@@ -262,20 +260,7 @@ const passages = passagesRaw.map(p => ({
     passages,  
   user: req.user,
   isAdmin: true
-});*/
-
-
-return res.render("admin/org_manage", {
-  org,
-  invites,
-  memberships,
-  modules,
-  passages,
-  user: req.user,
-  isAdmin: true,
-  isSchool
 });
-
     } catch (err) {
       console.error("[admin org manage] error:", err && (err.stack || err));
       return res.status(500).send("failed");

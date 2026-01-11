@@ -71,127 +71,89 @@
     <section>
       <h2>Members</h2>
 
-     <table>
-  <thead>
-    <tr>
-      <th>Name</th>
+      <table>
+        <thead>
+  <tr>
+    <th>Name</th>
+    <th>Email</th>
+    <th>Role</th>
 
-      {{#if isSchool}}
-        <th>Student ID</th>
-        <th>Grade</th>
-      {{/if}}
+    {{#if (eq org.type "school")}}
+      <th>Student Password</th>
+    {{/if}}
 
-      <th>Email</th>
-      <th>Role</th>
-      <th>Password</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
+    <th>Actions</th>
+  </tr>
+</thead>
 
-  <tbody id="membersTbody">
-    {{#each memberships}}
-      <tr data-user-id="{{user._id}}">
+        <tbody id="membersTbody">
+        {{#each memberships}}
+          <tr data-user-id="{{this.user._id}}">
+         <td>
+  {{#if this.user.displayName}}
+    {{this.user.displayName}}
+  {{else}}
+    {{this.user.firstName}} {{this.user.lastName}}
+  {{/if}}
+</td>
 
-        <!-- Name -->
-        <td>
-          {{user.firstName}} {{user.lastName}}
-        </td>
+            <td>
+  {{#if this.user.email}}
+    {{this.user.email}}
+  {{else}}
+    <span class="muted">No email (CSV student)</span>
+  {{/if}}
+</td>
 
-        <!-- Student-only columns -->
-        {{#if ../isSchool}}
-          <td>
-            {{#if user.studentId}}
-              {{user.studentId}}
-            {{else}}
-              —
-            {{/if}}
-          </td>
+            <td class="roleCell">{{this.role}}</td>
 
-          <td>
-            {{#if user.grade}}
-              Grade {{user.grade}}
-            {{else}}
-              —
-            {{/if}}
-          </td>
-        {{/if}}
+            {{#if (eq ../org.type "school")}}
+<td>
+  {{#if (eq this.role "student")}}
+    <form
+      class="inline-form set-password-form"
+      data-user-id="{{this.user._id}}"
+    >
+      <input
+        type="password"
+        name="password"
+        placeholder="New password"
+        required
+        minlength="4"
+        style="width:120px"
+      />
+      <button type="submit">Set</button>
+    </form>
+  {{else}}
+    <span class="muted">|</span>
+  {{/if}}
+</td>
+{{/if}}
 
-        <!-- Email -->
-        <td>
-          {{#if user.email}}
-            {{user.email}}
-          {{else}}
-            <em>No email (CSV student)</em>
-          {{/if}}
-        </td>
+            <td>
+              <!-- Promote to Manager -->
+              <form class="inline-form" data-ajax="member" method="post" action="/admin/orgs/{{../org.slug}}/members/{{this.user._id}}">
+                <input type="hidden" name="action" value="promote" />
+                <input type="hidden" name="role" value="manager" />
+                <button type="submit">Promote to Manager</button>
+              </form>
 
-        <!-- Role -->
-        <td>{{role}}</td>
+              <!-- Demote to Employee -->
+              <form class="inline-form" data-ajax="member" method="post" action="/admin/orgs/{{../org.slug}}/members/{{this.user._id}}">
+                <input type="hidden" name="action" value="demote" />
+                <button type="submit">Demote</button>
+              </form>
 
-        <!-- Password (students only) -->
-        <td>
-          {{#if (eq role "student")}}
-            <form
-              class="inline-form set-password-form"
-              data-user-id="{{user._id}}"
-            >
-              <input
-                type="password"
-                name="password"
-                placeholder="New password"
-                required
-                minlength="4"
-                style="width:120px"
-              />
-              <button type="submit">Set</button>
-            </form>
-          {{else}}
-            <span class="muted">—</span>
-          {{/if}}
-        </td>
-
-        <!-- Actions -->
-        <td>
-          <!-- Promote to Manager -->
-          <form
-            class="inline-form"
-            data-ajax="member"
-            method="post"
-            action="/admin/orgs/{{../org.slug}}/members/{{user._id}}"
-          >
-            <input type="hidden" name="action" value="promote" />
-            <input type="hidden" name="role" value="manager" />
-            <button type="submit">Promote to Manager</button>
-          </form>
-
-          <!-- Demote -->
-          <form
-            class="inline-form"
-            data-ajax="member"
-            method="post"
-            action="/admin/orgs/{{../org.slug}}/members/{{user._id}}"
-          >
-            <input type="hidden" name="action" value="demote" />
-            <button type="submit">Demote</button>
-          </form>
-
-          <!-- Remove -->
-          <form
-            class="inline-form"
-            data-ajax="member"
-            method="post"
-            action="/admin/orgs/{{../org.slug}}/members/{{user._id}}"
-          >
-            <input type="hidden" name="action" value="remove" />
-            <button type="submit" style="background:#c43">Remove</button>
-          </form>
-        </td>
-
-      </tr>
-    {{/each}}
-  </tbody>
-</table>
-
+              <!-- Remove -->
+              <form class="inline-form" data-ajax="member" method="post" action="/admin/orgs/{{../org.slug}}/members/{{this.user._id}}">
+                <input type="hidden" name="action" value="remove" />
+                <button type="submit" style="background:#c43">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {{/each}}
+        </tbody>
+      </table>
       <div id="memberFeedback" class="notice"></div>
     </section>
 
