@@ -211,7 +211,7 @@ router.post("/student", async (req, res) => {
 
 
 // Logout
-router.get("/logout", (req, res, next) => {
+/*router.get("/logout", (req, res, next) => {
   req.logout(function (err) {
     if (err) return next(err);
     req.session.destroy(() => {
@@ -219,6 +219,27 @@ router.get("/logout", (req, res, next) => {
       res.redirect("/");
     });
   });
+});*/
+
+router.get("/logout", (req, res, next) => {
+  const role = req.user?.role; // capture role before logout
+
+  req.logout(function (err) {
+    if (err) return next(err);
+
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+
+      // 🎓 Students go to student login
+      if (role === "student") {
+        return res.redirect("/auth/student");
+      }
+
+      // 👨‍🏫 Others go home
+      return res.redirect("/");
+    });
+  });
 });
+
 
 export default router;
