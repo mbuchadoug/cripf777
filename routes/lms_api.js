@@ -501,6 +501,9 @@ function buildCertificateHtml({
   /st[\s\-]?eurit/.test(org) ||
   /eurit/.test(org);
 
+const isWinchester =
+  /winchester/.test(org);
+
 
   /* ===============================
      🎨 BRAND CONFIG
@@ -511,6 +514,14 @@ function buildCertificateHtml({
       accent: "#D4AF37",  // gold
       logo: `${process.env.SITE_URL || ""}/assets/st-eurit-logo.png`,
       title: "St Eurit International School Certificate"
+    }
+
+      : isWinchester
+  ? {
+      primary: "#1F3C88", // navy blue
+      accent: "#8B1E2D",  // maroon
+      logo: `${process.env.SITE_URL || ""}/assets/winchester-logo.jpg`,
+      title: "Winchester School Certificate"
     }
   : isNyaradzo
   ? {
