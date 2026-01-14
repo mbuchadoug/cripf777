@@ -842,10 +842,7 @@ router.post("/quiz/submit", async (req, res) => {
     const orgSlugOrId = payload.org || null;
 
     // 🔑 SINGLE SOURCE OF TRUTH FOR examId (used by BOTH certificate & attempt)
-const finalExamId =
-  examId ||
-  (exam && exam.examId) ||
-  ("exam-" + Date.now().toString(36));
+
 
 
     // map of question ids supplied
@@ -860,6 +857,19 @@ const finalExamId =
         console.error("[quiz/submit] exam lookup error:", e && (e.stack || e));
       }
     }
+
+    // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
+const finalExamId =
+  examId ||
+  exam?.examId ||
+  ("exam-" + Date.now().toString(36));
+
+
+  console.log("EXAM ALIGNMENT CHECK:", {
+  payloadExamId: examId,
+  finalExamId,
+  examFound: !!exam
+});
 
     // load DB questions for any ObjectId-like ids (use Question model)
     const byId = {};
@@ -1056,15 +1066,11 @@ savedCertificate = await Certificate.create({
 
 
     // Find / update or create Attempt
-    let attemptFilter = {};
-    if (examId) attemptFilter.examId = examId;
-    else {
-      attemptFilter = {
-        userId: (req.user && req.user._id) ? req.user._id : undefined,
-        organization: (exam && exam.org) ? exam.org : undefined,
-        module: exam ? exam.module : (moduleKey || undefined)
-      };
-    }
+  // ✅ ALWAYS lookup attempt by finalExamId
+let attemptFilter = {
+  examId: finalExamId
+};
+
     Object.keys(attemptFilter).forEach(k => attemptFilter[k] === undefined && delete attemptFilter[k]);
 
     let attempt = null;
