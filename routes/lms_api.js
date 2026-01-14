@@ -1106,28 +1106,41 @@ const startTime =
   // leave defaults
 }
 
-   const attemptExamId =
-  examId ||
-  attempt?.examId ||
-  ("exam-" + Date.now().toString(36));
+  
 
 const attemptDoc = {
-  examId: attemptExamId,
-      userId: (req.user && req.user._id) ? req.user._id : (exam && exam.user) ? exam.user : null,
-      organization: (exam && exam.org) ? exam.org : (typeof orgSlugOrId === 'string' ? orgSlugOrId : null),
-      module: (exam && exam.module) ? exam.module : (moduleKey || null),
-      questionIds: (exam && Array.isArray(exam.questionIds)) ? exam.questionIds : qIds.map(id => (mongoose.isValidObjectId(id) ? mongoose.Types.ObjectId(id) : id)),
-      answers: savedAnswers,
-      score,
-       duration,
-      maxScore: total,
-      passed: !!passed,
-      status: "finished",
-   startedAt: attempt?.startedAt,
-      finishedAt: now,
-      updatedAt: now,
-      createdAt: attempt ? attempt.createdAt : now
-    };
+  examId: finalExamId,   // 🔑 MUST MATCH CERTIFICATE
+  userId: (req.user && req.user._id)
+    ? req.user._id
+    : (exam && exam.user) || null,
+
+  organization: (exam && exam.org)
+    ? exam.org
+    : (typeof orgSlugOrId === "string" ? orgSlugOrId : null),
+
+  module: (exam && exam.module) ? exam.module : (moduleKey || null),
+
+  questionIds: (exam && Array.isArray(exam.questionIds))
+    ? exam.questionIds
+    : qIds.map(id =>
+        mongoose.isValidObjectId(id)
+          ? mongoose.Types.ObjectId(id)
+          : id
+      ),
+
+  answers: savedAnswers,
+  score,
+  duration,
+  maxScore: total,
+  passed: !!passed,
+  status: "finished",
+
+  startedAt: attempt?.startedAt,   // ✅ do NOT overwrite
+  finishedAt: now,
+  updatedAt: now,
+  createdAt: attempt ? attempt.createdAt : now
+};
+
 
     let savedAttempt = null;
     if (attempt) {

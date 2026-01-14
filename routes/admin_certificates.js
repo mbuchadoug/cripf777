@@ -17,6 +17,7 @@ const router = express.Router();
  * View all certificates
  */
 router.get("/admin/certificates", ensureAuth, async (req, res) => {
+  
  const certsRaw = await Certificate.find()
   .sort({ issuedAt: -1 })
   .populate("userId", "name email")
