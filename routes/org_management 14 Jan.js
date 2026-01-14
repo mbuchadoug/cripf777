@@ -666,10 +666,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
       let status = "pending";
       if (ex.finishedAt) status = "completed";
-      if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
-  if (ex.expiresAt && ex.expiresAt < now) status = "expired";
-}
-
+      else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
 
       let quizTitle =
         moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz";
@@ -1030,12 +1027,7 @@ if (org.type !== "school") {
             }
 
             const examId = crypto.randomUUID();
-            //const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
-
-            const expiresAt =
-  process.env.QUIZ_EXPIRY_ENABLED === "true"
-    ? new Date(Date.now() + Number(expiresMinutes) * 60 * 1000)
-    : null;
+            const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
             await ExamInstance.create({
               examId,
@@ -1052,7 +1044,16 @@ if (org.type !== "school") {
               createdByIp: req.ip,
             });
 
-          
+            if (Attempt) {
+              await Attempt.create({
+                userId: mongoose.Types.ObjectId(uId),
+                organization: org._id,
+                module: moduleKey,
+                questionIds,
+                startedAt: new Date(),
+                maxScore: childIds.length,
+              });
+            }
 
             const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
             assigned.push({ userId: uId, examId, url });
@@ -1126,13 +1127,7 @@ if (org.type !== "school") {
           }
 
           const examId = crypto.randomUUID();
-        //  const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
-
-        const expiresAt =
-  process.env.QUIZ_EXPIRY_ENABLED === "true"
-    ? new Date(Date.now() + Number(expiresMinutes) * 60 * 1000)
-    : null;
-
+          const expiresAt = new Date(Date.now() + Number(expiresMinutes) * 60 * 1000);
 
           await ExamInstance.create({
             examId,
@@ -1146,7 +1141,17 @@ if (org.type !== "school") {
             createdByIp: req.ip,
           });
 
-         
+          if (Attempt) {
+            await Attempt.create({
+              userId: mongoose.Types.ObjectId(uId),
+              organization: org._id,
+              module: moduleKey,
+              questionIds,
+              startedAt: new Date(),
+              maxScore: questionIds.length,
+            });
+          }
+
           const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;
           assigned.push({ userId: uId, examId, url });
         } catch (e) {

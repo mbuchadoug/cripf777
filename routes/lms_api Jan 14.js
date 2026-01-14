@@ -1082,24 +1082,13 @@ if (passed) {
     }
 
     // mark exam instance as used (optional)
-  // mark exam instance as used (optional)
-if (exam) {
-  try {
-    const update = { updatedAt: now };
-
-    if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
-      update.expiresAt = now;
+    if (exam) {
+      try {
+        await ExamInstance.updateOne({ examId: exam.examId }, { $set: { updatedAt: now, expiresAt: now } }).exec();
+      } catch (e) {
+        console.error("[quiz/submit] failed to update examInstance:", e && (e.stack || e));
+      }
     }
-
-    await ExamInstance.updateOne(
-      { examId: exam.examId },
-      { $set: update }
-    ).exec();
-  } catch (e) {
-    console.error("[quiz/submit] failed to update examInstance:", e && (e.stack || e));
-  }
-}
-
 
     // base response
     const responseJson = {
