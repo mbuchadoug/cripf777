@@ -841,6 +841,13 @@ router.post("/quiz/submit", async (req, res) => {
     const moduleKey = String(payload.module || "").trim() || null;
     const orgSlugOrId = payload.org || null;
 
+    // 🔑 SINGLE SOURCE OF TRUTH FOR examId (used by BOTH certificate & attempt)
+const finalExamId =
+  examId ||
+  (exam && exam.examId) ||
+  ("exam-" + Date.now().toString(36));
+
+
     // map of question ids supplied
     const qIds = answers.map(a => a.questionId).filter(Boolean).map(String);
 
@@ -1008,10 +1015,7 @@ if (passed) {
     });*/
 
    // 🔑 FORCE certificate + attempt to share SAME examId
-const finalExamId =
-  examId ||
-  (exam && exam.examId) ||
-  ("exam-" + Date.now().toString(36));
+
 
 
 
