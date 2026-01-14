@@ -1,7 +1,6 @@
 import { Router } from "express";
 import Certificate from "../models/certificate.js";
 import User from "../models/user.js";
-import Attempt from "../models/attempt.js";
 
 const router = Router();
 
@@ -15,22 +14,8 @@ router.get("/certificates/:serial", async (req, res) => {
 
   if (!cert) return res.status(404).send("Certificate not found");
 
-  // 🔑 load matching attempt
-  const attempt = await Attempt.findOne(
-    { examId: cert.examId },
-    { duration: 1 }
-  ).lean();
-
-  const formatDuration = (d) => {
-    if (!d || typeof d.totalSeconds !== "number") return "-";
-    return `${String(d.hours).padStart(2,"0")}:${String(d.minutes).padStart(2,"0")}:${String(d.seconds).padStart(2,"0")}`;
-  };
-
   return res.render("certificates/view", {
-    cert: {
-      ...cert,
-      durationFormatted: formatDuration(attempt?.duration)
-    },
+    cert,
     user: cert.userId
   });
 });

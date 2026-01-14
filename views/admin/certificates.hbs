@@ -103,7 +103,14 @@
               <td>
                 {{issuedAt}}
               </td>
-<td>{{durationFormatted}}</td>
+<td>
+  {{#if durationFormatted}}
+    {{durationFormatted}}
+  {{else}}
+    <em style="color:red">NO DURATION</em>
+  {{/if}}
+</td>
+
 
 
               <td>
