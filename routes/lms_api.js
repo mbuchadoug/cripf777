@@ -51,6 +51,23 @@ function fetchRandomQuestionsFromFile(count = 5) {
 router.get("/quiz", async (req, res) => {
   try {
     const examIdParam = String(req.query.examId || "").trim();
+
+    // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
+if (examIdParam) {
+  await Attempt.findOneAndUpdate(
+    { examId: examIdParam },
+    {
+      $setOnInsert: {
+        examId: examIdParam,
+        userId: req.user?._id || null,
+        startedAt: new Date(),
+        status: "in_progress"
+      }
+    },
+    { upsert: true, new: true }
+  );
+}
+
     let count = parseInt(req.query.count || "5", 10);
     if (!Number.isFinite(count)) count = 5;
     count = Math.max(1, Math.min(50, count));
@@ -993,8 +1010,10 @@ if (passed) {
    // 🔑 FORCE certificate + attempt to share SAME examId
 const finalExamId =
   examId ||
-  attempt?.examId ||
+  (exam && exam.examId) ||
   ("exam-" + Date.now().toString(36));
+
+
 
 savedCertificate = await Certificate.create({
   userId: (req.user && req.user._id)
@@ -1104,7 +1123,7 @@ const attemptDoc = {
       maxScore: total,
       passed: !!passed,
       status: "finished",
-   startedAt: attempt?.startedAt || now,
+   startedAt: attempt?.startedAt,
       finishedAt: now,
       updatedAt: now,
       createdAt: attempt ? attempt.createdAt : now
