@@ -5,7 +5,7 @@ import User from "../models/user.js";
 const router = Router();
 
 router.get("/certificates/:serial", async (req, res) => {
-  const serial = req.params.serial;
+ const serial = req.params.serial;
 
   const cert = await Certificate
     .findOne({ serial })

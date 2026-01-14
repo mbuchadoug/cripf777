@@ -70,6 +70,7 @@
             <th>Quiz</th>
             <th>Score</th>
             <th>Issued</th>
+            <th>Duration</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -102,6 +103,13 @@
               <td>
                 {{issuedAt}}
               </td>
+<td>
+  {{#if duration}}
+    {{duration.hours}}h {{duration.minutes}}m {{duration.seconds}}s
+  {{else}}
+    -
+  {{/if}}
+</td>
 
               <td>
                 <a href="/admin/certificates/{{_id}}/download/pdf">

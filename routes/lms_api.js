@@ -1047,6 +1047,38 @@ if (passed) {
     }
 
     const now = new Date();
+
+    // ⏱️ CALCULATE QUIZ DURATION
+let duration = {
+  hours: 0,
+  minutes: 0,
+  seconds: 0,
+  totalSeconds: 0
+};
+
+try {
+  const startTime =
+    attempt?.startedAt ||
+    exam?.createdAt ||
+    now;
+
+  const diffMs = Math.max(0, now.getTime() - new Date(startTime).getTime());
+  const totalSeconds = Math.floor(diffMs / 1000);
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  duration = {
+    hours,
+    minutes,
+    seconds,
+    totalSeconds
+  };
+} catch (e) {
+  // leave defaults
+}
+
     const attemptDoc = {
       examId: examId || ("exam-" + Date.now().toString(36)),
       userId: (req.user && req.user._id) ? req.user._id : (exam && exam.user) ? exam.user : null,
@@ -1055,6 +1087,7 @@ if (passed) {
       questionIds: (exam && Array.isArray(exam.questionIds)) ? exam.questionIds : qIds.map(id => (mongoose.isValidObjectId(id) ? mongoose.Types.ObjectId(id) : id)),
       answers: savedAnswers,
       score,
+       duration,
       maxScore: total,
       passed: !!passed,
       status: "finished",

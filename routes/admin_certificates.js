@@ -4,6 +4,8 @@ import User from "../models/user.js";
 import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import path from "path";
+import Attempt from "../models/attempt.js"; // ADD THIS
+
 import fs from "fs";
 import { generateCertificatePdf } from "../routes/lms_api.js"; // 👈 export it (next step)
 
@@ -15,18 +17,40 @@ const router = express.Router();
  * View all certificates
  */
 router.get("/admin/certificates", ensureAuth, async (req, res) => {
-  const certs = await Certificate.find()
-    .sort({ issuedAt: -1 })
-    .populate("userId", "name email")
-    .populate("orgId", "name slug")
-    .lean();
+ const certsRaw = await Certificate.find()
+  .sort({ issuedAt: -1 })
+  .populate("userId", "name email")
+  .populate("orgId", "name slug")
+  .lean();
 
-  res.render("admin/certificates", {
-    title: "Certificates",
-    certs,
-      user: req.user,
-    isAdmin: true
-  });
+// attach duration from Attempt
+const examIds = certsRaw.map(c => c.examId).filter(Boolean);
+
+const attempts = await Attempt.find(
+  { examId: { $in: examIds } },
+  { examId: 1, duration: 1 }
+).lean();
+
+const attemptByExamId = {};
+for (const a of attempts) {
+  attemptByExamId[a.examId] = a;
+}
+
+const certs = certsRaw.map(c => {
+  const attempt = attemptByExamId[c.examId];
+  return {
+    ...c,
+    duration: attempt?.duration || null
+  };
+});
+
+ res.render("admin/certificates", {
+  title: "Certificates",
+  certs,
+  user: req.user,
+  isAdmin: true
+});
+
 });
 
 /**

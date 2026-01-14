@@ -22,7 +22,14 @@ const AttemptSchema = new mongoose.Schema({
   passed: { type: Boolean, default: false },
   status: { type: String, default: "in_progress" }, // in_progress | finished
   startedAt: { type: Date },
-  finishedAt: { type: Date }
+  finishedAt: { type: Date },
+  duration: {
+  hours: { type: Number, default: 0 },
+  minutes: { type: Number, default: 0 },
+  seconds: { type: Number, default: 0 },
+  totalSeconds: { type: Number, default: 0 }
+},
+
 }, { timestamps: true });
 
 export default mongoose.models.Attempt || mongoose.model("Attempt", AttemptSchema);
