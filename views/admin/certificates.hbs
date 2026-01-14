@@ -103,13 +103,8 @@
               <td>
                 {{issuedAt}}
               </td>
-<td>
-  {{#if duration}}
-    {{duration.hours}}h {{duration.minutes}}m {{duration.seconds}}s
-  {{else}}
-    -
-  {{/if}}
-</td>
+<td>{{durationFormatted}}</td>
+
 
               <td>
                 <a href="/admin/certificates/{{_id}}/download/pdf">

@@ -1057,10 +1057,10 @@ let duration = {
 };
 
 try {
-  const startTime =
-    attempt?.startedAt ||
-    exam?.createdAt ||
-    now;
+ const startTime =
+  attempt?.startedAt ||
+  now;
+
 
   const diffMs = Math.max(0, now.getTime() - new Date(startTime).getTime());
   const totalSeconds = Math.floor(diffMs / 1000);
@@ -1091,7 +1091,7 @@ try {
       maxScore: total,
       passed: !!passed,
       status: "finished",
-      startedAt: (exam && exam.createdAt) ? exam.createdAt : now,
+   startedAt: attempt?.startedAt || now,
       finishedAt: now,
       updatedAt: now,
       createdAt: attempt ? attempt.createdAt : now

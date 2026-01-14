@@ -25,7 +25,6 @@ router.get("/admin/certificates", ensureAuth, async (req, res) => {
 
 // attach duration from Attempt
 const examIds = certsRaw.map(c => c.examId).filter(Boolean);
-
 const attempts = await Attempt.find(
   { examId: { $in: examIds } },
   { examId: 1, duration: 1 }
@@ -36,13 +35,24 @@ for (const a of attempts) {
   attemptByExamId[a.examId] = a;
 }
 
+function formatDuration(d) {
+  if (!d || typeof d.totalSeconds !== "number") return "-";
+
+  const h = String(d.hours).padStart(2, "0");
+  const m = String(d.minutes).padStart(2, "0");
+  const s = String(d.seconds).padStart(2, "0");
+
+  return `${h}:${m}:${s}`;
+}
+
 const certs = certsRaw.map(c => {
   const attempt = attemptByExamId[c.examId];
   return {
     ...c,
-    duration: attempt?.duration || null
+    durationFormatted: formatDuration(attempt?.duration)
   };
 });
+
 
  res.render("admin/certificates", {
   title: "Certificates",
