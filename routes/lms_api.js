@@ -990,13 +990,20 @@ if (passed) {
       serial,
     });*/
 
-    savedCertificate = await Certificate.create({
+   // 🔑 FORCE certificate + attempt to share SAME examId
+const finalExamId =
+  examId ||
+  attempt?.examId ||
+  ("exam-" + Date.now().toString(36));
+
+savedCertificate = await Certificate.create({
   userId: (req.user && req.user._id)
     ? req.user._id
     : (exam && exam.user) || null,
 
   orgId: (exam && exam.org) || null,
-  examId: examId || ("exam-" + Date.now().toString(36)),
+  examId: finalExamId,
+
 
   // ✅ STORE REAL QUIZ TITLE
   quizTitle:
@@ -1057,8 +1064,9 @@ let duration = {
 };
 
 try {
- const startTime =
+const startTime =
   attempt?.startedAt ||
+  attempt?.createdAt ||
   now;
 
 
@@ -1079,8 +1087,13 @@ try {
   // leave defaults
 }
 
-    const attemptDoc = {
-      examId: examId || ("exam-" + Date.now().toString(36)),
+   const attemptExamId =
+  examId ||
+  attempt?.examId ||
+  ("exam-" + Date.now().toString(36));
+
+const attemptDoc = {
+  examId: attemptExamId,
       userId: (req.user && req.user._id) ? req.user._id : (exam && exam.user) ? exam.user : null,
       organization: (exam && exam.org) ? exam.org : (typeof orgSlugOrId === 'string' ? orgSlugOrId : null),
       module: (exam && exam.module) ? exam.module : (moduleKey || null),
