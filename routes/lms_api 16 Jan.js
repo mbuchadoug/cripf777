@@ -53,25 +53,20 @@ router.get("/quiz", async (req, res) => {
     const examIdParam = String(req.query.examId || "").trim();
 
     // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
-// ⏱️ Ensure Attempt exists with startedAt when quiz is opened
-if (examIdParam && req.user) {
+if (examIdParam) {
   await Attempt.findOneAndUpdate(
-    {
-      examId: examIdParam,
-      userId: req.user._id
-    },
+    { examId: examIdParam },
     {
       $setOnInsert: {
         examId: examIdParam,
-        userId: req.user._id,
+        userId: req.user?._id || null,
         startedAt: new Date(),
         status: "in_progress"
       }
     },
-    { upsert: true }
+    { upsert: true, new: true }
   );
 }
-
 
     let count = parseInt(req.query.count || "5", 10);
     if (!Number.isFinite(count)) count = 5;
@@ -1073,8 +1068,7 @@ savedCertificate = await Certificate.create({
     // Find / update or create Attempt
   // ✅ ALWAYS lookup attempt by finalExamId
 let attemptFilter = {
-  examId: finalExamId,
-  userId: req.user?._id
+  examId: finalExamId
 };
 
     Object.keys(attemptFilter).forEach(k => attemptFilter[k] === undefined && delete attemptFilter[k]);
@@ -1082,8 +1076,7 @@ let attemptFilter = {
     let attempt = null;
     try {
       if (Object.keys(attemptFilter).length) {
-       attempt = await Attempt.findOne(attemptFilter).sort({ createdAt: -1 }).exec();
-
+        attempt = await Attempt.findOne(attemptFilter).sort({ createdAt: -1 }).exec();
       }
     } catch (e) {
       console.error("[quiz/submit] attempt lookup error:", e && (e.stack || e));
@@ -1098,19 +1091,6 @@ let duration = {
   seconds: 0,
   totalSeconds: 0
 };
-
-if (attempt?.startedAt) {
-  const diffMs = now.getTime() - new Date(attempt.startedAt).getTime();
-  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-
-  duration = {
-    hours: Math.floor(totalSeconds / 3600),
-    minutes: Math.floor((totalSeconds % 3600) / 60),
-    seconds: totalSeconds % 60,
-    totalSeconds
-  };
-}
-
 
 try {
 const startTime =
@@ -1167,6 +1147,8 @@ const attemptDoc = {
 
   startedAt: attempt?.startedAt,   // ✅ do NOT overwrite
   finishedAt: now,
+  updatedAt: now,
+  createdAt: attempt ? attempt.createdAt : now
 };
 
 
