@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Organization from "../models/organization.js";
 import Attempt from "../models/attempt.js";
 import User from "../models/user.js";
+import { formatZimDateTime } from "../utils/time.js";
 import Question from "../models/question.js";
 import ExamInstance from "../models/examInstance.js";
 import { ensureAuth } from "../middleware/authGuard.js";

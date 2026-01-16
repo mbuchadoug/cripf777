@@ -146,6 +146,19 @@ const hbsHelpers = {
     return (x / y).toFixed(3);
   },
 
+  formatDate: (date) => {
+  if (!date) return "-";
+
+  return new Date(date).toLocaleString("en-ZW", {
+    timeZone: "Africa/Harare",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+},
+
   let: function (varNameOrOptions, maybeOptions) {
     let varName = null;
     let options = maybeOptions;
@@ -162,6 +175,8 @@ const hbsHelpers = {
 
     return options.fn ? options.fn(ctx) : "";
   }
+
+  
 };
 
 /*app.engine(
