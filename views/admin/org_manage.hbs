@@ -325,11 +325,11 @@
          </label>-->
 
 
-         {{#unless (eq org.type "school")}}
+ {{#unless isSchool}}
 <label class="block">
   Users:
   <select id="userIds" name="userIds" multiple size="6" required>
-    {{#each memberships}}
+    {{#each groups.staff}}
       {{#if this.user}}
         <option value="{{this.user._id}}">
           {{this.user.email}} ({{this.role}})
