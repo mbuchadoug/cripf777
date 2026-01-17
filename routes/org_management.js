@@ -268,13 +268,14 @@ const passages = passagesRaw.map(p => ({
 return res.render("admin/org_manage", {
   org,
   invites,
-  memberships,
   modules,
   passages,
+  groups,
   user: req.user,
   isAdmin: true,
   isSchool
 });
+
 
     } catch (err) {
       console.error("[admin org manage] error:", err && (err.stack || err));

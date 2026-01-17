@@ -1,0 +1,100 @@
+<style>
+    .tabs {
+  display:flex;
+  gap:6px;
+  margin-bottom:10px;
+  flex-wrap:wrap;
+}
+
+.tab-btn {
+  padding:6px 12px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  background:#f5f5f5;
+  cursor:pointer;
+}
+
+.tab-btn.active {
+  background:#0b6fb7;
+  color:#fff;
+}
+
+.tab-content {
+  display:none;
+}
+
+.tab-content.active {
+  display:block;
+}
+
+.member-table {
+  width:100%;
+  border-collapse:collapse;
+}
+
+.member-table th,
+.member-table td {
+  border:1px solid #e5e5e5;
+  padding:8px;
+}
+
+</style>
+
+
+
+<table class="member-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+
+      {{#if isSchool}}
+        <th>ID</th>
+        <th>Grade</th>
+      {{/if}}
+
+      <th>Email</th>
+      <th>Role</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {{#each rows}}
+      <tr class="member-row">
+        <td>{{user.firstName}} {{user.lastName}}</td>
+
+        {{#if ../isSchool}}
+          <td>{{user.studentId}}</td>
+          <td>{{user.grade}}</td>
+        {{/if}}
+
+        <td>{{user.email}}</td>
+        <td>{{role}}</td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+
+<script>
+  const tabs = document.querySelectorAll(".tab-btn");
+  const contents = document.querySelectorAll(".tab-content");
+
+  tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabs.forEach(b => b.classList.remove("active"));
+      contents.forEach(c => c.classList.remove("active"));
+
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  document.getElementById("memberSearch").addEventListener("input", e => {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll(".member-row").forEach(row => {
+      row.style.display = row.textContent.toLowerCase().includes(q)
+        ? ""
+        : "none";
+    });
+  });
+</script>
