@@ -5,6 +5,7 @@ import Organization from "../models/organization.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import path from "path";
 import Attempt from "../models/attempt.js"; // ADD THIS
+import { allowPlatformAdminOrOrgManager } from "../middleware/orgAccess.js";
 
 import fs from "fs";
 import { generateCertificatePdf } from "../routes/lms_api.js"; // 👈 export it (next step)
