@@ -217,6 +217,49 @@
 </div>
 {{/if}}
 
+{{#if (eq org.type "school")}}
+
+<div class="panel">
+  <h2>Import Teachers (CSV)</h2>
+  <form
+    method="POST"
+    action="/admin/orgs/{{org.slug}}/import-teachers"
+    enctype="multipart/form-data"
+  >
+    <input type="file" name="csv" accept=".csv" required />
+
+    <p class="muted small">
+      Required columns:
+      <code>email, firstName, lastName</code>
+    </p>
+
+    <button class="btn primary">Upload Teachers</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Import School Admins (CSV)</h2>
+  <p class="muted small">
+    School admins manage <strong>this school only</strong> (not platform admins).
+  </p>
+
+  <form
+    method="POST"
+    action="/admin/orgs/{{org.slug}}/import-admins"
+    enctype="multipart/form-data"
+  >
+    <input type="file" name="csv" accept=".csv" required />
+
+    <p class="muted small">
+      Required columns:
+      <code>email, firstName, lastName</code>
+    </p>
+
+    <button class="btn primary">Upload School Admins</button>
+  </form>
+</div>
+
+{{/if}}
 
     <section>
       <h2>Modules</h2>

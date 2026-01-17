@@ -1575,5 +1575,101 @@ router.post(
 );
 
 
+router.post(
+  "/admin/orgs/:slug/import-teachers",
+  ensureAuth,
+  ensureAdminEmails,
+  upload.single("csv"),
+  async (req, res) => {
+    const org = await Organization.findOne({ slug: req.params.slug });
+    if (!org || org.type !== "school") {
+      return res.status(400).json({ error: "School org only" });
+    }
+
+    let created = 0;
+
+    const stream = fs.createReadStream(req.file.path).pipe(
+      parse({ columns: true, trim: true })
+    );
+
+    for await (const row of stream) {
+      const email = String(row.email || "").toLowerCase();
+      if (!email) continue;
+
+      let user = await User.findOne({ email });
+
+      if (!user) {
+        user = await User.create({
+          email,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          role: "teacher",
+          organization: org._id
+        });
+      }
+
+      await OrgMembership.findOneAndUpdate(
+        { org: org._id, user: user._id },
+        { $set: { role: "teacher", joinedAt: new Date() } },
+        { upsert: true }
+      );
+
+      created++;
+    }
+
+    res.json({ ok: true, created });
+  }
+);
+
+
+
+
+router.post(
+  "/admin/orgs/:slug/import-teachers",
+  ensureAuth,
+  ensureAdminEmails,
+  upload.single("csv"),
+  async (req, res) => {
+    const org = await Organization.findOne({ slug: req.params.slug });
+    if (!org || org.type !== "school") {
+      return res.status(400).json({ error: "School org only" });
+    }
+
+    let created = 0;
+
+    const stream = fs.createReadStream(req.file.path).pipe(
+      parse({ columns: true, trim: true })
+    );
+
+    for await (const row of stream) {
+      const email = String(row.email || "").toLowerCase();
+      if (!email) continue;
+
+      let user = await User.findOne({ email });
+
+      if (!user) {
+        user = await User.create({
+          email,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          role: "teacher",
+          organization: org._id
+        });
+      }
+
+      await OrgMembership.findOneAndUpdate(
+        { org: org._id, user: user._id },
+        { $set: {role: "org_admin", joinedAt: new Date() } },
+        { upsert: true }
+      );
+
+      created++;
+    }
+
+    res.json({ ok: true, created });
+  }
+);
+
+
 // export default router
 export default router;
