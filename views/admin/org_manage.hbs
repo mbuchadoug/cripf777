@@ -22,6 +22,72 @@
     .notice{margin-top:8px;color:#333}
     .panel{padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee;margin-bottom:12px}
     label.block{display:block;margin-bottom:8px}
+
+    /* ---------- Tabs ---------- */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  padding: 8px;
+  z-index: 10;
+}
+
+.tab-btn {
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab-btn.active {
+  background: #0b6fb7;
+  color: #fff;
+  border-color: #0b6fb7;
+}
+
+/* ---------- Tab Content ---------- */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ---------- Scrollable members area ---------- */
+.members-scroll {
+  max-height: 420px;      /* 👈 KEY: stops massive scrolling */
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* ---------- Table polish ---------- */
+.members-scroll table {
+  margin-top: 0;
+}
+
+.members-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f8f8;
+  z-index: 2;
+}
+
+/* ---------- Search ---------- */
+#memberSearch {
+  position: sticky;
+  top: 52px;
+  z-index: 9;
+  background: #fff;
+}
+
   </style>
 </head>
 <body>
@@ -106,9 +172,12 @@
     />
 
     {{#if groups.students.length}}
-      <div class="tab-content active" id="students">
-        {{> members_table rows=groups.students isSchool=isSchool}}
-      </div>
+   <div class="tab-content active" id="students">
+  <div class="members-scroll">
+    {{> members_table rows=groups.students isSchool=isSchool}}
+  </div>
+</div>
+
     {{/if}}
 
     {{#if groups.teachers.length}}
