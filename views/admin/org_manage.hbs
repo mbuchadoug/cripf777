@@ -151,7 +151,7 @@
         </button>
       {{/if}}
 
-      {{#if groups.staff.length}}
+      {{#if (or groups.staff.length (not isSchool))}}
         <button class="tab-btn" data-tab="staff">
           Staff ({{groups.staff.length}})
         </button>
@@ -182,19 +182,19 @@
 
     {{#if groups.teachers.length}}
       <div class="tab-content" id="teachers">
-        {{> members_table rows=groups.teachers}}
+        {{> members_table rows=groups.teachers isSchool=isSchool}}
       </div>
     {{/if}}
 
-    {{#if groups.staff.length}}
+ {{#if (or groups.staff.length (not isSchool))}}
       <div class="tab-content" id="staff">
-        {{> members_table rows=groups.staff}}
+    {{> members_table rows=groups.staff isSchool=isSchool}}
       </div>
     {{/if}}
 
     {{#if groups.admins.length}}
       <div class="tab-content" id="admins">
-        {{> members_table rows=groups.admins}}
+       {{> members_table rows=groups.admins isSchool=isSchool}}
       </div>
     {{/if}}
   </div>
@@ -737,6 +737,16 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabContents = document.querySelectorAll(".tab-content");
 
+  function activateFirstTab() {
+    const firstBtn = tabButtons[0];
+    if (!firstBtn) return;
+
+    const target = firstBtn.dataset.tab;
+
+    firstBtn.classList.add("active");
+    document.getElementById(target)?.classList.add("active");
+  }
+
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tab;
@@ -745,11 +755,14 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
       tabContents.forEach(c => c.classList.remove("active"));
 
       btn.classList.add("active");
-      const el = document.getElementById(target);
-      if (el) el.classList.add("active");
+      document.getElementById(target)?.classList.add("active");
     });
   });
+
+  // auto activate first available tab
+  activateFirstTab();
 </script>
+
 
 <script>
   const searchInput = document.getElementById("memberSearch");

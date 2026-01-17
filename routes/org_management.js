@@ -500,7 +500,7 @@ router.post(
       if (!org) return res.status(404).json({ error: "org not found" });
 
       if (action === "remove") {
-        await OrgMembership.deleteOne({ org: org._1d, user: userId });
+        await OrgMembership.deleteOne({ org: org._id, user: userId });
         return res.json({ ok: true, action: "removed" });
       } else if (action === "promote") {
         await OrgMembership.findOneAndUpdate(
