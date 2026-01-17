@@ -88,6 +88,23 @@
   background: #fff;
 }
 
+
+/* ---------- Scrollable invites ---------- */
+.invites-scroll {
+  max-height: 220px;        /* adjust if needed */
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.invites-scroll ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+
   </style>
 </head>
 <body>
@@ -119,17 +136,23 @@
 
       <div id="inviteFeedback" class="notice"></div>
 
-      <h3 style="margin-top:16px">Existing Invites</h3>
-      <ul id="invitesList">
-        {{#each invites}}
-          <li data-invite-id="{{this._id}}">
-            <span class="small">{{this.email}}</span>
-            <span class="muted"> | token: <code>{{this.token}}</code></span>
-            <span class="badge">{{#if this.used}}Used{{else}}Pending{{/if}}</span>
-            <span class="muted"> | created {{this.createdAt}}</span>
-          </li>
-        {{/each}}
-      </ul>
+     <h3 style="margin-top:16px">Existing Invites</h3>
+
+<div class="invites-scroll">
+  <ul id="invitesList">
+    {{#each invites}}
+      <li data-invite-id="{{this._id}}">
+        <span class="small">{{this.email}}</span>
+        <span class="muted"> | token: <code>{{this.token}}</code></span>
+        <span class="badge">
+          {{#if this.used}}Used{{else}}Pending{{/if}}
+        </span>
+        <span class="muted"> | created {{this.createdAt}}</span>
+      </li>
+    {{/each}}
+  </ul>
+</div>
+
     </section>
 
     <hr />
