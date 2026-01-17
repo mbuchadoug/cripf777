@@ -129,14 +129,12 @@
 </h1>
 
 
- {{#if isAdmin}}
-<div class="admin panel">
-  <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
-  <a href="/admin/orgs/{{org.slug}}/attempts">View Attempts</a>
-  <a href="/admin/orgs/{{org.slug}}/certificates">View Certificates</a>
-</div>
-{{/if}}
-
+    {{#if isAdmin}}
+    <div class="admin panel">
+      <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
+      <a href="/admin/orgs/{{org.slug}}/attempts">View Attempts</a>
+    </div>
+    {{/if}}
 
     <!-- ================= MODULES ================= -->
   {{#unless (eq membership.role "student")}}
@@ -227,10 +225,9 @@
       <div class="card" style="margin-bottom:10px">
         <strong>{{quizTitle}}</strong>
         <div>{{percentage}}%</div>
-      <a href="/docs/certificates/{{pdfFile}}" target="_blank">
-  Download
-</a>
-
+        <a href="/docs/certificates/{{serial}}.pdf" target="_blank">
+          Download
+        </a>
       </div>
     {{/each}}
   </div>

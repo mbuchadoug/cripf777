@@ -16,6 +16,7 @@ const CertificateSchema = new mongoose.Schema(
     score: Number,
     percentage: Number,
     serial: { type: String, unique: true },
+    pdfFile: String,
 
     issuedAt: { type: Date, default: Date.now }
   },

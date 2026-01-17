@@ -738,12 +738,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-const certRows = certificates.map(c => ({
-  quizTitle: c.quizTitle || c.courseTitle || "Quiz",
-  percentage: c.percentage,
-  pdfFile: c.pdfFile, // 👈 REQUIRED
-  createdAt: c.createdAt
-}));
+    const certRows = certificates.map(c => ({
+      quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+      percentage: c.percentage,
+      serial: c.serial,
+      createdAt: c.createdAt
+    }));
+
     /* -------------------------------
        RENDER
     -------------------------------- */

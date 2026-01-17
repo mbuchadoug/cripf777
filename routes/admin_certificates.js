@@ -146,4 +146,36 @@ const recipientName =
 );
 
 
+
+
+router.get(
+  "/admin/orgs/:slug/certificates",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
+      const certsRaw = await Certificate.find({ orgId: org._id })
+        .sort({ issuedAt: -1 })
+        .populate("userId", "displayName firstName lastName email")
+        .lean();
+
+      res.render("admin/certificates", {
+        title: `Certificates – ${org.name}`,
+        certs: certsRaw,
+        user: req.user,
+        isAdmin: true,
+        org
+      });
+    } catch (err) {
+      console.error("[org certificates] error:", err);
+      res.status(500).send("failed");
+    }
+  }
+);
+
+
 export default router;
