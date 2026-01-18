@@ -65,9 +65,25 @@
         <td>{{user.firstName}} {{user.lastName}}</td>
 
         {{#if ../isSchool}}
-          <td>{{user.studentId}}</td>
-          <td>{{user.grade}}</td>
-        {{/if}}
+  <td>
+    {{#if (eq role "student")}}
+      {{user.studentId}}
+    {{else if (eq role "teacher")}}
+      {{user.teacherId}}
+    {{else}}
+      -
+    {{/if}}
+  </td>
+
+  <td>
+    {{#if (eq role "student")}}
+      {{user.grade}}
+    {{else}}
+      -
+    {{/if}}
+  </td>
+{{/if}}
+
 
         <td>{{user.email}}</td>
         <td>{{role}}</td>

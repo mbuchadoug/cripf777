@@ -1600,100 +1600,79 @@ router.post(
 );
 
 
-router.post(
-  "/admin/orgs/:slug/import-teachers",
+
+
+
+
+router.post("/admin/orgs/:slug/import-teachers",
   ensureAuth,
   ensureAdminEmails,
   upload.single("csv"),
   async (req, res) => {
-    const org = await Organization.findOne({ slug: req.params.slug });
-    if (!org || org.type !== "school") {
-      return res.status(400).json({ error: "School org only" });
-    }
-
-    let created = 0;
-
-    const stream = fs.createReadStream(req.file.path).pipe(
-      parse({ columns: true, trim: true })
-    );
-
-    for await (const row of stream) {
-      const email = String(row.email || "").toLowerCase();
-      if (!email) continue;
-
-      let user = await User.findOne({ email });
-
-      if (!user) {
-        user = await User.create({
-          email,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          role: "teacher",
-          organization: org._id
-        });
+    try {
+      const org = await Organization.findOne({ slug: req.params.slug });
+      if (!org || org.type !== "school") {
+        return res.status(400).json({ error: "School org only" });
       }
 
-      await OrgMembership.findOneAndUpdate(
-        { org: org._id, user: user._id },
-        { $set: { role: "teacher", joinedAt: new Date() } },
-        { upsert: true }
+      let created = 0;
+      let skipped = 0;
+      const errors = [];
+
+      const stream = fs.createReadStream(req.file.path).pipe(
+        parse({ columns: true, trim: true })
       );
 
-      created++;
-    }
+      for await (const row of stream) {
+        try {
+          const teacherId = String(row.teacherId || "").trim();
+          const email = String(row.email || "").toLowerCase().trim();
+          const firstName = String(row.firstName || "").trim();
+          const lastName = String(row.lastName || "").trim();
 
-    res.json({ ok: true, created });
+          if (!teacherId || !firstName || !lastName) {
+            skipped++;
+            continue;
+          }
+
+          let user = await User.findOne({
+            organization: org._id,
+            teacherId
+          });
+
+          if (!user) {
+            user = await User.create({
+              organization: org._id,
+              role: "teacher",
+              teacherId,
+              email,
+              firstName,
+              lastName
+            });
+          }
+
+          await OrgMembership.findOneAndUpdate(
+            { org: org._id, user: user._id },
+            { $set: { role: "teacher", joinedAt: new Date() } },
+            { upsert: true }
+          );
+
+          created++;
+        } catch (e) {
+          skipped++;
+          errors.push(e.message);
+        }
+      }
+
+      fs.unlink(req.file.path, () => {});
+      res.json({ ok: true, created, skipped, errors });
+    } catch (err) {
+      console.error("[import teachers]", err);
+      res.status(500).json({ error: "import failed" });
+    }
   }
 );
 
-
-
-
-router.post(
-  "/admin/orgs/:slug/import-teachers",
-  ensureAuth,
-  ensureAdminEmails,
-  upload.single("csv"),
-  async (req, res) => {
-    const org = await Organization.findOne({ slug: req.params.slug });
-    if (!org || org.type !== "school") {
-      return res.status(400).json({ error: "School org only" });
-    }
-
-    let created = 0;
-
-    const stream = fs.createReadStream(req.file.path).pipe(
-      parse({ columns: true, trim: true })
-    );
-
-    for await (const row of stream) {
-      const email = String(row.email || "").toLowerCase();
-      if (!email) continue;
-
-      let user = await User.findOne({ email });
-
-      if (!user) {
-        user = await User.create({
-          email,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          role: "teacher",
-          organization: org._id
-        });
-      }
-
-      await OrgMembership.findOneAndUpdate(
-        { org: org._id, user: user._id },
-        { $set: {role: "org_admin", joinedAt: new Date() } },
-        { upsert: true }
-      );
-
-      created++;
-    }
-
-    res.json({ ok: true, created });
-  }
-);
 
 
 
