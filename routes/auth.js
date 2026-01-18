@@ -284,20 +284,31 @@ router.post("/school", async (req, res) => {
       }
 
       // 🚦 Role-based redirect
-      switch (user.role) {
-        case "student":
-          return res.redirect(`/org/${membership.org.slug}/student`);
+  const orgSlug = membership.org.slug;
+const memberRole = String(membership.role || "").toLowerCase();
 
-        case "teacher":
-        case "employee":
-          return res.redirect(`/org/${membership.org.slug}/dashboard`);
+// 🎓 SCHOOL ORG LOGIC
+if (membership.org.type === "school") {
+  if (memberRole === "student") {
+    return res.redirect(`/org/${orgSlug}/student`);
+  }
 
-        case "org_admin":
-          return res.redirect(`/org/${membership.org.slug}/admin`);
+  if (["teacher", "employee", "staff"].includes(memberRole)) {
+    return res.redirect(`/org/${orgSlug}/dashboard`);
+  }
 
-        default:
-          return res.redirect("/");
-      }
+  if (["admin", "manager", "org_admin"].includes(memberRole)) {
+    return res.redirect(`/org/${orgSlug}/admin`);
+  }
+}
+
+// 🏢 NON-SCHOOL ORG LOGIC (fallback)
+if (["admin", "manager", "org_admin"].includes(memberRole)) {
+  return res.redirect(`/org/${orgSlug}/admin`);
+}
+
+return res.redirect(`/org/${orgSlug}/dashboard`);
+
     });
   } catch (e) {
     console.error("[school login]", e);
@@ -320,7 +331,9 @@ router.get("/logout", (req, res, next) => {
 
       // 🎓 Students go to student login
       if (role === "student") {
-        return res.redirect("/auth/student");
+        return res.redirect("/auth/school");
+      }else if(role == "teacher"){
+        return res.redirect("/auth/school");
       }
 
       // 👨‍🏫 Others go home
