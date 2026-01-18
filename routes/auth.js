@@ -288,26 +288,13 @@ router.post("/school", async (req, res) => {
 const memberRole = String(membership.role || "").toLowerCase();
 
 // 🎓 SCHOOL ORG LOGIC
-if (membership.org.type === "school") {
-  if (memberRole === "student") {
-    return res.redirect(`/org/${orgSlug}/student`);
-  }
+return res.redirect(`/org/${membership.org.slug}/dashboard`);
 
-  if (["teacher", "employee", "staff"].includes(memberRole)) {
-    return res.redirect(`/org/${orgSlug}/dashboard`);
-  }
-
-  if (["admin", "manager", "org_admin"].includes(memberRole)) {
-    return res.redirect(`/org/${orgSlug}/admin`);
-  }
-}
 
 // 🏢 NON-SCHOOL ORG LOGIC (fallback)
-if (["admin", "manager", "org_admin"].includes(memberRole)) {
-  return res.redirect(`/org/${orgSlug}/admin`);
-}
 
-return res.redirect(`/org/${orgSlug}/dashboard`);
+
+//return res.redirect(`/org/${orgSlug}/dashboard`);
 
     });
   } catch (e) {
