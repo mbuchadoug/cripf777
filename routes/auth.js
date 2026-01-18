@@ -221,6 +221,94 @@ router.post("/student", async (req, res) => {
   });
 });*/
 
+
+router.get("/school", (req, res) => {
+  res.render("auth/school_login", { error: null });
+});
+
+
+router.post("/school", async (req, res) => {
+  try {
+    const { loginId, password } = req.body;
+
+    if (!loginId || !password) {
+      return res.render("auth/school_login", {
+        error: "Please enter your ID and password"
+      });
+    }
+
+    // 🔍 Find user by ANY school-issued ID
+    const user = await User.findOne({
+      $or: [
+        { studentId: loginId },
+        { teacherId: loginId }
+      ]
+    });
+
+    if (!user) {
+      return res.render("auth/school_login", {
+        error: "Invalid ID or password"
+      });
+    }
+
+    // 🔐 Verify password
+    const ok = await user.verifyPassword(password);
+    if (!ok) {
+      return res.render("auth/school_login", {
+        error: "Invalid ID or password"
+      });
+    }
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    // ✅ Create login session
+    req.login(user, async err => {
+      if (err) {
+        console.error(err);
+        return res.render("auth/school_login", {
+          error: "Login failed"
+        });
+      }
+
+      // 🔗 Get org membership
+      const membership = await OrgMembership
+        .findOne({ user: user._id })
+        .populate("org")
+        .lean();
+
+      if (!membership || !membership.org?.slug) {
+        return res.render("auth/school_login", {
+          error: "No school assigned to this account"
+        });
+      }
+
+      // 🚦 Role-based redirect
+      switch (user.role) {
+        case "student":
+          return res.redirect(`/org/${membership.org.slug}/student`);
+
+        case "teacher":
+        case "employee":
+          return res.redirect(`/org/${membership.org.slug}/dashboard`);
+
+        case "org_admin":
+          return res.redirect(`/org/${membership.org.slug}/admin`);
+
+        default:
+          return res.redirect("/");
+      }
+    });
+  } catch (e) {
+    console.error("[school login]", e);
+    res.render("auth/school_login", {
+      error: "Unexpected error occurred"
+    });
+  }
+});
+
+
+
 router.get("/logout", (req, res, next) => {
   const role = req.user?.role; // capture role before logout
 
