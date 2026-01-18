@@ -170,28 +170,9 @@ router.get(
       const invites = await OrgInvite.find({ orgId: org._id })
         .sort({ createdAt: -1 })
         .lean();
-    const membershipsRaw = await OrgMembership.find({ org: org._id })
-  .populate("user")
-  .lean();
-
-const groups = {
-  students: [],
-  teachers: [],
-  staff: [],
-  admins: []
-};
-
-for (const m of membershipsRaw) {
-  if (!m.user) continue;
-
-  const role = String(m.role || "").toLowerCase();
-
-  if (role === "student") groups.students.push(m);
-  else if (role === "teacher") groups.teachers.push(m);
-  else if (role === "employee" || role === "staff") groups.staff.push(m);
-  else if (["admin", "manager", "org_admin"].includes(role)) groups.admins.push(m);
-}
-
+      const memberships = await OrgMembership.find({ org: org._id })
+        .populate("user")
+        .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
 
       return res.render("admin/org_manage", {
@@ -520,12 +501,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         openUrl,
       });
     }
-
-    // 🔁 clear first-login flag after dashboard loads once
-if (req.session?.isFirstLogin) {
-  delete req.session.isFirstLogin;
-}
-
 
     return res.render("org/dashboard", {
       org,

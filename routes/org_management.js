@@ -784,6 +784,13 @@ const certRows = certificates.map(c => ({
   pdfFile: c.pdfFile, // 👈 REQUIRED
   createdAt: c.createdAt
 }));
+
+
+// 🔁 clear first-login flag after dashboard loads once
+if (req.session?.isFirstLogin) {
+  delete req.session.isFirstLogin;
+}
+
     /* -------------------------------
        RENDER
     -------------------------------- */
