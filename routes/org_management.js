@@ -655,12 +655,7 @@ if (req.session?.isFirstLogin) {
 }
 
 
-// ⛔ FIRST LOGIN: limit what they see
-if (isFirstLogin) {
-  examQuery.createdAt = {
-    $gte: new Date(Date.now() - 10 * 60 * 1000) // last 10 minutes only
-  };
-}
+
 
 const exams = await ExamInstance.find(examQuery)
   .sort({ createdAt: -1 })
@@ -1195,7 +1190,7 @@ if (org.type !== "school") {
             examId,
             org: org._id,
             module: moduleKey,
-            user: mongoose.Types.ObjectId(uId),
+            userId: mongoose.Types.ObjectId(uId),
             questionIds,
             choicesOrder,
             expiresAt,
