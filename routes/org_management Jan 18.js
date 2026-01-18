@@ -633,27 +633,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     /* -------------------------------
        LOAD EXAMS (RAW)
     -------------------------------- */
- 
-
-// 🧠 detect first-time login
-const isFirstLogin = !!req.session?.isFirstLogin;
-
-// base query (always required)
-const examQuery = {
-  org: org._id,
-  userId: req.user._id
-};
-
-// ⛔ FIRST LOGIN: limit what they see
-if (isFirstLogin) {
-  examQuery.createdAt = {
-    $gte: new Date(Date.now() - 10 * 60 * 1000) // last 10 minutes only
-  };
-}
-
-const exams = await ExamInstance.find(examQuery)
-  .sort({ createdAt: -1 })
-  .lean();
+    const exams = await ExamInstance.find({
+      org: org._id,
+      userId: req.user._id
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
     /* -------------------------------
        PRELOAD COMPREHENSION TITLES

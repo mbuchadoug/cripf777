@@ -521,6 +521,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       });
     }
 
+    // 🔁 clear first-login flag after dashboard loads once
+if (req.session?.isFirstLogin) {
+  delete req.session.isFirstLogin;
+}
+
+
     return res.render("org/dashboard", {
       org,
       membership,
