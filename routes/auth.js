@@ -97,16 +97,18 @@ async function assignOnboardingQuizzes({ org, user }) {
     choicesOrder.push(indices);
   }
 
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    org: org._id,
-    userId: user._id,
-    module: MODULE,
-    questionIds,
-    choicesOrder,
-    createdAt: new Date(),
-    expiresAt: null
-  });
+await ExamInstance.create({
+  examId: crypto.randomUUID(),
+  org: org._id,
+  userId: user._id,
+  module: MODULE,
+  questionIds,
+  choicesOrder,
+  createdAt: new Date(),
+  expiresAt: null,
+  isOnboarding: true   // 🔑 THIS IS THE KEY
+});
+
 }
 
 /**

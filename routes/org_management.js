@@ -461,11 +461,17 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const invite = await OrgInvite.findOne({ token, used: false }).lean();
     if (!invite) return res.status(404).send("invite not found or used");
 
-    await OrgMembership.findOneAndUpdate(
-      { org: invite.orgId, user: req.user._id },
-      { $set: { role: invite.role, joinedAt: new Date() } },
-      { upsert: true }
-    );
+  const membership = await OrgMembership.findOneAndUpdate(
+  { org: invite.orgId, user: req.user._id },
+  { $setOnInsert: { role: invite.role, joinedAt: new Date() } },
+  { upsert: true, new: true }
+);
+
+// ✅ FIRST TIME JOIN → mark onboarding
+if (membership?.joinedAt && Date.now() - membership.joinedAt.getTime() < 2000) {
+  req.session.isFirstLogin = true;
+}
+
 
     await OrgInvite.updateOne(
       { _id: invite._id },
@@ -643,6 +649,11 @@ const examQuery = {
   org: org._id,
   userId: req.user._id
 };
+
+if (req.session?.isFirstLogin) {
+  examQuery.isOnboarding = true;
+}
+
 
 // ⛔ FIRST LOGIN: limit what they see
 if (isFirstLogin) {

@@ -7,6 +7,12 @@ const ExamInstanceSchema = new mongoose.Schema(
 
     title: { type: String, default: null },
 
+    isOnboarding: {
+  type: Boolean,
+  default: false,
+  index: true
+}
+,
 
     // Organization that owns this exam (nullable for platform/global)
     org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
