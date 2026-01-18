@@ -348,21 +348,35 @@
          </label>-->
 
 
- {{#unless isSchool}}
+
+{{#unless isSchool}}
 <label class="block">
   Users:
   <select id="userIds" name="userIds" multiple size="6" required>
+
+    {{!-- STAFF --}}
     {{#each groups.staff}}
       {{#if this.user}}
         <option value="{{this.user._id}}">
-          {{this.user.email}} ({{this.role}})
+          {{this.user.email}} (staff)
         </option>
       {{/if}}
     {{/each}}
+
+    {{!-- TEACHERS --}}
+    {{#each groups.teachers}}
+      {{#if this.user}}
+        <option value="{{this.user._id}}">
+          {{this.user.email}} (teacher)
+        </option>
+      {{/if}}
+    {{/each}}
+
   </select>
   <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
 </label>
 {{/unless}}
+
 
 
          <label class="block">
@@ -718,43 +732,47 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
 
 
   <script>
-  document.querySelectorAll('.set-password-form').forEach(form => {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+ document.querySelectorAll('.set-password-form').forEach(form => {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-      const userId = form.dataset.userId;
-      const password = form.querySelector('input[name="password"]').value;
+    const userId = form.dataset.userId;
+    const password = form.querySelector('input[name="password"]').value;
+    const role = form.dataset.role; // 👈 ADD THIS
 
-      if (!password || password.length < 4) {
-        alert("Password must be at least 4 characters");
+    if (!password || password.length < 4) {
+      alert("Password must be at least 4 characters");
+      return;
+    }
+
+    // 👇 CHOOSE ENDPOINT BASED ON ROLE
+    const endpoint =
+      role === "teacher"
+        ? `/admin/orgs/{{org.slug}}/teachers/${userId}/password`
+        : `/admin/orgs/{{org.slug}}/students/${userId}/password`;
+
+    try {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || "Failed to set password");
         return;
       }
 
-      try {
-        const resp = await fetch(
-          `/admin/orgs/{{org.slug}}/students/${userId}/password`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password })
-          }
-        );
-
-        const data = await resp.json();
-        if (!resp.ok) {
-          alert(data.error || "Failed to set password");
-          return;
-        }
-
-        alert("✅ Password set successfully");
-        form.reset();
-
-      } catch (err) {
-        console.error(err);
-        alert("Network error");
-      }
-    });
+      alert("✅ Password set successfully");
+      form.reset();
+    } catch (err) {
+      console.error(err);
+      alert("Network error");
+    }
   });
+});
+
 </script>
 <script>
   const tabButtons = document.querySelectorAll(".tab-btn");

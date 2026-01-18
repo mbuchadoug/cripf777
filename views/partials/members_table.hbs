@@ -43,19 +43,21 @@
 
 
 <table class="member-table">
-  <thead>
-    <tr>
-      <th>Name</th>
+ <thead>
+  <tr>
+    <th>Name</th>
 
-      {{#if isSchool}}
-        <th>ID</th>
-        <th>Grade</th>
-      {{/if}}
+    {{#if isSchool}}
+      <th>ID</th>
+      <th>Grade</th>
+    {{/if}}
 
-      <th>Email</th>
-      <th>Role</th>
-    </tr>
-  </thead>
+    <th>Email</th>
+    <th>Role</th>
+    <th>Password</th>   {{!-- 👈 ADD THIS --}}
+  </tr>
+</thead>
+
 
   <tbody>
     {{#each rows}}
@@ -69,6 +71,27 @@
 
         <td>{{user.email}}</td>
         <td>{{role}}</td>
+        <td>
+  {{#if (or (eq role "student") (eq role "teacher"))}}
+    <form
+      class="inline-form set-password-form"
+      data-user-id="{{user._id}}"
+      data-role="{{role}}"
+    >
+      <input
+        type="password"
+        name="password"
+        placeholder="New password"
+        required
+        minlength="4"
+        style="width:110px"
+      />
+      <button type="submit">Set</button>
+    </form>
+  {{else}}
+    <span class="muted">-</span>
+  {{/if}}
+</td>
       </tr>
     {{/each}}
   </tbody>

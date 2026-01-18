@@ -1696,5 +1696,46 @@ router.post(
 );
 
 
+
+router.post(
+  "/admin/orgs/:slug/teachers/:userId/password",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+      const { password } = req.body;
+
+      if (!password || password.length < 4) {
+        return res.status(400).json({ error: "Password too short" });
+      }
+
+      const org = await Organization.findOne({ slug });
+      if (!org) {
+        return res.status(404).json({ error: "Org not found" });
+      }
+
+      const user = await User.findOne({
+        _id: userId,
+        role: "teacher"
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      await user.setPassword(password);
+      await user.save();
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[set teacher password]", err);
+      res.status(500).json({ error: "Failed to set password" });
+    }
+  }
+);
+
+
+
 // export default router
 export default router;
