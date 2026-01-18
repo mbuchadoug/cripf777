@@ -2,9 +2,6 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "../models/user.js";
-import Organization from "../models/organization.js";
-import OrgMembership from "../models/orgMembership.js";
-
 
 export default function configurePassport() {
   passport.serializeUser((user, done) => {
@@ -53,44 +50,13 @@ export default function configurePassport() {
 
           const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
 
-         const user = await User.findOneAndUpdate(
-  { googleId },
-  { $set: update, $setOnInsert: { createdAt: new Date(), googleId } },
-  opts
-);
+          const user = await User.findOneAndUpdate(
+            { googleId },
+            { $set: update, $setOnInsert: { createdAt: new Date(), googleId } },
+            opts
+          );
 
-// ===============================
-// 🏫 AUTO-ENROL INTO CRIPFCNT SCHOOL
-// ===============================
-const ORG_SLUG = "cripfcnt-school";
-
-// 1️⃣ Ensure org exists
-let org = await Organization.findOne({ slug: ORG_SLUG });
-if (!org) {
-  org = await Organization.create({
-    name: "CRIPFCNT",
-    slug: ORG_SLUG,
-    type: "school"
-  });
-}
-
-// 2️⃣ Ensure membership exists
-const existingMembership = await OrgMembership.findOne({
-  org: org._id,
-  user: user._id
-});
-
-if (!existingMembership) {
-  await OrgMembership.create({
-    org: org._id,
-    user: user._id,
-    role: "employee", // default role
-    joinedAt: new Date()
-  });
-}
-
-return done(null, user);
-
+          return done(null, user);
         } catch (err) {
           return done(err, null);
         }
