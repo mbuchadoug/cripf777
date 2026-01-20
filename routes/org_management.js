@@ -1151,7 +1151,7 @@ if (org.type !== "school") {
             await ExamInstance.create({
               examId,
               org: org._id,
-              module: modules,
+              module: moduleKey,
               //user: mongoose.Types.ObjectId(uId),
               userId: mongoose.Types.ObjectId(uId),
  isOnboarding: false,
@@ -1266,7 +1266,7 @@ const match = {
           await ExamInstance.create({
             examId,
             org: org._id,
-            module: modules,
+            module: moduleKey,
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
              isOnboarding: false,
