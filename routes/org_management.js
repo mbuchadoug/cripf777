@@ -1042,6 +1042,9 @@ if (!Array.isArray(modules) || !modules.length) {
 
 modules = modules.map(m => String(m).trim().toLowerCase());
 
+const moduleKey = modules[0];
+
+
 
 // 🔹 Load org FIRST
 const org = await Organization.findOne({ slug }).lean();
