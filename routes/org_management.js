@@ -705,10 +705,15 @@ const examQuery = {
 
 // 🔐 HARD SECURITY RULE
 if (membership.isOnboardingComplete === false) {
+  // During onboarding → ONLY onboarding quizzes
   examQuery.isOnboarding = true;
+} else {
+  // After onboarding → HIDE onboarding quizzes
+  examQuery.$or = [
+    { isOnboarding: { $exists: false } },
+    { isOnboarding: false }
+  ];
 }
-
-
 
 
 
