@@ -52,66 +52,7 @@ function decodeState(state) {
 // ======================================================
 // 🧠 Assign 5 onboarding quizzes to first-time users
 // ======================================================
-async function assignOnboardingQuizzes({ org, user }) {
-  const QUIZ_COUNT = 5;
-  const MODULE = "responsibility";
 
-  // ⛔ Prevent duplicates
-const existing = await ExamInstance.countDocuments({
-  org: org._id,
-  userId: user._id,
-  isOnboarding: true
-});
-
-if (existing > 0) return;
-
-
-  // 🎯 Pick 5 random questions (org-specific or global)
-  const questions = await Question.aggregate([
-    {
-      $match: {
-        module: { $regex: /^responsibility$/i },
-        $or: [
-          { organization: org._id },
-          { organization: null }
-        ]
-      }
-    },
-    { $sample: { size: QUIZ_COUNT } }
-  ]);
-
-  if (!questions.length) return;
-
-  const questionIds = [];
-  const choicesOrder = [];
-
-  for (const q of questions) {
-    questionIds.push(String(q._id));
-
-    const n = Array.isArray(q.choices) ? q.choices.length : 0;
-    const indices = Array.from({ length: n }, (_, i) => i);
-
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-
-    choicesOrder.push(indices);
-  }
-
-await ExamInstance.create({
-  examId: crypto.randomUUID(),
-  org: org._id,
-  userId: user._id,
-  module: MODULE,
-  questionIds,
-  choicesOrder,
-  createdAt: new Date(),
-  expiresAt: null,
-  isOnboarding: true   // 🔑 THIS IS THE KEY
-});
-
-}
 
 /**
  * GET /auth/google

@@ -45,6 +45,49 @@ function ensureAdminEmails(req, res, next) {
 }
 
 
+
+async function assignOnboardingQuizzes({ orgId, userId }) {
+  // prevent duplicates
+  const existing = await ExamInstance.countDocuments({
+    org: orgId,
+    userId,
+    isOnboarding: true
+  });
+
+  if (existing > 0) return;
+
+  // pick 5 random questions (global or org)
+  const questions = await QuizQuestion.aggregate([
+    {
+      $match: {
+        $or: [
+          { organization: orgId },
+          { organization: null }
+        ]
+      }
+    },
+    { $sample: { size: 5 } }
+  ]);
+
+  if (!questions.length) return;
+
+  const questionIds = questions.map(q => String(q._id));
+  const choicesOrder = questions.map(q =>
+    Array.from({ length: q.choices.length }, (_, i) => i)
+  );
+
+  await ExamInstance.create({
+    examId: crypto.randomUUID(),
+    org: orgId,
+    userId,
+    module: "onboarding",
+    isOnboarding: true, // 🔥 THIS IS THE KEY
+    questionIds,
+    choicesOrder,
+    createdAt: new Date()
+  });
+}
+
 function requireTeacherOrAdmin(req, res, next) {
   if (!["teacher", "org_admin"].includes(req.user.role)) {
     return res.status(403).send("Forbidden");
@@ -467,11 +510,12 @@ const membership = await OrgMembership.findOneAndUpdate(
     $setOnInsert: {
       role: invite.role,
       joinedAt: new Date(),
-      isOnboardingComplete: false // 🔐 REQUIRED
+      isOnboardingComplete: false
     }
   },
   { upsert: true, new: true }
 );
+
 
 
 // ✅ FIRST TIME JOIN → mark onboarding
@@ -479,14 +523,16 @@ if (membership?.joinedAt && Date.now() - membership.joinedAt.getTime() < 2000) {
   req.session.isFirstLogin = true;
 }
 
+await OrgInvite.updateOne(
+  { _id: invite._id },
+  { $set: { used: true } }
+);
 
-    await OrgInvite.updateOne(
-      { _id: invite._id },
-      { $set: { used: true } }
-    );
+const org = await Organization.findById(invite.orgId).lean();
+return res.redirect(`/org/${org.slug}/dashboard`);
 
-    const org = await Organization.findById(invite.orgId).lean();
-    return res.redirect(`/org/${org.slug}/dashboard`);
+
+
   } catch (err) {
     console.error("[org/join] error:", err && (err.stack || err));
     return res.status(500).send("join failed");
