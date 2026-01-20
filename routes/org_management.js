@@ -840,11 +840,12 @@ const exams = await ExamInstance.find(examQuery)
       .lean();
 
 const certRows = certificates.map(c => ({
+  _id: c._id,
   quizTitle: c.quizTitle || c.courseTitle || "Quiz",
   percentage: c.percentage,
-  pdfFile: c.pdfFile, // 👈 REQUIRED
   createdAt: c.createdAt
 }));
+
 
 
 // 🔁 clear first-login flag after dashboard loads once
