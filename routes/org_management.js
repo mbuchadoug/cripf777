@@ -703,6 +703,15 @@ if (isAdmin) {
     .lean();
 } else {
   // 👤 NORMAL USER sees only their quizzes
+let exams = [];
+
+if (isAdmin) {
+  // ✅ ADMIN sees ALL quizzes assigned in this org (no duplication hacks)
+  exams = await ExamInstance.find({ org: org._id })
+    .sort({ createdAt: -1 })
+    .lean();
+} else {
+  // 👤 NORMAL USER sees only their quizzes
   const examQuery = {
     org: org._id,
     userId: req.user._id,
@@ -712,6 +721,8 @@ if (isAdmin) {
   exams = await ExamInstance.find(examQuery)
     .sort({ createdAt: -1 })
     .lean();
+}
+
 }
 
 
@@ -1117,6 +1128,19 @@ if (org.type !== "school") {
         // For each user create exam instance with: ['parent:<parentId>', childId1, childId2, ...]
         for (const uId of userIds) {
           try {
+
+            // ⛔ PREVENT DUPLICATE ASSIGNMENT FOR SAME MODULE
+const alreadyAssigned = await ExamInstance.exists({
+  org: org._id,
+  userId: mongoose.Types.ObjectId(uId),
+  module: moduleKey,
+  isOnboarding: false
+});
+
+if (alreadyAssigned) {
+  continue; // 🚫 skip duplicate
+}
+
             const questionIds = [];
             const choicesOrder = [];
 
@@ -1223,6 +1247,19 @@ const match = {
       // create exam per user from sampled docs (existing logic; store IDs as strings)
       for (const uId of userIds) {
         try {
+
+          // ⛔ PREVENT DUPLICATE PASSAGE ASSIGNMENT
+const alreadyAssigned = await ExamInstance.exists({
+  org: org._id,
+  userId: mongoose.Types.ObjectId(uId),
+  module: moduleKey,
+  isOnboarding: false
+});
+
+if (alreadyAssigned) {
+  continue;
+}
+
           const questionIds = [];
           const choicesOrder = [];
 
