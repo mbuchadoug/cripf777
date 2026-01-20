@@ -964,6 +964,19 @@ if (org.type !== "school") {
         // For each user create exam instance with: ['parent:<parentId>', childId1, childId2, ...]
         for (const uId of userIds) {
           try {
+
+            // ⛔ PREVENT DUPLICATE ASSIGNMENT FOR SAME MODULE
+const alreadyAssigned = await ExamInstance.exists({
+  org: org._id,
+  userId: mongoose.Types.ObjectId(uId),
+  module: moduleKey,
+  isOnboarding: false
+});
+
+if (alreadyAssigned) {
+  continue; // 🚫 skip duplicate
+}
+
             const questionIds = [];
             const choicesOrder = [];
 
@@ -1056,6 +1069,19 @@ if (org.type !== "school") {
       // create exam per user from sampled docs (existing logic; store IDs as strings)
       for (const uId of userIds) {
         try {
+
+          // ⛔ PREVENT DUPLICATE PASSAGE ASSIGNMENT
+const alreadyAssigned = await ExamInstance.exists({
+  org: org._id,
+  userId: mongoose.Types.ObjectId(uId),
+  module: moduleKey,
+  isOnboarding: false
+});
+
+if (alreadyAssigned) {
+  continue;
+}
+
           const questionIds = [];
           const choicesOrder = [];
 

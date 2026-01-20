@@ -49,14 +49,16 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   const existing = await ExamInstance.countDocuments({
     org: orgId,
     userId,
-    isOnboarding: true
+    isOnboarding: true,
+    module: "responsibility"
   });
 
-  if (existing > 0) return;
+  if (existing > 0) return; // ✅ HARD STOP
 
   const questions = await QuizQuestion.aggregate([
     {
       $match: {
+        module: "responsibility",
         $or: [{ organization: orgId }, { organization: null }]
       }
     },
@@ -69,8 +71,8 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
     examId: crypto.randomUUID(),
     org: orgId,
     userId,
-    module: "onboarding",
-    isOnboarding: true,   // ✅ MUST BE TRUE
+    module: "responsibility",
+    isOnboarding: true,
     questionIds: questions.map(q => String(q._id)),
     choicesOrder: questions.map(q =>
       Array.from({ length: q.choices.length }, (_, i) => i)
@@ -78,6 +80,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
     createdAt: new Date()
   });
 }
+
 
 
 
@@ -690,23 +693,27 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 // 🧠 detect first-time login
 const isFirstLogin = !!req.session?.isFirstLogin;
 
-const examQuery = {
-  org: org._id,
-  userId: req.user._id
-};
 
-if (membership.isOnboardingComplete === false) {
-  examQuery.isOnboarding = true;
+let exams = [];
+
+if (isAdmin) {
+  // ✅ ADMIN sees ALL quizzes assigned in this org (no duplication hacks)
+  exams = await ExamInstance.find({ org: org._id })
+    .sort({ createdAt: -1 })
+    .lean();
 } else {
-  examQuery.isOnboarding = false;
+  // 👤 NORMAL USER sees only their quizzes
+  const examQuery = {
+    org: org._id,
+    userId: req.user._id,
+    isOnboarding: membership.isOnboardingComplete === false
+  };
+
+  exams = await ExamInstance.find(examQuery)
+    .sort({ createdAt: -1 })
+    .lean();
 }
 
-
-
-
-const exams = await ExamInstance.find(examQuery)
-  .sort({ createdAt: -1 })
-  .lean();
 
     /* -------------------------------
        PRELOAD COMPREHENSION TITLES
