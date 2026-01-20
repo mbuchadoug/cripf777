@@ -57,31 +57,28 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   const questions = await QuizQuestion.aggregate([
     {
       $match: {
-        $or: [
-          { organization: orgId },
-          { organization: null }
-        ]
+        $or: [{ organization: orgId }, { organization: null }]
       }
     },
     { $sample: { size: 5 } }
   ]);
 
-  for (const q of questions) {
-    const n = Array.isArray(q.choices) ? q.choices.length : 0;
-    const choicesOrder = Array.from({ length: n }, (_, i) => i);
+  if (!questions.length) return;
 
-    await ExamInstance.create({
-      examId: crypto.randomUUID(),
-      org: orgId,
-      userId,
-      module: "onboarding",
-       isOnboarding: false,
-      questionIds: [String(q._id)],
-      choicesOrder: [choicesOrder],
-      createdAt: new Date()
-    });
-  }
+  await ExamInstance.create({
+    examId: crypto.randomUUID(),
+    org: orgId,
+    userId,
+    module: "onboarding",
+    isOnboarding: true,   // ✅ MUST BE TRUE
+    questionIds: questions.map(q => String(q._id)),
+    choicesOrder: questions.map(q =>
+      Array.from({ length: q.choices.length }, (_, i) => i)
+    ),
+    createdAt: new Date()
+  });
 }
+
 
 
 function requireTeacherOrAdmin(req, res, next) {
@@ -1034,7 +1031,14 @@ if (!Array.isArray(modules) || !modules.length) {
 
 modules = modules.map(m => String(m).trim().toLowerCase());
 
+if (modules.length !== 1) {
+  return res.status(400).json({
+    error: "Select exactly ONE module when assigning a quiz"
+  });
+}
+
 const moduleKey = modules[0];
+
 
 
 

@@ -3,7 +3,7 @@ import crypto from "crypto";
 import ExamInstance from "../models/examInstance.js";
 import QuizQuestion from "../models/question.js";
 
-export async function assignOnboardingQuizzes({ orgId, userId }) {
+async function assignOnboardingQuizzes({ orgId, userId }) {
   const existing = await ExamInstance.countDocuments({
     org: orgId,
     userId,
@@ -28,7 +28,7 @@ export async function assignOnboardingQuizzes({ orgId, userId }) {
     org: orgId,
     userId,
     module: "onboarding",
-    isOnboarding: true,
+    isOnboarding: true,   // ✅ MUST BE TRUE
     questionIds: questions.map(q => String(q._id)),
     choicesOrder: questions.map(q =>
       Array.from({ length: q.choices.length }, (_, i) => i)
