@@ -4,8 +4,6 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "../models/user.js";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
-import { assignOnboardingQuizzes } from "../services/onboarding.js";
-
 
 
 export default function configurePassport() {
@@ -83,20 +81,12 @@ const existingMembership = await OrgMembership.findOne({
 });
 
 if (!existingMembership) {
-await OrgMembership.create({
-  org: org._id,
-  user: user._id,
-  role: "employee",
-  joinedAt: new Date(),
-  isOnboardingComplete: false // 🔐 REQUIRED
-});
-
-// 🧠 ASSIGN ONBOARDING
-await assignOnboardingQuizzes({
-  orgId: org._id,
-  userId: user._id
-});
-
+  await OrgMembership.create({
+    org: org._id,
+    user: user._id,
+    role: "employee", // default role
+    joinedAt: new Date()
+  });
 }
 
 return done(null, user);
