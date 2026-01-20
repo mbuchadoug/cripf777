@@ -751,11 +751,8 @@ const exams = await ExamInstance.find(examQuery)
     const now = new Date();
 
    for (const ex of exams) {
-  const logicalKey =
-    `${ex.org}_${ex.userId}_${ex.module}_` +
-    (Array.isArray(ex.questionIds)
-      ? ex.questionIds.filter(q => !String(q).startsWith("parent:")).join(",")
-      : "");
+  const logicalKey = ex.examId;
+
 
   if (seenKeys.has(logicalKey)) continue;
   seenKeys.add(logicalKey);

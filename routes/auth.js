@@ -149,11 +149,6 @@ await OrgMembership.create({
 });
 
 
-  // 🆕 ASSIGN ONLY 5 ONBOARDING QUIZZES
-  await assignOnboardingQuizzes({
-    org,
-    user: req.user
-  });
 
   if (req.session) {
     req.session.isFirstLogin = true;
