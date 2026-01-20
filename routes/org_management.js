@@ -45,9 +45,7 @@ function ensureAdminEmails(req, res, next) {
 }
 
 
-
 async function assignOnboardingQuizzes({ orgId, userId }) {
-  // prevent duplicates
   const existing = await ExamInstance.countDocuments({
     org: orgId,
     userId,
@@ -56,7 +54,6 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
 
   if (existing > 0) return;
 
-  // pick 5 random questions (global or org)
   const questions = await QuizQuestion.aggregate([
     {
       $match: {
@@ -69,24 +66,23 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
     { $sample: { size: 5 } }
   ]);
 
-  if (!questions.length) return;
+  for (const q of questions) {
+    const n = Array.isArray(q.choices) ? q.choices.length : 0;
+    const choicesOrder = Array.from({ length: n }, (_, i) => i);
 
-  const questionIds = questions.map(q => String(q._id));
-  const choicesOrder = questions.map(q =>
-    Array.from({ length: q.choices.length }, (_, i) => i)
-  );
-
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    org: orgId,
-    userId,
-    module: "onboarding",
-    isOnboarding: true, // 🔥 THIS IS THE KEY
-    questionIds,
-    choicesOrder,
-    createdAt: new Date()
-  });
+    await ExamInstance.create({
+      examId: crypto.randomUUID(),
+      org: orgId,
+      userId,
+      module: "onboarding",
+      isOnboarding: true,
+      questionIds: [String(q._id)],
+      choicesOrder: [choicesOrder],
+      createdAt: new Date()
+    });
+  }
 }
+
 
 function requireTeacherOrAdmin(req, res, next) {
   if (!["teacher", "org_admin"].includes(req.user.role)) {
@@ -709,10 +705,17 @@ if (membership.isOnboardingComplete === false) {
   examQuery.isOnboarding = true;
 } else {
   // After onboarding → HIDE onboarding quizzes
-  examQuery.$or = [
-    { isOnboarding: { $exists: false } },
-    { isOnboarding: false }
-  ];
+const examQuery = {
+  org: org._id,
+  userId: req.user._id
+};
+
+if (membership.isOnboardingComplete === false) {
+  examQuery.isOnboarding = true;
+} else {
+  examQuery.isOnboarding = { $ne: true };
+}
+
 }
 
 
