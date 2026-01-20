@@ -57,12 +57,14 @@ async function assignOnboardingQuizzes({ org, user }) {
   const MODULE = "responsibility";
 
   // ⛔ Prevent duplicates
-  const existing = await ExamInstance.countDocuments({
-    org: org._id,
-    userId: user._id
-  });
+const existing = await ExamInstance.countDocuments({
+  org: org._id,
+  userId: user._id,
+  isOnboarding: true
+});
 
-  if (existing > 0) return;
+if (existing > 0) return;
+
 
   // 🎯 Pick 5 random questions (org-specific or global)
   const questions = await Question.aggregate([

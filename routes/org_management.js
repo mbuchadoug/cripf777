@@ -461,11 +461,18 @@ router.get("/org/join/:token", ensureAuth, async (req, res) => {
     const invite = await OrgInvite.findOne({ token, used: false }).lean();
     if (!invite) return res.status(404).send("invite not found or used");
 
-  const membership = await OrgMembership.findOneAndUpdate(
+const membership = await OrgMembership.findOneAndUpdate(
   { org: invite.orgId, user: req.user._id },
-  { $setOnInsert: { role: invite.role, joinedAt: new Date() } },
+  {
+    $setOnInsert: {
+      role: invite.role,
+      joinedAt: new Date(),
+      isOnboardingComplete: false // 🔐 REQUIRED
+    }
+  },
   { upsert: true, new: true }
 );
+
 
 // ✅ FIRST TIME JOIN → mark onboarding
 if (membership?.joinedAt && Date.now() - membership.joinedAt.getTime() < 2000) {
