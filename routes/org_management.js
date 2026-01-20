@@ -517,6 +517,11 @@ const membership = await OrgMembership.findOneAndUpdate(
 // ✅ FIRST TIME JOIN → mark onboarding
 if (membership?.joinedAt && Date.now() - membership.joinedAt.getTime() < 2000) {
   req.session.isFirstLogin = true;
+  await assignOnboardingQuizzes({
+  orgId: invite.orgId,
+  userId: req.user._id
+});
+
 }
 
 await OrgInvite.updateOne(
@@ -697,33 +702,23 @@ const isFirstLogin = !!req.session?.isFirstLogin;
 let exams = [];
 
 if (isAdmin) {
-  // ✅ ADMIN sees ALL quizzes assigned in this org (no duplication hacks)
+  // Admin sees all exams in org
   exams = await ExamInstance.find({ org: org._id })
     .sort({ createdAt: -1 })
     .lean();
 } else {
-  // 👤 NORMAL USER sees only their quizzes
-let exams = [];
-
-if (isAdmin) {
-  // ✅ ADMIN sees ALL quizzes assigned in this org (no duplication hacks)
-  exams = await ExamInstance.find({ org: org._id })
-    .sort({ createdAt: -1 })
-    .lean();
-} else {
-  // 👤 NORMAL USER sees only their quizzes
-  const examQuery = {
+  // User sees ONLY their assigned exams
+  exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
     isOnboarding: membership.isOnboardingComplete === false
-  };
-
-  exams = await ExamInstance.find(examQuery)
+  })
     .sort({ createdAt: -1 })
     .lean();
 }
 
-}
+
+
 
 
     /* -------------------------------
@@ -1134,8 +1129,10 @@ const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
   module: moduleKey,
-  isOnboarding: false
+  isOnboarding: false,
+  expiresAt: { $ne: null }
 });
+
 
 if (alreadyAssigned) {
   continue; // 🚫 skip duplicate
@@ -1253,8 +1250,10 @@ const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
   module: moduleKey,
-  isOnboarding: false
+  isOnboarding: false,
+  expiresAt: { $ne: null }
 });
+
 
 if (alreadyAssigned) {
   continue;
