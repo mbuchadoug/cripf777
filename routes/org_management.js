@@ -75,7 +75,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
       org: orgId,
       userId,
       module: "onboarding",
-      isOnboarding: true,
+       isOnboarding: false,
       questionIds: [String(q._id)],
       choicesOrder: [choicesOrder],
       createdAt: new Date()
@@ -693,18 +693,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 // 🧠 detect first-time login
 const isFirstLogin = !!req.session?.isFirstLogin;
 
-// base query (always required)
-const examQuery = {
-  org: org._id,
-  userId: req.user._id
-};
-
-// 🔐 HARD SECURITY RULE
-if (membership.isOnboardingComplete === false) {
-  // During onboarding → ONLY onboarding quizzes
-  examQuery.isOnboarding = true;
-} else {
-  // After onboarding → HIDE onboarding quizzes
 const examQuery = {
   org: org._id,
   userId: req.user._id
@@ -713,10 +701,9 @@ const examQuery = {
 if (membership.isOnboardingComplete === false) {
   examQuery.isOnboarding = true;
 } else {
-  examQuery.isOnboarding = { $ne: true };
+  examQuery.isOnboarding = false;
 }
 
-}
 
 
 
@@ -1167,7 +1154,7 @@ if (org.type !== "school") {
               module: moduleKey,
               //user: mongoose.Types.ObjectId(uId),
               userId: mongoose.Types.ObjectId(uId),
-
+ isOnboarding: false,
               // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
               questionIds,
               choicesOrder,
@@ -1282,6 +1269,7 @@ const match = {
             module: moduleKey,
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
+             isOnboarding: false,
             choicesOrder,
             expiresAt,
             createdAt: new Date(),
