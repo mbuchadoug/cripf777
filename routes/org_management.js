@@ -993,7 +993,7 @@ return res.redirect(
       user: req.user,
       quizCount: 20,
       moduleLabel: `${moduleNameRaw} | ${org.slug} Quiz`,
-      moduleKey,
+      modules,
       orgSlug: org.slug,
       examId: ""
     });
@@ -1031,11 +1031,7 @@ if (!Array.isArray(modules) || !modules.length) {
 
 modules = modules.map(m => String(m).trim().toLowerCase());
 
-if (modules.length !== 1) {
-  return res.status(400).json({
-    error: "Select exactly ONE module when assigning a quiz"
-  });
-}
+
 
 const moduleKey = modules[0];
 
@@ -1155,7 +1151,7 @@ if (org.type !== "school") {
             await ExamInstance.create({
               examId,
               org: org._id,
-              module: moduleKey,
+              module: modules,
               //user: mongoose.Types.ObjectId(uId),
               userId: mongoose.Types.ObjectId(uId),
  isOnboarding: false,
@@ -1205,7 +1201,7 @@ const match = {
 
 
       const totalAvailable = await QuizQuestion.countDocuments(match);
-      console.log("[assign quiz] available questions:", totalAvailable, "for module=", moduleKey, "org=", org._id.toString());
+      console.log("[assign quiz] available questions:", totalAvailable, "for module=", modules, "org=", org._id.toString());
       if (!totalAvailable) {
         return res.status(404).json({ error: "no questions available for that module" });
       }
@@ -1270,7 +1266,7 @@ const match = {
           await ExamInstance.create({
             examId,
             org: org._id,
-            module: moduleKey,
+            module: modules,
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
              isOnboarding: false,

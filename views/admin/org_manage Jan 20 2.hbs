@@ -467,34 +467,25 @@
 
   <script>
     // helper: convert FormData -> object (handles multiple selects)
-function formToObject(form) {
-  const fd = new FormData(form);
-  const obj = {};
-
-  for (const [k, v] of fd.entries()) {
-    if (obj[k] !== undefined) {
-      if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
-      obj[k].push(v);
-    } else {
-      obj[k] = v;
+    function formToObject(form) {
+      const fd = new FormData(form);
+      const obj = {};
+      for (const [k, v] of fd.entries()) {
+        if (obj[k] !== undefined) {
+          if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
+          obj[k].push(v);
+        } else {
+          obj[k] = v;
+        }
+      }
+      // handle multi-select named "userIds"
+      if (form.querySelector('[name="userIds"]')) {
+        const select = form.querySelector('[name="userIds"]');
+        const vals = Array.from(select.selectedOptions).map(o => o.value);
+        obj.userIds = vals;
+      }
+      return obj;
     }
-  }
-
-  // ✅ FORCE modules to always be array
-  const moduleSelect = form.querySelector('[name="modules"]');
-  if (moduleSelect) {
-    obj.modules = Array.from(moduleSelect.selectedOptions).map(o => o.value);
-  }
-
-  // users
-  const userSelect = form.querySelector('[name="userIds"]');
-  if (userSelect) {
-    obj.userIds = Array.from(userSelect.selectedOptions).map(o => o.value);
-  }
-
-  return obj;
-}
-
 
     // hide/show passage selector + auto count
     const usePassageCb = document.getElementById('usePassage');
