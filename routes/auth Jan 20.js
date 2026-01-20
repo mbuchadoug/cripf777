@@ -197,14 +197,12 @@ router.get(
           // 3️⃣ New user → auto-enrol into default org
           const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
 if (org) {
-await OrgMembership.create({
-  org: org._id,
-  user: req.user._id,
-  role: "employee",
-  joinedAt: new Date(),
-  isOnboardingComplete: false // 🔐 LOCK DOWN
-});
-
+  await OrgMembership.create({
+    org: org._id,
+    user: req.user._id,
+    role: "employee",
+    joinedAt: new Date()
+  });
 
   // 🆕 ASSIGN ONLY 5 ONBOARDING QUIZZES
   await assignOnboardingQuizzes({

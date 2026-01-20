@@ -4,6 +4,12 @@ import mongoose from "mongoose";
 const OrgMembershipSchema = new mongoose.Schema({
   org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true, required: true },
+  isOnboardingComplete: {
+  type: Boolean,
+  default: false,
+  index: true
+}
+,
   role: { type: String, enum: ["employee", "manager", "admin"], default: "employee" },
   joinedAt: { type: Date, default: () => new Date() }
 });

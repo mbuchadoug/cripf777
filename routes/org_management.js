@@ -650,9 +650,11 @@ const examQuery = {
   userId: req.user._id
 };
 
-if (req.session?.isFirstLogin) {
+// 🔐 HARD SECURITY RULE
+if (!membership.isOnboardingComplete) {
   examQuery.isOnboarding = true;
 }
+
 
 
 
@@ -1121,7 +1123,24 @@ if (org.type !== "school") {
           }
         } // end for userIds
 
-        return res.json({ ok: true, assigned, countUsed: childIds.length, passageAssigned: String(parent._id) });
+       // 🔓 UNLOCK USERS AFTER ADMIN ASSIGNS PASSAGE QUIZ
+await OrgMembership.updateMany(
+  {
+    org: org._id,
+    user: { $in: userIds.map(id => mongoose.Types.ObjectId(id)) }
+  },
+  {
+    $set: { isOnboardingComplete: true }
+  }
+);
+
+return res.json({
+  ok: true,
+  assigned,
+  countUsed: childIds.length,
+  passageAssigned: String(parent._id)
+});
+
       }
 
       // ---------- No passageId: previous sampling behavior ----------
@@ -1214,8 +1233,19 @@ const match = {
           console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
         }
       } // end for userIds
+// 🔓 UNLOCK USERS AFTER ADMIN ASSIGNS QUIZ
+await OrgMembership.updateMany(
+  {
+    org: org._id,
+    user: { $in: userIds.map(id => mongoose.Types.ObjectId(id)) }
+  },
+  {
+    $set: { isOnboardingComplete: true }
+  }
+);
 
-      return res.json({ ok: true, assigned, countUsed: docs.length });
+return res.json({ ok: true, assigned, countUsed: docs.length });
+
     } catch (err) {
       console.error("[assign quiz] error:", err && (err.stack || err));
       return res.status(500).json({ error: "assign failed" });
