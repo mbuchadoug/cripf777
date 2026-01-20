@@ -10,6 +10,7 @@ const OrgMembershipSchema = new mongoose.Schema({
   index: true
 }
 ,
+
   role: { type: String, enum: ["employee", "manager", "admin"], default: "employee" },
   joinedAt: { type: Date, default: () => new Date() }
 });
