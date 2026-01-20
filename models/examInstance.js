@@ -19,7 +19,11 @@ const ExamInstanceSchema = new mongoose.Schema(
 
     // Module key (e.g. "responsibility")
     module: { type: String, default: "general", index: true },
-
+modules: [{
+  type: String,
+  index: true
+}]
+,
     // Assigned user (optional for generic attempts)
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
 

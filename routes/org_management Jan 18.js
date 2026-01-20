@@ -1174,17 +1174,24 @@ if (org.type !== "school") {
     : null;
 
 
-          await ExamInstance.create({
-            examId,
-            org: org._id,
-            module: moduleKey,
-            user: mongoose.Types.ObjectId(uId),
-            questionIds,
-            choicesOrder,
-            expiresAt,
-            createdAt: new Date(),
-            createdByIp: req.ip,
-          });
+       await ExamInstance.create({
+  examId,
+  org: org._id,
+
+  // 👇 legacy compatibility
+  module: modules[0],
+
+  // ✅ NEW FIELD
+  modules,
+
+  userId: mongoose.Types.ObjectId(uId),
+  questionIds,
+  choicesOrder,
+  expiresAt,
+  createdAt: new Date(),
+  createdByIp: req.ip,
+});
+
 
          
           const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;

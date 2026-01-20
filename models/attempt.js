@@ -15,6 +15,10 @@ const AttemptSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true, default: null },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
   module: { type: String, default: null },
+    // ✅ NEW
+  modules: [{
+    type: String
+  }],
   questionIds: [{ type: mongoose.Schema.Types.Mixed }], // preserve either ObjectId or fallback id strings
   answers: [AnswerSub],
   score: { type: Number, default: 0 },

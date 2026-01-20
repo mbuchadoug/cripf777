@@ -969,7 +969,7 @@ router.post(
      const slug = String(req.params.slug || "");
 
 let {
-  module = "general",
+  modules = [],
   userIds = [],
   grade = null,
   count = 20,
@@ -977,7 +977,15 @@ let {
   passageId = null
 } = req.body || {};
 
-const moduleKey = String(module).trim().toLowerCase();
+// ✅ validate modules
+if (!Array.isArray(modules) || !modules.length) {
+  return res.status(400).json({
+    error: "At least one module must be selected"
+  });
+}
+
+modules = modules.map(m => String(m).trim().toLowerCase());
+
 
 // 🔹 Load org FIRST
 const org = await Organization.findOne({ slug }).lean();
@@ -1118,10 +1126,11 @@ if (org.type !== "school") {
 
       // ---------- No passageId: previous sampling behavior ----------
       // case-insensitive match on module + org/global questions
-      const match = {
-        $or: [{ organization: org._id }, { organization: null }],
-        module: { $regex: new RegExp(`^${moduleKey}$`, "i") },
-      };
+const match = {
+  $or: [{ organization: org._id }, { organization: null }],
+  module: { $in: modules }
+};
+
 
       const totalAvailable = await QuizQuestion.countDocuments(match);
       console.log("[assign quiz] available questions:", totalAvailable, "for module=", moduleKey, "org=", org._id.toString());

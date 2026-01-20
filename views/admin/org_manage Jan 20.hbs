@@ -328,18 +328,11 @@
 
          <label class="block">
            Module:
-      <select id="modules" name="modules" multiple size="6" required>
-  {{#each modules}}
-    <option value="{{this.slug}}">
-      {{this.title}} ({{this.slug}})
-    </option>
-  {{/each}}
-</select>
-
-<p class="muted small">
-  Hold Ctrl / Cmd to select multiple modules
-</p>
-
+           <select id="module" name="module">
+             {{#each modules}}
+               <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
+             {{/each}}
+           </select>
          </label>
 
          <!--<label class="block">
