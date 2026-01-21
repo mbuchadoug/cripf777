@@ -659,14 +659,18 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
   const payload = formToObject(form);
   const isSchool = "{{org.type}}" === "school";
 
-  if (isSchool) {
-    if (!payload.grade) {
-      document.getElementById('assignResult').innerHTML =
-        '<span class="error">Please select a grade.</span>';
-      return;
-    }
-    delete payload.userIds;
-  } else {
+if (isSchool) {
+  // ✅ Grade is ONLY required for students
+  if (payload.targetRole === "student" && !payload.grade) {
+    document.getElementById('assignResult').innerHTML =
+      '<span class="error">Please select a grade.</span>';
+    return;
+  }
+
+  // teachers don't use grade or userIds
+  delete payload.userIds;
+}
+ else {
     if (!Array.isArray(payload.userIds) || !payload.userIds.length) {
       document.getElementById('assignResult').innerHTML =
         '<span class="error">Please select at least one user.</span>';
