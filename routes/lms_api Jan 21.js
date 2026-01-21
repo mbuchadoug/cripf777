@@ -1226,43 +1226,16 @@ if (exam) {
     if (passed) {
       try {
         // For certificate name, prefer: req.user.name or savedAttempt.userName or fallback to 'Learner'
-     // 🧾 Resolve certificate recipient name (supports Google + local users)
-// 🧾 Resolve certificate recipient name (ALWAYS load from DB)
-let recipientName = "Learner";
-
-try {
-  if (req.user?._id) {
-    const fullUser = await User.findById(req.user._id)
-      .select("firstName lastName displayName name fullName email")
-      .lean();
-
-    if (fullUser) {
-      // 1️⃣ displayName (highest priority)
-      if (fullUser.displayName && fullUser.displayName.trim()) {
-        recipientName = fullUser.displayName.trim();
-      }
-      // 2️⃣ firstName + lastName (school users)
-      else if (fullUser.firstName || fullUser.lastName) {
-        recipientName = [
-          fullUser.firstName || "",
-          fullUser.lastName || ""
-        ].join(" ").trim();
-      }
-      // 3️⃣ Google-style fallbacks
-      else if (fullUser.name || fullUser.fullName) {
-        recipientName = fullUser.name || fullUser.fullName;
-      }
-      // 4️⃣ Email fallback
-      else if (fullUser.email) {
-        recipientName = fullUser.email.split("@")[0];
-      }
-    }
-  }
-} catch (e) {
-  console.warn("[certificate] failed to resolve user name", e);
-}
-
-
+        let recipientName = "Learner";
+        try {
+          if (req.user && (req.user.name || req.user.fullName || req.user.displayName)) {
+            recipientName = req.user.name || req.user.fullName || req.user.displayName;
+          } else if (savedAttempt && savedAttempt.userName) {
+            recipientName = savedAttempt.userName;
+          } else if (savedAttempt && savedAttempt.userId && typeof savedAttempt.userId === "string") {
+            recipientName = `User ${String(savedAttempt.userId).slice(0,8)}`;
+          }
+        } catch (e) {}
 
         // Try to find organization name if possible
         let orgName = "";
