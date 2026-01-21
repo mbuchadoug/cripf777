@@ -810,24 +810,57 @@ for (const ex of exams) {
     /* -------------------------------
        USER ATTEMPTS
     -------------------------------- */
-    const attempts = await Attempt.find({
-      organization: org._id,
-      userId: req.user._id
-    })
-      .sort({ finishedAt: -1 })
-      .lean();
+   /* -------------------------------
+   USER ATTEMPTS (WITH QUIZ TITLE)
+-------------------------------- */
+const attempts = await Attempt.find({
+  organization: org._id,
+  userId: req.user._id
+})
+  .sort({ finishedAt: -1 })
+  .lean();
 
-    const attemptRows = attempts.map(a => ({
-      quizTitle: a.quizTitle || a.module || "Quiz",
-      module: a.module || "",
-      score: a.score || 0,
-      maxScore: a.maxScore || 0,
-      percentage: a.maxScore
-        ? Math.round((a.score / a.maxScore) * 100)
-        : 0,
-      passed: !!a.passed,
-      finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-    }));
+// 🔹 load related exam instances to resolve titles
+const examIds = attempts.map(a => a.examId).filter(Boolean);
+const examsByExamId = {};
+
+if (examIds.length) {
+  const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
+    .select("examId module questionIds")
+    .lean();
+
+  for (const ex of examDocs) {
+    examsByExamId[ex.examId] = ex;
+  }
+}
+
+const attemptRows = attempts.map(a => {
+  const ex = examsByExamId[a.examId];
+
+  let quizTitle = a.quizTitle;
+
+  // fallback: derive title like Assigned Quizzes does
+  if (!quizTitle && ex) {
+    quizTitle =
+      ex.module
+        ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz"
+        : "Quiz";
+  }
+
+  return {
+    _id: a._id,                // 🔴 REQUIRED for Review Attempt link
+    examId: a.examId,
+    quizTitle: quizTitle || "Quiz",
+    score: a.score || 0,
+    maxScore: a.maxScore || 0,
+    percentage: a.maxScore
+      ? Math.round((a.score / a.maxScore) * 100)
+      : 0,
+    passed: !!a.passed,
+    finishedAt: a.finishedAt || a.updatedAt || a.createdAt
+  };
+});
+
 
     /* -------------------------------
        CERTIFICATES
@@ -874,6 +907,107 @@ if (req.session?.isFirstLogin) {
   }
 });
 
+
+
+// --------------------------------------------------
+// USER: View own quiz attempt (review mode)
+// GET /org/:slug/attempts/:attemptId
+// --------------------------------------------------
+router.get(
+  "/org/:slug/attempts/:attemptId",
+  ensureAuth,
+  async (req, res) => {
+    try {
+      const { slug, attemptId } = req.params;
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
+      if (!mongoose.isValidObjectId(attemptId)) {
+        return res.status(400).send("invalid attempt id");
+      }
+
+      const attempt = await Attempt.findById(attemptId).lean();
+      if (!attempt) return res.status(404).send("attempt not found");
+
+      // 🔐 SECURITY: user can ONLY view their own attempt
+      if (String(attempt.userId) !== String(req.user._id)) {
+        return res.status(403).send("Not allowed");
+      }
+
+      // reuse admin logic to resolve questions
+      let orderedQIds = Array.isArray(attempt.questionIds)
+        ? attempt.questionIds.map(String)
+        : [];
+
+      if (!orderedQIds.length && attempt.examId) {
+        const exam = await ExamInstance.findOne({ examId: attempt.examId }).lean();
+        if (exam?.questionIds) {
+          orderedQIds = exam.questionIds.map(String);
+        }
+      }
+
+      const answerMap = {};
+      if (Array.isArray(attempt.answers)) {
+        for (const a of attempt.answers) {
+          if (a?.questionId) {
+            answerMap[String(a.questionId)] =
+              typeof a.choiceIndex === "number" ? a.choiceIndex : null;
+          }
+        }
+      }
+
+      const validIds = orderedQIds.filter(id => mongoose.isValidObjectId(id));
+      const questions = await Question.find({ _id: { $in: validIds } }).lean();
+
+      const qById = {};
+      for (const q of questions) qById[String(q._id)] = q;
+
+      const details = orderedQIds.map((qid, idx) => {
+        const q = qById[qid];
+        if (!q) {
+          return {
+            qIndex: idx + 1,
+            questionText: "(question not found)",
+            choices: [],
+            yourIndex: null,
+            correctIndex: null,
+            correct: false
+          };
+        }
+
+        const correctIndex =
+          q.correctIndex ?? q.answerIndex ?? q.correct ?? null;
+
+        const yourIndex = answerMap[qid];
+
+        return {
+          qIndex: idx + 1,
+          questionText: q.text,
+          choices: q.choices.map(c =>
+            typeof c === "string" ? { text: c } : { text: c.text }
+          ),
+          yourIndex,
+          correctIndex,
+          correct:
+            correctIndex !== null &&
+            yourIndex !== null &&
+            correctIndex === yourIndex
+        };
+      });
+
+      return res.render("org/attempt_review", {
+        org,
+        attempt,
+        details,
+        user: req.user
+      });
+    } catch (err) {
+      console.error("[user attempt review] error:", err);
+      return res.status(500).send("failed");
+    }
+  }
+);
 
 
 // ------------------------------------------------------------------

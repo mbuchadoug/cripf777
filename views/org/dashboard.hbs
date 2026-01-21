@@ -200,24 +200,34 @@
     <div class="grid">
 
       <div class="panel">
-        <h2>Quiz History</h2>
-        <div class="scroll-box">
-          {{#each attemptRows}}
-            <div class="card" style="margin-bottom:10px">
-              <strong>{{quizTitle}}</strong>
-              <div>
-                {{percentage}}%
-                {{#if passed}}
-                  <span class="tag">Passed</span>
-                {{else}}
-                  <span class="tag">Failed</span>
-                {{/if}}
-              </div>
-              <small>{{finishedAt}}</small>
-            </div>
-          {{/each}}
+  <h2>Quiz History</h2>
+  <div class="scroll-box">
+    {{#each attemptRows}}
+      <div class="card" style="margin-bottom:10px">
+        <strong>{{quizTitle}}</strong>
+
+        <div>
+          {{percentage}}%
+          {{#if passed}}
+            <span class="tag">Passed</span>
+          {{else}}
+            <span class="tag">Failed</span>
+          {{/if}}
         </div>
+
+        <!-- 🔹 ADD THIS BLOCK -->
+        <div class="actions" style="margin-top:6px">
+          <a href="/org/{{../org.slug}}/attempts/{{_id}}">
+            Review Attempt
+          </a>
+        </div>
+
+        <small>{{finishedAt}}</small>
       </div>
+    {{/each}}
+  </div>
+</div>
+
 
    {{#if certRows.length}}
 <div class="panel">
