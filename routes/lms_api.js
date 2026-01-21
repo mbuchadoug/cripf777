@@ -2,7 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
-
+import User from "../models/user.js";
 import Organization from "../models/organization.js";
 import Question from "../models/question.js";         // Question model (used throughout)
 import ExamInstance from "../models/examInstance.js";
