@@ -92,74 +92,57 @@ router.get(
   "/admin/certificates/:id/download/pdf",
   ensureAuth,
   async (req, res) => {
-    try {
-      const cert = await Certificate.findById(req.params.id)
-        .populate("userId", "displayName firstName lastName email")
-        .populate("orgId", "name slug")
-        .lean();
+    const cert = await Certificate.findById(req.params.id)
+      //.populate("userId", "name email")
+      .populate("userId", "displayName firstName lastName email")
+      .populate("orgId", "name slug")
+      .lean();
 
-      if (!cert) {
-        return res.status(404).send("Certificate not found");
-      }
+    if (!cert) return res.status(404).send("Certificate not found");
 
-      /* ------------------------------------------------
-         🔐 ACCESS CONTROL
-         - Admins / org managers: OK
-         - Normal users: ONLY own certificate
-      ------------------------------------------------ */
-      const isOwner =
-        cert.userId &&
-        String(cert.userId._id) === String(req.user._id);
+    /*const recipientName =
+      cert.userId?.name || cert.userId?.email || "Learner";*/
 
-      const isAdmin =
-        req.user?.role === "super_admin" ||
-        req.user?.role === "org_admin";
+const recipientName =
+  cert.userId?.displayName ||
+  [cert.userId?.firstName, cert.userId?.lastName]
+    .filter(Boolean)
+    .join(" ") ||
+  cert.userId?.email ||
+  "Learner";
 
-      if (!isAdmin && !isOwner) {
-        return res.status(403).send("Not allowed to access this certificate");
-      }
 
-      /* ------------------------------------------------
-         Resolve recipient name (Google + local users)
-      ------------------------------------------------ */
-      const recipientName =
-        cert.userId?.displayName ||
-        [cert.userId?.firstName, cert.userId?.lastName]
-          .filter(Boolean)
-          .join(" ") ||
-        cert.userId?.email ||
-        "Learner";
 
-      const orgName = cert.orgId?.name || "Organization";
+    const orgName = cert.orgId?.name || "Organization";
 
-      // 🔁 Generate PDF on demand (same logic as admin)
-      const result = await generateCertificatePdf({
-        name: recipientName,
-        orgName,
-        moduleName: cert.moduleName,
-        quizTitle: cert.quizTitle,
-        score: cert.score,
-        percentage: cert.percentage,
-        date: cert.issuedAt,
-        req,
-      });
+    // 🔁 REGENERATE PDF FROM DB DATA
+    const result = await generateCertificatePdf({
+      name: recipientName,
+      orgName,
+      moduleName: cert.moduleName,
+      quizTitle: cert.quizTitle,
+      score: cert.score,
+      percentage: cert.percentage,
+      date: cert.issuedAt,
+      req,
+    });
 
-      if (!result || !result.filepath) {
-        return res.status(500).send("Failed to generate certificate PDF");
-      }
-
-      res.download(
-        result.filepath,
-        `${cert.serial}.pdf`,
-        () => {
-          // 🧹 clean temp file
-          fs.unlink(result.filepath, () => {});
-        }
-      );
-    } catch (err) {
-      console.error("[certificate pdf download] error:", err);
-      return res.status(500).send("failed");
+    if (!result || !result.filepath) {
+      return res.status(500).send("Failed to generate certificate PDF");
     }
+
+    res.download(
+      result.filepath,
+      `${cert.serial}.pdf`,
+      (err) => {
+        if (err) {
+          console.error("PDF download error:", err);
+        }
+
+        // 🧹 Optional cleanup (recommended)
+        fs.unlink(result.filepath, () => {});
+      }
+    );
   }
 );
 
