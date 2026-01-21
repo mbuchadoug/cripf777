@@ -69,6 +69,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
 
   await ExamInstance.create({
     examId: crypto.randomUUID(),
+    targetRole: "student",
     org: orgId,
     userId,
     module: "responsibility",
@@ -712,16 +713,30 @@ if (membership.role === "student") {
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
+    targetRole: "student",           // ✅ FILTER
     isOnboarding: membership.isOnboardingComplete === false
-  }).sort({ createdAt: -1 }).lean();
-} else {
-  // teachers & staff
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+} else if (membership.role === "teacher") {
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
+    targetRole: "teacher",           // ✅ FILTER
     isOnboarding: false
-  }).sort({ createdAt: -1 }).lean();
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+} else {
+  // staff / admin fallback
+  exams = await ExamInstance.find({
+    org: org._id,
+    userId: req.user._id
+  })
+    .sort({ createdAt: -1 })
+    .lean();
 }
+
 
 }
 
@@ -764,7 +779,8 @@ if (membership.role === "student") {
     const now = new Date();
 
    for (const ex of exams) {
-  const logicalKey = ex.examId;
+  const logicalKey = `${ex.userId}-${ex.module}-${ex.targetRole}`;
+
 
 
   if (seenKeys.has(logicalKey)) continue;
@@ -1213,6 +1229,7 @@ if (alreadyAssigned) {
               // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
               questionIds,
               choicesOrder,
+              targetRole: targetRole, // "student" or "teacher"
               expiresAt,
               createdAt: new Date(),
               createdByIp: req.ip,
@@ -1340,6 +1357,8 @@ if (alreadyAssigned) {
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
              isOnboarding: false,
+             targetRole: targetRole, // "student" or "teacher"
+
             choicesOrder,
             expiresAt,
             createdAt: new Date(),
