@@ -309,32 +309,21 @@
      <div class="panel">
        <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
 
-   {{#if (eq org.type "school")}}
-
-<label class="block">
-  Assign to:
-  <select id="targetRole" name="targetRole" required>
-    <option value="student">Students (by grade)</option>
-    <option value="teacher">Teachers (all teachers)</option>
-  </select>
-</label>
-
-<label class="block" id="gradeWrap">
-  Grade:
-  <select id="gradeSelect" name="grade">
-    <option value="">-- select grade --</option>
-    <option value="1">Grade 1</option>
-    <option value="2">Grade 2</option>
-    <option value="3">Grade 3</option>
-    <option value="4">Grade 4</option>
-    <option value="5">Grade 5</option>
-    <option value="6">Grade 6</option>
-    <option value="7">Grade 7</option>
-  </select>
-</label>
-
-{{/if}}
-
+       {{#if (eq org.type "school")}}
+    <label class="block">
+      Grade:
+      <select id="gradeSelect" name="grade" required>
+        <option value="">-- select grade --</option>
+        <option value="1">Grade 1</option>
+        <option value="2">Grade 2</option>
+        <option value="3">Grade 3</option>
+        <option value="4">Grade 4</option>
+        <option value="5">Grade 5</option>
+        <option value="6">Grade 6</option>
+        <option value="7">Grade 7</option>
+      </select>
+    </label>
+    {{/if}}
          <p>Select members to assign a quiz for the chosen module. This creates an exam instance per selected user.</p>
 
          <label class="block">
@@ -846,20 +835,6 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
       });
   });
 </script>
-
-
-<script>
-  const roleSelect = document.getElementById("targetRole");
-  const gradeWrap = document.getElementById("gradeWrap");
-
-  if (roleSelect && gradeWrap) {
-    roleSelect.addEventListener("change", () => {
-      gradeWrap.style.display =
-        roleSelect.value === "student" ? "block" : "none";
-    });
-  }
-</script>
-
 
 </body>
 </html>

@@ -708,13 +708,21 @@ if (isAdmin) {
     .lean();
 } else {
   // User sees ONLY their assigned exams
+if (membership.role === "student") {
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
     isOnboarding: membership.isOnboardingComplete === false
-  })
-    .sort({ createdAt: -1 })
-    .lean();
+  }).sort({ createdAt: -1 }).lean();
+} else {
+  // teachers & staff
+  exams = await ExamInstance.find({
+    org: org._id,
+    userId: req.user._id,
+    isOnboarding: false
+  }).sort({ createdAt: -1 }).lean();
+}
+
 }
 
 
@@ -1030,10 +1038,12 @@ let {
   modules = [],
   userIds = [],
   grade = null,
+  targetRole = "student",
   count = 20,
   expiresMinutes = 60,
   passageId = null
 } = req.body || {};
+
 
 // ✅ validate modules
 if (!Array.isArray(modules) || !modules.length) {
@@ -1059,28 +1069,45 @@ if (!org) return res.status(404).json({ error: "org not found" });
 // 🎓 SCHOOL MODE: resolve users by grade
 // ----------------------------------
 if (org.type === "school") {
-  const gradeNum = Number(grade);
 
-  if (!Number.isInteger(gradeNum) || gradeNum <= 0) {
-    return res.status(400).json({
-      error: "valid grade required for school assignments"
-    });
+  if (targetRole === "teacher") {
+    const teachers = await User.find({
+      organization: org._id,
+      role: "teacher"
+    }).select("_id");
+
+    if (!teachers.length) {
+      return res.status(404).json({
+        error: "No teachers found in this school"
+      });
+    }
+
+    userIds = teachers.map(t => String(t._id));
+
+  } else {
+    // default: students by grade
+    const gradeNum = Number(grade);
+
+    if (!Number.isInteger(gradeNum) || gradeNum <= 0) {
+      return res.status(400).json({
+        error: "valid grade required for student assignments"
+      });
+    }
+
+    const students = await User.find({
+      organization: org._id,
+      role: "student",
+      grade: gradeNum
+    }).select("_id");
+
+    if (!students.length) {
+      return res.status(404).json({
+        error: `No students found for grade ${gradeNum}`
+      });
+    }
+
+    userIds = students.map(s => String(s._id));
   }
-
-  const students = await User.find({
-    organization: org._id,
-    role: "student",
-    grade: gradeNum
-  }).select("_id");
-
-  if (!students.length) {
-    return res.status(404).json({
-      error: `No students found for grade ${gradeNum}`
-    });
-  }
-
-  // ⛔ overwrite userIds completely
-  userIds = students.map(s => String(s._id));
 }
 
 // ----------------------------------
