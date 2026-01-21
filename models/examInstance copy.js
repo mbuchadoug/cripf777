@@ -24,26 +24,8 @@ modules: [{
   index: true
 }]
 ,
-
-// Assigned user (REQUIRED)
-userId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "User",
-  required: true,
-  index: true
-},
-
-
-// Who this quiz is for
-targetRole: {
-  type: String,
-  enum: ["student", "teacher"],
-  required: true,
-  index: true
-},
-
     // Assigned user (optional for generic attempts)
-   // user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
 
     /**
      * questionIds intentionally uses Mixed so it can hold:
@@ -99,11 +81,7 @@ ExamInstanceSchema.methods.normalizedQuestionIds = function () {
 };
 
 // basic indexes that will help lookups
-ExamInstanceSchema.index({ org: 1, userId: 1, examId: 1 });
+ExamInstanceSchema.index({ org: 1, user: 1, examId: 1 });
 
-ExamInstanceSchema.index(
-  { org: 1, userId: 1, module: 1, targetRole: 1, expiresAt: 1 },
-  { unique: true, partialFilterExpression: { expiresAt: { $ne: null } } }
-);
 const ExamInstance = mongoose.models.ExamInstance || mongoose.model("ExamInstance", ExamInstanceSchema);
 export default ExamInstance;

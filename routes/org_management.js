@@ -699,7 +699,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 // 🧠 detect first-time login
 const isFirstLogin = !!req.session?.isFirstLogin;
 
-
 let exams = [];
 
 if (isAdmin) {
@@ -708,40 +707,16 @@ if (isAdmin) {
     .sort({ createdAt: -1 })
     .lean();
 } else {
-  // User sees ONLY their assigned exams
-if (membership.role === "student") {
+  // Non-admins see ONLY quizzes assigned to them for their role
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
-    targetRole: "student",
-    isOnboarding: false   // 🔥 ALWAYS false for real quizzes
-  })
-  .sort({ createdAt: -1 })
-  .lean();
-}
- else if (membership.role === "teacher") {
-  exams = await ExamInstance.find({
-    org: org._id,
-    userId: req.user._id,
-    targetRole: "teacher",
+    targetRole: role,
     isOnboarding: false
-  })
-  .sort({ createdAt: -1 })
-  .lean();
-}
- else {
-  // staff / admin fallback
-  exams = await ExamInstance.find({
-    org: org._id,
-    userId: req.user._id
   })
     .sort({ createdAt: -1 })
     .lean();
 }
-
-
-}
-
 
 
 
@@ -777,7 +752,7 @@ if (membership.role === "student") {
     -------------------------------- */
     const quizzesByModule = {};
     //const seenExamIds = new Set();
-    //const now = new Date();
+  const now = new Date();
  const seenExamIds = new Set();
 
 for (const ex of exams) {
