@@ -910,8 +910,9 @@ if (req.session?.isFirstLogin) {
 
 
 // --------------------------------------------------
-// USER: View own quiz attempt (review mode)
-// GET /org/:slug/attempts/:attemptId
+// SHARED: View attempt detail
+// - Admins can view any attempt
+// - Users can ONLY view their own
 // --------------------------------------------------
 router.get(
   "/org/:slug/attempts/:attemptId",
@@ -920,90 +921,35 @@ router.get(
     try {
       const { slug, attemptId } = req.params;
 
-      const org = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).send("org not found");
-
       if (!mongoose.isValidObjectId(attemptId)) {
         return res.status(400).send("invalid attempt id");
       }
 
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
       const attempt = await Attempt.findById(attemptId).lean();
       if (!attempt) return res.status(404).send("attempt not found");
 
-      // 🔐 SECURITY: user can ONLY view their own attempt
-      if (String(attempt.userId) !== String(req.user._id)) {
+      // 🔐 AUTHORIZATION
+      const isAdmin =
+        (process.env.ADMIN_EMAILS || "")
+          .split(",")
+          .map(e => e.trim().toLowerCase())
+          .includes(req.user.email?.toLowerCase());
+
+      const isOwner = String(attempt.userId) === String(req.user._id);
+
+      if (!isAdmin && !isOwner) {
         return res.status(403).send("Not allowed");
       }
 
-      // reuse admin logic to resolve questions
-      let orderedQIds = Array.isArray(attempt.questionIds)
-        ? attempt.questionIds.map(String)
-        : [];
-
-      if (!orderedQIds.length && attempt.examId) {
-        const exam = await ExamInstance.findOne({ examId: attempt.examId }).lean();
-        if (exam?.questionIds) {
-          orderedQIds = exam.questionIds.map(String);
-        }
-      }
-
-      const answerMap = {};
-      if (Array.isArray(attempt.answers)) {
-        for (const a of attempt.answers) {
-          if (a?.questionId) {
-            answerMap[String(a.questionId)] =
-              typeof a.choiceIndex === "number" ? a.choiceIndex : null;
-          }
-        }
-      }
-
-      const validIds = orderedQIds.filter(id => mongoose.isValidObjectId(id));
-      const questions = await Question.find({ _id: { $in: validIds } }).lean();
-
-      const qById = {};
-      for (const q of questions) qById[String(q._id)] = q;
-
-      const details = orderedQIds.map((qid, idx) => {
-        const q = qById[qid];
-        if (!q) {
-          return {
-            qIndex: idx + 1,
-            questionText: "(question not found)",
-            choices: [],
-            yourIndex: null,
-            correctIndex: null,
-            correct: false
-          };
-        }
-
-        const correctIndex =
-          q.correctIndex ?? q.answerIndex ?? q.correct ?? null;
-
-        const yourIndex = answerMap[qid];
-
-        return {
-          qIndex: idx + 1,
-          questionText: q.text,
-          choices: q.choices.map(c =>
-            typeof c === "string" ? { text: c } : { text: c.text }
-          ),
-          yourIndex,
-          correctIndex,
-          correct:
-            correctIndex !== null &&
-            yourIndex !== null &&
-            correctIndex === yourIndex
-        };
-      });
-
-      return res.render("org/attempt_review", {
-        org,
-        attempt,
-        details,
-        user: req.user
-      });
+      // ✅ REUSE ADMIN LOGIC BY REDIRECTING INTERNALLY
+      return res.redirect(
+        `/admin/orgs/${org.slug}/attempts/${attempt._id}`
+      );
     } catch (err) {
-      console.error("[user attempt review] error:", err);
+      console.error("[shared attempt review] error:", err);
       return res.status(500).send("failed");
     }
   }
