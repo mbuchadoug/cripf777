@@ -713,21 +713,23 @@ if (membership.role === "student") {
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
-    targetRole: "student",           // ✅ FILTER
-    isOnboarding: membership.isOnboardingComplete === false
+    targetRole: "student",
+    isOnboarding: false   // 🔥 ALWAYS false for real quizzes
   })
-    .sort({ createdAt: -1 })
-    .lean();
-} else if (membership.role === "teacher") {
+  .sort({ createdAt: -1 })
+  .lean();
+}
+ else if (membership.role === "teacher") {
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
-    targetRole: "teacher",           // ✅ FILTER
+    targetRole: "teacher",
     isOnboarding: false
   })
-    .sort({ createdAt: -1 })
-    .lean();
-} else {
+  .sort({ createdAt: -1 })
+  .lean();
+}
+ else {
   // staff / admin fallback
   exams = await ExamInstance.find({
     org: org._id,
@@ -775,16 +777,13 @@ if (membership.role === "student") {
     -------------------------------- */
     const quizzesByModule = {};
     //const seenExamIds = new Set();
-    const seenKeys = new Set();
-    const now = new Date();
+    //const now = new Date();
+ const seenExamIds = new Set();
 
-   for (const ex of exams) {
-  const logicalKey = `${ex.userId}-${ex.module}-${ex.targetRole}`;
+for (const ex of exams) {
+  if (seenExamIds.has(ex.examId)) continue;
+  seenExamIds.add(ex.examId);
 
-
-
-  if (seenKeys.has(logicalKey)) continue;
-  seenKeys.add(logicalKey);
 
       const moduleKey = ex.module || "general";
       if (!quizzesByModule[moduleKey]) {
@@ -1289,19 +1288,7 @@ const match = {
       for (const uId of userIds) {
         try {
 
-          // ⛔ PREVENT DUPLICATE PASSAGE ASSIGNMENT
-const alreadyAssigned = await ExamInstance.exists({
-  org: org._id,
-  userId: mongoose.Types.ObjectId(uId),
-  module: moduleKey,
-  isOnboarding: false,
-  expiresAt: { $ne: null }
-});
 
-
-if (alreadyAssigned) {
-  continue;
-}
 
           const questionIds = [];
           const choicesOrder = [];
