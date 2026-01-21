@@ -46,7 +46,7 @@ router.get("/admin/orgs/:slug/attempts", ensureAuth, ensureAdminEmails, async (r
   }
 });
 
-router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth,  async (req, res) => {
+router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth,ensureAdminEmails,  async (req, res) => {
   try {
     const slug = String(req.params.slug || "");
     const attemptId = String(req.params.attemptId || "");
