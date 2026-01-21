@@ -1,0 +1,23 @@
+<h1>School Login</h1>
+
+{{#if error}}
+  <div class="error">{{error}}</div>
+{{/if}}
+
+<form method="POST" action="/auth/school">
+  <label>
+    <span>School ID</span>
+    <input name="loginId" placeholder="Student / Teacher ID" required />
+  </label>
+
+  <label>
+    <span>Password</span>
+    <input type="password" name="password" required />
+  </label>
+
+  <button type="submit">Log in</button>
+</form>
+
+<p class="help-text">
+  Use the ID and password provided by your school
+</p>
