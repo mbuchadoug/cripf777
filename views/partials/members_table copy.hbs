@@ -65,18 +65,15 @@
         <td>{{user.firstName}} {{user.lastName}}</td>
 
         {{#if ../isSchool}}
- <td>
-  {{#if (eq role "student")}}
-    {{user.studentId}}
-  {{else if (eq role "teacher")}}
-    {{user.teacherId}}
-  {{else if (or (eq role "admin") (eq role "manager"))}}
-    {{user.adminId}}
-  {{else}}
-    -
-  {{/if}}
-</td>
-
+  <td>
+    {{#if (eq role "student")}}
+      {{user.studentId}}
+    {{else if (eq role "teacher")}}
+      {{user.teacherId}}
+    {{else}}
+      -
+    {{/if}}
+  </td>
 
   <td>
     {{#if (eq role "student")}}
