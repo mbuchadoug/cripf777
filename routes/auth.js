@@ -335,6 +335,8 @@ router.get("/logout", (req, res, next) => {
         return res.redirect("/auth/school");
       }else if(role == "teacher"){
         return res.redirect("/auth/school");
+      } else if(role == "admin"){
+        return res.redirect("/auth/school");
       }
 
       // 👨‍🏫 Others go home
@@ -342,6 +344,4 @@ router.get("/logout", (req, res, next) => {
     });
   });
 });
-
-
 export default router;

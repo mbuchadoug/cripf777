@@ -753,11 +753,16 @@ if (isAdmin) {
     const quizzesByModule = {};
     //const seenExamIds = new Set();
   const now = new Date();
- const seenExamIds = new Set();
+const seenKeys = new Set();
 
 for (const ex of exams) {
-  if (seenExamIds.has(ex.examId)) continue;
-  seenExamIds.add(ex.examId);
+  // 🔑 dedupe key: same quiz assigned to many users
+  const dedupeKey = isAdmin
+    ? `${ex.module}|${ex.targetRole}|${ex.isOnboarding ? "onboard" : "live"}`
+    : ex.examId;
+
+  if (seenKeys.has(dedupeKey)) continue;
+  seenKeys.add(dedupeKey);
 
 
       const moduleKey = ex.module || "general";
