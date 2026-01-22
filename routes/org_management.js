@@ -1976,5 +1976,89 @@ router.post(
 
 
 
+
+// --------------------------------------------------
+// USER: View own attempt (NON-ADMIN)
+// GET /org/:slug/my-attempts/:attemptId
+// --------------------------------------------------
+router.get(
+  "/org/:slug/my-attempts/:attemptId",
+  ensureAuth,
+  async (req, res) => {
+    try {
+      const { slug, attemptId } = req.params;
+
+      if (!mongoose.isValidObjectId(attemptId)) {
+        return res.status(400).send("invalid attempt id");
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).send("org not found");
+
+      const attempt = await Attempt.findById(attemptId).lean();
+      if (!attempt) return res.status(404).send("attempt not found");
+
+      // 🔐 USER CAN ONLY VIEW THEIR OWN ATTEMPT
+      if (String(attempt.userId) !== String(req.user._id)) {
+        return res.status(403).send("Not allowed");
+      }
+
+      // Load questions
+      const qIds = Array.isArray(attempt.questionIds)
+        ? attempt.questionIds.map(String)
+        : [];
+
+      const questions = await Question.find({
+        _id: { $in: qIds.filter(id => mongoose.isValidObjectId(id)) }
+      }).lean();
+
+      const qById = {};
+      for (const q of questions) qById[String(q._id)] = q;
+
+      const answersLookup = {};
+      if (Array.isArray(attempt.answers)) {
+        for (const a of attempt.answers) {
+          if (a?.questionId)
+            answersLookup[String(a.questionId)] = a.choiceIndex;
+        }
+      }
+
+      const details = qIds.map((qid, idx) => {
+        const q = qById[qid];
+        const yourIndex = answersLookup[qid];
+
+        let correctIndex = null;
+        if (q) {
+          if (typeof q.correctIndex === "number") correctIndex = q.correctIndex;
+          else if (typeof q.answerIndex === "number") correctIndex = q.answerIndex;
+        }
+
+        return {
+          qIndex: idx + 1,
+          questionText: q?.text || "(question not found)",
+          choices: q?.choices || [],
+          yourIndex,
+          correctIndex,
+          correct:
+            correctIndex !== null &&
+            yourIndex !== null &&
+            correctIndex === yourIndex
+        };
+      });
+
+      return res.render("org/org_attempt_detail", {
+        org,
+        attempt,
+        details,
+        user: req.user
+      });
+    } catch (err) {
+      console.error("[user attempt review] error:", err);
+      return res.status(500).send("failed");
+    }
+  }
+);
+
+
 // export default router
 export default router;
