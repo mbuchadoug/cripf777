@@ -254,7 +254,8 @@ router.post("/school", async (req, res) => {
     const user = await User.findOne({
       $or: [
         { studentId: loginId },
-        { teacherId: loginId }
+        { teacherId: loginId },
+        { adminId: loginId }
       ]
     });
 

@@ -2060,5 +2060,87 @@ router.get(
 );
 
 
+router.post(
+  "/admin/orgs/:slug/import-admins",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager, // NOT ensureAdminEmails
+  upload.single("csv"),
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "");
+      const org = await Organization.findOne({ slug });
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      if (org.type !== "school") {
+        return res.status(400).json({ error: "Only school orgs can import admins" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "CSV file required" });
+      }
+
+      let created = 0;
+      let skipped = 0;
+      const errors = [];
+
+      const stream = fs.createReadStream(req.file.path).pipe(
+        parse({ columns: true, trim: true, skip_empty_lines: true })
+      );
+
+      for await (const row of stream) {
+        try {
+          const adminId = String(row.adminId || "").trim();
+          const firstName = String(row.firstName || "").trim();
+          const lastName = String(row.lastName || "").trim();
+          const role = String(row.role || "admin").toLowerCase();
+
+          if (!adminId || !firstName || !lastName) {
+            skipped++;
+            continue;
+          }
+
+          let user = await User.findOne({
+            organization: org._id,
+            adminId
+          });
+
+          if (!user) {
+            user = await User.create({
+              organization: org._id,
+              role: "employee", // 🔒 NOT org_admin
+              adminId,
+              firstName,
+              lastName
+            });
+          }
+
+          await OrgMembership.findOneAndUpdate(
+            { org: org._id, user: user._id },
+            {
+              $set: {
+                role: role === "manager" ? "manager" : "admin",
+                joinedAt: new Date()
+              }
+            },
+            { upsert: true }
+          );
+
+          created++;
+        } catch (e) {
+          skipped++;
+          errors.push(e.message);
+        }
+      }
+
+      fs.unlink(req.file.path, () => {});
+      return res.json({ ok: true, created, skipped, errors });
+    } catch (err) {
+      console.error("[import admins]", err);
+      return res.status(500).json({ error: "import failed" });
+    }
+  }
+);
+
+
 // export default router
 export default router;

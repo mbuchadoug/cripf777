@@ -36,6 +36,12 @@ const UserSchema = new mongoose.Schema({
   index: true,
   sparse: true
 },
+adminId: {
+  type: String,
+  index: true,
+  sparse: true
+},
+
 
   grade: { type: Number, index: true },
 
