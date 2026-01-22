@@ -778,10 +778,16 @@ if (isSchool) {
     }
 
     // 👇 CHOOSE ENDPOINT BASED ON ROLE
-    const endpoint =
-      role === "teacher"
-        ? `/admin/orgs/{{org.slug}}/teachers/${userId}/password`
-        : `/admin/orgs/{{org.slug}}/students/${userId}/password`;
+  let endpoint;
+
+if (role === "teacher") {
+  endpoint = `/admin/orgs/{{org.slug}}/teachers/${userId}/password`;
+} else if (role === "student") {
+  endpoint = `/admin/orgs/{{org.slug}}/students/${userId}/password`;
+} else {
+  endpoint = `/admin/orgs/{{org.slug}}/admins/${userId}/password`;
+}
+
 
     try {
       const resp = await fetch(endpoint, {
