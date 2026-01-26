@@ -493,40 +493,16 @@ router.get(
 /*  GET /org/join/:token                                              */
 /* ------------------------------------------------------------------ */
 
-router.get("/org/join/:token", async (req, res) => {
+router.get("/org/join/:token", ensureAuth, async (req, res) => {
   try {
-    
     const token = String(req.params.token || "");
     if (!token) return res.status(400).send("token required");
 
     const invite = await OrgInvite.findOne({ token, used: false }).lean();
     if (!invite) return res.status(404).send("invite not found or used");
 
-    // 🚪 STEP 2: not logged in → go login first
-  // 🚪 If not logged in → go authenticate first
-if (!req.isAuthenticated()) {
-  req.session.inviteToken = token;
-  return res.redirect("/auth/school");
-}
-
-// 👤 Ensure user exists (invite-only users)
-let user = req.user;
-
-if (!user && invite.email) {
-  user = await User.findOne({ email: invite.email });
-}
-
-if (!user) {
-  user = await User.create({
-    email: invite.email,
-    role: invite.role || "employee",
-    provider: "invite",
-    createdAt: new Date()
-  });
-}
-
 const membership = await OrgMembership.findOneAndUpdate(
-  { org: invite.orgId, user: user._id },
+  { org: invite.orgId, user: req.user._id },
   {
     $setOnInsert: {
       role: invite.role,
@@ -537,14 +513,16 @@ const membership = await OrgMembership.findOneAndUpdate(
   { upsert: true, new: true }
 );
 
-// First-time onboarding
+
+
+// ✅ FIRST TIME JOIN → mark onboarding
 if (membership?.joinedAt && Date.now() - membership.joinedAt.getTime() < 2000) {
   req.session.isFirstLogin = true;
-
   await assignOnboardingQuizzes({
-    orgId: invite.orgId,
-    userId: user._id
-  });
+  orgId: invite.orgId,
+  userId: req.user._id
+});
+
 }
 
 await OrgInvite.updateOne(
@@ -554,6 +532,8 @@ await OrgInvite.updateOne(
 
 const org = await Organization.findById(invite.orgId).lean();
 return res.redirect(`/org/${org.slug}/dashboard`);
+
+
 
   } catch (err) {
     console.error("[org/join] error:", err && (err.stack || err));
