@@ -180,145 +180,61 @@ const QUIZ_TITLE =
 
     // --- New helper: render one normal question into quizArea and return canonical question object
     // positionLabel is optional — used to show numbering (Q1, Q2, ...)
-  function renderSingleQuestion(qObj, positionLabel) {
+function renderSingleQuestion(qObj, positionLabel) {
   const q = repairBlock(qObj);
 
-  // 📝 ESSAY QUESTION HANDLING (ADD THIS)
-  if (q.answerType === "essay") {
-    return renderEssayQuestion(q, positionLabel);
-  }
-
-  // ⬇️ EXISTING MCQ CODE CONTINUES BELOW (DO NOT TOUCH)
-
-      const q = repairBlock(qObj);
-      // ensure we preserve any server-provided id (_id or id). If missing, generate local id.
-      const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
-      const choices = (q.choices || []).map(normalizeChoice);
-
-      const block = document.createElement('div');
-      block.className = 'q';
-      const qnum = (typeof positionLabel !== 'undefined') ? positionLabel : (quizArea.querySelectorAll('.q').length + 1);
-      const head = document.createElement('div');
-      head.className = 'q-head';
-      const text = q.text && String(q.text).trim()
-        ? escapeHtml(q.text.trim())
-        : 'Choose the best option';
-      head.innerHTML = '<span style="font-weight:800">Q' + qnum + '.</span> ' + text;
-      block.appendChild(head);
-
-      const choicesWrap = document.createElement('div');
-      choicesWrap.className = 'choices';
-
-      if (!choices.length) {
-        const p = document.createElement('div');
-        p.className = 'muted';
-        p.textContent = 'No choices available for this question.';
-        choicesWrap.appendChild(p);
-      } else {
-        choices.forEach((c, ci) => {
-          const btn = document.createElement('div');
-          btn.className = 'choice';
-          btn.setAttribute('role','button');
-          btn.setAttribute('tabindex','0');
-          btn.dataset.qid = qid;
-          btn.dataset.index = ci;
-
-          const badge = document.createElement('div');
-          badge.className = 'badge';
-          badge.textContent = letterForIndex(ci);
-
-          const txt = document.createElement('div');
-          txt.className = 'text';
-          txt.textContent = c.text || '';
-
-          btn.appendChild(badge);
-          btn.appendChild(txt);
-
-          btn.addEventListener('click', () => {
-            choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
-            btn.classList.add('selected');
-            answers[qid] = ci;
-          });
-          btn.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-              ev.preventDefault();
-              btn.click();
-            }
-          });
-
-          choicesWrap.appendChild(btn);
-        });
-      }
-
-      block.appendChild(choicesWrap);
-      quizArea.appendChild(block);
-
-      // return canonical question object for series (used by submit)
-      q.id = qid;
-      q.choices = choices;
-      return q;
-    }
 
 
+  // ✅ MCQ (unchanged logic)
+  const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
+  const choices = (q.choices || []).map(normalizeChoice);
 
+  const block = document.createElement('div');
+  block.className = 'q';
 
-function renderEssayQuestion(q, positionLabel) {
-  const block = document.createElement("div");
-  block.className = "q";
+  const qnum = positionLabel;
+  const head = document.createElement('div');
+  head.className = 'q-head';
+  head.innerHTML = `<strong>Q${qnum}.</strong> ${escapeHtml(q.text || '')}`;
+  block.appendChild(head);
 
-  block.innerHTML = `
-    <div class="q-head">
-      <strong>Q${positionLabel}.</strong> ${escapeHtml(q.text)}
-    </div>
-    <div class="essay-slots"></div>
-    <div class="muted small" style="margin-top:8px">
-      Preview: <span class="essay-preview"></span>
-    </div>
-  `;
+  const choicesWrap = document.createElement('div');
+  choicesWrap.className = 'choices';
 
-  const slotsWrap = block.querySelector(".essay-slots");
-  const preview = block.querySelector(".essay-preview");
+  choices.forEach((c, ci) => {
+    const btn = document.createElement('div');
+    btn.className = 'choice';
+    btn.dataset.qid = qid;
+    btn.dataset.index = ci;
 
-  const selections = {};
-  preview.textContent = q.essayTemplate || "";
-
-  (q.essaySlots || []).forEach(slot => {
-    const select = document.createElement("select");
-
-    select.innerHTML = `
-      <option value="">-- ${slot.label} --</option>
-      ${(slot.options || []).map(o => `<option>${escapeHtml(o)}</option>`).join("")}
+    btn.innerHTML = `
+      <div class="badge">${letterForIndex(ci)}</div>
+      <div class="text">${escapeHtml(c.text)}</div>
     `;
 
-    select.addEventListener("change", () => {
-      selections[slot.key] = select.value;
+    btn.onclick = () => {
+      choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
+      btn.classList.add('selected');
+      answers[qid] = ci;
+    };
 
-      let out = q.essayTemplate || "";
-      for (const k in selections) {
-        out = out.replace(
-          `{${k}}`,
-          selections[k] || "_____"
-        );
-      }
-      preview.textContent = out;
-    });
-
-    slotsWrap.appendChild(select);
+    choicesWrap.appendChild(btn);
   });
 
+  block.appendChild(choicesWrap);
   quizArea.appendChild(block);
 
-  // ⭐ STORE ESSAY STATE FOR SUBMISSION
-  q.essaySelections = selections;
-  q.id = q.id || q._id;
-  series.push(q);
+  q.id = qid;
+  return q;
 }
+
+
+
 
     // --- Render quiz including comprehension parents (with children) ---
     function renderQuiz(list){
       quizArea.innerHTML = '';
       answers = {};
-      series = [];
       localUserAnswers = {}; // reset local cache on new quiz load
 
       if (!Array.isArray(list) || list.length === 0) {
@@ -366,15 +282,16 @@ function renderEssayQuestion(q, positionLabel) {
           } else {
             children.forEach((child) => {
               runningIndex++;
-              const qObj = renderSingleQuestion(child, runningIndex);
-              series.push(qObj);
+             renderSingleQuestion(child, runningIndex);
+
             });
           }
         } else {
           // normal question item
           runningIndex++;
-          const qObj = renderSingleQuestion(item, runningIndex);
-          series.push(qObj);
+        renderSingleQuestion(item, runningIndex);
+
+
         }
       });
     }
@@ -457,13 +374,19 @@ else if (payload.durationMinutes) {
   answers: []
 };
 
-      for (const s of series) {
-        const id = s.id || s._id || null;
-        payload.answers.push({
-          questionId: id,
-          choiceIndex: (typeof answers[id] === 'number') ? answers[id] : null
-        });
-      }
+
+for (const s of series) {
+  const id = s.id || s._id || null;
+
+  payload.answers.push({
+    questionId: id,
+    choiceIndex:
+      typeof answers[id] === "number"
+        ? answers[id]
+        : null
+  });
+}
+
 
       // SAVE a copy of what the user actually clicked (shown indexes)
       localUserAnswers = Object.assign({}, answers);
