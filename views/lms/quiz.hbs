@@ -280,9 +280,9 @@ function renderEssayQuestion(q, positionLabel) {
   quizArea.appendChild(block);
 
   // ⭐ STORE ESSAY STATE FOR SUBMISSION
-  q.essaySelections = selections;
-  q.id = q.id || q._id;
-  series.push(q);
+q.essaySelections = selections;
+q.id = q.id || q._id;
+return q;
 }
 
     // --- Render quiz including comprehension parents (with children) ---
