@@ -724,7 +724,8 @@ if (isAdmin) {
     org: org._id,
     userId: req.user._id,
     targetRole: quizTargetRole,
-    ...(isFirstLogin ? {} : { isOnboarding: false })
+  ...(membership.isOnboardingComplete ? { isOnboarding: false } : {})
+
   })
     .sort({ createdAt: -1 })
     .lean();
