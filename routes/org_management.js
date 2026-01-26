@@ -62,14 +62,14 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
         $or: [{ organization: orgId }, { organization: null }]
       }
     },
-    { $sample: { size: 5 } }
+    { $sample: { size: 3 } }
   ]);
 
   if (!questions.length) return;
 
   await ExamInstance.create({
     examId: crypto.randomUUID(),
-    targetRole: "student",
+    targetRole: "employee",
     org: orgId,
     userId,
     module: "responsibility",
@@ -722,21 +722,22 @@ const isFirstLogin = !!req.session?.isFirstLogin;
 let exams = [];
 
 if (isAdmin) {
-  // Admin sees all exams in org
   exams = await ExamInstance.find({ org: org._id })
     .sort({ createdAt: -1 })
     .lean();
 } else {
-  // Non-admins see ONLY quizzes assigned to them for their role
+  const isFirstLogin = !!req.session?.isFirstLogin;
+
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
     targetRole: role,
-    isOnboarding: false
+    ...(isFirstLogin ? {} : { isOnboarding: false })
   })
     .sort({ createdAt: -1 })
     .lean();
 }
+
 
 
 
