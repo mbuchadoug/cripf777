@@ -1132,6 +1132,10 @@ let {
 } = req.body || {};
 
 
+// 🔑 normalize quiz target role
+const effectiveTargetRole =
+  targetRole === "employee" ? "teacher" : targetRole;
+
 // ✅ validate modules
 if (!Array.isArray(modules) || !modules.length) {
   return res.status(400).json({
@@ -1300,7 +1304,8 @@ if (alreadyAssigned) {
               // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
               questionIds,
               choicesOrder,
-              targetRole: targetRole, // "student" or "teacher"
+              targetRole: effectiveTargetRole,
+ // "student" or "teacher"
               expiresAt,
               createdAt: new Date(),
               createdByIp: req.ip,
@@ -1428,7 +1433,8 @@ const match = {
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
              isOnboarding: false,
-             targetRole: targetRole, // "student" or "teacher"
+          targetRole: effectiveTargetRole,
+
 
             choicesOrder,
             expiresAt,
