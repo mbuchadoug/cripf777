@@ -716,10 +716,14 @@ if (isAdmin) {
 } else {
   const isFirstLogin = !!req.session?.isFirstLogin;
 
+  // 🔑 map org roles → quiz target roles
+  const quizTargetRole =
+    role === "employee" ? "teacher" : role;
+
   exams = await ExamInstance.find({
     org: org._id,
     userId: req.user._id,
-    targetRole: role,
+    targetRole: quizTargetRole,
     ...(isFirstLogin ? {} : { isOnboarding: false })
   })
     .sort({ createdAt: -1 })
