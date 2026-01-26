@@ -720,13 +720,16 @@ if (isAdmin) {
   const quizTargetRole =
     role === "employee" ? "teacher" : role;
 
-  exams = await ExamInstance.find({
-    org: org._id,
-    userId: req.user._id,
-    targetRole: quizTargetRole,
+exams = await ExamInstance.find({
+  org: org._id,
+  userId: req.user._id,
+  $or: [
+    { targetRole: quizTargetRole },
+    { targetRole: { $exists: false } }
+  ],
   ...(membership.isOnboardingComplete ? { isOnboarding: false } : {})
+})
 
-  })
     .sort({ createdAt: -1 })
     .lean();
 }
@@ -1248,6 +1251,7 @@ const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
   module: moduleKey,
+   targetRole: effectiveTargetRole,   // ✅ ADD THIS
   isOnboarding: false,
   expiresAt: { $ne: null }
 });
@@ -1321,16 +1325,7 @@ if (alreadyAssigned) {
           }
         } // end for userIds
 
-       // 🔓 UNLOCK USERS AFTER ADMIN ASSIGNS PASSAGE QUIZ
-await OrgMembership.updateMany(
-  {
-    org: org._id,
-    user: { $in: userIds.map(id => mongoose.Types.ObjectId(id)) }
-  },
-  {
-    $set: { isOnboardingComplete: true }
-  }
-);
+     
 
 return res.json({
   ok: true,
@@ -1372,7 +1367,7 @@ const match = {
       org: org._id,
       userId: mongoose.Types.ObjectId(uId),
       module: moduleKey,
-      targetRole,
+       targetRole: effectiveTargetRole,   // ✅ FIX
       isOnboarding: false,
       expiresAt: { $ne: null }
     });
@@ -1450,16 +1445,7 @@ const match = {
           console.warn("[assign-quiz] user assign failed", uId, e && (e.stack || e));
         }
       } // end for userIds
-// 🔓 UNLOCK USERS AFTER ADMIN ASSIGNS QUIZ
-await OrgMembership.updateMany(
-  {
-    org: org._id,
-    user: { $in: userIds.map(id => mongoose.Types.ObjectId(id)) }
-  },
-  {
-    $set: { isOnboardingComplete: true }
-  }
-);
+
 
 return res.json({ ok: true, assigned, countUsed: docs.length });
 
