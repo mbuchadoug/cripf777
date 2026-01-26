@@ -757,9 +757,8 @@ const seenKeys = new Set();
 
 for (const ex of exams) {
   // 🔑 dedupe key: same quiz assigned to many users
-  const dedupeKey = isAdmin
-    ? `${ex.module}|${ex.targetRole}|${ex.isOnboarding ? "onboard" : "live"}`
-    : ex.examId;
+const dedupeKey = ex.examId;
+
 
   if (seenKeys.has(dedupeKey)) continue;
   seenKeys.add(dedupeKey);
