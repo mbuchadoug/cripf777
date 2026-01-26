@@ -428,6 +428,23 @@
            <input id="expiresMinutes" name="expiresMinutes" type="number" min="5" max="1440" value="60">
          </label>
 
+         <label class="block">
+  Duration (mins):
+  <input
+    id="durationMinutes"
+    name="durationMinutes"
+    type="number"
+    min="1"
+    max="300"
+    value="30"
+    required
+  >
+  <div class="muted small">
+    How long the learner has to complete the quiz once they start.
+  </div>
+</label>
+
+
          <div style="margin-top:8px">
            <button id="assignBtn" type="submit">Assign Quiz</button>
          </div>

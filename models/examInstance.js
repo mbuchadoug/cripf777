@@ -66,6 +66,11 @@ targetRole: {
     // optional expiry timestamp
     expiresAt: { type: Date, default: null },
 
+    durationMinutes: {
+  type: Number,
+  default: null
+}
+,
     // status: pending/finished/expired etc.
     status: { type: String, default: "pending", index: true },
 

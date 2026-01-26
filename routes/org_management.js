@@ -1127,8 +1127,10 @@ let {
   targetRole = "student",
   count = 20,
   expiresMinutes = 60,
+  durationMinutes = 30,   // ✅ ADD THIS
   passageId = null
 } = req.body || {};
+
 
 
 // 🔑 normalize quiz target role
@@ -1305,6 +1307,7 @@ if (alreadyAssigned) {
               questionIds,
               choicesOrder,
               targetRole: effectiveTargetRole,
+               durationMinutes,  
  // "student" or "teacher"
               expiresAt,
               createdAt: new Date(),
@@ -1426,7 +1429,7 @@ const match = {
              isOnboarding: false,
           targetRole: effectiveTargetRole,
 
-
+            durationMinutes,  
             choicesOrder,
             expiresAt,
             createdAt: new Date(),

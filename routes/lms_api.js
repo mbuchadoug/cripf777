@@ -386,12 +386,14 @@ if (examIdParam && req.user) {
         }
 
        // return res.json({ examId: exam.examId, series });
-       return res.json({
+return res.json({
   examId: exam.examId,
   expiresAt: exam.expiresAt || null,
+  durationMinutes: exam.durationMinutes || null, // ✅ ADD THIS
   serverTime: new Date(),
   series
 });
+
 
       } catch (e) {
         console.error("[/api/lms/quiz] exam load error:", e && (e.stack || e));
@@ -872,19 +874,38 @@ router.post("/quiz/submit", async (req, res) => {
 
 
     // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE — SOURCE OF TRUTH)
-if (
-  process.env.QUIZ_EXPIRY_ENABLED === "true" &&
-  exam?.expiresAt
-) {
+if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam) {
   const now = new Date();
 
-  if (now > new Date(exam.expiresAt)) {
+  // 1️⃣ Absolute expiry (calendar-based)
+  if (exam.expiresAt && now > new Date(exam.expiresAt)) {
     return res.status(403).json({
       error: "Quiz expired",
       expiredAt: exam.expiresAt
     });
   }
+
+  // 2️⃣ Duration-based expiry (MOST IMPORTANT)
+  if (exam.durationMinutes) {
+    const startedAt =
+      exam.startedAt ||
+      exam.createdAt;
+
+    if (startedAt) {
+      const deadline =
+        new Date(startedAt).getTime() +
+        exam.durationMinutes * 60 * 1000;
+
+      if (now.getTime() > deadline) {
+        return res.status(403).json({
+          error: "Time is up. Quiz auto-submitted.",
+          durationMinutes: exam.durationMinutes
+        });
+      }
+    }
+  }
 }
+
 
 
     // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known

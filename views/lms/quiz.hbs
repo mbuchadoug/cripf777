@@ -343,9 +343,21 @@ const QUIZ_TITLE =
         }
         const payload = await res.json();
 
-        if (payload.expiresAt) {
+// ⏳ Start timer (expiry OR duration-based)
+if (payload.expiresAt) {
   startQuizTimer(payload.expiresAt, payload.serverTime);
+} 
+else if (payload.durationMinutes) {
+  const serverNow = new Date(payload.serverTime).getTime();
+  const expiresAt =
+    serverNow + payload.durationMinutes * 60 * 1000;
+
+  startQuizTimer(
+    new Date(expiresAt).toISOString(),
+    payload.serverTime
+  );
 }
+
 
 
         // persist examId from backend here so submit uses same id
