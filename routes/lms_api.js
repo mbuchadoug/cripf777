@@ -963,80 +963,123 @@ const finalExamId =
     const details = [];
     const savedAnswers = [];
 
-    for (const a of answers) {
-      const qid = String(a.questionId || "");
-      const shownIndex = (typeof a.choiceIndex === "number") ? a.choiceIndex : null;
+for (const a of answers) {
+  const qid = String(a.questionId || "");
+  const qdoc = byId[qid] || null;
 
-      let canonicalIndex = (typeof shownIndex === "number") ? shownIndex : null;
+  const qObjId = mongoose.isValidObjectId(qid)
+    ? mongoose.Types.ObjectId(qid)
+    : qid;
 
-      const qdoc = byId[qid] || null;
+  /* ===============================
+     📝 ESSAY QUESTION HANDLING
+  =============================== */
+  if (qdoc?.answerType === "essay") {
+    const selections = a.essaySelections || {};
 
-      // PREF: per-question mapping (if question object contained choicesOrder in quiz response or file fallback)
-      if (qdoc && Array.isArray(qdoc.choicesOrder) && typeof shownIndex === "number") {
-        const map = qdoc.choicesOrder;
-        if (typeof map[shownIndex] === 'number') {
-          canonicalIndex = map[shownIndex];
-        } else {
-          // try invert mapping (original->display)
-          for (let orig = 0; orig < map.length; orig++) {
-            if (map[orig] === shownIndex) { canonicalIndex = orig; break; }
-          }
+    const essayText = qdoc.essayTemplate
+      ? qdoc.essayTemplate.replace(
+          /\{(\w+)\}/g,
+          (_, key) => selections[key] || ""
+        )
+      : "";
+
+    savedAnswers.push({
+      questionId: qObjId,
+      answerType: "essay",
+      essaySelections: selections,
+      essayText
+    });
+
+    // ❗ essays are NOT auto-marked
+    continue;
+  }
+
+  /* ===============================
+     ✅ MCQ HANDLING (UNCHANGED LOGIC)
+  =============================== */
+  const shownIndex =
+    typeof a.choiceIndex === "number" ? a.choiceIndex : null;
+
+  let canonicalIndex =
+    typeof shownIndex === "number" ? shownIndex : null;
+
+  // per-question mapping
+  if (qdoc && Array.isArray(qdoc.choicesOrder) && typeof shownIndex === "number") {
+    const map = qdoc.choicesOrder;
+    if (typeof map[shownIndex] === "number") {
+      canonicalIndex = map[shownIndex];
+    } else {
+      for (let orig = 0; orig < map.length; orig++) {
+        if (map[orig] === shownIndex) {
+          canonicalIndex = orig;
+          break;
         }
-      } else if (exam && examIndexMap.hasOwnProperty(qid)) {
-        // fallback: use the exam-level mapping
-        const qPos = examIndexMap[qid];
-        const mapping = Array.isArray(examChoicesOrder[qPos]) ? examChoicesOrder[qPos] : null;
-        if (mapping && typeof shownIndex === "number") {
-          let mapped = mapping[shownIndex];
-          if (typeof mapped === "number") {
-            canonicalIndex = mapped;
-          } else {
-            for (let orig = 0; orig < mapping.length; orig++) {
-              if (mapping[orig] === shownIndex) { canonicalIndex = orig; break; }
-            }
-          }
-        }
       }
-
-      let correctIndex = null;
-      if (qdoc) {
-        if (typeof qdoc.correctIndex === "number") correctIndex = qdoc.correctIndex;
-        else if (typeof qdoc.answerIndex === "number") correctIndex = qdoc.answerIndex;
-        else if (typeof qdoc.correct === "number") correctIndex = qdoc.correct;
-      }
-
-      let selectedText = "";
-      if (qdoc) {
-        const choices = qdoc.choices || [];
-        const tryChoice = (idx) => {
-          if (idx === null || idx === undefined) return "";
-          const c = choices[idx];
-          if (!c) return "";
-          return (typeof c === "string") ? c : (c.text || "");
-        };
-        selectedText = tryChoice(canonicalIndex);
-      }
-
-      const correct = (correctIndex !== null && canonicalIndex !== null && correctIndex === canonicalIndex);
-      if (correct) score++;
-
-      details.push({
-        questionId: qid,
-        correctIndex: (correctIndex !== null) ? correctIndex : null,
-        yourIndex: canonicalIndex,
-        correct: !!correct
-      });
-
-      const qObjId = mongoose.isValidObjectId(qid) ? mongoose.Types.ObjectId(qid) : qid;
-      savedAnswers.push({
-        questionId: qObjId,
-        choiceIndex: (typeof canonicalIndex === "number") ? canonicalIndex : null,
-        shownIndex: (typeof shownIndex === "number") ? shownIndex : null,
-        selectedText,
-        correctIndex: (typeof correctIndex === "number") ? correctIndex : null,
-        correct: !!correct
-      });
     }
+  }
+  // fallback to exam-level mapping
+  else if (exam && examIndexMap.hasOwnProperty(qid)) {
+    const qPos = examIndexMap[qid];
+    const mapping = Array.isArray(examChoicesOrder[qPos])
+      ? examChoicesOrder[qPos]
+      : null;
+
+    if (mapping && typeof shownIndex === "number") {
+      let mapped = mapping[shownIndex];
+      if (typeof mapped === "number") {
+        canonicalIndex = mapped;
+      } else {
+        for (let orig = 0; orig < mapping.length; orig++) {
+          if (mapping[orig] === shownIndex) {
+            canonicalIndex = orig;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  let correctIndex = null;
+  if (qdoc) {
+    if (typeof qdoc.correctIndex === "number") correctIndex = qdoc.correctIndex;
+    else if (typeof qdoc.answerIndex === "number") correctIndex = qdoc.answerIndex;
+    else if (typeof qdoc.correct === "number") correctIndex = qdoc.correct;
+  }
+
+  let selectedText = "";
+  if (qdoc) {
+    const choices = qdoc.choices || [];
+    const c = choices[canonicalIndex];
+    selectedText =
+      typeof c === "string" ? c : (c?.text || "");
+  }
+
+  const correct =
+    correctIndex !== null &&
+    canonicalIndex !== null &&
+    correctIndex === canonicalIndex;
+
+  if (correct) score++;
+
+  details.push({
+    questionId: qid,
+    correctIndex,
+    yourIndex: canonicalIndex,
+    correct
+  });
+
+  savedAnswers.push({
+    questionId: qObjId,
+    answerType: "mcq",
+    choiceIndex: canonicalIndex,
+    shownIndex,
+    selectedText,
+    correctIndex,
+    correct
+  });
+}
+
 
     const total = answers.length;
     const percentage = Math.round((score / Math.max(1, total)) * 100);

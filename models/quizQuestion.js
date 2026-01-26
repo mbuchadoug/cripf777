@@ -11,6 +11,30 @@ const QuizQuestionSchema = new mongoose.Schema({
   // make answerIndex optional (parent docs won't have it)
   answerIndex: { type: Number },
 
+  // Essay / structured response support
+answerType: {
+  type: String,
+  enum: ["mcq", "essay"],
+  default: "mcq",
+  index: true
+},
+
+essayTemplate: {
+  // Example:
+  // "{cause} leads to {effect} because {reason}."
+  type: String,
+  default: null
+},
+
+essaySlots: [
+  {
+    key: String,          // "cause", "effect", "reason"
+    label: String,        // UI label
+    options: [String],    // selectable phrases
+    required: { type: Boolean, default: true }
+  }
+]
+,
   // optional metadata for org/module so this collection can be filtered similarly to Question model
   organization: {
     type: mongoose.Schema.Types.ObjectId,

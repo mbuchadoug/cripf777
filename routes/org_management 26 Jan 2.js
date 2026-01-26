@@ -1642,8 +1642,6 @@ router.post(
 
       // Helper: parseQuestionBlocks (same logic as your importer)
       function parseQuestionBlocks(raw) {
-
-
         if (!raw || typeof raw !== "string") return [];
         const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
         const blocks = normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
@@ -1652,52 +1650,6 @@ router.post(
         for (const block of blocks) {
           const lines = block.split("\n").map(l => l.replace(/\t/g, ' ').trim()).filter(Boolean);
           if (lines.length === 0) continue;
-
-          // ===============================
-// 📝 ESSAY QUESTION DETECTION
-// ===============================
-if (/^\[ESSAY\]/i.test(lines[0])) {
-  const getLine = (prefix) =>
-    lines.find(l => l.startsWith(prefix))
-      ?.replace(prefix, "")
-      .trim();
-
-  const questionText = getLine("Question:");
-  const template = getLine("Template:");
-
-  const slots = [];
-  let currentSlot = null;
-
-  for (const line of lines.slice(1)) {
-    if (
-      line.endsWith(":") &&
-      !line.startsWith("Question") &&
-      !line.startsWith("Template")
-    ) {
-      currentSlot = {
-        key: line.replace(":", "").toLowerCase(),
-        label: line.replace(":", ""),
-        options: []
-      };
-      slots.push(currentSlot);
-    } else if (currentSlot && line.startsWith("-")) {
-      currentSlot.options.push(
-        line.replace("-", "").trim()
-      );
-    }
-  }
-
-  parsed.push({
-    text: questionText || "Essay question",
-    answerType: "essay",
-    essayTemplate: template || "",
-    essaySlots: slots,
-    rawBlock: block
-  });
-
-  continue; // ⛔ DO NOT fall through to MCQ parser
-}
-
 
           const isChoiceLine = (s) => /^[a-d][\.\)]\s+/i.test(s) || /^\([a-d]\)\s+/i.test(s) || /^[A-D]\)\s+/i.test(s);
           const isCorrectLine = (s) => /Correct Answer:/i.test(s) || /✅\s*Correct Answer:/i.test(s);

@@ -457,25 +457,13 @@ else if (payload.durationMinutes) {
   answers: []
 };
 
-   for (const s of series) {
-  const id = s.id || s._id || null;
-
-  if (s.answerType === "essay") {
-    payload.answers.push({
-      questionId: id,
-      essaySelections: s.essaySelections || {}
-    });
-  } else {
-    payload.answers.push({
-      questionId: id,
-      choiceIndex:
-        typeof answers[id] === "number"
-          ? answers[id]
-          : null
-    });
-  }
-}
-
+      for (const s of series) {
+        const id = s.id || s._id || null;
+        payload.answers.push({
+          questionId: id,
+          choiceIndex: (typeof answers[id] === 'number') ? answers[id] : null
+        });
+      }
 
       // SAVE a copy of what the user actually clicked (shown indexes)
       localUserAnswers = Object.assign({}, answers);
