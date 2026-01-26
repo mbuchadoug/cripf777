@@ -69,7 +69,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
 
   await ExamInstance.create({
     examId: crypto.randomUUID(),
-    targetRole: "teacher",
+    targetRole: "student",
     org: orgId,
     userId,
     module: "responsibility",

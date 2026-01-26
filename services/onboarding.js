@@ -22,16 +22,18 @@ export async function assignOnboardingQuizzes({ orgId, userId }) {
 
   if (!questions.length) return;
 
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    org: orgId,
-    userId,
-    module: "onboarding",
-    isOnboarding: true,
-    questionIds: questions.map(q => String(q._id)),
-    choicesOrder: questions.map(q =>
-      Array.from({ length: q.choices.length }, (_, i) => i)
-    ),
-    createdAt: new Date()
-  });
+ await ExamInstance.create({
+  examId: crypto.randomUUID(),
+  org: orgId,
+  userId,
+  targetRole: "teacher", // ✅ REQUIRED
+  module: "onboarding",
+  isOnboarding: true,
+  questionIds: questions.map(q => String(q._id)),
+  choicesOrder: questions.map(q =>
+    Array.from({ length: q.choices.length }, (_, i) => i)
+  ),
+  createdAt: new Date()
+});
+
 }
