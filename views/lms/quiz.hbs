@@ -289,7 +289,6 @@ return q;
     function renderQuiz(list){
       quizArea.innerHTML = '';
       answers = {};
-      series = [];
       localUserAnswers = {}; // reset local cache on new quiz load
 
       if (!Array.isArray(list) || list.length === 0) {
