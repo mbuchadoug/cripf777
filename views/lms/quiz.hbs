@@ -92,6 +92,13 @@
   data-org="{{orgSlug}}"
   data-exam-id="{{examId}}"
 >
+<div id="quizTimer"
+     style="position:fixed;top:12px;right:12px;
+            background:#111;color:#fff;
+            padding:8px 14px;border-radius:8px;
+            font-weight:700;z-index:9999;">
+  ⏳ <span id="timeLeft">--:--</span>
+</div>
 
   <div class="page">
     <div class="card" role="main" aria-labelledby="quiz-title">
@@ -335,6 +342,11 @@ const QUIZ_TITLE =
           throw new Error(t || res.statusText || 'failed to fetch quiz');
         }
         const payload = await res.json();
+
+        if (payload.expiresAt) {
+  startQuizTimer(payload.expiresAt, payload.serverTime);
+}
+
 
         // persist examId from backend here so submit uses same id
         examId = payload.examId || effectiveExamId || null;
@@ -589,5 +601,51 @@ const QUIZ_TITLE =
     loadQuiz(DEFAULT_COUNT);
   })();
   </script>
+
+  <script>
+let timerInterval = null;
+
+function startQuizTimer(expiresAtISO, serverTimeISO) {
+  const expiresAt = new Date(expiresAtISO).getTime();
+  const serverNow = new Date(serverTimeISO).getTime();
+  const clientNow = Date.now();
+  const offset = serverNow - clientNow; // anti-cheat offset
+
+  function tick() {
+    const now = Date.now() + offset;
+    const remaining = expiresAt - now;
+
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      document.getElementById("timeLeft").textContent = "00:00";
+      autoSubmitQuiz();
+      return;
+    }
+
+    const secs = Math.floor(remaining / 1000);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+
+    document.getElementById("timeLeft").textContent =
+      `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
+  tick();
+  timerInterval = setInterval(tick, 1000);
+}
+</script>
+
+<script>
+function autoSubmitQuiz() {
+  if (window.__submitted) return;
+  window.__submitted = true;
+
+  alert("⏰ Time is up. Submitting your quiz.");
+
+  document.getElementById("submitBtn")?.click();
+}
+
+</script>
+
 </body>
 </html>

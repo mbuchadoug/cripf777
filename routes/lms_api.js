@@ -385,7 +385,14 @@ if (examIdParam && req.user) {
           // unknown token -> skip
         }
 
-        return res.json({ examId: exam.examId, series });
+       // return res.json({ examId: exam.examId, series });
+       return res.json({
+  examId: exam.examId,
+  expiresAt: exam.expiresAt || null,
+  serverTime: new Date(),
+  series
+});
+
       } catch (e) {
         console.error("[/api/lms/quiz] exam load error:", e && (e.stack || e));
         return res.status(500).json({ error: "failed to load exam instance" });
@@ -863,6 +870,23 @@ router.post("/quiz/submit", async (req, res) => {
       }
     }
 
+
+    // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE — SOURCE OF TRUTH)
+if (
+  process.env.QUIZ_EXPIRY_ENABLED === "true" &&
+  exam?.expiresAt
+) {
+  const now = new Date();
+
+  if (now > new Date(exam.expiresAt)) {
+    return res.status(403).json({
+      error: "Quiz expired",
+      expiredAt: exam.expiresAt
+    });
+  }
+}
+
+
     // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
 const finalExamId =
   examId ||
@@ -1188,21 +1212,15 @@ const attemptDoc = {
     }
 
     // mark exam instance as used (optional)
-  // mark exam instance as used (optional)
+// mark exam instance as touched (DO NOT change expiresAt)
 if (exam) {
   try {
-    const update = { updatedAt: now };
-
-    if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
-      update.expiresAt = now;
-    }
-
     await ExamInstance.updateOne(
       { examId: exam.examId },
-      { $set: update }
+      { $set: { updatedAt: now } }
     ).exec();
   } catch (e) {
-    console.error("[quiz/submit] failed to update examInstance:", e && (e.stack || e));
+    console.error("[quiz/submit] failed to update examInstance:", e);
   }
 }
 
