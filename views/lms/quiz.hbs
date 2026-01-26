@@ -180,85 +180,56 @@ const QUIZ_TITLE =
 
     // --- New helper: render one normal question into quizArea and return canonical question object
     // positionLabel is optional — used to show numbering (Q1, Q2, ...)
-  function renderSingleQuestion(qObj, positionLabel) {
+function renderSingleQuestion(qObj, positionLabel) {
   const q = repairBlock(qObj);
 
-  // 📝 ESSAY QUESTION HANDLING (ADD THIS)
+  // 📝 Essay
   if (q.answerType === "essay") {
     return renderEssayQuestion(q, positionLabel);
   }
 
-  // ⬇️ EXISTING MCQ CODE CONTINUES BELOW (DO NOT TOUCH)
+  // ✅ MCQ (unchanged logic)
+  const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
+  const choices = (q.choices || []).map(normalizeChoice);
 
-      const q = repairBlock(qObj);
-      // ensure we preserve any server-provided id (_id or id). If missing, generate local id.
-      const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
-      const choices = (q.choices || []).map(normalizeChoice);
+  const block = document.createElement('div');
+  block.className = 'q';
 
-      const block = document.createElement('div');
-      block.className = 'q';
-      const qnum = (typeof positionLabel !== 'undefined') ? positionLabel : (quizArea.querySelectorAll('.q').length + 1);
-      const head = document.createElement('div');
-      head.className = 'q-head';
-      const text = q.text && String(q.text).trim()
-        ? escapeHtml(q.text.trim())
-        : 'Choose the best option';
-      head.innerHTML = '<span style="font-weight:800">Q' + qnum + '.</span> ' + text;
-      block.appendChild(head);
+  const qnum = positionLabel;
+  const head = document.createElement('div');
+  head.className = 'q-head';
+  head.innerHTML = `<strong>Q${qnum}.</strong> ${escapeHtml(q.text || '')}`;
+  block.appendChild(head);
 
-      const choicesWrap = document.createElement('div');
-      choicesWrap.className = 'choices';
+  const choicesWrap = document.createElement('div');
+  choicesWrap.className = 'choices';
 
-      if (!choices.length) {
-        const p = document.createElement('div');
-        p.className = 'muted';
-        p.textContent = 'No choices available for this question.';
-        choicesWrap.appendChild(p);
-      } else {
-        choices.forEach((c, ci) => {
-          const btn = document.createElement('div');
-          btn.className = 'choice';
-          btn.setAttribute('role','button');
-          btn.setAttribute('tabindex','0');
-          btn.dataset.qid = qid;
-          btn.dataset.index = ci;
+  choices.forEach((c, ci) => {
+    const btn = document.createElement('div');
+    btn.className = 'choice';
+    btn.dataset.qid = qid;
+    btn.dataset.index = ci;
 
-          const badge = document.createElement('div');
-          badge.className = 'badge';
-          badge.textContent = letterForIndex(ci);
+    btn.innerHTML = `
+      <div class="badge">${letterForIndex(ci)}</div>
+      <div class="text">${escapeHtml(c.text)}</div>
+    `;
 
-          const txt = document.createElement('div');
-          txt.className = 'text';
-          txt.textContent = c.text || '';
+    btn.onclick = () => {
+      choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
+      btn.classList.add('selected');
+      answers[qid] = ci;
+    };
 
-          btn.appendChild(badge);
-          btn.appendChild(txt);
+    choicesWrap.appendChild(btn);
+  });
 
-          btn.addEventListener('click', () => {
-            choicesWrap.querySelectorAll('.choice').forEach(n => n.classList.remove('selected'));
-            btn.classList.add('selected');
-            answers[qid] = ci;
-          });
-          btn.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter' || ev.key === ' ') {
-              ev.preventDefault();
-              btn.click();
-            }
-          });
+  block.appendChild(choicesWrap);
+  quizArea.appendChild(block);
 
-          choicesWrap.appendChild(btn);
-        });
-      }
-
-      block.appendChild(choicesWrap);
-      quizArea.appendChild(block);
-
-      // return canonical question object for series (used by submit)
-      q.id = qid;
-      q.choices = choices;
-      return q;
-    }
-
+  q.id = qid;
+  return q;
+}
 
 
 
