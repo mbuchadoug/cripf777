@@ -503,27 +503,15 @@ router.get("/org/join/:token", async (req, res) => {
     if (!invite) return res.status(404).send("invite not found or used");
 
     // 🚪 STEP 2: not logged in → go login first
-  // 🚪 If not logged in → go authenticate first
 if (!req.isAuthenticated()) {
   req.session.inviteToken = token;
-  return res.redirect("/auth/school");
+  return res.redirect(
+    `/auth/google?returnTo=${encodeURIComponent(`/org/join/${token}`)}`
+  );
 }
 
-// 👤 Ensure user exists (invite-only users)
-let user = req.user;
+const user = req.user;
 
-if (!user && invite.email) {
-  user = await User.findOne({ email: invite.email });
-}
-
-if (!user) {
-  user = await User.create({
-    email: invite.email,
-    role: invite.role || "employee",
-    provider: "invite",
-    createdAt: new Date()
-  });
-}
 
 const membership = await OrgMembership.findOneAndUpdate(
   { org: invite.orgId, user: user._id },
