@@ -66,10 +66,12 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   ]);
 
   if (!questions.length) return;
+const assignmentId = crypto.randomUUID();
 
   await ExamInstance.create({
     examId: crypto.randomUUID(),
     targetRole: "teacher",
+      assignmentId, 
     org: orgId,
     userId,
     module: "responsibility",
@@ -769,11 +771,8 @@ const seenKeys = new Set();
 
 for (const ex of exams) {
   // ✅ One quiz assignment = same module + same expiry + same onboarding flag
-  const dedupeKey = [
-    ex.module,
-    ex.expiresAt ? new Date(ex.expiresAt).getTime() : "no-expiry",
-    ex.isOnboarding ? "onboarding" : "normal"
-  ].join("|");
+const dedupeKey = ex.assignmentId || ex.examId;
+
 
   if (seenKeys.has(dedupeKey)) continue;
   seenKeys.add(dedupeKey);
@@ -1304,6 +1303,7 @@ if (alreadyAssigned) {
               examId,
               org: org._id,
               module: moduleKey,
+                assignmentId, 
               //user: mongoose.Types.ObjectId(uId),
               userId: mongoose.Types.ObjectId(uId),
  isOnboarding: false,
@@ -1428,6 +1428,7 @@ const match = {
             examId,
             org: org._id,
             module: moduleKey,
+              assignmentId, 
             userId: mongoose.Types.ObjectId(uId),
             questionIds,
              isOnboarding: false,
