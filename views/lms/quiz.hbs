@@ -376,15 +376,30 @@ else if (payload.durationMinutes) {
 
 
 for (const s of series) {
-  const id = s.id || s._id || null;
-
-  payload.answers.push({
-    questionId: id,
-    choiceIndex:
-      typeof answers[id] === "number"
-        ? answers[id]
-        : null
-  });
+  // 🧠 COMPREHENSION PARENT → submit CHILD answers
+  if (s.type === "comprehension" && Array.isArray(s.children)) {
+    for (const child of s.children) {
+      const cid = child.id || child._id;
+      payload.answers.push({
+        questionId: cid,
+        choiceIndex:
+          typeof answers[cid] === "number"
+            ? answers[cid]
+            : null
+      });
+    }
+  }
+  // ✅ NORMAL QUESTION
+  else {
+    const id = s.id || s._id;
+    payload.answers.push({
+      questionId: id,
+      choiceIndex:
+        typeof answers[id] === "number"
+          ? answers[id]
+          : null
+    });
+  }
 }
 
 
