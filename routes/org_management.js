@@ -781,15 +781,9 @@ exams = await ExamInstance.find({
     const quizzesByModule = {};
     //const seenExamIds = new Set();
   const now = new Date();
-const seenKeys = new Set();
 
-for (const ex of exams) {
-  // ✅ One quiz assignment = same module + same expiry + same onboarding flag
-const dedupeKey = ex.assignmentId || ex.examId;
+  for (const ex of exams) {
 
-
-  if (seenKeys.has(dedupeKey)) continue;
-  seenKeys.add(dedupeKey);
 
 
 
