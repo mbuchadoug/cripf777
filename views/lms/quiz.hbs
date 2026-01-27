@@ -376,6 +376,12 @@ for (const item of series) {
     }
 
     submitBtn.addEventListener('click', async () => {
+      // ⛔ STOP TIMER IMMEDIATELY ON SUBMIT
+if (window.__timerInterval) {
+  clearInterval(window.__timerInterval);
+  window.__timerInterval = null;
+}
+
    // ✅ count ONLY actual MCQ questions (children included, parents excluded)
 let totalQuestions = 0;
 
@@ -658,7 +664,8 @@ for (const s of series) {
   </script>
 
   <script>
-let timerInterval = null;
+window.__timerInterval = null;
+
 
 function startQuizTimer(expiresAtISO, serverTimeISO) {
   const expiresAt = new Date(expiresAtISO).getTime();
@@ -671,7 +678,8 @@ function startQuizTimer(expiresAtISO, serverTimeISO) {
     const remaining = expiresAt - now;
 
     if (remaining <= 0) {
-      clearInterval(timerInterval);
+      clearInterval(window.__timerInterval);
+window.__timerInterval = null;
       document.getElementById("timeLeft").textContent = "00:00";
       autoSubmitQuiz();
       return;
