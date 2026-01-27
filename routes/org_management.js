@@ -1121,6 +1121,7 @@ router.post(
   ensureAdminEmails,
   async (req, res) => {
     try {
+
      const slug = String(req.params.slug || "");
 
 let {
@@ -1159,6 +1160,9 @@ const moduleKey = modules[0];
 // 🔹 Load org FIRST
 const org = await Organization.findOne({ slug }).lean();
 if (!org) return res.status(404).json({ error: "org not found" });
+
+
+const assignmentId = crypto.randomUUID();
 
 // ----------------------------------
 // 🎓 SCHOOL MODE: resolve users by grade
@@ -1251,10 +1255,10 @@ const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
   module: moduleKey,
-   targetRole: effectiveTargetRole,   // ✅ ADD THIS
-  isOnboarding: false,
-  expiresAt: { $ne: null }
+  targetRole: effectiveTargetRole,
+  isOnboarding: false
 });
+
 
 
 if (alreadyAssigned) {
@@ -1365,14 +1369,14 @@ const match = {
 
 
     // ✅ PREVENT DUPLICATE LIVE QUIZ FOR SAME USER
-    const alreadyAssigned = await ExamInstance.exists({
-      org: org._id,
-      userId: mongoose.Types.ObjectId(uId),
-      module: moduleKey,
-       targetRole: effectiveTargetRole,   // ✅ FIX
-      isOnboarding: false,
-      expiresAt: { $ne: null }
-    });
+   const alreadyAssigned = await ExamInstance.exists({
+  org: org._id,
+  userId: mongoose.Types.ObjectId(uId),
+  module: moduleKey,
+  targetRole: effectiveTargetRole,
+  isOnboarding: false
+});
+
 
     if (alreadyAssigned) {
       continue;
