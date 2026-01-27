@@ -712,9 +712,21 @@ const isFirstLogin = !!req.session?.isFirstLogin;
 let exams = [];
 
 if (isAdmin) {
+ if (isAdmin) {
   exams = await ExamInstance.find({ org: org._id })
     .sort({ createdAt: -1 })
     .lean();
+
+  // 🔑 collapse admin view to one quiz per assignment
+  const seenAssignments = new Set();
+  exams = exams.filter(ex => {
+    const key = ex.assignmentId || ex.examId;
+    if (seenAssignments.has(key)) return false;
+    seenAssignments.add(key);
+    return true;
+  });
+}
+
 } else {
   const isFirstLogin = !!req.session?.isFirstLogin;
 
@@ -992,10 +1004,22 @@ router.post(
       if (!org) return res.status(404).send("org not found");
 
       // delete exam instance
-      const exam = await ExamInstance.findOneAndDelete({
-        examId,
-        org: org._id
-      });
+    const exam = await ExamInstance.findOne({
+  examId,
+  org: org._id
+});
+
+if (!exam) return res.status(404).send("quiz not found");
+
+await ExamInstance.deleteMany({
+  org: org._id,
+  assignmentId: exam.assignmentId
+});
+
+await Attempt.deleteMany({
+  examId: exam.examId
+});
+
 
       if (!exam) {
         return res.status(404).send("quiz not found");
@@ -1254,9 +1278,7 @@ if (org.type !== "school") {
 const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
-  module: moduleKey,
-  targetRole: effectiveTargetRole,
-  isOnboarding: false
+  assignmentId
 });
 
 
