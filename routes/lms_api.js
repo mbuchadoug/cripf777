@@ -874,37 +874,16 @@ router.post("/quiz/submit", async (req, res) => {
 
 
     // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE — SOURCE OF TRUTH)
-if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam) {
-  const now = new Date();
-
-  // 1️⃣ Absolute expiry (calendar-based)
-  if (exam.expiresAt && now > new Date(exam.expiresAt)) {
+// ⛔ CALENDAR-BASED EXPIRY ONLY
+if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
+  if (new Date() > new Date(exam.expiresAt)) {
     return res.status(403).json({
       error: "Quiz expired",
       expiredAt: exam.expiresAt
     });
   }
-
-  // 2️⃣ Duration-based expiry (MOST IMPORTANT)
-  if (exam.durationMinutes) {
-    const startedAt =
-      exam.startedAt ||
-      exam.createdAt;
-
-    if (startedAt) {
-      const deadline =
-        new Date(startedAt).getTime() +
-        exam.durationMinutes * 60 * 1000;
-
-      if (now.getTime() > deadline) {
-        return res.status(403).json({
-          error: "Time is up. Quiz auto-submitted.",
-          durationMinutes: exam.durationMinutes
-        });
-      }
-    }
-  }
 }
+
 
 
 
@@ -1178,6 +1157,10 @@ let attemptFilter = {
       if (Object.keys(attemptFilter).length) {
        attempt = await Attempt.findOne(attemptFilter).sort({ createdAt: -1 }).exec();
 
+       
+
+
+
       }
     } catch (e) {
       console.error("[quiz/submit] attempt lookup error:", e && (e.stack || e));
@@ -1185,7 +1168,29 @@ let attemptFilter = {
 
     const now = new Date();
 
+    // ⛔ DURATION-BASED EXPIRY (SOURCE OF TRUTH)
+if (
+  process.env.QUIZ_EXPIRY_ENABLED === "true" &&
+  exam?.durationMinutes &&
+  attempt?.startedAt
+) {
+  const deadline =
+    new Date(attempt.startedAt).getTime() +
+    exam.durationMinutes * 60 * 1000;
+
+  if (now.getTime() > deadline) {
+    return res.status(403).json({
+      error: "Time is up. Quiz auto-submitted.",
+      durationMinutes: exam.durationMinutes
+    });
+  }
+}
+
+
     // ⏱️ CALCULATE QUIZ DURATION
+
+
+
 let duration = {
   hours: 0,
   minutes: 0,
@@ -1194,63 +1199,22 @@ let duration = {
 };
 
 if (attempt?.startedAt) {
-  const diffMs = now.getTime() - new Date(attempt.startedAt).getTime();
-  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-
-  duration = {
-    hours: Math.floor(totalSeconds / 3600),
-    minutes: Math.floor((totalSeconds % 3600) / 60),
-    seconds: totalSeconds % 60,
-    totalSeconds
-  };
-}
-
-
-try {
-const startTime =
-  attempt?.startedAt ||
-  attempt?.createdAt ||
-  now;
-
-
-// ⏱️ FINAL, TIMER-AWARE DURATION (SOURCE OF TRUTH)
-let totalSeconds = 0;
-
-if (attempt?.startedAt) {
   const wallClockSeconds = Math.floor(
     (now.getTime() - new Date(attempt.startedAt).getTime()) / 1000
   );
 
-  // ⏳ Cap by quiz timer if defined
-  if (exam?.durationMinutes) {
-    const maxSeconds = exam.durationMinutes * 60;
-    totalSeconds = Math.min(wallClockSeconds, maxSeconds);
-  } else {
-    totalSeconds = Math.max(0, wallClockSeconds);
-  }
-}
-
-const duration = {
-  hours: Math.floor(totalSeconds / 3600),
-  minutes: Math.floor((totalSeconds % 3600) / 60),
-  seconds: totalSeconds % 60,
-  totalSeconds
-};
-
-
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const cappedSeconds = exam?.durationMinutes
+    ? Math.min(wallClockSeconds, exam.durationMinutes * 60)
+    : Math.max(0, wallClockSeconds);
 
   duration = {
-    hours,
-    minutes,
-    seconds,
-    totalSeconds
+    hours: Math.floor(cappedSeconds / 3600),
+    minutes: Math.floor((cappedSeconds % 3600) / 60),
+    seconds: cappedSeconds % 60,
+    totalSeconds: cappedSeconds
   };
-} catch (e) {
-  // leave defaults
 }
+
 
   
 
