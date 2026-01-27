@@ -352,6 +352,21 @@ else if (payload.durationMinutes) {
         if (!Array.isArray(rawSeries)) throw new Error('unexpected quiz format');
         series = rawSeries.map(s => Object.assign({}, s));
         renderQuiz(series);
+        // ✅ Build flat lookup of ALL MCQ questions (children + normal)
+window.__flatQuestionMap = {};
+
+for (const item of series) {
+  if (item.type === "comprehension" && Array.isArray(item.children)) {
+    for (const child of item.children) {
+      const cid = child.id || child._id;
+      if (cid) window.__flatQuestionMap[String(cid)] = child;
+    }
+  } else {
+    const id = item.id || item._id;
+    if (id) window.__flatQuestionMap[String(id)] = item;
+  }
+}
+
         status.textContent = '';
       } catch (e) {
         console.error('loadQuiz error:', e);
@@ -508,7 +523,11 @@ for (const s of series) {
         // try to find matching question in series:
         // 1) match by id/_id
         // 2) if not found, fallback to matching by question text (loose)
-        let q = series.find(s => String(s.id || s._id) === String(d.questionId));
+        let q =
+  (window.__flatQuestionMap &&
+   window.__flatQuestionMap[String(d.questionId)]) ||
+  null;
+
         if (!q) {
           // fallback: compare normalized text
           const targetText = normStr(d.questionText || d.question || '');
