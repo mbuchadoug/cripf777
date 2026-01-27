@@ -502,6 +502,13 @@ for (const s of series) {
 
     // UPDATED showResult: translates canonical correctIndex to displayed index for review highlights
     function showResult(resp){
+
+      if (window.__timerInterval) {
+  clearInterval(window.__timerInterval);
+  window.__timerInterval = null;
+}
+window.__submitted = true;
+
       result.style.display = 'block';
       result.innerHTML =
         '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' - ' + resp.percentage + '%</div>' +
@@ -694,7 +701,7 @@ window.__timerInterval = null;
   }
 
   tick();
-  timerInterval = setInterval(tick, 1000);
+window.__timerInterval = setInterval(tick, 1000);
 }
 </script>
 
