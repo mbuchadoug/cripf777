@@ -712,22 +712,24 @@ const isFirstLogin = !!req.session?.isFirstLogin;
 let exams = [];
 
 if (isAdmin) {
- if (isAdmin) {
-  exams = await ExamInstance.find({ org: org._id })
-    .sort({ createdAt: -1 })
-    .lean();
+  exams = await ExamInstance.aggregate([
+    { $match: { org: org._id } },
 
-  // 🔑 collapse admin view to one quiz per assignment
-  const seenAssignments = new Set();
-  exams = exams.filter(ex => {
-    const key = ex.assignmentId || ex.examId;
-    if (seenAssignments.has(key)) return false;
-    seenAssignments.add(key);
-    return true;
-  });
+    // ✅ group by assignmentId (or fallback examId)
+    {
+      $group: {
+        _id: { $ifNull: ["$assignmentId", "$examId"] },
+        doc: { $first: "$$ROOT" }
+      }
+    },
+
+    // ✅ restore document shape
+    { $replaceRoot: { newRoot: "$doc" } },
+
+    { $sort: { createdAt: -1 } }
+  ]);
 }
-
-} else {
+ else {
   const isFirstLogin = !!req.session?.isFirstLogin;
 
   // 🔑 map org roles → quiz target roles
