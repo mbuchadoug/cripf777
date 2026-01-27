@@ -959,9 +959,12 @@ const finalExamId =
     }
 
     // Scoring & saved answers
-    let score = 0;
-    const details = [];
-    const savedAnswers = [];
+   // Scoring & saved answers
+let score = 0;
+let maxScore = 0; // ✅ FIX: real max score (MCQs only)
+const details = [];
+const savedAnswers = [];
+
 
 for (const a of answers) {
   const qid = String(a.questionId || "");
@@ -1060,7 +1063,9 @@ for (const a of answers) {
     canonicalIndex !== null &&
     correctIndex === canonicalIndex;
 
-  if (correct) score++;
+ maxScore++;           // ✅ count this question
+if (correct) score++;
+
 
   details.push({
     questionId: qid,
@@ -1081,8 +1086,9 @@ for (const a of answers) {
 }
 
 
-    const total = answers.length;
-    const percentage = Math.round((score / Math.max(1, total)) * 100);
+   const total = maxScore; // ✅ FIX
+const percentage = Math.round((score / Math.max(1, maxScore)) * 100);
+
     const passThreshold = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
     const passed = percentage >= passThreshold;
 
@@ -1249,7 +1255,7 @@ const attemptDoc = {
   answers: savedAnswers,
   score,
   duration,
-  maxScore: total,
+ maxScore,
   passed: !!passed,
   status: "finished",
 
