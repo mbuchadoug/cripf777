@@ -175,7 +175,8 @@
                   {{#if ../../isAdmin}}
                     <form
                       method="POST"
-                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{examId}}/delete"
+                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+
                       style="display:inline"
                       onsubmit="return confirm('Delete this quiz?');"
                     >

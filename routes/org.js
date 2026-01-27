@@ -580,6 +580,22 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
+    // 🔑 ADMIN OPEN: assignmentId → resolve to ONE examId
+if (assignmentId && !examId) {
+  const exam = await ExamInstance.findOne({
+    assignmentId,
+    org: org._id
+  }).lean();
+
+  if (!exam) {
+    return res.status(404).send("Quiz not found");
+  }
+
+  return res.redirect(
+    `/lms/quiz?examId=${encodeURIComponent(exam.examId)}&org=${encodeURIComponent(org.slug)}`
+  );
+}
+
     // If an examId was supplied, redirect to the LMS UI with examId and org so the client calls the exact exam
     if (examId) {
       console.log("[org quiz] redirecting to /lms/quiz with examId and org", examId, org.slug);

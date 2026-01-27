@@ -754,6 +754,8 @@ exams = await ExamInstance.find({
     -------------------------------- */
     const parentIds = new Set();
 
+    const assignmentKey = ex.assignmentId || ex.examId;
+
     for (const ex of exams) {
       if (!Array.isArray(ex.questionIds)) continue;
       for (const q of ex.questionIds) {
@@ -819,19 +821,21 @@ exams = await ExamInstance.find({
         }
       }
 
-      const openUrl =
-        `/org/${org.slug}/quiz` +
-        `?examId=${encodeURIComponent(ex.examId)}` +
-        `&quizTitle=${encodeURIComponent(quizTitle)}`;
+    const openUrl =
+  `/org/${org.slug}/quiz` +
+  `?assignmentId=${encodeURIComponent(assignmentKey)}` +
+  `&quizTitle=${encodeURIComponent(quizTitle)}`;
 
-      quizzesByModule[moduleKey].push({
-        examId: ex.examId,
-        quizTitle,
-        questionCount,
-        status,
-        openUrl,
-        createdAt: ex.createdAt
-      });
+
+  quizzesByModule[moduleKey].push({
+  assignmentId: assignmentKey,
+  quizTitle,
+  questionCount,
+  status,
+  openUrl,
+  createdAt: ex.createdAt
+});
+
     }
 
     /* -------------------------------
@@ -994,14 +998,15 @@ router.post(
   async (req, res) => {
     try {
       const slug = String(req.params.slug || "").trim();
-      const examId = String(req.params.examId || "").trim();
+      const assignmentId = String(req.params.examId || "").trim();
+
 
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).send("org not found");
 
       // delete exam instance
-    const exam = await ExamInstance.findOne({
-  examId,
+const exam = await ExamInstance.findOne({
+  assignmentId,
   org: org._id
 });
 
@@ -1009,11 +1014,15 @@ if (!exam) return res.status(404).send("quiz not found");
 
 await ExamInstance.deleteMany({
   org: org._id,
-  assignmentId: exam.assignmentId
+  assignmentId
 });
 
+const examIds = await ExamInstance
+  .find({ assignmentId })
+  .distinct("examId");
+
 await Attempt.deleteMany({
-  examId: exam.examId
+  examId: { $in: examIds }
 });
 
 
@@ -1088,7 +1097,9 @@ router.get("/org/:slug/quiz", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
     const moduleNameRaw = String(req.query.module || "Responsibility").trim();
-    const examId = String(req.query.examId || "").trim(); // <-- respect examId if provided
+    const examId = String(req.query.examId || "").trim();
+const assignmentId = String(req.query.assignmentId || "").trim();
+ // <-- respect examId if provided
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
