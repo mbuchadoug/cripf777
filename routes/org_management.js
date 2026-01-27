@@ -754,7 +754,6 @@ exams = await ExamInstance.find({
     -------------------------------- */
     const parentIds = new Set();
 
-    const assignmentKey = ex.assignmentId || ex.examId;
 
     for (const ex of exams) {
       if (!Array.isArray(ex.questionIds)) continue;
@@ -788,6 +787,7 @@ exams = await ExamInstance.find({
 
 
 
+const assignmentKey = ex.assignmentId || ex.examId;
 
       const moduleKey = ex.module || "general";
       if (!quizzesByModule[moduleKey]) {
@@ -1111,6 +1111,22 @@ const assignmentId = String(req.query.assignmentId || "").trim();
     if (!membership) {
       return res.status(403).send("You are not a member of this organization");
     }
+
+    // 🔑 ADMIN OPEN: assignmentId → resolve to ONE examId
+if (assignmentId && !examId) {
+  const exam = await ExamInstance.findOne({
+    assignmentId,
+    org: org._id
+  }).lean();
+
+  if (!exam) {
+    return res.status(404).send("Quiz not found");
+  }
+
+  return res.redirect(
+    `/lms/quiz?examId=${encodeURIComponent(exam.examId)}&org=${encodeURIComponent(org.slug)}`
+  );
+}
 
     // If an examId was supplied, redirect to the LMS page with that examId so client requests exact exam instance
     if (examId) {
