@@ -1274,18 +1274,8 @@ if (org.type !== "school") {
         for (const uId of userIds) {
           try {
 
-            // ⛔ PREVENT DUPLICATE ASSIGNMENT FOR SAME MODULE
-const alreadyAssigned = await ExamInstance.exists({
-  org: org._id,
-  userId: mongoose.Types.ObjectId(uId),
-  assignmentId
-});
 
 
-
-if (alreadyAssigned) {
-  continue; // 🚫 skip duplicate
-}
 
             const questionIds = [];
             const choicesOrder = [];
@@ -1390,17 +1380,7 @@ const match = {
         try {
 
 
-    // ✅ PREVENT DUPLICATE LIVE QUIZ FOR SAME USER
 
-const alreadyAssigned = await ExamInstance.exists({
-  org: org._id,
-  userId: mongoose.Types.ObjectId(uId),
-  assignmentId
-});
-
-if (alreadyAssigned) {
-  continue;
-}
 
           const questionIds = [];
           const choicesOrder = [];
