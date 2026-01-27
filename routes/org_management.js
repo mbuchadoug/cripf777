@@ -768,12 +768,16 @@ exams = await ExamInstance.find({
 const seenKeys = new Set();
 
 for (const ex of exams) {
-  // 🔑 dedupe key: same quiz assigned to many users
-const dedupeKey = ex.examId;
-
+  // ✅ One quiz assignment = same module + same expiry + same onboarding flag
+  const dedupeKey = [
+    ex.module,
+    ex.expiresAt ? new Date(ex.expiresAt).getTime() : "no-expiry",
+    ex.isOnboarding ? "onboarding" : "normal"
+  ].join("|");
 
   if (seenKeys.has(dedupeKey)) continue;
   seenKeys.add(dedupeKey);
+
 
 
       const moduleKey = ex.module || "general";
