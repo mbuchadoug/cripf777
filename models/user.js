@@ -53,7 +53,8 @@ adminId: {
   searchCountDay: { type: String, index: true, default: null },
   searchCount: { type: Number, default: 0 },
 
-  auditCredits: { type: Number, default: 0 },
+auditCredits: { type: Number, default: 1 },
+
   paidAt: { type: Date, default: null }
 }, { strict: true });
 

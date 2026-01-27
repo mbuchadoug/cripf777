@@ -443,36 +443,26 @@ app.post("/api/chat-stream", async (req, res) => {
 
   try {
     // enforce daily limit for non-admins
- if (!isAdmin) {
+// 🔐 CREDIT ENFORCEMENT (HARD GATE)
+if (!isAdmin) {
   const current = await User.findById(userId);
 
-  // 🔁 Reset daily quota if new day
-  if (current.searchCountDay !== today) {
-    current.searchCountDay = today;
-    current.searchCount = 0;
-  }
-
-  // ✅ USE FREE DAILY QUOTA FIRST
-  if (current.searchCount < DAILY_LIMIT) {
-    current.searchCount += 1;
-    current.lastLogin = new Date();
-    await current.save();
-  }
-  // ✅ THEN USE PAID CREDITS
-  else if (current.auditCredits > 0) {
-    current.auditCredits -= 1;
-    current.lastLogin = new Date();
-    await current.save();
-  }
-  // ❌ NOTHING LEFT
-  else {
+  // ❌ No credits left → STOP before OpenAI
+  if (!current || current.auditCredits <= 0) {
     return res.status(402).json({
       error: "Payment required",
-      message: "You’ve used all free audits and credits. Purchase more to continue.",
+      message: "You’ve used your available audit credit.",
+      checkoutUrl: "/billing",
       paywall: true
     });
   }
+
+  // ✅ Consume exactly ONE credit
+  current.auditCredits -= 1;
+  current.lastLogin = new Date();
+  await current.save();
 }
+
 
 
     // Setup SSE headers & keep-alive after credit has been consumed
