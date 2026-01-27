@@ -1213,8 +1213,30 @@ const startTime =
   now;
 
 
-  const diffMs = Math.max(0, now.getTime() - new Date(startTime).getTime());
-  const totalSeconds = Math.floor(diffMs / 1000);
+// ⏱️ FINAL, TIMER-AWARE DURATION (SOURCE OF TRUTH)
+let totalSeconds = 0;
+
+if (attempt?.startedAt) {
+  const wallClockSeconds = Math.floor(
+    (now.getTime() - new Date(attempt.startedAt).getTime()) / 1000
+  );
+
+  // ⏳ Cap by quiz timer if defined
+  if (exam?.durationMinutes) {
+    const maxSeconds = exam.durationMinutes * 60;
+    totalSeconds = Math.min(wallClockSeconds, maxSeconds);
+  } else {
+    totalSeconds = Math.max(0, wallClockSeconds);
+  }
+}
+
+const duration = {
+  hours: Math.floor(totalSeconds / 3600),
+  minutes: Math.floor((totalSeconds % 3600) / 60),
+  seconds: totalSeconds % 60,
+  totalSeconds
+};
+
 
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
