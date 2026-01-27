@@ -1391,18 +1391,17 @@ const match = {
 
 
     // ✅ PREVENT DUPLICATE LIVE QUIZ FOR SAME USER
-   const alreadyAssigned = await ExamInstance.exists({
+
+const alreadyAssigned = await ExamInstance.exists({
   org: org._id,
   userId: mongoose.Types.ObjectId(uId),
-  module: moduleKey,
-  targetRole: effectiveTargetRole,
-  isOnboarding: false
+  assignmentId
 });
 
+if (alreadyAssigned) {
+  continue;
+}
 
-    if (alreadyAssigned) {
-      continue;
-    }
           const questionIds = [];
           const choicesOrder = [];
 
