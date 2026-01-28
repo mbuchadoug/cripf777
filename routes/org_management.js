@@ -727,12 +727,20 @@ if (isAdmin) {
     },
 
     // 3️⃣ one row per assignment
-    {
-      $group: {
-        _id: "$assignmentId",
-        doc: { $first: "$$ROOT" }
+  {
+  $group: {
+    _id: "$assignmentId",
+    doc: {
+      $first: {
+        assignmentId: "$assignmentId",
+        module: "$module",
+        questionIds: "$questionIds",
+        createdAt: "$createdAt",
+        expiresAt: "$expiresAt"
       }
-    },
+    }
+  }
+},
 
     // 4️⃣ restore document
     { $replaceRoot: { newRoot: "$doc" } },
@@ -805,7 +813,10 @@ exams = await ExamInstance.find({
 
 const assignmentKey = ex.assignmentId || ex.examId;
 
-      const moduleKey = ex.module || "general";
+const moduleKey = typeof ex.module === "string" && ex.module.trim()
+  ? ex.module
+  : "general";
+
       if (!quizzesByModule[moduleKey]) {
         quizzesByModule[moduleKey] = [];
       }
