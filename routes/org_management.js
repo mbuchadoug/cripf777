@@ -713,22 +713,33 @@ let exams = [];
 
 if (isAdmin) {
   exams = await ExamInstance.aggregate([
+    // 1️⃣ only quizzes for this org
     { $match: { org: org._id } },
 
-    // ✅ group by assignmentId (or fallback examId)
+    // 2️⃣ IMPORTANT: admin dashboard ONLY cares about assignments
+    {
+      $match: {
+        assignmentId: { $exists: true, $ne: null },
+        isOnboarding: { $ne: true }
+      }
+    },
+
+    // 3️⃣ ONE quiz per assignment (THIS FIXES DUPLICATES)
     {
       $group: {
-        _id: { $ifNull: ["$assignmentId", "$examId"] },
+        _id: "$assignmentId",
         doc: { $first: "$$ROOT" }
       }
     },
 
-    // ✅ restore document shape
+    // 4️⃣ restore document
     { $replaceRoot: { newRoot: "$doc" } },
 
+    // 5️⃣ newest first
     { $sort: { createdAt: -1 } }
   ]);
 }
+
  else {
   const isFirstLogin = !!req.session?.isFirstLogin;
 
