@@ -716,7 +716,15 @@ if (isAdmin) {
     // 1️⃣ org only
     { $match: { org: org._id } },
 
-    // 2️⃣ group FIRST (this is the critical fix)
+    // 2️⃣ 🔑 CRITICAL: ignore docs without assignmentId
+    {
+      $match: {
+        assignmentId: { $exists: true, $ne: null },
+        isOnboarding: false
+      }
+    },
+
+    // 3️⃣ one row per assignment
     {
       $group: {
         _id: "$assignmentId",
@@ -724,23 +732,14 @@ if (isAdmin) {
       }
     },
 
-    // 3️⃣ restore document
+    // 4️⃣ restore document
     { $replaceRoot: { newRoot: "$doc" } },
-
-    // 4️⃣ NOW safely exclude onboarding (optional)
-    {
-      $match: {
-        $or: [
-          { isOnboarding: { $exists: false } },
-          { isOnboarding: false }
-        ]
-      }
-    },
 
     // 5️⃣ newest first
     { $sort: { createdAt: -1 } }
   ]);
 }
+
 
 
  else {
