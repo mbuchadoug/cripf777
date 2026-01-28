@@ -710,17 +710,19 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 const isFirstLogin = !!req.session?.isFirstLogin;
 
 let exams = [];
-
 if (isAdmin) {
   exams = await ExamInstance.aggregate([
     // 1️⃣ org only
     { $match: { org: org._id } },
 
-    // 2️⃣ 🔑 CRITICAL: ignore docs without assignmentId
+    // 2️⃣ only assigned quizzes (NOT onboarding)
     {
       $match: {
         assignmentId: { $exists: true, $ne: null },
-        isOnboarding: false
+        $or: [
+          { isOnboarding: false },
+          { isOnboarding: { $exists: false } } // 🔑 THIS IS THE FIX
+        ]
       }
     },
 
@@ -739,6 +741,7 @@ if (isAdmin) {
     { $sort: { createdAt: -1 } }
   ]);
 }
+
 
 
 
