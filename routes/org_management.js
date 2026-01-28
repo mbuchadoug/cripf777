@@ -45,39 +45,24 @@ function ensureAdminEmails(req, res, next) {
 }
 
 
-
 async function assignOnboardingQuizzes({ orgId, userId }) {
-
-
-  // 🔒 Prevent duplicate onboarding
+  // prevent duplicates
   const existing = await ExamInstance.countDocuments({
     org: orgId,
     userId,
     isOnboarding: true
   });
-
   if (existing > 0) return;
 
   const onboardingAssignmentId = crypto.randomUUID();
 
-  // 🧠 Fixed onboarding quizzes
   const onboardingQuizzes = [
-    {
-      module: "inclusion",
-      title: "Inclusion Is Not Absorption"
-    },
-    {
-      module: "responsibility",
-      title: "Responsibility Is Not Blame"
-    },
-    {
-      module: "grid",
-      title: "The Grid – How the World Actually Operates"
-    }
+    { module: "inclusion", title: "Inclusion Is Not Absorption" },
+    { module: "responsibility", title: "Responsibility Is Not Blame" },
+    { module: "grid", title: "The Grid – How the World Actually Operates" }
   ];
 
   for (const quiz of onboardingQuizzes) {
-    // load questions (org-specific + global)
     const questions = await QuizQuestion.aggregate([
       {
         $match: {
@@ -85,29 +70,29 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
           $or: [{ organization: orgId }, { organization: null }]
         }
       },
-      { $sample: { size: 3 } } // 🔧 adjust if you want more
+      { $sample: { size: 3 } }
     ]);
 
     if (!questions.length) continue;
 
- await ExamInstance.create({
-  examId: crypto.randomUUID(),
-  assignmentId: onboardingAssignmentId,   // ✅ ADD
-  title: quiz.title,                      // ✅ KEEP
-  org: orgId,
-  userId,
-  module: quiz.module,
-  isOnboarding: true,
-  targetRole: "teacher",
-  questionIds: questions.map(q => String(q._id)),
-  choicesOrder: questions.map(q =>
-    Array.from({ length: q.choices.length }, (_, i) => i)
-  ),
-  createdAt: new Date()
-});
-
+    await ExamInstance.create({
+      examId: crypto.randomUUID(),
+      assignmentId: onboardingAssignmentId, // ✅ REQUIRED
+      title: quiz.title,                    // ✅ REQUIRED
+      org: orgId,
+      userId,
+      module: quiz.module,                  // ❌ NEVER "onboarding"
+      isOnboarding: true,
+      targetRole: "teacher",
+      questionIds: questions.map(q => String(q._id)),
+      choicesOrder: questions.map(q =>
+        Array.from({ length: q.choices.length }, (_, i) => i)
+      ),
+      createdAt: new Date()
+    });
   }
 }
+
 
 
 
@@ -875,10 +860,10 @@ const moduleKey = typeof ex.module === "string" && ex.module.trim()
         }
       }
 
-    const openUrl =
-  `/org/${org.slug}/quiz` +
-  `?assignmentId=${encodeURIComponent(assignmentKey)}` +
-  `&quizTitle=${encodeURIComponent(quizTitle)}`;
+  const openUrl = ex.isOnboarding
+  ? `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`
+  : `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+
 
 
   quizzesByModule[moduleKey].push({
