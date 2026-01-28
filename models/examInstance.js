@@ -3,7 +3,8 @@ import mongoose from "mongoose";
 
 const ExamInstanceSchema = new mongoose.Schema(
   {
-    examId: { type: String, required: true, index: true, unique: true },
+examId: { type: String, required: true, index: true },
+
 
     title: { type: String, default: null },
 
@@ -111,9 +112,6 @@ ExamInstanceSchema.methods.normalizedQuestionIds = function () {
 // basic indexes that will help lookups
 ExamInstanceSchema.index({ org: 1, userId: 1, examId: 1 });
 
-ExamInstanceSchema.index(
-  { org: 1, userId: 1, module: 1, targetRole: 1, expiresAt: 1 },
-  { unique: true, partialFilterExpression: { expiresAt: { $ne: null } } }
-);
+
 const ExamInstance = mongoose.models.ExamInstance || mongoose.model("ExamInstance", ExamInstanceSchema);
 export default ExamInstance;
