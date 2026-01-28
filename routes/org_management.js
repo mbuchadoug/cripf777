@@ -66,12 +66,11 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   ]);
 
   if (!questions.length) return;
-const assignmentId = crypto.randomUUID();
+
 
   await ExamInstance.create({
     examId: crypto.randomUUID(),
     targetRole: "teacher",
-      assignmentId, 
     org: orgId,
     userId,
     module: "responsibility",
@@ -713,7 +712,8 @@ let exams = [];
 if (isAdmin) {
   exams = await ExamInstance.aggregate([
     // 1️⃣ org only
-    { $match: { org: org._id } },
+   { $match: { org: mongoose.Types.ObjectId(org._id) } },
+
 
     // 2️⃣ only assigned quizzes (NOT onboarding)
     {
@@ -952,7 +952,7 @@ if (req.session?.isFirstLogin) {
       membership,
       modules,
       quizzesByModule,
-      hasAssignedQuizzes: Object.keys(quizzesByModule).length > 0,
+hasAssignedQuizzes: Object.values(quizzesByModule).some(arr => arr.length > 0),
       attemptRows,
       certRows,
       isAdmin,
@@ -1039,18 +1039,19 @@ const exam = await ExamInstance.findOne({
 
 if (!exam) return res.status(404).send("quiz not found");
 
+const examIds = await ExamInstance
+  .find({ org: org._id, assignmentId })
+  .distinct("examId");
+
 await ExamInstance.deleteMany({
   org: org._id,
   assignmentId
 });
 
-const examIds = await ExamInstance
-  .find({ assignmentId })
-  .distinct("examId");
-
 await Attempt.deleteMany({
   examId: { $in: examIds }
 });
+
 
 
       if (!exam) {
@@ -1058,7 +1059,8 @@ await Attempt.deleteMany({
       }
 
       // delete related attempts
-      await Attempt.deleteMany({ examId });
+    await Attempt.deleteMany({ examId });
+
 
       return res.redirect(`/org/${org.slug}/dashboard`);
     } catch (err) {
@@ -1195,6 +1197,7 @@ router.post(
   ensureAdminEmails,
   async (req, res) => {
     try {
+const assignmentId = crypto.randomUUID();
 
      const slug = String(req.params.slug || "");
 
@@ -1236,7 +1239,7 @@ const org = await Organization.findOne({ slug }).lean();
 if (!org) return res.status(404).json({ error: "org not found" });
 
 
-const assignmentId = crypto.randomUUID();
+
 
 // ----------------------------------
 // 🎓 SCHOOL MODE: resolve users by grade
@@ -1369,6 +1372,7 @@ if (org.type !== "school") {
               examId,
               org: org._id,
               module: moduleKey,
+            
                 assignmentId, 
               //user: mongoose.Types.ObjectId(uId),
               userId: mongoose.Types.ObjectId(uId),
