@@ -44,44 +44,63 @@ function ensureAdminEmails(req, res, next) {
   next();
 }
 
-
 async function assignOnboardingQuizzes({ orgId, userId }) {
+  // 🔒 Prevent duplicate onboarding
   const existing = await ExamInstance.countDocuments({
     org: orgId,
     userId,
-    isOnboarding: true,
-    module: "responsibility"
+    isOnboarding: true
   });
 
-  if (existing > 0) return; // ✅ HARD STOP
+  if (existing > 0) return;
 
-  const questions = await QuizQuestion.aggregate([
+  // 🧠 Fixed onboarding quizzes
+  const onboardingQuizzes = [
     {
-      $match: {
-        module: "responsibility",
-        $or: [{ organization: orgId }, { organization: null }]
-      }
+      module: "inclusion",
+      title: "Inclusion Is Not Absorption"
     },
-    { $sample: { size: 3 } }
-  ]);
+    {
+      module: "responsibility",
+      title: "Responsibility Is Not Blame"
+    },
+    {
+      module: "grid",
+      title: "The Grid – How the World Actually Operates"
+    }
+  ];
 
-  if (!questions.length) return;
+  for (const quiz of onboardingQuizzes) {
+    // load questions (org-specific + global)
+    const questions = await QuizQuestion.aggregate([
+      {
+        $match: {
+          module: quiz.module,
+          $or: [{ organization: orgId }, { organization: null }]
+        }
+      },
+      { $sample: { size: 3 } } // 🔧 adjust if you want more
+    ]);
 
+    if (!questions.length) continue;
 
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    targetRole: "teacher",
-    org: orgId,
-    userId,
-    module: "responsibility",
-    isOnboarding: true,
-    questionIds: questions.map(q => String(q._id)),
-    choicesOrder: questions.map(q =>
-      Array.from({ length: q.choices.length }, (_, i) => i)
-    ),
-    createdAt: new Date()
-  });
+    await ExamInstance.create({
+      examId: crypto.randomUUID(),
+      title: quiz.title,              // ✅ STORE TITLE
+      org: orgId,
+      userId,
+      module: quiz.module,
+      isOnboarding: true,              // 🔑 FLAG
+      targetRole: "teacher",            // or student if needed
+      questionIds: questions.map(q => String(q._id)),
+      choicesOrder: questions.map(q =>
+        Array.from({ length: q.choices.length }, (_, i) => i)
+      ),
+      createdAt: new Date()
+    });
+  }
 }
+
 
 
 
