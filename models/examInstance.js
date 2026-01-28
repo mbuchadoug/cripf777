@@ -65,6 +65,11 @@ targetRole: {
 
     // optional expiry timestamp
     expiresAt: { type: Date, default: null },
+    assignmentId: {
+  type: String,
+  index: true
+},
+
 
     durationMinutes: {
   type: Number,

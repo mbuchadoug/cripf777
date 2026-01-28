@@ -716,15 +716,13 @@ if (isAdmin) {
 
 
     // 2️⃣ only assigned quizzes (NOT onboarding)
-    {
-      $match: {
-        assignmentId: { $exists: true, $ne: null },
-        $or: [
-          { isOnboarding: false },
-          { isOnboarding: { $exists: false } } // 🔑 THIS IS THE FIX
-        ]
-      }
-    },
+  {
+  $match: {
+    assignmentId: { $exists: true, $ne: null },
+    isOnboarding: { $ne: true }
+  }
+}
+,
 
     // 3️⃣ one row per assignment
   {
@@ -1054,12 +1052,7 @@ await Attempt.deleteMany({
 
 
 
-      if (!exam) {
-        return res.status(404).send("quiz not found");
-      }
-
-      // delete related attempts
-    await Attempt.deleteMany({ examId });
+    
 
 
       return res.redirect(`/org/${org.slug}/dashboard`);
