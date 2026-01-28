@@ -44,7 +44,11 @@ function ensureAdminEmails(req, res, next) {
   next();
 }
 
+
+
 async function assignOnboardingQuizzes({ orgId, userId }) {
+
+
   // 🔒 Prevent duplicate onboarding
   const existing = await ExamInstance.countDocuments({
     org: orgId,
@@ -53,6 +57,8 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   });
 
   if (existing > 0) return;
+
+  const onboardingAssignmentId = crypto.randomUUID();
 
   // 🧠 Fixed onboarding quizzes
   const onboardingQuizzes = [
@@ -84,20 +90,22 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
 
     if (!questions.length) continue;
 
-    await ExamInstance.create({
-      examId: crypto.randomUUID(),
-      title: quiz.title,              // ✅ STORE TITLE
-      org: orgId,
-      userId,
-      module: quiz.module,
-      isOnboarding: true,              // 🔑 FLAG
-      targetRole: "teacher",            // or student if needed
-      questionIds: questions.map(q => String(q._id)),
-      choicesOrder: questions.map(q =>
-        Array.from({ length: q.choices.length }, (_, i) => i)
-      ),
-      createdAt: new Date()
-    });
+ await ExamInstance.create({
+  examId: crypto.randomUUID(),
+  assignmentId: onboardingAssignmentId,   // ✅ ADD
+  title: quiz.title,                      // ✅ KEEP
+  org: orgId,
+  userId,
+  module: quiz.module,
+  isOnboarding: true,
+  targetRole: "teacher",
+  questionIds: questions.map(q => String(q._id)),
+  choicesOrder: questions.map(q =>
+    Array.from({ length: q.choices.length }, (_, i) => i)
+  ),
+  createdAt: new Date()
+});
+
   }
 }
 
@@ -776,9 +784,9 @@ if (isAdmin) {
   // 🔑 map org roles → quiz target roles
 exams = await ExamInstance.find({
   org: org._id,
-  userId: req.user._id,
-  ...(membership.isOnboardingComplete ? { isOnboarding: false } : {})
+  userId: req.user._id
 })
+
 
 
 
@@ -845,8 +853,10 @@ const moduleKey = typeof ex.module === "string" && ex.module.trim()
 }
 
 
-      let quizTitle =
-        moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz";
+     let quizTitle =
+  ex.title ||
+  (moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz");
+
 
       let questionCount = 0;
 
