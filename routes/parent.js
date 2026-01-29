@@ -15,9 +15,10 @@ router.use(ensureAuth);
 // GET /parent/dashboard
 // ----------------------------------
 router.get("/parent/dashboard", async (req, res) => {
-  const learners = await LearnerProfile.find({
-    ownerUserId: req.user._id
-  }).lean();
+const learners = await LearnerProfile.find({
+  parentUserId: req.user._id
+}).lean();
+
 
   res.render("parent/dashboard", {
     user: req.user,
@@ -40,13 +41,14 @@ router.get("/parent/learners/new", (req, res) => {
 router.post("/parent/learners", async (req, res) => {
   const { displayName, schoolLevel, grade } = req.body;
 
-  const learner = await LearnerProfile.create({
-    ownerUserId: req.user._id,
-    displayName,
-    schoolLevel,
-    grade,
-    trialCounters: {}
-  });
+ const learner = await LearnerProfile.create({
+  parentUserId: req.user._id,
+  displayName,
+  schoolLevel,
+  grade,
+  trialCounters: {}
+});
+
 
   res.redirect("/parent/dashboard");
 });

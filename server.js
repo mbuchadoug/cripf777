@@ -427,6 +427,16 @@ app.get("/audit", ensureAuth, (req, res) => {
   });
 });
 
+
+// -------------------------------
+// START PAGE (Parents / Consumers)
+// -------------------------------
+app.get("/start", (req, res) => {
+  res.render("consumer/start", {
+    user: req.user || null
+  });
+});
+
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
 // -------------------------------

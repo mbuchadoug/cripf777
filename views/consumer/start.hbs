@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+  <title>Start | CRIPFCnt</title>
+</head>
+<body>
+
+<h1>Get Started</h1>
+
+{{#if user}}
+  <p>Welcome {{user.email}}</p>
+  <a href="/parent/dashboard">Go to Parent Dashboard</a>
+{{else}}
+  <a href="/auth/google?returnTo=/parent/dashboard">
+    Sign in as Parent / Guardian
+  </a>
+{{/if}}
+
+</body>
+</html>
