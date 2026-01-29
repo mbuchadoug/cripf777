@@ -5,6 +5,7 @@ import LearnerProfile from "../models/learnerProfile.js";
 import ExamInstance from "../models/examInstance.js";
 import crypto from "crypto";
 import mongoose from "mongoose";
+import { assignQuizzesForLearner } from "../services/quizAssignmentService.js";
 
 import Question from "../models/question.js";
 
@@ -68,6 +69,15 @@ const learners = await LearnerProfile.find({
   parentUserId: req.user._id
 }).lean();
 
+for (const learner of learners) {
+  learner.quizzes = await ExamInstance.find({
+    learnerProfileId: learner._id
+  })
+    .select("title module status examId")
+    .lean();
+}
+
+
 
   res.render("parent/dashboard", {
     user: req.user,
@@ -99,10 +109,12 @@ router.post("/parent/learners", async (req, res) => {
 });
 
 // 🔥 AUTO-ASSIGN 2 TRIAL QUIZZES
-await assignTrialQuizzesToLearner({
-  learnerProfileId: learner._id,
-  parentUserId: req.user._id
+await assignQuizzesForLearner({
+  learnerProfile: learner,
+  parentUserId: req.user._id,
+  type: "trial"
 });
+
 
 
 
