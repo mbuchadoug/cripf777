@@ -49,13 +49,16 @@ router.post(
       return res.status(403).send("Not allowed");
     }
 
-    await QuizRule.create({
-      org: org._id,
-      grade: Number(grade),
-      subject,
-      title,
-      isTrial: isTrial !== "false"
-    });
+   //const { grade, subject, title, isTrial } = req.body;
+
+await QuizRule.create({
+  org: org._id,
+  grade: Number(grade),
+  subject,
+  title,
+  isTrial: isTrial !== "false"   // true by default
+});
+
 
     res.redirect(`/admin/orgs/${org.slug}/quiz-rules`);
   }
