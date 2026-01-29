@@ -4,6 +4,7 @@ import { ensureAuth } from "../middleware/authGuard.js";
 import LearnerProfile from "../models/learnerProfile.js";
 import ExamInstance from "../models/examInstance.js";
 import crypto from "crypto";
+import mongoose from "mongoose";
 
 import Question from "../models/question.js";
 
