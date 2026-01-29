@@ -54,12 +54,9 @@ router.get("/quiz", async (req, res) => {
 
     // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
 // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
-if (examIdParam && req.user) {
+if (examIdParam && req.user?._id) {
   await Attempt.findOneAndUpdate(
-    {
-      examId: examIdParam,
-      userId: req.user._id
-    },
+    { examId: examIdParam, userId: req.user._id },
     {
       $setOnInsert: {
         examId: examIdParam,
@@ -71,6 +68,7 @@ if (examIdParam && req.user) {
     { upsert: true }
   );
 }
+
 
 
     let count = parseInt(req.query.count || "5", 10);
