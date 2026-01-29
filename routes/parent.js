@@ -5,7 +5,46 @@ import LearnerProfile from "../models/learnerProfile.js";
 import ExamInstance from "../models/examInstance.js";
 import crypto from "crypto";
 
+import Question from "../models/question.js";
+
 const router = Router();
+
+
+
+
+async function assignTrialQuizzesToLearner({ learnerProfileId, parentUserId }) {
+  const ORG_ID = mongoose.Types.ObjectId("693b3d8d8004ece0477340c7"); // cripfcnt-school
+  const assignmentId = crypto.randomUUID();
+
+  // pull 2 existing quizzes worth of questions
+  const questions = await Question.aggregate([
+    {
+      $match: {
+        organization: ORG_ID
+      }
+    },
+    { $sample: { size: 10 } }
+  ]);
+
+  if (!questions.length) return;
+
+  await ExamInstance.create({
+    examId: crypto.randomUUID(),
+    assignmentId,
+    org: ORG_ID,
+    learnerProfileId,
+    userId: parentUserId,          // parent owns session
+    targetRole: "student",
+    module: "trial",
+    title: "Trial Quiz",
+    isOnboarding: false,
+    questionIds: questions.map(q => String(q._id)),
+    choicesOrder: questions.map(q =>
+      Array.from({ length: q.choices.length }, (_, i) => i)
+    ),
+    createdAt: new Date()
+  });
+}
 
 // 🔐 All parent routes require login
 router.use(ensureAuth);
@@ -48,6 +87,13 @@ router.post("/parent/learners", async (req, res) => {
   grade,
   trialCounters: {}
 });
+
+// 🔥 AUTO-ASSIGN 2 TRIAL QUIZZES
+await assignTrialQuizzesToLearner({
+  learnerProfileId: learner._id,
+  parentUserId: req.user._id
+});
+
 
 
   res.redirect("/parent/dashboard");

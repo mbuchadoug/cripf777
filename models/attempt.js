@@ -19,6 +19,13 @@ const AttemptSchema = new mongoose.Schema({
   modules: [{
     type: String
   }],
+  learnerProfileId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "LearnerProfile",
+  index: true,
+  default: null
+},
+
   questionIds: [{ type: mongoose.Schema.Types.Mixed }], // preserve either ObjectId or fallback id strings
   answers: [AnswerSub],
   score: { type: Number, default: 0 },

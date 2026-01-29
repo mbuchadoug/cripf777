@@ -55,11 +55,11 @@ router.get("/quiz", async (req, res) => {
     // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
 // ⏱️ Ensure Attempt exists with startedAt when quiz is opened
 if (examIdParam && req.user) {
-  await Attempt.findOneAndUpdate(
-    {
-      examId: examIdParam,
-      userId: req.user._id
-    },
+await Attempt.findOneAndUpdate(
+  {
+    examId: examIdParam,
+    learnerProfileId: req.body.learnerProfileId || null
+  },
     {
       $setOnInsert: {
         examId: examIdParam,
