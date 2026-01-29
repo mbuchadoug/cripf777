@@ -62,7 +62,8 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     role: "student",
     grade: Number(grade),
     parentUserId: req.user._id,
-    organization: org._id
+    organization: org._id,
+    accountType: "student_self"
   });
 
   // 2️⃣ Create org membership
