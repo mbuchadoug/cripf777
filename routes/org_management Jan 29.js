@@ -14,8 +14,6 @@ import QuizQuestion from "../models/question.js";
 import Question from "../models/question.js";
 import Attempt from "../models/attempt.js";
 import { ensureAuth } from "../middleware/authGuard.js";
-import QuizRule from "../models/quizRule.js";
-
 
 import multer from "multer";
 import fs from "fs";
@@ -274,14 +272,6 @@ router.get(
       const org = await Organization.findOne({ slug }).lean();
       const isSchool = org.type === "school";
 
-
-let quizRules = [];
-
-if (org.slug === "cripfcnt-home") {
-  quizRules = await QuizRule.find({ org: org._id }).lean();
-}
-
-
       if (!org) return res.status(404).send("org not found");
 
       const invites = await OrgInvite.find({ orgId: org._id })
@@ -352,9 +342,6 @@ const passages = passagesRaw.map(p => ({
 });*/
 
 
-const isHomeSchool = org.slug === "cripfcnt-home";
-
-
 return res.render("admin/org_manage", {
   org,
   invites,
@@ -363,10 +350,7 @@ return res.render("admin/org_manage", {
   groups,
   user: req.user,
   isAdmin: true,
-  isSchool,
-  isHomeSchool,
-  quizRules
-   // 👈 ADD THIS
+  isSchool
 });
 
 
