@@ -384,13 +384,13 @@ for (const item of series) {
 if (window.__timerInterval) {
   clearInterval(window.__timerInterval);
   window.__timerInterval = null;
-}
+}.
 
 // 🔒 HARD STOP: learner must be specified
-if (!LEARNER_PROFILE_ID) {
+/*if (!LEARNER_PROFILE_ID) {
   alert("❌ Learner not specified. Please start the quiz from the parent dashboard.");
   return;
-}
+}*/
 
 
    // ✅ count ONLY actual MCQ questions (children included, parents excluded)
