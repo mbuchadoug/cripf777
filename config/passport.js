@@ -13,28 +13,29 @@ export default function configurePassport() {
     done(null, user._id);
   });
 
-  passport.deserializeUser(async (id, done) => {
-    try {
-      // 🔍 Detect parent signup flow
-const isParentSignup =
-  accessToken?.req?.session?.signupSource === "start";
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id).lean();
+    done(null, user || null);
+  } catch (err) {
+    done(err, null);
+  }
+});
 
-      const user = await User.findById(id).lean();
-      done(null, user || null);
-    } catch (err) {
-      done(err, null);
-    }
-  });
 
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL,
-      },
-      async (accessToken, refreshToken, profile, done) => {
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      passReqToCallback: true // ✅ ADD THIS LINE
+    },
+     async (req, accessToken, refreshToken, profile, done) => {
+
         try {
+          const isParentSignup = req.session?.signupSource === "start";
+
           // Extract common fields
           const googleId = profile.id;
           const displayName = profile.displayName;
@@ -68,9 +69,10 @@ const isParentSignup =
       googleId,
 
       // ✅ CRITICAL FIX
-      role: isParentSignup ? "parent" : undefined,
-      accountType: isParentSignup ? "parent" : undefined,
-      consumerEnabled: isParentSignup ? true : false
+     role: isParentSignup ? "parent" : "employee",
+accountType: isParentSignup ? "parent" : null,
+consumerEnabled: isParentSignup ? true : false
+
     }
   },
   opts
@@ -116,9 +118,10 @@ await assignOnboardingQuizzes({
 
 
 // 🧹 Clear parent signup marker after use
-if (accessToken?.req?.session?.signupSource) {
-  delete accessToken.req.session.signupSource;
+if (req.session?.signupSource) {
+  delete req.session.signupSource;
 }
+
 
 return done(null, user);
 
