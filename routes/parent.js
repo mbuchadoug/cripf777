@@ -18,30 +18,42 @@ async function assignTrialQuizzesToLearner({ learnerProfileId, parentUserId }) {
   const assignmentId = crypto.randomUUID();
 
   const QUIZ_TEXT = "CRIPFCnt Mathematics Test 4 - Primary Level";
+// ✅ Load the comprehension parent (NOT the children directly)
+const parent = await Question.findOne({
+  organization: ORG_ID,
+  text: QUIZ_TEXT,
+  type: "comprehension"
+}).lean();
 
-  const questions = await Question.find({
-    organization: ORG_ID,
-    text: QUIZ_TEXT
-  }).lean();
+if (!parent || !Array.isArray(parent.questionIds) || !parent.questionIds.length) {
+  console.error("❌ Comprehension parent or children missing for:", QUIZ_TEXT);
+  return;
+}
 
-  if (!questions.length) return;
+// ✅ Create exam using parent marker + child IDs
+await ExamInstance.create({
+  examId: crypto.randomUUID(),
+  assignmentId,
+  org: ORG_ID,
+  learnerProfileId,
+  userId: parentUserId,
+  targetRole: "student",
+  module: "math",
+  title: QUIZ_TEXT,
+  isOnboarding: false,
 
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    assignmentId,
-    org: ORG_ID,
-    learnerProfileId,
-    userId: parentUserId,
-    targetRole: "student",
-    module: "trial",
-    title: QUIZ_TEXT,
-    isOnboarding: false,
-    questionIds: questions.map(q => String(q._id)),
-    choicesOrder: questions.map(q =>
-      Array.from({ length: q.choices.length }, (_, i) => i)
-    ),
-    createdAt: new Date()
-  });
+  // 🔥 THIS IS THE CRITICAL FIX
+  questionIds: [
+    `parent:${parent._id}`,
+    ...parent.questionIds.map(id => String(id))
+  ],
+
+  // children order handled by LMS
+  choicesOrder: parent.questionIds.map(() => null),
+
+  createdAt: new Date()
+});
+
 }
 
 // 🔐 All parent routes require login
@@ -112,18 +124,22 @@ router.post("/parent/quiz/start", async (req, res) => {
     return res.status(403).send("Trial exhausted");
   }
 
-  const examId = crypto.randomUUID();
-
- await ExamInstance.create({
-  examId,
-  userId: req.user._id,
+ // ✅ Find the pre-assigned trial exam
+const exam = await ExamInstance.findOne({
   learnerProfileId: learner._id,
-  module: subject,
-  title: "Trial Quiz",
-  targetRole: "student", // ✅ REQUIRED
-  isOnboarding: false,
-  createdAt: new Date()
-});
+  module: "math",
+  title: "CRIPFCnt Mathematics Test 4 - Primary Level"
+}).sort({ createdAt: -1 });
+
+if (!exam) {
+  return res.status(404).send("Trial quiz not found");
+}
+
+learner.trialCounters[subject] = used + 1;
+await learner.save();
+
+return res.redirect(`/lms/quiz?examId=${exam.examId}`);
+
 
 
   learner.trialCounters[subject] = used + 1;
