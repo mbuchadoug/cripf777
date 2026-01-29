@@ -15,10 +15,6 @@ export default function configurePassport() {
 
   passport.deserializeUser(async (id, done) => {
     try {
-      // 🔍 Detect parent signup flow
-const isParentSignup =
-  accessToken?.req?.session?.signupSource === "start";
-
       const user = await User.findById(id).lean();
       done(null, user || null);
     } catch (err) {
@@ -59,20 +55,9 @@ const isParentSignup =
 
           const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
 
-   const user = await User.findOneAndUpdate(
+         const user = await User.findOneAndUpdate(
   { googleId },
-  {
-    $set: update,
-    $setOnInsert: {
-      createdAt: new Date(),
-      googleId,
-
-      // ✅ CRITICAL FIX
-      role: isParentSignup ? "parent" : undefined,
-      accountType: isParentSignup ? "parent" : undefined,
-      consumerEnabled: isParentSignup ? true : false
-    }
-  },
+  { $set: update, $setOnInsert: { createdAt: new Date(), googleId } },
   opts
 );
 
@@ -112,12 +97,6 @@ await assignOnboardingQuizzes({
   userId: user._id
 });
 
-}
-
-
-// 🧹 Clear parent signup marker after use
-if (accessToken?.req?.session?.signupSource) {
-  delete accessToken.req.session.signupSource;
 }
 
 return done(null, user);

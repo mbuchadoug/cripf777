@@ -12,6 +12,12 @@ import Question from "../models/question.js";
 const router = Router();
 
 
+function isParentSignup(req) {
+  return (
+    req.session?.signupSource === "start" ||
+    req.query?.from === "start"
+  );
+}
 
 // small helper to ensure returnTo is a safe same-origin path
 function safeReturnTo(candidate) {
