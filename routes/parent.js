@@ -14,18 +14,15 @@ const router = Router();
 
 
 async function assignTrialQuizzesToLearner({ learnerProfileId, parentUserId }) {
-  const ORG_ID = mongoose.Types.ObjectId("693b3d8d8004ece0477340c7"); // cripfcnt-school
+  const ORG_ID = mongoose.Types.ObjectId("693b3d8d8004ece0477340c7");
   const assignmentId = crypto.randomUUID();
 
-  // pull 2 existing quizzes worth of questions
-  const questions = await Question.aggregate([
-    {
-      $match: {
-        organization: ORG_ID
-      }
-    },
-    { $sample: { size: 10 } }
-  ]);
+  const QUIZ_TEXT = "CRIPFCnt Mathematics Test 4 - Primary Level";
+
+  const questions = await Question.find({
+    organization: ORG_ID,
+    text: QUIZ_TEXT
+  }).lean();
 
   if (!questions.length) return;
 
@@ -34,10 +31,10 @@ async function assignTrialQuizzesToLearner({ learnerProfileId, parentUserId }) {
     assignmentId,
     org: ORG_ID,
     learnerProfileId,
-    userId: parentUserId,          // parent owns session
+    userId: parentUserId,
     targetRole: "student",
     module: "trial",
-    title: "Trial Quiz",
+    title: QUIZ_TEXT,
     isOnboarding: false,
     questionIds: questions.map(q => String(q._id)),
     choicesOrder: questions.map(q =>
