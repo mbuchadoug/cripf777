@@ -384,7 +384,14 @@ for (const item of series) {
 if (window.__timerInterval) {
   clearInterval(window.__timerInterval);
   window.__timerInterval = null;
-}
+}.
+
+// 🔒 HARD STOP: learner must be specified
+/*if (!LEARNER_PROFILE_ID) {
+  alert("❌ Learner not specified. Please start the quiz from the parent dashboard.");
+  return;
+}*/
+
 
    // ✅ count ONLY actual MCQ questions (children included, parents excluded)
 let totalQuestions = 0;
@@ -415,11 +422,13 @@ if (answered < totalQuestions) {
 
       // build payload
       //const payload = { examId, answers: [] };
-      const payload = {
+const payload = {
   examId,
-  quizTitle: QUIZ_TITLE, // ✅ send quiz title to backend
+  quizTitle: QUIZ_TITLE,
+  learnerProfileId: LEARNER_PROFILE_ID, // ✅ CRITICAL
   answers: []
 };
+
 
 
 for (const s of series) {
