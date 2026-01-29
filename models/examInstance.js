@@ -34,6 +34,13 @@ userId: {
   index: true
 },
 
+// 🔵 Consumer mode: learner profile (NULL for org quizzes)
+learnerProfileId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "LearnerProfile",
+  default: null,
+  index: true
+},
 
 // Who this quiz is for
 targetRole: {

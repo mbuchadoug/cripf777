@@ -11,6 +11,15 @@ import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
 import Handlebars from "handlebars";
+import consumerRoutes from "./routes/consumer.js";
+import consumerQuizRoutes from "./routes/consumer_quiz.js";
+
+import parentRoutes from "./routes/parent.js";
+
+
+
+
+
 import {
   allowInsecurePrototypeAccess
 } from "@handlebars/allow-prototype-access";
@@ -276,6 +285,9 @@ app.use("/api", trackRouter);
 // Public LMS pages
 app.use("/lms", lmsRoutes);
 app.use("/admin", lmsImportRoutes);
+app.use("/consumer", consumerRoutes);
+app.use("/consumer", consumerQuizRoutes);
+app.use(parentRoutes);
 app.use(adminCertificateRoutes);
 //app.use(lmsLoginRoutes);
 app.use(portalRoutes);
@@ -296,6 +308,7 @@ app.use(adminPlacementImport);
 app.use(placementAuditRoutes);
 app.use(scoiDownloadRoutes);
 app.use(specialScoiImportRoutes);
+
 
 // small debug route to inspect current user (useful for testing)
 app.get("/api/whoami", (req, res) => {

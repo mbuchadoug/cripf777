@@ -54,6 +54,37 @@ adminId: {
   searchCount: { type: Number, default: 0 },
 
 auditCredits: { type: Number, default: 1 },
+accountType: {
+  type: String,
+  enum: ["parent", "guardian", "student_self"],
+  default: null,
+  index: true
+},
+
+schoolLevelsEnabled: [{
+  type: String,
+  enum: ["junior", "high"]
+}],
+
+subscriptionStatus: {
+  type: String,
+  enum: ["trial", "paid"],
+  default: "trial",
+  index: true
+},
+
+trialCounters: {
+  maths: { type: Number, default: 0 },
+  english: { type: Number, default: 0 },
+  science: { type: Number, default: 0 }
+},
+
+consumerEnabled: {
+  type: Boolean,
+  default: false,
+  index: true
+}
+,
 
   paidAt: { type: Date, default: null }
 }, { strict: true });

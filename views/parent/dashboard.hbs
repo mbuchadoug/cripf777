@@ -1,0 +1,19 @@
+<h1>Parent Dashboard</h1>
+
+<a href="/parent/learners/new">➕ Add Learner</a>
+
+<hr>
+
+{{#each learners}}
+  <div>
+    <strong>{{displayName}}</strong>
+    ({{schoolLevel}} | Grade {{grade}})
+    <form method="POST" action="/parent/quiz/start">
+      <input type="hidden" name="learnerId" value="{{_id}}">
+      <input type="hidden" name="subject" value="math">
+      <button>Start Math Trial</button>
+    </form>
+  </div>
+{{else}}
+  <p>No learners yet.</p>
+{{/each}}
