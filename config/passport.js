@@ -60,23 +60,23 @@ passport.use(
 
           const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
 
-   const user = await User.findOneAndUpdate(
+const updateDoc = {
+  $set: update
+};
+
+// 🔥 FORCE parent role when coming from /start
+if (isParentSignup) {
+  updateDoc.$set.role = "parent";
+  updateDoc.$set.accountType = "parent";
+  updateDoc.$set.consumerEnabled = true;
+}
+
+const user = await User.findOneAndUpdate(
   { googleId },
-  {
-    $set: update,
-    $setOnInsert: {
-      createdAt: new Date(),
-      googleId,
-
-      // ✅ CRITICAL FIX
-     role: isParentSignup ? "parent" : "employee",
-accountType: isParentSignup ? "parent" : null,
-consumerEnabled: isParentSignup ? true : false
-
-    }
-  },
+  updateDoc,
   opts
 );
+
 
 // ===============================
 // 🏫 AUTO-ENROL INTO CRIPFCNT SCHOOL

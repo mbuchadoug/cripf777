@@ -140,10 +140,14 @@ router.get(
           .populate("org")
           .lean();
 
-        if (memberships.length > 0 && memberships[0].org?.slug) {
-          // Existing user → their org dashboard
-          redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
-        } else {
+      // 👨‍👩‍👧 Parent flow ALWAYS goes to parent dashboard
+if (req.user.role === "parent") {
+  redirectPath = "/parent/dashboard";
+}
+else if (memberships.length > 0 && memberships[0].org?.slug) {
+  redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
+}
+ else {
           // 3️⃣ New user → auto-enrol into default org
           const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
 if (org) {
