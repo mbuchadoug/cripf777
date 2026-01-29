@@ -1,95 +1,28 @@
-<h1>Quiz Rules</h1>
+<h2>Trial Quiz Rules – {{org.name}}</h2>
 
-<form method="POST" action="/admin/quiz-rules" style="margin-bottom:20px">
-  <fieldset>
-    <legend>Create Quiz Rule</legend>
+<form method="POST">
+  <label>Grade</label>
+  <input name="grade" type="number" required>
 
-    <label>
-      Grade:
-      <input type="number" name="grade" min="1" max="12" required>
-    </label>
+  <label>Subject</label>
+  <select name="subject">
+    <option value="math">Math</option>
+    <option value="english">English</option>
+    <option value="science">Science</option>
+  </select>
 
-    <label>
-      Subject:
-      <select name="subject" required>
-        <option value="math">Math</option>
-        <option value="english">English</option>
-        <option value="science">Science</option>
-      </select>
-    </label>
+  <label>Quiz Title</label>
+  <input name="title" required>
 
-    <label>
-      Type:
-      <select name="type" required>
-        <option value="trial">Trial</option>
-        <option value="paid">Paid</option>
-      </select>
-    </label>
-
-    <label>
-      Source:
-      <select name="questionSource" required>
-        <option value="module">Module</option>
-        <option value="passage">Passage</option>
-      </select>
-    </label>
-
-    <label>
-      Module (if module):
-      <input name="module" placeholder="math / english / science">
-    </label>
-
-    <label>
-      Passage ID (if passage):
-      <input name="passageId">
-    </label>
-
-    <label>
-      Question Count:
-      <input type="number" name="count" value="10">
-    </label>
-
-    <label>
-      Duration (minutes):
-      <input type="number" name="durationMinutes" value="20">
-    </label>
-
-    <button type="submit">Create Rule</button>
-  </fieldset>
+  <button>Create Trial Quiz</button>
 </form>
 
 <hr>
 
-<h2>Existing Rules</h2>
-
-<table border="1" cellpadding="6">
-  <tr>
-    <th>Grade</th>
-    <th>Subject</th>
-    <th>Type</th>
-    <th>Source</th>
-    <th>Count</th>
-    <th>Duration</th>
-    <th>Status</th>
-    <th>Action</th>
-  </tr>
-
+<ul>
   {{#each rules}}
-  <tr>
-    <td>{{grade}}</td>
-    <td>{{subject}}</td>
-    <td>{{type}}</td>
-    <td>{{questionSource}}</td>
-    <td>{{count}}</td>
-    <td>{{durationMinutes}} min</td>
-    <td>{{#if active}}Active{{else}}Disabled{{/if}}</td>
-    <td>
-      <form method="POST" action="/admin/quiz-rules/{{_id}}/toggle">
-        <button type="submit">
-          {{#if active}}Disable{{else}}Enable{{/if}}
-        </button>
-      </form>
-    </td>
-  </tr>
+    <li>
+      Grade {{grade}} – {{subject}} – {{title}}
+    </li>
   {{/each}}
-</table>
+</ul>

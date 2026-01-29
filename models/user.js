@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ["student", "teacher", "employee", "org_admin", "super_admin"]
+    enum: ["student", "teacher", "employee", "org_admin", "super_admin",'parent']
   },
 
   displayName: String,
@@ -85,6 +85,13 @@ consumerEnabled: {
   index: true
 }
 ,
+
+parentUserId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  default: null,
+  index: true
+},
 
   paidAt: { type: Date, default: null }
 }, { strict: true });

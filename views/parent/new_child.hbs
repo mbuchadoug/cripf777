@@ -1,0 +1,26 @@
+<h1>Add Child</h1>
+
+<form method="POST" action="/parent/children">
+  <label>
+    First name:
+    <input name="firstName" required>
+  </label>
+
+  <label>
+    Last name:
+    <input name="lastName">
+  </label>
+
+  <label>
+    Grade:
+    <select name="grade" required>
+      <option value="">--select--</option>
+      <option value="1">Grade 1</option>
+      <option value="2">Grade 2</option>
+      <option value="3">Grade 3</option>
+      <option value="4">Grade 4</option>
+    </select>
+  </label>
+
+  <button type="submit">Create Child</button>
+</form>

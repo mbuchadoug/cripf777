@@ -1,0 +1,26 @@
+<h1>Parent Dashboard</h1>
+
+<a href="/parent/learners/new">➕ Add Learner</a>
+<hr>
+
+{{#each learners}}
+  <div style="margin-bottom:20px">
+    <strong>{{displayName}}</strong>
+    (Grade {{grade}})
+
+    {{#if quizzes.length}}
+      <ul>
+        {{#each quizzes}}
+          <li>
+            {{title}} — {{status}}
+            <a href="/lms/quiz?examId={{examId}}">Start</a>
+          </li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <p>No quizzes assigned yet.</p>
+    {{/if}}
+  </div>
+{{else}}
+  <p>No learners yet.</p>
+{{/each}}

@@ -1,26 +1,14 @@
 <h1>Parent Dashboard</h1>
 
-<a href="/parent/learners/new">➕ Add Learner</a>
+<a href="/parent/children/new">➕ Add Child</a>
 <hr>
 
-{{#each learners}}
-  <div style="margin-bottom:20px">
-    <strong>{{displayName}}</strong>
+{{#each children}}
+  <div>
+    <strong>{{firstName}} {{lastName}}</strong>
     (Grade {{grade}})
-
-    {{#if quizzes.length}}
-      <ul>
-        {{#each quizzes}}
-          <li>
-            {{title}} — {{status}}
-            <a href="/lms/quiz?examId={{examId}}">Start</a>
-          </li>
-        {{/each}}
-      </ul>
-    {{else}}
-      <p>No quizzes assigned yet.</p>
-    {{/if}}
+    <a href="/org/cripfcnt-home/dashboard">View Quizzes</a>
   </div>
 {{else}}
-  <p>No learners yet.</p>
+  <p>No children yet.</p>
 {{/each}}

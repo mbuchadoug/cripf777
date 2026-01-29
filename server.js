@@ -289,9 +289,11 @@ app.use("/lms", lmsRoutes);
 app.use("/admin", lmsImportRoutes);
 app.use("/consumer", consumerRoutes);
 app.use("/consumer", consumerQuizRoutes);
+
 app.use(adminQuizRules);
 app.use(parentRoutes);
 app.use(adminCertificateRoutes);
+
 //app.use(lmsLoginRoutes);
 app.use(portalRoutes);
 // Org-related routes

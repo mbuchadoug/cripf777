@@ -4,57 +4,51 @@ const QuizRuleSchema = new mongoose.Schema({
   org: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Organization",
-    default: null // null = platform-wide
+    required: true,
+    index: true
   },
 
   grade: {
     type: Number,
-    required: true
+    required: true,
+    index: true
   },
 
   subject: {
     type: String,
     enum: ["math", "english", "science"],
-    required: true
+    required: true,
+    index: true
   },
 
-  type: {
-    type: String,
-    enum: ["trial", "paid"],
-    required: true
+  isTrial: {
+    type: Boolean,
+    default: true,
+    index: true
   },
 
-  questionSource: {
-    type: String,
-    enum: ["module", "passage"],
-    required: true
-  },
-
-  module: {
-    type: String,
-    default: null
-  },
-
-  passageId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Question",
-    default: null
-  },
-
-  count: {
+  questionCount: {
     type: Number,
     default: 10
   },
 
-  durationMinutes: {
-    type: Number,
-    default: 20
+  title: {
+    type: String,
+    required: true
   },
 
-  active: {
+  enabled: {
     type: Boolean,
     default: true
-  }
-}, { timestamps: true });
+  },
 
-export default mongoose.model("QuizRule", QuizRuleSchema);
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const QuizRule =
+  mongoose.models.QuizRule || mongoose.model("QuizRule", QuizRuleSchema);
+
+export default QuizRule;

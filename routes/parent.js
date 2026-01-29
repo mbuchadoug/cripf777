@@ -1,163 +1,147 @@
-// routes/parent.js
 import { Router } from "express";
-import { ensureAuth } from "../middleware/authGuard.js";
-import LearnerProfile from "../models/learnerProfile.js";
-import ExamInstance from "../models/examInstance.js";
-import crypto from "crypto";
 import mongoose from "mongoose";
-import { assignQuizzesForLearner } from "../services/quizAssignmentService.js";
+import crypto from "crypto";
 
-import Question from "../models/question.js";
+import { ensureAuth } from "../middleware/authGuard.js";
+import User from "../models/user.js";
+import OrgMembership from "../models/orgMembership.js";
+import Organization from "../models/organization.js";
+import ExamInstance from "../models/examInstance.js";
 
 const router = Router();
 
-
-
-
-async function assignTrialQuizzesToLearner({ learnerProfileId, parentUserId }) {
-  const ORG_ID = mongoose.Types.ObjectId("693b3d8d8004ece0477340c7");
-  const assignmentId = crypto.randomUUID();
-
-  const QUIZ_TEXT = "CRIPFCnt Mathematics Test 4 - Primary Level";
-// ✅ Load the comprehension parent (NOT the children directly)
-const parent = await Question.findOne({
-  organization: ORG_ID,
-  text: QUIZ_TEXT,
-  type: "comprehension"
-}).lean();
-
-if (!parent || !Array.isArray(parent.questionIds) || !parent.questionIds.length) {
-  console.error("❌ Comprehension parent or children missing for:", QUIZ_TEXT);
-  return;
-}
-
-// ✅ Create exam using parent marker + child IDs
-await ExamInstance.create({
-  examId: crypto.randomUUID(),
-  assignmentId,
-  org: ORG_ID,
-  learnerProfileId,
-  userId: parentUserId,
-  targetRole: "student",
-  module: "math",
-  title: QUIZ_TEXT,
-  isOnboarding: false,
-
-  // 🔥 THIS IS THE CRITICAL FIX
-  questionIds: [
-    `parent:${parent._id}`,
-    ...parent.questionIds.map(id => String(id))
-  ],
-
-  // children order handled by LMS
-  choicesOrder: parent.questionIds.map(() => null),
-
-  createdAt: new Date()
-});
-
-}
-
-// 🔐 All parent routes require login
-router.use(ensureAuth);
+// 🔒 Hard-lock HOME org
+const HOME_ORG_SLUG = "cripfcnt-home";
 
 // ----------------------------------
 // Parent dashboard
 // GET /parent/dashboard
 // ----------------------------------
-router.get("/parent/dashboard", async (req, res) => {
-const learners = await LearnerProfile.find({
-  parentUserId: req.user._id
-}).lean();
+router.get("/parent/dashboard", ensureAuth, async (req, res) => {
+  if (req.user.role !== "parent") {
+    return res.status(403).send("Parents only");
+  }
 
-for (const learner of learners) {
-  learner.quizzes = await ExamInstance.find({
-    learnerProfileId: learner._id
-  })
-    .select("title module status examId")
-    .lean();
-}
-
-
+  const children = await User.find({
+    parentUserId: req.user._id,
+    role: "student"
+  }).lean();
 
   res.render("parent/dashboard", {
     user: req.user,
-    learners
+    children
   });
 });
 
 // ----------------------------------
-// Add learner form
-// GET /parent/learners/new
+// Add child form
+// GET /parent/children/new
 // ----------------------------------
-router.get("/parent/learners/new", (req, res) => {
-  res.render("parent/new_learner", { user: req.user });
+router.get("/parent/children/new", ensureAuth, (req, res) => {
+  res.render("parent/new_child", { user: req.user });
 });
 
 // ----------------------------------
-// Create learner
-// POST /parent/learners
+// Create child + auto-assign trials
+// POST /parent/children
 // ----------------------------------
-router.post("/parent/learners", async (req, res) => {
-  const { displayName, schoolLevel, grade } = req.body;
+router.post("/parent/children", ensureAuth, async (req, res) => {
+  const { firstName, lastName, grade } = req.body;
 
- const learner = await LearnerProfile.create({
-  parentUserId: req.user._id,
-  displayName,
-  schoolLevel,
-  grade,
-  trialCounters: {}
-});
+  if (!firstName || !grade) {
+    return res.status(400).send("Name and grade required");
+  }
 
-// 🔥 AUTO-ASSIGN 2 TRIAL QUIZZES
-await assignQuizzesForLearner({
-  learnerProfile: learner,
-  parentUserId: req.user._id,
-  type: "trial"
-});
+  const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
+  if (!org) return res.status(500).send("Home org missing");
 
+  // 1️⃣ Create child user
+  const child = await User.create({
+    firstName,
+    lastName,
+    role: "student",
+    grade: Number(grade),
+    parentUserId: req.user._id,
+    organization: org._id
+  });
 
+  // 2️⃣ Create org membership
+  await OrgMembership.create({
+    org: org._id,
+    user: child._id,
+    role: "student",
+    joinedAt: new Date()
+  });
 
+  // 3️⃣ AUTO ASSIGN TRIAL QUIZZES (by grade)
+  await assignTrialQuizzes({
+    orgId: org._id,
+    grade: child.grade,
+    userId: child._id
+  });
 
   res.redirect("/parent/dashboard");
 });
 
-// ----------------------------------
-// Start trial quiz
-// POST /parent/quiz/start
-// ----------------------------------
-router.post("/parent/quiz/start", async (req, res) => {
-  const { learnerId, subject } = req.body;
 
-  const learner = await LearnerProfile.findById(learnerId);
-  if (!learner) return res.status(404).send("Learner not found");
+// ----------------------------------
+// AUTO-ASSIGN TRIAL QUIZZES
+// ----------------------------------
+import QuizRule from "../models/quizRule.js";
+import Question from "../models/question.js";
 
-  const used = learner.trialCounters?.[subject] || 0;
-  if (used >= 3) {
-    return res.status(403).send("Trial exhausted");
+async function assignTrialQuizzes({ orgId, grade, userId }) {
+
+  const existing = await ExamInstance.countDocuments({
+    org: orgId,
+    userId,
+    isTrial: true
+  });
+  if (existing > 0) return;
+
+  const rules = await QuizRule.find({
+    org: orgId,
+    grade,
+    isTrial: true,
+    enabled: true
+  }).lean();
+
+  if (!rules.length) return;
+
+  const assignmentId = crypto.randomUUID();
+
+  for (const rule of rules) {
+
+    const questions = await Question.aggregate([
+      {
+        $match: {
+          organization: orgId,
+          module: rule.subject,
+          grade
+        }
+      },
+      { $sample: { size: rule.questionCount } }
+    ]);
+
+    if (!questions.length) continue;
+
+    await ExamInstance.create({
+      examId: crypto.randomUUID(),
+      assignmentId,
+      org: orgId,
+      userId,
+      targetRole: "student",
+      module: rule.subject,
+      title: rule.title,
+      isTrial: true,
+      questionIds: questions.map(q => String(q._id)),
+      choicesOrder: questions.map(q =>
+        Array.from({ length: q.choices.length }, (_, i) => i)
+      ),
+      createdAt: new Date()
+    });
   }
-
- // ✅ Find the pre-assigned trial exam
-const exam = await ExamInstance.findOne({
-  learnerProfileId: learner._id,
-  module: "math",
-  title: "CRIPFCnt Mathematics Test 4 - Primary Level"
-}).sort({ createdAt: -1 });
-
-if (!exam) {
-  return res.status(404).send("Trial quiz not found");
 }
 
-learner.trialCounters[subject] = used + 1;
-await learner.save();
-
-return res.redirect(`/lms/quiz?examId=${exam.examId}`);
-
-
-
-  learner.trialCounters[subject] = used + 1;
-  await learner.save();
-
-  res.redirect(`/lms/quiz?examId=${examId}`);
-});
 
 export default router;

@@ -1,67 +1,46 @@
 import { Router } from "express";
 import { ensureAuth } from "../middleware/authGuard.js";
-import QuizRule from "../models/quizRule.js";
 import Organization from "../models/organization.js";
+import QuizRule from "../models/quizRule.js";
 
 const router = Router();
 
-/* ------------------------------
-   LIST RULES
-   GET /admin/quiz-rules
--------------------------------- */
-router.get("/admin/quiz-rules", ensureAuth, async (req, res) => {
-  const rules = await QuizRule.find()
-    .sort({ grade: 1, subject: 1 })
-    .lean();
+router.get(
+  "/admin/orgs/:slug/quiz-rules",
+  ensureAuth,
+  async (req, res) => {
+    const org = await Organization.findOne({ slug: req.params.slug }).lean();
+    if (!org) return res.status(404).send("Org not found");
 
-  res.render("admin/quiz_rules", {
-    user: req.user,
-    rules
-  });
-});
+    const rules = await QuizRule.find({ org: org._id }).lean();
 
-/* ------------------------------
-   CREATE RULE
-   POST /admin/quiz-rules
--------------------------------- */
-router.post("/admin/quiz-rules", ensureAuth, async (req, res) => {
-  const {
-    grade,
-    subject,
-    type,
-    questionSource,
-    module,
-    passageId,
-    count,
-    durationMinutes
-  } = req.body;
+    res.render("admin/quiz_rules", {
+      org,
+      rules,
+      user: req.user
+    });
+  }
+);
 
-  await QuizRule.create({
-    grade: Number(grade),
-    subject,
-    type,
-    questionSource,
-    module: questionSource === "module" ? module : null,
-    passageId: questionSource === "passage" ? passageId : null,
-    count: Number(count),
-    durationMinutes: Number(durationMinutes)
-  });
+router.post(
+  "/admin/orgs/:slug/quiz-rules",
+  ensureAuth,
+  async (req, res) => {
+    const { grade, subject, title } = req.body;
 
-  res.redirect("/admin/quiz-rules");
-});
+    const org = await Organization.findOne({ slug: req.params.slug });
+    if (!org) return res.status(404).send("Org not found");
 
-/* ------------------------------
-   TOGGLE ACTIVE
-   POST /admin/quiz-rules/:id/toggle
--------------------------------- */
-router.post("/admin/quiz-rules/:id/toggle", ensureAuth, async (req, res) => {
-  const rule = await QuizRule.findById(req.params.id);
-  if (!rule) return res.status(404).send("Not found");
+    await QuizRule.create({
+      org: org._id,
+      grade: Number(grade),
+      subject,
+      title,
+      isTrial: true
+    });
 
-  rule.active = !rule.active;
-  await rule.save();
-
-  res.redirect("/admin/quiz-rules");
-});
+    res.redirect(`/admin/orgs/${org.slug}/quiz-rules`);
+  }
+);
 
 export default router;
