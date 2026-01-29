@@ -117,14 +117,17 @@ router.post("/parent/quiz/start", async (req, res) => {
 
   const examId = crypto.randomUUID();
 
-  await ExamInstance.create({
-    examId,
-    userId: req.user._id,
-    module: subject,
-    isTrial: true,
-    learnerProfileId: learner._id,
-    createdAt: new Date()
-  });
+ await ExamInstance.create({
+  examId,
+  userId: req.user._id,
+  learnerProfileId: learner._id,
+  module: subject,
+  title: "Trial Quiz",
+  targetRole: "student", // ✅ REQUIRED
+  isOnboarding: false,
+  createdAt: new Date()
+});
+
 
   learner.trialCounters[subject] = used + 1;
   await learner.save();
