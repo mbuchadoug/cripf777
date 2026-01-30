@@ -188,11 +188,13 @@ if (!["parent", "admin", "employee", "org_admin", "super_admin"].includes(req.us
 // View child's quizzes
 // GET /parent/children/:childId/quizzes
 // ----------------------------------
-router.get("/parent/children/:childId/quizzes", ensureAuth, async (req, res) => {
-  if (req.user.role !== "parent") {
-    return res.status(403).send("Parents only");
-  }
+router.get(
+  "/parent/children/:childId/quizzes",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
 
+ 
   const { childId } = req.params;
 
   // 🔒 ensure child belongs to parent
