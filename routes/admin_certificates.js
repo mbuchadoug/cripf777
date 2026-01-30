@@ -194,9 +194,9 @@ router.get(
   ensureAuth,
   async (req, res) => {
     // 🔐 hard safety
-    if (!req.user || req.user.role !== "admin") {
+    /*if (!req.user || req.user.role !== "admin") {
       return res.status(403).send("Forbidden");
-    }
+    }*/
 
     // 🎯 ONLY these titles are considered broken
     const BAD_TITLES = new Set([
