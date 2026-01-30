@@ -1,0 +1,19 @@
+<h1>{{child.firstName}} {{child.lastName}} – Quizzes</h1>
+
+<a href="/parent/dashboard">← Back</a>
+<hr>
+
+{{#each quizzes}}
+  <div>
+    <strong>{{quizTitle}}</strong><br>
+    Subject: {{module}}<br>
+    Status: {{status}}<br>
+
+    {{#if (eq status "pending")}}
+      <a href="/lms/exam/{{examId}}">▶ Start Quiz</a>
+    {{/if}}
+  </div>
+  <hr>
+{{else}}
+  <p>No quizzes assigned yet.</p>
+{{/each}}

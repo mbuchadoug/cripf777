@@ -140,4 +140,40 @@ async function assignTrialQuizzes({ orgId, grade, userId }) {
 }
 
 
+// ----------------------------------
+// View child's quizzes
+// GET /parent/children/:childId/quizzes
+// ----------------------------------
+router.get("/parent/children/:childId/quizzes", ensureAuth, async (req, res) => {
+  if (req.user.role !== "parent") {
+    return res.status(403).send("Parents only");
+  }
+
+  const { childId } = req.params;
+
+  // 🔒 ensure child belongs to parent
+  const child = await User.findOne({
+    _id: childId,
+    parentUserId: req.user._id,
+    role: "student"
+  }).lean();
+
+  if (!child) {
+    return res.status(404).send("Child not found");
+  }
+
+  const quizzes = await ExamInstance.find({
+    userId: child._id
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.render("parent/child_quizzes", {
+    user: req.user,
+    child,
+    quizzes
+  });
+});
+
+
 export default router;
