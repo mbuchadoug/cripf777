@@ -1,26 +1,177 @@
-<h1>Add Child</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Add Child | Parent Setup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<form method="POST" action="/parent/children">
-  <label>
-    First name:
-    <input name="firstName" required>
-  </label>
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+    }
 
-  <label>
-    Last name:
-    <input name="lastName">
-  </label>
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+      background:var(--bg);
+      color:#fff;
+    }
 
-  <label>
-    Grade:
-    <select name="grade" required>
-      <option value="">--select--</option>
-      <option value="1">Grade 1</option>
-      <option value="2">Grade 2</option>
-      <option value="3">Grade 3</option>
-      <option value="4">Grade 4</option>
-    </select>
-  </label>
+    main{
+      max-width:520px;
+      margin:60px auto;
+      padding:0 20px;
+    }
 
-  <button type="submit">Create Child</button>
-</form>
+    h1{
+      font-size:28px;
+      margin-bottom:8px;
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:15px;
+      margin-bottom:24px;
+      line-height:1.5;
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:22px;
+    }
+
+    form{
+      display:grid;
+      gap:18px;
+    }
+
+    label{
+      display:flex;
+      flex-direction:column;
+      font-size:14px;
+      font-weight:600;
+    }
+
+    label span{
+      margin-bottom:6px;
+      color:#ddd;
+    }
+
+    input, select{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:12px;
+      font-size:15px;
+      color:#fff;
+      outline:none;
+    }
+
+    input::placeholder{
+      color:#666;
+    }
+
+    input:focus, select:focus{
+      border-color:var(--gold);
+    }
+
+    button{
+      margin-top:10px;
+      padding:14px;
+      border-radius:12px;
+      border:none;
+      background:var(--gold);
+      color:#000;
+      font-weight:800;
+      font-size:16px;
+      cursor:pointer;
+    }
+
+    button:hover{
+      opacity:0.9;
+    }
+
+    .note{
+      margin-top:14px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+
+    .back{
+      display:inline-block;
+      margin-bottom:18px;
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      font-size:14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
+
+  <h1>Add Your Child</h1>
+  <p class="subtitle">
+    Enter your child’s details to start tracking quizzes,
+    progress and certificates.
+  </p>
+
+  <div class="panel">
+    <form method="POST" action="/parent/children">
+
+      <label>
+        <span>First name *</span>
+        <input
+          name="firstName"
+          placeholder="e.g. Tendai"
+          required
+        >
+      </label>
+
+      <label>
+        <span>Last name</span>
+        <input
+          name="lastName"
+          placeholder="e.g. Moyo"
+        >
+      </label>
+
+      <label>
+        <span>Grade *</span>
+        <select name="grade" required>
+          <option value="">Select grade</option>
+          <option value="1">Grade 1</option>
+          <option value="2">Grade 2</option>
+          <option value="3">Grade 3</option>
+          <option value="4">Grade 4</option>
+        </select>
+      </label>
+
+      <button type="submit">
+        ➕ Add Child
+      </button>
+
+    </form>
+
+    <div class="note">
+      You’ll be able to assign quizzes and view learning progress
+      immediately after adding your child.
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

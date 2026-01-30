@@ -1,20 +1,228 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <title>Start | CRIPFCnt</title>
+  <meta charset="utf-8" />
+  <title>CRIPFCnt | Parent Learning Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+    }
+
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+      background:var(--bg);
+      color:#fff;
+    }
+
+    header{
+      padding:20px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    header strong{
+      font-size:20px;
+      color:var(--gold);
+    }
+
+    header a{
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+    }
+
+    main{
+      max-width:1100px;
+      margin:40px auto;
+      padding:0 20px;
+    }
+
+    .hero{
+      display:grid;
+      grid-template-columns:1.2fr 1fr;
+      gap:30px;
+      align-items:center;
+    }
+
+    @media(max-width:900px){
+      .hero{
+        grid-template-columns:1fr;
+      }
+    }
+
+    h1{
+      font-size:40px;
+      margin-bottom:14px;
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:18px;
+      line-height:1.5;
+      margin-bottom:24px;
+    }
+
+    .cta{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+    }
+
+    .btn{
+      padding:14px 22px;
+      border-radius:12px;
+      font-weight:800;
+      text-decoration:none;
+      border:1px solid var(--gold);
+      cursor:pointer;
+    }
+
+    .btn.primary{
+      background:var(--gold);
+      color:#000;
+    }
+
+    .btn.secondary{
+      background:#111;
+      color:#fff;
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:20px;
+    }
+
+    .features{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:16px;
+      margin-top:50px;
+    }
+
+    .feature{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+    }
+
+    .feature strong{
+      display:block;
+      margin-bottom:6px;
+      color:var(--gold);
+    }
+
+    footer{
+      margin-top:60px;
+      padding:20px;
+      text-align:center;
+      color:var(--muted);
+      font-size:13px;
+      border-top:1px solid var(--border);
+    }
+  </style>
 </head>
+
 <body>
 
-<h1>Get Started</h1>
+<header>
+  <strong>CRIPFCnt</strong>
 
-{{#if user}}
-  <p>Welcome {{user.email}}</p>
-  <a href="/parent/dashboard">Go to Parent Dashboard</a>
-{{else}}
-  <a href="/auth/google?returnTo=/parent/dashboard">
-    Sign in as Parent / Guardian
-  </a>
-{{/if}}
+  {{#if user}}
+    <a href="/parent/dashboard">Parent Dashboard →</a>
+  {{else}}
+    <a href="/auth/google?returnTo=/parent/dashboard">
+      Sign in
+    </a>
+  {{/if}}
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div>
+      <h1>
+        Know how your child is really learning.
+      </h1>
+
+      <p class="subtitle">
+        CRIPFCnt gives parents real visibility into quizzes, progress,
+        certificates and learning outcomes, all in one secure dashboard.
+      </p>
+
+      <div class="cta">
+        {{#if user}}
+          <a href="/parent/dashboard" class="btn primary">
+            Go to Parent Dashboard
+          </a>
+        {{else}}
+          <a
+            href="/auth/google?returnTo=/parent/dashboard"
+            class="btn primary"
+          >
+            Get Started as a Parent
+          </a>
+
+          <a href="#features" class="btn secondary">
+            Learn More
+          </a>
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong style="color:var(--gold)">What parents can do</strong>
+      <ul style="margin-top:12px;line-height:1.6;color:var(--muted)">
+        <li>View assigned quizzes per child</li>
+        <li>Track quiz history & average scores</li>
+        <li>Download certificates</li>
+        <li>Receive notifications for new quizzes</li>
+        <li>Monitor learning progress over time</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="features">
+    <div class="feature">
+      <strong>📊 Progress Tracking</strong>
+      See how your child is improving over time with real quiz data.
+    </div>
+
+    <div class="feature">
+      <strong>🏆 Certificates</strong>
+      Access and download earned certificates anytime.
+    </div>
+
+    <div class="feature">
+      <strong>🧠 Structured Learning</strong>
+      Quizzes aligned to responsibility, reasoning and comprehension.
+    </div>
+
+    <div class="feature">
+      <strong>🔔 Parent Notifications</strong>
+      Get notified when new quizzes are assigned.
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  © {{year}} CRIPFCnt · Parent-controlled learning insight
+</footer>
 
 </body>
 </html>
