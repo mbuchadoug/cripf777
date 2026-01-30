@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import ExamInstance from "../models/examInstance.js";
 import Question from "../models/question.js";
+import Notification from "../models/notification.js";
 
 export async function assignQuizFromRule({ rule, userId, orgId }) {
   const quiz = await Question.findById(rule.quizQuestionId).lean();
@@ -30,5 +31,14 @@ export async function assignQuizFromRule({ rule, userId, orgId }) {
   questionIds: quiz.questionIds.map(id => String(id)),
   createdAt: new Date()
 });
+
+
+await Notification.create({
+  userId,
+  type: "quiz_assigned",
+  message: `New quiz assigned: ${quiz.text}`
+});
+
+
 
 }

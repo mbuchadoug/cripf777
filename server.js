@@ -125,6 +125,7 @@ function renderPage(res, view, req, canonicalPath, extra = {}) {
     ...extra,
   });
 }
+hbs.registerHelper("subtract", (a, b) => a - b);
 
 const hbsHelpers = {
   eq: (a, b) => a === b,

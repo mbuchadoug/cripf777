@@ -1,0 +1,15 @@
+<h1>Parent Dashboard</h1>
+
+<a href="/parent/children/new">➕ Add Child</a>
+<hr>
+
+{{#each children}}
+  <div>
+    <strong>{{firstName}} {{lastName}}</strong>
+    (Grade {{grade}})
+    <a href="/parent/children/{{_id}}/quizzes">View Quizzes</a>
+
+  </div>
+{{else}}
+  <p>No children yet.</p>
+{{/each}}

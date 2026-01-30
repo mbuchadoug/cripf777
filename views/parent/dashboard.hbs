@@ -1,15 +1,255 @@
-<h1>Parent Dashboard</h1>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Parent Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-<a href="/parent/children/new">➕ Add Child</a>
-<hr>
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+      --red:#c0392b;
+    }
 
-{{#each children}}
-  <div>
-    <strong>{{firstName}} {{lastName}}</strong>
-    (Grade {{grade}})
-    <a href="/parent/children/{{_id}}/quizzes">View Quizzes</a>
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+    }
 
+    main{
+      max-width:1200px;
+      margin:32px auto;
+      padding:0 20px;
+    }
+
+    h1{
+      font-size:30px;
+      margin-bottom:6px;
+    }
+
+    h2{
+      margin:28px 0 12px;
+      color:var(--gold);
+      font-size:20px;
+    }
+
+    /* PANELS */
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      margin-bottom:18px;
+    }
+
+    /* GRID */
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+      gap:16px;
+    }
+
+    /* CHILD CARD */
+    .child-card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+
+    .child-name{
+      font-size:18px;
+      font-weight:800;
+    }
+
+    .child-meta{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:2px;
+    }
+
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin:14px 0;
+    }
+
+    .stat{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px;
+      text-align:center;
+      font-size:13px;
+    }
+
+    .stat strong{
+      display:block;
+      font-size:18px;
+      margin-bottom:2px;
+    }
+
+    .actions a{
+      display:inline-block;
+      margin-top:8px;
+      margin-right:12px;
+      color:var(--gold);
+      font-weight:700;
+      text-decoration:none;
+      font-size:14px;
+    }
+
+    .actions a:hover{
+      text-decoration:underline;
+    }
+
+    /* TOP ACTION */
+    .top-actions{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:20px;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    .btn{
+      background:var(--gold);
+      color:#000;
+      padding:10px 16px;
+      border-radius:10px;
+      font-weight:800;
+      text-decoration:none;
+      border:none;
+      cursor:pointer;
+    }
+
+    /* EMPTY */
+    .empty{
+      color:var(--muted);
+      font-size:15px;
+      margin-top:10px;
+    }
+
+    /* FOOT NOTE */
+    .note{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:6px;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <!-- HEADER -->
+  <div class="top-actions">
+    <div>
+      <h1>Parent Dashboard</h1>
+      <div class="note">
+        Manage your children’s learning, quizzes and certificates.
+      </div>
+    </div>
+
+<a href="/parent/notifications">
+  Notifications
+  {{#if unreadCount}}
+    <span style="
+      background:#D4AF37;
+      color:#000;
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:12px;
+      font-weight:700;
+    ">
+      {{unreadCount}}
+    </span>
+  {{/if}}
+</a>
+
+    <a href="/parent/children/new" class="btn">
+      ➕ Add Child
+    </a>
   </div>
-{{else}}
-  <p>No children yet.</p>
-{{/each}}
+
+  <!-- CHILDREN -->
+  <h2>My Children</h2>
+
+  {{#if children.length}}
+  <div class="grid">
+    {{#each children}}
+      <div class="child-card">
+        <div>
+          <div class="child-name">
+            {{firstName}} {{lastName}}
+          </div>
+          <div class="child-meta">
+            Grade {{grade}}
+          </div>
+
+          <!-- STATS (safe defaults if not provided yet) -->
+          <div class="stats">
+            <div class="stat">
+              <strong>{{pendingCount}}</strong>
+              Pending
+            </div>
+            <div class="stat">
+              <strong>{{completedCount}}</strong>
+              Completed
+            </div>
+            <div class="stat">
+              <strong>{{certificateCount}}</strong>
+              Certificates
+            </div>
+          </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="actions">
+          <a href="/parent/children/{{_id}}/quizzes">
+            ▶ View Quizzes
+          </a>
+          <a href="/parent/children/{{_id}}/certificates">
+            🏆 Certificates
+          </a>
+        </div>
+      </div>
+    {{/each}}
+  </div>
+  {{else}}
+    <div class="panel">
+      <div class="empty">
+        No children added yet.
+      </div>
+      <div class="note">
+        Click “Add Child” to register your learner and assign quizzes.
+      </div>
+    </div>
+  {{/if}}
+
+  <!-- HELP / TRUST -->
+  <div class="panel">
+    <strong style="color:var(--gold)">🔒 Parent Controlled Access</strong>
+    <div class="note">
+      Only you can view your children’s quizzes, results and certificates.
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

@@ -9,6 +9,10 @@ import Organization from "../models/organization.js";
 import ExamInstance from "../models/examInstance.js";
 import { assignQuizFromRule } from "../services/quizAssignment.js";
 import QuizRule from "../models/quizRule.js";
+import Attempt from "../models/attempt.js";
+import Certificate from "../models/certificate.js";
+import Notification from "../models/notification.js";
+
 
 //import QuizRule from "../models/quizRule.js";
 import Question from "../models/question.js";
@@ -27,14 +31,57 @@ router.get("/parent/dashboard", ensureAuth, async (req, res) => {
     return res.status(403).send("Parents only");
   }
 
-  const children = await User.find({
-    parentUserId: req.user._id,
-    role: "student"
-  }).lean();
+const children = await User.find({
+  parentUserId: req.user._id,
+  role: "student"
+}).lean();
 
-  res.render("parent/dashboard", {
+for (const child of children) {
+  // 1️⃣ Pending quizzes
+  child.pendingCount = await ExamInstance.countDocuments({
+    userId: child._id,
+    status: { $ne: "finished" }
+  });
+
+  // 2️⃣ Completed quizzes
+  child.completedCount = await ExamInstance.countDocuments({
+    userId: child._id,
+    status: "finished"
+  });
+
+  // 3️⃣ Certificates earned
+  child.certificateCount = await Certificate.countDocuments({
+    userId: child._id
+  });
+}
+
+
+for (const child of children) {
+  const attempts = await Attempt.find({
+    userId: child._id,
+    status: "finished"
+  }).select("percentage").lean();
+
+  if (!attempts.length) {
+    child.avgScore = null;
+    child.quizCount = 0;
+  } else {
+    const total = attempts.reduce((s, a) => s + (a.percentage || 0), 0);
+    child.avgScore = Math.round(total / attempts.length);
+    child.quizCount = attempts.length;
+  }
+}
+
+const unreadCount = await Notification.countDocuments({
+  userId: req.user._id,
+  read: false
+});
+
+
+ res.render("parent/dashboard", {
     user: req.user,
-    children
+    children,
+    unreadCount: res.locals?.unreadCount || 0
   });
 });
 
@@ -140,15 +187,34 @@ router.get("/parent/children/:childId/quizzes", ensureAuth, async (req, res) => 
     .sort({ createdAt: -1 })
     .lean();
 
+
+    const certificates = await Certificate.find({
+  userId: child._id
+})
+.sort({ createdAt: -1 })
+.lean();
+
 const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+const attempts = await Attempt.find({
+  userId: child._id,
+  status: "finished"
+})
+.sort({ finishedAt: 1 })
+.select("percentage")
+.lean();
+
+const progressPoints = attempts.map(a => a.percentage);
+
+res.render("parent/child_quizzes", {
+  user: req.user,
+  child,
+  quizzes,
+  certificates,
+  progressPoints,
+  org
+});
 
 
-  res.render("parent/child_quizzes", {
-    user: req.user,
-    child,
-    quizzes,
-     org   // ✅ ADD THIS
-  });
 });
 
 
