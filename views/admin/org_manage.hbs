@@ -534,16 +534,27 @@
   {{/each}}
 </select>
 
-<label>
+<label class="block">
   Quiz
   <select name="quizQuestionId" required>
-    {{#each quizzes}}
-      <option value="{{_id}}">
-        {{text}} ({{module}})
-      </option>
-    {{/each}}
+    <option value="">-- select quiz --</option>
+
+    {{#if quizzes.length}}
+      {{#each quizzes}}
+       <option
+  value="{{_id}}"
+  data-subject="{{subject}}"
+>
+
+          {{text}} ({{module}})
+        </option>
+      {{/each}}
+    {{else}}
+      <option disabled>No quizzes found for this organization</option>
+    {{/if}}
   </select>
 </label>
+
 
 
 <label>Question count</label>
@@ -980,6 +991,34 @@ if (role === "teacher") {
   }
 </script>
 
+<script>
+  const subjectSelect = document.querySelector(
+    'form[action$="/quiz-rules"] select[name="subject"]'
+  );
+  const quizSelect = document.querySelector(
+    'form[action$="/quiz-rules"] select[name="quizQuestionId"]'
+  );
+
+  if (subjectSelect && quizSelect) {
+    function filterQuizzesBySubject() {
+      const subject = subjectSelect.value;
+
+      Array.from(quizSelect.options).forEach(opt => {
+        if (!opt.dataset.subject) return;
+
+        opt.style.display =
+          opt.dataset.subject === subject ? '' : 'none';
+      });
+
+      quizSelect.value = '';
+    }
+
+    subjectSelect.addEventListener('change', filterQuizzesBySubject);
+
+    // run once on page load
+    filterQuizzesBySubject();
+  }
+</script>
 
 </body>
 </html>

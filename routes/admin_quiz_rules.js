@@ -47,7 +47,8 @@ const quizzes = await Question.find({
   organization: org._id,
   type: "comprehension"
 })
-.select("_id text module")
+.select("_id text module subject")
+
 .lean();
 
 res.render("admin/quiz_rules", {
@@ -73,29 +74,39 @@ router.post(
       const slug = req.params.slug;
       const org = await Organization.findOne({ slug });
       if (!org) return res.status(404).send("Org not found");
+const {
+  grade,
+  module,
+  quizQuestionId,
+  quizType,
+  questionCount,
+  durationMinutes
+} = req.body;
 
-      const {
-        grade,
-        module,
-        quizTitle,
-        quizType,
-        questionCount,
-        durationMinutes
-      } = req.body;
+if (!grade || !module || !quizQuestionId || !quizType) {
+  return res.status(400).send("Missing fields");
+}
 
-      if (!grade || !module || !quizTitle || !quizType) {
-        return res.status(400).send("Missing fields");
-      }
+const quiz = await Question.findById(quizQuestionId).lean();
+if (!quiz) {
+  return res.status(400).send("Invalid quiz selected");
+}
+
 
       await QuizRule.create({
-        org: org._id,
-        grade: Number(grade),
-        module: module.toLowerCase(),
-        quizTitle: quizTitle.trim(),
-        quizType,
-        questionCount: Number(questionCount) || 10,
-        durationMinutes: Number(durationMinutes) || 30
-      });
+  org: org._id,
+  grade: Number(grade),
+  module: module.toLowerCase(),
+
+  quizQuestionId: quiz._id,
+  quizTitle: quiz.text, // ✅ text is the real title
+
+  quizType,
+  questionCount: Number(questionCount) || 10,
+  durationMinutes: Number(durationMinutes) || 30,
+  enabled: true
+});
+
 
       res.redirect(`/admin/orgs/${slug}/manage`);
     } catch (err) {

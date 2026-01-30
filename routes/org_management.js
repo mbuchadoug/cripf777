@@ -340,14 +340,15 @@ const passagesRaw = await Question.find({
 let quizzes = [];
 
 if (org.slug === "cripfcnt-home") {
-  quizzes = await Question.find({
-    type: "comprehension",
-    organization: org._id,
-    questionIds: { $exists: true, $ne: [] }
-  })
-    .select("_id text module")
-    .sort({ createdAt: -1 })
-    .lean();
+ quizzes = await Question.find({
+  type: "comprehension",
+  organization: org._id
+})
+.select("_id text module subject")
+.sort({ createdAt: -1 })
+.lean();
+
+  
 }
 
 // Shape for UI
