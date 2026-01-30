@@ -5,6 +5,7 @@ import QuizRule from "../models/quizRule.js";
 import Question from "../models/question.js";
 import User from "../models/user.js";
 import ExamInstance from "../models/examInstance.js";
+import { assignQuizFromRule } from "../services/quizAssignment.js";
 
 const router = Router();
 
@@ -125,27 +126,13 @@ const students = await User.find({
 });
 
 for (const student of students) {
-  const exists = await ExamInstance.findOne({
-    user: student._id,
-    organization: org._id,
-    question: quiz._id,
-    source: "quiz-rule"
-  });
-
-  if (exists) continue; // 👈 prevents duplicates
-
-  await ExamInstance.create({
-    user: student._id,
-    organization: org._id,
-    question: quiz._id,
-    module: quiz.module,
-    subject: subject.toLowerCase(),
-    type: quizType,
-    count: Number(questionCount) || 10,
-    durationMinutes: Number(durationMinutes) || 30,
-    source: "quiz-rule"
+  await assignQuizFromRule({
+    rule,
+    userId: student._id,
+    orgId: org._id
   });
 }
+
 
 
 
