@@ -7,7 +7,8 @@ import User from "../models/user.js";
 import crypto from "crypto";
 import ExamInstance from "../models/examInstance.js";
 import Question from "../models/question.js";
-
+import { ensureAuth } from "../middleware/authGuard.js";
+import User from "../models/user.js";
 
 const router = Router();
 
@@ -355,4 +356,41 @@ router.get("/logout", (req, res, next) => {
     });
   });
 });
+
+
+
+
+
+router.post("/admin/create-parent", ensureAuth, async (req, res) => {
+  if (!["admin", "employee"].includes(req.user.role)) {
+    return res.status(403).send("Not allowed");
+  }
+
+  const { email, firstName, lastName } = req.body;
+
+  if (!email || !firstName) {
+    return res.status(400).send("Missing required fields");
+  }
+
+  const existing = await User.findOne({ email: email.toLowerCase() });
+  if (existing) {
+    return res.status(400).send("User already exists");
+  }
+
+  const parent = await User.create({
+    email: email.toLowerCase(),
+    firstName,
+    lastName,
+    role: "parent",
+    accountType: "parent",
+    consumerEnabled: true,
+    createdAt: new Date()
+  });
+
+  return res.json({
+    success: true,
+    parentId: parent._id
+  });
+});
+
 export default router;

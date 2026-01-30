@@ -12,9 +12,6 @@ import QuizRule from "../models/quizRule.js";
 import Attempt from "../models/attempt.js";
 import Certificate from "../models/certificate.js";
 import Notification from "../models/notification.js";
-import { canActAsParent } from "../middleware/parentAccess.js";
-
-
 
 
 //import QuizRule from "../models/quizRule.js";
@@ -29,11 +26,10 @@ const HOME_ORG_SLUG = "cripfcnt-home";
 // Parent dashboard
 // GET /parent/dashboard
 // ----------------------------------
-router.get(
-  "/parent/dashboard",
-  ensureAuth,
-  canActAsParent,
-  async (req, res) => {
+router.get("/parent/dashboard", ensureAuth, async (req, res) => {
+  if (req.user.role !== "parent") {
+    return res.status(403).send("Parents only");
+  }
 
 const children = await User.find({
   parentUserId: req.user._id,
@@ -93,32 +89,18 @@ const unreadCount = await Notification.countDocuments({
 // Add child form
 // GET /parent/children/new
 // ----------------------------------
-router.get(
-  "/parent/children/new",
-  ensureAuth,
-  canActAsParent,
-  (req, res) => {
-    res.render("parent/new_child", { user: req.user });
-  }
-);
+router.get("/parent/children/new", ensureAuth, (req, res) => {
+  res.render("parent/new_child", { user: req.user });
+});
 
 // ----------------------------------
 // Create child + auto-assign trials
 // POST /parent/children
+// ----------------------------------
 router.post("/parent/children", ensureAuth, async (req, res) => {
-  const { firstName, lastName, grade, parentId } = req.body;
+  const { firstName, lastName, grade } = req.body;
 
-  // 🧠 Determine parent context
-  let effectiveParentId = req.user._id;
-
-  if (["admin", "employee"].includes(req.user.role)) {
-    if (!parentId) {
-      return res.status(400).send("parentId required for admin");
-    }
-    effectiveParentId = parentId;
-  } else if (req.user.role !== "parent") {
-    return res.status(403).send("Not allowed");
-  }
+ 
 
   if (!firstName || !grade) {
     return res.status(400).send("Name and grade required");
@@ -127,47 +109,46 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
   const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
   if (!org) return res.status(500).send("Home org missing");
 
-  // 1️⃣ Create child
+  // 1️⃣ Create child user
   const child = await User.create({
     firstName,
     lastName,
     role: "student",
     grade: Number(grade),
-    parentUserId: effectiveParentId,
+    parentUserId: req.user._id,
     organization: org._id,
     accountType: "student_self"
   });
 
-  // 2️⃣ Membership
-  await OrgMembership.create({
-    org: org._id,
-    user: child._id,
-    role: "student",
-    joinedAt: new Date()
-  });
+  // 2️⃣ Create org membership
 
-  // 3️⃣ Assign trials
-  const rules = await QuizRule.find({
-    org: org._id,
-    grade: child.grade,
-    quizType: "trial",
-    enabled: true
-  });
-
-  for (const rule of rules) {
-    await assignQuizFromRule({
-      rule,
-      userId: child._id,
-      orgId: org._id
-    });
-  }
-
-  return res.json({
-    success: true,
-    childId: child._id
-  });
+await OrgMembership.create({
+  org: org._id,
+  user: child._id,
+  role: "student",
+  joinedAt: new Date()
 });
 
+
+
+const rules = await QuizRule.find({
+  org: org._id,
+  grade: child.grade,
+  quizType: "trial",
+  enabled: true
+});
+
+for (const rule of rules) {
+  await assignQuizFromRule({
+    rule,
+    userId: child._id,
+    orgId: org._id
+  });
+}
+
+
+  res.redirect("/parent/dashboard");
+});
 
 
 // ----------------------------------
