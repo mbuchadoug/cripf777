@@ -109,16 +109,24 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
   const { firstName, lastName, grade, parentId } = req.body;
 
   // 🧠 Determine parent context
-  let effectiveParentId = req.user._id;
+// ✅ DEFAULT: user is acting as parent for themselves
+let effectiveParentId = req.user._id;
 
-  if (["admin", "employee"].includes(req.user.role)) {
-    if (!parentId) {
-      return res.status(400).send("parentId required for admin");
-    }
-    effectiveParentId = parentId;
-  } else if (req.user.role !== "parent") {
-    return res.status(403).send("Not allowed");
+// ✅ OPTIONAL: admins/employees may act on behalf of another parent
+if (parentId) {
+  // ensure target parent exists
+  const parentUser = await User.findById(parentId).lean();
+  if (!parentUser) {
+    return res.status(400).send("Invalid parentId");
   }
+  effectiveParentId = parentId;
+}
+
+// 🚫 hard block only non-parent-capable roles
+if (!["parent", "admin", "employee", "org_admin", "super_admin"].includes(req.user.role)) {
+  return res.status(403).send("Not allowed");
+}
+
 
   if (!firstName || !grade) {
     return res.status(400).send("Name and grade required");
@@ -162,10 +170,8 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     });
   }
 
-  return res.json({
-    success: true,
-    childId: child._id
-  });
+ return res.redirect("/parent/dashboard");
+
 });
 
 
