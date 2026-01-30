@@ -9,9 +9,12 @@
     Subject: {{module}}<br>
     Status: {{status}}<br>
 
-    {{#if (eq status "pending")}}
-      <a href="/lms/exam/{{examId}}">▶ Start Quiz</a>
-    {{/if}}
+   {{#if (eq status "pending")}}
+  <a href="/org/{{org.slug}}/quiz?examId={{examId}}">
+    ▶ Start Quiz
+  </a>
+{{/if}}
+
   </div>
   <hr>
 {{else}}

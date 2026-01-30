@@ -140,10 +140,14 @@ router.get("/parent/children/:childId/quizzes", ensureAuth, async (req, res) => 
     .sort({ createdAt: -1 })
     .lean();
 
+const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+
+
   res.render("parent/child_quizzes", {
     user: req.user,
     child,
-    quizzes
+    quizzes,
+     org   // ✅ ADD THIS
   });
 });
 
