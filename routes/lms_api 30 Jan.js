@@ -1353,33 +1353,27 @@ if (exam) {
         // For certificate name, prefer: req.user.name or savedAttempt.userName or fallback to 'Learner'
      // 🧾 Resolve certificate recipient name (supports Google + local users)
 // 🧾 Resolve certificate recipient name (ALWAYS load from DB)
-// 🧾 Resolve certificate recipient name
 let recipientName = "Learner";
 
 try {
-  // 🔑 HOME LEARNING FIX:
-  // Certificate owner is the STUDENT, not the logged-in parent
-  const certificateUserId =
-    exam?.userId || savedCertificate?.userId || null;
-
-  if (certificateUserId) {
-    const fullUser = await User.findById(certificateUserId)
+  if (req.user?._id) {
+    const fullUser = await User.findById(req.user._id)
       .select("firstName lastName displayName name fullName email")
       .lean();
 
     if (fullUser) {
       // 1️⃣ displayName (highest priority)
-      if (fullUser.displayName?.trim()) {
+      if (fullUser.displayName && fullUser.displayName.trim()) {
         recipientName = fullUser.displayName.trim();
       }
-      // 2️⃣ first + last name (students)
+      // 2️⃣ firstName + lastName (school users)
       else if (fullUser.firstName || fullUser.lastName) {
         recipientName = [
           fullUser.firstName || "",
           fullUser.lastName || ""
         ].join(" ").trim();
       }
-      // 3️⃣ Google-style names
+      // 3️⃣ Google-style fallbacks
       else if (fullUser.name || fullUser.fullName) {
         recipientName = fullUser.name || fullUser.fullName;
       }
@@ -1390,9 +1384,8 @@ try {
     }
   }
 } catch (e) {
-  console.warn("[certificate] failed to resolve student name", e);
+  console.warn("[certificate] failed to resolve user name", e);
 }
-
 
 
 
