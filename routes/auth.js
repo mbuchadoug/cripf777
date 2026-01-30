@@ -3,7 +3,6 @@ import { Router } from "express";
 import passport from "passport";
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
-import User from "../models/user.js";
 import crypto from "crypto";
 import ExamInstance from "../models/examInstance.js";
 import Question from "../models/question.js";
