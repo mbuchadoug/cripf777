@@ -712,7 +712,10 @@ h1 {
 
     <div class="subtitle">has successfully completed the quiz</div>
 
-    <div class="quiz">${esc(quizTitle || moduleName || "")}</div>
+ <div class="quiz">
+  ${esc(quizTitle || moduleName || "Quiz")}
+</div>
+
 
     <div class="details">
       <div class="detail">
@@ -1364,21 +1367,21 @@ console.log("CERT DEBUG:", {
 });
 
 
-   const certResult = await generateCertificatePdf({
+const certResult = await generateCertificatePdf({
   name: recipientName,
   orgName,
-  moduleName: moduleNameForCert,
-  quizTitle:
-    quizTitleFromClient ||
-    exam?.title ||
-    exam?.quizTitle ||
-    exam?.name ||
-    moduleNameForCert,
+
+  // ✅ USE SAVED CERTIFICATE TITLE
+  quizTitle: savedCertificate?.quizTitle || "Quiz",
+
+  moduleName: savedCertificate?.moduleName || null,
+
   score,
   percentage,
   date: now,
   req
 });
+
 
 
 
