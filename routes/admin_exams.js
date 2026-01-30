@@ -6,11 +6,8 @@ import Question from "../models/question.js";
 const router = Router();
 
 /**
- * 🔧 FIX EXISTING EXAM TITLES
+ * 🔧 FIX EXISTING EXAM TITLES + QUIZ TITLES
  * GET /admin/exams/fix-titles
- *
- * - Reads parent comprehension question
- * - Sets ExamInstance.title & quizTitle correctly
  */
 router.get("/exams/fix-titles", async (req, res) => {
   try {
@@ -48,15 +45,7 @@ router.get("/exams/fix-titles", async (req, res) => {
 
       const realTitle = parentQuestion.text.trim();
 
-      // Skip if already correct
-      if (
-        exam.title === realTitle &&
-        exam.quizTitle === realTitle
-      ) {
-        skipped.push({ examId: exam.examId, reason: "already correct" });
-        continue;
-      }
-
+      // 🔑 FORCE BOTH FIELDS (even if quizTitle never existed)
       await ExamInstance.updateOne(
         { _id: exam._id },
         {
@@ -64,18 +53,20 @@ router.get("/exams/fix-titles", async (req, res) => {
             title: realTitle,
             quizTitle: realTitle
           }
-        }
+        },
+        { strict: false }
       );
 
       updated.push({
         examId: exam.examId,
-        newTitle: realTitle
+        title: realTitle,
+        quizTitle: realTitle
       });
     }
 
     return res.json({
       success: true,
-      totalExamInstances: exams.length,
+      scanned: exams.length,
       updatedCount: updated.length,
       skippedCount: skipped.length,
       updated,
