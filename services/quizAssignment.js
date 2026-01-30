@@ -14,17 +14,21 @@ export async function assignQuizFromRule({ rule, userId, orgId }) {
 
   if (exists) return;
 
-  await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    assignmentId: crypto.randomUUID(),
-    org: orgId,
-    userId,
-    module: quiz.module,
-    title: quiz.text,
-    quizTitle: quiz.text,
-    isTrial: rule.quizType === "trial",
-    durationMinutes: rule.durationMinutes,
-    questionIds: quiz.questionIds.map(id => String(id)),
-    createdAt: new Date()
-  });
+ await ExamInstance.create({
+  examId: crypto.randomUUID(),
+  assignmentId: crypto.randomUUID(),
+  org: orgId,
+  userId,
+
+  targetRole: "student", // ✅ REQUIRED (THIS IS THE FIX)
+
+  module: quiz.module,
+  title: quiz.text,
+  quizTitle: quiz.text,
+  isTrial: rule.quizType === "trial",
+  durationMinutes: rule.durationMinutes,
+  questionIds: quiz.questionIds.map(id => String(id)),
+  createdAt: new Date()
+});
+
 }
