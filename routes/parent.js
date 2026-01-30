@@ -67,12 +67,6 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
   });
 
   // 2️⃣ Create org membership
- await OrgMembership.create({
-  org: org._id,
-  user: child._id,
-  role: "member",   // or "learner" — MUST match enum
-  joinedAt: new Date()
-});
 
 
   // 3️⃣ AUTO ASSIGN TRIAL QUIZZES (by grade)
