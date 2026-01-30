@@ -870,10 +870,11 @@ const moduleKey = typeof ex.module === "string" && ex.module.trim()
           String(q).startsWith("parent:")
         );
 
-        if (parentMarker) {
-          const parentId = String(parentMarker).replace("parent:", "");
-          quizTitle = parentTitleMap[parentId] || "Comprehension Quiz";
-        }
+     if (!ex.title && !ex.quizTitle && parentMarker) {
+  const parentId = String(parentMarker).replace("parent:", "");
+  quizTitle = parentTitleMap[parentId] || quizTitle;
+}
+
       }
 
   const openUrl = ex.isOnboarding

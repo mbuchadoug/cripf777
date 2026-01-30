@@ -1121,12 +1121,14 @@ savedCertificate = await Certificate.create({
 
   // ✅ STORE REAL QUIZ TITLE
 quizTitle:
+  savedCertificate?.quizTitle ||
   exam?.title ||
   exam?.quizTitle ||
   quizTitleFromClient ||
   (exam?.module
     ? exam.module.charAt(0).toUpperCase() + exam.module.slice(1) + " Quiz"
     : "Quiz"),
+
 
 
 
