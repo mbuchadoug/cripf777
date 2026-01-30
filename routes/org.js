@@ -174,10 +174,17 @@ router.get(
         .populate("user")
         .lean();
       const modules = await OrgModule.find({ org: org._id }).lean();
+const quizzes = await Question.find({
+  organization: org._id,
+  type: "comprehension"
+})
+.select("_id text module subject")
+.lean();
 
       return res.render("admin/org_manage", {
         org,
         invites,
+         quizzes,
         memberships,
         modules,
       });

@@ -3,6 +3,8 @@ import { ensureAuth } from "../middleware/authGuard.js";
 import Organization from "../models/organization.js";
 import QuizRule from "../models/quizRule.js";
 import Question from "../models/question.js";
+import User from "../models/user.js";
+import ExamInstance from "../models/examInstance.js";
 
 const router = Router();
 
@@ -44,12 +46,16 @@ router.get(
 
     const rules = await QuizRule.find({ org: org._id }).lean();
 const quizzes = await Question.find({
-  organization: org._id,
-  type: "comprehension"
+  type: "comprehension",
+  $or: [
+    { organization: org._id },
+    { organization: { $exists: false } },
+    { organization: null }
+  ]
 })
-.select("_id text module subject")
+  .select("_id text module")
+  .lean();
 
-.lean();
 
 res.render("admin/quiz_rules", {
   org,
@@ -76,6 +82,7 @@ router.post(
       if (!org) return res.status(404).send("Org not found");
 const {
   grade,
+  subject,
   module,
   quizQuestionId,
   quizType,
@@ -83,7 +90,8 @@ const {
   durationMinutes
 } = req.body;
 
-if (!grade || !module || !quizQuestionId || !quizType) {
+
+if (!grade || !subject || !quizQuestionId || !quizType) {
   return res.status(400).send("Missing fields");
 }
 
@@ -93,19 +101,53 @@ if (!quiz) {
 }
 
 
-      await QuizRule.create({
+  await QuizRule.create({
   org: org._id,
   grade: Number(grade),
-  module: module.toLowerCase(),
+  subject: subject.toLowerCase(),   // 👈 KEY
+  module: module?.toLowerCase(),
 
   quizQuestionId: quiz._id,
-  quizTitle: quiz.text, // ✅ text is the real title
+  quizTitle: quiz.text,
 
   quizType,
   questionCount: Number(questionCount) || 10,
   durationMinutes: Number(durationMinutes) || 30,
+
   enabled: true
 });
+
+
+const students = await User.find({
+  organization: org._id,
+  role: "student",
+  grade: Number(grade)
+});
+
+for (const student of students) {
+  const exists = await ExamInstance.findOne({
+    user: student._id,
+    organization: org._id,
+    question: quiz._id,
+    source: "quiz-rule"
+  });
+
+  if (exists) continue; // 👈 prevents duplicates
+
+  await ExamInstance.create({
+    user: student._id,
+    organization: org._id,
+    question: quiz._id,
+    module: quiz.module,
+    subject: subject.toLowerCase(),
+    type: quizType,
+    count: Number(questionCount) || 10,
+    durationMinutes: Number(durationMinutes) || 30,
+    source: "quiz-rule"
+  });
+}
+
+
 
 
       res.redirect(`/admin/orgs/${slug}/manage`);
@@ -118,43 +160,7 @@ if (!quiz) {
 
 
 
-router.post(
-  "/admin/orgs/:slug/quiz-rules/:ruleId/apply",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const { slug, ruleId } = req.params;
 
-      const org = await Organization.findOne({ slug });
-      if (!org) return res.status(404).send("Org not found");
-
-      const rule = await QuizRule.findById(ruleId);
-      if (!rule || !rule.enabled) {
-        return res.status(404).send("Rule not found");
-      }
-
-      const students = await User.find({
-        organization: org._id,
-        role: "student",
-        grade: rule.grade
-      });
-
-      for (const student of students) {
-        await assignQuizFromRule({
-          rule,
-          userId: student._id,
-          orgId: org._id
-        });
-      }
-
-      res.redirect(`/admin/orgs/${slug}/manage`);
-    } catch (err) {
-      console.error("[apply quiz rule]", err);
-      res.status(500).send("Failed");
-    }
-  }
-);
 
 
 export default router;

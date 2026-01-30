@@ -581,13 +581,10 @@
   Grade {{grade}} – {{module}} – {{quizTitle}}
   <span class="badge">{{quizType}}</span>
 
-  <form
-    method="POST"
-    action="/admin/orgs/{{../org.slug}}/quiz-rules/{{_id}}/apply"
-    style="display:inline"
-  >
-    <button type="submit">Apply to existing students</button>
-  </form>
+ <span class="muted small">
+  Applies to existing & future students
+</span>
+
 </li>
 {{/each}}
 

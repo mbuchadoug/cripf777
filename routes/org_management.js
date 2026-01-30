@@ -337,19 +337,23 @@ const passagesRaw = await Question.find({
 
 
   // ✅ LOAD QUIZZES FOR QUIZ RULES DROPDOWN (HOME SCHOOL ONLY)
+// ✅ LOAD QUIZZES FOR QUIZ RULES DROPDOWN (HOME SCHOOL ONLY)
 let quizzes = [];
 
 if (org.slug === "cripfcnt-home") {
- quizzes = await Question.find({
-  type: "comprehension",
-  organization: org._id
-})
-.select("_id text module subject")
-.sort({ createdAt: -1 })
-.lean();
-
-  
+  quizzes = await Question.find({
+    type: "comprehension",
+    $or: [
+      { organization: org._id },          // home school quizzes
+      { organization: { $exists: false } }, // legacy
+      { organization: null }                // global quizzes
+    ]
+  })
+    .select("_id text module")
+    .sort({ createdAt: -1 })
+    .lean();
 }
+
 
 // Shape for UI
 const passages = passagesRaw.map(p => ({
