@@ -130,6 +130,29 @@ if (user.role !== "parent") {
 
 }
 
+// ===============================
+// 🏠 AUTO-ENROL PARENTS INTO HOME ORG (VISIBLE IN ADMIN)
+// ===============================
+if (user.role === "parent") {
+  const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" });
+
+  if (homeOrg) {
+    const exists = await OrgMembership.findOne({
+      org: homeOrg._id,
+      user: user._id
+    });
+
+    if (!exists) {
+      await OrgMembership.create({
+        org: homeOrg._id,
+        user: user._id,
+        role: "employee", // 👈 MUST MATCH ENUM
+        joinedAt: new Date()
+      });
+    }
+  }
+}
+
 
 // ===============================
 // 🏠 ENSURE HOME ORG MEMBERSHIP FOR PARENTS

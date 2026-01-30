@@ -332,6 +332,24 @@ const passagesRaw = await Question.find({
   .select("_id text module questionIds organization")
   .lean();
 
+
+
+
+
+  // ✅ LOAD QUIZZES FOR QUIZ RULES DROPDOWN (HOME SCHOOL ONLY)
+let quizzes = [];
+
+if (org.slug === "cripfcnt-home") {
+  quizzes = await Question.find({
+    type: "comprehension",
+    organization: org._id,
+    questionIds: { $exists: true, $ne: [] }
+  })
+    .select("_id text module")
+    .sort({ createdAt: -1 })
+    .lean();
+}
+
 // Shape for UI
 const passages = passagesRaw.map(p => ({
   _id: p._id,
@@ -360,14 +378,15 @@ return res.render("admin/org_manage", {
   invites,
   modules,
   passages,
+  quizzes,        // ✅ ADD THIS LINE
   groups,
   user: req.user,
   isAdmin: true,
   isSchool,
   isHomeSchool,
   quizRules
-   // 👈 ADD THIS
 });
+
 
 
     } catch (err) {
