@@ -263,9 +263,22 @@ const passages = passagesRaw.map(p => ({
   user: req.user,
   isAdmin: true
 });*/
+let parents = [];
+let children = [];
+
+if (org.slug === "cripfcnt-home") {
+  parents = await User.find({
+    role: "parent"
+  }).lean();
+
+  children = await User.find({
+    role: "student",
+    organization: org._id
+  }).lean();
+}
 
 
-return res.render("admin/org_manage", {
+/*return res.render("admin/org_manage", {
   org,
   invites,
   memberships,
@@ -274,7 +287,22 @@ return res.render("admin/org_manage", {
   user: req.user,
   isAdmin: true,
   isSchool
+});*/
+return res.render("admin/org_manage", {
+  org,
+  invites,
+  modules,
+  passages,
+  groups,
+  parents,
+  children,
+  user: req.user,
+  isAdmin: true,
+  isSchool,
+  isHomeSchool,
+  quizRules
 });
+
 
     } catch (err) {
       console.error("[admin org manage] error:", err && (err.stack || err));

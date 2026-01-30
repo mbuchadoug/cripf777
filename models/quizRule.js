@@ -1,11 +1,12 @@
+// models/quizRule.js
 import mongoose from "mongoose";
 
 const QuizRuleSchema = new mongoose.Schema({
   org: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Organization",
-    required: true,
-    index: true
+    index: true,
+    required: true
   },
 
   grade: {
@@ -14,16 +15,22 @@ const QuizRuleSchema = new mongoose.Schema({
     index: true
   },
 
-  subject: {
+  module: {
     type: String,
-    enum: ["math", "english", "science"],
     required: true,
     index: true
   },
 
-  isTrial: {
-    type: Boolean,
-    default: true,
+quizQuestionId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Question",
+  required: true
+},
+
+  quizType: {
+    type: String,
+    enum: ["trial", "paid"],
+    required: true,
     index: true
   },
 
@@ -32,14 +39,15 @@ const QuizRuleSchema = new mongoose.Schema({
     default: 10
   },
 
-  title: {
-    type: String,
-    required: true
+  durationMinutes: {
+    type: Number,
+    default: 30
   },
 
   enabled: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
 
   createdAt: {
@@ -48,7 +56,7 @@ const QuizRuleSchema = new mongoose.Schema({
   }
 });
 
-const QuizRule =
-  mongoose.models.QuizRule || mongoose.model("QuizRule", QuizRuleSchema);
+QuizRuleSchema.index({ org: 1, grade: 1, module: 1, quizType: 1 });
 
-export default QuizRule;
+export default mongoose.models.QuizRule ||
+  mongoose.model("QuizRule", QuizRuleSchema);

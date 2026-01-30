@@ -131,6 +131,31 @@ if (user.role !== "parent") {
 }
 
 
+// ===============================
+// 🏠 ENSURE HOME ORG MEMBERSHIP FOR PARENTS
+// ===============================
+const HOME_ORG_SLUG = "cripfcnt-home";
+
+const homeOrg = await Organization.findOne({ slug: HOME_ORG_SLUG });
+if (!homeOrg) {
+  throw new Error("Home org missing");
+}
+
+const hasHomeMembership = await OrgMembership.findOne({
+  org: homeOrg._id,
+  user: user._id
+});
+
+if (!hasHomeMembership) {
+  await OrgMembership.create({
+    org: homeOrg._id,
+    user: user._id,
+    role: "parent",
+    joinedAt: new Date()
+  });
+}
+
+
 // 🧹 Clear parent signup marker after use
 if (req.session?.signupSource) {
   delete req.session.signupSource;

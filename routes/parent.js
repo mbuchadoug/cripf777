@@ -7,6 +7,11 @@ import User from "../models/user.js";
 import OrgMembership from "../models/orgMembership.js";
 import Organization from "../models/organization.js";
 import ExamInstance from "../models/examInstance.js";
+import { assignQuizFromRule } from "../services/quizAssignment.js";
+import QuizRule from "../models/quizRule.js";
+
+//import QuizRule from "../models/quizRule.js";
+import Question from "../models/question.js";
 
 const router = Router();
 
@@ -48,6 +53,8 @@ router.get("/parent/children/new", ensureAuth, (req, res) => {
 router.post("/parent/children", ensureAuth, async (req, res) => {
   const { firstName, lastName, grade } = req.body;
 
+ 
+
   if (!firstName || !grade) {
     return res.status(400).send("Name and grade required");
   }
@@ -68,13 +75,30 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
 
   // 2️⃣ Create org membership
 
+await OrgMembership.create({
+  org: org._id,
+  user: child._id,
+  role: "student",
+  joinedAt: new Date()
+});
 
-  // 3️⃣ AUTO ASSIGN TRIAL QUIZZES (by grade)
-  await assignTrialQuizzes({
-    orgId: org._id,
-    grade: child.grade,
-    userId: child._id
+
+
+const rules = await QuizRule.find({
+  org: org._id,
+  grade: child.grade,
+  quizType: "trial",
+  enabled: true
+});
+
+for (const rule of rules) {
+  await assignQuizFromRule({
+    rule,
+    userId: child._id,
+    orgId: org._id
   });
+}
+
 
   res.redirect("/parent/dashboard");
 });
@@ -83,61 +107,9 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
 // ----------------------------------
 // AUTO-ASSIGN TRIAL QUIZZES
 // ----------------------------------
-import QuizRule from "../models/quizRule.js";
-import Question from "../models/question.js";
 
-async function assignTrialQuizzes({ orgId, grade, userId }) {
 
-  const existing = await ExamInstance.countDocuments({
-    org: orgId,
-    userId,
-    isTrial: true
-  });
-  if (existing > 0) return;
 
-  const rules = await QuizRule.find({
-    org: orgId,
-    grade,
-    isTrial: true,
-    enabled: true
-  }).lean();
-
-  if (!rules.length) return;
-
-  const assignmentId = crypto.randomUUID();
-
-  for (const rule of rules) {
-
-    const questions = await Question.aggregate([
-      {
-        $match: {
-          organization: orgId,
-          module: rule.subject,
-          grade
-        }
-      },
-      { $sample: { size: rule.questionCount } }
-    ]);
-
-    if (!questions.length) continue;
-
-    await ExamInstance.create({
-      examId: crypto.randomUUID(),
-      assignmentId,
-      org: orgId,
-      userId,
-      targetRole: "student",
-      module: rule.subject,
-      title: rule.title,
-      isTrial: true,
-      questionIds: questions.map(q => String(q._id)),
-      choicesOrder: questions.map(q =>
-        Array.from({ length: q.choices.length }, (_, i) => i)
-      ),
-      createdAt: new Date()
-    });
-  }
-}
 
 
 // ----------------------------------

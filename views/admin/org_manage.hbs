@@ -525,18 +525,39 @@
       </select>
     </label>
 
-    <label class="block">
-      Quiz Title
-      <input name="title" placeholder="Grade 4 Mathematics – Trial" required />
-    </label>
+  <label>Grade</label>
+<select name="grade">...</select>
 
-    <label class="block">
-      Type
-      <select name="isTrial">
-        <option value="true">Trial</option>
-        <option value="false">Paid</option>
-      </select>
-    </label>
+<label>Module</label>
+<select name="module">
+  {{#each modules}}
+    <option value="{{slug}}">{{title}}</option>
+  {{/each}}
+</select>
+
+<label>
+  Quiz
+  <select name="quizQuestionId" required>
+    {{#each quizzes}}
+      <option value="{{_id}}">
+        {{text}} ({{module}})
+      </option>
+    {{/each}}
+  </select>
+</label>
+
+
+<label>Question count</label>
+<input name="questionCount" type="number" value="10" />
+
+<label>Duration (mins)</label>
+<input name="durationMinutes" type="number" value="30" />
+
+<label>Type</label>
+<select name="quizType">
+  <option value="trial">Trial</option>
+  <option value="paid">Paid</option>
+</select>
 
     <button>Create Quiz Rule</button>
   </form>
@@ -545,13 +566,21 @@
 
   <h3>Existing Rules</h3>
   <ul>
-    {{#each quizRules}}
-      <li>
-        Grade {{grade}} – {{subject}} –
-        {{title}}
-        {{#if isTrial}}<span class="badge">Trial</span>{{else}}<span class="badge">Paid</span>{{/if}}
-      </li>
-    {{/each}}
+ {{#each quizRules}}
+<li>
+  Grade {{grade}} – {{module}} – {{quizTitle}}
+  <span class="badge">{{quizType}}</span>
+
+  <form
+    method="POST"
+    action="/admin/orgs/{{../org.slug}}/quiz-rules/{{_id}}/apply"
+    style="display:inline"
+  >
+    <button type="submit">Apply to existing students</button>
+  </form>
+</li>
+{{/each}}
+
   </ul>
 </section>
 {{/if}}
