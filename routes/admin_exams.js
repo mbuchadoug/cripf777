@@ -1,0 +1,93 @@
+import { Router } from "express";
+import mongoose from "mongoose";
+import ExamInstance from "../models/examInstance.js";
+import Question from "../models/question.js";
+
+const router = Router();
+
+/**
+ * 🔧 FIX EXISTING EXAM TITLES
+ * GET /admin/exams/fix-titles
+ *
+ * - Reads parent comprehension question
+ * - Sets ExamInstance.title & quizTitle correctly
+ */
+router.get("/exams/fix-titles", async (req, res) => {
+  try {
+    const exams = await ExamInstance.find({
+      questionIds: { $elemMatch: { $regex: /^parent:/ } }
+    });
+
+    let updated = [];
+    let skipped = [];
+
+    for (const exam of exams) {
+      const parentToken = exam.questionIds.find(
+        q => typeof q === "string" && q.startsWith("parent:")
+      );
+
+      if (!parentToken) {
+        skipped.push({ examId: exam.examId, reason: "no parent token" });
+        continue;
+      }
+
+      const parentId = parentToken.split(":")[1];
+      if (!mongoose.isValidObjectId(parentId)) {
+        skipped.push({ examId: exam.examId, reason: "invalid parent id" });
+        continue;
+      }
+
+      const parentQuestion = await Question.findById(parentId)
+        .select("text")
+        .lean();
+
+      if (!parentQuestion?.text) {
+        skipped.push({ examId: exam.examId, reason: "parent text missing" });
+        continue;
+      }
+
+      const realTitle = parentQuestion.text.trim();
+
+      // Skip if already correct
+      if (
+        exam.title === realTitle &&
+        exam.quizTitle === realTitle
+      ) {
+        skipped.push({ examId: exam.examId, reason: "already correct" });
+        continue;
+      }
+
+      await ExamInstance.updateOne(
+        { _id: exam._id },
+        {
+          $set: {
+            title: realTitle,
+            quizTitle: realTitle
+          }
+        }
+      );
+
+      updated.push({
+        examId: exam.examId,
+        newTitle: realTitle
+      });
+    }
+
+    return res.json({
+      success: true,
+      totalExamInstances: exams.length,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      updated,
+      skipped
+    });
+  } catch (err) {
+    console.error("[fix-exam-titles]", err);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fix exam titles"
+    });
+  }
+});
+
+export default router;

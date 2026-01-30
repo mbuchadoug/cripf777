@@ -14,7 +14,7 @@ import Handlebars from "handlebars";
 import consumerRoutes from "./routes/consumer.js";
 import consumerQuizRoutes from "./routes/consumer_quiz.js";
 import adminQuizRules from "./routes/admin_quiz_rules.js";
-
+import adminExamRoutes from "./routes/admin_exams.js";
 
 import parentRoutes from "./routes/parent.js";
 
@@ -289,6 +289,10 @@ app.use("/lms", lmsRoutes);
 app.use("/admin", lmsImportRoutes);
 app.use("/consumer", consumerRoutes);
 app.use("/consumer", consumerQuizRoutes);
+
+
+app.use("/admin", adminExamRoutes);
+
 
 app.use(adminQuizRules);
 app.use(parentRoutes);
