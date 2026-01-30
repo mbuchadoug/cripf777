@@ -1118,10 +1118,13 @@ savedCertificate = await Certificate.create({
 
   // ✅ STORE REAL QUIZ TITLE
 quizTitle:
-  exam?.title ||               // ✅ SOURCE OF TRUTH
+  exam?.title ||
   exam?.quizTitle ||
   quizTitleFromClient ||
-  null,
+  (exam?.module
+    ? exam.module.charAt(0).toUpperCase() + exam.module.slice(1) + " Quiz"
+    : "Quiz"),
+
 
 
   // optional but useful
