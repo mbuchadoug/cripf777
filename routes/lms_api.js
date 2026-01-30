@@ -1117,12 +1117,12 @@ savedCertificate = await Certificate.create({
 
 
   // ✅ STORE REAL QUIZ TITLE
-  quizTitle:
-    quizTitleFromClient ||
-    exam?.title ||
-    exam?.quizTitle ||
-    exam?.name ||
-    null,
+quizTitle:
+  exam?.title ||               // ✅ SOURCE OF TRUTH
+  exam?.quizTitle ||
+  quizTitleFromClient ||
+  null,
+
 
   // optional but useful
   moduleName: (exam && exam.module) ? exam.module : (moduleKey || null),

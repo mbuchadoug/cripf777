@@ -1232,7 +1232,8 @@ let {
   count = 20,
   expiresMinutes = 60,
   durationMinutes = 30,   // ✅ ADD THIS
-  passageId = null
+  passageId = null,
+    quizTitle = null
 } = req.body || {};
 
 
@@ -1255,6 +1256,13 @@ modules = modules.map(m => String(m).trim().toLowerCase());
 const moduleKey = modules[0];
 
 
+const resolvedQuizTitle =
+  quizTitle ||
+  (passageId
+    ? "Comprehension Quiz"
+    : moduleKey
+      ? moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz"
+      : "Quiz");
 
 
 // 🔹 Load org FIRST
@@ -1391,25 +1399,25 @@ if (org.type !== "school") {
     ? new Date(Date.now() + Number(expiresMinutes) * 60 * 1000)
     : null;
 
-            await ExamInstance.create({
-              examId,
-              org: org._id,
-              module: moduleKey,
-            
-                assignmentId, 
-              //user: mongoose.Types.ObjectId(uId),
-              userId: mongoose.Types.ObjectId(uId),
- isOnboarding: false,
-              // store string ids and parent marker (ExamInstance schema must accept Mixed or [String])
-              questionIds,
-              choicesOrder,
-              targetRole: effectiveTargetRole,
-               durationMinutes,  
- // "student" or "teacher"
-              expiresAt,
-              createdAt: new Date(),
-              createdByIp: req.ip,
-            });
+await ExamInstance.create({
+  examId,
+  org: org._id,
+  module: moduleKey,
+
+  title: resolvedQuizTitle,     // ✅ ADD
+  quizTitle: resolvedQuizTitle, // ✅ ADD
+
+  assignmentId,
+  userId: mongoose.Types.ObjectId(uId),
+  isOnboarding: false,
+  questionIds,
+  choicesOrder,
+  targetRole: effectiveTargetRole,
+  durationMinutes,
+  expiresAt,
+  createdAt: new Date()
+});
+
 
           
 
@@ -1506,22 +1514,25 @@ const match = {
     : null;
 
 
-          await ExamInstance.create({
-            examId,
-            org: org._id,
-            module: moduleKey,
-              assignmentId, 
-            userId: mongoose.Types.ObjectId(uId),
-            questionIds,
-             isOnboarding: false,
-          targetRole: effectiveTargetRole,
+    await ExamInstance.create({
+  examId,
+  org: org._id,
+  module: moduleKey,
 
-            durationMinutes,  
-            choicesOrder,
-            expiresAt,
-            createdAt: new Date(),
-            createdByIp: req.ip,
-          });
+  title: resolvedQuizTitle,     // ✅ ADD
+  quizTitle: resolvedQuizTitle, // ✅ ADD
+
+  assignmentId,
+  userId: mongoose.Types.ObjectId(uId),
+  questionIds,
+  isOnboarding: false,
+  targetRole: effectiveTargetRole,
+  durationMinutes,
+  choicesOrder,
+  expiresAt,
+  createdAt: new Date()
+});
+
 
          
           const url = `${baseUrl}/org/${org.slug}/quiz?examId=${examId}`;

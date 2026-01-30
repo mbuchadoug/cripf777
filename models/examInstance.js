@@ -84,6 +84,19 @@ targetRole: {
   default: null
 }
 ,
+
+  // 🔥 REQUIRED: human-readable quiz title
+  title: {
+    type: String,
+    index: true
+  },
+
+  // optional backward-compat / safety
+  quizTitle: {
+    type: String,
+    index: true
+  },
+
     // status: pending/finished/expired etc.
     status: { type: String, default: "pending", index: true },
 
