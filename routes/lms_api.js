@@ -132,6 +132,31 @@ if (examIdParam && req.user) {
     if (examIdParam) {
       try {
         const exam = await ExamInstance.findOne({ examId: examIdParam }).lean();
+
+        // 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
+let resolvedQuizTitle = exam.quizTitle || exam.title || null;
+
+try {
+  const parentToken = (exam.questionIds || []).find(q =>
+    typeof q === "string" && q.startsWith("parent:")
+  );
+
+  if (parentToken) {
+    const parentId = parentToken.split(":")[1];
+    if (mongoose.isValidObjectId(parentId)) {
+      const parentQuestion = await Question.findById(parentId)
+        .select("text")
+        .lean();
+
+      if (parentQuestion?.text) {
+        resolvedQuizTitle = parentQuestion.text.trim();
+      }
+    }
+  }
+} catch (e) {
+  console.warn("[quiz title] failed to resolve parent title", e.message);
+}
+
         if (!exam) return res.status(404).json({ error: "exam instance not found" });
 
         const rawList = normalizeIds(exam.questionIds || []);
@@ -388,11 +413,13 @@ if (examIdParam && req.user) {
        // return res.json({ examId: exam.examId, series });
 return res.json({
   examId: exam.examId,
+  quizTitle: resolvedQuizTitle, // ✅ REAL TITLE
   expiresAt: exam.expiresAt || null,
-  durationMinutes: exam.durationMinutes || null, // ✅ ADD THIS
+  durationMinutes: exam.durationMinutes || null,
   serverTime: new Date(),
   series
 });
+
 
 
       } catch (e) {
@@ -1116,13 +1143,8 @@ savedCertificate = await Certificate.create({
   examId: finalExamId,
 
   // 🔑 SINGLE SOURCE OF TRUTH
-  quizTitle:
-    exam?.quizTitle ||
-    exam?.title ||
-    quizTitleFromClient ||
-    (exam?.module
-      ? exam.module.charAt(0).toUpperCase() + exam.module.slice(1) + " Quiz"
-      : "Quiz"),
+  quizTitle: resolvedQuizTitle || "Quiz",
+
 
   moduleName: exam?.module || moduleKey || null,
 
@@ -1213,6 +1235,34 @@ if (attempt?.startedAt) {
 }
 
 
+// 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
+let resolvedQuizTitle =
+  exam?.quizTitle ||
+  exam?.title ||
+  null;
+
+try {
+  const parentToken = (exam?.questionIds || []).find(
+    q => typeof q === "string" && q.startsWith("parent:")
+  );
+
+  if (parentToken) {
+    const parentId = parentToken.split(":")[1];
+
+    if (mongoose.isValidObjectId(parentId)) {
+      const parentQuestion = await Question.findById(parentId)
+        .select("text")
+        .lean();
+
+      if (parentQuestion?.text) {
+        resolvedQuizTitle = parentQuestion.text.trim();
+      }
+    }
+  }
+} catch (e) {
+  console.warn("[attempt] failed to resolve quiz title", e.message);
+}
+
   
 
 const attemptDoc = {
@@ -1241,6 +1291,7 @@ const attemptDoc = {
  maxScore,
   passed: !!passed,
   status: "finished",
+quizTitle: resolvedQuizTitle || "Quiz",
 
   startedAt: attempt?.startedAt,   // ✅ do NOT overwrite
   finishedAt: now,
