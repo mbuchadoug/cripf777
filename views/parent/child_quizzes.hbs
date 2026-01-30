@@ -10,9 +10,10 @@
     Status: {{status}}<br>
 
    {{#if (eq status "pending")}}
-  <a href="/org/{{org.slug}}/quiz?examId={{examId}}">
-    ▶ Start Quiz
-  </a>
+ <a href="/lms/quiz?examId={{examId}}&org={{org.slug}}">
+  ▶ Start Quiz
+</a>
+
 {{/if}}
 
   </div>
