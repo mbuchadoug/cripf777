@@ -88,38 +88,45 @@ const user = await User.findOneAndUpdate(
 // ===============================
 // 🏫 AUTO-ENROL INTO CRIPFCNT SCHOOL
 // ===============================
-const ORG_SLUG = "cripfcnt-school";
+// ❗ ONLY for NON-PARENT users
 
-// 1️⃣ Ensure org exists
-let org = await Organization.findOne({ slug: ORG_SLUG });
-if (!org) {
-  org = await Organization.create({
-    name: "CRIPFCNT",
-    slug: ORG_SLUG,
-    type: "school"
+if (user.role !== "parent") {
+
+  const ORG_SLUG = "cripfcnt-school";
+
+  // 1️⃣ Ensure org exists
+  let org = await Organization.findOne({ slug: ORG_SLUG });
+  if (!org) {
+    org = await Organization.create({
+      name: "CRIPFCNT",
+      slug: ORG_SLUG,
+      type: "school"
+    });
+  }
+
+  // 2️⃣ Ensure membership exists
+  const existingMembership = await OrgMembership.findOne({
+    org: org._id,
+    user: user._id
   });
-}
 
-// 2️⃣ Ensure membership exists
-const existingMembership = await OrgMembership.findOne({
-  org: org._id,
-  user: user._id
-});
+  if (!existingMembership) {
+    await OrgMembership.create({
+      org: org._id,
+      user: user._id,
+      role: "employee",
+      joinedAt: new Date(),
+      isOnboardingComplete: false // 🔐 REQUIRED
+    });
 
-if (!existingMembership) {
-await OrgMembership.create({
-  org: org._id,
-  user: user._id,
-  role: "employee",
-  joinedAt: new Date(),
-  isOnboardingComplete: false // 🔐 REQUIRED
-});
+    // 🧠 Onboarding quizzes are SCHOOL ONLY
+    await assignOnboardingQuizzes({
+      orgId: org._id,
+      userId: user._id
+    });
+  }
 
-// 🧠 ASSIGN ONBOARDING
-await assignOnboardingQuizzes({
-  orgId: org._id,
-  userId: user._id
-});
+
 
 }
 

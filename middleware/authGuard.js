@@ -1,33 +1,45 @@
+import Organization from "../models/organization.js";
+import { syncQuizRulesForUser } from "../services/quizRuleSync.js";
+
+
 // middleware/authGuard.js
-export function ensureAuth(req, res, next) {
+export async function ensureAuth(req, res, next) {
   try {
     if (req.isAuthenticated && req.isAuthenticated()) {
-      return next(); // user is logged in → allow
+
+      // 🔁 AUTO-SYNC HOME LEARNING QUIZZES
+      if (req.user.role === "student" && req.user.grade) {
+        const homeOrg = await Organization.findOne({
+          slug: "cripfcnt-home"
+        }).lean();
+
+        if (homeOrg) {
+          await syncQuizRulesForUser({
+            orgId: homeOrg._id,
+            userId: req.user._id,
+            grade: req.user.grade
+          });
+        }
+      }
+
+      return next();
     }
 
-    // save where the user was trying to go (session fallback)
-    // prefer originalUrl (path + query)
+    // ---------- NOT AUTHENTICATED ----------
     const dest = String(req.originalUrl || req.url || "/");
 
-    // store in session too (best-effort)
     if (req.session) {
       try {
         req.session.returnTo = dest;
       } catch (e) {
-        // ignore session errors
-        console.warn("[ensureAuth] failed to set session.returnTo:", e && e.message);
+        console.warn("[ensureAuth] failed to set returnTo:", e?.message);
       }
     }
 
-    // Build a safe redirect URL to /auth/google and include a returnTo query param.
-    // This is helpful when session cookie is not preserved or if you run multiple instances.
     const encoded = encodeURIComponent(dest);
-    const authUrl = `/auth/google?returnTo=${encoded}`;
-
-    return res.redirect(authUrl);
+    return res.redirect(`/auth/google?returnTo=${encoded}`);
   } catch (err) {
-    // In case something unexpected fails, fallback to sending user to auth page
-    console.warn("[ensureAuth] unexpected error:", err && err.message);
+    console.warn("[ensureAuth] unexpected error:", err?.message);
     return res.redirect("/auth/google");
   }
 }
