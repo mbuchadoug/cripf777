@@ -1101,6 +1101,35 @@ const percentage = Math.round((score / Math.max(1, maxScore)) * 100);
     const passThreshold = parseInt(process.env.QUIZ_PASS_THRESHOLD || "60", 10);
     const passed = percentage >= passThreshold;
 
+
+    // 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
+let resolvedQuizTitle =
+  exam?.quizTitle ||
+  exam?.title ||
+  null;
+
+try {
+  const parentToken = (exam?.questionIds || []).find(
+    q => typeof q === "string" && q.startsWith("parent:")
+  );
+
+  if (parentToken) {
+    const parentId = parentToken.split(":")[1];
+
+    if (mongoose.isValidObjectId(parentId)) {
+      const parentQuestion = await Question.findById(parentId)
+        .select("text")
+        .lean();
+
+      if (parentQuestion?.text) {
+        resolvedQuizTitle = parentQuestion.text.trim();
+      }
+    }
+  }
+} catch (e) {
+  console.warn("[attempt] failed to resolve quiz title", e.message);
+}
+
     // ===============================
 // 🎓 SAVE CERTIFICATE (NO PDF)
 // ===============================
@@ -1236,32 +1265,6 @@ if (attempt?.startedAt) {
 
 
 // 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
-let resolvedQuizTitle =
-  exam?.quizTitle ||
-  exam?.title ||
-  null;
-
-try {
-  const parentToken = (exam?.questionIds || []).find(
-    q => typeof q === "string" && q.startsWith("parent:")
-  );
-
-  if (parentToken) {
-    const parentId = parentToken.split(":")[1];
-
-    if (mongoose.isValidObjectId(parentId)) {
-      const parentQuestion = await Question.findById(parentId)
-        .select("text")
-        .lean();
-
-      if (parentQuestion?.text) {
-        resolvedQuizTitle = parentQuestion.text.trim();
-      }
-    }
-  }
-} catch (e) {
-  console.warn("[attempt] failed to resolve quiz title", e.message);
-}
 
   
 

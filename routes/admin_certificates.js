@@ -6,6 +6,10 @@ import { ensureAuth } from "../middleware/authGuard.js";
 import path from "path";
 import Attempt from "../models/attempt.js"; // ADD THIS
 import { allowPlatformAdminOrOrgManager } from "../middleware/orgAccess.js";
+import mongoose from "mongoose";
+import ExamInstance from "../models/examInstance.js";
+import Question from "../models/question.js";
+
 
 import fs from "fs";
 import { generateCertificatePdf } from "../routes/lms_api.js"; // 👈 export it (next step)
@@ -175,6 +179,113 @@ router.get(
       console.error("[org certificates] error:", err);
       res.status(500).send("failed");
     }
+  }
+);
+
+
+/**
+ * 🔧 ADMIN MAINTENANCE
+ * Fix ONLY bad certificate titles
+ *
+ * GET /admin/certificates/fix-titles
+ */
+router.get(
+  "/admin/certificates/fix-titles",
+  ensureAuth,
+  async (req, res) => {
+    // 🔐 hard safety
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).send("Forbidden");
+    }
+
+    // 🎯 ONLY these titles are considered broken
+    const BAD_TITLES = new Set([
+      "Comprehension Quiz",
+      "Responsibility Quiz",
+      "responsibility",
+      "consciousness"
+    ]);
+
+    const certs = await Certificate.find({}).lean();
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (const cert of certs) {
+      const currentTitle =
+        (cert.quizTitle || "").trim() ||
+        (cert.courseTitle || "").trim();
+
+      // ⛔ Skip anything that is NOT explicitly bad
+      if (!BAD_TITLES.has(currentTitle)) {
+        skipped++;
+        continue;
+      }
+
+      if (!cert.examId) {
+        skipped++;
+        continue;
+      }
+
+      const exam = await ExamInstance.findOne({ examId: cert.examId }).lean();
+      if (!exam) {
+        skipped++;
+        continue;
+      }
+
+      let resolvedTitle =
+        exam.quizTitle ||
+        exam.title ||
+        null;
+
+      // 🔑 SOURCE OF TRUTH → parent comprehension question
+      try {
+        const parentToken = (exam.questionIds || []).find(
+          q => typeof q === "string" && q.startsWith("parent:")
+        );
+
+        if (parentToken) {
+          const parentId = parentToken.split(":")[1];
+
+          if (mongoose.isValidObjectId(parentId)) {
+            const parent = await Question.findById(parentId)
+              .select("text")
+              .lean();
+
+            if (parent?.text) {
+              resolvedTitle = parent.text.trim();
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[cert fix] failed", cert._id, e.message);
+      }
+
+      if (!resolvedTitle) {
+        skipped++;
+        continue;
+      }
+
+      // ✅ Update BOTH fields (critical)
+      await Certificate.updateOne(
+        { _id: cert._id },
+        {
+          $set: {
+            quizTitle: resolvedTitle,
+            courseTitle: resolvedTitle
+          }
+        }
+      );
+
+      updated++;
+    }
+
+    return res.json({
+      success: true,
+      updated,
+      skipped,
+      fixedTitles: Array.from(BAD_TITLES)
+    });
   }
 );
 
