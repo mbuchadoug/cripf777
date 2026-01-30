@@ -1111,39 +1111,28 @@ if (passed) {
 
 
 savedCertificate = await Certificate.create({
-  userId: (req.user && req.user._id)
-    ? req.user._id
-    : (exam && exam.user) || null,
-
-  orgId: (exam && exam.org) || null,
+  userId: req.user?._id,
+  orgId: exam?.org || null,
   examId: finalExamId,
 
+  // 🔑 SINGLE SOURCE OF TRUTH
+  quizTitle:
+    exam?.quizTitle ||
+    exam?.title ||
+    quizTitleFromClient ||
+    (exam?.module
+      ? exam.module.charAt(0).toUpperCase() + exam.module.slice(1) + " Quiz"
+      : "Quiz"),
 
-  // ✅ STORE REAL QUIZ TITLE
-quizTitle:
-  savedCertificate?.quizTitle ||
-  exam?.title ||
-  exam?.quizTitle ||
-  quizTitleFromClient ||
-  (exam?.module
-    ? exam.module.charAt(0).toUpperCase() + exam.module.slice(1) + " Quiz"
-    : "Quiz"),
+  moduleName: exam?.module || moduleKey || null,
 
-
-
-
-  // optional but useful
-  moduleName: (exam && exam.module) ? exam.module : (moduleKey || null),
-
-  // legacy support
-  courseTitle: (exam && exam.module)
-    ? exam.module
-    : (moduleKey || "Quiz"),
+  courseTitle: exam?.module || moduleKey || "Quiz",
 
   score,
   percentage,
-  serial,
+  serial
 });
+
 
   } catch (e) {
     console.error("[quiz/submit] certificate save failed:", e);

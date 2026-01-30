@@ -854,9 +854,11 @@ const moduleKey = typeof ex.module === "string" && ex.module.trim()
 }
 
 
-     let quizTitle =
+  let quizTitle =
+  ex.quizTitle ||
   ex.title ||
   (moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz");
+
 
 
       let questionCount = 0;
