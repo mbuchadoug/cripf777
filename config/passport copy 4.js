@@ -61,22 +61,15 @@ passport.use(
           const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
 
 const updateDoc = {
-  $set: update,
-  $setOnInsert: {
-    createdAt: new Date()
-  }
+  $set: update
 };
 
-// 🔥 FORCE parent role ALWAYS when coming from /start
+// 🔥 FORCE parent role when coming from /start
 if (isParentSignup) {
   updateDoc.$set.role = "parent";
   updateDoc.$set.accountType = "parent";
   updateDoc.$set.consumerEnabled = true;
-
-  // 🔐 critical: ensure role is never overwritten later
-  updateDoc.$setOnInsert.role = "parent";
 }
-
 
 const user = await User.findOneAndUpdate(
   { googleId },

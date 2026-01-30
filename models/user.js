@@ -16,10 +16,19 @@ const UserSchema = new mongoose.Schema({
     default: null
   },
 
-  role: {
-    type: String,
-    enum: ["student", "teacher", "employee", "org_admin", "super_admin",'parent']
-  },
+role: {
+  type: String,
+  enum: [
+    "student",
+    "teacher",
+    "employee",
+    "org_admin",
+    "super_admin",
+    "parent"   // 👈 parent must be FIRST-CLASS
+  ],
+  default: "parent" // ✅ ensures safety
+},
+
 
   displayName: String,
   firstName: String,
