@@ -125,7 +125,7 @@ function renderPage(res, view, req, canonicalPath, extra = {}) {
     ...extra,
   });
 }
-hbs.registerHelper("subtract", (a, b) => a - b);
+
 
 const hbsHelpers = {
   eq: (a, b) => a === b,
@@ -139,6 +139,12 @@ const hbsHelpers = {
   not: (v) => !v,
   isNull: (v) => v === null || v === undefined,
   isNumber: (v) => typeof v === "number",
+subtract: (a, b) => {
+  const x = Number(a);
+  const y = Number(b);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+  return x - y;
+},
 
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
