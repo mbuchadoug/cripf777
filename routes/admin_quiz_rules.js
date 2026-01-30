@@ -10,6 +10,26 @@ const router = Router();
 // VIEW QUIZ RULES (HOME SCHOOL ONLY)
 // GET /admin/orgs/:slug/quiz-rules
 // ----------------------------------
+// ----------------------------------
+// 🔐 Platform admin email guard
+// ----------------------------------
+function ensureAdminEmails(req, res, next) {
+  const adminSet = new Set(
+    (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const email = String(req.user?.email || "").toLowerCase();
+
+  if (!adminSet.has(email)) {
+    return res.status(403).send("Admins only");
+  }
+
+  next();
+}
+
 router.get(
   "/admin/orgs/:slug/quiz-rules",
   ensureAuth,
