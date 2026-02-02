@@ -92,8 +92,10 @@ const pollUrl = payment.pollUrl;
     // 🔎 Poll Paynow
 const status = await paynow.pollTransaction(pollUrl);
 
+console.log("[paynow poll] RESULT:", status);
 
-    if (status.paid === true) {
+   if (status.status === "Paid") {
+
   // 1️⃣ Mark payment
   payment.status = "paid";
   payment.paidAt = new Date();
