@@ -153,7 +153,8 @@ await User.updateMany(
 }
 
 
-    if (status.status === "failed") {
+    if (String(status.status).toLowerCase() === "failed") {
+
       payment.status = "failed";
       await payment.save();
     }
