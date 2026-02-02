@@ -10,12 +10,13 @@ export async function assignQuizFromRule({ rule, userId, orgId }) {
   if (!student) return;
 
   // 🔎 Check payment if PAID quiz
-  if (rule.quizType === "paid") {
-    const parent = await User.findById(student.parentUserId).lean();
-    if (!parent || parent.subscriptionStatus !== "paid") {
-      return; // ⛔ DO NOT ASSIGN
-    }
+if (rule.quizType === "paid") {
+  const parent = await User.findById(student.parentUserId).lean();
+  if (!parent?.subscriptionStatus || parent.subscriptionStatus !== "paid") {
+    return;
   }
+}
+
 
   // 🚫 Prevent duplicates
   const exists = await ExamInstance.findOne({

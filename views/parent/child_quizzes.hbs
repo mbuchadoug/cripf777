@@ -195,9 +195,8 @@
   <!-- HISTORY -->
 <!-- HISTORY -->
 <div id="history" class="panel tab-content hidden">
-  {{#if quizzes.length}}
-    {{#each quizzes}}
-      {{#if (eq status "finished")}}
+  {{#if attempts.length}}
+    {{#each attempts}}
       <div class="card">
         <strong>{{quizTitle}}</strong>
 
@@ -217,12 +216,12 @@
           </a>
         </div>
       </div>
-      {{/if}}
     {{/each}}
   {{else}}
     <div class="empty">No quiz history yet.</div>
   {{/if}}
 </div>
+
 
 
   <!-- CERTIFICATES -->

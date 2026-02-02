@@ -197,80 +197,62 @@ router.get(
   canActAsParent,
   async (req, res) => {
 
-    const parent = await User.findById(req.user._id).lean();
-    if (!parent || parent.subscriptionStatus !== "paid") {
-      return res.redirect("/parent/dashboard");
-    }
+ // 🔐 Require paid subscription
+const freshUser = await User.findById(req.user._id).lean();
 
-    const child = await User.findOne({
-      _id: req.params.childId,
-      parentUserId: parent._id,
-      role: "student"
-    }).lean();
+if (!freshUser || freshUser.subscriptionStatus !== "paid") {
+  return res.redirect("/parent/dashboard");
+}
 
-    if (!child) {
-      return res.status(404).send("Child not found");
-    }
 
-    const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+  const { childId } = req.params;
 
-    /* -----------------------------
-       ASSIGNED QUIZZES
-    ----------------------------- */
-    const exams = await ExamInstance.find({
-      userId: child._id,
-      org: org._id
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+  // 🔒 ensure child belongs to parent
+  const child = await User.findOne({
+    _id: childId,
+    parentUserId: req.user._id,
+    role: "student"
+  }).lean();
 
-    const quizzes = exams.map(ex => {
-      let status = "pending";
-      if (ex.finishedAt) status = "finished";
-
-      return {
-        _id: ex._id,
-        examId: ex.examId,
-        quizTitle: ex.quizTitle,
-        module: ex.module,
-        status
-      };
-    });
-
-    /* -----------------------------
-       ATTEMPTS (HISTORY)
-    ----------------------------- */
-    const attempts = await Attempt.find({
-      userId: child._id,
-      organization: org._id
-    })
-      .sort({ finishedAt: -1 })
-      .lean();
-
-    /* -----------------------------
-       CERTIFICATES
-    ----------------------------- */
-    const certificates = await Certificate.find({
-      userId: child._id,
-      orgId: org._id
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    /* -----------------------------
-       RENDER
-    ----------------------------- */
-    res.render("parent/child_quizzes", {
-      user: parent,
-      child,
-      org,
-      quizzes,
-      attempts,
-      certificates
-    });
+  if (!child) {
+    return res.status(404).send("Child not found");
   }
-);
 
+  const quizzes = await ExamInstance.find({
+    userId: child._id
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+
+    const certificates = await Certificate.find({
+  userId: child._id
+})
+.sort({ createdAt: -1 })
+.lean();
+
+const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+const attempts = await Attempt.find({
+  userId: child._id,
+  status: "finished"
+})
+.sort({ finishedAt: 1 })
+.select("percentage")
+.lean();
+
+const progressPoints = attempts.map(a => a.percentage);
+
+res.render("parent/child_quizzes", {
+  user: req.user,
+  child,
+  quizzes,
+  certificates,
+  progressPoints,
+  org
+});
+
+
+});
 
 
 export default router;

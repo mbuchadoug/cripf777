@@ -137,17 +137,38 @@ await User.updateMany(
   });
 
   // 6️⃣ Assign quizzes
-  for (const child of children) {
-    for (const rule of paidRules) {
-      if (rule.grade === child.grade) {
-        await assignQuizFromRule({
-          rule,
-          userId: child._id,
-          orgId: org._id
-        });
-      }
+// 6️⃣ FORCE-ASSIGN PAID QUIZZES AFTER PAYMENT
+for (const child of children) {
+  const rules = await QuizRule.find({
+    org: org._id,
+    grade: child.grade,
+    quizType: "paid",
+    enabled: true
+  });
+
+  for (const rule of rules) {
+    // ⚠️ Bypass payment check — parent JUST paid
+    const exists = await ExamInstance.findOne({
+      userId: child._id,
+      ruleId: rule._id
+    });
+
+    if (!exists) {
+      await ExamInstance.create({
+        examId: crypto.randomUUID(),
+        org: org._id,
+        userId: child._id,
+        ruleId: rule._id,
+        module: rule.module,
+        quizTitle: rule.quizTitle,
+        durationMinutes: rule.durationMinutes,
+        isOnboarding: false,
+        createdAt: new Date()
+      });
     }
   }
+}
+
 
   console.log("[paynow] paid quizzes assigned for parent:", parent._id);
 }
