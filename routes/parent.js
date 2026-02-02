@@ -194,7 +194,13 @@ router.get(
   canActAsParent,
   async (req, res) => {
 
- 
+ // 🔐 Require paid subscription
+if (req.user.subscriptionStatus !== "paid") {
+  return res.render("payments/upgrade_required", {
+    user: req.user
+  });
+}
+
   const { childId } = req.params;
 
   // 🔒 ensure child belongs to parent

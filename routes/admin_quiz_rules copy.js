@@ -102,37 +102,35 @@ if (!quiz) {
 }
 
 
- const rule = await QuizRule.create({
+  await QuizRule.create({
   org: org._id,
   grade: Number(grade),
-  subject: subject.toLowerCase(),
+  subject: subject.toLowerCase(),   // 👈 KEY
   module: module?.toLowerCase(),
 
   quizQuestionId: quiz._id,
   quizTitle: quiz.text,
 
-  quizType, // "trial" or "paid"
+  quizType,
   questionCount: Number(questionCount) || 10,
   durationMinutes: Number(durationMinutes) || 30,
 
   enabled: true
 });
 
-// 🔁 ONLY auto-assign TRIAL quizzes immediately
-if (quizType === "trial") {
-  const students = await User.find({
-    organization: org._id,
-    role: "student",
-    grade: Number(grade)
-  });
 
-  for (const student of students) {
-    await assignQuizFromRule({
-      rule,
-      userId: student._id,
-      orgId: org._id
-    });
-  }
+const students = await User.find({
+  organization: org._id,
+  role: "student",
+  grade: Number(grade)
+});
+
+for (const student of students) {
+  await assignQuizFromRule({
+    rule,
+    userId: student._id,
+    orgId: org._id
+  });
 }
 
 

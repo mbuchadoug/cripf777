@@ -170,12 +170,18 @@
       ➕ Add Child
     </a>
 
-    <form method="POST" action="/payments/paynow/init">
-  <input type="hidden" name="amount" value="5">
-  <button class="btn">
-    💳 Pay Fees (EcoCash / OneMoney)
-  </button>
-</form>
+  {{#if (eq user.subscriptionStatus "paid")}}
+  <div class="note">
+    ✅ Subscription active — full access enabled
+  </div>
+{{else}}
+  <form method="POST" action="/payments/paynow/init">
+    <input type="hidden" name="amount" value="1">
+    <button class="btn">
+      💳 Unlock Full Access - $1
+    </button>
+  </form>
+{{/if}}
 
   </div>
 

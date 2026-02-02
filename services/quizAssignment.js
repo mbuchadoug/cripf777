@@ -1,44 +1,60 @@
+import mongoose from "mongoose";
 import crypto from "crypto";
 import ExamInstance from "../models/examInstance.js";
+import User from "../models/user.js";
 import Question from "../models/question.js";
-import Notification from "../models/notification.js";
 
 export async function assignQuizFromRule({ rule, userId, orgId }) {
-  const quiz = await Question.findById(rule.quizQuestionId).lean();
-  if (!quiz) return;
+  // 🔎 Load child
+  const student = await User.findById(userId).lean();
+  if (!student) return;
 
+  // 🔎 Check payment if PAID quiz
+  if (rule.quizType === "paid") {
+    const parent = await User.findById(student.parentUserId).lean();
+    if (!parent || parent.subscriptionStatus !== "paid") {
+      return; // ⛔ DO NOT ASSIGN
+    }
+  }
+
+  // 🚫 Prevent duplicates
   const exists = await ExamInstance.findOne({
-    org: orgId,
     userId,
-    quizTitle: quiz.text
-  });
+    ruleId: rule._id
+  }).lean();
 
   if (exists) return;
 
- await ExamInstance.create({
-  examId: crypto.randomUUID(),
-  assignmentId: crypto.randomUUID(),
-  org: orgId,
-  userId,
+  // 🔎 Load quiz question (parent comprehension)
+  const parentQuestion = await Question.findById(rule.quizQuestionId).lean();
+  if (!parentQuestion) return;
 
-  targetRole: "student", // ✅ REQUIRED (THIS IS THE FIX)
+  const childIds = parentQuestion.questionIds || [];
+  if (!childIds.length) return;
 
-  module: quiz.module,
-  title: quiz.text,
-  quizTitle: quiz.text,
-  isTrial: rule.quizType === "trial",
-  durationMinutes: rule.durationMinutes,
-  questionIds: quiz.questionIds.map(id => String(id)),
-  createdAt: new Date()
-});
+  const questionIds = [`parent:${parentQuestion._id}`, ...childIds.map(String)];
 
+  const choicesOrder = [];
+  for (const cid of childIds) {
+    const q = await Question.findById(cid).lean();
+    const n = q?.choices?.length || 0;
+    const arr = Array.from({ length: n }, (_, i) => i);
+    choicesOrder.push(arr);
+  }
 
-await Notification.create({
-  userId,
-  type: "quiz_assigned",
-  message: `New quiz assigned: ${quiz.text}`
-});
+  await ExamInstance.create({
+    examId: crypto.randomUUID(),
+    org: orgId,
+    userId,
+    ruleId: rule._id,
 
+    module: rule.module,
+    quizTitle: rule.quizTitle,
+    questionIds,
+    choicesOrder,
 
-
+    durationMinutes: rule.durationMinutes,
+    isOnboarding: false,
+    createdAt: new Date()
+  });
 }

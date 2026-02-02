@@ -50,6 +50,7 @@ targetRole: {
   index: true
 },
 
+
     // Assigned user (optional for generic attempts)
    // user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
 
