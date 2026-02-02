@@ -4,6 +4,8 @@ import paynow from "../services/paynow.js";
 import Payment from "../models/payment.js";
 import User from "../models/user.js";
 import { ensureAuth } from "../middleware/authGuard.js";
+import Question from "../models/question.js"; // add at top if missing
+
 
 
 
@@ -154,17 +156,47 @@ for (const child of children) {
     });
 
     if (!exists) {
-      await ExamInstance.create({
-        examId: crypto.randomUUID(),
-        org: org._id,
-        userId: child._id,
-        ruleId: rule._id,
-        module: rule.module,
-        quizTitle: rule.quizTitle,
-        durationMinutes: rule.durationMinutes,
-        isOnboarding: false,
-        createdAt: new Date()
-      });
+     const parentQuestion = await Question.findById(rule.quizQuestionId).lean();
+if (!parentQuestion) continue;
+
+const childIds = parentQuestion.questionIds || [];
+if (!childIds.length) continue;
+
+const questionIds = [
+  `parent:${parentQuestion._id}`,
+  ...childIds.map(String)
+];
+
+const choicesOrder = [];
+for (const cid of childIds) {
+  const q = await Question.findById(cid).lean();
+  const n = q?.choices?.length || 0;
+  choicesOrder.push(Array.from({ length: n }, (_, i) => i));
+}
+
+await ExamInstance.create({
+  examId: crypto.randomUUID(),
+
+  org: org._id,
+  userId: child._id,
+
+  // 🔴 REQUIRED
+  targetRole: "student",
+
+  ruleId: rule._id,
+
+  module: rule.module,
+  title: rule.quizTitle,
+  quizTitle: rule.quizTitle,
+
+  questionIds,
+  choicesOrder,
+
+  durationMinutes: rule.durationMinutes,
+  status: "pending",
+  isOnboarding: false
+});
+
     }
   }
 }

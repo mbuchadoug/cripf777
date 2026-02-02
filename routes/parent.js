@@ -198,9 +198,11 @@ router.get(
   async (req, res) => {
 
     const parent = await User.findById(req.user._id).lean();
-    if (!parent || parent.subscriptionStatus !== "paid") {
-      return res.redirect("/parent/dashboard");
-    }
+if (!parent) {
+  return res.redirect("/parent/dashboard");
+}
+
+
 
     const child = await User.findOne({
       _id: req.params.childId,
@@ -240,12 +242,22 @@ router.get(
     /* -----------------------------
        ATTEMPTS (HISTORY)
     ----------------------------- */
-    const attempts = await Attempt.find({
-      userId: child._id,
-      organization: org._id
-    })
-      .sort({ finishedAt: -1 })
-      .lean();
+    const rawAttempts = await Attempt.find({
+  userId: child._id,
+  organization: org._id
+})
+.sort({ finishedAt: -1 })
+.lean();
+
+const attempts = rawAttempts.map(a => ({
+  _id: a._id,
+  quizTitle: a.quizTitle || "Quiz",
+  percentage: a.maxScore
+    ? Math.round((a.score / a.maxScore) * 100)
+    : 0,
+  passed: !!a.passed
+}));
+
 
     /* -----------------------------
        CERTIFICATES
