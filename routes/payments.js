@@ -70,19 +70,26 @@ router.get("/paynow/return", ensureAuth, async (req, res) => {
 -------------------------------- */
 router.post("/paynow/result", async (req, res) => {
   try {
-    const { reference, pollurl } = req.body;
+  const { reference } = req.body;
 
-    if (!reference || !pollurl) {
-      return res.sendStatus(200);
-    }
+if (!reference) {
+  console.error("[paynow result] missing reference", req.body);
+  return res.sendStatus(200);
+}
 
-    const payment = await Payment.findOne({ reference });
-    if (!payment) {
-      return res.sendStatus(200);
-    }
+const payment = await Payment.findOne({ reference });
+if (!payment) {
+  console.error("[paynow result] payment not found:", reference);
+  return res.sendStatus(200);
+}
+
+// ✅ ALWAYS use pollUrl saved during init (this one is reliable)
+const pollUrl = payment.pollUrl;
+
 
     // 🔎 Poll Paynow
-    const status = await paynow.pollTransaction(pollurl);
+const status = await paynow.pollTransaction(pollUrl);
+
 
     if (status.paid === true) {
   // 1️⃣ Mark payment
