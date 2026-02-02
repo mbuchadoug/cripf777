@@ -196,7 +196,8 @@
   <div id="history" class="panel tab-content hidden">
     {{#if quizzes.length}}
       {{#each quizzes}}
-        {{#unless (eq status "pending")}}
+       {{#if (eq status "finished")}}
+
         <div class="card">
           <strong>{{quizTitle}}</strong>
 

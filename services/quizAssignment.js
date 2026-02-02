@@ -42,19 +42,27 @@ export async function assignQuizFromRule({ rule, userId, orgId }) {
     choicesOrder.push(arr);
   }
 
+ 
   await ExamInstance.create({
-    examId: crypto.randomUUID(),
-    org: orgId,
-    userId,
-    ruleId: rule._id,
+  examId: crypto.randomUUID(),
+  org: orgId,
+  userId,
+  ruleId: rule._id,
 
-    module: rule.module,
-    quizTitle: rule.quizTitle,
-    questionIds,
-    choicesOrder,
+  module: rule.module,
+  quizTitle: rule.quizTitle,
+  questionIds,
+  choicesOrder,
 
-    durationMinutes: rule.durationMinutes,
-    isOnboarding: false,
-    createdAt: new Date()
-  });
+  durationMinutes: rule.durationMinutes,
+  isOnboarding: false,
+
+  // 🔥🔥🔥 REQUIRED FIELDS 🔥🔥🔥
+  status: "pending",                 // THIS FIXES EVERYTHING
+  quizType: rule.quizType,            // "trial" | "paid"
+  assignedAt: new Date(),
+
+  createdAt: new Date()
+});
+
 }
