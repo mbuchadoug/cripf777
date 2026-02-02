@@ -60,9 +60,9 @@ router.post("/paynow/init", ensureAuth, async (req, res) => {
    PAYNOW RETURN (Browser redirect)
 -------------------------------- */
 router.get("/paynow/return", ensureAuth, async (req, res) => {
-  return res.render("payments/processing", {
-    message: "Processing payment, please wait..."
-  });
+  // Payment confirmation is handled asynchronously via /paynow/result
+  // Just return the parent to dashboard
+  return res.redirect("/parent/dashboard");
 });
 
 /* ------------------------------
@@ -100,6 +100,13 @@ router.post("/paynow/result", async (req, res) => {
     },
     { new: true }
   );
+
+  // 🔁 Ensure future requests reflect PAID status
+await User.updateMany(
+  { parentUserId: parent._id },
+  { $set: { consumerEnabled: true } }
+);
+
 
   // 3️⃣ Load HOME org
   const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
