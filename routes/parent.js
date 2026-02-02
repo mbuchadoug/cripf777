@@ -196,9 +196,8 @@ router.get(
 
  // 🔐 Require paid subscription
 if (req.user.subscriptionStatus !== "paid") {
-  return res.render("payments/upgrade_required", {
-    user: req.user
-  });
+ return res.redirect("/parent/dashboard");
+
 }
 
   const { childId } = req.params;
