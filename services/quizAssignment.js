@@ -54,7 +54,7 @@ if (rule.quizType === "paid") {
   quizTitle: rule.quizTitle,
   questionIds,
   choicesOrder,
-
+ targetRole: "student",
   durationMinutes: rule.durationMinutes,
   isOnboarding: false,
 
