@@ -1,4 +1,6 @@
-import Paynow from "paynow";
+import PaynowPkg from "paynow";
+
+const Paynow = PaynowPkg.default || PaynowPkg;
 
 const paynow = new Paynow(
   process.env.PAYNOW_INTEGRATION_ID,
