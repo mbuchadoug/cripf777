@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Processing Payment</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background:#0b0b0b;
+      color:#fff;
+      font-family:system-ui, Arial;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      text-align:center;
+    }
+    .box {
+      background:#141414;
+      border:1px solid #222;
+      padding:30px;
+      border-radius:14px;
+      max-width:400px;
+    }
+    .spinner {
+      margin:20px auto;
+      width:40px;
+      height:40px;
+      border:4px solid #333;
+      border-top-color:#D4AF37;
+      border-radius:50%;
+      animation:spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Processing Payment</h2>
+    <p>Please wait while we confirm your payment.</p>
+    <div class="spinner"></div>
+    <p>You’ll be redirected automatically.</p>
+  </div>
+
+  <script>
+    setTimeout(() => {
+      window.location.href = "/parent/dashboard";
+    }, 5000);
+  </script>
+</body>
+</html>
