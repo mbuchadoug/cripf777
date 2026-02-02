@@ -70,6 +70,8 @@ router.get("/paynow/return", ensureAuth, async (req, res) => {
 -------------------------------- */
 router.post("/paynow/result", async (req, res) => {
   try {
+    console.log("[paynow result] CALLBACK RECEIVED", req.body);
+
   const { reference } = req.body;
 
 if (!reference) {

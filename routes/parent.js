@@ -82,11 +82,14 @@ const unreadCount = await Notification.countDocuments({
 });
 
 
- res.render("parent/dashboard", {
-    user: req.user,
-    children,
-    unreadCount: res.locals?.unreadCount || 0
-  });
+const freshUser = await User.findById(req.user._id).lean();
+
+res.render("parent/dashboard", {
+  user: freshUser,
+  children,
+  unreadCount: res.locals?.unreadCount || 0
+});
+
 });
 
 // ----------------------------------
@@ -195,10 +198,12 @@ router.get(
   async (req, res) => {
 
  // 🔐 Require paid subscription
-if (req.user.subscriptionStatus !== "paid") {
- return res.redirect("/parent/dashboard");
+const freshUser = await User.findById(req.user._id).lean();
 
+if (!freshUser || freshUser.subscriptionStatus !== "paid") {
+  return res.redirect("/parent/dashboard");
 }
+
 
   const { childId } = req.params;
 
