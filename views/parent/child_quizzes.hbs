@@ -193,36 +193,37 @@
   </div>
 
   <!-- HISTORY -->
-  <div id="history" class="panel tab-content hidden">
-    {{#if quizzes.length}}
-      {{#each quizzes}}
-       {{#if (eq status "finished")}}
+<!-- HISTORY -->
+<div id="history" class="panel tab-content hidden">
+  {{#if quizzes.length}}
+    {{#each quizzes}}
+      {{#if (eq status "finished")}}
+      <div class="card">
+        <strong>{{quizTitle}}</strong>
 
-        <div class="card">
-          <strong>{{quizTitle}}</strong>
-
-          <div class="meta">
-            Score: {{percentage}}%
-          </div>
-
-          {{#if passed}}
-            <span class="status passed">Passed</span>
-          {{else}}
-            <span class="status failed">Failed</span>
-          {{/if}}
-
-          <div class="actions">
-            <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">
-              Review Attempt
-            </a>
-          </div>
+        <div class="meta">
+          Score: {{percentage}}%
         </div>
-        {{/unless}}
-      {{/each}}
-    {{else}}
-      <div class="empty">No quiz history yet.</div>
-    {{/if}}
-  </div>
+
+        {{#if passed}}
+          <span class="status passed">Passed</span>
+        {{else}}
+          <span class="status failed">Failed</span>
+        {{/if}}
+
+        <div class="actions">
+          <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">
+            Review Attempt
+          </a>
+        </div>
+      </div>
+      {{/if}}
+    {{/each}}
+  {{else}}
+    <div class="empty">No quiz history yet.</div>
+  {{/if}}
+</div>
+
 
   <!-- CERTIFICATES -->
   <div id="certificates" class="panel tab-content hidden">
