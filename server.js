@@ -51,6 +51,7 @@ import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
 
 import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 
+import paymentsRouter from "./routes/payments.js";
 
 
 
@@ -313,6 +314,7 @@ app.use(orgManagementRoutes);
 // ⚠️ must be before express.json()
 //app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
+app.use("/payments", paymentsRouter);
 
 app.use("/api/org", apiOrgQuizRoutes);
 app.use(scoiMarketplaceRoutes);

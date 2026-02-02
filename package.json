@@ -36,6 +36,7 @@
     "openai": "^6.6.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "paynow": "^2.2.2",
     "pdfkit": "^0.17.2",
     "puppeteer": "^19.7.2",
     "stripe": "^20.1.0",
