@@ -93,8 +93,8 @@ const pollUrl = payment.pollUrl;
 const status = await paynow.pollTransaction(pollUrl);
 
 console.log("[paynow poll] RESULT:", status);
+if (String(status.status).toLowerCase() === "paid") {
 
-   if (status.status === "Paid") {
 
   // 1️⃣ Mark payment
   payment.status = "paid";
