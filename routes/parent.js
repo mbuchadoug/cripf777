@@ -214,7 +214,11 @@ if (!parent) {
       return res.status(404).send("Child not found");
     }
 
-    const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+   const org = await Organization.findById(child.organization).lean();
+if (!org) {
+  return res.status(500).send("Child organization not found");
+}
+
 
     /* -----------------------------
        ASSIGNED QUIZZES
