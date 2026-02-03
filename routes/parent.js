@@ -598,4 +598,47 @@ if (!child) {
   }
 );
 
+
+
+
+// ⚠️ TEMP FIX — RUN ONCE THEN DELETE
+router.get(
+  "/admin/fix-quiz-titles",
+  ensureAuth,
+  async (req, res) => {
+    try {
+      const ExamInstance = (await import("../models/examInstance.js")).default;
+      const QuizRule = (await import("../models/quizRule.js")).default;
+
+      let updated = 0;
+
+      const exams = await ExamInstance.find({
+        $or: [
+          { quizTitle: { $exists: false } },
+          { quizTitle: "" },
+          { quizTitle: null }
+        ],
+        ruleId: { $exists: true }
+      });
+
+      for (const exam of exams) {
+        const rule = await QuizRule.findById(exam.ruleId).lean();
+        if (!rule?.quizTitle) continue;
+
+        exam.quizTitle = rule.quizTitle;
+        exam.title = rule.quizTitle;
+
+        await exam.save();
+        updated++;
+      }
+
+      res.send(`✅ Fixed quiz titles for ${updated} exam(s)`);
+
+    } catch (err) {
+      console.error("[fix-quiz-titles]", err);
+      res.status(500).send("Failed");
+    }
+  }
+);
+
 export default router;

@@ -14,6 +14,12 @@ subject: {
   index: true
 },
 
+quizTitle: {
+  type: String,
+  required: true
+},
+
+
   grade: {
     type: Number,
     required: true,
