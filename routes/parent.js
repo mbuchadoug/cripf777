@@ -253,11 +253,12 @@ const quizzes = exams.map(ex => {
     examId: ex.examId,
     quizTitle: ex.quizTitle,
     module: ex.module,
-    status: hasAttempt ? "finished" : "pending"
+
+    // 🔑 BOTH representations (important)
+    status: hasAttempt ? "finished" : "pending",
+    finished: hasAttempt
   };
 });
-
-
 
 
 const attempts = rawAttempts.map(a => ({

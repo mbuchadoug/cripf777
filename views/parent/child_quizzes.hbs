@@ -167,12 +167,13 @@
 {{/if}}
 
   <!-- ASSIGNED QUIZZES -->
-  <div id="assigned" class="panel tab-content">
-    {{#if quizzes.length}}
-      {{#each quizzes}}
-        {{#if (eq status "pending")}}
+<div id="assigned" class="panel tab-content">
+  {{#if quizzes.length}}
+    {{#each quizzes}}
+      {{#unless finished}}
         <div class="card">
           <strong>{{quizTitle}}</strong>
+
           <div class="meta">
             Module: {{module}}
           </div>
@@ -185,16 +186,16 @@
             </a>
           </div>
         </div>
-        {{/if}}
-      {{/each}}
-    {{else}}
-      <div class="empty">No quizzes assigned.</div>
-    {{/if}}
-  </div>
+      {{/unless}}
+    {{/each}}
+  {{else}}
+    <div class="empty">No quizzes assigned.</div>
+  {{/if}}
+</div>
+
 
   <!-- HISTORY -->
-<!-- HISTORY -->
-<div id="history" class="panel tab-content hidden">
+ <div id="history" class="panel tab-content hidden">
   {{#if attempts.length}}
     {{#each attempts}}
       <div class="card">
@@ -221,8 +222,6 @@
     <div class="empty">No quiz history yet.</div>
   {{/if}}
 </div>
-
-
 
   <!-- CERTIFICATES -->
   <div id="certificates" class="panel tab-content hidden">
@@ -251,50 +250,7 @@
 
 
 <hr>
-<h2>Certificates</h2>
 
-{{#if certificates.length}}
-<div style="
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-  gap:16px;
-">
-  {{#each certificates}}
-    <div style="
-      background:#141414;
-      border:1px solid #222;
-      border-radius:12px;
-      padding:14px;
-    ">
-      <div style="
-        background:#0f5132;
-        border-radius:8px;
-        padding:14px;
-        text-align:center;
-        font-weight:800;
-      ">
-        🎓 CERTIFICATE
-      </div>
-
-      <strong style="display:block;margin-top:10px">
-        {{quizTitle}}
-      </strong>
-
-      <small style="color:#9aa3ad">
-        {{percentage}}%
-      </small>
-
-      <div style="margin-top:8px">
-        <a href="/admin/certificates/{{_id}}/download/pdf" target="_blank">
-          Download
-        </a>
-      </div>
-    </div>
-  {{/each}}
-</div>
-{{else}}
-<p>No certificates yet.</p>
-{{/if}}
 
 </main>
 
