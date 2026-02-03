@@ -17,6 +17,7 @@ import adminQuizRules from "./routes/admin_quiz_rules.js";
 import adminExamRoutes from "./routes/admin_exams.js";
 
 import parentRoutes from "./routes/parent.js";
+import parentAttemptsRoutes from "./routes/parent_attempts.js";
 
 
 
@@ -317,6 +318,8 @@ app.use("/billing", billingRoutes);
 app.use("/payments", paymentsRouter);
 
 app.use("/api/org", apiOrgQuizRoutes);
+app.use("/", parentAttemptsRoutes);
+
 app.use(scoiMarketplaceRoutes);
 
 app.use(scoiCheckoutRoutes);
