@@ -8,6 +8,11 @@ const QuizRuleSchema = new mongoose.Schema({
     index: true,
     required: true
   },
+subject: {
+  type: String,
+  required: true,
+  index: true
+},
 
   grade: {
     type: Number,

@@ -107,7 +107,6 @@ if (!quiz) {
   grade: Number(grade),
   subject: subject.toLowerCase(),
   module: module?.toLowerCase(),
-
   quizQuestionId: quiz._id,
   quizTitle: quiz.text,
 
