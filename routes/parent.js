@@ -323,6 +323,46 @@ const certificates = await Certificate.find({
   }
 );
 
+// ----------------------------------
+// Parent review attempt (child-scoped)
+// GET /parent/children/:childId/attempts/:attemptId
+// ----------------------------------
+router.get(
+  "/parent/children/:childId/attempts/:attemptId",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const { childId, attemptId } = req.params;
+
+    if (!mongoose.isValidObjectId(attemptId)) {
+      return res.status(400).send("Invalid attempt id");
+    }
+
+    const child = await User.findOne({
+      _id: childId,
+      parentUserId: req.user._id,
+      role: "student"
+    }).lean();
+
+    if (!child) {
+      return res.status(403).send("Not allowed");
+    }
+
+    const attempt = await Attempt.findOne({
+      _id: attemptId,
+      userId: child._id
+    }).lean();
+
+    if (!attempt) {
+      return res.status(404).send("attempt not found");
+    }
+
+    const org = await Organization.findById(child.organization).lean();
+
+    // reuse existing logic by redirecting
+    return res.redirect(`/org/${org.slug}/my-attempts/${attempt._id}`);
+  }
+);
 
 
 export default router;
