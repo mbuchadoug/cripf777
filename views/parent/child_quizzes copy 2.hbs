@@ -167,33 +167,30 @@
 {{/if}}
 
   <!-- ASSIGNED QUIZZES -->
-{{#if quizzesBySubject}}
-  {{#each quizzesBySubject}}
-    <h3 style="margin-top:20px; color:var(--gold)">
-      {{@key}}
-    </h3>
+<div id="assigned" class="panel tab-content">
+  {{#if quizzes.length}}
+    {{#each quizzes}}
+      {{#unless finished}}
+        <div class="card">
+          <strong>{{quizTitle}}</strong>
 
-    {{#each this}}
-      <div class="card">
-        <strong>{{quizTitle}}</strong>
+          <div class="meta">
+            Module: {{module}}
+          </div>
 
-        <div class="meta">
-          Module: {{module}}
+          <span class="status pending">Pending</span>
+
+          <div class="actions">
+            <a href="/lms/quiz?examId={{examId}}&org={{../org.slug}}">
+              ▶ Start Quiz
+            </a>
+          </div>
         </div>
-
-        <span class="status pending">Pending</span>
-
-        <div class="actions">
-          <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}">
-            ▶ Start Quiz
-          </a>
-        </div>
-      </div>
+      {{/unless}}
     {{/each}}
-  {{/each}}
-{{else}}
-  <div class="empty">No quizzes assigned.</div>
-{{/if}}
+  {{else}}
+    <div class="empty">No quizzes assigned.</div>
+  {{/if}}
 </div>
 
 

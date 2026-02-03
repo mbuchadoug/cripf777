@@ -56,7 +56,9 @@ await ExamInstance.create({
   org: orgId,
   userId,
   ruleId: rule._id,
-
+meta: {
+  subject: rule.subject
+},
   targetRole: "student",
 
   module: rule.module,

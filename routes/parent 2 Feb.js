@@ -269,32 +269,21 @@ const attempts = rawAttempts.map(a => ({
 
 // ---- ASSIGNED QUIZZES (SOURCE = EXAM INSTANCES WITHOUT ATTEMPTS) ----
 // ASSIGNED QUIZZES = exams that DO NOT have a finished attempt
-// ---- ASSIGNED QUIZZES (GROUPED BY SUBJECT) ----
-const quizzesBySubject = {};
+const quizzes = exams
+  .map(ex => {
+    const hasFinishedAttempt = rawAttempts.some(
+      a => String(a.examId) === String(ex.examId)
+    );
 
-exams.forEach(ex => {
-  const hasFinishedAttempt = rawAttempts.some(
-    a => String(a.examId) === String(ex.examId)
-  );
-  if (hasFinishedAttempt) return;
-
-  const subject =
-    ex.meta?.subject ||
-    ex.meta?.ruleSubject ||
-    "General";
-
-  if (!quizzesBySubject[subject]) {
-    quizzesBySubject[subject] = [];
-  }
-
-  quizzesBySubject[subject].push({
-    _id: ex._id,
-    examId: ex.examId,
-    quizTitle: ex.quizTitle || ex.title || ex.module || "Quiz",
-    module: ex.module
-  });
-});
-
+    return {
+      _id: ex._id,
+      examId: ex.examId,
+      quizTitle: ex.quizTitle || ex.module || "Quiz",
+      module: ex.module,
+      finished: hasFinishedAttempt
+    };
+  })
+  .filter(q => !q.finished);
 
 
 
@@ -326,15 +315,15 @@ const certificates = await Certificate.find({
   certs: certificates.length,
   exams: exams.length
 });
-res.render("parent/child_quizzes", {
-  user: parent,
-  child,
-  org,
-  quizzesBySubject,
-  attempts,
-  certificates
-});
 
+    res.render("parent/child_quizzes", {
+      user: parent,
+      child,
+      org,
+      quizzes,
+      attempts,
+      certificates
+    });
   }
 );
 
