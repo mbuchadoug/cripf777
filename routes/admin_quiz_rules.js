@@ -135,6 +135,30 @@ if (quizType === "trial") {
   }
 }
 
+// ✅ APPLY PAID QUIZ RULES TO ALREADY-PAID PARENTS
+if (quizType === "paid") {
+  const paidParents = await User.find({
+    subscriptionStatus: "paid"
+  }).lean();
+
+  for (const parent of paidParents) {
+    const children = await User.find({
+      parentUserId: parent._id,
+      role: "student",
+      grade: Number(grade)
+    }).lean();
+
+    for (const child of children) {
+      await assignQuizFromRule({
+        rule,
+        userId: child._id,
+        orgId: org._id,
+        force: true   // 🔑 IMPORTANT
+      });
+    }
+  }
+}
+
 
 
 
