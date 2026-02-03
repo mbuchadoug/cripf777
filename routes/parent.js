@@ -264,17 +264,23 @@ const attempts = rawAttempts.map(a => ({
 }));
 
 // ---- ASSIGNED QUIZZES (SOURCE = EXAM INSTANCES WITHOUT ATTEMPTS) ----
+// ASSIGNED QUIZZES = exams that DO NOT have a finished attempt
 const quizzes = exams
-  .filter(ex =>
-    !rawAttempts.some(a => String(a.examId) === String(ex.examId))
-  )
-  .map(ex => ({
-    _id: ex._id,
-    examId: ex.examId,
-    quizTitle: ex.quizTitle,
-    module: ex.module,
-    finished: false
-  }));
+  .map(ex => {
+    const hasFinishedAttempt = rawAttempts.some(
+      a => String(a.examId) === String(ex.examId)
+    );
+
+    return {
+      _id: ex._id,
+      examId: ex.examId,
+      quizTitle: ex.quizTitle || ex.module || "Quiz",
+      module: ex.module,
+      finished: hasFinishedAttempt
+    };
+  })
+  .filter(q => !q.finished);
+
 
 
 

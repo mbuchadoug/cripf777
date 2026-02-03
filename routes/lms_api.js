@@ -1205,11 +1205,26 @@ savedCertificate = await Certificate.create({
 
     // Find / update or create Attempt
   // ✅ ALWAYS lookup attempt by finalExamId
+// 🔑 ALWAYS SAVE ATTEMPT AGAINST STUDENT (NOT PARENT)
+const attemptUserId =
+  exam?.userId ||               // assigned exam → student
+  exam?.learnerId ||            // future-proof
+  payload.userId ||             // explicit student id (if sent)
+  null;
+
+if (!attemptUserId) {
+  throw new Error("Attempt userId (student) could not be resolved");
+}
+
 let attemptFilter = {
   examId: finalExamId,
-  userId: exam?.userId || req.user?._id,
+  userId: attemptUserId,
   organization: exam?.org || undefined
 };
+
+Object.keys(attemptFilter).forEach(
+  k => attemptFilter[k] === undefined && delete attemptFilter[k]
+);
 
 
     Object.keys(attemptFilter).forEach(k => attemptFilter[k] === undefined && delete attemptFilter[k]);
@@ -1283,10 +1298,17 @@ if (attempt?.startedAt) {
   
 
 const attemptDoc = {
-  examId: finalExamId,   // 🔑 MUST MATCH CERTIFICATE
-  userId: (req.user && req.user._id)
-    ? req.user._id
-    : (exam && exam.user) || null,
+  examId: finalExamId,
+
+  // ✅ ALWAYS STUDENT
+  userId: attemptUserId,
+
+  organization: exam?.org
+    ? exam.org
+    : (exam?.organization || null),
+
+  module: exam?.module || moduleKey || null,
+
 
 organization: exam?.org
   ? exam.org
