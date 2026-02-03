@@ -1179,7 +1179,7 @@ if (passed) {
 
 
 savedCertificate = await Certificate.create({
-  userId: req.user?._id,
+  userId: exam?.userId || attempt?.userId,
   orgId: exam?.org || null,
   examId: finalExamId,
 
@@ -1207,8 +1207,10 @@ savedCertificate = await Certificate.create({
   // ✅ ALWAYS lookup attempt by finalExamId
 let attemptFilter = {
   examId: finalExamId,
-  userId: req.user?._id
+  userId: exam?.userId || req.user?._id,
+  organization: exam?.org || undefined
 };
+
 
     Object.keys(attemptFilter).forEach(k => attemptFilter[k] === undefined && delete attemptFilter[k]);
 
@@ -1286,9 +1288,10 @@ const attemptDoc = {
     ? req.user._id
     : (exam && exam.user) || null,
 
-  organization: (exam && exam.org)
-    ? exam.org
-    : (typeof orgSlugOrId === "string" ? orgSlugOrId : null),
+organization: exam?.org
+  ? exam.org
+  : (exam?.organization || null),
+
 
   module: (exam && exam.module) ? exam.module : (moduleKey || null),
 
