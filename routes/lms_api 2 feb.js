@@ -918,22 +918,10 @@ if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
 
 
     // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
-// ✅ SAFE EXAM ID RESOLUTION
-let finalExamId;
-
-// CASE 1: Quiz came from ExamInstance (parent/assigned flow)
-if (exam?.examId) {
-  finalExamId = exam.examId;
-}
-// CASE 2: Legacy / other schools (sampling, org quizzes, etc.)
-else if (examId) {
-  finalExamId = examId;
-}
-// CASE 3: Absolute fallback (keep old behavior)
-else {
-  finalExamId = "exam-" + Date.now().toString(36);
-}
-
+const finalExamId =
+  examId ||
+  exam?.examId ||
+  ("exam-" + Date.now().toString(36));
 
 
   console.log("EXAM ALIGNMENT CHECK:", {

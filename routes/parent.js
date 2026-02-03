@@ -227,10 +227,17 @@ if (!parent) {
       .lean();
 
 
-      const rawAttempts = await Attempt.find({
+const rawAttempts = await Attempt.find({
   userId: child._id,
-  status: "finished"
+  status: "finished",
+  $or: [
+    { organization: org._id },     // school quizzes
+    { organization: null },        // legacy
+    { organization: { $exists: false } }
+  ]
 })
+
+
 .sort({ finishedAt: -1 })
 .lean();
 
@@ -271,10 +278,16 @@ const attempts = rawAttempts.map(a => ({
        CERTIFICATES
     ----------------------------- */
 const certificates = await Certificate.find({
-  userId: child._id
+  userId: child._id,
+  $or: [
+    { orgId: org._id },   // school certificates
+    { orgId: null },      // HOME learning certificates
+    { orgId: { $exists: false } }
+  ]
 })
 .sort({ issuedAt: -1, createdAt: -1 })
 .lean();
+
 
 
 
