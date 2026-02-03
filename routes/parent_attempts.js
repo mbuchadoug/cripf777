@@ -39,15 +39,26 @@ router.get(
 
       // 🔒 CRITICAL SECURITY CHECK
       // Attempt must belong to a child of this parent
-      const child = await User.findOne({
-        _id: attempt.userId,
-        parentUserId: req.user._id,
-        role: "student"
-      }).lean();
+    // 🔐 Ownership resolution (supports legacy home-learning attempts)
 
-      if (!child) {
-        return res.status(403).send("Not allowed");
-      }
+// Case 1: attempt belongs to a student child
+let child = await User.findOne({
+  _id: attempt.userId,
+  parentUserId: req.user._id,
+  role: "student"
+}).lean();
+
+// Case 2: legacy home-learning attempt saved against parent
+if (!child && String(attempt.userId) === String(req.user._id)) {
+  child = await User.findOne({
+    parentUserId: req.user._id,
+    role: "student"
+  }).lean();
+}
+
+if (!child) {
+  return res.status(403).send("Not allowed");
+}
 
       // Load exam if needed (for fallback question order)
       let orderedQIds = Array.isArray(attempt.questionIds) && attempt.questionIds.length
