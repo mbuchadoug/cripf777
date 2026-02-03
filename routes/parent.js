@@ -229,10 +229,12 @@ if (!parent) {
 
 const rawAttempts = await Attempt.find({
   userId: child._id,
+  organization: org._id,
   status: "finished"
 })
 .sort({ finishedAt: -1 })
 .lean();
+
 
 
 
@@ -243,40 +245,42 @@ const rawAttempts = await Attempt.find({
     /* -----------------------------
        ATTEMPTS (HISTORY)
     ----------------------------- */
-const quizzes = exams.map(ex => {
-  const hasAttempt = rawAttempts.some(
-    a => String(a.examId) === String(ex.examId)
-  );
-
-  return {
-    _id: ex._id,
-    examId: ex.examId,
-    quizTitle: ex.quizTitle,
-    module: ex.module,
-
-    // 🔑 BOTH representations (important)
-    status: hasAttempt ? "finished" : "pending",
-    finished: hasAttempt
-  };
-});
-
-
+// ---- QUIZ HISTORY (SOURCE OF TRUTH = ATTEMPTS) ----
 const attempts = rawAttempts.map(a => ({
   _id: a._id,
-  quizTitle: a.quizTitle || "Quiz",
+  examId: a.examId,
+  quizTitle: a.quizTitle || a.module || "Quiz",
   percentage: a.maxScore
     ? Math.round((a.score / a.maxScore) * 100)
     : 0,
-  passed: !!a.passed
+  passed: !!a.passed,
+  finishedAt: a.finishedAt
 }));
+
+// ---- ASSIGNED QUIZZES (SOURCE = EXAM INSTANCES WITHOUT ATTEMPTS) ----
+const quizzes = exams
+  .filter(ex =>
+    !rawAttempts.some(a => String(a.examId) === String(ex.examId))
+  )
+  .map(ex => ({
+    _id: ex._id,
+    examId: ex.examId,
+    quizTitle: ex.quizTitle,
+    module: ex.module
+  }));
+
+
+
 
 
     /* -----------------------------
        CERTIFICATES
     ----------------------------- */
 const certificates = await Certificate.find({
-  userId: child._id
+  userId: child._id,
+  orgId: org._id
 })
+
 .sort({ issuedAt: -1, createdAt: -1 })
 .lean();
 
