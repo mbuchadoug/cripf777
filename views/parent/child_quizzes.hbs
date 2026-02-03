@@ -167,19 +167,18 @@
 {{/if}}
 
   <!-- ASSIGNED QUIZZES -->
+<!-- ASSIGNED QUIZZES -->
+<div id="assigned" class="panel tab-content">
+
 {{#if quizzesBySubject}}
   {{#each quizzesBySubject}}
-    <h3 style="margin-top:20px; color:var(--gold)">
+    <h3 style="margin:20px 0 10px; color:var(--gold)">
       {{@key}}
     </h3>
 
     {{#each this}}
       <div class="card">
         <strong>{{quizTitle}}</strong>
-
-        <div class="meta">
-          Module: {{module}}
-        </div>
 
         <span class="status pending">Pending</span>
 
@@ -194,7 +193,9 @@
 {{else}}
   <div class="empty">No quizzes assigned.</div>
 {{/if}}
+
 </div>
+
 
 
   <!-- HISTORY -->

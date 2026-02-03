@@ -270,32 +270,30 @@ const attempts = rawAttempts.map(a => ({
 // ---- ASSIGNED QUIZZES (SOURCE = EXAM INSTANCES WITHOUT ATTEMPTS) ----
 // ASSIGNED QUIZZES = exams that DO NOT have a finished attempt
 // ---- ASSIGNED QUIZZES (GROUPED BY SUBJECT) ----
-const quizzesBySubject = {};
+let quizzesBySubject = null;
 
-exams.forEach(ex => {
-  const hasFinishedAttempt = rawAttempts.some(
-    a => String(a.examId) === String(ex.examId)
-  );
-  if (hasFinishedAttempt) return;
+// ✅ ONLY APPLY TO HOME SCHOOL
+if (org.slug === "cripfcnt-home") {
+  quizzesBySubject = {};
 
-  const subject =
-    ex.meta?.subject ||
-    ex.meta?.ruleSubject ||
-    "General";
+  exams.forEach(ex => {
+    const hasFinishedAttempt = rawAttempts.some(
+      a => String(a.examId) === String(ex.examId)
+    );
+    if (hasFinishedAttempt) return;
 
-  if (!quizzesBySubject[subject]) {
-    quizzesBySubject[subject] = [];
-  }
+    const subject = ex.meta?.subject || "General";
 
-  quizzesBySubject[subject].push({
-    _id: ex._id,
-    examId: ex.examId,
-    quizTitle: ex.quizTitle || ex.title || ex.module || "Quiz",
-    module: ex.module
+    if (!quizzesBySubject[subject]) {
+      quizzesBySubject[subject] = [];
+    }
+
+    quizzesBySubject[subject].push({
+      examId: ex.examId,
+      quizTitle: ex.quizTitle || "Quiz"
+    });
   });
-});
-
-
+}
 
 
 
@@ -326,14 +324,16 @@ const certificates = await Certificate.find({
   certs: certificates.length,
   exams: exams.length
 });
+
 res.render("parent/child_quizzes", {
   user: parent,
   child,
   org,
-  quizzesBySubject,
+  quizzesBySubject, // only set for cripfcnt-home
   attempts,
   certificates
 });
+
 
   }
 );
