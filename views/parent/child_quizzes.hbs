@@ -229,9 +229,10 @@
       {{#each certificates}}
         <div class="card">
           <strong>{{quizTitle}}</strong>
-          <div class="meta">
-            {{percentage}}% • {{issuedAt}}
-          </div>
+         <div class="meta">
+  {{percentage}}% • {{createdAt}}
+</div>
+
 
           <div class="actions">
             <a href="/admin/certificates/{{_id}}/download/pdf" target="_blank">

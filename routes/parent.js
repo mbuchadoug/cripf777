@@ -229,11 +229,11 @@ if (!parent) {
 
 const rawAttempts = await Attempt.find({
   userId: child._id,
-  organization: org._id,
-  status: "finished"
+  orgId: org._id
 })
 .sort({ finishedAt: -1 })
 .lean();
+
 
 
 
@@ -266,7 +266,8 @@ const quizzes = exams
     _id: ex._id,
     examId: ex.examId,
     quizTitle: ex.quizTitle,
-    module: ex.module
+    module: ex.module,
+    finished: false
   }));
 
 
@@ -291,6 +292,14 @@ const certificates = await Certificate.find({
     /* -----------------------------
        RENDER
     ----------------------------- */
+    console.log("PARENT VIEW DEBUG", {
+  child: child._id.toString(),
+  org: org._id.toString(),
+  attempts: rawAttempts.length,
+  certs: certificates.length,
+  exams: exams.length
+});
+
     res.render("parent/child_quizzes", {
       user: parent,
       child,
