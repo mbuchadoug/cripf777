@@ -226,9 +226,24 @@ if (!parent) {
       .sort({ createdAt: -1 })
       .lean();
 
-    const quizzes = exams.map(ex => {
-  const quizzes = exams.map(ex => {
-  const hasAttempt = rawAttempts.some(a => a.examId === ex.examId);
+
+      const rawAttempts = await Attempt.find({
+  userId: child._id,
+  status: "finished"
+})
+.sort({ finishedAt: -1 })
+.lean();
+
+
+ 
+
+    /* -----------------------------
+       ATTEMPTS (HISTORY)
+    ----------------------------- */
+const quizzes = exams.map(ex => {
+  const hasAttempt = rawAttempts.some(
+    a => String(a.examId) === String(ex.examId)
+  );
 
   return {
     _id: ex._id,
@@ -239,25 +254,6 @@ if (!parent) {
   };
 });
 
-
-      return {
-        _id: ex._id,
-        examId: ex.examId,
-        quizTitle: ex.quizTitle,
-        module: ex.module,
-        status
-      };
-    });
-
-    /* -----------------------------
-       ATTEMPTS (HISTORY)
-    ----------------------------- */
-const rawAttempts = await Attempt.find({
-  userId: child._id,
-  status: "finished"
-})
-.sort({ finishedAt: -1 })
-.lean();
 
 
 
