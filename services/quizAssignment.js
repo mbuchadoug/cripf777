@@ -4,18 +4,20 @@ import ExamInstance from "../models/examInstance.js";
 import User from "../models/user.js";
 import Question from "../models/question.js";
 
-export async function assignQuizFromRule({ rule, userId, orgId }) {
+export async function assignQuizFromRule({ rule, userId, orgId, force = false }) {
+
   // 🔎 Load child
   const student = await User.findById(userId).lean();
   if (!student) return;
 
   // 🔎 Check payment if PAID quiz
-if (rule.quizType === "paid") {
+if (rule.quizType === "paid" && !force) {
   const parent = await User.findById(student.parentUserId).lean();
-  if (!parent?.subscriptionStatus || parent.subscriptionStatus !== "paid") {
+  if (!parent || parent.subscriptionStatus !== "paid") {
     return;
   }
 }
+
 
 
   // 🚫 Prevent duplicates

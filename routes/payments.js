@@ -150,54 +150,24 @@ for (const child of children) {
 
   for (const rule of rules) {
     // ⚠️ Bypass payment check — parent JUST paid
-    const exists = await ExamInstance.findOne({
+ for (const child of children) {
+  const rules = await QuizRule.find({
+    org: org._id,
+    grade: child.grade,
+    quizType: "paid",
+    enabled: true
+  });
+
+  for (const rule of rules) {
+    await assignQuizFromRule({
+      rule,
       userId: child._id,
-      ruleId: rule._id
+      orgId: org._id,
+      force: true // 👈 ADD THIS
     });
-
-    if (!exists) {
-     const parentQuestion = await Question.findById(rule.quizQuestionId).lean();
-if (!parentQuestion) continue;
-
-const childIds = parentQuestion.questionIds || [];
-if (!childIds.length) continue;
-
-const questionIds = [
-  `parent:${parentQuestion._id}`,
-  ...childIds.map(String)
-];
-
-const choicesOrder = [];
-for (const cid of childIds) {
-  const q = await Question.findById(cid).lean();
-  const n = q?.choices?.length || 0;
-  choicesOrder.push(Array.from({ length: n }, (_, i) => i));
+  }
 }
 
-await ExamInstance.create({
-  examId: crypto.randomUUID(),
-
-  org: org._id,
-  userId: child._id,
-
-  // 🔴 REQUIRED
-  targetRole: "student",
-
-  ruleId: rule._id,
-
-  module: rule.module,
-  title: rule.quizTitle,
-  quizTitle: rule.quizTitle,
-
-  questionIds,
-  choicesOrder,
-
-  durationMinutes: rule.durationMinutes,
-  status: "pending",
-  isOnboarding: false
-});
-
-    }
   }
 }
 
