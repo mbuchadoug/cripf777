@@ -48,9 +48,10 @@ if (rule.quizType === "paid" && !force) {
  
 const assignmentId = crypto.randomUUID();
 
+
 await ExamInstance.create({
-  examId: assignmentId,          // 👈 SAME VALUE
-  assignmentId,                  // 👈 REQUIRED
+  examId: assignmentId,
+  assignmentId,
 
   org: orgId,
   userId,
@@ -59,8 +60,11 @@ await ExamInstance.create({
   targetRole: "student",
 
   module: rule.module,
-  title: rule.quizTitle,         // 👈 REQUIRED
-  quizTitle: rule.quizTitle,     // 👈 REQUIRED
+
+  // 🔥 REQUIRED — THIS IS THE FIX
+  title: rule.quizTitle,
+  quizTitle: rule.quizTitle,
+  quizType: rule.quizType, // "trial" or "paid"
 
   questionIds,
   choicesOrder,
@@ -70,6 +74,7 @@ await ExamInstance.create({
   status: "pending",
   isOnboarding: false
 });
+
 
 
 }
