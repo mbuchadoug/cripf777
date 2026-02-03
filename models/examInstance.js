@@ -5,6 +5,12 @@ const ExamInstanceSchema = new mongoose.Schema(
   {
 examId: { type: String, required: true, index: true },
 
+ruleId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "QuizRule",
+  index: true,
+  required: true
+},
 
 
     isOnboarding: {
