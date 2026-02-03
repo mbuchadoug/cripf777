@@ -259,7 +259,7 @@ console.log("PARENT ATTEMPTS FOUND:", rawAttempts.length);
 const attempts = rawAttempts.map(a => ({
   _id: a._id,
   examId: a.examId,
-  quizTitle: a.quizTitle || a.module || "Quiz",
+ quizTitle: a.quizTitle || "Quiz",
   percentage: a.maxScore
     ? Math.round((a.score / a.maxScore) * 100)
     : 0,
@@ -600,45 +600,59 @@ if (!child) {
 
 
 
-
-// ⚠️ TEMP FIX — RUN ONCE THEN DELETE
+// ⚠️ TEMP FIX — BACKFILL ATTEMPT QUIZ TITLES
 router.get(
-  "/admin/fix-quiz-titles",
+  "/admin/fix-attempt-quiz-titles",
   ensureAuth,
   async (req, res) => {
     try {
+      const Attempt = (await import("../models/attempt.js")).default;
       const ExamInstance = (await import("../models/examInstance.js")).default;
       const QuizRule = (await import("../models/quizRule.js")).default;
 
       let updated = 0;
 
-      const exams = await ExamInstance.find({
+      const attempts = await Attempt.find({
         $or: [
           { quizTitle: { $exists: false } },
-          { quizTitle: "" },
-          { quizTitle: null }
+          { quizTitle: null },
+          { quizTitle: "" }
         ],
-        ruleId: { $exists: true }
+        examId: { $exists: true }
       });
 
-      for (const exam of exams) {
-        const rule = await QuizRule.findById(exam.ruleId).lean();
-        if (!rule?.quizTitle) continue;
+      for (const attempt of attempts) {
+        // 1️⃣ Try ExamInstance first
+        const exam = await ExamInstance.findOne({
+          examId: attempt.examId
+        }).lean();
 
-        exam.quizTitle = rule.quizTitle;
-        exam.title = rule.quizTitle;
+        if (exam?.quizTitle) {
+          attempt.quizTitle = exam.quizTitle;
+          await attempt.save();
+          updated++;
+          continue;
+        }
 
-        await exam.save();
-        updated++;
+        // 2️⃣ Fallback → QuizRule
+        if (exam?.ruleId) {
+          const rule = await QuizRule.findById(exam.ruleId).lean();
+          if (rule?.quizTitle) {
+            attempt.quizTitle = rule.quizTitle;
+            await attempt.save();
+            updated++;
+          }
+        }
       }
 
-      res.send(`✅ Fixed quiz titles for ${updated} exam(s)`);
+      res.send(`✅ Fixed quiz history titles for ${updated} attempt(s)`);
 
     } catch (err) {
-      console.error("[fix-quiz-titles]", err);
+      console.error("[fix-attempt-quiz-titles]", err);
       res.status(500).send("Failed");
     }
   }
 );
+
 
 export default router;

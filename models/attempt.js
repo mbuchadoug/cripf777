@@ -26,6 +26,9 @@ const AttemptSchema = new mongoose.Schema({
   default: null
 },
 
+quizTitle: { type: String, default: null },
+
+
   questionIds: [{ type: mongoose.Schema.Types.Mixed }], // preserve either ObjectId or fallback id strings
   answers: [AnswerSub],
   score: { type: Number, default: 0 },
