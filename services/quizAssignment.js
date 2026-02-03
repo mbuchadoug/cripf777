@@ -46,26 +46,30 @@ if (rule.quizType === "paid" && !force) {
   }
 
  
-  await ExamInstance.create({
-  examId: crypto.randomUUID(),
+const assignmentId = crypto.randomUUID();
+
+await ExamInstance.create({
+  examId: assignmentId,          // 👈 SAME VALUE
+  assignmentId,                  // 👈 REQUIRED
+
   org: orgId,
   userId,
   ruleId: rule._id,
 
+  targetRole: "student",
+
   module: rule.module,
-  quizTitle: rule.quizTitle,
+  title: rule.quizTitle,         // 👈 REQUIRED
+  quizTitle: rule.quizTitle,     // 👈 REQUIRED
+
   questionIds,
   choicesOrder,
- targetRole: "student",
+
   durationMinutes: rule.durationMinutes,
-  isOnboarding: false,
 
-  // 🔥🔥🔥 REQUIRED FIELDS 🔥🔥🔥
-  status: "pending",                 // THIS FIXES EVERYTHING
-  quizType: rule.quizType,            // "trial" | "paid"
-  assignedAt: new Date(),
-
-  createdAt: new Date()
+  status: "pending",
+  isOnboarding: false
 });
+
 
 }

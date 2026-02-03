@@ -6,7 +6,6 @@ const ExamInstanceSchema = new mongoose.Schema(
 examId: { type: String, required: true, index: true },
 
 
-    title: { type: String, default: null },
 
     isOnboarding: {
   type: Boolean,
