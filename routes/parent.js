@@ -227,8 +227,18 @@ if (!parent) {
       .lean();
 
     const quizzes = exams.map(ex => {
-      let status = "pending";
-      if (ex.finishedAt) status = "finished";
+  const quizzes = exams.map(ex => {
+  const hasAttempt = rawAttempts.some(a => a.examId === ex.examId);
+
+  return {
+    _id: ex._id,
+    examId: ex.examId,
+    quizTitle: ex.quizTitle,
+    module: ex.module,
+    status: hasAttempt ? "finished" : "pending"
+  };
+});
+
 
       return {
         _id: ex._id,
@@ -242,11 +252,13 @@ if (!parent) {
     /* -----------------------------
        ATTEMPTS (HISTORY)
     ----------------------------- */
- const rawAttempts = await Attempt.find({
-  userId: child._id
+const rawAttempts = await Attempt.find({
+  userId: child._id,
+  status: "finished"
 })
 .sort({ finishedAt: -1 })
 .lean();
+
 
 
 const attempts = rawAttempts.map(a => ({
@@ -262,11 +274,12 @@ const attempts = rawAttempts.map(a => ({
     /* -----------------------------
        CERTIFICATES
     ----------------------------- */
-  const certificates = await Certificate.find({
+const certificates = await Certificate.find({
   userId: child._id
 })
-.sort({ createdAt: -1 })
+.sort({ issuedAt: -1, createdAt: -1 })
 .lean();
+
 
 
     /* -----------------------------
