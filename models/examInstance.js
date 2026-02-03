@@ -9,8 +9,9 @@ ruleId: {
   type: mongoose.Schema.Types.ObjectId,
   ref: "QuizRule",
   index: true,
-  required: true
+  default: null   // ✅ optional
 },
+
 
 
     isOnboarding: {
