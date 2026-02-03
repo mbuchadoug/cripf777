@@ -242,12 +242,12 @@ if (!parent) {
     /* -----------------------------
        ATTEMPTS (HISTORY)
     ----------------------------- */
-    const rawAttempts = await Attempt.find({
-  userId: child._id,
-  organization: org._id
+ const rawAttempts = await Attempt.find({
+  userId: child._id
 })
 .sort({ finishedAt: -1 })
 .lean();
+
 
 const attempts = rawAttempts.map(a => ({
   _id: a._id,
@@ -262,12 +262,12 @@ const attempts = rawAttempts.map(a => ({
     /* -----------------------------
        CERTIFICATES
     ----------------------------- */
-    const certificates = await Certificate.find({
-      userId: child._id,
-      orgId: org._id
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+  const certificates = await Certificate.find({
+  userId: child._id
+})
+.sort({ createdAt: -1 })
+.lean();
+
 
     /* -----------------------------
        RENDER
