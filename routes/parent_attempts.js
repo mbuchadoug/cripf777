@@ -20,8 +20,8 @@ const router = Router();
 router.get(
   "/org/:slug/my-attempts/:attemptId",
   ensureAuth,
-  canActAsParent,
   async (req, res) => {
+
     try {
       const { slug, attemptId } = req.params;
 
