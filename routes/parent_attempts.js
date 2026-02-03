@@ -43,17 +43,9 @@ router.get(
 
 // Case 1: attempt belongs to a student child
 // ✅ Resolve child via ExamInstance (SOURCE OF TRUTH)
-const exam = await ExamInstance.findOne({
-  examId: attempt.examId
-}).lean();
-
-if (!exam) {
-  return res.status(403).send("Not allowed");
-}
-
-// exam.userId MUST be the child
+// ✅ Ownership check — SIMPLE AND CORRECT
 const child = await User.findOne({
-  _id: exam.userId,
+  _id: attempt.userId,
   parentUserId: req.user._id,
   role: "student"
 }).lean();
@@ -61,6 +53,7 @@ const child = await User.findOne({
 if (!child) {
   return res.status(403).send("Not allowed");
 }
+
 
 
       // Load exam if needed (for fallback question order)
