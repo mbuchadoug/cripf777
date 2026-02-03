@@ -233,11 +233,13 @@ if (!org) {
 
 const rawAttempts = await Attempt.find({
   userId: child._id,
-  orgId: org._id
+  status: "finished"
 })
 .sort({ finishedAt: -1 })
 .lean();
 
+
+console.log("PARENT ATTEMPTS FOUND:", rawAttempts.length);
 
 
 
