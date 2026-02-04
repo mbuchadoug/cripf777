@@ -249,7 +249,8 @@ let passCount = 0;
 let failCount = 0;
 
 for (const a of rawAttempts) {
-  const pct = calcPercentage(a);
+const pct = a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0;
+
 
   // Progress over time
   progressData.push({
@@ -276,6 +277,37 @@ const subjectChartData = Object.entries(subjectStats).map(
     avg: Math.round(v.total / v.count)
   })
 );
+
+
+let avgScore = null;
+let trend = "N/A";
+let strongestSubject = null;
+let weakestSubject = null;
+
+if (progressData.length) {
+  avgScore = Math.round(
+    progressData.reduce((s, p) => s + p.score, 0) / progressData.length
+  );
+
+  if (progressData.length >= 2) {
+    const first = progressData[progressData.length - 1].score;
+    const last = progressData[0].score;
+
+    if (last > first) trend = "Improving";
+    else if (last < first) trend = "Declining";
+    else trend = "Stable";
+  }
+}
+
+if (subjectChartData.length) {
+  strongestSubject = subjectChartData.reduce((a, b) =>
+    b.avg > a.avg ? b : a
+  ).subject;
+
+  weakestSubject = subjectChartData.reduce((a, b) =>
+    b.avg < a.avg ? b : a
+  ).subject;
+}
 
 
 
@@ -372,7 +404,13 @@ res.render("parent/child_quizzes", {
   progressData,
 subjectChartData,
 passCount,
-failCount
+failCount,
+
+avgScore,
+trend,
+strongestSubject,
+weakestSubject,
+
 
 });
 

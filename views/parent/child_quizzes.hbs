@@ -147,32 +147,10 @@
   <div class="tabs">
     <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
     <div class="tab" data-tab="history">Quiz History</div>
+     <div class="tab" data-tab="progress">Progress</div>
     <div class="tab" data-tab="certificates">Certificates</div>
   </div>
 
-
-{{#if progressData.length}}
-<div class="panel">
-  <h3 style="color:var(--gold)">📈 Progress Over Time</h3>
-  <canvas id="progressChart" height="120"></canvas>
-  <p class="sub">Shows how your child’s performance changes across quizzes.</p>
-</div>
-{{/if}}
-
-
-{{#if subjectChartData.length}}
-<div class="panel">
-  <h3 style="color:var(--gold)">📊 Subject Performance</h3>
-  <canvas id="subjectChart" height="120"></canvas>
-  <p class="sub">Lower bars highlight areas needing improvement.</p>
-</div>
-{{/if}}
-
-
-<div class="panel">
-  <h3 style="color:var(--gold)">✅ Pass vs ❌ Fail</h3>
-  <canvas id="passFailChart" height="120"></canvas>
-</div>
 
 
 
@@ -208,6 +186,51 @@
 
 </div>
 
+
+
+<!-- PROGRESS -->
+<div id="progress" class="panel tab-content hidden">
+
+  {{#if progressData.length}}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+
+    <div class="card">
+      <strong>Average Score</strong>
+      <div class="meta">{{avgScore}}%</div>
+    </div>
+
+    <div class="card">
+      <strong>Trend</strong>
+      <div class="meta">{{trend}}</div>
+    </div>
+
+    <div class="card">
+      <strong>Strongest Subject</strong>
+      <div class="meta">{{strongestSubject}}</div>
+    </div>
+
+    <div class="card">
+      <strong>Needs Improvement</strong>
+      <div class="meta">{{weakestSubject}}</div>
+    </div>
+
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <p class="sub">
+      Your child is showing <strong>{{trend}}</strong> performance.
+      Focus more on <strong>{{weakestSubject}}</strong> to improve results.
+    </p>
+  </div>
+
+  {{else}}
+    <div class="empty">
+      Progress insights will appear after completing quizzes.
+    </div>
+  {{/if}}
+
+</div>
 
 
   <!-- HISTORY -->
@@ -285,64 +308,6 @@
 </script>
 
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const progressData = {{{json progressData}}};
-const subjectData = {{{json subjectChartData}}};
-
-// 📈 Progress chart
-if (progressData && progressData.length) {
-  new Chart(document.getElementById("progressChart"), {
-    type: "line",
-    data: {
-      labels: progressData.map(p =>
-        new Date(p.date).toLocaleDateString()
-      ),
-      datasets: [{
-        label: "Score %",
-        data: progressData.map(p => p.score),
-        borderWidth: 2,
-        tension: 0.3
-      }]
-    },
-    options: {
-      scales: {
-        y: { min: 0, max: 100 }
-      }
-    }
-  });
-}
-
-// 📊 Subject chart
-if (subjectData && subjectData.length) {
-  new Chart(document.getElementById("subjectChart"), {
-    type: "bar",
-    data: {
-      labels: subjectData.map(s => s.subject),
-      datasets: [{
-        label: "Average %",
-        data: subjectData.map(s => s.avg)
-      }]
-    },
-    options: {
-      scales: {
-        y: { min: 0, max: 100 }
-      }
-    }
-  });
-}
-
-// 🍩 Pass vs fail
-new Chart(document.getElementById("passFailChart"), {
-  type: "doughnut",
-  data: {
-    labels: ["Passed", "Failed"],
-    datasets: [{
-      data: [{{passCount}}, {{failCount}}]
-    }]
-  }
-});
-</script>
 
 
 </body>
