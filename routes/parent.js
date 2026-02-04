@@ -328,15 +328,33 @@ if (progressData.length) {
   }
 }
 
-if (subjectChartData.length) {
-  strongestSubject = subjectChartData.reduce((a, b) =>
-    b.avg > a.avg ? b : a
-  ).subject;
+// 🎯 Performance thresholds (education-aware)
+const THRESHOLDS = {
+  excellent: 85,      // strong performance
+  satisfactory: 60   // below this needs improvement
+};
 
-  weakestSubject = subjectChartData.reduce((a, b) =>
-    b.avg < a.avg ? b : a
-  ).subject;
+if (subjectChartData.length) {
+  // Sort subjects from best → worst
+  const sorted = [...subjectChartData].sort(
+    (a, b) => b.avg - a.avg
+  );
+
+  strongestSubject = sorted[0].subject;
+
+  // Only mark a weak subject if:
+  // 1️⃣ There is more than one subject
+  // 2️⃣ The weakest score is below the satisfactory threshold
+  if (
+    sorted.length > 1 &&
+    sorted[sorted.length - 1].avg < THRESHOLDS.satisfactory
+  ) {
+    weakestSubject = sorted[sorted.length - 1].subject;
+  } else {
+    weakestSubject = null;
+  }
 }
+
 
 
 
