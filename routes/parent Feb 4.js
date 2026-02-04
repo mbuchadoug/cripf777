@@ -243,43 +243,6 @@ const rawAttempts = await Attempt.find({
 .lean();
 
 
-const progressData = [];
-const subjectStats = {};
-let passCount = 0;
-let failCount = 0;
-
-for (const a of rawAttempts) {
-  const pct = calcPercentage(a);
-
-  // Progress over time
-  progressData.push({
-    date: a.finishedAt,
-    score: pct
-  });
-
-  // Pass / fail
-  a.passed ? passCount++ : failCount++;
-
-  // Subject / module aggregation
-  const subject = a.module || "General";
-  if (!subjectStats[subject]) {
-    subjectStats[subject] = { total: 0, count: 0 };
-  }
-  subjectStats[subject].total += pct;
-  subjectStats[subject].count++;
-}
-
-// Normalize subject averages
-const subjectChartData = Object.entries(subjectStats).map(
-  ([subject, v]) => ({
-    subject,
-    avg: Math.round(v.total / v.count)
-  })
-);
-
-
-
-
 console.log("PARENT ATTEMPTS FOUND:", rawAttempts.length);
 
 
@@ -368,12 +331,7 @@ res.render("parent/child_quizzes", {
   org,
   quizzesBySubject, // only set for cripfcnt-home
   attempts,
-  certificates,
-  progressData,
-subjectChartData,
-passCount,
-failCount
-
+  certificates
 });
 
 

@@ -150,33 +150,21 @@
     <div class="tab" data-tab="certificates">Certificates</div>
   </div>
 
-
-{{#if progressData.length}}
-<div class="panel">
-  <h3 style="color:var(--gold)">📈 Progress Over Time</h3>
-  <canvas id="progressChart" height="120"></canvas>
-  <p class="sub">Shows how your child’s performance changes across quizzes.</p>
-</div>
+{{#if progressPoints.length}}
+<h3>Progress Trend</h3>
+<svg width="100%" height="40" viewBox="0 0 100 40">
+  <polyline
+    fill="none"
+    stroke="#D4AF37"
+    stroke-width="2"
+    points="
+      {{#each progressPoints}}
+        {{@index}},{{subtract 40 this}}
+      {{/each}}
+    "
+  />
+</svg>
 {{/if}}
-
-
-{{#if subjectChartData.length}}
-<div class="panel">
-  <h3 style="color:var(--gold)">📊 Subject Performance</h3>
-  <canvas id="subjectChart" height="120"></canvas>
-  <p class="sub">Lower bars highlight areas needing improvement.</p>
-</div>
-{{/if}}
-
-
-<div class="panel">
-  <h3 style="color:var(--gold)">✅ Pass vs ❌ Fail</h3>
-  <canvas id="passFailChart" height="120"></canvas>
-</div>
-
-
-
-
 
   <!-- ASSIGNED QUIZZES -->
 <!-- ASSIGNED QUIZZES -->
@@ -283,67 +271,6 @@
     });
   });
 </script>
-
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const progressData = {{{json progressData}}};
-const subjectData = {{{json subjectChartData}}};
-
-// 📈 Progress chart
-if (progressData && progressData.length) {
-  new Chart(document.getElementById("progressChart"), {
-    type: "line",
-    data: {
-      labels: progressData.map(p =>
-        new Date(p.date).toLocaleDateString()
-      ),
-      datasets: [{
-        label: "Score %",
-        data: progressData.map(p => p.score),
-        borderWidth: 2,
-        tension: 0.3
-      }]
-    },
-    options: {
-      scales: {
-        y: { min: 0, max: 100 }
-      }
-    }
-  });
-}
-
-// 📊 Subject chart
-if (subjectData && subjectData.length) {
-  new Chart(document.getElementById("subjectChart"), {
-    type: "bar",
-    data: {
-      labels: subjectData.map(s => s.subject),
-      datasets: [{
-        label: "Average %",
-        data: subjectData.map(s => s.avg)
-      }]
-    },
-    options: {
-      scales: {
-        y: { min: 0, max: 100 }
-      }
-    }
-  });
-}
-
-// 🍩 Pass vs fail
-new Chart(document.getElementById("passFailChart"), {
-  type: "doughnut",
-  data: {
-    labels: ["Passed", "Failed"],
-    datasets: [{
-      data: [{{passCount}}, {{failCount}}]
-    }]
-  }
-});
-</script>
-
 
 </body>
 </html>
