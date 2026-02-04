@@ -132,47 +132,6 @@
       color:var(--muted);
       font-size:15px;
     }
-
-
-
-
-    /* SUBJECT GROUP CONTAINER */
-.subject-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: #101010;
-  margin-bottom: 18px;
-  overflow: hidden;
-}
-
-/* SUBJECT HEADER */
-.subject-header {
-  position: sticky;
-  top: 0;
-  background: #141414;
-  padding: 12px 14px;
-  font-weight: 700;
-  color: var(--gold);
-  border-bottom: 1px solid var(--border);
-  z-index: 2;
-}
-
-/* SCROLLABLE QUIZ LIST */
-.subject-quizzes {
-  max-height: 260px;        /* 👈 controls scroll height */
-  overflow-y: auto;
-  padding: 12px;
-}
-
-/* Subtle scrollbar (mobile friendly) */
-.subject-quizzes::-webkit-scrollbar {
-  width: 6px;
-}
-.subject-quizzes::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 10px;
-}
-
   </style>
 </head>
 
@@ -202,32 +161,25 @@
 <div id="assigned" class="panel tab-content">
 
 {{#if quizzesBySubject}}
- {{#each quizzesBySubject}}
-  <div class="subject-group">
-
-    <div class="subject-header">
+  {{#each quizzesBySubject}}
+    <h3 style="margin:20px 0 10px; color:var(--gold)">
       {{@key}}
-    </div>
+    </h3>
 
-    <div class="subject-quizzes">
-      {{#each this}}
-        <div class="card">
-          <strong>{{quizTitle}}</strong>
+    {{#each this}}
+      <div class="card">
+        <strong>{{quizTitle}}</strong>
 
-          <span class="status pending">Pending</span>
+        <span class="status pending">Pending</span>
 
-          <div class="actions">
-            <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}">
-              ▶ Start Quiz
-            </a>
-          </div>
+        <div class="actions">
+          <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}">
+            ▶ Start Quiz
+          </a>
         </div>
-      {{/each}}
-    </div>
-
-  </div>
-{{/each}}
-
+      </div>
+    {{/each}}
+  {{/each}}
 {{else}}
   <div class="empty">No quizzes assigned.</div>
 {{/if}}
