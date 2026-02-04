@@ -233,6 +233,11 @@ if (!org) {
 .sort({ createdAt: -1 })
 .lean();
 
+// 🔑 Build examId → exam map for fast lookup
+const examById = {};
+for (const ex of exams) {
+  examById[String(ex.examId)] = ex;
+}
 
 
 const rawAttempts = await Attempt.find({
@@ -241,6 +246,21 @@ const rawAttempts = await Attempt.find({
 })
 .sort({ finishedAt: -1 })
 .lean();
+
+
+// 🎓 Normalise academic subject labels for parents
+function normaliseSubject(subject) {
+  if (!subject) return "General";
+
+  const map = {
+    math: "Mathematics",
+    maths: "Mathematics",
+    english: "English",
+    science: "Science"
+  };
+
+  return map[String(subject).toLowerCase()] || subject;
+}
 
 
 const progressData = [];
@@ -262,7 +282,16 @@ const pct = a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0;
   a.passed ? passCount++ : failCount++;
 
   // Subject / module aggregation
-  const subject = a.module || "General";
+const exam = examById[String(a.examId)];
+
+const rawSubject =
+  exam?.meta?.subject ||
+  exam?.meta?.ruleSubject ||
+  "General";
+
+const subject = normaliseSubject(rawSubject);
+
+
   if (!subjectStats[subject]) {
     subjectStats[subject] = { total: 0, count: 0 };
   }
