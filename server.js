@@ -147,6 +147,10 @@ subtract: (a, b) => {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
   return x - y;
 },
+json: (context) => {
+  return JSON.stringify(context);
+},
+
 
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
