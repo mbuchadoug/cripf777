@@ -139,18 +139,7 @@ await User.updateMany(
   });
 
   // 6️⃣ Assign quizzes
-// 6️⃣ FORCE-ASSIGN PAID QUIZZES AFTER PAYMENT
 for (const child of children) {
-  const rules = await QuizRule.find({
-    org: org._id,
-    grade: child.grade,
-    quizType: "paid",
-    enabled: true
-  });
-
-  for (const rule of rules) {
-    // ⚠️ Bypass payment check — parent JUST paid
- for (const child of children) {
   const rules = await QuizRule.find({
     org: org._id,
     grade: child.grade,
@@ -163,11 +152,8 @@ for (const child of children) {
       rule,
       userId: child._id,
       orgId: org._id,
-      force: true // 👈 ADD THIS
+      force: true
     });
-  }
-}
-
   }
 }
 

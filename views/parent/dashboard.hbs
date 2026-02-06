@@ -8,6 +8,7 @@
   <style>
     :root{
       --gold:#D4AF37;
+      --silver:#C0C0C0;
       --bg:#0b0b0b;
       --panel:#141414;
       --border:#222;
@@ -30,18 +31,9 @@
       padding:0 20px;
     }
 
-    h1{
-      font-size:30px;
-      margin-bottom:6px;
-    }
+    h1{ font-size:30px; margin-bottom:6px; }
+    h2{ margin:28px 0 12px; color:var(--gold); font-size:20px; }
 
-    h2{
-      margin:28px 0 12px;
-      color:var(--gold);
-      font-size:20px;
-    }
-
-    /* PANELS */
     .panel{
       background:var(--panel);
       border:1px solid var(--border);
@@ -50,14 +42,12 @@
       margin-bottom:18px;
     }
 
-    /* GRID */
     .grid{
       display:grid;
       grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
       gap:16px;
     }
 
-    /* CHILD CARD */
     .child-card{
       background:#111;
       border:1px solid var(--border);
@@ -68,16 +58,8 @@
       justify-content:space-between;
     }
 
-    .child-name{
-      font-size:18px;
-      font-weight:800;
-    }
-
-    .child-meta{
-      color:var(--muted);
-      font-size:13px;
-      margin-top:2px;
-    }
+    .child-name{ font-size:18px; font-weight:800; }
+    .child-meta{ color:var(--muted); font-size:13px; margin-top:2px; }
 
     .stats{
       display:grid;
@@ -95,11 +77,7 @@
       font-size:13px;
     }
 
-    .stat strong{
-      display:block;
-      font-size:18px;
-      margin-bottom:2px;
-    }
+    .stat strong{ display:block; font-size:18px; margin-bottom:2px; }
 
     .actions a{
       display:inline-block;
@@ -110,12 +88,8 @@
       text-decoration:none;
       font-size:14px;
     }
+    .actions a:hover{ text-decoration:underline; }
 
-    .actions a:hover{
-      text-decoration:underline;
-    }
-
-    /* TOP ACTION */
     .top-actions{
       display:flex;
       justify-content:space-between;
@@ -134,21 +108,139 @@
       text-decoration:none;
       border:none;
       cursor:pointer;
+      font-size:14px;
+    }
+    .btn:hover{ opacity:0.9; }
+
+    .btn-silver{
+      background:var(--silver);
+      color:#000;
     }
 
-    /* EMPTY */
-    .empty{
-      color:var(--muted);
-      font-size:15px;
-      margin-top:10px;
+    .btn-outline{
+      background:transparent;
+      border:2px solid var(--gold);
+      color:var(--gold);
     }
 
-    /* FOOT NOTE */
-    .note{
+    .empty{ color:var(--muted); font-size:15px; margin-top:10px; }
+    .note{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+    /* PLAN CARDS */
+    .plan-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:16px;
+      margin-top:12px;
+    }
+
+    .plan-card{
+      background:#111;
+      border:2px solid var(--border);
+      border-radius:14px;
+      padding:24px 20px;
+      text-align:center;
+      position:relative;
+      transition: border-color 0.2s;
+    }
+
+    .plan-card:hover{ border-color:var(--gold); }
+
+    .plan-card.silver-border{ border-color:var(--silver); }
+    .plan-card.gold-border{ border-color:var(--gold); }
+
+    .plan-badge{
+      display:inline-block;
+      padding:4px 14px;
+      border-radius:20px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:10px;
+    }
+
+    .badge-silver{ background:var(--silver); color:#000; }
+    .badge-gold{ background:var(--gold); color:#000; }
+
+    .plan-price{
+      font-size:36px;
+      font-weight:900;
+      margin:8px 0 4px;
+    }
+
+    .plan-period{
       color:var(--muted);
       font-size:13px;
-      margin-top:6px;
+      margin-bottom:14px;
     }
+
+    .plan-features{
+      list-style:none;
+      padding:0;
+      margin:0 0 18px;
+      text-align:left;
+    }
+
+    .plan-features li{
+      padding:6px 0;
+      font-size:14px;
+      color:#ccc;
+      border-bottom:1px solid #1a1a1a;
+    }
+
+    .plan-features li:last-child{ border-bottom:none; }
+
+    .plan-features li::before{
+      content:"✓ ";
+      color:var(--green);
+      font-weight:700;
+    }
+
+    /* SUBSCRIPTION STATUS BAR */
+    .sub-bar{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:14px 18px;
+      border-radius:12px;
+      margin-bottom:18px;
+      flex-wrap:wrap;
+    }
+
+    .sub-active{
+      background:#0d2818;
+      border:1px solid #1a5c2e;
+    }
+
+    .sub-expired{
+      background:#2d1515;
+      border:1px solid #5c1a1a;
+    }
+
+    .sub-trial{
+      background:#1a1a10;
+      border:1px solid #3d3d1a;
+    }
+
+    .sub-label{
+      font-weight:800;
+      font-size:15px;
+    }
+
+    .sub-detail{
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .payments-link{
+      color:var(--gold);
+      font-size:13px;
+      font-weight:700;
+      text-decoration:none;
+      margin-left:auto;
+    }
+    .payments-link:hover{ text-decoration:underline; }
   </style>
 </head>
 
@@ -161,29 +253,137 @@
     <div>
       <h1>Parent Dashboard</h1>
       <div class="note">
-        Manage your children’s learning, quizzes and certificates.
+        Manage your children's learning, quizzes and certificates.
       </div>
     </div>
 
+    {{#if canAddChild}}
+      <a href="/parent/children/new" class="btn">
+        ➕ Add Child
+      </a>
+    {{else}}
+      {{#if (eq childLimit 0)}}
+        <span class="note">📌 Subscribe to add children</span>
+      {{else}}
+        <span class="note">📌 Child limit reached ({{childCount}}/{{childLimit}})</span>
+      {{/if}}
+    {{/if}}
+  </div>
 
-    <a href="/parent/children/new" class="btn">
-      ➕ Add Child
-    </a>
-
+  <!-- SUBSCRIPTION STATUS -->
   {{#if (eq user.subscriptionStatus "paid")}}
-  <div class="note">
-    ✅ Subscription active - full access enabled
-  </div>
-{{else}}
-  <form method="POST" action="/payments/paynow/init">
-    <input type="hidden" name="amount" value="5">
-    <button class="btn">
-      💳 Unlock Full Access - $5 (monthly fee)
-    </button>
-  </form>
-{{/if}}
+    {{#if isExpired}}
+      <div class="sub-bar sub-expired">
+        <span class="sub-label">⚠️ {{planLabel}} Plan — Expired</span>
+        <span class="sub-detail">Your subscription has expired. Renew to keep full access.</span>
+        <a href="#plans" class="payments-link">Renew →</a>
+      </div>
+    {{else}}
+      <div class="sub-bar sub-active">
+        <span class="sub-label">✅ {{planLabel}} Plan — Active</span>
+        <span class="sub-detail">
+          Up to {{childLimit}} children
+          {{#if user.subscriptionExpiresAt}}
+            · Renews by {{formatDate user.subscriptionExpiresAt}}
+          {{/if}}
+        </span>
+        <a href="/parent/payments" class="payments-link">Payment History →</a>
+      </div>
+    {{/if}}
+  {{else}}
+    <div class="sub-bar sub-trial">
+      <span class="sub-label">🆓 Free Trial</span>
+      <span class="sub-detail">Subscribe below to unlock full quizzes and add children.</span>
+    </div>
+  {{/if}}
 
-  </div>
+  <!-- PLAN SELECTION (show if not paid, or if expired) -->
+  {{#unless (eq user.subscriptionStatus "paid")}}
+    <div id="plans">
+      <h2>Choose Your Plan</h2>
+      <div class="plan-grid">
+
+        <!-- SILVER -->
+        <div class="plan-card silver-border">
+          <span class="plan-badge badge-silver">Silver</span>
+          <div class="plan-price">$5</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 2 children</li>
+            <li>Full quiz access per grade</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="silver">
+            <button class="btn btn-silver" type="submit">
+              💳 Subscribe Silver
+            </button>
+          </form>
+        </div>
+
+        <!-- GOLD -->
+        <div class="plan-card gold-border">
+          <span class="plan-badge badge-gold">Gold</span>
+          <div class="plan-price">$10</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 5 children</li>
+            <li>Full quiz access per grade</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+            <li>Priority support</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="gold">
+            <button class="btn" type="submit">
+              💳 Subscribe Gold
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  {{/unless}}
+
+  {{#if isExpired}}
+    <div id="plans">
+      <h2>Renew Your Plan</h2>
+      <div class="plan-grid">
+        <div class="plan-card silver-border">
+          <span class="plan-badge badge-silver">Silver</span>
+          <div class="plan-price">$5</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 2 children</li>
+            <li>Full quiz access per grade</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="silver">
+            <button class="btn btn-silver" type="submit">💳 Renew Silver</button>
+          </form>
+        </div>
+        <div class="plan-card gold-border">
+          <span class="plan-badge badge-gold">Gold</span>
+          <div class="plan-price">$10</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 5 children</li>
+            <li>Full quiz access per grade</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+            <li>Priority support</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="gold">
+            <button class="btn" type="submit">💳 Renew Gold</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  {{/if}}
 
   <!-- CHILDREN -->
   <h2>My Children</h2>
@@ -200,7 +400,6 @@
             Grade {{grade}}
           </div>
 
-          <!-- STATS (safe defaults if not provided yet) -->
           <div class="stats">
             <div class="stat">
               <strong>{{pendingCount}}</strong>
@@ -217,7 +416,6 @@
           </div>
         </div>
 
-        <!-- ACTIONS -->
         <div class="actions">
           <a href="/parent/children/{{_id}}/quizzes">
             ▶ View Quizzes
@@ -235,7 +433,11 @@
         No children added yet.
       </div>
       <div class="note">
-        Click “Add Child” to register your learner and assign quizzes.
+        {{#if (eq childLimit 0)}}
+          Subscribe to a plan above to start adding children.
+        {{else}}
+          Click "Add Child" to register your learner and assign quizzes.
+        {{/if}}
       </div>
     </div>
   {{/if}}
@@ -244,7 +446,7 @@
   <div class="panel">
     <strong style="color:var(--gold)">🔒 Parent Controlled Access</strong>
     <div class="note">
-      Only you can view your children’s quizzes, results and certificates.
+      Only you can view your children's quizzes, results and certificates.
     </div>
   </div>
 

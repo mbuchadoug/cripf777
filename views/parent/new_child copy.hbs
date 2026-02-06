@@ -28,7 +28,10 @@
       padding:0 20px;
     }
 
-    h1{ font-size:28px; margin-bottom:8px; }
+    h1{
+      font-size:28px;
+      margin-bottom:8px;
+    }
 
     .subtitle{
       color:var(--muted);
@@ -44,7 +47,10 @@
       padding:22px;
     }
 
-    form{ display:grid; gap:18px; }
+    form{
+      display:grid;
+      gap:18px;
+    }
 
     label{
       display:flex;
@@ -68,8 +74,13 @@
       outline:none;
     }
 
-    input::placeholder{ color:#666; }
-    input:focus, select:focus{ border-color:var(--gold); }
+    input::placeholder{
+      color:#666;
+    }
+
+    input:focus, select:focus{
+      border-color:var(--gold);
+    }
 
     button{
       margin-top:10px;
@@ -83,7 +94,9 @@
       cursor:pointer;
     }
 
-    button:hover{ opacity:0.9; }
+    button:hover{
+      opacity:0.9;
+    }
 
     .note{
       margin-top:14px;
@@ -100,18 +113,6 @@
       font-weight:700;
       font-size:14px;
     }
-
-    .slots{
-      background:#0e0e0e;
-      border:1px solid var(--border);
-      border-radius:10px;
-      padding:12px 16px;
-      margin-bottom:8px;
-      font-size:14px;
-      text-align:center;
-    }
-
-    .slots strong{ color:var(--gold); }
   </style>
 </head>
 
@@ -123,16 +124,11 @@
 
   <h1>Add Your Child</h1>
   <p class="subtitle">
-    Enter your child's details to start tracking quizzes,
+    Enter your child’s details to start tracking quizzes,
     progress and certificates.
   </p>
 
   <div class="panel">
-
-    <div class="slots">
-      Child slots: <strong>{{childCount}}</strong> / <strong>{{childLimit}}</strong> used
-    </div>
-
     <form method="POST" action="/parent/children">
 
       <label>
@@ -160,9 +156,10 @@
           <option value="2">Grade 2</option>
           <option value="3">Grade 3</option>
           <option value="4">Grade 4</option>
-          <option value="5">Grade 5</option>
+           <option value="5">Grade 5</option>
           <option value="6">Grade 6</option>
-          <option value="7">Grade 7</option>
+           <option value="7">Grade 7</option>
+         
         </select>
       </label>
 
@@ -172,9 +169,11 @@
 
     </form>
 
-    <div class="note">
+   <div class="note">
       You'll be able to assign quizzes and view learning progress
       immediately after adding your child.
+      <br><br>
+      📌 Your current plan supports up to <strong>2 children</strong>.
     </div>
   </div>
 

@@ -1,17 +1,54 @@
 import mongoose from "mongoose";
 
 const PaymentSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, required: true },
-  childId: { type: mongoose.Schema.Types.ObjectId },
-  reference: { type: String, unique: true },
-  amount: Number,
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true
+  },
+
+  reference: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
+
+  amount: {
+    type: Number,
+    required: true
+  },
+
+  plan: {
+    type: String,
+    enum: ["silver", "gold"],
+    default: "silver",
+    index: true
+  },
+
+  pollUrl: {
+    type: String,
+    default: null
+  },
+
   status: {
     type: String,
-    enum: ["pending", "paid", "failed"],
-    default: "pending"
+    enum: ["pending", "paid", "failed", "cancelled"],
+    default: "pending",
+    index: true
   },
-  pollUrl: String,
-  createdAt: { type: Date, default: Date.now }
+
+  paidAt: {
+    type: Date,
+    default: null
+  },
+
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-export default mongoose.model("Payment", PaymentSchema);
+const Payment = mongoose.models.Payment || mongoose.model("Payment", PaymentSchema);
+export default Payment;
