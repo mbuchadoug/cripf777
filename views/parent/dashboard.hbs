@@ -33,6 +33,7 @@
 
     h1{ font-size:30px; margin-bottom:6px; }
     h2{ margin:28px 0 12px; color:var(--gold); font-size:20px; }
+    h3{ margin:18px 0 8px; font-size:17px; }
 
     .panel{
       background:var(--panel);
@@ -111,17 +112,7 @@
       font-size:14px;
     }
     .btn:hover{ opacity:0.9; }
-
-    .btn-silver{
-      background:var(--silver);
-      color:#000;
-    }
-
-    .btn-outline{
-      background:transparent;
-      border:2px solid var(--gold);
-      color:var(--gold);
-    }
+    .btn-silver{ background:var(--silver); color:#000; }
 
     .empty{ color:var(--muted); font-size:15px; margin-top:10px; }
     .note{ color:var(--muted); font-size:13px; margin-top:6px; }
@@ -129,7 +120,7 @@
     /* PLAN CARDS */
     .plan-grid{
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
       gap:16px;
       margin-top:12px;
     }
@@ -140,12 +131,10 @@
       border-radius:14px;
       padding:24px 20px;
       text-align:center;
-      position:relative;
       transition: border-color 0.2s;
     }
 
     .plan-card:hover{ border-color:var(--gold); }
-
     .plan-card.silver-border{ border-color:var(--silver); }
     .plan-card.gold-border{ border-color:var(--gold); }
 
@@ -163,17 +152,8 @@
     .badge-silver{ background:var(--silver); color:#000; }
     .badge-gold{ background:var(--gold); color:#000; }
 
-    .plan-price{
-      font-size:36px;
-      font-weight:900;
-      margin:8px 0 4px;
-    }
-
-    .plan-period{
-      color:var(--muted);
-      font-size:13px;
-      margin-bottom:14px;
-    }
+    .plan-price{ font-size:36px; font-weight:900; margin:8px 0 4px; }
+    .plan-period{ color:var(--muted); font-size:13px; margin-bottom:14px; }
 
     .plan-features{
       list-style:none;
@@ -188,16 +168,10 @@
       color:#ccc;
       border-bottom:1px solid #1a1a1a;
     }
-
     .plan-features li:last-child{ border-bottom:none; }
+    .plan-features li::before{ content:"✓ "; color:var(--green); font-weight:700; }
 
-    .plan-features li::before{
-      content:"✓ ";
-      color:var(--green);
-      font-weight:700;
-    }
-
-    /* SUBSCRIPTION STATUS BAR */
+    /* SUBSCRIPTION BAR */
     .sub-bar{
       display:flex;
       align-items:center;
@@ -207,31 +181,12 @@
       margin-bottom:18px;
       flex-wrap:wrap;
     }
+    .sub-active{ background:#0d2818; border:1px solid #1a5c2e; }
+    .sub-expired{ background:#2d1515; border:1px solid #5c1a1a; }
+    .sub-trial{ background:#1a1a10; border:1px solid #3d3d1a; }
 
-    .sub-active{
-      background:#0d2818;
-      border:1px solid #1a5c2e;
-    }
-
-    .sub-expired{
-      background:#2d1515;
-      border:1px solid #5c1a1a;
-    }
-
-    .sub-trial{
-      background:#1a1a10;
-      border:1px solid #3d3d1a;
-    }
-
-    .sub-label{
-      font-weight:800;
-      font-size:15px;
-    }
-
-    .sub-detail{
-      color:var(--muted);
-      font-size:13px;
-    }
+    .sub-label{ font-weight:800; font-size:15px; }
+    .sub-detail{ color:var(--muted); font-size:13px; }
 
     .payments-link{
       color:var(--gold);
@@ -241,6 +196,117 @@
       margin-left:auto;
     }
     .payments-link:hover{ text-decoration:underline; }
+
+    /* DEMO PREVIEW */
+    .demo-hero{
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border:1px solid #1a3a5c;
+      border-radius:var(--radius);
+      padding:32px 28px;
+      margin-bottom:24px;
+      text-align:center;
+    }
+
+    .demo-hero h2{
+      color:#fff;
+      font-size:26px;
+      margin:0 0 10px;
+    }
+
+    .demo-hero p{
+      color:#a0b4cc;
+      font-size:15px;
+      line-height:1.6;
+      max-width:600px;
+      margin:0 auto 20px;
+    }
+
+    .demo-features{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:14px;
+      margin:20px 0;
+    }
+
+    .demo-feature{
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:12px;
+      padding:16px;
+      text-align:center;
+    }
+
+    .demo-feature .icon{ font-size:28px; margin-bottom:6px; }
+    .demo-feature .label{ font-size:13px; color:#a0b4cc; }
+    .demo-feature .value{ font-size:20px; font-weight:800; color:#fff; }
+
+    /* DEMO MOCKUP */
+    .demo-mockup{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:24px;
+    }
+
+    .demo-mockup-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:16px;
+    }
+
+    .demo-tag{
+      background:var(--gold);
+      color:#000;
+      padding:3px 10px;
+      border-radius:8px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+    }
+
+    .mock-bar{
+      background:#0e0e0e;
+      border-radius:8px;
+      height:10px;
+      margin-bottom:10px;
+      overflow:hidden;
+    }
+
+    .mock-fill{
+      height:100%;
+      border-radius:8px;
+    }
+
+    .mock-fill.green{ background:var(--green); }
+    .mock-fill.gold{ background:var(--gold); }
+    .mock-fill.red{ background:var(--red); }
+
+    .mock-label{
+      display:flex;
+      justify-content:space-between;
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:14px;
+    }
+
+    .mock-subject-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 0;
+      border-bottom:1px solid #1a1a1a;
+      font-size:14px;
+    }
+    .mock-subject-row:last-child{ border-bottom:none; }
+
+    .mock-dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      flex-shrink:0;
+    }
   </style>
 </head>
 
@@ -257,21 +323,171 @@
       </div>
     </div>
 
-    {{#if canAddChild}}
-      <a href="/parent/children/new" class="btn">
-        ➕ Add Child
-      </a>
-    {{else}}
-      {{#if (eq childLimit 0)}}
-        <span class="note">📌 Subscribe to add children</span>
+    {{#if isPaid}}
+      {{#if canAddChild}}
+        <a href="/parent/children/new" class="btn">➕ Add Child</a>
       {{else}}
         <span class="note">📌 Child limit reached ({{childCount}}/{{childLimit}})</span>
       {{/if}}
     {{/if}}
   </div>
 
-  <!-- SUBSCRIPTION STATUS -->
-  {{#if (eq user.subscriptionStatus "paid")}}
+  <!-- ============================== -->
+  <!-- 🆓 TRIAL / DEMO VIEW          -->
+  <!-- ============================== -->
+  {{#unless isPaid}}
+
+    <!-- DEMO HERO -->
+    <div class="demo-hero">
+      <h2>🎓 Welcome to Your Child's Learning Hub</h2>
+      <p>
+        Our platform provides structured quizzes across multiple subjects,
+        tracks your child's progress, and awards certificates on completion.
+        Subscribe to get started!
+      </p>
+
+      {{#if demoData}}
+      <div class="demo-features">
+        <div class="demo-feature">
+          <div class="icon">📚</div>
+          <div class="value">{{demoData.subjects.length}}</div>
+          <div class="label">Subjects Available</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">📝</div>
+          <div class="value">{{demoData.totalQuizzes}}</div>
+          <div class="label">Quizzes Ready</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">🎒</div>
+          <div class="value">Grades {{#each demoData.grades}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</div>
+          <div class="label">Grade Coverage</div>
+        </div>
+        <div class="demo-feature">
+          <div class="icon">🏆</div>
+          <div class="value">Yes</div>
+          <div class="label">Certificates Awarded</div>
+        </div>
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- DEMO MOCKUP: What you'll see -->
+    <div class="demo-mockup">
+      <div class="demo-mockup-header">
+        <h3 style="margin:0;">📊 Preview: Child Progress Dashboard</h3>
+        <span class="demo-tag">Demo</span>
+      </div>
+
+      <div class="mock-label">
+        <span>📐 Mathematics</span>
+        <span>85%</span>
+      </div>
+      <div class="mock-bar">
+        <div class="mock-fill green" style="width:85%"></div>
+      </div>
+
+      <div class="mock-label">
+        <span>🤝 Responsibility</span>
+        <span>78%</span>
+      </div>
+      <div class="mock-bar">
+        <div class="mock-fill gold" style="width:78%"></div>
+      </div>
+
+      <!-- LOCKED SUBJECTS PREVIEW -->
+      <div style="margin-top:18px; padding:14px; background:rgba(212,175,55,0.08); border:1px dashed var(--gold); border-radius:10px;">
+        <div style="font-size:14px; color:var(--gold); font-weight:700; margin-bottom:6px;">
+          🔒 More subjects available with a subscription
+        </div>
+        <div style="color:var(--muted); font-size:13px; line-height:1.5;">
+          Subscribe to unlock <strong style="color:#fff;">English, Science, Social Studies</strong> and more subjects
+          across all grades. Your child will also get full access to our complete quiz library,
+          progress tracking, and certificates.
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top:16px;">
+        <div class="note">
+          This is a preview of what your dashboard will look like. Subscribe below to get started!
+        </div>
+      </div>
+    </div>
+
+    <!-- WHAT'S INCLUDED -->
+    <div class="panel">
+      <h3 style="color:var(--gold); margin-top:0;">✨ What's Included</h3>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--green)"></div>
+        <span>1 free trial quiz per subject so your child can try before you buy</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--gold)"></div>
+        <span>Full quiz library unlocked per grade after subscribing</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:#6c63ff"></div>
+        <span>Progress tracking, score analytics and performance trends</span>
+      </div>
+      <div class="mock-subject-row">
+        <div class="mock-dot" style="background:var(--red)"></div>
+        <span>Certificates awarded on quiz completion</span>
+      </div>
+    </div>
+
+    <!-- PLAN SELECTION -->
+    <div id="plans">
+      <h2>Choose Your Plan</h2>
+      <div class="plan-grid">
+
+        <!-- SILVER -->
+        <div class="plan-card silver-border">
+          <span class="plan-badge badge-silver">Silver</span>
+          <div class="plan-price">$5</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 2 children</li>
+            <li>1 trial quiz per subject (free)</li>
+            <li>Full paid quiz library</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="silver">
+            <button class="btn btn-silver" type="submit">💳 Get Silver</button>
+          </form>
+        </div>
+
+        <!-- GOLD -->
+        <div class="plan-card gold-border">
+          <span class="plan-badge badge-gold">Gold</span>
+          <div class="plan-price">$10</div>
+          <div class="plan-period">per month</div>
+          <ul class="plan-features">
+            <li>Up to 5 children</li>
+            <li>1 trial quiz per subject (free)</li>
+            <li>Full paid quiz library</li>
+            <li>Progress tracking & reports</li>
+            <li>Certificates</li>
+            <li>Priority support</li>
+          </ul>
+          <form method="POST" action="/payments/paynow/init">
+            <input type="hidden" name="plan" value="gold">
+            <button class="btn" type="submit">💳 Get Gold</button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+  {{/unless}}
+
+  <!-- ============================== -->
+  <!-- 💳 PAID USER VIEW              -->
+  <!-- ============================== -->
+  {{#if isPaid}}
+
+    <!-- SUBSCRIPTION STATUS -->
     {{#if isExpired}}
       <div class="sub-bar sub-expired">
         <span class="sub-label">⚠️ {{planLabel}} Plan - Expired</span>
@@ -284,165 +500,81 @@
         <span class="sub-detail">
           Up to {{childLimit}} children
           {{#if user.subscriptionExpiresAt}}
-            · Renews by {{formatDate user.subscriptionExpiresAt}}
+            · Next payment due: {{formatDate user.subscriptionExpiresAt}}
           {{/if}}
         </span>
         <a href="/parent/payments" class="payments-link">Payment History →</a>
       </div>
     {{/if}}
-  {{else}}
-    <div class="sub-bar sub-trial">
-      <span class="sub-label">🆓 Free Trial</span>
-      <span class="sub-detail">Subscribe below to unlock full quizzes and add children.</span>
-    </div>
-  {{/if}}
 
-  <!-- PLAN SELECTION (show if not paid, or if expired) -->
-  {{#unless (eq user.subscriptionStatus "paid")}}
-    <div id="plans">
-      <h2>Choose Your Plan</h2>
-      <div class="plan-grid">
-
-        <!-- SILVER -->
-        <div class="plan-card silver-border">
-          <span class="plan-badge badge-silver">Silver</span>
-          <div class="plan-price">$5</div>
-          <div class="plan-period">per month</div>
-          <ul class="plan-features">
-            <li>Up to 2 children</li>
-            <li>Full quiz access per grade</li>
-            <li>Progress tracking & reports</li>
-            <li>Certificates</li>
-          </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="silver">
-            <button class="btn btn-silver" type="submit">
-              💳 Subscribe Silver
-            </button>
-          </form>
-        </div>
-
-        <!-- GOLD -->
-        <div class="plan-card gold-border">
-          <span class="plan-badge badge-gold">Gold</span>
-          <div class="plan-price">$10</div>
-          <div class="plan-period">per month</div>
-          <ul class="plan-features">
-            <li>Up to 5 children</li>
-            <li>Full quiz access per grade</li>
-            <li>Progress tracking & reports</li>
-            <li>Certificates</li>
-            <li>Priority support</li>
-          </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="gold">
-            <button class="btn" type="submit">
-              💳 Subscribe Gold
-            </button>
-          </form>
-        </div>
-
-      </div>
-    </div>
-  {{/unless}}
-
-  {{#if isExpired}}
-    <div id="plans">
-      <h2>Renew Your Plan</h2>
-      <div class="plan-grid">
-        <div class="plan-card silver-border">
-          <span class="plan-badge badge-silver">Silver</span>
-          <div class="plan-price">$5</div>
-          <div class="plan-period">per month</div>
-          <ul class="plan-features">
-            <li>Up to 2 children</li>
-            <li>Full quiz access per grade</li>
-            <li>Progress tracking & reports</li>
-            <li>Certificates</li>
-          </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="silver">
-            <button class="btn btn-silver" type="submit">💳 Renew Silver</button>
-          </form>
-        </div>
-        <div class="plan-card gold-border">
-          <span class="plan-badge badge-gold">Gold</span>
-          <div class="plan-price">$10</div>
-          <div class="plan-period">per month</div>
-          <ul class="plan-features">
-            <li>Up to 5 children</li>
-            <li>Full quiz access per grade</li>
-            <li>Progress tracking & reports</li>
-            <li>Certificates</li>
-            <li>Priority support</li>
-          </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="gold">
-            <button class="btn" type="submit">💳 Renew Gold</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  {{/if}}
-
-  <!-- CHILDREN -->
-  <h2>My Children</h2>
-
-  {{#if children.length}}
-  <div class="grid">
-    {{#each children}}
-      <div class="child-card">
-        <div>
-          <div class="child-name">
-            {{firstName}} {{lastName}}
+    <!-- RENEW IF EXPIRED -->
+    {{#if isExpired}}
+      <div id="plans">
+        <h2>Renew Your Plan</h2>
+        <div class="plan-grid">
+          <div class="plan-card silver-border">
+            <span class="plan-badge badge-silver">Silver</span>
+            <div class="plan-price">$5</div>
+            <div class="plan-period">per month · 2 children</div>
+            <form method="POST" action="/payments/paynow/init">
+              <input type="hidden" name="plan" value="silver">
+              <button class="btn btn-silver" type="submit">💳 Renew Silver</button>
+            </form>
           </div>
-          <div class="child-meta">
-            Grade {{grade}}
-          </div>
-
-          <div class="stats">
-            <div class="stat">
-              <strong>{{pendingCount}}</strong>
-              Pending
-            </div>
-            <div class="stat">
-              <strong>{{completedCount}}</strong>
-              Completed
-            </div>
-            <div class="stat">
-              <strong>{{certificateCount}}</strong>
-              Certificates
-            </div>
+          <div class="plan-card gold-border">
+            <span class="plan-badge badge-gold">Gold</span>
+            <div class="plan-price">$10</div>
+            <div class="plan-period">per month · 5 children</div>
+            <form method="POST" action="/payments/paynow/init">
+              <input type="hidden" name="plan" value="gold">
+              <button class="btn" type="submit">💳 Renew Gold</button>
+            </form>
           </div>
         </div>
+      </div>
+    {{/if}}
 
-        <div class="actions">
-          <a href="/parent/children/{{_id}}/quizzes">
-            ▶ View Quizzes
-          </a>
-          <a href="/parent/children/{{_id}}/certificates">
-            🏆 Certificates
-          </a>
+    <!-- CHILDREN -->
+    <h2>My Children</h2>
+
+    {{#if children.length}}
+    <div class="grid">
+      {{#each children}}
+        <div class="child-card">
+          <div>
+            <div class="child-name">{{firstName}} {{lastName}}</div>
+            <div class="child-meta">Grade {{grade}}</div>
+
+            <div class="stats">
+              <div class="stat">
+                <strong>{{pendingCount}}</strong>Pending
+              </div>
+              <div class="stat">
+                <strong>{{completedCount}}</strong>Completed
+              </div>
+              <div class="stat">
+                <strong>{{certificateCount}}</strong>Certificates
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <a href="/parent/children/{{_id}}/quizzes">▶ View Quizzes</a>
+            <a href="/parent/children/{{_id}}/certificates">🏆 Certificates</a>
+          </div>
         </div>
-      </div>
-    {{/each}}
-  </div>
-  {{else}}
-    <div class="panel">
-      <div class="empty">
-        No children added yet.
-      </div>
-      <div class="note">
-        {{#if (eq childLimit 0)}}
-          Subscribe to a plan above to start adding children.
-        {{else}}
-          Click "Add Child" to register your learner and assign quizzes.
-        {{/if}}
-      </div>
+      {{/each}}
     </div>
+    {{else}}
+      <div class="panel">
+        <div class="empty">No children added yet.</div>
+        <div class="note">Click "Add Child" above to register your learner and assign quizzes.</div>
+      </div>
+    {{/if}}
+
   {{/if}}
 
-  <!-- HELP / TRUST -->
+  <!-- TRUST -->
   <div class="panel">
     <strong style="color:var(--gold)">🔒 Parent Controlled Access</strong>
     <div class="note">
