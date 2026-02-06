@@ -274,13 +274,13 @@
   {{#if (eq user.subscriptionStatus "paid")}}
     {{#if isExpired}}
       <div class="sub-bar sub-expired">
-        <span class="sub-label">⚠️ {{planLabel}} Plan — Expired</span>
+        <span class="sub-label">⚠️ {{planLabel}} Plan - Expired</span>
         <span class="sub-detail">Your subscription has expired. Renew to keep full access.</span>
         <a href="#plans" class="payments-link">Renew →</a>
       </div>
     {{else}}
       <div class="sub-bar sub-active">
-        <span class="sub-label">✅ {{planLabel}} Plan — Active</span>
+        <span class="sub-label">✅ {{planLabel}} Plan - Active</span>
         <span class="sub-detail">
           Up to {{childLimit}} children
           {{#if user.subscriptionExpiresAt}}
