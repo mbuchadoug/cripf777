@@ -350,7 +350,8 @@
       <div class="demo-features">
         <div class="demo-feature">
           <div class="icon">📚</div>
-          <div class="value">{{demoData.subjects.length}}</div>
+          <!--<div class="value">{{demoData.subjects.length}}</div>-->
+          <div class="value">5</div>
           <div class="label">Subjects Available</div>
         </div>
         <div class="demo-feature">
@@ -522,7 +523,7 @@
     <!-- SUBSCRIPTION STATUS -->
     {{#if isExpired}}
       <div class="sub-bar sub-expired">
-        <span class="sub-label">⚠️ {{planLabel}} Plan — Expired</span>
+        <span class="sub-label">⚠️ {{planLabel}} Plan - Expired</span>
         <span class="sub-detail">Your subscription has expired. Renew to keep full access.</span>
         <a href="#plans" class="payments-link">Renew →</a>
       </div>
