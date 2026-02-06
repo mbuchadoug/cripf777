@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Free Trial Used</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --gold: #D4AF37;
+      --silver: #C0C0C0;
+      --bg: #0b0b0b;
+      --panel: #141414;
+      --border: #222;
+      --muted: #9aa3ad;
+      --radius: 14px;
+      --green: #1db954;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Arial;
+      background: var(--bg);
+      color: #fff;
+    }
+    main {
+      max-width: 520px;
+      margin: 80px auto;
+      padding: 0 20px;
+      text-align: center;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+    }
+    .icon { font-size: 48px; margin-bottom: 12px; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .msg {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .btn {
+      display: inline-block;
+      background: var(--gold);
+      color: #000;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-weight: 800;
+      text-decoration: none;
+      font-size: 15px;
+      border: none;
+      cursor: pointer;
+      margin: 6px;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-silver { background: var(--silver); color: #000; }
+    .back {
+      display: inline-block;
+      margin-top: 16px;
+      color: var(--gold);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel">
+      <div class="icon">✅</div>
+      <h1>Free Trial Already Used</h1>
+      <p class="msg">
+        You've already added your free trial child. To add more children
+        and unlock all subjects and quizzes, subscribe to a plan.
+      </p>
+
+      <form method="POST" action="/payments/paynow/init" style="display:inline">
+        <input type="hidden" name="plan" value="silver">
+        <button class="btn btn-silver" type="submit">💳 Silver - $5/mo (2 kids)</button>
+      </form>
+      <form method="POST" action="/payments/paynow/init" style="display:inline">
+        <input type="hidden" name="plan" value="gold">
+        <button class="btn" type="submit">💳 Gold - $10/mo (5 kids)</button>
+      </form>
+
+      <br>
+      <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
+    </div>
+  </main>
+</body>
+</html>

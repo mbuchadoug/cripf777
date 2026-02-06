@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Try Free Quiz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+    }
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+      background:var(--bg);
+      color:#fff;
+    }
+    main{
+      max-width:520px;
+      margin:60px auto;
+      padding:0 20px;
+    }
+    h1{ font-size:28px; margin-bottom:8px; }
+    .subtitle{
+      color:var(--muted);
+      font-size:15px;
+      margin-bottom:24px;
+      line-height:1.5;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:22px;
+    }
+    form{ display:grid; gap:18px; }
+    label{
+      display:flex;
+      flex-direction:column;
+      font-size:14px;
+      font-weight:600;
+    }
+    label span{ margin-bottom:6px; color:#ddd; }
+    input, select{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:12px;
+      font-size:15px;
+      color:#fff;
+      outline:none;
+    }
+    input::placeholder{ color:#666; }
+    input:focus, select:focus{ border-color:var(--gold); }
+    button{
+      margin-top:10px;
+      padding:14px;
+      border-radius:12px;
+      border:none;
+      background:var(--green);
+      color:#fff;
+      font-weight:800;
+      font-size:16px;
+      cursor:pointer;
+    }
+    button:hover{ opacity:0.9; }
+    .note{
+      margin-top:14px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+    .back{
+      display:inline-block;
+      margin-bottom:18px;
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      font-size:14px;
+    }
+    .free-badge{
+      display:inline-block;
+      background:var(--green);
+      color:#fff;
+      padding:4px 12px;
+      border-radius:20px;
+      font-size:12px;
+      font-weight:800;
+      margin-bottom:12px;
+    }
+    .quiz-preview{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:14px;
+      margin-bottom:8px;
+    }
+    .quiz-preview-item{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 0;
+      font-size:14px;
+    }
+    .quiz-preview-item:first-child{ border-bottom:1px solid #1a1a1a; }
+    .quiz-icon{ font-size:20px; }
+  </style>
+</head>
+<body>
+
+<main>
+  <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
+
+  <span class="free-badge">🆓 FREE TRIAL</span>
+  <h1>Try 2 Free Quizzes</h1>
+  <p class="subtitle">
+    Enter your child's details to get started with 2 free quizzes —
+    one in <strong>Mathematics</strong> and one in <strong>Responsibility</strong>.
+    No payment required.
+  </p>
+
+  <div class="panel">
+
+    <!-- What they'll get -->
+    <div class="quiz-preview">
+      <div class="quiz-preview-item">
+        <span class="quiz-icon">📐</span>
+        <span>1 × Mathematics Quiz (matched to grade)</span>
+      </div>
+      <div class="quiz-preview-item">
+        <span class="quiz-icon">🤝</span>
+        <span>1 × Responsibility Quiz (matched to grade)</span>
+      </div>
+    </div>
+
+    <form method="POST" action="/parent/trial/children">
+
+      <label>
+        <span>Child's first name *</span>
+        <input name="firstName" placeholder="e.g. Tendai" required>
+      </label>
+
+      <label>
+        <span>Last name</span>
+        <input name="lastName" placeholder="e.g. Moyo">
+      </label>
+
+      <label>
+        <span>Grade *</span>
+        <select name="grade" required>
+          <option value="">Select grade</option>
+          <option value="1">Grade 1</option>
+          <option value="2">Grade 2</option>
+          <option value="3">Grade 3</option>
+          <option value="4">Grade 4</option>
+          <option value="5">Grade 5</option>
+          <option value="6">Grade 6</option>
+          <option value="7">Grade 7</option>
+        </select>
+      </label>
+
+      <button type="submit">
+        🎯 Start Free Trial
+      </button>
+
+    </form>
+
+    <div class="note">
+      After the trial, subscribe to unlock all subjects, more quizzes,
+      and add up to 5 children.
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

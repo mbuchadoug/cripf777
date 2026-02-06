@@ -414,38 +414,6 @@
       </div>
     </div>
 
-    <!-- 🆓 TRY FREE QUIZ CTA -->
-    {{#unless hasTrialChild}}
-      <div style="text-align:center; margin-bottom:24px;">
-        <a href="/parent/trial/new" class="btn" style="font-size:18px; padding:16px 32px; background:var(--green); color:#fff; display:inline-block;">
-          🎯 Try 2 Free Quizzes — No Payment Required
-        </a>
-        <div class="note" style="margin-top:10px;">
-          Add your child and let them try 1 Maths + 1 Responsibility quiz for free.
-        </div>
-      </div>
-    {{else}}
-      <!-- Trial child already exists — show their card -->
-      <div class="panel" style="border-color:var(--green);">
-        <h3 style="color:var(--green); margin-top:0;">🎯 Your Trial Child</h3>
-        {{#each children}}
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <div>
-              <strong>{{firstName}} {{lastName}}</strong>
-              <span class="note" style="margin:0;"> · Grade {{grade}}</span>
-            </div>
-            <a href="/parent/children/{{_id}}/quizzes" class="btn" style="font-size:13px; padding:8px 14px;">
-              ▶ View Quizzes
-            </a>
-          </div>
-        {{/each}}
-        <div class="note" style="margin-top:12px;">
-          Your child has 2 free trial quizzes (Maths + Responsibility).
-          Subscribe below to unlock all subjects and add more children.
-        </div>
-      </div>
-    {{/unless}}
-
     <!-- WHAT'S INCLUDED -->
     <div class="panel">
       <h3 style="color:var(--gold); margin-top:0;">✨ What's Included</h3>
@@ -522,13 +490,13 @@
     <!-- SUBSCRIPTION STATUS -->
     {{#if isExpired}}
       <div class="sub-bar sub-expired">
-        <span class="sub-label">⚠️ {{planLabel}} Plan — Expired</span>
+        <span class="sub-label">⚠️ {{planLabel}} Plan - Expired</span>
         <span class="sub-detail">Your subscription has expired. Renew to keep full access.</span>
         <a href="#plans" class="payments-link">Renew →</a>
       </div>
     {{else}}
       <div class="sub-bar sub-active">
-        <span class="sub-label">✅ {{planLabel}} Plan — Active</span>
+        <span class="sub-label">✅ {{planLabel}} Plan - Active</span>
         <span class="sub-detail">
           Up to {{childLimit}} children
           {{#if user.subscriptionExpiresAt}}
