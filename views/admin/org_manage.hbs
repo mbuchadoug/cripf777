@@ -17,6 +17,8 @@
     .small{font-size:13px}
     .inline-form{display:inline-block;margin:0}
     .badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#f1f1f1;color:#333}
+    .badge-trial{background:#e8f5e9;color:#2e7d32;font-weight:700}
+    .badge-paid{background:#fff3e0;color:#e65100;font-weight:700}
     .success{color:green}
     .error{color:red}
     .notice{margin-top:8px;color:#333}
@@ -24,95 +26,58 @@
     label.block{display:block;margin-bottom:8px}
 
     /* ---------- Tabs ---------- */
-.tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
-  position: sticky;
-  top: 0;
-  background: #fafafa;
-  padding: 8px;
-  z-index: 10;
-}
+    .tabs{display:flex;gap:6px;margin-bottom:10px;position:sticky;top:0;background:#fafafa;padding:8px;z-index:10}
+    .tab-btn{padding:6px 12px;border-radius:16px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:13px}
+    .tab-btn.active{background:#0b6fb7;color:#fff;border-color:#0b6fb7}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
 
-.tab-btn {
-  padding: 6px 12px;
-  border-radius: 16px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-  font-size: 13px;
-}
+    /* ---------- Scrollable members area ---------- */
+    .members-scroll{max-height:420px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff}
+    .members-scroll table{margin-top:0}
+    .members-scroll thead th{position:sticky;top:0;background:#f8f8f8;z-index:2}
+    #memberSearch{position:sticky;top:52px;z-index:9;background:#fff}
 
-.tab-btn.active {
-  background: #0b6fb7;
-  color: #fff;
-  border-color: #0b6fb7;
-}
+    /* ---------- Scrollable invites ---------- */
+    .invites-scroll{max-height:220px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff;padding:8px}
+    .invites-scroll ul{margin:0;padding-left:18px}
 
-/* ---------- Tab Content ---------- */
-.tab-content {
-  display: none;
-}
+    /* ---------- Quiz Rules Table ---------- */
+    .rules-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+    .rules-table th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid #ddd}
+    .rules-table td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:middle}
+    .rules-table tr:hover{background:#f8f8ff}
+    .rules-table .empty-row td{text-align:center;color:#999;padding:24px}
 
-.tab-content.active {
-  display: block;
-}
+    /* Filter pills */
+    .filter-pills{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+    .filter-pill{padding:5px 12px;border-radius:16px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:12px;font-weight:600}
+    .filter-pill.active{background:#0b6fb7;color:#fff;border-color:#0b6fb7}
+    .filter-pill .count{opacity:0.7;margin-left:3px}
 
-/* ---------- Scrollable members area ---------- */
-.members-scroll {
-  max-height: 420px;      /* 👈 KEY: stops massive scrolling */
-  overflow-y: auto;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  background: #fff;
-}
+    /* Stats row */
+    .rule-stats{display:flex;gap:12px;margin:10px 0;flex-wrap:wrap}
+    .rule-stat{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:8px 14px;font-size:13px}
+    .rule-stat strong{font-size:16px;display:block}
 
-/* ---------- Table polish ---------- */
-.members-scroll table {
-  margin-top: 0;
-}
-
-.members-scroll thead th {
-  position: sticky;
-  top: 0;
-  background: #f8f8f8;
-  z-index: 2;
-}
-
-/* ---------- Search ---------- */
-#memberSearch {
-  position: sticky;
-  top: 52px;
-  z-index: 9;
-  background: #fff;
-}
-
-
-/* ---------- Scrollable invites ---------- */
-.invites-scroll {
-  max-height: 220px;        /* adjust if needed */
-  overflow-y: auto;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  background: #fff;
-  padding: 8px;
-}
-
-.invites-scroll ul {
-  margin: 0;
-  padding-left: 18px;
-}
-
-
+    /* Admin nav links */
+    .admin-links{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap}
+    .admin-links a{padding:8px 16px;border-radius:8px;background:#f5f5f5;border:1px solid #ddd;color:#333;text-decoration:none;font-size:13px;font-weight:600}
+    .admin-links a:hover{background:#e8e8e8}
   </style>
 </head>
 <body>
   {{> navbar}}
   <main>
     <h1>Manage {{org.name}}</h1>
-  
 
+    {{!-- ===== ADMIN NAV LINKS (cripfcnt-home only) ===== --}}
+    {{#if isHomeSchool}}
+    <div class="admin-links">
+      <a href="/admin/finance">💰 Finance Dashboard</a>
+      <a href="/parent/dashboard">👁️ View Parent Dashboard</a>
+    </div>
+    {{/if}}
 
     <section>
       <h2>Invites</h2>
@@ -225,6 +190,10 @@
 
 
     <hr />
+
+{{!-- ===== IMPORT SECTIONS — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{#unless isHomeSchool}}
+
 {{#if (eq org.type "school")}}
 <div class="panel">
   <h2>Import Students (CSV)</h2>
@@ -290,7 +259,10 @@
 </div>
 
 {{/if}}
+{{/unless}}
 
+{{!-- ===== MODULES SECTION — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{#unless isHomeSchool}}
     <section>
       <h2>Modules</h2>
       <a href="/admin/orgs/{{org.slug}}/modules">Manage Modules</a>
@@ -304,7 +276,10 @@
     </section>
 
     <hr/>
+{{/unless}}
 
+{{!-- ===== ASSIGN QUIZ SECTION — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{#unless isHomeSchool}}
     <section>
   
      <div class="panel">
@@ -354,20 +329,6 @@
 
          </label>
 
-         <!--<label class="block">
-           Users:
-           <select id="userIds" name="userIds" multiple size="6" required>
-             {{#each memberships}}
-               {{#if this.user}}
-                 <option value="{{this.user._id}}">{{this.user.email}} ({{this.role}})</option>
-               {{/if}}
-             {{/each}}
-           </select>
-           <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
-         </label>-->
-
-
-
 {{#unless isSchool}}
 <label class="block">
   Users:
@@ -406,7 +367,6 @@
            Passage to assign:
            <select id="passageSelect" name="passageId">
              <option value="">-- choose passage --</option>
-             {{!-- server should provide `passages` array: each { _id, title, childCount, module, organization } --}}
              {{#if passages}}
                {{#each passages}}
                  <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
@@ -491,8 +451,10 @@
      </div>
 
     </section>
+{{/unless}}
 
 
+{{!-- ===== QUIZ RULES — CRIPFCNT-HOME ONLY (REDESIGNED) ===== --}}
 {{#if isHomeSchool}}
 <hr/>
 
@@ -502,99 +464,188 @@
     These rules auto-assign quizzes when a parent adds a child.
   </p>
 
-  <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules">
-    <label class="block">
-      Grade
-      <select name="grade" required>
-        <option value="1">Grade 1</option>
-        <option value="2">Grade 2</option>
-        <option value="3">Grade 3</option>
-        <option value="4">Grade 4</option>
-        <option value="5">Grade 5</option>
-        <option value="6">Grade 6</option>
-        <option value="7">Grade 7</option>
-      </select>
-    </label>
+  {{!-- QUICK STATS --}}
+  <div class="rule-stats" id="ruleStats"></div>
 
-    <label class="block">
-      Subject
-      <select name="subject">
-        <option value="math">Math</option>
-        <option value="english">English</option>
-        <option value="science">Science</option>
-         <option value="responsibility">Responsibility</option>
-      </select>
-    </label>
+  {{!-- CREATE FORM --}}
+  <div class="panel" style="background:#fff; margin:12px 0;">
+    <h3 style="margin-top:0;">➕ Create New Rule</h3>
+    <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
 
+      <label class="block">
+        Grade
+        <select name="grade" required>
+          <option value="1">Grade 1</option>
+          <option value="2">Grade 2</option>
+          <option value="3">Grade 3</option>
+          <option value="4">Grade 4</option>
+          <option value="5">Grade 5</option>
+          <option value="6">Grade 6</option>
+          <option value="7">Grade 7</option>
+        </select>
+      </label>
 
+      <label class="block">
+        Subject
+        <select name="subject">
+          <option value="math">Math</option>
+          <option value="english">English</option>
+          <option value="science">Science</option>
+          <option value="responsibility">Responsibility</option>
+        </select>
+      </label>
 
-<label>Module</label>
-<select name="module">
-  {{#each modules}}
-    <option value="{{slug}}">{{title}}</option>
-  {{/each}}
-</select>
+      <label class="block">
+        Module
+        <select name="module">
+          {{#each modules}}
+            <option value="{{slug}}">{{title}}</option>
+          {{/each}}
+        </select>
+      </label>
 
-<label class="block">
-  Quiz
-  <select name="quizQuestionId" required>
-    <option value="">-- select quiz --</option>
+      <label class="block">
+        Quiz
+        <select name="quizQuestionId" required>
+          <option value="">-- select quiz --</option>
+          {{#if quizzes.length}}
+            {{#each quizzes}}
+              <option value="{{_id}}" data-subject="{{subject}}">
+                {{text}} ({{module}})
+              </option>
+            {{/each}}
+          {{else}}
+            <option disabled>No quizzes found</option>
+          {{/if}}
+        </select>
+      </label>
 
-    {{#if quizzes.length}}
-      {{#each quizzes}}
-       <option
-  value="{{_id}}"
-  data-subject="{{subject}}"
->
+      <label class="block">
+        Question count
+        <input name="questionCount" type="number" value="10" />
+      </label>
 
-          {{text}} ({{module}})
-        </option>
-      {{/each}}
-    {{else}}
-      <option disabled>No quizzes found for this organization</option>
-    {{/if}}
-  </select>
-</label>
+      <label class="block">
+        Duration (mins)
+        <input name="durationMinutes" type="number" value="30" />
+      </label>
 
+      <label class="block">
+        Type
+        <select name="quizType">
+          <option value="trial">Trial</option>
+          <option value="paid">Paid</option>
+        </select>
+      </label>
 
-
-<label>Question count</label>
-<input name="questionCount" type="number" value="10" />
-
-<label>Duration (mins)</label>
-<input name="durationMinutes" type="number" value="30" />
-
-<label>Type</label>
-<select name="quizType">
-  <option value="trial">Trial</option>
-  <option value="paid">Paid</option>
-</select>
-
-    <button>Create Quiz Rule</button>
-  </form>
+      <div style="display:flex; align-items:end;">
+        <button style="width:100%;">Create Quiz Rule</button>
+      </div>
+    </form>
+  </div>
 
   <hr/>
 
-  <h3>Existing Rules</h3>
-  <ul>
- {{#each quizRules}}
-<li>
-  Grade {{grade}} – {{module}} – {{quizTitle}}
-  <span class="badge">{{quizType}}</span>
+  {{!-- FILTER PILLS --}}
+  <h3>📋 Existing Rules</h3>
 
- <span class="muted small">
-  Applies to existing & future students
-</span>
+  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+    <input
+      type="text"
+      id="ruleSearch"
+      placeholder="Search rules..."
+      style="flex:1; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:6px;"
+    />
+  </div>
 
-</li>
-{{/each}}
+  <div class="filter-pills" id="gradeFilters">
+    <span class="filter-pill active" data-grade="all">All Grades</span>
+    <span class="filter-pill" data-grade="1">G1</span>
+    <span class="filter-pill" data-grade="2">G2</span>
+    <span class="filter-pill" data-grade="3">G3</span>
+    <span class="filter-pill" data-grade="4">G4</span>
+    <span class="filter-pill" data-grade="5">G5</span>
+    <span class="filter-pill" data-grade="6">G6</span>
+    <span class="filter-pill" data-grade="7">G7</span>
+  </div>
 
-  </ul>
+  <div class="filter-pills" id="typeFilters">
+    <span class="filter-pill active" data-type="all">All Types</span>
+    <span class="filter-pill" data-type="trial">🆓 Trial</span>
+    <span class="filter-pill" data-type="paid">💳 Paid</span>
+  </div>
+
+  <div class="filter-pills" id="subjectFilters">
+    <span class="filter-pill active" data-subject="all">All Subjects</span>
+    <span class="filter-pill" data-subject="math">📐 Math</span>
+    <span class="filter-pill" data-subject="english">📖 English</span>
+    <span class="filter-pill" data-subject="science">🔬 Science</span>
+    <span class="filter-pill" data-subject="responsibility">🤝 Responsibility</span>
+  </div>
+
+  {{!-- RULES TABLE --}}
+  <div style="overflow-x:auto;">
+    <table class="rules-table" id="rulesTable">
+      <thead>
+        <tr>
+          <th>Grade</th>
+          <th>Subject</th>
+          <th>Quiz Title</th>
+          <th>Type</th>
+          <th>Questions</th>
+          <th>Duration</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each quizRules}}
+        <tr
+          data-grade="{{grade}}"
+          data-type="{{quizType}}"
+          data-subject="{{subject}}"
+        >
+          <td><strong>Grade {{grade}}</strong></td>
+          <td style="text-transform:capitalize;">{{subject}}</td>
+          <td style="max-width:280px;">
+            <div style="font-weight:600;">{{quizTitle}}</div>
+            <div class="muted small">Module: {{module}}</div>
+          </td>
+          <td>
+            {{#if (eq quizType "trial")}}
+              <span class="badge badge-trial">🆓 Trial</span>
+            {{else}}
+              <span class="badge badge-paid">💳 Paid</span>
+            {{/if}}
+          </td>
+          <td>{{questionCount}}</td>
+          <td>{{durationMinutes}} min</td>
+          <td>
+            {{#if enabled}}
+              <span style="color:green;">● Active</span>
+            {{else}}
+              <span style="color:#999;">○ Disabled</span>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+
+        {{#unless quizRules.length}}
+        <tr class="empty-row">
+          <td colspan="7">No quiz rules created yet.</td>
+        </tr>
+        {{/unless}}
+      </tbody>
+    </table>
+  </div>
+
+  <div id="ruleCount" class="muted small" style="margin-top:8px;"></div>
 </section>
 {{/if}}
 
   </main>
 
+  {{!-- ===== SCRIPTS — ONLY FOR NON-HOME ORGS ===== --}}
+  {{#unless isHomeSchool}}
   <script>
     // helper: convert FormData -> object (handles multiple selects)
 function formToObject(form) {
@@ -610,13 +661,11 @@ function formToObject(form) {
     }
   }
 
-  // ✅ FORCE modules to always be array
   const moduleSelect = form.querySelector('[name="modules"]');
   if (moduleSelect) {
     obj.modules = Array.from(moduleSelect.selectedOptions).map(o => o.value);
   }
 
-  // users
   const userSelect = form.querySelector('[name="userIds"]');
   if (userSelect) {
     obj.userIds = Array.from(userSelect.selectedOptions).map(o => o.value);
@@ -633,6 +682,7 @@ function formToObject(form) {
     const countInput = document.getElementById('count');
     const moduleSelect = document.getElementById('module');
 
+    if (usePassageCb) {
     usePassageCb.addEventListener('change', () => {
       passageWrap.style.display = usePassageCb.checked ? 'block' : 'none';
       if (!usePassageCb.checked) {
@@ -640,7 +690,9 @@ function formToObject(form) {
         countInput.removeAttribute('disabled');
       }
     });
+    }
 
+    if (passageSelect) {
     passageSelect.addEventListener('change', () => {
       const opt = passageSelect.selectedOptions[0];
       if (!opt || !opt.value) {
@@ -655,8 +707,7 @@ function formToObject(form) {
       } else {
         countInput.removeAttribute('disabled');
       }
-      // if passage has module, set the module select to match (optional convenience)
-      if (passageModule) {
+      if (passageModule && moduleSelect) {
         for (const o of moduleSelect.options) {
           if (o.value === passageModule) {
             moduleSelect.value = passageModule;
@@ -665,6 +716,7 @@ function formToObject(form) {
         }
       }
     });
+    }
 
     // AJAX invite form
     document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
@@ -768,9 +820,10 @@ fb.innerHTML = `
       });
     });
 
-    // Assign Quiz (AJAX) — includes optional passageId when chosen
-// Assign Quiz (AJAX) — includes optional passageId when chosen
-document.getElementById('assignForm').addEventListener('submit', async (ev) => {
+    // Assign Quiz (AJAX)
+    const assignForm = document.getElementById('assignForm');
+    if (assignForm) {
+    assignForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const form = ev.currentTarget;
   const url = form.action;
@@ -779,14 +832,11 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
   const isSchool = "{{org.type}}" === "school";
 
 if (isSchool) {
-  // ✅ Grade is ONLY required for students
   if (payload.targetRole === "student" && !payload.grade) {
     document.getElementById('assignResult').innerHTML =
       '<span class="error">Please select a grade.</span>';
     return;
   }
-
-  // teachers don't use grade or userIds
   delete payload.userIds;
 }
  else {
@@ -797,8 +847,7 @@ if (isSchool) {
     }
   }
 
-  // Passage mode
-  if (usePassageCb.checked) {
+  if (usePassageCb && usePassageCb.checked) {
     const sel = passageSelect.selectedOptions[0];
     if (!sel || !sel.value) {
       document.getElementById('assignResult').innerHTML =
@@ -836,14 +885,16 @@ if (isSchool) {
       '<span class="error">Assign failed (network)</span>';
   }
 });
+    }
 
-    // Create Passage Quiz (AJAX) — posts to /admin/orgs/:slug/passages
-    document.getElementById('createPassageForm').addEventListener('submit', async (ev) => {
+    // Create Passage Quiz (AJAX)
+    const createPassageForm = document.getElementById('createPassageForm');
+    if (createPassageForm) {
+    createPassageForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const form = ev.currentTarget;
       const url = form.action;
       const payload = formToObject(form);
-      // payload keys: title, module, passage, questions
       document.getElementById('createPassageResult').textContent = 'Creating passage...';
       try {
         const resp = await fetch(url, {
@@ -857,15 +908,13 @@ if (isSchool) {
           return;
         }
         document.getElementById('createPassageResult').innerHTML = '<span class="success">Passage created.</span>';
-        // If server returns new passage metadata, append to passageSelect
-        if (data.passage && data.passage._id) {
+        if (data.passage && data.passage._id && passageSelect) {
           const opt = document.createElement('option');
           opt.value = data.passage._id;
           opt.textContent = (data.passage.title || 'Passage') + ' (' + (data.passage.childCount || 0) + ' q)';
           opt.dataset.childCount = data.passage.childCount || 0;
           opt.dataset.module = data.passage.module || '';
           passageSelect.appendChild(opt);
-          // select it automatically and toggle UI
           usePassageCb.checked = true;
           passageWrap.style.display = 'block';
           passageSelect.value = data.passage._id;
@@ -877,10 +926,12 @@ if (isSchool) {
         document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed (network)</span>';
       }
     });
+    }
 
   </script>
+  {{/unless}}
 
-
+  {{!-- ===== COMMON SCRIPTS (ALL ORGS) ===== --}}
   <script>
  document.querySelectorAll('.set-password-form').forEach(form => {
   form.addEventListener('submit', async (e) => {
@@ -888,14 +939,13 @@ if (isSchool) {
 
     const userId = form.dataset.userId;
     const password = form.querySelector('input[name="password"]').value;
-    const role = form.dataset.role; // 👈 ADD THIS
+    const role = form.dataset.role;
 
     if (!password || password.length < 4) {
       alert("Password must be at least 4 characters");
       return;
     }
 
-    // 👇 CHOOSE ENDPOINT BASED ON ROLE
   let endpoint;
 
 if (role === "teacher") {
@@ -905,7 +955,6 @@ if (role === "teacher") {
 } else {
   endpoint = `/admin/orgs/{{org.slug}}/admins/${userId}/password`;
 }
-
 
     try {
       const resp = await fetch(endpoint, {
@@ -937,9 +986,7 @@ if (role === "teacher") {
   function activateFirstTab() {
     const firstBtn = tabButtons[0];
     if (!firstBtn) return;
-
     const target = firstBtn.dataset.tab;
-
     firstBtn.classList.add("active");
     document.getElementById(target)?.classList.add("active");
   }
@@ -947,26 +994,22 @@ if (role === "teacher") {
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tab;
-
       tabButtons.forEach(b => b.classList.remove("active"));
       tabContents.forEach(c => c.classList.remove("active"));
-
       btn.classList.add("active");
       document.getElementById(target)?.classList.add("active");
     });
   });
 
-  // auto activate first available tab
   activateFirstTab();
 </script>
 
 
 <script>
   const searchInput = document.getElementById("memberSearch");
-
+  if (searchInput) {
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.toLowerCase();
-
     document
       .querySelectorAll(".tab-content.active tbody tr")
       .forEach(row => {
@@ -974,6 +1017,7 @@ if (role === "teacher") {
         row.style.display = text.includes(q) ? "" : "none";
       });
   });
+  }
 </script>
 
 
@@ -989,7 +1033,99 @@ if (role === "teacher") {
   }
 </script>
 
+{{!-- ===== QUIZ RULES FILTER SCRIPT — HOME ONLY ===== --}}
+{{#if isHomeSchool}}
 <script>
+(function() {
+  const table = document.getElementById('rulesTable');
+  if (!table) return;
+
+  const rows = Array.from(table.querySelectorAll('tbody tr[data-grade]'));
+  const searchBox = document.getElementById('ruleSearch');
+  const countEl = document.getElementById('ruleCount');
+  const statsEl = document.getElementById('ruleStats');
+
+  let activeGrade = 'all';
+  let activeType = 'all';
+  let activeSubject = 'all';
+
+  // Build stats
+  const totalRules = rows.length;
+  const trialRules = rows.filter(r => r.dataset.type === 'trial').length;
+  const paidRules = rows.filter(r => r.dataset.type === 'paid').length;
+  const grades = new Set(rows.map(r => r.dataset.grade));
+
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="rule-stat"><strong>${totalRules}</strong> Total Rules</div>
+      <div class="rule-stat"><strong>${trialRules}</strong> Trial</div>
+      <div class="rule-stat"><strong>${paidRules}</strong> Paid</div>
+      <div class="rule-stat"><strong>${grades.size}</strong> Grades Covered</div>
+    `;
+  }
+
+  function filterRows() {
+    const q = (searchBox?.value || '').toLowerCase();
+    let visible = 0;
+
+    rows.forEach(row => {
+      const matchGrade = activeGrade === 'all' || row.dataset.grade === activeGrade;
+      const matchType = activeType === 'all' || row.dataset.type === activeType;
+      const matchSubject = activeSubject === 'all' || row.dataset.subject === activeSubject;
+      const matchSearch = !q || row.textContent.toLowerCase().includes(q);
+
+      const show = matchGrade && matchType && matchSubject && matchSearch;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (countEl) {
+      countEl.textContent = `Showing ${visible} of ${totalRules} rules`;
+    }
+  }
+
+  // Grade filter pills
+  document.querySelectorAll('#gradeFilters .filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#gradeFilters .filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeGrade = pill.dataset.grade;
+      filterRows();
+    });
+  });
+
+  // Type filter pills
+  document.querySelectorAll('#typeFilters .filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#typeFilters .filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeType = pill.dataset.type;
+      filterRows();
+    });
+  });
+
+  // Subject filter pills
+  document.querySelectorAll('#subjectFilters .filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#subjectFilters .filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeSubject = pill.dataset.subject;
+      filterRows();
+    });
+  });
+
+  // Search
+  if (searchBox) {
+    searchBox.addEventListener('input', filterRows);
+  }
+
+  // Initial
+  filterRows();
+})();
+</script>
+
+<script>
+  // Subject → quiz filter for create form
   const subjectSelect = document.querySelector(
     'form[action$="/quiz-rules"] select[name="subject"]'
   );
@@ -1000,23 +1136,70 @@ if (role === "teacher") {
   if (subjectSelect && quizSelect) {
     function filterQuizzesBySubject() {
       const subject = subjectSelect.value;
-
       Array.from(quizSelect.options).forEach(opt => {
         if (!opt.dataset.subject) return;
-
         opt.style.display =
           opt.dataset.subject === subject ? '' : 'none';
       });
-
       quizSelect.value = '';
     }
 
     subjectSelect.addEventListener('change', filterQuizzesBySubject);
-
-    // run once on page load
     filterQuizzesBySubject();
   }
 </script>
+{{/if}}
+
+{{!-- ===== INVITE AJAX — HOME ORG (since the non-home script block has it too) ===== --}}
+{{#if isHomeSchool}}
+<script>
+  function formToObject(form) {
+    const fd = new FormData(form);
+    const obj = {};
+    for (const [k, v] of fd.entries()) {
+      if (obj[k] !== undefined) {
+        if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
+        obj[k].push(v);
+      } else {
+        obj[k] = v;
+      }
+    }
+    return obj;
+  }
+
+  document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const url = f.action;
+      const payload = formToObject(f);
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        const fb = document.getElementById('inviteFeedback');
+        if (!resp.ok) {
+          fb.innerHTML = '<span class="error">Invite failed: ' + (data.error || 'unknown') + '</span>';
+          return;
+        }
+        const base = document.querySelector('base')?.href || `${location.protocol}//${location.host}`;
+        const inviteLink = `${base}/org/join/${data.token}`;
+        fb.innerHTML = `<div class="success"><strong>Invite created ✅</strong><br><br><strong>Invite link:</strong><br><input type="text" value="${inviteLink}" readonly style="width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:13px;" onclick="this.select()"/><div class="muted small" style="margin-top:6px">Copy this link and send it to the user on WhatsApp</div></div>`;
+        const ul = document.getElementById('invitesList');
+        const li = document.createElement('li');
+        li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
+        ul.prepend(li);
+        f.reset();
+      } catch (e) {
+        console.error(e);
+        document.getElementById('inviteFeedback').innerHTML = '<span class="error">Invite failed (network)</span>';
+      }
+    });
+  });
+</script>
+{{/if}}
 
 </body>
 </html>
