@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Finance Dashboard | Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --silver:#C0C0C0;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+      --red:#c0392b;
+      --blue:#3b82f6;
+      --purple:#8b5cf6;
+      --orange:#f59e0b;
+    }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+    }
+    main{
+      max-width:1300px;
+      margin:32px auto;
+      padding:0 20px;
+    }
+    h1{ font-size:28px; margin-bottom:4px; }
+    h2{ margin:28px 0 12px; color:var(--gold); font-size:20px; }
+    h3{ font-size:16px; margin:0 0 14px; color:var(--gold); }
+    .sub{ color:var(--muted); font-size:14px; margin-bottom:20px; }
+    .back{
+      display:inline-block;
+      margin-bottom:14px;
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      font-size:14px;
+    }
+
+    /* STAT GRID */
+    .stat-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:14px;
+      margin-bottom:24px;
+    }
+    .stat-card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:18px;
+      text-align:center;
+    }
+    .stat-value{
+      font-size:30px;
+      font-weight:900;
+      line-height:1.2;
+    }
+    .stat-label{
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      margin-top:4px;
+    }
+    .c-green{ color:var(--green); }
+    .c-gold{ color:var(--gold); }
+    .c-silver{ color:var(--silver); }
+    .c-blue{ color:var(--blue); }
+    .c-red{ color:var(--red); }
+    .c-purple{ color:var(--purple); }
+    .c-orange{ color:var(--orange); }
+
+    /* CHART */
+    .chart-box{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      margin-bottom:20px;
+    }
+    .chart-box canvas{ max-height:260px; }
+
+    .chart-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    @media(max-width:768px){
+      .chart-row{ grid-template-columns:1fr; }
+    }
+
+    /* TABLE */
+    .table-wrap{
+      overflow-x:auto;
+      margin-bottom:24px;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      background:var(--panel);
+      border-radius:var(--radius);
+      overflow:hidden;
+      min-width:800px;
+    }
+    thead th{
+      background:#1a1a1a;
+      padding:12px 14px;
+      text-align:left;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      color:var(--muted);
+      border-bottom:1px solid var(--border);
+    }
+    tbody td{
+      padding:12px 14px;
+      font-size:13px;
+      border-bottom:1px solid var(--border);
+    }
+    tbody tr:last-child td{ border-bottom:none; }
+    tbody tr:hover{ background:#1a1a1a; }
+
+    .badge{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:12px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+    }
+    .badge-silver{ background:var(--silver); color:#000; }
+    .badge-gold{ background:var(--gold); color:#000; }
+    .badge-active{ background:rgba(29,185,84,0.15); color:var(--green); }
+    .badge-expired{ background:rgba(192,57,43,0.15); color:var(--red); }
+    .badge-pending{ background:rgba(212,175,55,0.15); color:var(--gold); }
+    .badge-paid{ background:rgba(29,185,84,0.15); color:var(--green); }
+    .badge-failed{ background:rgba(192,57,43,0.15); color:var(--red); }
+
+    .expiring-warn{
+      color:var(--orange);
+      font-weight:700;
+      font-size:12px;
+    }
+
+    /* TABS */
+    .tabs{
+      display:flex;
+      gap:8px;
+      margin-bottom:16px;
+      border-bottom:1px solid var(--border);
+      overflow-x:auto;
+    }
+    .tab{
+      padding:10px 16px;
+      cursor:pointer;
+      font-weight:700;
+      color:var(--muted);
+      border-bottom:3px solid transparent;
+      white-space:nowrap;
+      font-size:14px;
+    }
+    .tab.active{ color:var(--gold); border-bottom-color:var(--gold); }
+    .tab-content.hidden{ display:none; }
+  </style>
+</head>
+<body>
+
+<main>
+  <a href="/admin/orgs/cripfcnt-home/manage" class="back">← Back to Admin</a>
+
+  <h1>💰 Finance Dashboard</h1>
+  <div class="sub">Revenue, subscriptions, and payment tracking.</div>
+
+  <!-- ============================== -->
+  <!-- 📊 REVENUE OVERVIEW            -->
+  <!-- ============================== -->
+  <h2>Revenue Overview</h2>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-value c-green">${{stats.totalRevenue}}</div>
+      <div class="stat-label">Total Revenue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-blue">${{stats.monthRevenue}}</div>
+      <div class="stat-label">This Month</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-silver">${{stats.silverRevenue}}</div>
+      <div class="stat-label">Silver Revenue ({{stats.silverPaymentCount}})</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-gold">${{stats.goldRevenue}}</div>
+      <div class="stat-label">Gold Revenue ({{stats.goldPaymentCount}})</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:#fff;">{{stats.totalPayments}}</div>
+      <div class="stat-label">Total Payments</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-blue">{{stats.monthPaymentCount}}</div>
+      <div class="stat-label">Payments This Month</div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 👥 SUBSCRIBER OVERVIEW         -->
+  <!-- ============================== -->
+  <h2>Subscriber Overview</h2>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-value c-green">{{stats.activeCount}}</div>
+      <div class="stat-label">Active Subscribers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-red">{{stats.expiredCount}}</div>
+      <div class="stat-label">Expired</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-purple">{{stats.trialCount}}</div>
+      <div class="stat-label">Trial (Unpaid)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-silver">{{stats.activeSilverCount}}</div>
+      <div class="stat-label">Active Silver</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-gold">{{stats.activeGoldCount}}</div>
+      <div class="stat-label">Active Gold</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value c-orange">{{stats.expiringSoonCount}}</div>
+      <div class="stat-label">Expiring in 7 Days</div>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- 📈 CHARTS                      -->
+  <!-- ============================== -->
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>📈 Monthly Revenue (Last 6 Months)</h3>
+      <canvas id="revenueChart" height="220"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>🍩 Plan Distribution</h3>
+      <canvas id="planChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <!-- ============================== -->
+  <!-- TABS: Subscribers / Payments   -->
+  <!-- ============================== -->
+  <div class="tabs">
+    <div class="tab active" data-tab="subscribers">👥 Subscribers</div>
+    <div class="tab" data-tab="payments">💳 Recent Payments</div>
+  </div>
+
+  <!-- SUBSCRIBERS TABLE -->
+  <div id="subscribers" class="tab-content">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Parent</th>
+            <th>Email</th>
+            <th>Plan</th>
+            <th>Status</th>
+            <th>Children</th>
+            <th>Expires</th>
+            <th>Days Left</th>
+            <th>Last Payment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each subscriberList}}
+          <tr>
+            <td style="font-weight:700;">{{name}}</td>
+            <td style="color:var(--muted); font-size:12px;">{{email}}</td>
+            <td>
+              {{#if (eq plan "gold")}}
+                <span class="badge badge-gold">Gold</span>
+              {{else if (eq plan "silver")}}
+                <span class="badge badge-silver">Silver</span>
+              {{else}}
+                <span style="color:var(--muted);">—</span>
+              {{/if}}
+            </td>
+            <td>
+              {{#if (eq status "active")}}
+                <span class="badge badge-active">Active</span>
+              {{else}}
+                <span class="badge badge-expired">Expired</span>
+              {{/if}}
+            </td>
+            <td>{{childCount}} / {{maxChildren}}</td>
+            <td>
+              {{#if expiresAt}}
+                {{formatDate expiresAt}}
+              {{else}}
+                —
+              {{/if}}
+            </td>
+            <td>
+              {{#if (eq status "active")}}
+                {{#if (lte daysLeft 7)}}
+                  <span class="expiring-warn">⚠️ {{daysLeft}}d</span>
+                {{else}}
+                  {{daysLeft}}d
+                {{/if}}
+              {{else}}
+                <span style="color:var(--red);">Expired</span>
+              {{/if}}
+            </td>
+            <td>
+              {{#if lastPaymentDate}}
+                ${{lastPaymentAmount}} · {{formatDate lastPaymentDate}}
+              {{else}}
+                —
+              {{/if}}
+            </td>
+          </tr>
+          {{/each}}
+
+          {{#unless subscriberList.length}}
+          <tr>
+            <td colspan="8" style="text-align:center; color:var(--muted); padding:30px;">
+              No subscribers yet.
+            </td>
+          </tr>
+          {{/unless}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RECENT PAYMENTS TABLE -->
+  <div id="payments" class="tab-content hidden">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Parent</th>
+            <th>Plan</th>
+            <th>Amount</th>
+            <th>Reference</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each recentPayments}}
+          <tr>
+            <td>{{formatDate createdAt}}</td>
+            <td>
+              {{#if userId}}
+                {{userId.firstName}} {{userId.lastName}}
+                <div style="font-size:11px; color:var(--muted);">{{userId.email}}</div>
+              {{else}}
+                <span style="color:var(--muted);">Unknown</span>
+              {{/if}}
+            </td>
+            <td>
+              {{#if (eq plan "gold")}}
+                <span class="badge badge-gold">Gold</span>
+              {{else}}
+                <span class="badge badge-silver">Silver</span>
+              {{/if}}
+            </td>
+            <td style="font-weight:700;">${{amount}}</td>
+            <td style="font-size:11px; color:#555;">{{reference}}</td>
+            <td>
+              {{#if (eq status "paid")}}
+                <span class="badge badge-paid">✓ Paid</span>
+              {{else if (eq status "pending")}}
+                <span class="badge badge-pending">⏳ Pending</span>
+              {{else}}
+                <span class="badge badge-failed">✗ Failed</span>
+              {{/if}}
+            </td>
+          </tr>
+          {{/each}}
+
+          {{#unless recentPayments.length}}
+          <tr>
+            <td colspan="6" style="text-align:center; color:var(--muted); padding:30px;">
+              No payments recorded yet.
+            </td>
+          </tr>
+          {{/unless}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  // ---- CHART DATA ----
+  const monthlyRevenue = {{{json monthlyRevenue}}};
+  const activeSilver = {{stats.activeSilverCount}};
+  const activeGold = {{stats.activeGoldCount}};
+  const trialCount = {{stats.trialCount}};
+  const expiredCount = {{stats.expiredCount}};
+
+  // ---- MONTHLY REVENUE BAR CHART ----
+  const revCtx = document.getElementById('revenueChart');
+  if (revCtx && monthlyRevenue.length) {
+    new Chart(revCtx, {
+      type: 'bar',
+      data: {
+        labels: monthlyRevenue.map(m => m.label),
+        datasets: [{
+          label: 'Revenue ($)',
+          data: monthlyRevenue.map(m => m.amount),
+          backgroundColor: '#D4AF37',
+          borderRadius: 6,
+          barThickness: 32
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: '#1a1a1a' },
+            ticks: { color: '#9aa3ad', callback: v => '$' + v }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#9aa3ad' }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => '$' + ctx.parsed.y + ' (' + monthlyRevenue[ctx.dataIndex].count + ' payments)'
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ---- PLAN DISTRIBUTION DONUT ----
+  const planCtx = document.getElementById('planChart');
+  if (planCtx) {
+    new Chart(planCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Silver (Active)', 'Gold (Active)', 'Trial', 'Expired'],
+        datasets: [{
+          data: [activeSilver, activeGold, trialCount, expiredCount],
+          backgroundColor: ['#C0C0C0', '#D4AF37', '#8b5cf6', '#c0392b'],
+          borderWidth: 0,
+          cutout: '65%'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#9aa3ad', padding: 12, font: { size: 12 } }
+          }
+        }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
