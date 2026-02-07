@@ -18,7 +18,7 @@ import adminExamRoutes from "./routes/admin_exams.js";
 
 import parentRoutes from "./routes/parent.js";
 import parentAttemptsRoutes from "./routes/parent_attempts.js";
-
+import adminFinanceRoutes from "./routes/admin_finance.js";
 
 
 
@@ -322,6 +322,7 @@ app.use("/billing", billingRoutes);
 app.use("/payments", paymentsRouter);
 
 app.use("/api/org", apiOrgQuizRoutes);
+app.use(adminFinanceRoutes);
 app.use("/", parentAttemptsRoutes);
 
 app.use(scoiMarketplaceRoutes);
