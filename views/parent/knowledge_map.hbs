@@ -1,0 +1,468 @@
+{{!-- views/parent/knowledge_map.hbs --}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{child.firstName}}'s Knowledge Map</title>
+  <style>
+    :root {
+      --gold: #D4AF37;
+      --bg: #0b0b0b;
+      --panel: #141414;
+      --border: #222;
+      --muted: #9aa3ad;
+      --green: #1db954;
+      --red: #c0392b;
+      --orange: #fb923c;
+      --yellow: #fbbf24;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial;
+      background: var(--bg);
+      color: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: var(--gold);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    .header {
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+      color: var(--gold);
+    }
+
+    .header p {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .subject-tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .tab:hover {
+      background: #1a1a1a;
+    }
+
+    .tab.active {
+      background: var(--gold);
+      color: #000;
+      border-color: var(--gold);
+    }
+
+    .subject-content {
+      display: none;
+    }
+
+    .subject-content.active {
+      display: block;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: var(--panel);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: #808080;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--gold);
+    }
+
+    .topics-section {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-title .icon {
+      font-size: 24px;
+    }
+
+    .topic-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .topic-item {
+      background: #0f0f0f;
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .topic-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .topic-name {
+      font-size: 16px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .topic-badge {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge-mastered {
+      background: rgba(29, 185, 84, 0.2);
+      color: var(--green);
+    }
+
+    .badge-strong {
+      background: rgba(251, 191, 36, 0.2);
+      color: var(--yellow);
+    }
+
+    .badge-struggling {
+      background: rgba(251, 146, 60, 0.2);
+      color: var(--orange);
+    }
+
+    .badge-weak {
+      background: rgba(192, 57, 43, 0.2);
+      color: var(--red);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #2d2d2d;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+
+    .fill-mastered { background: var(--green); }
+    .fill-strong { background: var(--yellow); }
+    .fill-struggling { background: var(--orange); }
+    .fill-weak { background: var(--red); }
+
+    .topic-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #808080;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #808080;
+    }
+
+    .empty-state .icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .topic-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <a href="/parent/children/{{child._id}}/quizzes" class="back-link">← Back to Quizzes</a>
+
+    <div class="header">
+      <h1>📊 {{child.firstName}}'s Knowledge Map</h1>
+      <p>Track strengths and areas for improvement across all subjects</p>
+    </div>
+
+    {{#if error}}
+      <div class="empty-state">
+        <div class="icon">⚠️</div>
+        <p>{{error}}</p>
+      </div>
+    {{else}}
+
+    <div class="subject-tabs">
+      {{#each subjects}}
+        <div class="tab" data-subject="{{this}}" onclick="switchSubject('{{this}}')">
+          {{#if (eq this 'math')}}📐 Mathematics{{/if}}
+          {{#if (eq this 'english')}}📚 English{{/if}}
+          {{#if (eq this 'science')}}🔬 Science{{/if}}
+          {{#if (eq this 'responsibility')}}🎯 Responsibility{{/if}}
+        </div>
+      {{/each}}
+    </div>
+
+    {{#each knowledgeMaps}}
+      <div class="subject-content" data-subject="{{@key}}">
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="label">Average Mastery</div>
+            <div class="value">{{this.stats.avgMastery}}%</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Topics Covered</div>
+            <div class="value">{{this.stats.totalTopics}}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Mastered</div>
+            <div class="value">{{this.stats.masteredCount}}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Needs Work</div>
+            <div class="value">{{this.stats.weakCount}}</div>
+          </div>
+        </div>
+
+        <!-- Weak Topics -->
+        {{#if this.byClassification.weak.length}}
+          <div class="topics-section">
+            <div class="section-title">
+              <span class="icon">🔴</span>
+              <span>Needs Work</span>
+            </div>
+            <div class="topic-list">
+              {{#each this.byClassification.weak}}
+                <div class="topic-item">
+                  <div class="topic-header">
+                    <div class="topic-name">{{this.topic}}</div>
+                    <div class="topic-badge badge-weak">{{this.masteryPct}}%</div>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill fill-weak" style="width: {{this.masteryPct}}%"></div>
+                  </div>
+                  <div class="topic-meta">
+                    <span>📝 {{this.totalAttempted}} attempts</span>
+                    <span>📊 Level {{this.currentDifficulty}}</span>
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+
+        <!-- Struggling Topics -->
+        {{#if this.byClassification.struggling.length}}
+          <div class="topics-section">
+            <div class="section-title">
+              <span class="icon">🟡</span>
+              <span>Improving</span>
+            </div>
+            <div class="topic-list">
+              {{#each this.byClassification.struggling}}
+                <div class="topic-item">
+                  <div class="topic-header">
+                    <div class="topic-name">{{this.topic}}</div>
+                    <div class="topic-badge badge-struggling">{{this.masteryPct}}%</div>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill fill-struggling" style="width: {{this.masteryPct}}%"></div>
+                  </div>
+                  <div class="topic-meta">
+                    <span>📝 {{this.totalAttempted}} attempts</span>
+                    <span>📊 Level {{this.currentDifficulty}}</span>
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+
+        <!-- Strong Topics -->
+        {{#if this.byClassification.strong.length}}
+          <div class="topics-section">
+            <div class="section-title">
+              <span class="icon">🟢</span>
+              <span>Strong</span>
+            </div>
+            <div class="topic-list">
+              {{#each this.byClassification.strong}}
+                <div class="topic-item">
+                  <div class="topic-header">
+                    <div class="topic-name">{{this.topic}}</div>
+                    <div class="topic-badge badge-strong">{{this.masteryPct}}%</div>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill fill-strong" style="width: {{this.masteryPct}}%"></div>
+                  </div>
+                  <div class="topic-meta">
+                    <span>📝 {{this.totalAttempted}} attempts</span>
+                    <span>📊 Level {{this.currentDifficulty}}</span>
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+
+        <!-- Mastered Topics -->
+        {{#if this.byClassification.mastered.length}}
+          <div class="topics-section">
+            <div class="section-title">
+              <span class="icon">⭐</span>
+              <span>Mastered</span>
+            </div>
+            <div class="topic-list">
+              {{#each this.byClassification.mastered}}
+                <div class="topic-item">
+                  <div class="topic-header">
+                    <div class="topic-name">{{this.topic}}</div>
+                    <div class="topic-badge badge-mastered">{{this.masteryPct}}%</div>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill fill-mastered" style="width: {{this.masteryPct}}%"></div>
+                  </div>
+                  <div class="topic-meta">
+                    <span>📝 {{this.totalAttempted}} attempts</span>
+                    <span>📊 Level {{this.currentDifficulty}}</span>
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+
+        <!-- Focus Recommendation -->
+        {{#if this.focusTopics.length}}
+          <div class="topics-section">
+            <div class="section-title">
+              <span class="icon">🎯</span>
+              <span>Recommended Practice Focus</span>
+            </div>
+            <p style="color: var(--muted); margin-bottom: 16px;">
+              Next adaptive quiz will prioritize: <strong>{{#each this.focusTopics}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</strong>
+            </p>
+          </div>
+        {{/if}}
+      </div>
+    {{/each}}
+
+    {{#unless knowledgeMaps}}
+      <div class="empty-state">
+        <div class="icon">📊</div>
+        <h2>No Data Yet</h2>
+        <p>{{child.firstName}} hasn't completed any quizzes yet.</p>
+        <p style="margin-top: 12px;">Complete a few quizzes to see the knowledge map!</p>
+      </div>
+    {{/unless}}
+
+    {{/if}}
+  </div>
+
+  <script>
+    function switchSubject(subject) {
+      document.querySelectorAll('.tab').forEach(tab => {
+        if (tab.dataset.subject === subject) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      });
+
+      document.querySelectorAll('.subject-content').forEach(content => {
+        if (content.dataset.subject === subject) {
+          content.classList.add('active');
+        } else {
+          content.classList.remove('active');
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const firstTab = document.querySelector('.tab');
+      if (firstTab) {
+        firstTab.click();
+      }
+    });
+  </script>
+</body>
+</html>

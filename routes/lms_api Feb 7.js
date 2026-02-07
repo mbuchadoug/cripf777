@@ -8,7 +8,7 @@ import Question from "../models/question.js";         // Question model (used th
 import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 import Certificate from "../models/certificate.js";
-import { updateTopicMasteryFromAttempt } from "../services/topicMasteryTracker.js";
+
 
 const router = Router();
 
@@ -1354,27 +1354,6 @@ quizTitle: resolvedQuizTitle || "Quiz",
         console.error("[quiz/submit] attempt create failed:", e && (e.stack || e));
       }
     }
-
-
-
-    if (savedAttempt && savedAttempt._id) {
-  // Run in background - don't block response
-  updateTopicMasteryFromAttempt(savedAttempt._id)
-    .then(result => {
-      if (result.skipped) {
-        console.log("[QuizSubmit] Topic mastery skipped (not cripfcnt-home)");
-      } else {
-        console.log(`[QuizSubmit] Topic mastery updated: ${result.updated} updated, ${result.created} created`);
-        if (result.topics && result.topics.length > 0) {
-          console.log(`[QuizSubmit] Topics covered:`, result.topics);
-        }
-      }
-    })
-    .catch(err => {
-      console.error("[QuizSubmit] Failed to update topic mastery:", err);
-      // Don't fail the quiz submission if mastery tracking fails
-    });
-}
 
     // mark exam instance as used (optional)
 // mark exam instance as touched (DO NOT change expiresAt)

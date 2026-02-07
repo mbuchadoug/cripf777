@@ -493,11 +493,28 @@ router.get(
       status: { $ne: "finished" }
     });
 
+
+    let knowledgeMap = null;
+
+
+if (org && org.slug === HOME_ORG_SLUG && child.grade) {
+  try {
+    // Get knowledge map for primary subject (math)
+    knowledgeMap = await getStudentKnowledgeMap(
+      child._id,
+      'math',
+      child.grade
+    );
+  } catch (err) {
+    console.error("[ChildQuizzes] Error getting knowledge map:", err);
+  }
+}
+
     res.render("parent/child_quizzes", {
       user: parent, child, org, quizzesBySubject, attempts, certificates,
       progressData, subjectChartData, passCount, failCount,
       avgScore, trend, strongestSubject, weakestSubject, parentIsPaid,
-      totalPending
+      totalPending, knowledgeMap 
     });
   }
 );
@@ -653,5 +670,72 @@ router.get("/admin/fix-attempt-quiz-titles", ensureAuth, async (req, res) => {
     res.status(500).send("Failed");
   }
 });
+
+
+
+router.get(
+  "/parent/children/:childId/knowledge-map",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    try {
+      const parent = await User.findById(req.user._id).lean();
+      if (!parent) return res.redirect("/parent/dashboard");
+
+      const child = await User.findOne({
+        _id: req.params.childId,
+        parentUserId: parent._id,
+        role: "student"
+      }).lean();
+
+      if (!child) return res.status(404).send("Child not found");
+
+      // Check if child is in cripfcnt-home
+      const org = await Organization.findById(child.organization).lean();
+      if (!org || org.slug !== HOME_ORG_SLUG) {
+        return res.status(404).send("Knowledge map only available for home school students");
+      }
+
+      if (!child.grade) {
+        return res.render("parent/knowledge_map", {
+          user: parent,
+          child,
+          error: "Child grade not set. Please update child profile."
+        });
+      }
+
+      // Available subjects for cripfcnt-home
+      const subjects = ["math", "english", "science", "responsibility"];
+      
+      // Get knowledge maps for all subjects
+      const knowledgeMaps = {};
+      for (const subject of subjects) {
+        try {
+          const map = await getStudentKnowledgeMap(
+            child._id,
+            subject,
+            child.grade
+          );
+          if (map.stats.totalTopics > 0) {
+            knowledgeMaps[subject] = map;
+          }
+        } catch (err) {
+          console.error(`[KnowledgeMap] Error getting ${subject}:`, err);
+        }
+      }
+
+      return res.render("parent/knowledge_map", {
+        user: parent,
+        child,
+        knowledgeMaps,
+        subjects
+      });
+
+    } catch (error) {
+      console.error("[KnowledgeMap] Error:", error);
+      return res.status(500).send("Failed to load knowledge map");
+    }
+  }
+);
 
 export default router;

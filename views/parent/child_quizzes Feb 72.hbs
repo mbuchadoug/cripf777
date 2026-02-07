@@ -293,31 +293,21 @@
   <div class="sub">Grade {{child.grade}}</div>
 
   <!-- TABS -->
- <div class="tabs">
-  <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
-  <div class="tab" data-tab="history">Quiz History</div>
-  <div class="tab" data-tab="progress">Progress</div>
-  <div class="tab" data-tab="knowledge">Knowledge Map</div>
-  <div class="tab" data-tab="certificates">Certificates</div>
-</div>
+  <div class="tabs">
+    <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
+    <div class="tab" data-tab="history">Quiz History</div>
+    <div class="tab" data-tab="progress">Progress</div>
+    <div class="tab" data-tab="certificates">Certificates</div>
+  </div>
 
   <!-- ============================== -->
   <!-- ASSIGNED QUIZZES               -->
   <!-- ============================== -->
-<div id="assigned" class="panel tab-content">
-  {{#if quizzesBySubject}}
-    {{#each quizzesBySubject}}
-      <div class="subject-group">
-        <div class="subject-header">
-          {{@key}}
-          <button 
-            onclick="generatePracticeQuiz('{{@key}}', '{{../../child._id}}')" 
-            class="btn" 
-            style="float:right; font-size:12px; padding:6px 12px; margin-top:-2px;"
-          >
-            ⚡ Generate Practice Quiz
-          </button>
-        </div>
+  <div id="assigned" class="panel tab-content">
+    {{#if quizzesBySubject}}
+      {{#each quizzesBySubject}}
+        <div class="subject-group">
+          <div class="subject-header">{{@key}}</div>
           <div class="subject-quizzes">
             {{#each this}}
               <div class="card">
@@ -477,39 +467,6 @@
 
   </div>
 
-
-
-
-
-
-
-
-
-  <!-- ============================== -->
-  <!-- 🗺️ KNOWLEDGE MAP TAB          -->
-  <!-- ============================== -->
-  <div id="knowledge" class="panel tab-content hidden">
-    <div style="margin-bottom:16px;">
-      <h3>🎯 Learning Progress by Topic</h3>
-      <div class="sub">See which topics {{child.firstName}} has mastered and which need more practice</div>
-    </div>
-
-    <div style="text-align:center; margin:30px 0;">
-      <a href="/parent/children/{{child._id}}/knowledge-map" class="btn" style="font-size:16px; padding:14px 28px;">
-        📊 View Full Knowledge Map
-      </a>
-    </div>
-
-    <div class="empty" style="margin-top:20px;">
-      The full knowledge map shows:
-      <ul style="text-align:left; max-width:400px; margin:12px auto; color:var(--muted);">
-        <li>📍 Topic-by-topic mastery levels</li>
-        <li>🎨 Color-coded progress (red → yellow → green)</li>
-        <li>🎯 Personalized practice quiz generation</li>
-        <li>📈 Difficulty progression tracking</li>
-      </ul>
-    </div>
-  </div>
   <!-- ============================== -->
   <!-- CERTIFICATES                   -->
   <!-- ============================== -->
@@ -528,13 +485,6 @@
       <div class="empty">No certificates earned yet.</div>
     {{/if}}
   </div>
-
-
-
-
-{{#if (and knowledgeMap (eq org.slug "cripfcnt-home"))}}
-  <div class="tab" data-tab="knowledge">Knowledge Map</div>
-{{/if}}
 
 </main>
 
@@ -722,37 +672,5 @@
   }
 </script>
 
-
-<!-- PRACTICE QUIZ GENERATION -->
-<script>
-  async function generatePracticeQuiz(subject, childId) {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = '⏳ Generating...';
-
-    try {
-      const response = await fetch(`/parent/children/${childId}/generate-practice-quiz`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: subject.toLowerCase() })
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.quizId) {
-        window.location.href = data.redirectUrl;
-      } else {
-        alert('Failed to generate quiz. Please try again.');
-        btn.disabled = false;
-        btn.textContent = '⚡ Generate Practice Quiz';
-      }
-    } catch (error) {
-      console.error('Error generating quiz:', error);
-      alert('Error generating quiz. Please try again.');
-      btn.disabled = false;
-      btn.textContent = '⚡ Generate Practice Quiz';
-    }
-  }
-</script>
 </body>
 </html>
