@@ -79,7 +79,8 @@ const QuestionSchema = new mongoose.Schema({
   tags: [String],
   source: { type: String, default: "import" },
   raw: { type: String, default: null },
-  createdAt: { type: Date, default: () => new Date() }
+  createdAt: { type: Date, default: () => new Date() },
+  updatedAt: { type: Date, default: () => new Date() }
 });
 
 // ==============================
@@ -90,10 +91,10 @@ QuestionSchema.index({ subject: 1, grade: 1, topic: 1 });
 QuestionSchema.index({ organization: 1, subject: 1, topic: 1 });
 QuestionSchema.index({ topic: 1, difficulty: 1 });
 
-
-
-// ADD THIS STATIC METHOD HERE (before module.exports):
-questionSchema.statics.bulkUpdateTopicsAndDifficulty = async function(updates) {
+// ==============================
+// STATIC METHOD FOR BULK TAGGING
+// ==============================
+QuestionSchema.statics.bulkUpdateTopicsAndDifficulty = async function(updates) {
   const bulkOps = updates.map(update => ({
     updateOne: {
       filter: { _id: update.id },
@@ -114,4 +115,8 @@ questionSchema.statics.bulkUpdateTopicsAndDifficulty = async function(updates) {
 
   return await this.bulkWrite(bulkOps);
 };
+
+// ==============================
+// EXPORT MODEL
+// ==============================
 export default mongoose.models.Question || mongoose.model("Question", QuestionSchema);
