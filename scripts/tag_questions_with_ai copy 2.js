@@ -1,13 +1,11 @@
 // scripts/tag_questions_with_ai.js
 /**
- * AI-Powered Question Tagging Script (CRIPFCnt-Home Only)
+ * AI-Powered Question Tagging Script
  * 
- * This script uses Claude AI to automatically tag questions with:
+ * This script uses Claude AI to automatically tag all existing questions with:
  * - topic (micro-topic like "fractions", "verb-tenses")
  * - difficulty (1-5 scale)
  * - subject (math, english, science, etc.)
- * 
- * ONLY processes questions from cripfcnt-home organization
  * 
  * Usage:
  *   node scripts/tag_questions_with_ai.js
@@ -28,7 +26,6 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_AP
 const BATCH_SIZE = parseInt(process.argv.find(arg => arg.startsWith('--batch-size='))?.split('=')[1]) || 50;
 const TARGET_SUBJECT = process.argv.find(arg => arg.startsWith('--subject='))?.split('=')[1];
 const DRY_RUN = process.argv.includes('--dry-run');
-const ORG_SLUG = 'cripfcnt-home'; // ONLY process this organization
 
 /**
  * Tag a batch of questions using Claude AI
@@ -102,23 +99,31 @@ Respond ONLY with a JSON array (no markdown, no explanation) in this exact forma
     }
 
     const data = await response.json();
-    const aiResponse = data.content[0].text;
-
-    // Parse response (handle markdown code blocks)
-    let jsonText = aiResponse.trim();
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim();
+    const content = data.content[0].text;
+    
+    // Extract JSON from response (handle markdown fences)
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      throw new Error("No JSON array found in AI response");
     }
 
-    const tags = JSON.parse(jsonText);
+    const tags = JSON.parse(jsonMatch[0]);
 
-    // Map back to question IDs
-    return tags.map(tag => ({
-      id: questions[tag.id]._id,
-      topic: tag.topic.toLowerCase().trim(),
-      difficulty: Math.min(5, Math.max(1, tag.difficulty)),
-      subject: tag.subject.toLowerCase().trim()
-    }));
+    // Map tags back to questions
+    const updates = [];
+    for (let i = 0; i < questions.length; i++) {
+      const tag = tags.find(t => t.id === i);
+      if (tag) {
+        updates.push({
+          questionId: questions[i]._id,
+          topic: tag.topic,
+          difficulty: tag.difficulty,
+          subject: tag.subject
+        });
+      }
+    }
+
+    return updates;
 
   } catch (error) {
     console.error("Error calling Claude API:", error.message);
@@ -127,14 +132,12 @@ Respond ONLY with a JSON array (no markdown, no explanation) in this exact forma
 }
 
 /**
- * Main execution
+ * Main tagging process
  */
-async function main() {
+async function tagAllQuestions() {
   try {
-    console.log("\n🤖 AI Question Tagger (CRIPFCnt-Home Only)");
-    console.log("==========================================");
+    console.log("🚀 Starting question tagging process...");
     console.log(`📊 Batch size: ${BATCH_SIZE}`);
-    console.log(`🏢 Organization: ${ORG_SLUG}`);
     if (TARGET_SUBJECT) {
       console.log(`🎯 Target subject: ${TARGET_SUBJECT}`);
     }
@@ -153,26 +156,8 @@ async function main() {
       console.log("✅ Connected to database");
     }
 
-    // Find the cripfcnt-home organization
-    const Organization = mongoose.model('Organization', new mongoose.Schema({
-      name: String,
-      slug: String
-    }), 'organizations');
-    
-    const homeOrg = await Organization.findOne({ slug: ORG_SLUG });
-    
-    if (!homeOrg) {
-      console.error(`❌ Error: Could not find organization with slug "${ORG_SLUG}"`);
-      console.log('   Please check your organization slug in the database\n');
-      process.exit(1);
-    }
-    
-    console.log(`✅ Found organization: ${homeOrg.name}`);
-    console.log(`   ID: ${homeOrg._id}\n`);
-
-    // Build query - ONLY for cripfcnt-home organization
+    // Build query
     const query = {
-      organization: homeOrg._id, // ← CRITICAL: Only this organization!
       type: { $ne: "comprehension" }, // Only tag regular questions
       $or: [
         { topic: { $exists: false } },
@@ -183,22 +168,18 @@ async function main() {
     };
 
     if (TARGET_SUBJECT) {
-      query.$and = [
-        {
-          $or: [
-            { subject: TARGET_SUBJECT },
-            { module: TARGET_SUBJECT }
-          ]
-        }
-      ];
+      query.$or.push(
+        { subject: TARGET_SUBJECT },
+        { module: TARGET_SUBJECT }
+      );
     }
 
     // Count questions to tag
     const totalCount = await Question.countDocuments(query);
-    console.log(`📝 Found ${totalCount} cripfcnt-home questions to tag\n`);
+    console.log(`📝 Found ${totalCount} questions to tag\n`);
 
     if (totalCount === 0) {
-      console.log("✨ All cripfcnt-home questions are already tagged!");
+      console.log("✨ All questions are already tagged!");
       return;
     }
 
@@ -239,52 +220,59 @@ async function main() {
 
         processedCount += questions.length;
 
-        // Rate limiting: wait 1 second between batches
+        // Rate limiting delay (1 second between batches)
         if (processedCount < totalCount) {
-          console.log("   ⏳ Waiting 1 second...");
+          console.log("   ⏳ Waiting 1 second before next batch...");
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
       } catch (error) {
-        console.error(`   ❌ Error processing batch: ${error.message}`);
+        console.error(`   ❌ Error processing batch:`, error.message);
         errorCount += questions.length;
         processedCount += questions.length;
-
-        // Wait longer after error
+        
+        // Continue with next batch
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
     // Summary
-    console.log("\n" + "=".repeat(50));
-    console.log("🎉 TAGGING COMPLETE!\n");
-    console.log(`✅ Successfully tagged: ${successCount} questions`);
-    if (errorCount > 0) {
-      console.log(`❌ Failed: ${errorCount} questions`);
-    }
-    console.log(`📊 Total processed: ${processedCount} questions`);
+    console.log("\n" + "=".repeat(60));
+    console.log("📊 TAGGING SUMMARY");
+    console.log("=".repeat(60));
+    console.log(`Total questions: ${totalCount}`);
+    console.log(`Successfully tagged: ${successCount}`);
+    console.log(`Errors: ${errorCount}`);
+    console.log(`Success rate: ${Math.round((successCount / totalCount) * 100)}%`);
     
-    if (!DRY_RUN) {
-      // Show sample topics created
-      const sampleTopics = await Question.distinct('topic', { 
-        organization: homeOrg._id,
-        topic: { $ne: null } 
-      });
-      console.log(`\n💾 Topics created: ${sampleTopics.length} unique topics`);
-      console.log(`   ${sampleTopics.slice(0, 10).join(', ')}${sampleTopics.length > 10 ? '...' : ''}`);
+    if (DRY_RUN) {
+      console.log("\n🔍 This was a DRY RUN - no changes were saved");
+      console.log("Run without --dry-run to apply changes");
     }
-    
-    console.log("\n✨ Done!\n");
+
+    console.log("\n✨ Tagging complete!");
 
   } catch (error) {
     console.error("\n❌ Fatal error:", error);
-    process.exit(1);
+    throw error;
   } finally {
     if (mongoose.connection.readyState) {
-      await mongoose.connection.close();
+      await mongoose.disconnect();
+      console.log("👋 Disconnected from database");
     }
   }
 }
 
-// Run the script
-main().catch(console.error);
+/**
+ * Run if called directly
+ */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  tagAllQuestions()
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error(err);
+      process.exit(1);
+    });
+}
+
+export { tagAllQuestions, tagQuestionsBatch };

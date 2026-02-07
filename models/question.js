@@ -90,4 +90,28 @@ QuestionSchema.index({ subject: 1, grade: 1, topic: 1 });
 QuestionSchema.index({ organization: 1, subject: 1, topic: 1 });
 QuestionSchema.index({ topic: 1, difficulty: 1 });
 
+
+
+// ADD THIS STATIC METHOD HERE (before module.exports):
+questionSchema.statics.bulkUpdateTopicsAndDifficulty = async function(updates) {
+  const bulkOps = updates.map(update => ({
+    updateOne: {
+      filter: { _id: update.id },
+      update: {
+        $set: {
+          topic: update.topic,
+          difficulty: update.difficulty,
+          subject: update.subject || undefined,
+          updatedAt: new Date()
+        }
+      }
+    }
+  }));
+
+  if (bulkOps.length === 0) {
+    return { modifiedCount: 0 };
+  }
+
+  return await this.bulkWrite(bulkOps);
+};
 export default mongoose.models.Question || mongoose.model("Question", QuestionSchema);
