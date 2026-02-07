@@ -23,13 +23,14 @@ const HOME_ORG_SLUG = "cripfcnt-home";
 // 💳 PLAN CONFIG
 // ==============================
 const PLAN_LIMITS = {
-  none:   { maxChildren: 0, label: "Free Trial" },
+  none:   { maxChildren: 0, label: "Free Trial" },  // 0 = no PAID children, but 1 trial child allowed
   silver: { maxChildren: 2, label: "Silver" },
   gold:   { maxChildren: 5, label: "Gold" }
 };
 
+// 🎓 Trial config
 const TRIAL_MAX_CHILDREN = 1;
-const TRIAL_SUBJECTS = ["math", "responsibility"];
+const TRIAL_SUBJECTS = ["math", "responsibility"];  // only these 2 subjects for trial
 
 function getChildLimit(user) {
   if (!isSubscriptionActive(user)) return 0;
@@ -105,8 +106,10 @@ router.get(
       new Date() > new Date(freshUser.subscriptionExpiresAt)
     );
 
+    // 🆓 Trial: check if they already used their free trial child
     const hasTrialChild = children.length > 0;
 
+    // 🎯 Build demo preview data for trial users
     let demoData = null;
     if (!isPaid) {
       const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
@@ -183,6 +186,7 @@ router.get(
 
 // ----------------------------------
 // 🆓 TRIAL: Add trial child form
+// GET /parent/trial/new
 // ----------------------------------
 router.get(
   "/parent/trial/new",
@@ -191,10 +195,12 @@ router.get(
   async (req, res) => {
     const freshUser = await User.findById(req.user._id).lean();
 
+    // Block if already paid (they use the normal add child flow)
     if (isSubscriptionActive(freshUser)) {
       return res.redirect("/parent/children/new");
     }
 
+    // Block if already has a trial child
     const existingCount = await User.countDocuments({
       parentUserId: req.user._id,
       role: "student"
@@ -210,6 +216,7 @@ router.get(
 
 // ----------------------------------
 // 🆓 TRIAL: Create trial child
+// POST /parent/trial/children
 // ----------------------------------
 router.post(
   "/parent/trial/children",
@@ -219,10 +226,12 @@ router.post(
     const { firstName, lastName, grade } = req.body;
     const freshUser = await User.findById(req.user._id).lean();
 
+    // Block if paid
     if (isSubscriptionActive(freshUser)) {
       return res.redirect("/parent/children/new");
     }
 
+    // Block if already has trial child
     const existingCount = await User.countDocuments({
       parentUserId: req.user._id,
       role: "student"
@@ -239,6 +248,7 @@ router.post(
     const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
     if (!org) return res.status(500).send("Home org missing");
 
+    // 1️⃣ Create trial child
     const child = await User.create({
       firstName,
       lastName,
@@ -247,9 +257,10 @@ router.post(
       parentUserId: req.user._id,
       organization: org._id,
       accountType: "student_self",
-      consumerEnabled: false
+      consumerEnabled: false  // trial child, not full access
     });
 
+    // 2️⃣ Membership
     await OrgMembership.create({
       org: org._id,
       user: child._id,
@@ -257,6 +268,7 @@ router.post(
       joinedAt: new Date()
     });
 
+    // 3️⃣ Assign 1 trial quiz for MATH and 1 for RESPONSIBILITY only
     for (const subject of TRIAL_SUBJECTS) {
       const rule = await QuizRule.findOne({
         org: org._id,
@@ -281,6 +293,7 @@ router.post(
 
 // ----------------------------------
 // Create child (PAID users)
+// POST /parent/children
 // ----------------------------------
 router.post("/parent/children", ensureAuth, async (req, res) => {
   const { firstName, lastName, grade, parentId } = req.body;
@@ -306,6 +319,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     return res.render("parent/subscribe_first", { user: req.user });
   }
 
+  // Child cap (count ALL children including trial ones)
   const childLimit = getChildLimit(parentUser);
   const existingCount = await User.countDocuments({
     parentUserId: effectiveParentId,
@@ -323,6 +337,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
   const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
   if (!org) return res.status(500).send("Home org missing");
 
+  // 1️⃣ Create child
   const child = await User.create({
     firstName,
     lastName,
@@ -334,6 +349,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     consumerEnabled: true
   });
 
+  // 2️⃣ Membership
   await OrgMembership.create({
     org: org._id,
     user: child._id,
@@ -341,6 +357,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     joinedAt: new Date()
   });
 
+  // 3️⃣ Assign 1 trial quiz per subject (maths + responsibility)
   for (const subject of TRIAL_SUBJECTS) {
     const rule = await QuizRule.findOne({
       org: org._id,
@@ -359,6 +376,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     }
   }
 
+  // 4️⃣ Assign ALL paid quizzes
   const paidRules = await QuizRule.find({
     org: org._id,
     grade: child.grade,
@@ -379,7 +397,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
 });
 
 // ----------------------------------
-// View child's quizzes + PROGRESS
+// View child's quizzes
 // ----------------------------------
 router.get(
   "/parent/children/:childId/quizzes",
@@ -413,11 +431,7 @@ router.get(
 
     function normaliseSubject(subject) {
       if (!subject) return "General";
-      const map = {
-        math: "Mathematics", maths: "Mathematics",
-        english: "English", science: "Science",
-        responsibility: "Responsibility"
-      };
+      const map = { math: "Mathematics", maths: "Mathematics", english: "English", science: "Science", responsibility: "Responsibility" };
       return map[String(subject).toLowerCase()] || subject;
     }
 
@@ -484,20 +498,13 @@ router.get(
     const certificates = await Certificate.find({ userId: child._id, orgId: org._id })
       .sort({ issuedAt: -1, createdAt: -1 }).lean();
 
+    // Check if parent is paid (to show upgrade prompt on quiz page)
     const parentIsPaid = isSubscriptionActive(parent);
-
-    // 📊 COMPLETION STATS
-    const totalCompleted = passCount + failCount;
-    const totalPending = await ExamInstance.countDocuments({
-      userId: child._id,
-      status: { $ne: "finished" }
-    });
 
     res.render("parent/child_quizzes", {
       user: parent, child, org, quizzesBySubject, attempts, certificates,
       progressData, subjectChartData, passCount, failCount,
-      avgScore, trend, strongestSubject, weakestSubject, parentIsPaid,
-      totalPending
+      avgScore, trend, strongestSubject, weakestSubject, parentIsPaid
     });
   }
 );

@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{child.firstName}} {{child.lastName}} | Quizzes</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+      --red:#c0392b;
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+    }
+
+    main{
+      max-width:1200px;
+      margin:30px auto;
+      padding:0 20px;
+    }
+
+    h1{
+      font-size:28px;
+      margin-bottom:4px;
+    }
+
+    .sub{
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    /* TABS */
+    .tabs{
+      display:flex;
+      gap:10px;
+      margin-top:20px;
+      border-bottom:1px solid var(--border);
+    }
+
+    .tab{
+      padding:12px 16px;
+      cursor:pointer;
+      font-weight:700;
+      color:var(--muted);
+      border-bottom:3px solid transparent;
+    }
+
+    .tab.active{
+      color:var(--gold);
+      border-bottom-color:var(--gold);
+    }
+
+    /* PANELS */
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      margin-top:18px;
+    }
+
+    /* CARDS */
+    .card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:14px;
+      margin-bottom:12px;
+    }
+
+    .card strong{
+      font-size:16px;
+    }
+
+    .meta{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    .status{
+      display:inline-block;
+      margin-top:6px;
+      padding:4px 10px;
+      font-size:12px;
+      border-radius:999px;
+      background:#1f1f1f;
+      color:var(--muted);
+    }
+
+    .status.pending{ color:var(--gold); }
+    .status.passed{ color:var(--green); }
+    .status.failed{ color:var(--red); }
+
+    .actions{
+      margin-top:10px;
+    }
+
+    .actions a{
+      color:var(--gold);
+      font-weight:700;
+      font-size:14px;
+      text-decoration:none;
+      margin-right:14px;
+    }
+
+    .actions a:hover{
+      text-decoration:underline;
+    }
+
+    .hidden{ display:none; }
+
+    .back{
+      display:inline-block;
+      margin-bottom:10px;
+      color:var(--muted);
+      text-decoration:none;
+    }
+
+    .empty{
+      color:var(--muted);
+      font-size:15px;
+    }
+
+
+
+
+    /* SUBJECT GROUP CONTAINER */
+.subject-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #101010;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+/* SUBJECT HEADER */
+.subject-header {
+  position: sticky;
+  top: 0;
+  background: #141414;
+  padding: 12px 14px;
+  font-weight: 700;
+  color: var(--gold);
+  border-bottom: 1px solid var(--border);
+  z-index: 2;
+}
+
+/* SCROLLABLE QUIZ LIST */
+.subject-quizzes {
+  max-height: 260px;        /* 👈 controls scroll height */
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* Subtle scrollbar (mobile friendly) */
+.subject-quizzes::-webkit-scrollbar {
+  width: 6px;
+}
+.subject-quizzes::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+
+  </style>
+</head>
+
+<body>
+<main>
+
+  <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
+
+  <h1>{{child.firstName}} {{child.lastName}}</h1>
+  <div class="sub">Grade {{child.grade}}</div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
+    <div class="tab" data-tab="history">Quiz History</div>
+     <div class="tab" data-tab="progress">Progress</div>
+    <div class="tab" data-tab="certificates">Certificates</div>
+  </div>
+
+
+
+
+
+
+  <!-- ASSIGNED QUIZZES -->
+<!-- ASSIGNED QUIZZES -->
+<div id="assigned" class="panel tab-content">
+
+{{#if quizzesBySubject}}
+ {{#each quizzesBySubject}}
+  <div class="subject-group">
+
+    <div class="subject-header">
+      {{@key}}
+    </div>
+
+    <div class="subject-quizzes">
+      {{#each this}}
+        <div class="card">
+          <strong>{{quizTitle}}</strong>
+
+          <span class="status pending">Pending</span>
+
+          <div class="actions">
+            <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}">
+              ▶ Start Quiz
+            </a>
+          </div>
+        </div>
+      {{/each}}
+    </div>
+
+  </div>
+{{/each}}
+
+{{else}}
+  <div class="empty">No quizzes assigned.</div>
+{{/if}}
+
+</div>
+
+
+
+<!-- PROGRESS -->
+<div id="progress" class="panel tab-content hidden">
+
+  {{#if progressData.length}}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+
+    <div class="card">
+      <strong>Average Score</strong>
+      <div class="meta">{{avgScore}}%</div>
+    </div>
+
+    <div class="card">
+      <strong>Trend</strong>
+      <div class="meta">{{trend}}</div>
+    </div>
+
+    <div class="card">
+      <strong>Strongest Subject</strong>
+      <div class="meta">{{strongestSubject}}</div>
+    </div>
+
+    <div class="card">
+      <strong>Needs Improvement</strong>
+      <div class="meta">{{weakestSubject}}</div>
+    </div>
+
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <p class="sub">
+      Your child is showing <strong>{{trend}}</strong> performance.
+      Focus more on <strong>{{weakestSubject}}</strong> to improve results.
+    </p>
+  </div>
+
+  {{else}}
+    <div class="empty">
+      Progress insights will appear after completing quizzes.
+    </div>
+  {{/if}}
+
+</div>
+
+
+  <!-- HISTORY -->
+ <div id="history" class="panel tab-content hidden">
+  {{#if attempts.length}}
+    {{#each attempts}}
+      <div class="card">
+        <strong>{{quizTitle}}</strong>
+
+        <div class="meta">
+          Score: {{percentage}}%
+        </div>
+
+        {{#if passed}}
+          <span class="status passed">Passed</span>
+        {{else}}
+          <span class="status failed">Failed</span>
+        {{/if}}
+
+        <div class="actions">
+         <a href="/parent/children/{{../child._id}}/attempts/{{_id}}">
+  Review Attempt
+</a>
+
+        </div>
+      </div>
+    {{/each}}
+  {{else}}
+    <div class="empty">No quiz history yet.</div>
+  {{/if}}
+</div>
+
+  <!-- CERTIFICATES -->
+  <div id="certificates" class="panel tab-content hidden">
+    {{#if certificates.length}}
+      {{#each certificates}}
+        <div class="card">
+          <strong>{{quizTitle}}</strong>
+         <div class="meta">
+  {{percentage}}% • {{createdAt}}
+</div>
+
+
+          <div class="actions">
+            <a href="/admin/certificates/{{_id}}/download/pdf" target="_blank">
+              Download Certificate
+            </a>
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <div class="empty">No certificates earned yet.</div>
+    {{/if}}
+  </div>
+
+
+
+
+
+<hr>
+
+
+</main>
+
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.remove('hidden');
+    });
+  });
+</script>
+
+
+
+
+</body>
+</html>
