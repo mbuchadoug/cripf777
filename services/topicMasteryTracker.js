@@ -1,4 +1,4 @@
-// services/topicMasteryTracker.js (DEBUG VERSION)
+// services/topicMasteryTracker.js (FINAL FIX)
 import mongoose from "mongoose";
 import Question from "../models/question.js";
 import Attempt from "../models/attempt.js";
@@ -36,8 +36,6 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       .filter(id => mongoose.isValidObjectId(id))
       .map(id => mongoose.Types.ObjectId(id));
 
-    console.log(`[TopicMastery] Extracted ${questionIds.length} valid question IDs from ${attempt.answers?.length || 0} answers`);
-
     if (questionIds.length === 0) {
       console.log("[TopicMastery] No valid question IDs");
       return { updated: 0, created: 0 };
@@ -48,19 +46,7 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       _id: { $in: questionIds }
     }).lean();
 
-    console.log(`[TopicMastery] Found ${questions.length} questions in database`);
-
-    // 🔍 DEBUG: Log each question's details
-    questions.forEach((q, idx) => {
-      console.log(`[TopicMastery] Q${idx + 1}:`, {
-        _id: String(q._id),
-        topic: q.topic || 'MISSING',
-        subject: q.subject || 'MISSING',
-        grade: q.grade || 'MISSING',
-        type: q.type || 'MISSING',
-        module: q.module || 'MISSING'
-      });
-    });
+    console.log(`[TopicMastery] Found ${questions.length} questions`);
 
     // Build maps
     const questionMap = {};
@@ -73,20 +59,11 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       answerMap[String(answer.questionId)] = answer;
     }
 
-    console.log(`[TopicMastery] Built maps: ${Object.keys(questionMap).length} questions, ${Object.keys(answerMap).length} answers`);
-
     // Track updates
     const updates = {
       updated: 0,
       created: 0,
-      topics: new Set(),
-      skippedReasons: {
-        noAnswer: 0,
-        notMCQ: 0,
-        missingTopic: 0,
-        missingSubject: 0,
-        missingGrade: 0
-      }
+      topics: new Set()
     };
 
     // Process each question
@@ -94,97 +71,74 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       const qid = String(question._id);
       const answer = answerMap[qid];
 
-      console.log(`[TopicMastery] Processing question ${qid}...`);
-
       if (!answer) {
-        console.log(`[TopicMastery] ❌ No answer found for question ${qid}`);
-        updates.skippedReasons.noAnswer++;
         continue;
       }
 
-      console.log(`[TopicMastery]   Answer type: ${answer.answerType || 'UNDEFINED'}`);
+      // ✅ FIX: Accept answers with choiceIndex as MCQ (regardless of answerType field)
+      const isMCQ = (
+        answer.answerType === "mcq" || 
+        typeof answer.choiceIndex === "number"
+      );
 
-      if (answer.answerType !== "mcq") {
-        console.log(`[TopicMastery] ❌ Question ${qid} is not MCQ (type: ${answer.answerType})`);
-        updates.skippedReasons.notMCQ++;
-        continue;
+      if (!isMCQ) {
+        continue; // Skip essays and other non-MCQ types
       }
 
-      // Get topic, subject, grade
+      // Get topic, subject, grade - use child's grade if question doesn't have one
       const topic = question.topic;
       const subject = question.subject;
-      const grade = question.grade;
-
-      console.log(`[TopicMastery]   Topic: ${topic || 'MISSING'}, Subject: ${subject || 'MISSING'}, Grade: ${grade || 'MISSING'}`);
-
-      if (!topic) {
-        console.log(`[TopicMastery] ❌ Question ${qid} missing topic`);
-        updates.skippedReasons.missingTopic++;
-        continue;
-      }
-
-      if (!subject) {
-        console.log(`[TopicMastery] ❌ Question ${qid} missing subject`);
-        updates.skippedReasons.missingSubject++;
-        continue;
-      }
-
+      
+      // ✅ FIX: Use attempt user's grade if question doesn't have grade field
+      let grade = question.grade;
       if (!grade) {
-        console.log(`[TopicMastery] ❌ Question ${qid} missing grade`);
-        updates.skippedReasons.missingGrade++;
-        continue;
+        // Try to get user's grade from attempt
+        try {
+          const User = mongoose.model('User');
+          const user = await User.findById(attempt.userId).select('grade').lean();
+          if (user && user.grade) {
+            grade = user.grade;
+          }
+        } catch (e) {
+          console.log(`[TopicMastery] Could not get user grade: ${e.message}`);
+        }
       }
 
-      console.log(`[TopicMastery]   ✅ Question ${qid} has all required fields`);
+      if (!topic || !subject || !grade) {
+        console.log(`[TopicMastery] Skipping question ${qid} - missing required fields (topic: ${!!topic}, subject: ${!!subject}, grade: ${!!grade})`);
+        continue;
+      }
 
       // Get or create mastery record
-      try {
-        console.log(`[TopicMastery]   Getting/creating mastery record...`);
-        
-        const mastery = await TopicMastery.getOrCreate({
-          userId: attempt.userId,
-          organization: attempt.organization,
-          subject: subject.toLowerCase(),
-          topic: topic.toLowerCase(),
-          grade
-        });
+      const mastery = await TopicMastery.getOrCreate({
+        userId: attempt.userId,
+        organization: attempt.organization,
+        subject: subject.toLowerCase(),
+        topic: topic.toLowerCase(),
+        grade
+      });
 
-        console.log(`[TopicMastery]   Mastery record ${mastery.isNew ? 'created' : 'found'}: ${mastery._id}`);
+      // Capture isNew status BEFORE saving
+      const wasNew = mastery.isNew;
 
-        // Capture isNew status BEFORE saving
-        const wasNew = mastery.isNew;
+      // Record attempt
+      const wasCorrect = answer.correct === true;
+      const difficulty = question.difficulty || 1;
 
-        // Record attempt
-        const wasCorrect = answer.correct === true;
-        const difficulty = question.difficulty || 1;
+      mastery.recordAttempt(qid, wasCorrect, difficulty);
+      await mastery.save();
 
-        console.log(`[TopicMastery]   Recording attempt: correct=${wasCorrect}, difficulty=${difficulty}`);
-        
-        mastery.recordAttempt(qid, wasCorrect, difficulty);
-        await mastery.save();
-
-        console.log(`[TopicMastery]   ✅ Saved mastery record`);
-
-        updates.topics.add(topic);
-        
-        if (wasNew) {
-          updates.created++;
-          console.log(`[TopicMastery]   📊 Counted as CREATED`);
-        } else {
-          updates.updated++;
-          console.log(`[TopicMastery]   📊 Counted as UPDATED`);
-        }
-
-      } catch (err) {
-        console.error(`[TopicMastery] ❌ Error processing question ${qid}:`, err);
+      updates.topics.add(topic);
+      
+      if (wasNew) {
+        updates.created++;
+      } else {
+        updates.updated++;
       }
     }
 
-    console.log(`[TopicMastery] ========== SUMMARY ==========`);
-    console.log(`[TopicMastery] Updated: ${updates.updated}, Created: ${updates.created}`);
+    console.log(`[TopicMastery] Updated ${updates.updated}, created ${updates.created}`);
     console.log(`[TopicMastery] Topics:`, Array.from(updates.topics));
-    console.log(`[TopicMastery] Skipped reasons:`, updates.skippedReasons);
-    console.log(`[TopicMastery] =============================`);
 
     return {
       updated: updates.updated,
@@ -193,7 +147,7 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
     };
 
   } catch (error) {
-    console.error("[TopicMastery] Fatal error:", error);
+    console.error("[TopicMastery] Error:", error);
     throw error;
   }
 }
