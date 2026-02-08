@@ -86,7 +86,6 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       }
 
       // Get or create mastery record
-      // ✅ FIX: Check isNew BEFORE calling recordAttempt and save
       const mastery = await TopicMastery.getOrCreate({
         userId: attempt.userId,
         organization: attempt.organization,
@@ -94,9 +93,6 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
         topic: topic.toLowerCase(),
         grade
       });
-
-      // ✅ FIX: Capture isNew status BEFORE saving
-      const wasNew = mastery.isNew;
 
       // Record attempt
       const wasCorrect = answer.correct === true;
@@ -106,9 +102,7 @@ export async function updateTopicMasteryFromAttempt(attemptId) {
       await mastery.save();
 
       updates.topics.add(topic);
-      
-      // ✅ FIX: Use wasNew (captured before save) instead of mastery.isNew
-      if (wasNew) {
+      if (mastery.isNew) {
         updates.created++;
       } else {
         updates.updated++;
