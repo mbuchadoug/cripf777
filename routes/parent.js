@@ -14,7 +14,7 @@ import Certificate from "../models/certificate.js";
 import Notification from "../models/notification.js";
 import { canActAsParent } from "../middleware/parentAccess.js";
 import Question from "../models/question.js";
-
+import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
 const router = Router();
 
 const HOME_ORG_SLUG = "cripfcnt-home";
