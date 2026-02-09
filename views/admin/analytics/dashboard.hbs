@@ -169,10 +169,11 @@
     font-size: 32px;
     font-weight: 800;
     margin-bottom: 8px;
+    color: #FFFFFF !important; /* ✅ FIXED: White numbers */
   }
 
   .stat-label {
-    color: #888;
+    color: #aaa; /* ✅ FIXED: Lighter labels */
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
@@ -184,6 +185,18 @@
     border: 1px solid #222;
     border-radius: 12px;
     padding: 24px;
+  }
+
+  .chart-card h3, .table-card h3 {
+    color: #FFFFFF !important; /* ✅ FIXED: White headers */
+  }
+
+  .table-card table {
+    color: #FFFFFF !important; /* ✅ FIXED: White table text */
+  }
+
+  .table-card table tbody tr td {
+    color: #EEEEEE !important; /* ✅ FIXED: Light table cells */
   }
 
   .btn-active {
