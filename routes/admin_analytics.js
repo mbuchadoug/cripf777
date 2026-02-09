@@ -2,7 +2,7 @@
 import { Router } from "express";
 import Analytics from "../models/analytics.js";
 import User from "../models/user.js";
-import { ensureAuth, ensureRole } from "../middleware/authGuard.js";
+import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
 
