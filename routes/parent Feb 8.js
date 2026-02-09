@@ -469,54 +469,17 @@ router.get(
       passed: !!a.passed, finishedAt: a.finishedAt
     }));
 
-  // ✅ Build attempt tracking
-const attemptCountByExam = {};
-const lastAttemptByExam = {};
-
-for (const a of rawAttempts) {
-  const eid = String(a.examId);
-  attemptCountByExam[eid] = (attemptCountByExam[eid] || 0) + 1;
-  
-  // Track most recent attempt per exam
-  if (!lastAttemptByExam[eid] || new Date(a.finishedAt) > new Date(lastAttemptByExam[eid].finishedAt)) {
-    lastAttemptByExam[eid] = a;
-  }
-}
-
-// ✅ Separate pending and completed quizzes
-let quizzesBySubject = null;
-let practiceQuizzesBySubject = null;
-
-if (org.slug === "cripfcnt-home") {
-  quizzesBySubject = {};        // Pending quizzes
-  practiceQuizzesBySubject = {}; // Completed quizzes (for practice)
-  
-  exams.forEach(ex => {
-    const examId = String(ex.examId);
-    const subject = ex.meta?.subject || "General";
-    const attemptCount = attemptCountByExam[examId] || 0;
-    const lastAttempt = lastAttemptByExam[examId];
-    
-    const quizData = {
-      examId: ex.examId,
-      quizTitle: ex.quizTitle || "Quiz",
-      attemptCount,
-      lastScore: lastAttempt ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100) : null,
-      lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
-      passed: lastAttempt ? lastAttempt.passed : false
-    };
-    
-    if (attemptCount === 0) {
-      // Pending quiz - never attempted
-      if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
-      quizzesBySubject[subject].push(quizData);
-    } else {
-      // Completed quiz - add to practice tab
-      if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
-      practiceQuizzesBySubject[subject].push(quizData);
+    let quizzesBySubject = null;
+    if (org.slug === "cripfcnt-home") {
+      quizzesBySubject = {};
+      exams.forEach(ex => {
+        const hasFinished = rawAttempts.some(a => String(a.examId) === String(ex.examId));
+        if (hasFinished) return;
+        const subject = ex.meta?.subject || "General";
+        if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
+        quizzesBySubject[subject].push({ examId: ex.examId, quizTitle: ex.quizTitle || "Quiz" });
+      });
     }
-  });
-}
 
     const certificates = await Certificate.find({ userId: child._id, orgId: org._id })
       .sort({ issuedAt: -1, createdAt: -1 }).lean();
@@ -551,8 +514,7 @@ if (org && org.slug === HOME_ORG_SLUG && child.grade) {
       user: parent, child, org, quizzesBySubject, attempts, certificates,
       progressData, subjectChartData, passCount, failCount,
       avgScore, trend, strongestSubject, weakestSubject, parentIsPaid,
-      totalPending, knowledgeMap ,  quizzesBySubject,           // ✅ Pending quizzes
-  practiceQuizzesBySubject,
+      totalPending, knowledgeMap 
     });
   }
 );

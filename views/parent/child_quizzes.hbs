@@ -281,7 +281,53 @@
       cursor:pointer;
     }
     .btn:hover{ opacity:0.9; }
+
+    /* PRACTICE MODE STYLES */
+.card[style*="border-left"] {
+  position: relative;
+}
+
+.practice-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  color: #3b82f6;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status.improvement {
+  background: rgba(192, 57, 43, 0.1);
+  border: 1px solid #c0392b;
+  color: #c0392b;
+}
+
+/* Retry button hover effect */
+.actions a[href*="Practice"] {
+  transition: all 0.2s ease;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+}
+
+.actions a[href*="Practice"]:hover {
+  background: #3b82f6;
+  color: #000 !important;
+  text-decoration: none;
+  transform: translateX(4px);
+}
   </style>
+
+
+
+  
 </head>
 
 <body>
@@ -296,6 +342,7 @@
  <div class="tabs">
   <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
   <div class="tab" data-tab="history">Quiz History</div>
+   <div class="tab" data-tab="practice">Practice</div>
   <div class="tab" data-tab="progress">Progress</div>
   <div class="tab" data-tab="knowledge">Knowledge Map</div>
   <div class="tab" data-tab="certificates">Certificates</div>
@@ -510,6 +557,78 @@
       </ul>
     </div>
   </div>
+  <!-- ============================== -->
+  <!-- PRACTICE                 -->
+  <!-- ============================== -->
+
+
+<!-- ============================== -->
+<!-- 🔄 PRACTICE TAB                -->
+<!-- ============================== -->
+<div id="practice" class="panel tab-content hidden">
+  <div style="margin-bottom:16px;">
+    <h3>🔄 Practice Mode</h3>
+    <div class="sub">Retry completed quizzes to improve your scores and reinforce learning</div>
+  </div>
+
+  {{#if practiceQuizzesBySubject}}
+    {{#each practiceQuizzesBySubject}}
+      <div class="subject-group">
+        <div class="subject-header">
+          {{@key}}
+        </div>
+        <div class="subject-quizzes">
+          {{#each this}}
+            <div class="card" style="border-left: 4px solid {{#if passed}}#1db954{{else}}#c0392b{{/if}};">
+              <strong>{{quizTitle}}</strong>
+              
+              <div class="meta">
+                {{#if lastScore}}
+                  Best Score: {{lastScore}}% 
+                {{/if}}
+                • Attempted {{attemptCount}}x
+                {{#if lastAttemptDate}}
+                  • Last: {{formatDate lastAttemptDate}}
+                {{/if}}
+              </div>
+
+              {{#if passed}}
+                <span class="status passed">✓ Passed</span>
+              {{else}}
+                <span class="status failed">Need Improvement</span>
+              {{/if}}
+
+              <div class="actions">
+                <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}" style="color:#3b82f6; font-size:15px;">
+                  🔄 Practice Again
+                </a>
+              </div>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/each}}
+
+    <!-- Practice Mode Info Box -->
+    <div class="insight" style="margin-top:20px;">
+      <span class="emoji">💡</span>
+      <strong>Practice makes perfect!</strong> Each retry helps you master the material. 
+      Your Knowledge Map updates with every attempt, showing your progress over time.
+    </div>
+
+  {{else}}
+    <div style="text-align:center; padding:40px 20px;">
+      <div style="font-size:48px; margin-bottom:12px;">📚</div>
+      <div style="font-size:18px; font-weight:700; margin-bottom:8px;">No Completed Quizzes Yet</div>
+      <div class="empty">
+        Complete quizzes from the <strong>Assigned Quizzes</strong> tab first, 
+        then they'll appear here for practice and revision.
+      </div>
+    </div>
+  {{/if}}
+</div>
+
+
   <!-- ============================== -->
   <!-- CERTIFICATES                   -->
   <!-- ============================== -->

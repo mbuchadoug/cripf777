@@ -1294,15 +1294,7 @@ if (attempt?.startedAt) {
 
 
 // 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
-// ✅ BEFORE attemptDoc creation, load organization
-let org = null;
-if (exam?.org) {
-  try {
-    org = await Organization.findById(exam.org).lean();
-  } catch (e) {
-    console.error("[quiz/submit] org lookup error:", e);
-  }
-}
+
   
 
 const attemptDoc = {
@@ -1311,15 +1303,6 @@ const attemptDoc = {
   // ✅ ALWAYS STUDENT
   userId: attemptUserId,
 
-
-
-   isPractice: (exam?.org && org?.slug === "cripfcnt-home") 
-    ? !!(await Attempt.exists({ 
-        examId: finalExamId, 
-        userId: attemptUserId,
-        status: "finished"
-      }))
-    : false, 
   organization: exam?.org
     ? exam.org
     : (exam?.organization || null),
