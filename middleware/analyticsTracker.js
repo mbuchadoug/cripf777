@@ -1,7 +1,7 @@
 // middleware/analyticsTracker.js
 import Analytics from "../models/analytics.js";
-import { UAParser } from "ua-parser-js";
-const UAParser = pkg;
+import * as UAParserModule from "ua-parser-js";
+const UAParser = UAParserModule.default || UAParserModule;
 
 /**
  * Analytics tracking middleware
