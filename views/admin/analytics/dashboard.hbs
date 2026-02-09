@@ -1,0 +1,300 @@
+{{!-- views/admin/analytics/dashboard.hbs --}}
+<div style="max-width:1400px; margin:0 auto; padding:20px;">
+
+  {{!-- Header --}}
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+    <div>
+      <h1 style="margin:0 0 8px 0; font-size:32px; font-weight:800;">📊 Analytics Dashboard</h1>
+      <div style="color:#888; font-size:14px;">Website traffic and user behavior insights</div>
+    </div>
+
+    {{!-- Time range selector --}}
+    <div style="display:flex; gap:8px;">
+      <a href="/admin/analytics?range=24h" 
+         class="{{#if (eq timeRange '24h')}}btn-active{{else}}btn-outline{{/if}}"
+         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        24h
+      </a>
+      <a href="/admin/analytics?range=7d" 
+         class="{{#if (eq timeRange '7d')}}btn-active{{else}}btn-outline{{/if}}"
+         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        7d
+      </a>
+      <a href="/admin/analytics?range=30d" 
+         class="{{#if (eq timeRange '30d')}}btn-active{{else}}btn-outline{{/if}}"
+         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        30d
+      </a>
+      <a href="/admin/analytics?range=90d" 
+         class="{{#if (eq timeRange '90d')}}btn-active{{else}}btn-outline{{/if}}"
+         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        90d
+      </a>
+    </div>
+  </div>
+
+  {{!-- Quick stats cards --}}
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:32px;">
+    
+    <div class="stat-card">
+      <div class="stat-icon">👁️</div>
+      <div class="stat-value">{{stats.totalPageViews}}</div>
+      <div class="stat-label">Total Page Views</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-value">{{stats.uniqueVisitors}}</div>
+      <div class="stat-label">Unique Visitors</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">🟢</div>
+      <div class="stat-value">{{stats.activeUsers}}</div>
+      <div class="stat-label">Active Users (24h)</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">📱</div>
+      <div class="stat-value">{{stats.bounceRate}}%</div>
+      <div class="stat-label">Bounce Rate</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-value">{{stats.avgResponseTime}}ms</div>
+      <div class="stat-label">Avg Response Time</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">👤</div>
+      <div class="stat-value">{{stats.totalUsers}}</div>
+      <div class="stat-label">Total Registered Users</div>
+    </div>
+
+  </div>
+
+  {{!-- Charts section --}}
+  <div style="display:grid; grid-template-columns:2fr 1fr; gap:24px; margin-bottom:32px;">
+    
+    {{!-- Daily traffic chart --}}
+    <div class="chart-card">
+      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">📈 Daily Traffic (Last 30 Days)</h3>
+      <canvas id="dailyChart" height="80"></canvas>
+    </div>
+
+    {{!-- Device breakdown --}}
+    <div class="chart-card">
+      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">📱 Devices</h3>
+      <canvas id="deviceChart"></canvas>
+    </div>
+
+  </div>
+
+  {{!-- Tables section --}}
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+    
+    {{!-- Top pages --}}
+    <div class="table-card">
+      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">🔥 Top Pages</h3>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid #222;">
+            <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Page</th>
+            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Views</th>
+            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Unique</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each topPages}}
+            <tr style="border-bottom:1px solid #111;">
+              <td style="padding:12px 8px; font-family:monospace; font-size:13px;">{{path}}</td>
+              <td style="padding:12px 8px; text-align:right; font-weight:600;">{{views}}</td>
+              <td style="padding:12px 8px; text-align:right; color:#888;">{{uniqueUsers}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    {{!-- Top referrers --}}
+    <div class="table-card">
+      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">🔗 Top Referrers</h3>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid #222;">
+            <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Source</th>
+            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Visits</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each referrerStats}}
+            <tr style="border-bottom:1px solid #111;">
+              <td style="padding:12px 8px; font-size:13px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{_id}}
+              </td>
+              <td style="padding:12px 8px; text-align:right; font-weight:600;">{{count}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  {{!-- Quick links --}}
+  <div style="margin-top:32px; display:flex; gap:12px;">
+    <a href="/admin/analytics/realtime" class="btn-primary">⚡ Real-time View</a>
+    <a href="/admin/analytics/users" class="btn-secondary">👥 User Analytics</a>
+    <a href="/admin/analytics/export?range={{timeRange}}" class="btn-secondary">📥 Export CSV</a>
+  </div>
+
+</div>
+
+<style>
+  .stat-card {
+    background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+
+  .stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    color: #888;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .chart-card, .table-card {
+    background: #0f0f0f;
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .btn-active {
+    background: #D4AF37;
+    color: #000;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid #333;
+    color: #fff;
+  }
+
+  .btn-outline:hover {
+    border-color: #D4AF37;
+    color: #D4AF37;
+  }
+
+  .btn-primary {
+    display: inline-block;
+    padding: 12px 24px;
+    background: #D4AF37;
+    color: #000;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 700;
+  }
+
+  .btn-secondary {
+    display: inline-block;
+    padding: 12px 24px;
+    background: transparent;
+    border: 1px solid #333;
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .btn-secondary:hover {
+    border-color: #D4AF37;
+    color: #D4AF37;
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  // Daily traffic chart
+  const dailyData = {{{json dailyStats}}};
+  
+  new Chart(document.getElementById('dailyChart'), {
+    type: 'line',
+    data: {
+      labels: dailyData.map(d => d.date),
+      datasets: [
+        {
+          label: 'Page Views',
+          data: dailyData.map(d => d.views),
+          borderColor: '#D4AF37',
+          backgroundColor: 'rgba(212, 175, 55, 0.1)',
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: 'Unique Visitors',
+          data: dailyData.map(d => d.uniqueVisitors),
+          borderColor: '#4CAF50',
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          tension: 0.4,
+          fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'top', labels: { color: '#fff' } }
+      },
+      scales: {
+        y: { 
+          beginAtZero: true,
+          ticks: { color: '#888' },
+          grid: { color: '#222' }
+        },
+        x: { 
+          ticks: { color: '#888' },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+
+  // Device breakdown chart
+  const deviceData = {{{json deviceStats}}};
+  
+  new Chart(document.getElementById('deviceChart'), {
+    type: 'doughnut',
+    data: {
+      labels: deviceData.map(d => d._id || 'Unknown'),
+      datasets: [{
+        data: deviceData.map(d => d.count),
+        backgroundColor: ['#D4AF37', '#4CAF50', '#2196F3', '#FF9800']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#fff' } }
+      }
+    }
+  });
+</script>

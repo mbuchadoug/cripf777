@@ -37,7 +37,8 @@ import scoiDownloadRoutes from "./routes/scoi_download.js";
 import AuditPurchase from "./models/auditPurchase.js";
 import PlacementAudit from "./models/placementAudit.js";
 
-
+import { trackPageView } from "./middleware/analyticsTracker.js";
+import adminAnalyticsRoutes from "./routes/admin_analytics.js";
 
 import lmsImportRoutes from "./routes/lms_Import.js";
 import adminCertificateRoutes from "./routes/admin_certificates.js";
@@ -269,6 +270,8 @@ configurePassport(); // config/passport.js should set up strategies + serialize/
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use(trackPageView);
+
 app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") {
     const host = req.headers.host;
@@ -287,7 +290,7 @@ app.use("/auth", authRoutes);
 
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
-
+app.use("/admin", adminAnalyticsRoutes);
 // API routes — keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 
