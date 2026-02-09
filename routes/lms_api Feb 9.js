@@ -1432,19 +1432,10 @@ if (exam) {
 let recipientName = "Learner";
 
 try {
-  // 🔑 CERTIFICATE NAME RESOLUTION:
-  // - cripfcnt-home: Use exam.userId (student/child)
-  // - Other orgs: Use req.user._id (logged-in quiz taker)
-  
-  let certificateUserId;
-  
-  if (org?.slug === "cripfcnt-home") {
-    // Home learning: certificate goes to the child (exam.userId)
-    certificateUserId = exam?.userId || savedCertificate?.userId || null;
-  } else {
-    // Regular schools: certificate goes to logged-in user taking quiz
-    certificateUserId = req.user?._id || null;
-  }
+  // 🔑 HOME LEARNING FIX:
+  // Certificate owner is the STUDENT, not the logged-in parent
+  const certificateUserId =
+    exam?.userId || savedCertificate?.userId || null;
 
   if (certificateUserId) {
     const fullUser = await User.findById(certificateUserId)
