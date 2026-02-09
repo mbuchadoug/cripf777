@@ -291,7 +291,7 @@ app.post("/api/chat-stream", async (req, res) => {
     }
 
     const systemPrompt = `
-You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
+You are the CRIPFCnt Audit Intelligence - trained under Donald Mataranyika’s civilization recalibration model.
 Generate a single, clean, structured SCOI audit for the entity provided.
 Follow this structure exactly:
 
