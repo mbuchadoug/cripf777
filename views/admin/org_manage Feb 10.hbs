@@ -413,11 +413,6 @@
        <div id="assignResult" class="notice"></div>
      </div>
 
-    </section>
-{{/unless}}
-
-{{!-- ===== CREATE PASSAGE SECTION — NOW AVAILABLE FOR ALL ORGS INCLUDING CRIPFCNT-HOME ===== --}}
-<section>
      <div class="panel">
        <h3>Create Passage Quiz (for this organization)</h3>
        <p class="muted">Paste passage text, then paste the child questions (each block separated by a blank line). The created passage will be saved with <code>organization</code> set to this company.</p>
@@ -425,12 +420,12 @@
        <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
          <label class="block">
            Title (short):
-           <input id="passageTitle" name="title" placeholder="Passage title (e.g. Responsibility passage 1)" required>
+           <input id="passageTitle" name="title" placeholder="Passage title (e.g. Responsibility passage 1)">
          </label>
 
          <label class="block">
            Module:
-           <select id="passageModule" name="module" required>
+           <select id="passageModule" name="module">
              {{#each modules}}
                <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
              {{/each}}
@@ -454,7 +449,9 @@
 
        <div id="createPassageResult" class="notice"></div>
      </div>
-</section>
+
+    </section>
+{{/unless}}
 
 
 {{!-- ===== QUIZ RULES — CRIPFCNT-HOME ONLY (REDESIGNED) ===== --}}
@@ -933,48 +930,6 @@ if (isSchool) {
 
   </script>
   {{/unless}}
-
-  {{!-- ===== CREATE PASSAGE SCRIPT — NOW FOR ALL ORGS ===== --}}
-  <script>
-    // Create Passage Quiz (AJAX) - Works for all orgs including cripfcnt-home
-    const createPassageForm = document.getElementById('createPassageForm');
-    if (createPassageForm) {
-    createPassageForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
-      const url = form.action;
-      
-      function formToObject(form) {
-        const fd = new FormData(form);
-        const obj = {};
-        for (const [k, v] of fd.entries()) {
-          obj[k] = v;
-        }
-        return obj;
-      }
-      
-      const payload = formToObject(form);
-      document.getElementById('createPassageResult').textContent = 'Creating passage...';
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        document.getElementById('createPassageResult').innerHTML = '<span class="success">✅ Passage created successfully! Created ' + (data.passage?.childCount || 0) + ' questions.</span>';
-        form.reset();
-      } catch (e) {
-        console.error(e);
-        document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed (network)</span>';
-      }
-    });
-    }
-  </script>
 
   {{!-- ===== COMMON SCRIPTS (ALL ORGS) ===== --}}
   <script>
