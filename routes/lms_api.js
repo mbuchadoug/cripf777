@@ -1429,12 +1429,13 @@ if (exam) {
      // 🧾 Resolve certificate recipient name (supports Google + local users)
 // 🧾 Resolve certificate recipient name (ALWAYS load from DB)
 // 🧾 Resolve certificate recipient name
+// 🧾 Resolve certificate recipient name (ALWAYS load from DB)
 let recipientName = "Learner";
 
 try {
   // 🔑 CERTIFICATE NAME RESOLUTION:
   // - cripfcnt-home: Use exam.userId (student/child)
-  // - Other orgs: Use req.user._id (logged-in quiz taker)
+  // - Other orgs/schools: Use savedAttempt.userId (the person who took the quiz)
   
   let certificateUserId;
   
@@ -1442,14 +1443,25 @@ try {
     // Home learning: certificate goes to the child (exam.userId)
     certificateUserId = exam?.userId || savedCertificate?.userId || null;
   } else {
-    // Regular schools: certificate goes to logged-in user taking quiz
-    certificateUserId = req.user?._id || null;
+    // Regular schools/orgs: certificate goes to the person who took the quiz
+    // savedAttempt.userId is the quiz taker (NOT the admin who assigned it)
+    certificateUserId = savedAttempt?.userId || req.user?._id || null;
   }
+
+  console.log("[certificate] Resolving name for userId:", certificateUserId, "| org:", org?.slug);
 
   if (certificateUserId) {
     const fullUser = await User.findById(certificateUserId)
       .select("firstName lastName displayName name fullName email")
       .lean();
+
+    console.log("[certificate] Found user:", {
+      id: fullUser?._id,
+      displayName: fullUser?.displayName,
+      firstName: fullUser?.firstName,
+      lastName: fullUser?.lastName,
+      email: fullUser?.email
+    });
 
     if (fullUser) {
       // 1️⃣ displayName (highest priority)
@@ -1473,6 +1485,8 @@ try {
       }
     }
   }
+
+  console.log("[certificate] Final recipient name:", recipientName);
 } catch (e) {
   console.warn("[certificate] failed to resolve student name", e);
 }
