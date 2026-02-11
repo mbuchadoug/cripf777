@@ -1,9 +1,24 @@
-// Quick verification that everything is ready
+// verify-setup.js - FIXED to use .env
 import mongoose from "mongoose";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
 
 async function verify() {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/lms');
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    
+    if (!mongoUri) {
+      console.log('❌ No MONGO_URI or MONGODB_URI found in environment!');
+      console.log('   Make sure .env file exists with MONGO_URI set\n');
+      return;
+    }
+    
+    console.log('🔌 Connecting to MongoDB...');
+    console.log(`   URI: ${mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}\n`);
+    
+    await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB\n');
     
     // Check org
@@ -12,7 +27,15 @@ async function verify() {
     });
     
     if (!org) {
-      console.log('❌ Organization not found!');
+      console.log('❌ Organization "cripfcnt-school" not found!\n');
+      
+      // Show what orgs exist
+      const allOrgs = await mongoose.connection.db.collection('organizations').find({}).toArray();
+      console.log(`📊 Found ${allOrgs.length} organization(s):`);
+      allOrgs.forEach((o, i) => {
+        console.log(`   ${i + 1}. "${o.name}" (slug: "${o.slug}")`);
+      });
+      console.log('');
       return;
     }
     
@@ -46,11 +69,13 @@ async function verify() {
         type: { $ne: 'comprehension' }
       });
       
-      console.log('📝 Sample question:');
-      console.log(`   Text: "${sample.text.substring(0, 80)}..."`);
-      console.log(`   Current module: ${sample.module || 'not set'}`);
-      console.log(`   Has modules array: ${sample.modules ? 'yes' : 'no'}`);
-      console.log(`   Has topics array: ${sample.topics ? 'yes' : 'no'}\n`);
+      if (sample) {
+        console.log('📝 Sample question:');
+        console.log(`   Text: "${sample.text.substring(0, 80)}..."`);
+        console.log(`   Current module: ${sample.module || 'not set'}`);
+        console.log(`   Has modules array: ${sample.modules ? 'yes' : 'no'}`);
+        console.log(`   Has topics array: ${sample.topics ? 'yes' : 'no'}\n`);
+      }
     }
     
     console.log('✅ Setup verification complete!');
