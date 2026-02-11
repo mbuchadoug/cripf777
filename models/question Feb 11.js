@@ -1,4 +1,4 @@
-// models/question.js (UPDATED FOR CRIPFCNT-SCHOOL + ADAPTIVE LEARNING)
+// models/question.js (UPDATED FOR ADAPTIVE LEARNING - cripfcnt-home only)
 import mongoose from "mongoose";
 
 const ChoiceSchema = new mongoose.Schema({
@@ -70,53 +70,10 @@ const QuestionSchema = new mongoose.Schema({
     default: null,
     index: true
   },
-  
-  // ==============================
-  // 📚 MODULES (CRIPFCNT-SCHOOL)
-  // ==============================
-  // Legacy single module (keep for backward compatibility)
   module: {
     type: String,
     default: "general",
     index: true
-  },
-  
-  // NEW: Multiple modules support for cripfcnt-school
-  modules: [{
-    type: String,
-    lowercase: true,
-    trim: true,
-    enum: [
-      'consciousness',
-      'responsibility', 
-      'interpretation',
-      'purpose',
-      'frequencies',
-      'civilization',
-      'negotiation',
-      'technology',
-      'general'
-    ]
-  }],
-  
-  // ==============================
-  // 🏷️ TOPICS (CRIPFCNT-SCHOOL)
-  // ==============================
-  // Topics are micro-categories within modules
-  // Examples: "placement-theory", "decision-frameworks", "structural-responsibility"
-  topics: [{
-    type: String,
-    lowercase: true,
-    trim: true
-  }],
-  
-  // Series/collection identifier (e.g., "foundation-series", "advanced-placement")
-  series: {
-    type: String,
-    lowercase: true,
-    trim: true,
-    index: true,
-    default: null
   },
 
   tags: [String],
@@ -133,14 +90,6 @@ QuestionSchema.index({ subject: 1, topic: 1, difficulty: 1, grade: 1 });
 QuestionSchema.index({ subject: 1, grade: 1, topic: 1 });
 QuestionSchema.index({ organization: 1, subject: 1, topic: 1 });
 QuestionSchema.index({ topic: 1, difficulty: 1 });
-
-// ==============================
-// INDEXES FOR CRIPFCNT-SCHOOL
-// ==============================
-QuestionSchema.index({ organization: 1, modules: 1 });
-QuestionSchema.index({ organization: 1, topics: 1 });
-QuestionSchema.index({ organization: 1, series: 1 });
-QuestionSchema.index({ modules: 1, topics: 1 });
 
 // ==============================
 // STATIC METHOD FOR BULK TAGGING

@@ -718,16 +718,9 @@ router.get(
 /*  ORG DASHBOARD (employees/managers)                                */
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
-// Add to routes/org_management.js - UPDATED DASHBOARD ROUTE WITH SEARCH
-
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
-    
-    // Get search/filter params
-    const searchQuery = String(req.query.q || "").trim();
-    const moduleFilter = String(req.query.module || "").trim();
-    const topicFilter = String(req.query.topic || "").trim();
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -742,7 +735,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     }
 
     /* -------------------------------
-       ADMIN CHECK
+       ADMIN CHECK (RESTORED)
     -------------------------------- */
     const platformAdmin = (process.env.ADMIN_EMAILS || "")
       .split(",")
@@ -750,7 +743,9 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .includes(req.user.email?.toLowerCase());
 
     const role = String(membership.role || "").toLowerCase();
-    const isAdmin = platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
+
+    const isAdmin =
+      platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
 
     /* -------------------------------
        LOAD MODULES
@@ -758,90 +753,82 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const modules = await OrgModule.find({ org: org._id }).lean();
 
     /* -------------------------------
-       LOAD EXAMS WITH SEARCH/FILTER
+       LOAD EXAMS (RAW)
     -------------------------------- */
-    const isFirstLogin = !!req.session?.isFirstLogin;
-    let exams = [];
+ 
 
-    if (isAdmin) {
-      exams = await ExamInstance.aggregate([
-        { $match: { org: mongoose.Types.ObjectId(org._id) } },
-        {
-          $match: {
-            assignmentId: { $exists: true, $ne: null },
-            isOnboarding: { $ne: true }
-          }
-        },
-        {
-          $group: {
-            _id: "$assignmentId",
-            doc: {
-              $first: {
-                assignmentId: "$assignmentId",
-                module: "$module",
-                modules: "$modules",
-                title: "$title",
-                quizTitle: "$quizTitle",
-                questionIds: "$questionIds",
-                createdAt: "$createdAt",
-                expiresAt: "$expiresAt",
-                meta: "$meta"
-              }
-            }
-          }
-        },
-        { $replaceRoot: { newRoot: "$doc" } },
-        { $sort: { createdAt: -1 } }
-      ]);
-    } else {
-      exams = await ExamInstance.find({
-        org: org._id,
-        userId: req.user._id
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+// 🧠 detect first-time login
+const isFirstLogin = !!req.session?.isFirstLogin;
+
+let exams = [];
+if (isAdmin) {
+  exams = await ExamInstance.aggregate([
+    // 1️⃣ org only
+   { $match: { org: mongoose.Types.ObjectId(org._id) } },
+
+
+    // 2️⃣ only assigned quizzes (NOT onboarding)
+  {
+  $match: {
+    assignmentId: { $exists: true, $ne: null },
+    isOnboarding: { $ne: true }
+  }
+}
+,
+
+    // 3️⃣ one row per assignment
+  {
+  $group: {
+    _id: "$assignmentId",
+    doc: {
+      $first: {
+        assignmentId: "$assignmentId",
+        module: "$module",
+        questionIds: "$questionIds",
+        createdAt: "$createdAt",
+        expiresAt: "$expiresAt"
+      }
     }
+  }
+},
 
-    /* -------------------------------
-       APPLY SEARCH/FILTER
-    -------------------------------- */
-    if (searchQuery || moduleFilter || topicFilter) {
-      exams = exams.filter(ex => {
-        // Search by title/quiz name
-        if (searchQuery) {
-          const title = (ex.title || ex.quizTitle || "").toLowerCase();
-          if (!title.includes(searchQuery.toLowerCase())) {
-            return false;
-          }
-        }
+    // 4️⃣ restore document
+    { $replaceRoot: { newRoot: "$doc" } },
 
-        // Filter by module
-        if (moduleFilter) {
-          const examModules = ex.modules || [ex.module];
-          if (!examModules.includes(moduleFilter)) {
-            return false;
-          }
-        }
+    // 5️⃣ newest first
+    { $sort: { createdAt: -1 } }
+  ]);
+}
 
-        // Filter by topic (requires meta.topics)
-        if (topicFilter) {
-          const topics = ex.meta?.topics || [];
-          const topicMatch = topics.some(t => 
-            t.toLowerCase().includes(topicFilter.toLowerCase())
-          );
-          if (!topicMatch) {
-            return false;
-          }
-        }
 
-        return true;
-      });
-    }
+
+
+ else {
+  const isFirstLogin = !!req.session?.isFirstLogin;
+
+  // 🔑 map org roles → quiz target roles
+exams = await ExamInstance.find({
+  org: org._id,
+  userId: req.user._id
+})
+
+
+
+
+    .sort({ createdAt: -1 })
+    .lean();
+}
+
+
+
+
 
     /* -------------------------------
        PRELOAD COMPREHENSION TITLES
     -------------------------------- */
     const parentIds = new Set();
+
+
     for (const ex of exams) {
       if (!Array.isArray(ex.questionIds)) continue;
       for (const q of ex.questionIds) {
@@ -859,114 +846,134 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
     const parentTitleMap = {};
     for (const p of parentDocs) {
-      parentTitleMap[String(p._id)] = p.title || p.text || "Comprehension Quiz";
+      parentTitleMap[String(p._id)] =
+        p.title || p.text || "Comprehension Quiz";
     }
 
     /* -------------------------------
-       BUILD DASHBOARD DATA
+       BUILD DASHBOARD DATA (DEDUPED)
     -------------------------------- */
     const quizzesByModule = {};
-    const now = new Date();
+    //const seenExamIds = new Set();
+  const now = new Date();
 
-    for (const ex of exams) {
-      const assignmentKey = ex.assignmentId || ex.examId;
-      
-      // Support multiple modules
-      const examModules = ex.modules || [ex.module || "general"];
-      
-      for (const moduleKey of examModules) {
-        if (!quizzesByModule[moduleKey]) {
-          quizzesByModule[moduleKey] = [];
-        }
+  for (const ex of exams) {
 
-        let status = "pending";
-        if (ex.finishedAt) status = "completed";
-        if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
-          if (ex.expiresAt && ex.expiresAt < now) status = "expired";
-        }
 
-        let quizTitle = ex.quizTitle || ex.title ||
-          (moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz");
 
-        let questionCount = 0;
-        if (Array.isArray(ex.questionIds)) {
-          questionCount = ex.questionIds.filter(
-            q => !String(q).startsWith("parent:")
-          ).length;
+const assignmentKey = ex.assignmentId || ex.examId;
 
-          const parentMarker = ex.questionIds.find(q =>
-            String(q).startsWith("parent:")
-          );
+const moduleKey = typeof ex.module === "string" && ex.module.trim()
+  ? ex.module
+  : "general";
 
-          if (!ex.title && !ex.quizTitle && parentMarker) {
-            const parentId = String(parentMarker).replace("parent:", "");
-            quizTitle = parentTitleMap[parentId] || quizTitle;
-          }
-        }
-
-        const openUrl = ex.isOnboarding
-          ? `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`
-          : `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-
-        quizzesByModule[moduleKey].push({
-          assignmentId: assignmentKey,
-          quizTitle,
-          questionCount,
-          status,
-          openUrl,
-          createdAt: ex.createdAt,
-          isTrial: ex.meta?.isTrial || false,
-          topics: ex.meta?.topics || []
-        });
+      if (!quizzesByModule[moduleKey]) {
+        quizzesByModule[moduleKey] = [];
       }
+
+      let status = "pending";
+      if (ex.finishedAt) status = "completed";
+      if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
+  if (ex.expiresAt && ex.expiresAt < now) status = "expired";
+}
+
+
+  let quizTitle =
+  ex.quizTitle ||
+  ex.title ||
+  (moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz");
+
+
+
+      let questionCount = 0;
+
+      if (Array.isArray(ex.questionIds)) {
+        questionCount = ex.questionIds.filter(
+          q => !String(q).startsWith("parent:")
+        ).length;
+
+        const parentMarker = ex.questionIds.find(q =>
+          String(q).startsWith("parent:")
+        );
+
+     if (!ex.title && !ex.quizTitle && parentMarker) {
+  const parentId = String(parentMarker).replace("parent:", "");
+  quizTitle = parentTitleMap[parentId] || quizTitle;
+}
+
+      }
+
+  const openUrl = ex.isOnboarding
+  ? `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`
+  : `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+
+
+
+  quizzesByModule[moduleKey].push({
+  assignmentId: assignmentKey,
+  quizTitle,
+  questionCount,
+  status,
+  openUrl,
+  createdAt: ex.createdAt
+});
+
     }
 
     /* -------------------------------
        USER ATTEMPTS
     -------------------------------- */
-    const attempts = await Attempt.find({
-      organization: org._id,
-      userId: req.user._id
-    })
-    .sort({ finishedAt: -1 })
+   /* -------------------------------
+   USER ATTEMPTS (WITH QUIZ TITLE)
+-------------------------------- */
+const attempts = await Attempt.find({
+  organization: org._id,
+  userId: req.user._id
+})
+  .sort({ finishedAt: -1 })
+  .lean();
+
+// 🔹 load related exam instances to resolve titles
+const examIds = attempts.map(a => a.examId).filter(Boolean);
+const examsByExamId = {};
+
+if (examIds.length) {
+  const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
+    .select("examId module questionIds")
     .lean();
 
-    const examIds = attempts.map(a => a.examId).filter(Boolean);
-    const examsByExamId = {};
+  for (const ex of examDocs) {
+    examsByExamId[ex.examId] = ex;
+  }
+}
 
-    if (examIds.length) {
-      const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
-        .select("examId module questionIds")
-        .lean();
+const attemptRows = attempts.map(a => {
+  const ex = examsByExamId[a.examId];
 
-      for (const ex of examDocs) {
-        examsByExamId[ex.examId] = ex;
-      }
-    }
+  let quizTitle = a.quizTitle;
 
-    const attemptRows = attempts.map(a => {
-      const ex = examsByExamId[a.examId];
-      let quizTitle = a.quizTitle;
+  // fallback: derive title like Assigned Quizzes does
+  if (!quizTitle && ex) {
+    quizTitle =
+      ex.module
+        ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz"
+        : "Quiz";
+  }
 
-      if (!quizTitle && ex) {
-        quizTitle = ex.module
-          ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz"
-          : "Quiz";
-      }
+  return {
+    _id: a._id,                // 🔴 REQUIRED for Review Attempt link
+    examId: a.examId,
+    quizTitle: quizTitle || "Quiz",
+    score: a.score || 0,
+    maxScore: a.maxScore || 0,
+    percentage: a.maxScore
+      ? Math.round((a.score / a.maxScore) * 100)
+      : 0,
+    passed: !!a.passed,
+    finishedAt: a.finishedAt || a.updatedAt || a.createdAt
+  };
+});
 
-      return {
-        _id: a._id,
-        examId: a.examId,
-        quizTitle: quizTitle || "Quiz",
-        score: a.score || 0,
-        maxScore: a.maxScore || 0,
-        percentage: a.maxScore
-          ? Math.round((a.score / a.maxScore) * 100)
-          : 0,
-        passed: !!a.passed,
-        finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-      };
-    });
 
     /* -------------------------------
        CERTIFICATES
@@ -975,40 +982,22 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       userId: req.user._id,
       orgId: org._id
     })
-    .sort({ createdAt: -1 })
-    .lean();
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const certRows = certificates.map(c => ({
-      _id: c._id,
-      quizTitle: c.quizTitle || c.courseTitle || "Quiz",
-      percentage: c.percentage,
-      createdAt: c.createdAt
-    }));
+const certRows = certificates.map(c => ({
+  _id: c._id,
+  quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+  percentage: c.percentage,
+  createdAt: c.createdAt
+}));
 
-    /* -------------------------------
-       TRIAL QUIZ STATUS
-    -------------------------------- */
-    let showTrialBanner = false;
-    let canUpgrade = false;
-    let trialQuizzesRemaining = 0;
 
-    if (org.slug === 'cripfcnt-school' && !isAdmin) {
-      try {
-        const trialStatus = await getTrialQuizStatus(req.user._id, org._id);
-        showTrialBanner = trialStatus.total > 0;
-        trialQuizzesRemaining = trialStatus.remaining;
-        
-        const upgradeCheck = await canUserUpgrade(req.user._id, org._id);
-        canUpgrade = upgradeCheck.canUpgrade;
-      } catch (err) {
-        console.error('[dashboard] Error checking trial status:', err);
-      }
-    }
 
-    // Clear first-login flag
-    if (req.session?.isFirstLogin) {
-      delete req.session.isFirstLogin;
-    }
+// 🔁 clear first-login flag after dashboard loads once
+if (req.session?.isFirstLogin) {
+  delete req.session.isFirstLogin;
+}
 
     /* -------------------------------
        RENDER
@@ -1018,19 +1007,11 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       membership,
       modules,
       quizzesByModule,
-      hasAssignedQuizzes: Object.values(quizzesByModule).some(arr => arr.length > 0),
+hasAssignedQuizzes: Object.values(quizzesByModule).some(arr => arr.length > 0),
       attemptRows,
       certRows,
       isAdmin,
-      user: req.user,
-      // Search/filter values
-      searchQuery,
-      moduleFilter,
-      topicFilter,
-      // Trial quiz info
-      showTrialBanner,
-      canUpgrade,
-      trialQuizzesRemaining
+      user: req.user
     });
 
   } catch (err) {

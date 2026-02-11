@@ -41,6 +41,111 @@
       margin-bottom:18px;
     }
 
+    /* ====== TRIAL UPGRADE BANNER ====== */
+    .trial-banner{
+      background:linear-gradient(135deg, #1a472a 0%, #0f5132 100%);
+      border:2px solid var(--gold);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:24px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .trial-banner h3{
+      color:var(--gold);
+      margin:0 0 8px;
+    }
+
+    .trial-banner p{
+      color:#ddd;
+      margin:0;
+      font-size:14px;
+    }
+
+    .upgrade-btn{
+      background:var(--gold);
+      color:#000;
+      padding:12px 24px;
+      border-radius:8px;
+      font-weight:800;
+      text-decoration:none;
+      white-space:nowrap;
+    }
+
+    .upgrade-btn:hover{
+      background:#c9a227;
+    }
+
+    /* ====== SEARCH & FILTER ====== */
+    .search-panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:24px;
+    }
+
+    .search-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr auto;
+      gap:12px;
+      align-items:end;
+    }
+
+    .search-group label{
+      display:block;
+      font-size:13px;
+      color:var(--muted);
+      margin-bottom:6px;
+      font-weight:600;
+    }
+
+    .search-group input,
+    .search-group select{
+      width:100%;
+      padding:10px;
+      background:#0b0b0b;
+      border:1px solid var(--border);
+      border-radius:8px;
+      color:#fff;
+      font-size:14px;
+    }
+
+    .search-group input:focus,
+    .search-group select:focus{
+      outline:2px solid var(--gold);
+      border-color:var(--gold);
+    }
+
+    .search-btn{
+      background:var(--gold);
+      color:#000;
+      padding:10px 20px;
+      border:none;
+      border-radius:8px;
+      font-weight:800;
+      cursor:pointer;
+      font-size:14px;
+    }
+
+    .search-btn:hover{
+      background:#c9a227;
+    }
+
+    .clear-btn{
+      background:transparent;
+      color:var(--muted);
+      padding:10px 20px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      font-weight:600;
+      cursor:pointer;
+      font-size:14px;
+      margin-left:8px;
+    }
+
     /* ====== GRID ====== */
     .grid{
       display:grid;
@@ -57,6 +162,38 @@
     }
 
     .card small{color:var(--muted)}
+
+    .card-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:start;
+      margin-bottom:10px;
+    }
+
+    .trial-badge{
+      background:var(--gold);
+      color:#000;
+      padding:2px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:800;
+    }
+
+    .topic-tags{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:8px;
+    }
+
+    .topic-tag{
+      background:rgba(212,175,55,0.15);
+      color:var(--gold);
+      padding:3px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:600;
+    }
 
     .actions a{
       color:var(--gold);
@@ -100,6 +237,18 @@
       margin-right:10px;
       text-decoration:none;
     }
+
+    @media(max-width:900px){
+      .search-grid{
+        grid-template-columns:1fr;
+      }
+
+      .trial-banner{
+        flex-direction:column;
+        gap:16px;
+        text-align:center;
+      }
+    }
   </style>
 </head>
 
@@ -112,51 +261,118 @@
     <div class="panel">
       <h3 style="color:var(--gold)">Welcome to CRIPFCnt 🎓</h3>
       <p style="color:var(--muted);margin-top:6px">
-        You’ve been enrolled into the Responsibility LMS. Navigate modules, quizzes,
+        You've been enrolled into the Responsibility LMS. Navigate modules, quizzes,
         certificates and SCOI resources below.
       </p>
     </div>
     {{/if}}
 
-  <h1>
-  {{#if (eq membership.role "student")}}
-    {{org.name}} - Student Dashboard
-  {{else if (eq membership.role "teacher")}}
-    {{org.name}} - Teacher Dashboard
-  {{else}}
-    {{org.name}} Dashboard
-  {{/if}}
-</h1>
+    <!-- TRIAL UPGRADE BANNER -->
+    {{#if showTrialBanner}}
+    <div class="trial-banner">
+      <div>
+        <h3>🎯 Trial Account</h3>
+        <p>You have {{trialQuizzesRemaining}} trial quizzes remaining. Complete them to unlock upgrade!</p>
+      </div>
+      {{#if canUpgrade}}
+        <a href="/upgrade" class="upgrade-btn">Upgrade Now →</a>
+      {{/if}}
+    </div>
+    {{/if}}
 
+    <h1>
+      {{#if (eq membership.role "student")}}
+        {{org.name}} - Student Dashboard
+      {{else if (eq membership.role "teacher")}}
+        {{org.name}} - Teacher Dashboard
+      {{else}}
+        {{org.name}} Dashboard
+      {{/if}}
+    </h1>
 
- {{#if isAdmin}}
-<div class="admin panel">
-  <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
-  <a href="/admin/orgs/{{org.slug}}/attempts">View Attempts</a>
-  <a href="/admin/orgs/{{org.slug}}/certificates">View Certificates</a>
-</div>
-{{/if}}
+    {{#if isAdmin}}
+    <div class="admin panel">
+      <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
+      <a href="/admin/orgs/{{org.slug}}/attempts">View Attempts</a>
+      <a href="/admin/orgs/{{org.slug}}/certificates">View Certificates</a>
+    </div>
+    {{/if}}
 
+    <!-- ================= SEARCH & FILTER ================= -->
+    <div class="search-panel">
+      <form id="searchForm" method="GET" action="/org/{{org.slug}}/dashboard">
+        <div class="search-grid">
+          
+          <div class="search-group">
+            <label for="searchQuery">Search Quizzes</label>
+            <input 
+              type="text" 
+              id="searchQuery" 
+              name="q" 
+              value="{{searchQuery}}"
+              placeholder="Search by title, keyword..."
+            />
+          </div>
+
+          <div class="search-group">
+            <label for="moduleFilter">Filter by Module</label>
+            <select id="moduleFilter" name="module">
+              <option value="">All Modules</option>
+              <option value="consciousness" {{#if (eq moduleFilter "consciousness")}}selected{{/if}}>Consciousness</option>
+              <option value="responsibility" {{#if (eq moduleFilter "responsibility")}}selected{{/if}}>Responsibility</option>
+              <option value="interpretation" {{#if (eq moduleFilter "interpretation")}}selected{{/if}}>Interpretation</option>
+              <option value="purpose" {{#if (eq moduleFilter "purpose")}}selected{{/if}}>Purpose</option>
+              <option value="frequencies" {{#if (eq moduleFilter "frequencies")}}selected{{/if}}>Frequencies</option>
+              <option value="civilization" {{#if (eq moduleFilter "civilization")}}selected{{/if}}>Civilization</option>
+              <option value="negotiation" {{#if (eq moduleFilter "negotiation")}}selected{{/if}}>Negotiation</option>
+              <option value="technology" {{#if (eq moduleFilter "technology")}}selected{{/if}}>Technology</option>
+            </select>
+          </div>
+
+          <div class="search-group">
+            <label for="topicFilter">Filter by Topic</label>
+            <input 
+              type="text" 
+              id="topicFilter" 
+              name="topic" 
+              value="{{topicFilter}}"
+              placeholder="e.g., placement, decision..."
+            />
+          </div>
+
+          <div style="display:flex;gap:8px">
+            <button type="submit" class="search-btn">Search</button>
+            <a href="/org/{{org.slug}}/dashboard" class="clear-btn">Clear</a>
+          </div>
+        </div>
+      </form>
+    </div>
 
     <!-- ================= MODULES ================= -->
-  {{#unless (eq membership.role "student")}}
-<h2>Modules</h2>
-<div class="grid">
-  {{#each modules}}
-    <div class="card">
-      <h3>{{this.title}}</h3>
-      <small>{{this.slug}}</small>
-      <div class="actions" style="margin-top:8px">
-        <a href="/org/{{../org.slug}}/modules/{{this.slug}}">Open</a>
-      </div>
+    {{#unless (eq membership.role "student")}}
+    <h2>Modules</h2>
+    <div class="grid">
+      {{#each modules}}
+        <div class="card">
+          <h3>{{this.title}}</h3>
+          <small>{{this.slug}}</small>
+          <div class="actions" style="margin-top:8px">
+            <a href="/org/{{../org.slug}}/modules/{{this.slug}}">Open</a>
+          </div>
+        </div>
+      {{/each}}
     </div>
-  {{/each}}
-</div>
-{{/unless}}
-
+    {{/unless}}
 
     <!-- ================= ASSIGNED QUIZZES ================= -->
-    <h2>Assigned Quizzes</h2>
+    <h2>
+      Assigned Quizzes
+      {{#if searchQuery}}
+        <span style="font-size:14px;color:var(--muted);font-weight:normal">
+          (showing results for "{{searchQuery}}")
+        </span>
+      {{/if}}
+    </h2>
 
     {{#if hasAssignedQuizzes}}
       {{#each quizzesByModule}}
@@ -166,8 +382,22 @@
           <div class="scroll-box">
             {{#each this}}
               <div class="card" style="margin-top:10px">
-                <strong>{{quizTitle}}</strong>
+                <div class="card-header">
+                  <strong>{{quizTitle}}</strong>
+                  {{#if isTrial}}
+                    <span class="trial-badge">TRIAL</span>
+                  {{/if}}
+                </div>
+
                 <span class="tag">{{questionCount}} questions</span>
+
+                {{#if topics}}
+                  <div class="topic-tags">
+                    {{#each topics}}
+                      <span class="topic-tag">{{this}}</span>
+                    {{/each}}
+                  </div>
+                {{/if}}
 
                 <div class="actions" style="margin-top:8px">
                   <a href="{{openUrl}}">Open quiz</a>
@@ -176,7 +406,6 @@
                     <form
                       method="POST"
                       action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
-
                       style="display:inline"
                       onsubmit="return confirm('Delete this quiz?');"
                     >
@@ -194,80 +423,72 @@
         </div>
       {{/each}}
     {{else}}
-      <p>No quizzes assigned.</p>
+      <p>No quizzes found. {{#if searchQuery}}Try different search terms.{{else}}No quizzes assigned yet.{{/if}}</p>
     {{/if}}
 
     <!-- ================= HISTORY + CERTS ================= -->
     <div class="grid">
-
       <div class="panel">
-  <h2>Quiz History</h2>
-  <div class="scroll-box">
-    {{#each attemptRows}}
-      <div class="card" style="margin-bottom:10px">
-        <strong>{{quizTitle}}</strong>
+        <h2>Quiz History</h2>
+        <div class="scroll-box">
+          {{#each attemptRows}}
+            <div class="card" style="margin-bottom:10px">
+              <strong>{{quizTitle}}</strong>
 
-        <div>
-          {{percentage}}%
-          {{#if passed}}
-            <span class="tag">Passed</span>
-          {{else}}
-            <span class="tag">Failed</span>
-          {{/if}}
+              <div>
+                {{percentage}}%
+                {{#if passed}}
+                  <span class="tag">Passed</span>
+                {{else}}
+                  <span class="tag">Failed</span>
+                {{/if}}
+              </div>
+
+              <div class="actions" style="margin-top:6px">
+                <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">
+                  Review Attempt
+                </a>
+              </div>
+
+              <small>{{finishedAt}}</small>
+            </div>
+          {{/each}}
         </div>
+      </div>
 
-        <!-- 🔹 ADD THIS BLOCK -->
-        <div class="actions" style="margin-top:6px">
-        <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">
-  Review Attempt
-</a>
+      {{#if certRows.length}}
+      <div class="panel">
+        <h2>Certificates</h2>
+        <div class="scroll-box">
+          {{#each certRows}}
+            <div class="card" style="margin-bottom:10px">
+              <strong>{{quizTitle}}</strong>
+              <div>{{percentage}}%</div>
 
+              <a
+                href="/admin/certificates/{{_id}}/download/pdf"
+                target="_blank"
+              >
+                Download
+              </a>
+            </div>
+          {{/each}}
         </div>
-
-        <small>{{finishedAt}}</small>
       </div>
-    {{/each}}
-  </div>
-</div>
-
-
-   {{#if certRows.length}}
-<div class="panel">
-  <h2>Certificates</h2>
-  <div class="scroll-box">
-    {{#each certRows}}
-      <div class="card" style="margin-bottom:10px">
-        <strong>{{quizTitle}}</strong>
-        <div>{{percentage}}%</div>
-
-        <a
-          href="/admin/certificates/{{_id}}/download/pdf"
-          target="_blank"
-        >
-          Download
-        </a>
-      </div>
-    {{/each}}
-  </div>
-</div>
-{{/if}}
-
-
-
+      {{/if}}
     </div>
 
     <!-- ================= MARKETPLACE ================= -->
-  {{#if isAdmin}}
-<h2>Marketplace</h2>
-<div class="panel">
-  <strong>SCOI Audit Reports</strong>
-  <div class="actions" style="margin-top:8px">
-    <a href="/scoi">Browse Marketplace</a>
-    <a href="/scoi/purchased">My Purchases</a>
-  </div>
-</div>
-{{/if}}
-
+    {{#if isAdmin}}
+    <h2>Marketplace</h2>
+    <div class="panel">
+      <strong>SCOI Audit Reports</strong>
+      <div class="actions" style="margin-top:8px">
+        <a href="/scoi">Browse Marketplace</a>
+        <a href="/scoi/purchased">My Purchases</a>
+      </div>
+    </div>
+    {{/if}}
 
   </main>
 </body>
