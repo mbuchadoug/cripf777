@@ -57,7 +57,8 @@ export default function configurePassport() {
           const updateDoc = {
             $set: update,
             $setOnInsert: {
-              createdAt: new Date()
+              createdAt: new Date(),
+              role: "employee"  // ✅ ADD THIS LINE!
             }
           };
 
