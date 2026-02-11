@@ -1,10 +1,14 @@
-// scripts/categorize-cripfcnt-questions.js
+// scripts/categorize-cripfcnt-questions.js - FIXED
 // Auto-categorize 9500+ questions for cripfcnt-school
 // Run: node scripts/categorize-cripfcnt-questions.js
 
 import mongoose from "mongoose";
+import dotenv from "dotenv";
 import Question from "../models/question.js";
 import Organization from "../models/organization.js";
+
+// Load environment variables
+dotenv.config();
 
 // ==============================
 // 🧠 MODULE CLASSIFICATION RULES
@@ -20,7 +24,7 @@ const MODULE_KEYWORDS = {
     'responsible', 'responsibility', 'accountable', 'obligation', 'duty',
     'placement', 'consequence', 'decision', 'choice', 'liability',
     'steward', 'custodian', 'entrust', 'answerable', 'commitment',
-    'ownership', 'blame', 'credit', 'experimentation'
+    'ownership', 'blame', 'credit', 'experimentation', 'performance'
   ],
   
   interpretation: [
@@ -71,54 +75,43 @@ const MODULE_KEYWORDS = {
 // 🏷️ TOPIC EXTRACTION PATTERNS
 // ==============================
 const TOPIC_PATTERNS = {
-  // Responsibility topics
   'placement': /placement|position|location|situate/i,
   'consequence-management': /consequence|outcome|result|effect|impact/i,
   'decision-frameworks': /decision|choose|select|option|alternative/i,
   'structural-responsibility': /structure|system|framework|architecture/i,
   'blame-vs-responsibility': /blame|fault|guilt|accountability/i,
-  
-  // Interpretation topics
   'context-reading': /context|situation|circumstance|environment/i,
   'narrative-construction': /narrative|story|account|explanation/i,
   'meaning-extraction': /meaning|significance|import|value/i,
   'perspective-shifts': /perspective|viewpoint|angle|lens/i,
-  
-  // Purpose topics
   'goal-alignment': /goal|objective|target|aim/i,
   'function-identification': /function|role|purpose|use/i,
   'mission-clarity': /mission|vision|calling|mandate/i,
   'legacy-planning': /legacy|inheritance|contribution|impact/i,
-  
-  // Civilization topics
   'social-contracts': /contract|agreement|covenant|pact/i,
   'governance-models': /govern|rule|manage|administer/i,
   'collective-stability': /stable|stability|balance|equilibrium/i,
   'institutional-trust': /trust|confidence|reliability|faith/i,
-  
-  // Consciousness topics
   'self-awareness': /self-aware|introspect|reflect|examine/i,
   'attention-direction': /attention|focus|concentrate|aware/i,
   'perception-accuracy': /perceive|sense|detect|observe/i,
   'cognitive-clarity': /clear|clarity|lucid|transparent/i,
-  
-  // Technology topics
   'system-design': /design|architect|plan|blueprint/i,
   'process-optimization': /optimize|improve|enhance|refine/i,
   'tool-selection': /tool|instrument|device|implement/i,
   'automation-ethics': /automate|machine|robot|artificial/i,
-  
-  // Negotiation topics
   'conflict-resolution': /conflict|dispute|disagree|tension/i,
   'value-exchange': /exchange|trade|swap|barter/i,
   'compromise-frameworks': /compromise|middle-ground|balance/i,
   'persuasion-techniques': /persuade|convince|influence|sway/i,
-  
-  // Frequencies topics
   'pattern-recognition': /pattern|rhythm|cycle|repetition/i,
   'resonance-tuning': /resonate|tune|align|harmonize/i,
   'signal-clarity': /signal|transmission|broadcast|communicate/i,
-  'energy-management': /energy|power|force|vitality/i
+  'energy-management': /energy|power|force|vitality/i,
+  'performance-metrics': /performance|metric|measure|indicator/i,
+  'visibility': /visibility|visible|transparent|observable/i,
+  'alignment': /alignment|align|synchronize|coordinate/i,
+  'restraint': /restraint|control|discipline|limitation/i
 };
 
 // ==============================
@@ -163,11 +156,11 @@ function classifyQuestion(questionText, rawText = '') {
     }
   }
   
-  // Get top 2 modules (questions can belong to multiple modules)
+  // Get top 2 modules
   const sortedModules = Object.entries(moduleScores)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .filter(([_, score]) => score >= 1) // at least 1 keyword match
+    .filter(([_, score]) => score >= 1)
     .map(([module]) => module);
   
   result.modules = sortedModules.length > 0 ? sortedModules : ['general'];
@@ -183,7 +176,7 @@ function classifyQuestion(questionText, rawText = '') {
   for (const [series, pattern] of Object.entries(SERIES_PATTERNS)) {
     if (pattern.test(combinedText)) {
       result.series = series;
-      break; // only one series per question
+      break;
     }
   }
   
@@ -195,30 +188,37 @@ function classifyQuestion(questionText, rawText = '') {
 // ==============================
 async function categorizeCripfcntQuestions() {
   try {
-    console.log('🔌 Connecting to MongoDB...');
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/lms');
-    console.log('✅ Connected to MongoDB');
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
     
-    // Find cripfcnt-school org
-    const org = await Organization.findOne({ slug: 'cripfcnt-school' }).lean();
-    if (!org) {
-      throw new Error('cripfcnt-school organization not found');
+    if (!mongoUri) {
+      throw new Error('MONGO_URI or MONGODB_URI not found in environment variables');
     }
     
-    console.log(`📚 Found organization: ${org.name} (${org._id})`);
+    console.log('🔌 Connecting to MongoDB...');
+    await mongoose.connect(mongoUri);
+    console.log('✅ Connected to MongoDB');
     
-    // Find all questions for this org
+    // Find org
+    const org = await Organization.findOne({ slug: 'cripfcnt-school' }).lean();
+    
+    if (!org) {
+      throw new Error('Organization "cripfcnt-school" not found. Run verify-setup.js first.');
+    }
+    
+    console.log(`\n📚 Using organization: ${org.name} (${org._id})`);
+    
+    // Find questions
     const questions = await Question.find({
       organization: org._id,
-      type: { $ne: 'comprehension' } // skip parent passages
+      type: { $ne: 'comprehension' }
     })
     .select('_id text raw module')
     .lean();
     
-    console.log(`📊 Found ${questions.length} questions to categorize`);
+    console.log(`\n📊 Found ${questions.length} questions to categorize\n`);
     
     if (questions.length === 0) {
-      console.log('⚠️  No questions found. Exiting.');
+      console.log('⚠️  No questions found. Run verify-setup.js to diagnose.');
       return;
     }
     
@@ -234,7 +234,6 @@ async function categorizeCripfcntQuestions() {
       for (const q of batch) {
         const classification = classifyQuestion(q.text, q.raw || '');
         
-        // Only update if we found modules/topics
         if (classification.modules.length > 0 || classification.topics.length > 0) {
           bulkOps.push({
             updateOne: {
@@ -255,17 +254,16 @@ async function categorizeCripfcntQuestions() {
         processed++;
       }
       
-      // Execute batch update
       if (bulkOps.length > 0) {
         await Question.bulkWrite(bulkOps);
       }
       
-      console.log(`✅ Processed ${processed}/${questions.length} questions (${updated} updated)`);
+      console.log(`✅ Processed ${processed}/${questions.length} (${updated} updated)`);
     }
     
-    // Generate summary statistics
+    // Summary
     console.log('\n📊 CATEGORIZATION SUMMARY:');
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     for (const module of Object.keys(MODULE_KEYWORDS)) {
       const count = await Question.countDocuments({
@@ -279,12 +277,12 @@ async function categorizeCripfcntQuestions() {
       organization: org._id,
       modules: 'general'
     });
-    console.log(`📌 GENERAL (uncategorized): ${generalCount} questions`);
+    console.log(`📌 GENERAL: ${generalCount} questions`);
     
-    console.log(`\n✅ Categorization complete! Updated ${updated}/${questions.length} questions`);
+    console.log(`\n✅ Complete! Updated ${updated}/${questions.length} questions\n`);
     
   } catch (error) {
-    console.error('❌ Error during categorization:', error);
+    console.error('❌ Error:', error.message);
     throw error;
   } finally {
     await mongoose.disconnect();
@@ -292,14 +290,10 @@ async function categorizeCripfcntQuestions() {
   }
 }
 
-// Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  categorizeCripfcntQuestions()
-    .then(() => process.exit(0))
-    .catch(err => {
-      console.error(err);
-      process.exit(1);
-    });
-}
-
-export default categorizeCripfcntQuestions;
+// Run
+categorizeCripfcntQuestions()
+  .then(() => process.exit(0))
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
