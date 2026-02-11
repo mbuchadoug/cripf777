@@ -961,7 +961,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         let openUrl;
         if (ex.isAdminQuiz) {
           // Admin catalog quiz - will create exam instance on-demand
-          openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
+          openUrl = `/org/${org.slug}/quiz?assignmentId=${ex.quizId}`;
         } else if (ex.isOnboarding) {
           openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
         } else {
