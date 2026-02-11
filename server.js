@@ -151,7 +151,21 @@ subtract: (a, b) => {
 json: (context) => {
   return JSON.stringify(context);
 },
-
+// ✅ ADD THIS:
+  math: (a, operator, b) => {
+    const x = Number(a);
+    const y = Number(b);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+    
+    switch (operator) {
+      case '+': return x + y;
+      case '-': return x - y;
+      case '*': return x * y;
+      case '/': return y !== 0 ? x / y : 0;
+      case '%': return y !== 0 ? x % y : 0;
+      default: return 0;
+    }
+  },
 
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
