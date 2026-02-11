@@ -150,7 +150,7 @@ router.get(
               user: req.user._id,
               role: "employee",
               joinedAt: new Date(),
-              isOnboarding Complete: false
+              isOnboardingComplete: false
             });
 
             if (req.session) {
