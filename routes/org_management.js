@@ -1780,6 +1780,229 @@ return res.json({ ok: true, assigned, countUsed: docs.length });
   }
 );
 
+
+
+//////////
+// FIXED BULK ASSIGN ROUTE FOR CRIPFCNT-SCHOOL
+// ADD THIS ROUTE TO routes/org_management.js AFTER the assign-quiz route
+
+/* ------------------------------------------------------------------ */
+/*  🆕 BULK ASSIGN ALL QUIZZES (cripfcnt-school only)                 */
+/*  POST /admin/orgs/:slug/bulk-assign-all                            */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/bulk-assign-all",
+  ensureAuth,
+  ensureAdminEmails,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").trim();
+      
+      // Only for cripfcnt-school
+      if (slug !== 'cripfcnt-school') {
+        return res.status(403).json({ error: "Bulk assign only available for cripfcnt-school" });
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "org not found" });
+
+      const {
+        targetType = 'all', // all, specific
+        userIds = [],
+        durationMinutes = 30,
+        previewOnly = false
+      } = req.body;
+
+      console.log('[bulk-assign-all] Starting bulk assignment', {
+        targetType,
+        userIdsCount: userIds.length,
+        durationMinutes,
+        previewOnly
+      });
+
+      // ===================================
+      // STEP 1: RESOLVE TARGET USERS
+      // ===================================
+      let resolvedUserIds = [];
+
+      if (targetType === 'all') {
+        // Get all employees (staff members) in this org
+        const memberships = await OrgMembership.find({
+          org: org._id
+        })
+        .populate('user')
+        .lean();
+
+        if (!memberships.length) {
+          return res.status(404).json({ error: "No members found in this organization" });
+        }
+
+        // Get user IDs from memberships
+        resolvedUserIds = memberships
+          .map(m => m.user ? String(m.user._id) : null)
+          .filter(Boolean);
+
+        console.log(`[bulk-assign-all] Found ${resolvedUserIds.length} members in org`);
+
+      } else if (targetType === 'specific') {
+        // Assign to specific users
+        if (!Array.isArray(userIds) || !userIds.length) {
+          return res.status(400).json({ error: "Please select at least one user" });
+        }
+        resolvedUserIds = userIds.map(String);
+        console.log(`[bulk-assign-all] Using ${resolvedUserIds.length} specific users`);
+
+      } else {
+        return res.status(400).json({ error: "Invalid target type" });
+      }
+
+      if (!resolvedUserIds.length) {
+        return res.status(404).json({ error: "No users to assign to" });
+      }
+
+      // ===================================
+      // STEP 2: LOAD ALL QUIZZES
+      // ===================================
+      const allQuizzes = await Question.find({
+        organization: org._id,
+        type: 'comprehension'
+      })
+      .select('_id text module modules topics series questionIds')
+      .lean();
+
+      if (!allQuizzes.length) {
+        return res.status(404).json({ error: "No quizzes found for this organization" });
+      }
+
+      console.log(`[bulk-assign-all] Found ${allQuizzes.length} quizzes to assign`);
+
+      // ===================================
+      // STEP 3: PREVIEW MODE (don't create)
+      // ===================================
+      if (previewOnly) {
+        const totalInstances = resolvedUserIds.length * allQuizzes.length;
+        return res.json({
+          preview: true,
+          usersCount: resolvedUserIds.length,
+          quizzesCount: allQuizzes.length,
+          totalInstances,
+          durationMinutes
+        });
+      }
+
+      // ===================================
+      // STEP 4: CREATE EXAM INSTANCES
+      // ===================================
+      const baseAssignmentId = crypto.randomUUID(); // Base ID for this bulk assignment
+      let totalCreated = 0;
+      const errors = [];
+
+      console.log('[bulk-assign-all] Starting exam instance creation...');
+
+      for (const userId of resolvedUserIds) {
+        for (const quiz of allQuizzes) {
+          try {
+            // Build question IDs array
+            const questionIds = [];
+            const choicesOrder = [];
+
+            // Add parent marker
+            questionIds.push(`parent:${String(quiz._id)}`);
+            choicesOrder.push([]);
+
+            // Add child questions with shuffled choices
+            const childIds = Array.isArray(quiz.questionIds) ? quiz.questionIds.map(String) : [];
+            
+            for (const cid of childIds) {
+              questionIds.push(String(cid));
+
+              // Load child doc to get choice count
+              let nChoices = 0;
+              try {
+                const childDoc = await Question.findById(String(cid)).select('choices').lean();
+                if (childDoc) {
+                  nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
+                }
+              } catch (e) {
+                nChoices = 0;
+              }
+
+              // Shuffle choice indices
+              const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
+              for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+              }
+              choicesOrder.push(indices);
+            }
+
+            // Create unique exam instance
+            const examId = crypto.randomUUID();
+            const assignmentId = `${baseAssignmentId}-${quiz._id}`; // Unique per quiz
+
+            const moduleKey = quiz.module || 'general';
+            const quizTitle = quiz.text || 'Quiz';
+
+            await ExamInstance.create({
+              examId,
+              assignmentId,
+              org: org._id,
+              userId: mongoose.Types.ObjectId(userId),
+              module: moduleKey,
+              modules: quiz.modules || [moduleKey],
+              title: quizTitle,
+              quizTitle: quizTitle,
+              questionIds,
+              choicesOrder,
+              isOnboarding: false,
+              targetRole: 'teacher', // cripfcnt-school uses 'teacher' for employees
+              durationMinutes: Number(durationMinutes) || 30,
+              meta: {
+                bulkAssignmentId: baseAssignmentId,
+                catalogQuizId: quiz._id,
+                topics: quiz.topics || [],
+                series: quiz.series,
+                isBulkAssigned: true
+              },
+              createdAt: new Date()
+            });
+
+            totalCreated++;
+
+            // Log progress every 100 instances
+            if (totalCreated % 100 === 0) {
+              console.log(`[bulk-assign-all] Created ${totalCreated} instances...`);
+            }
+
+          } catch (err) {
+            console.error(`[bulk-assign-all] Failed to create exam for user ${userId}, quiz ${quiz._id}:`, err.message);
+            errors.push({
+              userId,
+              quizId: quiz._id,
+              error: err.message
+            });
+          }
+        }
+      }
+
+      console.log(`[bulk-assign-all] Completed! Created ${totalCreated} exam instances`);
+
+      return res.json({
+        ok: true,
+        totalCreated,
+        usersCount: resolvedUserIds.length,
+        quizzesCount: allQuizzes.length,
+        durationMinutes,
+        baseAssignmentId,
+        errors: errors.length > 0 ? errors : undefined
+      });
+
+    } catch (err) {
+      console.error("[bulk-assign-all] error:", err && (err.stack || err));
+      return res.status(500).json({ error: "bulk assignment failed", detail: String(err && err.message) });
+    }
+  }
+);
 /////////////import students
 
 router.post(
