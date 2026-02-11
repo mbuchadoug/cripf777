@@ -141,9 +141,10 @@
       border:1px solid var(--border);
       border-radius:8px;
       font-weight:600;
-      cursor:pointer;
+      text-decoration:none;
       font-size:14px;
       margin-left:8px;
+      display:inline-block;
     }
 
     /* ====== GRID ====== */
@@ -179,7 +180,7 @@
       font-weight:800;
     }
 
-    .admin-badge{
+    .catalog-badge{
       background:#1e90ff;
       color:#fff;
       padding:2px 8px;
@@ -206,36 +207,22 @@
 
     .actions{
       margin-top:10px;
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
     }
 
-    .actions a, .actions button{
+    .actions a{
       color:var(--gold);
       font-size:14px;
+      margin-right:12px;
       text-decoration:none;
     }
 
     .actions button{
       background:none;
       border:none;
+      color:#c00;
       cursor:pointer;
+      font-size:14px;
       padding:0;
-    }
-
-    .assign-btn{
-      background:var(--gold);
-      color:#000;
-      padding:6px 12px;
-      border-radius:6px;
-      font-weight:800;
-      text-decoration:none;
-      display:inline-block;
-    }
-
-    .assign-btn:hover{
-      background:#c9a227;
     }
 
     /* ====== SCROLL AREAS ====== */
@@ -341,6 +328,7 @@
     {{/if}}
 
     <!-- ================= SEARCH & FILTER ================= -->
+    {{#if isCripfcntSchool}}
     <div class="search-panel">
       <form id="searchForm" method="GET" action="/org/{{org.slug}}/dashboard">
         <div class="search-grid">
@@ -389,6 +377,7 @@
         </div>
       </form>
     </div>
+    {{/if}}
 
     <!-- ================= MODULES ================= -->
     {{#unless (eq membership.role "student")}}
@@ -399,7 +388,7 @@
         <div class="card">
           <h3>{{this.title}}</h3>
           <small>{{this.slug}}</small>
-          <div class="actions">
+          <div class="actions" style="margin-top:8px">
             <a href="/org/{{../org.slug}}/modules/{{this.slug}}">Open</a>
           </div>
         </div>
@@ -412,7 +401,7 @@
     <h2>
       {{#if isAdmin}}
         {{#if isCripfcntSchool}}
-          📚 Quiz Library ({{quizCount}} total)
+          📚 Quiz Library
         {{else}}
           Assigned Quizzes
         {{/if}}
@@ -441,7 +430,7 @@
                       <span class="trial-badge">TRIAL</span>
                     {{/if}}
                     {{#if isAdminQuiz}}
-                      <span class="admin-badge">CATALOG</span>
+                      <span class="catalog-badge">CATALOG</span>
                     {{/if}}
                   </div>
                 </div>
@@ -457,30 +446,21 @@
                 {{/if}}
 
                 <div class="actions">
-                  {{#if isAdminQuiz}}
-                    <!-- Admin quiz - show assign button -->
-                    <a href="/admin/orgs/{{../../org.slug}}/manage#assignForm" 
-                       class="assign-btn"
-                       onclick="localStorage.setItem('preselect-quiz', '{{quizId}}'); return true;">
-                      💼 Assign to Users
-                    </a>
-                    <a href="{{openUrl}}" style="color:#999">Preview</a>
-                  {{else}}
-                    <!-- Regular assigned quiz -->
-                    <a href="{{openUrl}}">Open quiz</a>
+                  <a href="{{openUrl}}">
+                    {{#if isAdminQuiz}}Take Quiz{{else}}Open quiz{{/if}}
+                  </a>
 
-                    {{#if ../../isAdmin}}
+                  {{#if ../../isAdmin}}
+                    {{#unless isAdminQuiz}}
                       <form
                         method="POST"
                         action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
                         style="display:inline"
                         onsubmit="return confirm('Delete this quiz?');"
                       >
-                        <button style="background:none;border:none;color:#c00;cursor:pointer;">
-                          Delete
-                        </button>
+                        <button>Delete</button>
                       </form>
-                    {{/if}}
+                    {{/unless}}
                   {{/if}}
                 </div>
 
@@ -496,8 +476,7 @@
       <p>No quizzes found. {{#if searchQuery}}Try different search terms.{{else}}No quizzes available yet.{{/if}}</p>
     {{/if}}
 
-    <!-- ================= HISTORY + CERTS (non-admin) ================= -->
-    {{#unless isAdmin}}
+    <!-- ================= HISTORY + CERTS ================= -->
     <div class="grid">
       <div class="panel">
         <h2>Quiz History</h2>
@@ -515,7 +494,7 @@
                 {{/if}}
               </div>
 
-              <div class="actions">
+              <div class="actions" style="margin-top:6px">
                 <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">
                   Review Attempt
                 </a>
@@ -548,14 +527,13 @@
       </div>
       {{/if}}
     </div>
-    {{/unless}}
 
-    <!-- ================= MARKETPLACE (admin) ================= -->
+    <!-- ================= MARKETPLACE ================= -->
     {{#if isAdmin}}
     <h2>Marketplace</h2>
     <div class="panel">
       <strong>SCOI Audit Reports</strong>
-      <div class="actions">
+      <div class="actions" style="margin-top:8px">
         <a href="/scoi">Browse Marketplace</a>
         <a href="/scoi/purchased">My Purchases</a>
       </div>
@@ -563,20 +541,5 @@
     {{/if}}
 
   </main>
-
-  <script>
-    // Count total quizzes for display
-    const moduleBoxes = document.querySelectorAll('.panel h3');
-    let totalCount = 0;
-    moduleBoxes.forEach(box => {
-      const cards = box.parentElement.querySelectorAll('.card');
-      totalCount += cards.length;
-    });
-
-    const heading = document.querySelector('h2');
-    if (heading && heading.textContent.includes('Quiz Library')) {
-      heading.textContent = heading.textContent.replace('(0 total)', `(${totalCount} total)`);
-    }
-  </script>
 </body>
 </html>

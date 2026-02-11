@@ -722,6 +722,8 @@ router.get(
 
 // REPLACE the dashboard route in routes/org_management.js
 
+// REPLACE the dashboard route in routes/org_management.js
+
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
@@ -780,21 +782,28 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       console.log(`[dashboard] Found ${allQuizzes.length} total quizzes`);
 
       // Transform quizzes into exam-like structure for dashboard
-      exams = allQuizzes.map(quiz => ({
-        assignmentId: `quiz-${quiz._id}`, // Virtual assignment ID
-        title: quiz.text || 'Quiz',
-        quizTitle: quiz.text || 'Quiz',
-        module: quiz.module || 'general',
-        modules: quiz.modules || [quiz.module || 'general'],
-        questionIds: quiz.questionIds || [],
-        createdAt: quiz.createdAt,
-        isAdminQuiz: true, // Flag to show "Assign" button
-        quizId: quiz._id,
-        meta: {
-          topics: quiz.topics || [],
-          series: quiz.series
-        }
-      }));
+      // For each quiz, create a virtual exam that admins can take
+      for (const quiz of allQuizzes) {
+        const quizModules = quiz.modules || [quiz.module || 'general'];
+        
+        exams.push({
+          assignmentId: `admin-quiz-${quiz._id}`, // Virtual assignment ID
+          examId: null, // Will be created on-demand when admin clicks
+          title: quiz.text || 'Quiz',
+          quizTitle: quiz.text || 'Quiz',
+          module: quiz.module || 'general',
+          modules: quizModules,
+          questionIds: quiz.questionIds || [],
+          createdAt: quiz.createdAt,
+          isAdminQuiz: true, // Flag to show this is from catalog
+          quizId: quiz._id, // Original quiz ID
+          status: 'available', // Always available for admins
+          meta: {
+            topics: quiz.topics || [],
+            series: quiz.series
+          }
+        });
+      }
 
     } else if (isAdmin) {
       // OTHER ORGS: Show assigned quizzes (existing behavior)
@@ -878,7 +887,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     console.log(`[dashboard] ${exams.length} exams/quizzes after filter`);
 
     /* -------------------------------
-       PRELOAD COMPREHENSION TITLES (for non-admin view)
+       PRELOAD COMPREHENSION TITLES
     -------------------------------- */
     const parentIds = new Set();
     for (const ex of exams) {
@@ -924,7 +933,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           if (ex.expiresAt && ex.expiresAt < now) status = "expired";
         }
 
-        // For admin quizzes in cripfcnt-school, status is always "available"
+        // For admin catalog quizzes, status is always "available"
         if (ex.isAdminQuiz) {
           status = "available";
         }
@@ -948,10 +957,11 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           }
         }
 
-        // Build URL - admin quizzes link to assign page
+        // Build URL - for admin catalog quizzes, link to special route that creates exam on-demand
         let openUrl;
         if (ex.isAdminQuiz) {
-          openUrl = `/org/${org.slug}/quiz-assign?quizId=${ex.quizId}`;
+          // Admin catalog quiz - will create exam instance on-demand
+          openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
         } else if (ex.isOnboarding) {
           openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
         } else {
@@ -975,76 +985,71 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     }
 
     /* -------------------------------
-       USER ATTEMPTS (non-admin only)
+       USER ATTEMPTS
     -------------------------------- */
-    let attemptRows = [];
-    let certRows = [];
+    const attempts = await Attempt.find({
+      organization: org._id,
+      userId: req.user._id
+    })
+    .sort({ finishedAt: -1 })
+    .lean();
 
-    if (!isAdmin) {
-      const attempts = await Attempt.find({
-        organization: org._id,
-        userId: req.user._id
-      })
-      .sort({ finishedAt: -1 })
-      .lean();
+    const examIds = attempts.map(a => a.examId).filter(Boolean);
+    const examsByExamId = {};
 
-      const examIds = attempts.map(a => a.examId).filter(Boolean);
-      const examsByExamId = {};
+    if (examIds.length) {
+      const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
+        .select("examId module questionIds")
+        .lean();
 
-      if (examIds.length) {
-        const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
-          .select("examId module questionIds")
-          .lean();
-
-        for (const ex of examDocs) {
-          examsByExamId[ex.examId] = ex;
-        }
+      for (const ex of examDocs) {
+        examsByExamId[ex.examId] = ex;
       }
-
-      attemptRows = attempts.map(a => {
-        const ex = examsByExamId[a.examId];
-        let quizTitle = a.quizTitle;
-
-        if (!quizTitle && ex) {
-          quizTitle = ex.module
-            ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz"
-            : "Quiz";
-        }
-
-        return {
-          _id: a._id,
-          examId: a.examId,
-          quizTitle: quizTitle || "Quiz",
-          score: a.score || 0,
-          maxScore: a.maxScore || 0,
-          percentage: a.maxScore
-            ? Math.round((a.score / a.maxScore) * 100)
-            : 0,
-          passed: !!a.passed,
-          finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-        };
-      });
-
-      /* -------------------------------
-         CERTIFICATES
-      -------------------------------- */
-      const certificates = await Certificate.find({
-        userId: req.user._id,
-        orgId: org._id
-      })
-      .sort({ createdAt: -1 })
-      .lean();
-
-      certRows = certificates.map(c => ({
-        _id: c._id,
-        quizTitle: c.quizTitle || c.courseTitle || "Quiz",
-        percentage: c.percentage,
-        createdAt: c.createdAt
-      }));
     }
 
+    const attemptRows = attempts.map(a => {
+      const ex = examsByExamId[a.examId];
+      let quizTitle = a.quizTitle;
+
+      if (!quizTitle && ex) {
+        quizTitle = ex.module
+          ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz"
+          : "Quiz";
+      }
+
+      return {
+        _id: a._id,
+        examId: a.examId,
+        quizTitle: quizTitle || "Quiz",
+        score: a.score || 0,
+        maxScore: a.maxScore || 0,
+        percentage: a.maxScore
+          ? Math.round((a.score / a.maxScore) * 100)
+          : 0,
+        passed: !!a.passed,
+        finishedAt: a.finishedAt || a.updatedAt || a.createdAt
+      };
+    });
+
     /* -------------------------------
-       TRIAL QUIZ STATUS (cripfcnt-school only)
+       CERTIFICATES
+    -------------------------------- */
+    const certificates = await Certificate.find({
+      userId: req.user._id,
+      orgId: org._id
+    })
+    .sort({ createdAt: -1 })
+    .lean();
+
+    const certRows = certificates.map(c => ({
+      _id: c._id,
+      quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+      percentage: c.percentage,
+      createdAt: c.createdAt
+    }));
+
+    /* -------------------------------
+       TRIAL QUIZ STATUS (cripfcnt-school only, non-admin)
     -------------------------------- */
     let showTrialBanner = false;
     let canUpgrade = false;
@@ -1052,12 +1057,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
     if (isCripfcntSchool && !isAdmin) {
       try {
-        const trialStatus = await getTrialQuizStatus(req.user._id, org._id);
-        showTrialBanner = trialStatus.total > 0;
-        trialQuizzesRemaining = trialStatus.remaining;
-        
-        const upgradeCheck = await canUserUpgrade(req.user._id, org._id);
-        canUpgrade = upgradeCheck.canUpgrade;
+        // Import trial quiz functions if they exist
+        // const { getTrialQuizStatus, canUserUpgrade } = await import('../services/trialQuizAssignment.js');
+        // const trialStatus = await getTrialQuizStatus(req.user._id, org._id);
+        // showTrialBanner = trialStatus.total > 0;
+        // trialQuizzesRemaining = trialStatus.remaining;
+        // const upgradeCheck = await canUserUpgrade(req.user._id, org._id);
+        // canUpgrade = upgradeCheck.canUpgrade;
       } catch (err) {
         console.error('[dashboard] Error checking trial status:', err);
       }
@@ -1089,6 +1095,128 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
   } catch (err) {
     console.error("[org dashboard] error:", err);
+    return res.status(500).send("failed");
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  🆕 ADMIN: Take quiz from catalog (creates exam instance on-demand) */
+/*  GET /org/:slug/take-quiz?quizId=...                               */
+/* ------------------------------------------------------------------ */
+router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "").trim();
+    const quizId = String(req.query.quizId || "").trim();
+
+    if (!quizId || !mongoose.isValidObjectId(quizId)) {
+      return res.status(400).send("Invalid quiz ID");
+    }
+
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("org not found");
+
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id
+    }).lean();
+
+    if (!membership) {
+      return res.status(403).send("You are not a member of this organization");
+    }
+
+    // Check if admin
+    const platformAdmin = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(e => e.trim().toLowerCase())
+      .includes(req.user.email?.toLowerCase());
+
+    const role = String(membership.role || "").toLowerCase();
+    const isAdmin = platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
+
+    if (!isAdmin) {
+      return res.status(403).send("Only admins can take quizzes from the catalog");
+    }
+
+    // Load the quiz
+    const quiz = await Question.findById(quizId).lean();
+    if (!quiz || quiz.type !== 'comprehension') {
+      return res.status(404).send("Quiz not found");
+    }
+
+    // Check if admin already has an exam instance for this quiz
+    let examInstance = await ExamInstance.findOne({
+      org: org._id,
+      userId: req.user._id,
+      'meta.catalogQuizId': quizId
+    }).lean();
+
+    // If no exam instance exists, create one
+    if (!examInstance) {
+      const examId = crypto.randomUUID();
+      const assignmentId = crypto.randomUUID();
+
+      const childIds = Array.isArray(quiz.questionIds) ? quiz.questionIds.map(String) : [];
+      
+      const questionIds = [];
+      const choicesOrder = [];
+
+      // Add parent marker
+      questionIds.push(`parent:${String(quiz._id)}`);
+      choicesOrder.push([]);
+
+      // Add child questions with shuffled choices
+      for (const cid of childIds) {
+        questionIds.push(String(cid));
+
+        let nChoices = 0;
+        try {
+          const childDoc = await Question.findById(String(cid)).lean();
+          if (childDoc) nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
+        } catch (e) {
+          nChoices = 0;
+        }
+
+        const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
+        // Shuffle
+        for (let i = indices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        choicesOrder.push(indices);
+      }
+
+      examInstance = await ExamInstance.create({
+        examId,
+        assignmentId,
+        org: org._id,
+        userId: req.user._id,
+        module: quiz.module || 'general',
+        modules: quiz.modules || [quiz.module || 'general'],
+        title: quiz.text || 'Quiz',
+        quizTitle: quiz.text || 'Quiz',
+        questionIds,
+        choicesOrder,
+        isOnboarding: false,
+        targetRole: 'admin',
+        meta: {
+          catalogQuizId: quizId, // Track which catalog quiz this is from
+          topics: quiz.topics || [],
+          series: quiz.series,
+          isAdminAttempt: true
+        },
+        createdAt: new Date()
+      });
+
+      console.log(`[take-quiz] Created exam instance ${examId} for admin ${req.user._id}`);
+    }
+
+    // Redirect to quiz page
+    return res.redirect(
+      `/lms/quiz?examId=${encodeURIComponent(examInstance.examId)}&org=${encodeURIComponent(org.slug)}&quizTitle=${encodeURIComponent(examInstance.quizTitle || examInstance.title)}`
+    );
+
+  } catch (err) {
+    console.error("[take-quiz] error:", err);
     return res.status(500).send("failed");
   }
 });
