@@ -1,4 +1,4 @@
-// config/passport.js
+// config/passport.js - CORRECTED VERSION
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "../models/user.js";
@@ -6,35 +6,31 @@ import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
 import { assignOnboardingQuizzes } from "../services/onboarding.js";
 
-
-
 export default function configurePassport() {
   passport.serializeUser((user, done) => {
     done(null, user._id);
   });
 
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await User.findById(id).lean();
-    done(null, user || null);
-  } catch (err) {
-    done(err, null);
-  }
-});
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const user = await User.findById(id).lean();
+      done(null, user || null);
+    } catch (err) {
+      done(err, null);
+    }
+  });
 
-
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL,
-      passReqToCallback: true // ✅ ADD THIS LINE
-    },
-     async (req, accessToken, refreshToken, profile, done) => {
-
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: process.env.GOOGLE_CALLBACK_URL,
+        passReqToCallback: true
+      },
+      async (req, accessToken, refreshToken, profile, done) => {
         try {
-          const isParentSignup = req.session?.signupSource === "start";
+          const isParentSignup = req.session?.signupSource === "parent";
 
           // Extract common fields
           const googleId = profile.id;
@@ -58,136 +54,106 @@ passport.use(
             lastLogin: new Date(),
           };
 
-          const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
+          const updateDoc = {
+            $set: update,
+            $setOnInsert: {
+              createdAt: new Date()
+            }
+          };
 
-const updateDoc = {
-  $set: update,
-  $setOnInsert: {
-    createdAt: new Date()
-  }
-};
+          // 🔥 FORCE parent role ONLY when coming from /start
+          if (isParentSignup) {
+            updateDoc.$set.role = "parent";
+            updateDoc.$set.accountType = "parent";
+            updateDoc.$set.consumerEnabled = true;
+            updateDoc.$setOnInsert.role = "parent";
+          }
 
-// 🔥 FORCE parent role ALWAYS when coming from /start
-if (isParentSignup) {
-  updateDoc.$set.role = "parent";
-  updateDoc.$set.accountType = "parent";
-  updateDoc.$set.consumerEnabled = true;
+          const user = await User.findOneAndUpdate(
+            { googleId },
+            updateDoc,
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
 
-  // 🔐 critical: ensure role is never overwritten later
-  updateDoc.$setOnInsert.role = "parent";
-}
+          // ===============================
+          // 🎯 AUTO-ENROLLMENT LOGIC
+          // ===============================
+          
+          if (user.role === "parent") {
+            // ✅ PARENTS → cripfcnt-home
+            const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" });
+            if (homeOrg) {
+              const exists = await OrgMembership.findOne({
+                org: homeOrg._id,
+                user: user._id
+              });
 
+              if (!exists) {
+                await OrgMembership.create({
+                  org: homeOrg._id,
+                  user: user._id,
+                  role: "parent",
+                  joinedAt: new Date()
+                });
+                console.log(`[passport] Enrolled parent ${user.email} into cripfcnt-home`);
+              }
+            }
 
-const user = await User.findOneAndUpdate(
-  { googleId },
-  updateDoc,
-  opts
-);
+          } else {
+            // ✅ NON-PARENTS (including /lms signups) → cripfcnt-school
+            const schoolOrg = await Organization.findOne({ slug: "cripfcnt-school" });
+            
+            if (!schoolOrg) {
+              console.error('[passport] cripfcnt-school org not found!');
+              return done(null, user);
+            }
 
+            const existingMembership = await OrgMembership.findOne({
+              org: schoolOrg._id,
+              user: user._id
+            });
 
-// ===============================
-// 🏫 AUTO-ENROL INTO CRIPFCNT SCHOOL
-// ===============================
-// ❗ ONLY for NON-PARENT users
+            if (!existingMembership) {
+              // 🆕 NEW MEMBER - Create membership
+              await OrgMembership.create({
+                org: schoolOrg._id,
+                user: user._id,
+                role: "employee",
+                joinedAt: new Date(),
+                isOnboardingComplete: false
+              });
 
-if (user.role !== "parent") {
+              console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
 
-  const ORG_SLUG = "cripfcnt-school";
+              // 🎓 Assign onboarding quizzes
+              try {
+                await assignOnboardingQuizzes({
+                  orgId: schoolOrg._id,
+                  userId: user._id
+                });
+                console.log(`[passport] ✅ Assigned onboarding quizzes to ${user.email}`);
+              } catch (err) {
+                console.error('[passport] Failed to assign onboarding quizzes:', err.message);
+              }
 
-  // 1️⃣ Ensure org exists
-  let org = await Organization.findOne({ slug: ORG_SLUG });
-  if (!org) {
-    org = await Organization.create({
-      name: "CRIPFCNT",
-      slug: ORG_SLUG,
-      type: "school"
-    });
-  }
+              // 🚩 Mark as first login
+              if (req.session) {
+                req.session.isFirstLogin = true;
+              }
+            } else {
+              console.log(`[passport] ${user.email} already member of cripfcnt-school`);
+            }
+          }
 
-  // 2️⃣ Ensure membership exists
-  const existingMembership = await OrgMembership.findOne({
-    org: org._id,
-    user: user._id
-  });
+          // 🧹 Clear signup source marker
+          if (req.session?.signupSource) {
+            delete req.session.signupSource;
+          }
 
-  if (!existingMembership) {
-    await OrgMembership.create({
-      org: org._id,
-      user: user._id,
-      role: "employee",
-      joinedAt: new Date(),
-      isOnboardingComplete: false // 🔐 REQUIRED
-    });
-
-    // 🧠 Onboarding quizzes are SCHOOL ONLY
-    await assignOnboardingQuizzes({
-      orgId: org._id,
-      userId: user._id
-    });
-  }
-
-
-
-}
-
-// ===============================
-// 🏠 AUTO-ENROL PARENTS INTO HOME ORG (VISIBLE IN ADMIN)
-// ===============================
-if (user.role === "parent") {
-  const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" });
-
-  if (homeOrg) {
-    const exists = await OrgMembership.findOne({
-      org: homeOrg._id,
-      user: user._id
-    });
-
-    if (!exists) {
-      await OrgMembership.create({
-        org: homeOrg._id,
-        user: user._id,
-        role: "employee", // 👈 MUST MATCH ENUM
-        joinedAt: new Date()
-      });
-    }
-  }
-}
-
-
-// ===============================
-// 🏠 ENSURE HOME ORG MEMBERSHIP FOR PARENTS
-// ===============================
-const HOME_ORG_SLUG = "cripfcnt-home";
-
-const homeOrg = await Organization.findOne({ slug: HOME_ORG_SLUG });
-if (!homeOrg) {
-  throw new Error("Home org missing");
-}
-
-const hasHomeMembership = await OrgMembership.findOne({
-  org: homeOrg._id,
-  user: user._id
-});
-
-if (!hasHomeMembership) {
-  await OrgMembership.create({
-    org: homeOrg._id,
-    user: user._id,
-    role: "parent",
-    joinedAt: new Date()
-  });
-}
-
-
-// 🧹 Clear parent signup marker after use
-if (req.session?.signupSource) {
-  delete req.session.signupSource;
-}
-
-
-return done(null, user);
+          return done(null, user);
 
         } catch (err) {
+          console.error('[passport] Error:', err);
           return done(err, null);
         }
       }

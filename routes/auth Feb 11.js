@@ -1,4 +1,4 @@
-// routes/auth.js - CORRECTED VERSION (no /start conflict)
+// routes/auth.js
 import { Router } from "express";
 import passport from "passport";
 import Organization from "../models/organization.js";
@@ -11,7 +11,9 @@ import User from "../models/user.js";
 
 const router = Router();
 
-// Helper functions for safe returnTo handling
+
+
+// small helper to ensure returnTo is a safe same-origin path
 function safeReturnTo(candidate) {
   if (!candidate || typeof candidate !== "string") return null;
   const decoded = decodeURIComponent(candidate).trim();
@@ -22,6 +24,7 @@ function safeReturnTo(candidate) {
   return decoded;
 }
 
+// encode/decode for the state param — use base64url of the path only (no secrets)
 function encodeState(returnTo) {
   try {
     if (!returnTo) return "";
@@ -47,13 +50,16 @@ function decodeState(state) {
   }
 }
 
-/* ================================================================== */
-/*  ✅ PARENT SIGNUP ROUTE (renamed from /start to avoid conflict)    */
-/* ================================================================== */
-router.get("/parent", (req, res) => {
-  req.session.signupSource = "parent";   // ✅ MARK AS PARENT FLOW
+
+// ======================================================
+// 🧠 Assign 5 onboarding quizzes to first-time users
+// ======================================================
+
+router.get("/start", (req, res) => {
+  req.session.signupSource = "start";   // ✅ MARK AS PARENT FLOW
   res.redirect("/auth/google");
 });
+
 
 /**
  * GET /auth/google
@@ -134,32 +140,34 @@ router.get(
           .populate("org")
           .lean();
 
-        // 👨‍👩‍👧 Parent flow ALWAYS goes to parent dashboard
-        if (req.user.role === "parent") {
-          redirectPath = "/parent/dashboard";
-        }
-        else if (memberships.length > 0 && memberships[0].org?.slug) {
-          redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
-        }
-        else {
+      // 👨‍👩‍👧 Parent flow ALWAYS goes to parent dashboard
+if (req.user.role === "parent") {
+  redirectPath = "/parent/dashboard";
+}
+else if (memberships.length > 0 && memberships[0].org?.slug) {
+  redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
+}
+ else {
           // 3️⃣ New user → auto-enrol into default org
           const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
-          if (org) {
-            await OrgMembership.create({
-              org: org._id,
-              user: req.user._id,
-              role: "employee",
-              joinedAt: new Date(),
-              isOnboarding Complete: false
-            });
+if (org) {
+await OrgMembership.create({
+  org: org._id,
+  user: req.user._id,
+  role: "employee",
+  joinedAt: new Date(),
+  isOnboardingComplete: false // 🔐 LOCK DOWN
+});
 
-            if (req.session) {
-              req.session.isFirstLogin = true;
-            }
 
-            redirectPath = `/org/${defaultOrgSlug}/dashboard`;
-          }
-          else {
+
+  if (req.session) {
+    req.session.isFirstLogin = true;
+  }
+
+  redirectPath = `/org/${defaultOrgSlug}/dashboard`;
+}
+ else {
             redirectPath = "/";
           }
         }
@@ -175,18 +183,17 @@ router.get(
   }
 );
 
-/* ================================================================== */
-/*  STUDENT LOGIN ROUTES                                              */
-/* ================================================================== */
 
 router.get("/student", (req, res) => {
   res.render("auth/student_login");
 });
 
+
 router.post("/student", async (req, res) => {
   try {
     const { studentId, password } = req.body;
 
+    // Find student by ID
     const user = await User.findOne({
       studentId,
       role: "student"
@@ -204,9 +211,11 @@ router.post("/student", async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Login session
     req.login(user, async err => {
       if (err) return res.status(500).send("Login failed");
 
+      // Find org membership for redirect
       const membership = await OrgMembership
         .findOne({ user: user._id })
         .populate("org")
@@ -224,13 +233,23 @@ router.post("/student", async (req, res) => {
   }
 });
 
-/* ================================================================== */
-/*  SCHOOL LOGIN ROUTES                                               */
-/* ================================================================== */
+
+// Logout
+/*router.get("/logout", (req, res, next) => {
+  req.logout(function (err) {
+    if (err) return next(err);
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+      res.redirect("/");
+    });
+  });
+});*/
+
 
 router.get("/school", (req, res) => {
   res.render("auth/school_login", { error: null });
 });
+
 
 router.post("/school", async (req, res) => {
   try {
@@ -242,6 +261,7 @@ router.post("/school", async (req, res) => {
       });
     }
 
+    // 🔍 Find user by ANY school-issued ID
     const user = await User.findOne({
       $or: [
         { studentId: loginId },
@@ -256,6 +276,7 @@ router.post("/school", async (req, res) => {
       });
     }
 
+    // 🔐 Verify password
     const ok = await user.verifyPassword(password);
     if (!ok) {
       return res.render("auth/school_login", {
@@ -266,6 +287,7 @@ router.post("/school", async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // ✅ Create login session
     req.login(user, async err => {
       if (err) {
         console.error(err);
@@ -274,6 +296,7 @@ router.post("/school", async (req, res) => {
         });
       }
 
+      // 🔗 Get org membership
       const membership = await OrgMembership
         .findOne({ user: user._id })
         .populate("org")
@@ -285,7 +308,19 @@ router.post("/school", async (req, res) => {
         });
       }
 
-      return res.redirect(`/org/${membership.org.slug}/dashboard`);
+      // 🚦 Role-based redirect
+  const orgSlug = membership.org.slug;
+const memberRole = String(membership.role || "").toLowerCase();
+
+// 🎓 SCHOOL ORG LOGIC
+return res.redirect(`/org/${membership.org.slug}/dashboard`);
+
+
+// 🏢 NON-SCHOOL ORG LOGIC (fallback)
+
+
+//return res.redirect(`/org/${orgSlug}/dashboard`);
+
     });
   } catch (e) {
     console.error("[school login]", e);
@@ -295,12 +330,10 @@ router.post("/school", async (req, res) => {
   }
 });
 
-/* ================================================================== */
-/*  LOGOUT                                                            */
-/* ================================================================== */
+
 
 router.get("/logout", (req, res, next) => {
-  const role = req.user?.role;
+  const role = req.user?.role; // capture role before logout
 
   req.logout(function (err) {
     if (err) return next(err);
@@ -308,18 +341,24 @@ router.get("/logout", (req, res, next) => {
     req.session.destroy(() => {
       res.clearCookie("connect.sid");
 
-      if (role === "student" || role === "teacher" || role === "admin") {
+      // 🎓 Students go to student login
+      if (role === "student") {
+        return res.redirect("/auth/school");
+      }else if(role == "teacher"){
+        return res.redirect("/auth/school");
+      } else if(role == "admin"){
         return res.redirect("/auth/school");
       }
 
+      // 👨‍🏫 Others go home
       return res.redirect("/");
     });
   });
 });
 
-/* ================================================================== */
-/*  ADMIN HELPER - CREATE PARENT                                      */
-/* ================================================================== */
+
+
+
 
 router.post("/admin/create-parent", ensureAuth, async (req, res) => {
   if (!["admin", "employee"].includes(req.user.role)) {
