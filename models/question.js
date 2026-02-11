@@ -1,4 +1,4 @@
-// models/question.js (UPDATED FOR CRIPFCNT-SCHOOL + ADAPTIVE LEARNING)
+// models/question.js (CORRECTED - NO ARRAY INDEXES IN SCHEMA)
 import mongoose from "mongoose";
 
 const ChoiceSchema = new mongoose.Schema({
@@ -23,7 +23,7 @@ const QuestionSchema = new mongoose.Schema({
     type: String,
     lowercase: true,
     trim: true,
-    index: true,
+    // NO INDEX HERE - created separately in MongoDB
     default: null
   },
 
@@ -32,7 +32,7 @@ const QuestionSchema = new mongoose.Schema({
     type: String,
     lowercase: true,
     trim: true,
-    index: true,
+    // NO INDEX HERE - created separately in MongoDB
     default: null
   },
 
@@ -41,7 +41,7 @@ const QuestionSchema = new mongoose.Schema({
     type: Number,
     min: 1,
     max: 7,
-    index: true,
+    // NO INDEX HERE - created separately in MongoDB
     default: null
   },
 
@@ -50,8 +50,8 @@ const QuestionSchema = new mongoose.Schema({
     type: Number,
     min: 1,
     max: 5,
-    default: null,
-    index: true
+    default: null
+    // NO INDEX HERE - created separately in MongoDB
   },
 
   // ==============================
@@ -60,8 +60,8 @@ const QuestionSchema = new mongoose.Schema({
 
   // NEW: comprehension parent support
   type: { type: String, enum: ["question","comprehension"], default: "question", index: true },
-  passage: { type: String, default: null }, // full passage for comprehension parent
-  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }], // child IDs for parent
+  passage: { type: String, default: null },
+  questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
 
   // metadata
   organization: { 
@@ -82,6 +82,7 @@ const QuestionSchema = new mongoose.Schema({
   },
   
   // NEW: Multiple modules support for cripfcnt-school
+  // ⚠️ CRITICAL: NO INDEX ON ARRAY FIELDS IN SCHEMA
   modules: [{
     type: String,
     lowercase: true,
@@ -103,7 +104,7 @@ const QuestionSchema = new mongoose.Schema({
   // 🏷️ TOPICS (CRIPFCNT-SCHOOL)
   // ==============================
   // Topics are micro-categories within modules
-  // Examples: "placement-theory", "decision-frameworks", "structural-responsibility"
+  // ⚠️ CRITICAL: NO INDEX ON ARRAY FIELDS IN SCHEMA
   topics: [{
     type: String,
     lowercase: true,
@@ -115,7 +116,7 @@ const QuestionSchema = new mongoose.Schema({
     type: String,
     lowercase: true,
     trim: true,
-    index: true,
+    // NO INDEX HERE - created separately in MongoDB
     default: null
   },
 
@@ -127,20 +128,11 @@ const QuestionSchema = new mongoose.Schema({
 });
 
 // ==============================
-// INDEXES FOR ADAPTIVE QUERIES
+// ⚠️ IMPORTANT: INDEXES CREATED SEPARATELY
 // ==============================
-QuestionSchema.index({ subject: 1, topic: 1, difficulty: 1, grade: 1 });
-QuestionSchema.index({ subject: 1, grade: 1, topic: 1 });
-QuestionSchema.index({ organization: 1, subject: 1, topic: 1 });
-QuestionSchema.index({ topic: 1, difficulty: 1 });
-
-// ==============================
-// INDEXES FOR CRIPFCNT-SCHOOL
-// ==============================
-QuestionSchema.index({ organization: 1, modules: 1 });
-QuestionSchema.index({ organization: 1, topics: 1 });
-QuestionSchema.index({ organization: 1, series: 1 });
-QuestionSchema.index({ modules: 1, topics: 1 });
+// DO NOT use .index() in schema for array fields
+// Indexes are created via fix-indexes.js script
+// This prevents parallel array index errors
 
 // ==============================
 // STATIC METHOD FOR BULK TAGGING
