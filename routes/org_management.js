@@ -961,7 +961,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         let openUrl;
         if (ex.isAdminQuiz) {
           // Admin catalog quiz - will create exam instance on-demand
-          openUrl = `/org/${org.slug}/quiz?assignmentId=${ex.quizId}`;
+           openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
         } else if (ex.isOnboarding) {
           openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
         } else {
@@ -1099,6 +1099,116 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   }
 });
 
+
+
+/* ------------------------------------------------------------------ */
+/*  ADD THIS ROUTE TO routes/org_management.js                        */
+/*  Place it RIGHT AFTER the /org/:slug/dashboard route              */
+/* ------------------------------------------------------------------ */
+
+router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "").trim();
+    const quizId = String(req.query.quizId || "").trim();
+
+    if (!quizId || !mongoose.isValidObjectId(quizId)) {
+      return res.status(400).send("Invalid quiz ID");
+    }
+
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("Organization not found");
+
+    // Check if user already has an exam instance for this quiz
+    let examInstance = await ExamInstance.findOne({
+      org: org._id,
+      userId: req.user._id,
+      'meta.catalogQuizId': mongoose.Types.ObjectId(quizId)
+    }).lean();
+
+    // If exists, redirect to existing exam
+    if (examInstance) {
+      return res.redirect(`/org/${org.slug}/quiz?assignmentId=${examInstance.assignmentId}`);
+    }
+
+    // Load the parent quiz question
+    const parent = await Question.findById(quizId).lean();
+    if (!parent) {
+      return res.status(404).send("Quiz not found");
+    }
+
+    const childIds = Array.isArray(parent.questionIds) 
+      ? parent.questionIds.map(String) 
+      : [];
+
+    if (!childIds.length) {
+      return res.status(400).send("Quiz has no questions");
+    }
+
+    // Build questionIds array with parent marker
+    const questionIds = [`parent:${String(parent._id)}`, ...childIds];
+    
+    // Build shuffled choicesOrder for each child
+    const choicesOrder = [[]]; // Empty for parent marker
+
+    for (const cid of childIds) {
+      try {
+        const childDoc = await Question.findById(cid).select('choices').lean();
+        const nChoices = childDoc && Array.isArray(childDoc.choices) 
+          ? childDoc.choices.length 
+          : 0;
+
+        // Fisher-Yates shuffle
+        const indices = Array.from({ length: nChoices }, (_, i) => i);
+        for (let i = indices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+
+        choicesOrder.push(indices);
+      } catch (e) {
+        console.error('[take-quiz] Failed to load child:', cid, e);
+        choicesOrder.push([]);
+      }
+    }
+
+    // Create new exam instance
+    const examId = crypto.randomUUID();
+    const assignmentId = crypto.randomUUID();
+
+    const moduleKey = parent.module || 'general';
+    const quizTitle = parent.text || 'Quiz';
+
+    examInstance = await ExamInstance.create({
+      examId,
+      assignmentId,
+      org: org._id,
+      userId: req.user._id,
+      module: moduleKey,
+      modules: parent.modules || [moduleKey],
+      title: quizTitle,
+      quizTitle: quizTitle,
+      questionIds,
+      choicesOrder,
+      isOnboarding: false,
+      targetRole: 'teacher',
+      durationMinutes: 30,
+      meta: {
+        catalogQuizId: parent._id,
+        isAdminAttempt: true,
+        topics: parent.topics || [],
+        series: parent.series
+      },
+      createdAt: new Date()
+    });
+
+    // Redirect to quiz using assignmentId (same as regular quizzes)
+    return res.redirect(`/org/${org.slug}/quiz?assignmentId=${examInstance.assignmentId}`);
+
+  } catch (err) {
+    console.error('[take-quiz] error:', err);
+    return res.status(500).send(`Failed: ${err.message}`);
+  }
+});
 /* ------------------------------------------------------------------ */
 /*  🆕 ADMIN: Take quiz from catalog (creates exam instance on-demand) */
 /*  GET /org/:slug/take-quiz?quizId=...                               */
