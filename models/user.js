@@ -64,7 +64,7 @@ const UserSchema = new mongoose.Schema({
   accountType: {
     type: String,
     enum: ["parent", "guardian", "student_self"],
-    default: null,
+  default: undefined,   // ✅ not null
     index: true
   },
 
