@@ -8,35 +8,44 @@ const QuizRuleSchema = new mongoose.Schema({
     index: true,
     required: true
   },
-subject: {
-  type: String,
-  required: true,
-  index: true
-},
 
-quizTitle: {
-  type: String,
-  required: true
-},
-
-
-  grade: {
-    type: Number,
-    required: true,
+  // ✅ OPTIONAL for cripfcnt-school
+  // ✅ STILL USED for cripfcnt-home
+  subject: {
+    type: String,
+    required: false,
+    default: null,
     index: true
   },
 
+  quizTitle: {
+    type: String,
+    required: true
+  },
+
+  // ✅ OPTIONAL for cripfcnt-school
+  // ✅ STILL USED for cripfcnt-home
+  grade: {
+    type: Number,
+    required: false,
+    default: null,
+    index: true
+  },
+
+  // ✅ Keep required (both orgs use module)
+  // If you truly want module optional too for school rules, we can relax it later,
+  // but keeping it required keeps your rules organized.
   module: {
     type: String,
     required: true,
     index: true
   },
 
-quizQuestionId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Question",
-  required: true
-},
+  quizQuestionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Question",
+    required: true
+  },
 
   quizType: {
     type: String,
@@ -67,7 +76,20 @@ quizQuestionId: {
   }
 });
 
+/**
+ * ✅ Indexing strategy:
+ *
+ * - Your old index `{ org:1, grade:1, module:1, quizType:1 }` assumes grade always exists.
+ * - Now grade can be null → that index is not ideal (still works, but less meaningful for school).
+ *
+ * Best approach: keep TWO indexes:
+ * 1) Home-style lookup: org + grade + module + quizType
+ * 2) School-style lookup: org + module + quizType
+ *
+ * MongoDB will still index docs with grade=null for index #1, but index #2 gives you clean school queries.
+ */
 QuizRuleSchema.index({ org: 1, grade: 1, module: 1, quizType: 1 });
+QuizRuleSchema.index({ org: 1, module: 1, quizType: 1 });
 
 export default mongoose.models.QuizRule ||
   mongoose.model("QuizRule", QuizRuleSchema);

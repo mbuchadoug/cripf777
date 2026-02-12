@@ -135,21 +135,20 @@ if (isParentSignup) {
   console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
 
   // 🎓 Assign TRIAL quizzes (not onboarding)
-// 🎓 Assign TRIAL quizzes using RULES (cripfcnt-school)
-try {
-  const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
+  try {
+    const { assignEmployeeTrialQuizzes } = await import('../services/employeeTrialAssignment.js');
+    
+    const result = await assignEmployeeTrialQuizzes({
+      orgId: schoolOrg._id,
+      userId: user._id
+    });
 
-  const result = await applyEmployeeQuizRules({
-    orgId: schoolOrg._id,
-    userId: user._id,
-    force: false // trial rules only
-  });
-
-  console.log(`[passport] ✅ Applied ${result.applied} employee trial rule quizzes to ${user.email}`);
-} catch (err) {
-  console.error("[passport] Failed to apply employee quiz rules:", err.message);
-}
-
+    if (result.assigned) {
+      console.log(`[passport] ✅ Assigned ${result.count} trial quizzes to ${user.email}`);
+    }
+  } catch (err) {
+    console.error('[passport] Failed to assign trial quizzes:', err.message);
+  }
 
   // Mark as trial user
   user.employeeSubscriptionStatus = "trial";

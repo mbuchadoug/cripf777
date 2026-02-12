@@ -141,15 +141,17 @@ router.post("/", async (req, res) => {
         console.log(`[Stripe Webhook] ✅ Updated user ${userId} to paid status`);
 
         // Unlock all quizzes
-        const { unlockAllEmployeeQuizzes } = await import("../services/employeeTrialAssignment.js");
-        const result = await unlockAllEmployeeQuizzes({
-          orgId: org._id,
-          userId: user._id
-        });
+// ✅ Apply PAID quiz rules (force=true)
+const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
 
-        console.log(
-          `[Stripe Webhook] ✅ Unlocked ${result.unlocked}/${result.total} quizzes for user ${userId}`
-        );
+const result = await applyEmployeeQuizRules({
+  orgId: org._id,
+  userId: user._id,
+  force: true // includes paid rules
+});
+
+console.log(`[Stripe Webhook] ✅ Applied ${result.applied} paid rule quizzes for user ${userId}`);
+
 
       } catch (err) {
         console.error('[Stripe Webhook] Error processing employee upgrade:', err);
