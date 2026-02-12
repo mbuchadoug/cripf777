@@ -96,7 +96,7 @@ router.post("/employee/upgrade/checkout", ensureAuth, async (req, res) => {
               name: "CRIPFCnt School - Full Access",
               description: "Unlock all 6,681 quizzes - lifetime access"
             },
-            unit_amount: 10 // $99.00
+            unit_amount: 100 // $99.00
           },
           quantity: 1
         }
