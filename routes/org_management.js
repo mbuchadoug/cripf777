@@ -1063,19 +1063,25 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     let canUpgrade = false;
     let trialQuizzesRemaining = 0;
 
-    if (isCripfcntSchool && !isAdmin) {
-      try {
-        // Import trial quiz functions if they exist
-        // const { getTrialQuizStatus, canUserUpgrade } = await import('../services/trialQuizAssignment.js');
-        // const trialStatus = await getTrialQuizStatus(req.user._id, org._id);
-        // showTrialBanner = trialStatus.total > 0;
-        // trialQuizzesRemaining = trialStatus.remaining;
-        // const upgradeCheck = await canUserUpgrade(req.user._id, org._id);
-        // canUpgrade = upgradeCheck.canUpgrade;
-      } catch (err) {
-        console.error('[dashboard] Error checking trial status:', err);
-      }
-    }
+  let employeeTrialTotal = 0;
+let employeeTrialCompleted = 0;
+let canUpgradeEmployee = false;
+
+if (isCripfcntSchool && !isAdmin) {
+  try {
+    const { getEmployeeTrialStatus } = await import("../services/employeeTrialAssignment.js");
+    const trialStatus = await getEmployeeTrialStatus(req.user._id, org._id);
+
+    employeeTrialTotal = trialStatus.total || 0;
+    employeeTrialCompleted = trialStatus.completed || 0;
+    canUpgradeEmployee = !!trialStatus.canUpgrade;
+  } catch (err) {
+    console.error("[dashboard] Error checking employee trial status:", err);
+    // safe fallback: allow upgrade if user is in trial
+    canUpgradeEmployee = (req.user.employeeSubscriptionStatus === "trial");
+  }
+}
+
 
     /* -------------------------------
        RENDER
@@ -1090,6 +1096,10 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       certRows,
       isAdmin,
       isCripfcntSchool,
+      employeeTrialTotal,
+employeeTrialCompleted,
+canUpgradeEmployee,
+
       user: req.user,
       // Search/filter values
       searchQuery,

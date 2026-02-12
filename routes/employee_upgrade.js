@@ -41,8 +41,8 @@ router.get("/employee/upgrade", ensureAuth, async (req, res) => {
       org: membership.org,
       trialStatus,
       canUpgrade: trialStatus.canUpgrade,
-      price: 99, // $99 one-time payment
-      priceFormatted: "$99.00"
+      price: 1, // $99 one-time payment
+      priceFormatted: "$1.00"
     });
 
   } catch (err) {
