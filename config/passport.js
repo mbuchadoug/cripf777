@@ -63,12 +63,25 @@ export default function configurePassport() {
           };
 
           // 🔥 FORCE parent role ONLY when coming from /start
-          if (isParentSignup) {
-            updateDoc.$set.role = "parent";
-            updateDoc.$set.accountType = "parent";
-            updateDoc.$set.consumerEnabled = true;
-            updateDoc.$setOnInsert.role = "parent";
-          }
+       const updateDoc = {
+  $set: update,
+  $setOnInsert: {
+    createdAt: new Date()
+    // Don't set role here yet
+  }
+};
+
+// Set role based on signup source
+if (isParentSignup) {
+  // Parent signup
+  updateDoc.$set.role = "parent";
+  updateDoc.$set.accountType = "parent";
+  updateDoc.$set.consumerEnabled = true;
+  updateDoc.$setOnInsert.role = "parent";
+} else {
+  // LMS signup - only for NEW users
+  updateDoc.$setOnInsert.role = "employee";
+}
 
           const user = await User.findOneAndUpdate(
             { googleId },
