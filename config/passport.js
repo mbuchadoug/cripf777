@@ -66,14 +66,16 @@ export default function configurePassport() {
 };
 
 // Set role based on signup source
+// Set role based on signup source
 if (isParentSignup) {
-  // Parent signup
-  updateDoc.$set.role = "parent";
+  // ✅ REMOVE THIS LINE:
+  // updateDoc.$set.role = "parent";  
+  
+  // ✅ KEEP THESE:
   updateDoc.$set.accountType = "parent";
   updateDoc.$set.consumerEnabled = true;
   updateDoc.$setOnInsert.role = "parent";
 } else {
-  // LMS signup - only for NEW users
   updateDoc.$setOnInsert.role = "employee";
 }
 
