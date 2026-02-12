@@ -923,6 +923,130 @@
 </section>
 {{/if}}
 
+
+
+{{!-- ===== QUIZ RULES — CRIPFCNT-SCHOOL ONLY (NO GRADE/SUBJECT) ===== --}}
+{{#if isCripSchool}}
+<hr/>
+
+<section class="panel">
+  <h2>🏫 Crip School – Employee Quiz Rules</h2>
+  <p class="muted small">
+    These rules auto-assign quizzes to employees.
+    <br/>
+    <strong>Trial</strong> rules apply on signup. <strong>Paid</strong> rules apply after Stripe upgrade.
+  </p>
+
+  {{!-- CREATE FORM (NO grade/subject) --}}
+  <div class="panel" style="background:#fff; margin:12px 0;">
+    <h3 style="margin-top:0;">➕ Create New Rule</h3>
+
+    <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+
+      <label class="block">
+        Module
+        <select name="module" required>
+          {{#each modules}}
+            <option value="{{slug}}">{{title}}</option>
+          {{/each}}
+        </select>
+      </label>
+
+      <label class="block">
+        Quiz
+        <select name="quizQuestionId" required>
+          <option value="">-- select quiz --</option>
+          {{#if quizzes.length}}
+            {{#each quizzes}}
+              <option value="{{_id}}">
+                {{text}} ({{module}})
+              </option>
+            {{/each}}
+          {{else}}
+            <option disabled>No quizzes found</option>
+          {{/if}}
+        </select>
+      </label>
+
+      <label class="block">
+        Question count
+        <input name="questionCount" type="number" value="10" />
+      </label>
+
+      <label class="block">
+        Duration (mins)
+        <input name="durationMinutes" type="number" value="30" />
+      </label>
+
+      <label class="block">
+        Type
+        <select name="quizType" required>
+          <option value="trial">Trial</option>
+          <option value="paid">Paid</option>
+        </select>
+      </label>
+
+      <div style="display:flex; align-items:end;">
+        <button style="width:100%;">Create Quiz Rule</button>
+      </div>
+
+    </form>
+  </div>
+
+  <hr/>
+
+  {{!-- LIST EXISTING RULES --}}
+  <h3>📋 Existing Rules</h3>
+
+  <div style="overflow-x:auto;">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Quiz Title</th>
+          <th>Type</th>
+          <th>Questions</th>
+          <th>Duration</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each quizRules}}
+        <tr data-type="{{quizType}}">
+          <td><strong>{{module}}</strong></td>
+          <td style="max-width:320px;">
+            <div style="font-weight:600;">{{quizTitle}}</div>
+          </td>
+          <td>
+            {{#if (eq quizType "trial")}}
+              <span class="badge badge-trial">🆓 Trial</span>
+            {{else}}
+              <span class="badge badge-paid">💳 Paid</span>
+            {{/if}}
+          </td>
+          <td>{{questionCount}}</td>
+          <td>{{durationMinutes}} min</td>
+          <td>
+            {{#if enabled}}
+              <span style="color:green;">● Active</span>
+            {{else}}
+              <span style="color:#999;">○ Disabled</span>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+
+        {{#unless quizRules.length}}
+        <tr class="empty-row">
+          <td colspan="6">No quiz rules created yet.</td>
+        </tr>
+        {{/unless}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{/if}}
+
   </main>
 
   {{!-- ===== SCRIPTS — ONLY FOR NON-HOME ORGS ===== --}}

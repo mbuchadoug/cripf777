@@ -11,12 +11,7 @@ const QuizRuleSchema = new mongoose.Schema({
 
   // ✅ OPTIONAL for cripfcnt-school
   // ✅ STILL USED for cripfcnt-home
-  subject: {
-    type: String,
-    required: false,
-    default: null,
-    index: true
-  },
+subject: { type: String, default: null, index: true },
 
   quizTitle: {
     type: String,
@@ -25,12 +20,7 @@ const QuizRuleSchema = new mongoose.Schema({
 
   // ✅ OPTIONAL for cripfcnt-school
   // ✅ STILL USED for cripfcnt-home
-  grade: {
-    type: Number,
-    required: false,
-    default: null,
-    index: true
-  },
+  grade: { type: Number, default: null, index: true },
 
   // ✅ Keep required (both orgs use module)
   // If you truly want module optional too for school rules, we can relax it later,

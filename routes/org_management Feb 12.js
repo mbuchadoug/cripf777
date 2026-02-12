@@ -275,10 +275,10 @@ router.get(
       const isSchool = org.type === "school";
 
 
-// ✅ Load quiz rules for both cripfcnt-home and cripfcnt-school
 let quizRules = [];
-if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
-  quizRules = await QuizRule.find({ org: org._id }).sort({ createdAt: -1 }).lean();
+
+if (org.slug === "cripfcnt-home") {
+  quizRules = await QuizRule.find({ org: org._id }).lean();
 }
 
 
@@ -337,22 +337,22 @@ const passagesRaw = await Question.find({
 
 
   // ✅ LOAD QUIZZES FOR QUIZ RULES DROPDOWN (HOME SCHOOL ONLY)
-// ✅ Load quizzes for BOTH orgs so the dropdown works for rules
+// ✅ LOAD QUIZZES FOR QUIZ RULES DROPDOWN (HOME SCHOOL ONLY)
 let quizzes = [];
-if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
+
+if (org.slug === "cripfcnt-home") {
   quizzes = await Question.find({
     type: "comprehension",
     $or: [
-      { organization: org._id },            // org quizzes
+      { organization: org._id },          // home school quizzes
       { organization: { $exists: false } }, // legacy
-      { organization: null }                // global
+      { organization: null }                // global quizzes
     ]
   })
     .select("_id text module")
     .sort({ createdAt: -1 })
     .lean();
 }
-
 
 
 // Shape for UI
@@ -376,14 +376,12 @@ const passages = passagesRaw.map(p => ({
 
 
 const isHomeSchool = org.slug === "cripfcnt-home";
-const isCripSchool = org.slug === "cripfcnt-school";
 
 
 return res.render("admin/org_manage", {
   org,
   invites,
   modules,
-  isCripSchool,
   passages,
   quizzes,        // ✅ ADD THIS LINE
   groups,
