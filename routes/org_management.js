@@ -922,7 +922,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       const assignmentKey = ex.assignmentId || ex.examId;
       
       // Support multiple modules
-      const examModules = ex.modules || [ex.module || "general"];
+      //const examModules = ex.modules || [ex.module || "general"];
+
+      const examModules =
+  (Array.isArray(ex.modules) && ex.modules.length > 0)
+    ? ex.modules
+    : [ex.module || "general"];
+
       
       for (const moduleKey of examModules) {
         if (!quizzesByModule[moduleKey]) {

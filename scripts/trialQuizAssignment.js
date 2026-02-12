@@ -95,7 +95,9 @@ export async function assignTrialQuizzes({ userId, orgId }) {
           org: orgId,
           userId,
           module,
-          modules: [module],
+         // modules: [module],
+         modules: [rule.module],
+
           title: config.title,
           quizTitle: config.title,
           questionIds,
