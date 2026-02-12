@@ -85,6 +85,21 @@ if (isParentSignup) {
             { upsert: true, new: true, setDefaultsOnInsert: true }
           );
 
+          // ✅ Ensure accountType is never null (prevents enum validation error)
+// IMPORTANT: do NOT overwrite valid parent accounts.
+if (!user.accountType) {
+  user.accountType = (user.role === "parent") ? "parent" : "employee";
+}
+
+// Optional: keep consumerEnabled consistent
+if (user.role === "parent") {
+  if (user.consumerEnabled !== true) user.consumerEnabled = true;
+} else {
+  // Only set this if your schema expects it; otherwise remove.
+  if (user.consumerEnabled == null) user.consumerEnabled = false;
+}
+
+
           // ===============================
           // 🎯 AUTO-ENROLLMENT LOGIC
           // ===============================
