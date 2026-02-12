@@ -51,10 +51,11 @@ learnerProfileId: {
 // Who this quiz is for
 targetRole: {
   type: String,
-  enum: ["student", "teacher"],
+  enum: ["student", "teacher", "employee"],
   required: true,
   index: true
 },
+
 
 
     // Assigned user (optional for generic attempts)
