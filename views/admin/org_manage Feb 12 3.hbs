@@ -889,40 +889,10 @@
         >
           <td><strong>Grade {{grade}}</strong></td>
           <td style="text-transform:capitalize;">{{subject}}</td>
-         <td style="max-width:280px;">
-  <div style="font-weight:600;">
-    {{#if quizQuestionId}}
-      <a
-        href="/org/{{../org.slug}}/take-quiz?quizId={{quizQuestionId}}"
-        target="_blank"
-        rel="noopener"
-        style="color:#0b6fb7; text-decoration:none;"
-        title="Open this quiz in a new tab"
-      >
-        {{quizTitle}}
-      </a>
-    {{else}}
-      {{quizTitle}}
-    {{/if}}
-  </div>
-
-  <div class="muted small">Module: {{module}}</div>
-
-  {{#if quizQuestionId}}
-    <div style="margin-top:6px;">
-      <a
-        href="/org/{{../org.slug}}/take-quiz?quizId={{quizQuestionId}}"
-        target="_blank"
-        rel="noopener"
-        class="badge"
-        style="background:#e7f3ff; border:1px solid #bcdcff; color:#0b6fb7; text-decoration:none;"
-      >
-        ▶ Test / Attempt
-      </a>
-    </div>
-  {{/if}}
-</td>
-
+          <td style="max-width:280px;">
+            <div style="font-weight:600;">{{quizTitle}}</div>
+            <div class="muted small">Module: {{module}}</div>
+          </td>
           <td>
             {{#if (eq quizType "trial")}}
               <span class="badge badge-trial">🆓 Trial</span>
@@ -1609,23 +1579,15 @@ if (role === "teacher") {
   );
 
   if (subjectSelect && quizSelect) {
-   function filterQuizzesBySubject() {
-  const subject = subjectSelect.value;
-
-  Array.from(quizSelect.options).forEach(opt => {
-    if (!opt.dataset.subject) return;
-
-    const show = opt.dataset.subject === subject;
-    opt.style.display = show ? '' : 'none';
-
-    // ✅ CRITICAL FIX: unselect hidden options
-    if (!show) opt.selected = false;
-  });
-
-  // ✅ Properly reset MULTI-SELECT
-  quizSelect.selectedIndex = -1;
-}
-
+    function filterQuizzesBySubject() {
+      const subject = subjectSelect.value;
+      Array.from(quizSelect.options).forEach(opt => {
+        if (!opt.dataset.subject) return;
+        opt.style.display =
+          opt.dataset.subject === subject ? '' : 'none';
+      });
+      quizSelect.value = '';
+    }
 
     subjectSelect.addEventListener('change', filterQuizzesBySubject);
     filterQuizzesBySubject();
