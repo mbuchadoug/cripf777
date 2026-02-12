@@ -3,9 +3,8 @@ import Stripe from "stripe";
 import dotenv from "dotenv";
 import PlacementAudit from "../models/placementAudit.js";
 import { generateScoiAuditPdf } from "../utils/generateScoiAuditPdf.js";
-
 import User from "../models/user.js";
-import AuditPurchase from "../models/auditPurchase.js"; // ✅ NEW
+import AuditPurchase from "../models/auditPurchase.js";
 
 dotenv.config();
 
@@ -17,12 +16,6 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-/**
- * Stripe Webhook
- * Handles:
- * 1) Live SCOI audit credits (consumable)
- * 2) SCOI audit report purchases (asset / ownership)
- */
 router.post("/", async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -31,7 +24,7 @@ router.post("/", async (req, res) => {
 
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,   // ✅ RAW BUFFER (do not JSON parse)
+      req.body,
       sig,
       endpointSecret
     );
@@ -40,22 +33,13 @@ router.post("/", async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ─────────────────────────────────────────────
   // ✅ PAYMENT SUCCESS
-  // ─────────────────────────────────────────────
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const meta = session.metadata || {};
 
-
-    //const session = event.data.object;
-
-
     /**
-     * ─────────────────────────────
      * 1️⃣ LIVE SCOI SEARCH CREDITS
-     * (existing behavior — unchanged)
-     * ─────────────────────────────
      */
     if (meta.userId && meta.credits) {
       const credits = Number(meta.credits);
@@ -71,57 +55,106 @@ router.post("/", async (req, res) => {
     }
 
     /**
-     * ─────────────────────────────
      * 2️⃣ SCOI AUDIT REPORT PURCHASE
-     * (new asset-based product)
-     * ─────────────────────────────
      */
-  if (meta.type === "scoi_audit_report") {
-  const { userId, auditId, price } = meta;
+    if (meta.type === "scoi_audit_report") {
+      const { userId, auditId, price } = meta;
 
-  if (!userId || !auditId) {
-    console.error("❌ Missing metadata for audit purchase");
-    return;
-  }
+      if (!userId || !auditId) {
+        console.error("❌ Missing metadata for audit purchase");
+        return;
+      }
 
-  // 🔒 Idempotency protection
-  const exists = await AuditPurchase.findOne({
-    stripeSessionId: session.id
-  });
+      const exists = await AuditPurchase.findOne({
+        stripeSessionId: session.id
+      });
 
-  if (exists) {
-    console.log("⚠️ Duplicate webhook ignored:", session.id);
-    return;
-  }
+      if (exists) {
+        console.log("⚠️ Duplicate webhook ignored:", session.id);
+        return;
+      }
 
-  // 1️⃣ Record ownership
-  await AuditPurchase.create({
-    userId,
-    auditId,
-    pricePaid: Number(price || 0),
-    stripeSessionId: session.id
-  });
+      await AuditPurchase.create({
+        userId,
+        auditId,
+        pricePaid: Number(price || 0),
+        stripeSessionId: session.id
+      });
 
-  // 2️⃣ Mark audit as paid
-  const audit = await PlacementAudit.findByIdAndUpdate(
-    auditId,
-    { isPaid: true },
-    { new: true }
-  );
+      const audit = await PlacementAudit.findByIdAndUpdate(
+        auditId,
+        { isPaid: true },
+        { new: true }
+      );
 
-  // 3️⃣ Generate PDF ONCE
-  if (audit && !audit.pdfUrl) {
-    const pdf = await generateScoiAuditPdf({ audit, req });
-    audit.pdfUrl = pdf.url;
-    await audit.save();
+      if (audit && !audit.pdfUrl) {
+        const pdf = await generateScoiAuditPdf({ audit, req });
+        audit.pdfUrl = pdf.url;
+        await audit.save();
 
-    console.log("📄 SCOI audit PDF generated:", pdf.url);
-  }
+        console.log("📄 SCOI audit PDF generated:", pdf.url);
+      }
 
-  console.log(
+     console.log(
     `✅ SCOI audit report purchase complete | user=${userId} audit=${auditId}`
   );
-}
+    }
+
+    /**
+     * ─────────────────────────────
+     * 3️⃣ EMPLOYEE UPGRADE (cripfcnt-school)
+     * ─────────────────────────────
+     */
+    if (meta.upgradeType === "employee_full_access" && meta.orgSlug === "cripfcnt-school") {
+      const { userId } = meta;
+
+      if (!userId) {
+        console.error("❌ Missing userId for employee upgrade");
+        return;
+      }
+
+      console.log(`[Stripe Webhook] Processing employee upgrade for user: ${userId}`);
+
+      try {
+        // Find user
+        const user = await User.findById(userId);
+        if (!user) {
+          console.error(`[Stripe Webhook] User not found: ${userId}`);
+          return;
+        }
+
+        // Find org
+        const Organization = (await import("../models/organization.js")).default;
+        const org = await Organization.findOne({ slug: "cripfcnt-school" });
+        if (!org) {
+          console.error(`[Stripe Webhook] cripfcnt-school org not found`);
+          return;
+        }
+
+        // Update user subscription status
+        user.employeeSubscriptionStatus = 'paid';
+        user.employeeSubscriptionPlan = 'full_access';
+        user.employeeSubscriptionExpiresAt = null; // Lifetime access
+        user.employeePaidAt = new Date();
+        await user.save();
+
+        console.log(`[Stripe Webhook] ✅ Updated user ${userId} to paid status`);
+
+        // Unlock all quizzes
+        const { unlockAllEmployeeQuizzes } = await import("../services/employeeTrialAssignment.js");
+        const result = await unlockAllEmployeeQuizzes({
+          orgId: org._id,
+          userId: user._id
+        });
+
+        console.log(
+          `[Stripe Webhook] ✅ Unlocked ${result.unlocked}/${result.total} quizzes for user ${userId}`
+        );
+
+      } catch (err) {
+        console.error('[Stripe Webhook] Error processing employee upgrade:', err);
+      }
+    }
 
   }
 

@@ -62,7 +62,7 @@ import paymentsRouter from "./routes/payments.js";
 
 
 
-
+import employeeUpgradeRoutes from "./routes/employee_upgrade.js";
 
 
 
@@ -337,7 +337,7 @@ app.use(orgManagementRoutes);
 //app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 app.use("/payments", paymentsRouter);
-
+app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use(adminFinanceRoutes);
 app.use("/", parentAttemptsRoutes);

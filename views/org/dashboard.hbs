@@ -304,6 +304,26 @@
     </div>
     {{/if}}
 
+ {{!-- ============================================ --}}
+    {{!-- EMPLOYEE TRIAL BANNER (cripfcnt-school)      --}}
+    {{!-- ============================================ --}}
+    {{#if (and isCripfcntSchool (eq user.employeeSubscriptionStatus "trial"))}}
+    {{#unless isAdmin}}
+    <div class="trial-banner">
+      <div>
+        <h3>🎯 Employee Trial Account</h3>
+        <p>
+          Complete your {{employeeTrialTotal}} trial quizzes to unlock full access.
+          Progress: {{employeeTrialCompleted}}/{{employeeTrialTotal}}
+        </p>
+      </div>
+      {{#if canUpgradeEmployee}}
+        <a href="/employee/upgrade" class="upgrade-btn">Upgrade to Full Access →</a>
+      {{/if}}
+    </div>
+    {{/unless}}
+    {{/if}}
+
     <h1>
       {{#if (eq membership.role "student")}}
         {{org.name}} - Student Dashboard

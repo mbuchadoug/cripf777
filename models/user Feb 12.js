@@ -16,6 +16,8 @@ const UserSchema = new mongoose.Schema({
     default: null
   },
 
+  
+
   role: {
     type: String,
     enum: [
@@ -119,41 +121,7 @@ const UserSchema = new mongoose.Schema({
     default: null,
     index: true
   },
-
-  // After line ~100 (after trialCounters)
-
-// ==============================
-// 💼 EMPLOYEE SUBSCRIPTION (cripfcnt-school)
-// ==============================
-employeeSubscriptionStatus: {
-  type: String,
-  enum: ["trial", "paid"],
-  default: "trial",
-  index: true
-},
-
-employeeSubscriptionPlan: {
-  type: String,
-  enum: ["none", "full_access"],
-  default: "none",
-  index: true
-},
-
-employeeSubscriptionExpiresAt: {
-  type: Date,
-  default: null,
-  index: true
-},
-
-employeePaidAt: {
-  type: Date,
-  default: null
-},
-
-employeeTrialQuizzesCompleted: {
-  type: Number,
-  default: 0
-},
+  
 
   paidAt: { type: Date, default: null }
 }, { strict: true });
@@ -173,28 +141,6 @@ UserSchema.methods.verifyPassword = async function (plainPassword) {
   return bcrypt.compare(String(plainPassword), this.passwordHash);
 };
 
-// After line ~170 (after getPlanLabel)
-
-// ==============================
-// 💼 EMPLOYEE PLAN HELPERS
-// ==============================
-
-UserSchema.methods.isEmployeeSubscriptionActive = function () {
-  if (this.employeeSubscriptionStatus !== "paid") return false;
-  if (!this.employeeSubscriptionExpiresAt) return false;
-  return new Date() < this.employeeSubscriptionExpiresAt;
-};
-
-UserSchema.methods.canAccessPaidEmployeeQuizzes = function () {
-  return this.employeeSubscriptionStatus === "paid" && 
-         this.isEmployeeSubscriptionActive();
-};
-
-UserSchema.methods.canUpgradeEmployeeAccount = function () {
-  // Must complete all trial quizzes to upgrade
-  return this.employeeTrialQuizzesCompleted >= 3 && 
-         this.employeeSubscriptionStatus === "trial";
-};
 // ==============================
 // 💳 PLAN HELPERS
 // ==============================

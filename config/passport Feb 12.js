@@ -123,42 +123,34 @@ if (isParentSignup) {
               user: user._id
             });
 
-      if (!existingMembership) {
-  await OrgMembership.create({
-    org: schoolOrg._id,
-    user: user._id,
-    role: "employee",
-    joinedAt: new Date(),
-    isOnboardingComplete: false
-  });
+            if (!existingMembership) {
+              // 🆕 NEW MEMBER - Create membership
+              await OrgMembership.create({
+                org: schoolOrg._id,
+                user: user._id,
+                role: "employee",
+                joinedAt: new Date(),
+                isOnboardingComplete: false
+              });
 
-  console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
+              console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
 
-  // 🎓 Assign TRIAL quizzes (not onboarding)
-  try {
-    const { assignEmployeeTrialQuizzes } = await import('../services/employeeTrialAssignment.js');
-    
-    const result = await assignEmployeeTrialQuizzes({
-      orgId: schoolOrg._id,
-      userId: user._id
-    });
+              // 🎓 Assign onboarding quizzes
+              try {
+                await assignOnboardingQuizzes({
+                  orgId: schoolOrg._id,
+                  userId: user._id
+                });
+                console.log(`[passport] ✅ Assigned onboarding quizzes to ${user.email}`);
+              } catch (err) {
+                console.error('[passport] Failed to assign onboarding quizzes:', err.message);
+              }
 
-    if (result.assigned) {
-      console.log(`[passport] ✅ Assigned ${result.count} trial quizzes to ${user.email}`);
-    }
-  } catch (err) {
-    console.error('[passport] Failed to assign trial quizzes:', err.message);
-  }
-
-  // Mark as trial user
-  user.employeeSubscriptionStatus = "trial";
-  user.employeeSubscriptionPlan = "none";
-  await user.save();
-
-  if (req.session) {
-    req.session.isFirstLogin = true;
-  }
-} else {
+              // 🚩 Mark as first login
+              if (req.session) {
+                req.session.isFirstLogin = true;
+              }
+            } else {
               console.log(`[passport] ${user.email} already member of cripfcnt-school`);
             }
           }

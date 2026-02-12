@@ -1,0 +1,67 @@
+{{!-- views/employee/upgrade.hbs --}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Upgrade to Full Access</title>
+  <style>
+    body{font-family:system-ui;margin:0;background:#0b0b0b;color:#fff}
+    main{max-width:600px;margin:60px auto;padding:20px}
+    .panel{background:#141414;border:1px solid #222;border-radius:12px;padding:30px;text-align:center}
+    h1{color:#D4AF37;margin-top:0}
+    .price{font-size:48px;font-weight:800;color:#D4AF37;margin:20px 0}
+    .features{text-align:left;margin:24px 0;list-style:none;padding:0}
+    .features li{padding:8px 0;border-bottom:1px solid #222}
+    .features li:before{content:"✓";color:#28a745;font-weight:800;margin-right:10px}
+    .btn{display:inline-block;background:#D4AF37;color:#000;padding:16px 32px;border-radius:8px;text-decoration:none;font-weight:800;font-size:18px}
+    .btn:hover{background:#c9a227}
+    .btn:disabled{background:#666;cursor:not-allowed}
+    .trial-status{background:#1a472a;border:1px solid #28a745;border-radius:8px;padding:16px;margin:20px 0}
+    .warning{background:#4a1a1a;border:1px solid #c00;border-radius:8px;padding:16px;margin:20px 0}
+  </style>
+</head>
+<body>
+  {{> navbar}}
+
+  <main>
+    <div class="panel">
+      <h1>🚀 Upgrade to Full Access</h1>
+
+      <div class="price">$99<span style="font-size:24px;color:#999">/lifetime</span></div>
+
+      <p>Unlock all <strong>6,681 quizzes</strong> across 9 modules</p>
+
+      <ul class="features">
+        <li>Full access to all Responsibility LMS quizzes</li>
+        <li>Lifetime access - pay once, learn forever</li>
+        <li>9 comprehensive modules</li>
+        <li>Completion certificates</li>
+        <li>Track your progress and scores</li>
+      </ul>
+
+      {{#if trialStatus}}
+      <div class="trial-status">
+        <strong>Trial Status</strong><br>
+        Completed: {{trialStatus.completed}}/{{trialStatus.total}} trial quizzes
+      </div>
+      {{/if}}
+
+      {{#if canUpgrade}}
+        <form method="POST" action="/employee/upgrade/checkout">
+          <button type="submit" class="btn">Upgrade Now →</button>
+        </form>
+      {{else}}
+        <div class="warning">
+          ⚠️ Please complete all trial quizzes before upgrading<br>
+          <small>You must complete {{trialStatus.total}} trial quizzes to unlock the upgrade.</small>
+        </div>
+        <a href="/org/cripfcnt-school/dashboard" class="btn">Back to Dashboard</a>
+      {{/if}}
+
+      <p style="color:#999;font-size:13px;margin-top:30px">
+        Secure payment powered by Stripe
+      </p>
+    </div>
+  </main>
+</body>
+</html>
