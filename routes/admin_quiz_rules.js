@@ -204,61 +204,57 @@ if (org.slug === "cripfcnt-home") {
       // ----------------------------------
       // 🏫 PART 2: cripfcnt-school employee rules (NO grade/subject)
       // ----------------------------------
-      if (org.slug === "cripfcnt-school") {
-        // Create rule with grade/subject as null (requires schema to allow it)
-        const rule = await QuizRule.create({
-          org: org._id,
+   if (org.slug === "cripfcnt-school") {
 
-          // ✅ NO grade/subject for school
-          grade: null,
-          subject: null,
+  // ✅ Create ONE rule per selected quiz
+  const rules = await QuizRule.insertMany(
+    quizzesFound.map(q => ({
+      org: org._id,
+      grade: null,
+      subject: null,
 
-          module: module.toLowerCase(),
-          quizQuestionId: quiz._id,
-          quizTitle: quiz.text,
+      module: module.toLowerCase(),
+      quizQuestionId: q._id,
+      quizTitle: q.text,
 
-          quizType, // "trial" or "paid"
-          questionCount: Number(questionCount) || 10,
-          durationMinutes: Number(durationMinutes) || 30,
+      quizType,
+      questionCount: Number(questionCount) || 10,
+      durationMinutes: Number(durationMinutes) || 30,
 
-          enabled: true
-        });
+      enabled: true
+    }))
+  );
 
-        // ✅ Immediately apply this rule to existing employees
-        // - trial: assign to all employees
-        // - paid: assign ONLY to already-paid employees (force=true but only for those users)
-        if (quizType === "trial") {
-          const employees = await User.find({
-            // adjust this filter based on your user model:
-            role: "employee"
-          }).select("_id").lean();
+  // ✅ Immediately apply rules to existing employees
+  if (quizType === "trial") {
+    const employees = await User.find({ role: "employee" }).select("_id").lean();
+    for (const emp of employees) {
+      await applyEmployeeQuizRules({
+        orgId: org._id,
+        userId: emp._id,
+        force: false
+      });
+    }
+  }
 
-          for (const emp of employees) {
-            await applyEmployeeQuizRules({
-              orgId: org._id,
-              userId: emp._id,
-              force: false
-            });
-          }
-        }
+  if (quizType === "paid") {
+    const paidEmployees = await User.find({
+      role: "employee",
+      employeeSubscriptionStatus: "paid"
+    }).select("_id").lean();
 
-        if (quizType === "paid") {
-          const paidEmployees = await User.find({
-            role: "employee",
-            employeeSubscriptionStatus: "paid"
-          }).select("_id").lean();
+    for (const emp of paidEmployees) {
+      await applyEmployeeQuizRules({
+        orgId: org._id,
+        userId: emp._id,
+        force: true
+      });
+    }
+  }
 
-          for (const emp of paidEmployees) {
-            await applyEmployeeQuizRules({
-              orgId: org._id,
-              userId: emp._id,
-              force: true
-            });
-          }
-        }
+  return res.redirect(`/admin/orgs/${slug}/manage`);
+}
 
-        return res.redirect(`/admin/orgs/${slug}/manage`);
-      }
 
       // fallback (should never reach)
       return res.status(400).send("Unsupported org");
