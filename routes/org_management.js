@@ -1249,27 +1249,40 @@ router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
-    const membership = await OrgMembership.findOne({
-      org: org._id,
-      user: req.user._id
-    }).lean();
-
-    if (!membership) {
-      return res.status(403).send("You are not a member of this organization");
-    }
 
     // Check if admin
-    const platformAdmin = (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map(e => e.trim().toLowerCase())
-      .includes(req.user.email?.toLowerCase());
+   
 
-    const role = String(membership.role || "").toLowerCase();
-    const isAdmin = platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
+    // ✅ 1) Check if platform admin FIRST
+const platformAdmin = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map(e => e.trim().toLowerCase())
+  .includes(String(req.user.email || "").toLowerCase());
 
-    if (!isAdmin) {
-      return res.status(403).send("Only admins can take quizzes from the catalog");
-    }
+// ✅ 2) Load membership (needed for non-platform admins)
+const membership = await OrgMembership.findOne({
+  org: org._id,
+  user: req.user._id
+}).lean();
+
+// ✅ 3) If not a platform admin, user must be a member
+if (!membership && !platformAdmin) {
+  return res.status(403).send("You are not a member of this organization");
+}
+
+// ✅ 4) Determine role safely (membership might be null for platform admin)
+const role = String(membership?.role || "").toLowerCase();
+
+// ✅ 5) Allow if platform admin OR org admin roles
+const isAdmin =
+  platformAdmin ||
+  role === "admin" ||
+  role === "manager" ||
+  role === "org_admin";
+
+if (!isAdmin) {
+  return res.status(403).send("Only admins can take quizzes from the catalog");
+}
 
     // Load the quiz
     const quiz = await Question.findById(quizId).lean();
