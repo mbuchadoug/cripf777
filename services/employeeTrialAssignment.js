@@ -93,12 +93,13 @@ export async function getEmployeeTrialStatus(userId, orgId) {
   const completed = trials.filter(t => t.status === 'finished').length;
   const total = trials.length;
 
-  return {
-    total,
-    completed,
-    remaining: total - completed,
-    canUpgrade: completed >= total && total > 0
-  };
+ return {
+  total,
+  completed,
+  remaining: total - completed,
+  canUpgrade: total === 0 ? true : completed >= total
+};
+
 }
 
 /**

@@ -1075,6 +1075,12 @@ if (isCripfcntSchool && !isAdmin) {
     employeeTrialTotal = trialStatus.total || 0;
     employeeTrialCompleted = trialStatus.completed || 0;
     canUpgradeEmployee = !!trialStatus.canUpgrade;
+
+    // ✅ If there are no trial quizzes configured, allow upgrade immediately
+if (employeeTrialTotal === 0 && req.user.employeeSubscriptionStatus === "trial") {
+  canUpgradeEmployee = true;
+}
+
   } catch (err) {
     console.error("[dashboard] Error checking employee trial status:", err);
     // safe fallback: allow upgrade if user is in trial
