@@ -54,13 +54,7 @@ export default function configurePassport() {
             lastLogin: new Date(),
           };
 
-          const updateDoc = {
-            $set: update,
-            $setOnInsert: {
-              createdAt: new Date(),
-              role: "employee"  // ✅ ADD THIS LINE!
-            }
-          };
+       
 
           // 🔥 FORCE parent role ONLY when coming from /start
        const updateDoc = {
