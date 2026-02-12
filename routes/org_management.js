@@ -1531,13 +1531,34 @@ const assignmentId = String(req.query.assignmentId || "").trim();
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
-    const membership = await OrgMembership.findOne({
+    /*const membership = await OrgMembership.findOne({
       org: org._id,
       user: req.user._id,
     }).lean();
     if (!membership) {
       return res.status(403).send("You are not a member of this organization");
-    }
+    }*/
+   // ✅ Platform admin check
+const platformAdmin = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map(e => e.trim().toLowerCase())
+  .includes(String(req.user.email || "").toLowerCase());
+
+// ✅ Membership lookup (still used for normal users)
+const membership = await OrgMembership.findOne({
+  org: org._id,
+  user: req.user._id,
+}).lean();
+
+// ✅ Optional: allow users who have org attached directly on user record
+const orgFieldMatch =
+  req.user?.organization && String(req.user.organization) === String(org._id);
+
+// ✅ Block only if NOT platform admin AND NOT member AND NOT orgFieldMatch
+if (!platformAdmin && !membership && !orgFieldMatch) {
+  return res.status(403).send("You are not a member of this organization");
+}
+
 
     // 🔑 ADMIN OPEN: assignmentId → resolve to ONE examId
 if (assignmentId && !examId) {
