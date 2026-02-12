@@ -128,68 +128,78 @@ if (quizzesFound.length !== quizIds.length) {
       // ----------------------------------
       // 🏠 PART 1: cripfcnt-home rules (existing behavior)
       // ----------------------------------
-      if (org.slug === "cripfcnt-home") {
-        if (!grade || !subject) {
-          return res.status(400).send("Missing fields");
-        }
+     // ----------------------------------
+// 🏠 PART 1: cripfcnt-home rules (MULTI-QUIZ FIX)
+// ----------------------------------
+if (org.slug === "cripfcnt-home") {
+  if (!grade || !subject) {
+    return res.status(400).send("Missing fields");
+  }
 
-        const rule = await QuizRule.create({
-          org: org._id,
-          grade: Number(grade),
-          subject: subject.toLowerCase(),
-          module: module.toLowerCase(),
-          quizQuestionId: quiz._id,
-          quizTitle: quiz.text,
+  // ✅ Create ONE rule per selected quiz
+  const rules = await QuizRule.insertMany(
+    quizzesFound.map(q => ({
+      org: org._id,
+      grade: Number(grade),
+      subject: subject.toLowerCase(),
+      module: module.toLowerCase(),
+      quizQuestionId: q._id,
+      quizTitle: q.text,
+      quizType,
+      questionCount: Number(questionCount) || 10,
+      durationMinutes: Number(durationMinutes) || 30,
+      enabled: true
+    }))
+  );
 
-          quizType, // "trial" or "paid"
-          questionCount: Number(questionCount) || 10,
-          durationMinutes: Number(durationMinutes) || 30,
-          enabled: true
+  // 🔁 Auto-assign TRIAL rules
+  if (quizType === "trial") {
+    const students = await User.find({
+      organization: org._id,
+      role: "student",
+      grade: Number(grade)
+    }).select("_id").lean();
+
+    for (const student of students) {
+      for (const rule of rules) {
+        await assignQuizFromRule({
+          rule,
+          userId: student._id,
+          orgId: org._id
         });
-
-        // 🔁 ONLY auto-assign TRIAL quizzes immediately
-        if (quizType === "trial") {
-          const students = await User.find({
-            organization: org._id,
-            role: "student",
-            grade: Number(grade)
-          });
-
-          for (const student of students) {
-            await assignQuizFromRule({
-              rule,
-              userId: student._id,
-              orgId: org._id
-            });
-          }
-        }
-
-        // ✅ APPLY PAID QUIZ RULES TO ALREADY-PAID PARENTS
-        if (quizType === "paid") {
-          const paidParents = await User.find({
-            subscriptionStatus: "paid"
-          }).lean();
-
-          for (const parent of paidParents) {
-            const children = await User.find({
-              parentUserId: parent._id,
-              role: "student",
-              grade: Number(grade)
-            }).lean();
-
-            for (const child of children) {
-              await assignQuizFromRule({
-                rule,
-                userId: child._id,
-                orgId: org._id,
-                force: true
-              });
-            }
-          }
-        }
-
-        return res.redirect(`/admin/orgs/${slug}/manage`);
       }
+    }
+  }
+
+  // 💳 Apply PAID rules to already-paid parents
+  if (quizType === "paid") {
+    const paidParents = await User.find({
+      subscriptionStatus: "paid"
+    }).select("_id").lean();
+
+    for (const parent of paidParents) {
+      const children = await User.find({
+        parentUserId: parent._id,
+        role: "student",
+        grade: Number(grade)
+      }).select("_id").lean();
+
+      for (const child of children) {
+        for (const rule of rules) {
+          await assignQuizFromRule({
+            rule,
+            userId: child._id,
+            orgId: org._id,
+            force: true
+          });
+        }
+      }
+    }
+  }
+
+  return res.redirect(`/admin/orgs/${slug}/manage`);
+}
+
 
       // ----------------------------------
       // 🏫 PART 2: cripfcnt-school employee rules (NO grade/subject)
