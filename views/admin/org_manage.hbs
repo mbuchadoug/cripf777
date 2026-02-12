@@ -785,21 +785,23 @@
         </select>
       </label>
 
-      <label class="block">
-        Quiz
-        <select name="quizQuestionId" required>
-          <option value="">-- select quiz --</option>
-          {{#if quizzes.length}}
-            {{#each quizzes}}
-              <option value="{{_id}}" data-subject="{{subject}}">
-                {{text}} ({{module}})
-              </option>
-            {{/each}}
-          {{else}}
-            <option disabled>No quizzes found</option>
-          {{/if}}
-        </select>
-      </label>
+     <label class="block">
+  Quizzes (select multiple)
+  <select name="quizQuestionId" multiple size="10" required>
+    {{#if quizzes.length}}
+      {{#each quizzes}}
+        <option value="{{_id}}" data-subject="{{subject}}">
+          {{text}} ({{module}})
+        </option>
+      {{/each}}
+    {{else}}
+      <option disabled>No quizzes found</option>
+    {{/if}}
+  </select>
+
+  <p class="muted small">Hold Ctrl/Cmd to select multiple quizzes.</p>
+</label>
+
 
       <label class="block">
         Question count
