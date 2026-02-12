@@ -106,13 +106,24 @@ router.post(
       } = req.body;
 
       // Must have at least quiz + type + module for both orgs
-      if (!quizQuestionId || !quizType || !module) {
-        return res.status(400).send("Missing fields");
-      }
+   const quizIdsRaw = req.body.quizQuestionId;
 
-      // ✅ Validate quiz exists
-      const quiz = await Question.findById(quizQuestionId).lean();
-      if (!quiz) return res.status(400).send("Invalid quiz selected");
+// HTML multi-select posts either a string or an array depending on selection count
+const quizIds = Array.isArray(quizIdsRaw) ? quizIdsRaw : [quizIdsRaw].filter(Boolean);
+
+if (!quizIds.length || !quizType || !module) {
+  return res.status(400).send("Missing fields");
+}
+
+// ✅ Validate all quizzes exist
+const quizzesFound = await Question.find({ _id: { $in: quizIds } })
+  .select("_id text module")
+  .lean();
+
+if (quizzesFound.length !== quizIds.length) {
+  return res.status(400).send("One or more selected quizzes are invalid");
+}
+
 
       // ----------------------------------
       // 🏠 PART 1: cripfcnt-home rules (existing behavior)

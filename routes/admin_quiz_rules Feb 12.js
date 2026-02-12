@@ -96,26 +96,45 @@ if (!grade || !subject || !quizQuestionId || !quizType) {
   return res.status(400).send("Missing fields");
 }
 
-const quiz = await Question.findById(quizQuestionId).lean();
-if (!quiz) {
-  return res.status(400).send("Invalid quiz selected");
+if (org.slug === "cripfcnt-school") {
+  const rulesToCreate = quizzesFound.map(q => ({
+    org: org._id,
+    grade: null,
+    subject: null,
+    module: module.toLowerCase(),
+    quizQuestionId: q._id,
+    quizTitle: q.text,
+    quizType,
+    questionCount: Number(questionCount) || 10,
+    durationMinutes: Number(durationMinutes) || 30,
+    enabled: true
+  }));
+
+  // ✅ Create all rules at once
+  await QuizRule.insertMany(rulesToCreate);
+
+  // ✅ Apply rules after creation (same behavior you already have)
+  if (quizType === "trial") {
+    const employees = await User.find({ role: "employee" }).select("_id").lean();
+    for (const emp of employees) {
+      await applyEmployeeQuizRules({ orgId: org._id, userId: emp._id, force: false });
+    }
+  }
+
+  if (quizType === "paid") {
+    const paidEmployees = await User.find({
+      role: "employee",
+      employeeSubscriptionStatus: "paid"
+    }).select("_id").lean();
+
+    for (const emp of paidEmployees) {
+      await applyEmployeeQuizRules({ orgId: org._id, userId: emp._id, force: true });
+    }
+  }
+
+  return res.redirect(`/admin/orgs/${slug}/manage`);
 }
 
-
- const rule = await QuizRule.create({
-  org: org._id,
-  grade: Number(grade),
-  subject: subject.toLowerCase(),
-  module: module?.toLowerCase(),
-  quizQuestionId: quiz._id,
-  quizTitle: quiz.text,
-
-  quizType, // "trial" or "paid"
-  questionCount: Number(questionCount) || 10,
-  durationMinutes: Number(durationMinutes) || 30,
-
-  enabled: true
-});
 
 // 🔁 ONLY auto-assign TRIAL quizzes immediately
 if (quizType === "trial") {
