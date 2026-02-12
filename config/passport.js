@@ -87,9 +87,16 @@ if (isParentSignup) {
 
           // ✅ Ensure accountType is never null (prevents enum validation error)
 // IMPORTANT: do NOT overwrite valid parent accounts.
-if (!user.accountType) {
-  user.accountType = (user.role === "parent") ? "parent" : "employee";
+// ✅ accountType is ONLY for consumer accounts (parents/guardians/student_self)
+if (user.role === "parent") {
+  if (!user.accountType) user.accountType = "parent";
+  user.consumerEnabled = true;
+} else {
+  // ✅ employees must NOT have accountType
+  user.accountType = undefined;     // or: user.set("accountType", undefined)
+  user.consumerEnabled = false;
 }
+
 
 // Optional: keep consumerEnabled consistent
 if (user.role === "parent") {
@@ -167,9 +174,19 @@ try {
 
 
   // Mark as trial user
-  user.employeeSubscriptionStatus = "trial";
-  user.employeeSubscriptionPlan = "none";
-  await user.save();
+ // ✅ Mark employee as trial WITHOUT triggering full schema validation
+await User.updateOne(
+  { _id: user._id },
+  {
+    $set: {
+      employeeSubscriptionStatus: "trial",
+      employeeSubscriptionPlan: "none"
+    },
+    // Safety: remove invalid legacy values
+    $unset: { accountType: "" }
+  }
+);
+
 
   if (req.session) {
     req.session.isFirstLogin = true;
