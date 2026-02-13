@@ -30,6 +30,9 @@ router.get("/student/dashboard", ensureAuth, async (req, res) => {
   }
 
   const data = await buildStudentDashboardData({ userId: req.user._id, org });
+if (!data.quizzesBySubject || Object.keys(data.quizzesBySubject).length === 0) {
+  console.warn("[StudentDashboard] No subject grouping found for student", req.user._id);
+}
 
   return res.render("parent/child_quizzes", {
     user: req.user,

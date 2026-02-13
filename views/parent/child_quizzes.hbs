@@ -334,8 +334,14 @@
 <main>
 
 {{#if isStudentView}}
-  <a href="/student/dashboard" class="back">← Back</a>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <a href="/student/dashboard" class="back">← Back</a>
+    <a href="/logout" class="btn" style="font-size:12px; padding:6px 14px;">
+      🚪 Sign Out
+    </a>
+  </div>
 {{else}}
+
   <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
 {{/if}}
 

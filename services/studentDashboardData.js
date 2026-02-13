@@ -3,6 +3,8 @@ import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 import Certificate from "../models/certificate.js";
 import { getStudentKnowledgeMap } from "../services/topicMasteryTracker.js";
+import QuizRule from "../models/quizRule.js";
+
 
 const HOME_ORG_SLUG = "cripfcnt-home";
 
@@ -60,8 +62,8 @@ if (!exams.length) {
     a.passed ? passCount++ : failCount++;
 
     const exam = examById[String(a.examId)];
-    const rawSubject = exam?.meta?.subject || exam?.meta?.ruleSubject || "General";
-    const subject = normaliseSubject(rawSubject);
+const rawSubject = exam ? await resolveSubject(exam) : "general";
+const subject = normaliseSubject(rawSubject);
 
     if (!subjectStats[subject]) subjectStats[subject] = { total: 0, count: 0 };
     subjectStats[subject].total += pct;
@@ -116,40 +118,59 @@ if (!exams.length) {
   let quizzesBySubject = null;
   let practiceQuizzesBySubject = null;
 
-  if (org.slug === HOME_ORG_SLUG) {
-    quizzesBySubject = {};
-    practiceQuizzesBySubject = {};
+async function resolveSubject(exam) {
+  // 1) Prefer subject stored on the exam instance itself
+  if (exam?.meta?.subject) return exam.meta.subject;
+  if (exam?.meta?.ruleSubject) return exam.meta.ruleSubject;
 
-exams.forEach(ex => {
-  const examId = String(ex.examId);
-
-  const rawSubject = ex.meta?.subject || ex.meta?.ruleSubject || "General";
-  const subject = normaliseSubject(rawSubject);
-
-  const attemptCount = attemptCountByExam[examId] || 0;
-  const lastAttempt = lastAttemptByExam[examId];
-
-  const quizData = {
-    examId: ex.examId,
-    quizTitle: ex.quizTitle || "Quiz",
-    attemptCount,
-    lastScore: lastAttempt
-      ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100)
-      : null,
-    lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
-    passed: lastAttempt ? lastAttempt.passed : false
-  };
-
-  if (attemptCount === 0) {
-    if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
-    quizzesBySubject[subject].push(quizData);
-  } else {
-    if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
-    practiceQuizzesBySubject[subject].push(quizData);
+  // 2) If exam came from a rule, pull subject from the rule
+  if (exam?.ruleId) {
+    const rule = await QuizRule.findById(exam.ruleId).lean();
+    if (rule?.subject) return rule.subject;
   }
-});
 
+  // 3) Fallback
+  return "general";
+}
+
+
+
+ if (org.slug === HOME_ORG_SLUG) {
+  quizzesBySubject = {};
+  practiceQuizzesBySubject = {};
+
+  // ✅ async-safe loop (because resolveSubject can hit DB)
+  for (const ex of exams) {
+    const examId = String(ex.examId);
+
+    const rawSubject = await resolveSubject(ex);
+    const subject = normaliseSubject(rawSubject);
+
+    const attemptCount = attemptCountByExam[examId] || 0;
+    const lastAttempt = lastAttemptByExam[examId];
+
+    const quizData = {
+      examId: ex.examId,
+      quizTitle: ex.quizTitle || "Quiz",
+      attemptCount,
+      lastScore: lastAttempt
+        ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100)
+        : null,
+      lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
+      passed: lastAttempt ? lastAttempt.passed : false
+    };
+
+    // pending vs practice grouping
+    if (attemptCount === 0) {
+      if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
+      quizzesBySubject[subject].push(quizData);
+    } else {
+      if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
+      practiceQuizzesBySubject[subject].push(quizData);
+    }
   }
+}
+
 
   const certificates = await Certificate.find({ userId, orgId: org._id })
     .sort({ issuedAt: -1, createdAt: -1 }).lean();
