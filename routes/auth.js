@@ -216,7 +216,14 @@ router.post("/student", async (req, res) => {
         return res.status(403).send("No organization assigned");
       }
 
-      res.redirect(`/org/${membership.org.slug}/dashboard`);
+     // ✅ If this is a student logging in from /auth/school, send them to the new dashboard
+if (user.role === "student") {
+  return res.redirect("/student/dashboard");
+}
+
+// teachers/admins/employees keep the org dashboard
+return res.redirect(`/org/${membership.org.slug}/dashboard`);
+
     });
   } catch (e) {
     console.error("[student login]", e);
@@ -285,7 +292,14 @@ router.post("/school", async (req, res) => {
         });
       }
 
-      return res.redirect(`/org/${membership.org.slug}/dashboard`);
+    // ✅ If this is a student logging in from /auth/school, send them to the new dashboard
+if (user.role === "student") {
+  return res.redirect("/student/dashboard");
+}
+
+// teachers/admins/employees keep the org dashboard
+return res.redirect(`/org/${membership.org.slug}/dashboard`);
+
     });
   } catch (e) {
     console.error("[school login]", e);
