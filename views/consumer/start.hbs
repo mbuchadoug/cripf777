@@ -1,227 +1,1328 @@
+{{!-- views/consumer/start.hbs - REDESIGNED FOR PARENTS, GUARDIANS & PRIVATE TEACHERS --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>CRIPFCnt | Parent Learning Dashboard</title>
+  <title>Junior Academy | CRIPFCnt for Parents, Guardians & Private Teachers</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  {{!-- Google Fonts: Display + Body --}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@600;700&family=General+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root{
-      --gold:#D4AF37;
-      --bg:#0b0b0b;
-      --panel:#141414;
-      --border:#222;
-      --muted:#9aa3ad;
-      --radius:14px;
+      --gold:#FFB800;
+      --gold-light:#FFC933;
+      --gold-dark:#E6A600;
+      --navy:#0F172A;
+      --navy-light:#1E293B;
+      --navy-dark:#020617;
+      --slate:#64748B;
+      --slate-light:#94A3B8;
+      --white:#FFFFFF;
+      --cream:#FEFCE8;
+      --blue:#3B82F6;
+      --green:#10B981;
+      --purple:#8B5CF6;
+      --radius:20px;
+      --shadow:0 10px 40px rgba(0,0,0,0.08);
+      --shadow-lg:0 20px 60px rgba(0,0,0,0.12);
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
     }
 
     body{
-      margin:0;
-      font-family:system-ui,-apple-system,"Segoe UI",Arial;
-      background:var(--bg);
-      color:#fff;
+      font-family:'General Sans',system-ui,sans-serif;
+      background:linear-gradient(180deg,#FEFCE8 0%,#FEF3C7 100%);
+      color:var(--navy);
+      line-height:1.6;
+      overflow-x:hidden;
     }
 
-    header{
-      padding:20px;
-      border-bottom:1px solid var(--border);
+    /* ============================================ */
+    /* NAVBAR                                      */
+    /* ============================================ */
+    .navbar{
+      background:rgba(255,255,255,0.9);
+      backdrop-filter:blur(12px);
+      border-bottom:1px solid rgba(15,23,42,0.08);
+      padding:20px 0;
+      position:sticky;
+      top:0;
+      z-index:100;
+      animation:slideDown 0.6s ease;
+    }
+
+    @keyframes slideDown{
+      from{transform:translateY(-100%);opacity:0}
+      to{transform:translateY(0);opacity:1}
+    }
+
+    .nav-container{
+      max-width:1300px;
+      margin:0 auto;
+      padding:0 32px;
       display:flex;
       justify-content:space-between;
       align-items:center;
     }
 
-    header strong{
-      font-size:20px;
-      color:var(--gold);
-    }
-
-    header a{
-      color:var(--gold);
-      text-decoration:none;
+    .brand{
+      font-family:'Clash Display',sans-serif;
       font-weight:700;
+      font-size:26px;
+      color:var(--navy);
+      text-decoration:none;
+      letter-spacing:-0.5px;
     }
 
-    main{
-      max-width:1100px;
-      margin:40px auto;
-      padding:0 20px;
+    .brand span{
+      color:var(--gold);
     }
 
+    .nav-right{
+      display:flex;
+      align-items:center;
+      gap:24px;
+    }
+
+    .nav-link{
+      color:var(--navy);
+      text-decoration:none;
+      font-weight:500;
+      font-size:15px;
+      transition:color 0.2s;
+    }
+
+    .nav-link:hover{
+      color:var(--gold);
+    }
+
+    .btn-nav{
+      background:var(--gold);
+      color:var(--navy-dark);
+      padding:12px 24px;
+      border-radius:12px;
+      font-weight:700;
+      font-size:14px;
+      text-decoration:none;
+      transition:all 0.3s;
+      box-shadow:0 4px 12px rgba(255,184,0,0.3);
+    }
+
+    .btn-nav:hover{
+      background:var(--gold-light);
+      transform:translateY(-2px);
+      box-shadow:0 6px 16px rgba(255,184,0,0.4);
+    }
+
+    /* ============================================ */
+    /* HERO SECTION                                */
+    /* ============================================ */
     .hero{
+      max-width:1300px;
+      margin:0 auto;
+      padding:80px 32px;
       display:grid;
-      grid-template-columns:1.2fr 1fr;
-      gap:30px;
+      grid-template-columns:1.1fr 0.9fr;
+      gap:80px;
       align-items:center;
     }
 
-    @media(max-width:900px){
-      .hero{
-        grid-template-columns:1fr;
-      }
+    .hero-content{
+      animation:fadeInLeft 0.8s ease 0.2s backwards;
     }
 
-    h1{
-      font-size:40px;
-      margin-bottom:14px;
+    @keyframes fadeInLeft{
+      from{opacity:0;transform:translateX(-40px)}
+      to{opacity:1;transform:translateX(0)}
     }
 
-    .subtitle{
-      color:var(--muted);
-      font-size:18px;
-      line-height:1.5;
+    .hero-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:white;
+      padding:10px 18px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:700;
+      color:var(--navy);
+      border:1px solid rgba(15,23,42,0.1);
       margin-bottom:24px;
+      box-shadow:var(--shadow);
     }
 
-    .cta{
+    .hero-badge::before{
+      content:'🎓';
+      font-size:18px;
+    }
+
+    .hero h1{
+      font-family:'Clash Display',sans-serif;
+      font-size:64px;
+      font-weight:700;
+      line-height:1.1;
+      color:var(--navy);
+      margin-bottom:24px;
+      letter-spacing:-1.5px;
+    }
+
+    .hero h1 .highlight{
+      color:var(--gold);
+      position:relative;
+      display:inline-block;
+    }
+
+    .hero-subtitle{
+      font-size:20px;
+      color:var(--slate);
+      margin-bottom:16px;
+      line-height:1.6;
+      font-weight:500;
+    }
+
+    .hero-description{
+      font-size:17px;
+      color:var(--slate);
+      margin-bottom:40px;
+      line-height:1.7;
+      max-width:580px;
+    }
+
+    .hero-cta{
       display:flex;
-      gap:14px;
+      gap:16px;
       flex-wrap:wrap;
+      align-items:center;
     }
 
-    .btn{
-      padding:14px 22px;
-      border-radius:12px;
-      font-weight:800;
+    .btn-hero{
+      padding:18px 36px;
+      border-radius:16px;
+      font-weight:700;
+      font-size:16px;
       text-decoration:none;
-      border:1px solid var(--gold);
+      transition:all 0.3s;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      border:none;
       cursor:pointer;
     }
 
-    .btn.primary{
+    .btn-hero-primary{
       background:var(--gold);
-      color:#000;
+      color:var(--navy-dark);
+      box-shadow:0 8px 24px rgba(255,184,0,0.3);
     }
 
-    .btn.secondary{
-      background:#111;
-      color:#fff;
+    .btn-hero-primary:hover{
+      background:var(--gold-light);
+      transform:translateY(-4px);
+      box-shadow:0 12px 32px rgba(255,184,0,0.4);
     }
 
-    .panel{
-      background:var(--panel);
-      border:1px solid var(--border);
-      border-radius:var(--radius);
-      padding:20px;
+    .btn-hero-secondary{
+      background:white;
+      color:var(--navy);
+      box-shadow:0 4px 16px rgba(0,0,0,0.08);
+      border:2px solid rgba(15,23,42,0.1);
     }
 
-    .features{
+    .btn-hero-secondary:hover{
+      background:var(--cream);
+      transform:translateY(-2px);
+    }
+
+    /* ============================================ */
+    /* HERO VISUAL CARD                            */
+    /* ============================================ */
+    .hero-visual{
+      position:relative;
+      animation:fadeInRight 0.8s ease 0.4s backwards;
+    }
+
+    @keyframes fadeInRight{
+      from{opacity:0;transform:translateX(40px)}
+      to{opacity:1;transform:translateX(0)}
+    }
+
+    .info-card{
+      background:white;
+      border-radius:24px;
+      padding:40px;
+      box-shadow:var(--shadow-lg);
+      border:1px solid rgba(15,23,42,0.06);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .info-card::before{
+      content:'';
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      height:6px;
+      background:linear-gradient(90deg,var(--gold),var(--gold-light));
+    }
+
+    .info-card-header{
+      margin-bottom:28px;
+    }
+
+    .info-card h3{
+      font-family:'Clash Display',sans-serif;
+      font-size:28px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .info-card .tagline{
+      color:var(--slate);
+      font-size:15px;
+    }
+
+    .info-list{
+      list-style:none;
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
       gap:16px;
-      margin-top:50px;
     }
 
-    .feature{
-      background:#111;
-      border:1px solid var(--border);
+    .info-list li{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      padding:12px;
+      background:rgba(255,184,0,0.05);
       border-radius:12px;
-      padding:16px;
+      border:1px solid rgba(255,184,0,0.1);
     }
 
-    .feature strong{
+    .info-list li .icon{
+      width:32px;
+      height:32px;
+      background:var(--gold);
+      border-radius:8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+      font-size:16px;
+    }
+
+    .info-list li .text{
+      flex:1;
+    }
+
+    .info-list li strong{
       display:block;
-      margin-bottom:6px;
+      color:var(--navy);
+      font-weight:700;
+      margin-bottom:2px;
+      font-size:15px;
+    }
+
+    .info-list li span{
+      color:var(--slate);
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    /* ============================================ */
+    /* TARGET AUDIENCE SECTION                     */
+    /* ============================================ */
+    .audience-section{
+      background:white;
+      padding:80px 0;
+      border-top:1px solid rgba(15,23,42,0.08);
+    }
+
+    .audience-container{
+      max-width:1300px;
+      margin:0 auto;
+      padding:0 32px;
+    }
+
+    .section-header{
+      text-align:center;
+      margin-bottom:60px;
+    }
+
+    .section-tag{
+      font-size:14px;
+      font-weight:700;
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:12px;
+    }
+
+    .section-title{
+      font-family:'Clash Display',sans-serif;
+      font-size:48px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:16px;
+      line-height:1.2;
+    }
+
+    .section-subtitle{
+      font-size:18px;
+      color:var(--slate);
+      max-width:700px;
+      margin:0 auto;
+      line-height:1.6;
+    }
+
+    .audience-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:32px;
+    }
+
+    .audience-card{
+      background:linear-gradient(180deg,#FEFCE8,#FFFFFF);
+      border-radius:20px;
+      padding:36px;
+      border:1px solid rgba(15,23,42,0.08);
+      transition:all 0.3s;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .audience-card::before{
+      content:'';
+      position:absolute;
+      top:0;
+      left:0;
+      width:100%;
+      height:4px;
+      background:var(--gold);
+      transform:scaleX(0);
+      transition:transform 0.3s;
+    }
+
+    .audience-card:hover{
+      transform:translateY(-8px);
+      box-shadow:var(--shadow-lg);
+      border-color:rgba(255,184,0,0.2);
+    }
+
+    .audience-card:hover::before{
+      transform:scaleX(1);
+    }
+
+    .audience-icon{
+      width:64px;
+      height:64px;
+      background:var(--gold);
+      border-radius:16px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:32px;
+      margin-bottom:20px;
+    }
+
+    .audience-card h3{
+      font-family:'Clash Display',sans-serif;
+      font-size:24px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:12px;
+    }
+
+    .audience-card p{
+      color:var(--slate);
+      font-size:15px;
+      line-height:1.6;
+      margin-bottom:20px;
+    }
+
+    .audience-features{
+      list-style:none;
+      display:grid;
+      gap:8px;
+    }
+
+    .audience-features li{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--navy);
+      font-size:14px;
+      font-weight:500;
+    }
+
+    .audience-features li::before{
+      content:'✓';
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:18px;
+      height:18px;
+      background:rgba(255,184,0,0.2);
+      color:var(--gold-dark);
+      border-radius:50%;
+      font-weight:800;
+      font-size:11px;
+      flex-shrink:0;
+    }
+
+    /* ============================================ */
+    /* FEATURES SECTION                            */
+    /* ============================================ */
+    .features-section{
+      padding:80px 0;
+      background:linear-gradient(180deg,#FFFFFF,#FEFCE8);
+    }
+
+    .features-container{
+      max-width:1300px;
+      margin:0 auto;
+      padding:0 32px;
+    }
+
+    .features-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:32px;
+    }
+
+    .feature-card{
+      background:white;
+      border-radius:20px;
+      padding:32px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(15,23,42,0.06);
+      display:flex;
+      gap:24px;
+      transition:all 0.3s;
+    }
+
+    .feature-card:hover{
+      transform:translateY(-4px);
+      box-shadow:var(--shadow-lg);
+    }
+
+    .feature-icon-wrap{
+      flex-shrink:0;
+    }
+
+    .feature-icon{
+      width:56px;
+      height:56px;
+      background:linear-gradient(135deg,var(--gold),var(--gold-light));
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:26px;
+    }
+
+    .feature-content h3{
+      font-family:'Clash Display',sans-serif;
+      font-size:20px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .feature-content p{
+      color:var(--slate);
+      font-size:15px;
+      line-height:1.6;
+    }
+
+    /* ============================================ */
+    /* HOW IT WORKS SECTION                        */
+    /* ============================================ */
+    .how-it-works{
+      background:var(--navy);
+      padding:100px 0;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .how-it-works::before{
+      content:'';
+      position:absolute;
+      top:-50%;
+      right:-25%;
+      width:150%;
+      height:200%;
+      background:radial-gradient(circle,rgba(255,184,0,0.08),transparent 60%);
+    }
+
+    .how-container{
+      max-width:1300px;
+      margin:0 auto;
+      padding:0 32px;
+      position:relative;
+      z-index:1;
+    }
+
+    .how-header{
+      text-align:center;
+      margin-bottom:60px;
+    }
+
+    .how-header h2{
+      font-family:'Clash Display',sans-serif;
+      font-size:48px;
+      font-weight:700;
+      color:white;
+      margin-bottom:16px;
+    }
+
+    .how-header p{
+      font-size:18px;
+      color:rgba(255,255,255,0.7);
+      max-width:600px;
+      margin:0 auto;
+    }
+
+    .steps-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:24px;
+    }
+
+    .step{
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:20px;
+      padding:32px;
+      backdrop-filter:blur(10px);
+      position:relative;
+    }
+
+    .step-number{
+      position:absolute;
+      top:-16px;
+      left:24px;
+      width:40px;
+      height:40px;
+      background:var(--gold);
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:18px;
+      color:var(--navy-dark);
+    }
+
+    .step-icon{
+      width:56px;
+      height:56px;
+      background:rgba(255,184,0,0.15);
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:28px;
+      margin-bottom:20px;
+    }
+
+    .step h3{
+      font-family:'Clash Display',sans-serif;
+      font-size:20px;
+      font-weight:700;
+      color:white;
+      margin-bottom:8px;
+    }
+
+    .step p{
+      color:rgba(255,255,255,0.7);
+      font-size:14px;
+      line-height:1.6;
+    }
+
+    /* ============================================ */
+    /* PRICING PREVIEW                             */
+    /* ============================================ */
+    .pricing-section{
+      padding:80px 0;
+      background:white;
+    }
+
+    .pricing-container{
+      max-width:900px;
+      margin:0 auto;
+      padding:0 32px;
+    }
+
+    .pricing-card{
+      background:linear-gradient(135deg,#FEFCE8,#FEF3C7);
+      border-radius:24px;
+      padding:48px;
+      text-align:center;
+      border:2px solid var(--gold);
+      box-shadow:var(--shadow-lg);
+    }
+
+    .pricing-badge{
+      display:inline-block;
+      background:var(--gold);
+      color:var(--navy-dark);
+      padding:8px 18px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      margin-bottom:20px;
+    }
+
+    .pricing-card h2{
+      font-family:'Clash Display',sans-serif;
+      font-size:42px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:12px;
+    }
+
+    .pricing-card .description{
+      font-size:18px;
+      color:var(--slate);
+      margin-bottom:32px;
+      line-height:1.6;
+    }
+
+    .pricing-features{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:16px;
+      margin-bottom:40px;
+      text-align:left;
+    }
+
+    .pricing-features li{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--navy);
+      font-size:15px;
+      font-weight:500;
+    }
+
+    .pricing-features li::before{
+      content:'✓';
+      width:24px;
+      height:24px;
+      background:var(--gold);
+      color:var(--navy-dark);
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:14px;
+      flex-shrink:0;
+    }
+
+    .pricing-note{
+      font-size:14px;
+      color:var(--slate);
+      margin-top:24px;
+    }
+
+    /* ============================================ */
+    /* FINAL CTA                                   */
+    /* ============================================ */
+    .cta-section{
+      padding:100px 0;
+      background:linear-gradient(180deg,#FEFCE8,#FEF3C7);
+    }
+
+    .cta-container{
+      max-width:1000px;
+      margin:0 auto;
+      padding:0 32px;
+      text-align:center;
+    }
+
+    .cta-container h2{
+      font-family:'Clash Display',sans-serif;
+      font-size:52px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:20px;
+      line-height:1.2;
+    }
+
+    .cta-container p{
+      font-size:20px;
+      color:var(--slate);
+      margin-bottom:40px;
+      max-width:700px;
+      margin-left:auto;
+      margin-right:auto;
+      line-height:1.6;
+    }
+
+    .cta-buttons{
+      display:flex;
+      gap:16px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+
+    /* ============================================ */
+    /* FOOTER                                      */
+    /* ============================================ */
+    .footer{
+      background:var(--navy-dark);
+      padding:60px 32px 32px;
+      color:rgba(255,255,255,0.6);
+    }
+
+    .footer-container{
+      max-width:1300px;
+      margin:0 auto;
+      display:grid;
+      grid-template-columns:2fr 1fr 1fr 1fr;
+      gap:60px;
+      margin-bottom:40px;
+    }
+
+    .footer-brand{
+      font-family:'Clash Display',sans-serif;
+      font-size:28px;
+      font-weight:700;
+      color:white;
+      margin-bottom:12px;
+    }
+
+    .footer-brand span{
       color:var(--gold);
     }
 
-    footer{
-      margin-top:60px;
-      padding:20px;
+    .footer-tagline{
+      font-size:14px;
+      line-height:1.6;
+      margin-bottom:20px;
+    }
+
+    .footer h4{
+      font-family:'Clash Display',sans-serif;
+      font-weight:700;
+      color:white;
+      margin-bottom:16px;
+      font-size:16px;
+    }
+
+    .footer ul{
+      list-style:none;
+    }
+
+    .footer ul li{
+      margin-bottom:10px;
+    }
+
+    .footer ul li a{
+      color:rgba(255,255,255,0.6);
+      text-decoration:none;
+      font-size:14px;
+      transition:color 0.2s;
+    }
+
+    .footer ul li a:hover{
+      color:var(--gold);
+    }
+
+    .footer-bottom{
+      max-width:1300px;
+      margin:0 auto;
+      padding-top:30px;
+      border-top:1px solid rgba(255,255,255,0.1);
       text-align:center;
-      color:var(--muted);
       font-size:13px;
-      border-top:1px solid var(--border);
+    }
+
+    /* ============================================ */
+    /* RESPONSIVE                                  */
+    /* ============================================ */
+    @media(max-width:1100px){
+      .hero{
+        grid-template-columns:1fr;
+        gap:50px;
+      }
+
+      .audience-grid{
+        grid-template-columns:1fr;
+      }
+
+      .features-grid{
+        grid-template-columns:1fr;
+      }
+
+      .steps-grid{
+        grid-template-columns:repeat(2,1fr);
+      }
+
+      .pricing-features{
+        grid-template-columns:1fr;
+      }
+
+      .footer-container{
+        grid-template-columns:1fr 1fr;
+      }
+    }
+
+    @media(max-width:768px){
+      .hero h1{
+        font-size:42px;
+      }
+
+      .section-title{
+        font-size:36px;
+      }
+
+      .how-header h2{
+        font-size:36px;
+      }
+
+      .cta-container h2{
+        font-size:38px;
+      }
+
+      .steps-grid{
+        grid-template-columns:1fr;
+      }
+
+      .footer-container{
+        grid-template-columns:1fr;
+        gap:40px;
+      }
     }
   </style>
 </head>
 
 <body>
 
-<header>
-  <strong>CRIPFCnt</strong>
+<!-- ================= NAVBAR ================= -->
+<nav class="navbar">
+  <div class="nav-container">
+    <a href="/lms" class="brand">CRIPF<span>Cnt</span></a>
 
-  {{#if user}}
-    <a href="/parent/dashboard">Parent Dashboard →</a>
-  {{else}}
-    <a href="/auth/google?returnTo=/parent/dashboard">
-      Sign in
-    </a>
-  {{/if}}
-</header>
-
-<main>
-
-  <!-- HERO -->
-  <section class="hero">
-    <div>
-      <h1>
-        Know how your child is really learning.
-      </h1>
-
-      <p class="subtitle">
-        CRIPFCnt gives parents real visibility into quizzes, progress,
-        certificates and learning outcomes, all in one secure dashboard.
-      </p>
-
-      <div class="cta">
-        {{#if user}}
-          <a href="/parent/dashboard" class="btn primary">
-            Go to Parent Dashboard
-          </a>
-        {{else}}
-          <a
-            href="/auth/parent"
-            class="btn primary"
-          >
-            Get Started as a Parent
-          </a>
-
-          <a href="#features" class="btn secondary">
-            Learn More
-          </a>
-        {{/if}}
-      </div>
+    <div class="nav-right">
+      {{#if user}}
+        <a href="/parent/dashboard" class="nav-link">Dashboard</a>
+        <a href="/auth/logout" class="btn-nav">Sign Out</a>
+      {{else}}
+        <a href="/lms" class="nav-link">Back to Home</a>
+        <a href="/auth/parent" class="btn-nav">Get Started</a>
+      {{/if}}
     </div>
+  </div>
+</nav>
 
-    <div class="panel">
-      <strong style="color:var(--gold)">What parents can do</strong>
-      <ul style="margin-top:12px;line-height:1.6;color:var(--muted)">
-        <li>View assigned quizzes per child</li>
-        <li>Track quiz history & average scores</li>
-        <li>Download certificates</li>
-        <li>Receive notifications for new quizzes</li>
-        <li>Monitor learning progress over time</li>
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">Junior Academy Platform</div>
+
+    <h1>
+      Empower Your Child's<br>
+      <span class="highlight">Learning Journey</span>
+    </h1>
+
+    <p class="hero-subtitle">
+      Built for <strong>parents</strong>, <strong>guardians</strong>, 
+      and <strong>private teachers</strong> supporting primary school learners.
+    </p>
+
+    <p class="hero-description">
+      Take control of your child's education with structured quizzes across Math, 
+      English, Science, and Responsibility. Track progress, assign work, monitor 
+      completion, and celebrate achievements—all in one powerful dashboard.
+    </p>
+
+    <div class="hero-cta">
+      {{#if user}}
+        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+          Open Dashboard →
+        </a>
+      {{else}}
+        <a href="/auth/parent" class="btn-hero btn-hero-primary">
+          Start Free Trial →
+        </a>
+        <a href="#how-it-works" class="btn-hero btn-hero-secondary">
+          See How It Works
+        </a>
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="hero-visual">
+    <div class="info-card">
+      <div class="info-card-header">
+        <h3>What You Get</h3>
+        <p class="tagline">Complete learning visibility and control</p>
+      </div>
+
+      <ul class="info-list">
+        <li>
+          <div class="icon">👨‍👩‍👧</div>
+          <div class="text">
+            <strong>Multi-Child Management</strong>
+            <span>Create profiles for multiple children (Silver: 2, Gold: 5)</span>
+          </div>
+        </li>
+
+        <li>
+          <div class="icon">📊</div>
+          <div class="text">
+            <strong>Real-Time Progress</strong>
+            <span>View scores, completion rates, and knowledge gaps</span>
+          </div>
+        </li>
+
+        <li>
+          <div class="icon">📚</div>
+          <div class="text">
+            <strong>4 Subject Areas</strong>
+            <span>Math, English, Science, Responsibility (Grades 1-7)</span>
+          </div>
+        </li>
+
+        <li>
+          <div class="icon">🎯</div>
+          <div class="text">
+            <strong>Smart Assignment</strong>
+            <span>Auto-assigned quizzes based on grade and subject</span>
+          </div>
+        </li>
+
+        <li>
+          <div class="icon">🏆</div>
+          <div class="text">
+            <strong>Certificates</strong>
+            <span>Downloadable completion certificates per subject</span>
+          </div>
+        </li>
       </ul>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- FEATURES -->
-  <section id="features" class="features">
-    <div class="feature">
-      <strong>📊 Progress Tracking</strong>
-      See how your child is improving over time with real quiz data.
+<!-- ================= TARGET AUDIENCE ================= -->
+<section class="audience-section">
+  <div class="audience-container">
+    <div class="section-header">
+      <div class="section-tag">Who This Is For</div>
+      <h2 class="section-title">Built for Education Champions</h2>
+      <p class="section-subtitle">
+        Whether you're a parent at home, a guardian supporting extended family, 
+        or a private teacher with multiple students—Junior Academy gives you the 
+        tools to drive real learning outcomes.
+      </p>
     </div>
 
-    <div class="feature">
-      <strong>🏆 Certificates</strong>
-      Access and download earned certificates anytime.
+    <div class="audience-grid">
+      <div class="audience-card">
+        <div class="audience-icon">👨‍👩‍👧</div>
+        <h3>Parents</h3>
+        <p>
+          Monitor your child's learning progress across all subjects. Assign quizzes, 
+          track completion, identify weak areas, and celebrate wins together.
+        </p>
+        <ul class="audience-features">
+          <li>Create child profiles by grade</li>
+          <li>Assign subject-specific quizzes</li>
+          <li>Download achievement certificates</li>
+          <li>Track progress over time</li>
+        </ul>
+      </div>
+
+      <div class="audience-card">
+        <div class="audience-icon">🤝</div>
+        <h3>Guardians</h3>
+        <p>
+          Support children in your care with structured learning paths. Perfect for 
+          grandparents, aunts, uncles, and extended family managing education.
+        </p>
+        <ul class="audience-features">
+          <li>Multi-child dashboard access</li>
+          <li>Simple, intuitive controls</li>
+          <li>Progress reporting tools</li>
+          <li>Certificate generation</li>
+        </ul>
+      </div>
+
+      <div class="audience-card">
+        <div class="audience-icon">👨‍🏫</div>
+        <h3>Private Teachers</h3>
+        <p>
+          Manage multiple students with ease. Assign personalized learning paths, 
+          track individual progress, and demonstrate measurable outcomes to parents.
+        </p>
+        <ul class="audience-features">
+          <li>Manage up to 5 students (Gold plan)</li>
+          <li>Custom quiz assignment</li>
+          <li>Individual progress tracking</li>
+          <li>Professional reporting</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FEATURES ================= -->
+<section class="features-section">
+  <div class="features-container">
+    <div class="section-header">
+      <div class="section-tag">Platform Features</div>
+      <h2 class="section-title">Everything You Need to Guide Learning</h2>
     </div>
 
-    <div class="feature">
-      <strong>🧠 Structured Learning</strong>
-      Quizzes aligned to responsibility, reasoning and comprehension.
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">📚</div>
+        </div>
+        <div class="feature-content">
+          <h3>Comprehensive Subject Coverage</h3>
+          <p>
+            Access thousands of quizzes across Math, English, Science, and Responsibility 
+            modules. Content aligned to primary school curriculum (Grades 1-7).
+          </p>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">🎯</div>
+        </div>
+        <div class="feature-content">
+          <h3>Smart Auto-Assignment</h3>
+          <p>
+            Quizzes automatically assigned based on child's grade level and subject needs. 
+            No manual searching—just instant, relevant content.
+          </p>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">📊</div>
+        </div>
+        <div class="feature-content">
+          <h3>Real-Time Progress Dashboard</h3>
+          <p>
+            See exactly how each child is performing. Track quiz completion, average scores, 
+            subject mastery, and identify areas needing attention.
+          </p>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">🏆</div>
+        </div>
+        <div class="feature-content">
+          <h3>Achievement Certificates</h3>
+          <p>
+            Generate and download professional certificates when children master subjects. 
+            Celebrate progress with official documentation.
+          </p>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">🔍</div>
+        </div>
+        <div class="feature-content">
+          <h3>Knowledge Gap Analysis</h3>
+          <p>
+            Identify exactly which topics need more practice. Visual maps show mastery 
+            levels across all subjects and modules.
+          </p>
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-wrap">
+          <div class="feature-icon">📱</div>
+        </div>
+        <div class="feature-content">
+          <h3>Mobile-Friendly Access</h3>
+          <p>
+            Manage learning from anywhere. Responsive design works perfectly on phones, 
+            tablets, and computers.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HOW IT WORKS ================= -->
+<section id="how-it-works" class="how-it-works">
+  <div class="how-container">
+    <div class="how-header">
+      <h2>Get Started in 4 Simple Steps</h2>
+      <p>From signup to first quiz completion in under 10 minutes</p>
     </div>
 
-    <div class="feature">
-      <strong>🔔 Parent Notifications</strong>
-      Get notified when new quizzes are assigned.
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-icon">🔐</div>
+        <h3>Sign Up Free</h3>
+        <p>
+          Create your parent account with Google. No credit card required for trial access.
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-icon">👧</div>
+        <h3>Add Child Profile</h3>
+        <p>
+          Enter child's name and grade level. System auto-assigns appropriate quizzes.
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-icon">📝</div>
+        <h3>Start Learning</h3>
+        <p>
+          Child completes assigned quizzes. You track progress in real-time dashboard.
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-number">4</div>
+        <div class="step-icon">🎉</div>
+        <h3>Celebrate Success</h3>
+        <p>
+          Download certificates, review scores, identify growth areas, assign more quizzes.
+        </p>
+      </div>
     </div>
-  </section>
+  </div>
+</section>
 
-</main>
+<!-- ================= PRICING PREVIEW ================= -->
+<section class="pricing-section">
+  <div class="pricing-container">
+    <div class="pricing-card">
+      <span class="pricing-badge">Free Trial Available</span>
+      <h2>Start with 3 Trial Quizzes</h2>
+      <p class="description">
+        Try Junior Academy risk-free with 3 complimentary quizzes in Math and Responsibility. 
+        See the platform in action before upgrading to full access.
+      </p>
 
-<footer>
-  © {{year}} CRIPFCnt · Parent-controlled learning insight
+      <ul class="pricing-features">
+        <li>3 free trial quizzes</li>
+        <li>Math & Responsibility access</li>
+        <li>Full dashboard features</li>
+        <li>Progress tracking tools</li>
+        <li>Certificate generation</li>
+        <li>1 child profile (trial)</li>
+      </ul>
+
+      {{#if user}}
+        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+          Go to Dashboard →
+        </a>
+      {{else}}
+        <a href="/auth/parent" class="btn-hero btn-hero-primary">
+          Start Free Trial Now →
+        </a>
+      {{/if}}
+
+      <p class="pricing-note">
+        <strong>After trial:</strong> Upgrade to Silver (2 children) or Gold (5 children) 
+        for full subject access across Math, English, Science, and Responsibility.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FINAL CTA ================= -->
+<section class="cta-section">
+  <div class="cta-container">
+    <h2>Ready to Transform Your Child's Learning?</h2>
+    <p>
+      Join hundreds of parents, guardians, and private teachers using Junior Academy 
+      to build strong academic foundations and accountability skills from age 6.
+    </p>
+
+    <div class="cta-buttons">
+      {{#if user}}
+        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+          Open Dashboard →
+        </a>
+      {{else}}
+        <a href="/auth/parent" class="btn-hero btn-hero-primary">
+          Start Free Trial →
+        </a>
+        <a href="/lms" class="btn-hero btn-hero-secondary">
+          Back to Home
+        </a>
+      {{/if}}
+    </div>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer class="footer">
+  <div class="footer-container">
+    <div>
+      <div class="footer-brand">CRIPF<span>Cnt</span></div>
+      <p class="footer-tagline">
+        Building responsibility and academic excellence from primary school through 
+        structured learning, progress tracking, and accountability training.
+      </p>
+    </div>
+
+    <div>
+      <h4>Platform</h4>
+      <ul>
+        <li><a href="/lms">Home</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/lms/quiz">Preview Quiz</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4>Junior Academy</h4>
+      <ul>
+        <li><a href="/start">Get Started</a></li>
+        <li><a href="/parent/dashboard">Dashboard</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4>Support</h4>
+      <ul>
+        <li><a href="/help">Help Center</a></li>
+        <li><a href="/contact">Contact Us</a></li>
+        <li><a href="/faq">FAQ</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    © 2026 CRIPFCnt Junior Academy. All rights reserved.
+  </div>
 </footer>
 
 </body>
