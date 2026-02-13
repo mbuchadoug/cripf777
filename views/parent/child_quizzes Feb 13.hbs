@@ -333,12 +333,7 @@
 <body>
 <main>
 
-{{#if isStudentView}}
-  <a href="/student/dashboard" class="back">← Back</a>
-{{else}}
   <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
-{{/if}}
-
 
   <h1>{{child.firstName}} {{child.lastName}}</h1>
   <div class="sub">Grade {{child.grade}}</div>
@@ -403,12 +398,7 @@
             <span class="status failed">Failed</span>
           {{/if}}
           <div class="actions">
-          {{#if isStudentView}}
-  <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">Review Attempt</a>
-{{else}}
-  <a href="/parent/children/{{../child._id}}/attempts/{{_id}}">Review Attempt</a>
-{{/if}}
-
+            <a href="/parent/children/{{../child._id}}/attempts/{{_id}}">Review Attempt</a>
           </div>
         </div>
       {{/each}}
