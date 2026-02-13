@@ -98,29 +98,35 @@ export async function buildStudentDashboardData({ userId, org }) {
     quizzesBySubject = {};
     practiceQuizzesBySubject = {};
 
-    exams.forEach(ex => {
-      const examId = String(ex.examId);
-      const subject = ex.meta?.subject || "General";
-      const attemptCount = attemptCountByExam[examId] || 0;
-      const lastAttempt = lastAttemptByExam[examId];
+exams.forEach(ex => {
+  const examId = String(ex.examId);
 
-      const quizData = {
-        examId: ex.examId,
-        quizTitle: ex.quizTitle || "Quiz",
-        attemptCount,
-        lastScore: lastAttempt ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100) : null,
-        lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
-        passed: lastAttempt ? lastAttempt.passed : false
-      };
+  const rawSubject = ex.meta?.subject || ex.meta?.ruleSubject || "General";
+  const subject = normaliseSubject(rawSubject);
 
-      if (attemptCount === 0) {
-        if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
-        quizzesBySubject[subject].push(quizData);
-      } else {
-        if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
-        practiceQuizzesBySubject[subject].push(quizData);
-      }
-    });
+  const attemptCount = attemptCountByExam[examId] || 0;
+  const lastAttempt = lastAttemptByExam[examId];
+
+  const quizData = {
+    examId: ex.examId,
+    quizTitle: ex.quizTitle || "Quiz",
+    attemptCount,
+    lastScore: lastAttempt
+      ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100)
+      : null,
+    lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
+    passed: lastAttempt ? lastAttempt.passed : false
+  };
+
+  if (attemptCount === 0) {
+    if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
+    quizzesBySubject[subject].push(quizData);
+  } else {
+    if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
+    practiceQuizzesBySubject[subject].push(quizData);
+  }
+});
+
   }
 
   const certificates = await Certificate.find({ userId, orgId: org._id })
