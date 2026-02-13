@@ -67,17 +67,18 @@ export default function configurePassport() {
 
 // Set role based on signup source
 // Set role based on signup source
+// ✅ Do not flip role for existing users
 if (isParentSignup) {
-  // ✅ REMOVE THIS LINE:
-  // updateDoc.$set.role = "parent";  
-  
-  // ✅ KEEP THESE:
-  updateDoc.$set.accountType = "parent";
   updateDoc.$set.consumerEnabled = true;
+  updateDoc.$set.accountType = "parent";
+
+  // only set role if new user
   updateDoc.$setOnInsert.role = "parent";
 } else {
+  // only set role if new user
   updateDoc.$setOnInsert.role = "employee";
 }
+
 
           const user = await User.findOneAndUpdate(
             { googleId },
@@ -88,14 +89,18 @@ if (isParentSignup) {
           // ✅ Ensure accountType is never null (prevents enum validation error)
 // IMPORTANT: do NOT overwrite valid parent accounts.
 // ✅ accountType is ONLY for consumer accounts (parents/guardians/student_self)
-if (user.role === "parent") {
+// ✅ Keep consumer flags based on flow (NOT user.role)
+if (isParentSignup) {
+  // allow employee to also be a parent
   if (!user.accountType) user.accountType = "parent";
   user.consumerEnabled = true;
 } else {
-  // ✅ employees must NOT have accountType
-  user.accountType = undefined;     // or: user.set("accountType", undefined)
-  user.consumerEnabled = false;
+  // don't destroy parent capability if they already have it
+  // only disable if you truly want employees to never be parents (you do NOT)
+  // so: do nothing here
 }
+await user.save();
+
 
 
 // Optional: keep consumerEnabled consistent
@@ -111,90 +116,84 @@ if (user.role === "parent") {
           // 🎯 AUTO-ENROLLMENT LOGIC
           // ===============================
           
-          if (user.role === "parent") {
-            // ✅ PARENTS → cripfcnt-home
-            const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" });
-            if (homeOrg) {
-              const exists = await OrgMembership.findOne({
-                org: homeOrg._id,
-                user: user._id
-              });
+         // ===============================
+// 🎯 AUTO-ENROLLMENT LOGIC (FIXED)
+// Decide org membership by FLOW, not by user.role
+// ===============================
 
-              if (!exists) {
-                await OrgMembership.create({
-                  org: homeOrg._id,
-                  user: user._id,
-                  role: "parent",
-                  joinedAt: new Date()
-                });
-                console.log(`[passport] Enrolled parent ${user.email} into cripfcnt-home`);
-              }
-            }
+const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+const schoolOrg = await Organization.findOne({ slug: "cripfcnt-school" }).lean();
 
-          } else {
-            // ✅ NON-PARENTS (including /lms signups) → cripfcnt-school
-            const schoolOrg = await Organization.findOne({ slug: "cripfcnt-school" });
-            
-            if (!schoolOrg) {
-              console.error('[passport] cripfcnt-school org not found!');
-              return done(null, user);
-            }
-
-            const existingMembership = await OrgMembership.findOne({
-              org: schoolOrg._id,
-              user: user._id
-            });
-
-      if (!existingMembership) {
-  await OrgMembership.create({
-    org: schoolOrg._id,
-    user: user._id,
-    role: "employee",
-    joinedAt: new Date(),
-    isOnboardingComplete: false
+// ✅ If they came via /auth/parent => ensure HOME membership
+if (isParentSignup && homeOrg) {
+  const homeMembership = await OrgMembership.findOne({
+    org: homeOrg._id,
+    user: user._id
   });
 
-  console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
+  if (!homeMembership) {
+    await OrgMembership.create({
+      org: homeOrg._id,
+      user: user._id,
+      role: "parent",
+      joinedAt: new Date()
+    });
 
-  // 🎓 Assign TRIAL quizzes (not onboarding)
-// 🎓 Assign TRIAL quizzes using RULES (cripfcnt-school)
-try {
-  const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
-
-  const result = await applyEmployeeQuizRules({
-    orgId: schoolOrg._id,
-    userId: user._id,
-    force: false // trial rules only
-  });
-
-  console.log(`[passport] ✅ Applied ${result.applied} employee trial rule quizzes to ${user.email}`);
-} catch (err) {
-  console.error("[passport] Failed to apply employee quiz rules:", err.message);
+    console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as parent`);
+  } else {
+    console.log(`[passport] ${user.email} already member of cripfcnt-home`);
+  }
 }
 
+// ✅ If they did NOT come via parent flow => ensure SCHOOL membership
+if (!isParentSignup && schoolOrg) {
+  const schoolMembership = await OrgMembership.findOne({
+    org: schoolOrg._id,
+    user: user._id
+  });
 
-  // Mark as trial user
- // ✅ Mark employee as trial WITHOUT triggering full schema validation
-await User.updateOne(
-  { _id: user._id },
-  {
-    $set: {
-      employeeSubscriptionStatus: "trial",
-      employeeSubscriptionPlan: "none"
-    },
-    // Safety: remove invalid legacy values
-    $unset: { accountType: "" }
+  if (!schoolMembership) {
+    await OrgMembership.create({
+      org: schoolOrg._id,
+      user: user._id,
+      role: "employee",
+      joinedAt: new Date(),
+      isOnboardingComplete: false
+    });
+
+    console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
+
+    // 🎓 Assign TRIAL quizzes using RULES (cripfcnt-school)
+    try {
+      const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
+
+      const result = await applyEmployeeQuizRules({
+        orgId: schoolOrg._id,
+        userId: user._id,
+        force: false
+      });
+
+      console.log(`[passport] ✅ Applied ${result.applied} employee trial rule quizzes to ${user.email}`);
+    } catch (err) {
+      console.error("[passport] Failed to apply employee quiz rules:", err.message);
+    }
+
+    // ✅ Mark employee trial fields ONLY (do NOT unset accountType)
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          employeeSubscriptionStatus: "trial",
+          employeeSubscriptionPlan: "none"
+        }
+      }
+    );
+
+    if (req.session) req.session.isFirstLogin = true;
+  } else {
+    console.log(`[passport] ${user.email} already member of cripfcnt-school`);
   }
-);
-
-
-  if (req.session) {
-    req.session.isFirstLogin = true;
-  }
-} else {
-              console.log(`[passport] ${user.email} already member of cripfcnt-school`);
-            }
-          }
+}
 
           // 🧹 Clear signup source marker
           if (req.session?.signupSource) {
