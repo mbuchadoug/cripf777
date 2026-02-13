@@ -167,6 +167,17 @@ json: (context) => {
     }
   },
 
+  substring: (str, start, len) => {
+  if (str === null || str === undefined) return "";
+  const s = String(str);
+  const from = Number(start) || 0;
+
+  // If len is provided, return that many chars, else return to end
+  if (len === null || len === undefined) return s.substring(from);
+  const n = Number(len);
+  return s.substring(from, from + (Number.isFinite(n) ? n : 0));
+},
+
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
     const seq = "abcdefghijklmnopqrstuvwxyz";
