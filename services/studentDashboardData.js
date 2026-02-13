@@ -17,7 +17,29 @@ function normaliseSubject(subject) {
 }
 
 export async function buildStudentDashboardData({ userId, org }) {
-  const exams = await ExamInstance.find({ userId }).sort({ createdAt: -1 }).lean();
+let exams = [];
+
+// ✅ Try org-specific first (covers different possible field names)
+if (org?._id) {
+  exams = await ExamInstance.find({
+    userId,
+    $or: [
+      { orgId: org._id },
+      { organization: org._id },
+      { org: org._id }
+    ]
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+}
+
+// ✅ Fallback: old behavior
+if (!exams.length) {
+  exams = await ExamInstance.find({ userId })
+    .sort({ createdAt: -1 })
+    .lean();
+}
+
 
   const examById = {};
   for (const ex of exams) examById[String(ex.examId)] = ex;
