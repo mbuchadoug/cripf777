@@ -38,7 +38,8 @@ const UserSchema = new mongoose.Schema({
   locale: String,
   provider: String,
 
-  studentId: { type: String, index: true },
+ studentId: { type: String, index: true, unique: true, sparse: true },
+
   teacherId: {
     type: String,
     index: true,

@@ -31,6 +31,30 @@ const PLAN_LIMITS = {
 const TRIAL_MAX_CHILDREN = 1;
 const TRIAL_SUBJECTS = ["math", "responsibility"];
 
+
+// ==============================
+// 🔐 STUDENT LOGIN HELPERS
+// ==============================
+function generatePin(length = 4) {
+  // 4-digit PIN, numeric, no leading zeros issues
+  const min = Math.pow(10, length - 1);
+  const max = Math.pow(10, length) - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+}
+
+async function generateUniqueStudentId(UserModel) {
+  // Format: CRIP-123456 (simple, readable)
+  // Retry a few times to avoid collisions
+  for (let i = 0; i < 10; i++) {
+    const id = "CRIP-" + String(Math.floor(100000 + Math.random() * 900000));
+    const exists = await UserModel.exists({ studentId: id });
+    if (!exists) return id;
+  }
+  throw new Error("Failed to generate unique studentId");
+}
+
+
+
 function getChildLimit(user) {
   if (!isSubscriptionActive(user)) return 0;
   const plan = user.subscriptionPlan || "none";
@@ -239,16 +263,24 @@ router.post(
     const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
     if (!org) return res.status(500).send("Home org missing");
 
-    const child = await User.create({
-      firstName,
-      lastName,
-      role: "student",
-      grade: Number(grade),
-      parentUserId: req.user._id,
-      organization: org._id,
-      accountType: "student_self",
-      consumerEnabled: false
-    });
+    const studentId = await generateUniqueStudentId(User);
+const pin = generatePin(4);
+
+const child = new User({
+  firstName,
+  lastName,
+  role: "student",
+  grade: Number(grade),
+  parentUserId: req.user._id,
+  organization: org._id,
+  accountType: "student_self",
+  consumerEnabled: false,
+  studentId
+});
+
+await child.setPassword(pin);   // uses your bcrypt helper
+await child.save();
+
 
     await OrgMembership.create({
       org: org._id,
@@ -275,7 +307,13 @@ router.post(
       }
     }
 
-    return res.redirect("/parent/dashboard");
+   // return res.redirect("/parent/dashboard");
+   return res.render("parent/student_credentials", {
+  childName: `${child.firstName} ${child.lastName || ""}`.trim(),
+  studentId: child.studentId,
+  pin
+});
+
   }
 );
 
@@ -323,16 +361,24 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
   const org = await Organization.findOne({ slug: HOME_ORG_SLUG });
   if (!org) return res.status(500).send("Home org missing");
 
-  const child = await User.create({
-    firstName,
-    lastName,
-    role: "student",
-    grade: Number(grade),
-    parentUserId: effectiveParentId,
-    organization: org._id,
-    accountType: "student_self",
-    consumerEnabled: true
-  });
+  const studentId = await generateUniqueStudentId(User);
+const pin = generatePin(4);
+
+const child = new User({
+  firstName,
+  lastName,
+  role: "student",
+  grade: Number(grade),
+  parentUserId: effectiveParentId,
+  organization: org._id,
+  accountType: "student_self",
+  consumerEnabled: true,
+  studentId
+});
+
+await child.setPassword(pin);
+await child.save();
+
 
   await OrgMembership.create({
     org: org._id,
@@ -375,7 +421,13 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     });
   }
 
-  return res.redirect("/parent/dashboard");
+ // return res.redirect("/parent/dashboard");
+ return res.render("parent/student_credentials", {
+  childName: `${child.firstName} ${child.lastName || ""}`.trim(),
+  studentId: child.studentId,
+  pin
+});
+
 });
 
 // ----------------------------------
