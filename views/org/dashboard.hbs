@@ -334,6 +334,35 @@
       {{/if}}
     </h1>
 
+{{!-- =============================== --}}
+{{!-- MODE SWITCH: ORG → PARENT       --}}
+{{!-- =============================== --}}
+<div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <div>
+    <strong style="color:var(--gold)">👨‍👩‍👧 Parent Mode</strong>
+    <div style="color:var(--muted);font-size:13px;margin-top:4px">
+      View your children’s learning dashboard
+    </div>
+  </div>
+
+  <a
+    href="/parent/dashboard"
+    style="
+      background:var(--gold);
+      color:#000;
+      padding:10px 18px;
+      border-radius:8px;
+      font-weight:800;
+      text-decoration:none;
+      white-space:nowrap;
+    "
+  >
+    Switch to CRIPFCnt Jnr Academy →
+  </a>
+</div>
+
+
+
     {{#if isAdmin}}
     <div class="admin panel">
       <a href="/admin/orgs/{{org.slug}}/manage">Manage Org</a>
