@@ -1,45 +1,62 @@
 // middleware/parentAccess.js
 import Organization from "../models/organization.js";
 import OrgMembership from "../models/orgMembership.js";
+import User from "../models/user.js";
 
 const HOME_ORG_SLUG = "cripfcnt-home";
 
+/**
+ * Allow users to act as parent IF:
+ *  - They are logged in
+ *  - They are one of: parent/admin/employee/org_admin/super_admin
+ * AND:
+ *  - They are enrolled in cripfcnt-home
+ *
+ * ✅ If not enrolled, auto-enroll them on first visit (this is "if they wish").
+ */
 export async function canActAsParent(req, res, next) {
   try {
-    if (!req.user?._id) {
-      return res.status(401).send("Not logged in");
+    if (!req.user) return res.status(401).send("Not logged in");
+
+    const allowedRoles = ["parent", "admin", "employee", "org_admin", "super_admin"];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).send("Parent access denied");
     }
 
-    // ✅ Platform admins can always view parent dashboard
-    const platformAdmin = (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map(e => e.trim().toLowerCase())
-      .includes(String(req.user.email || "").toLowerCase());
-
-    if (platformAdmin || req.user.role === "super_admin") {
-      return next();
-    }
-
-    // ✅ Must be enrolled in cripfcnt-home as parent/guardian
     const homeOrg = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
     if (!homeOrg) {
-      return res.status(500).send("Home org not configured");
+      return res.status(500).send("Home organization not found");
     }
 
-    const membership = await OrgMembership.findOne({
+    const existing = await OrgMembership.findOne({
       org: homeOrg._id,
       user: req.user._id
     }).lean();
 
-    const role = String(membership?.role || "").toLowerCase();
+    // ✅ Already enrolled => ok
+    if (existing) return next();
 
-    if (membership && (role === "parent" || role === "guardian")) {
-      // Optional: expose it for views
-      res.locals.parentMembership = membership;
-      return next();
-    }
+    // ✅ Not enrolled => auto-enroll on demand
+    await OrgMembership.create({
+      org: homeOrg._id,
+      user: req.user._id,
+      role: "parent",
+      joinedAt: new Date()
+    });
 
-    return res.status(403).send("Parent access denied (not enrolled in cripfcnt-home)");
+    // ✅ Enable consumer mode without changing system role
+    await User.updateOne(
+      { _id: req.user._id },
+      {
+        $set: {
+          consumerEnabled: true,
+          // Only set accountType if empty (don’t overwrite)
+          ...(req.user.accountType ? {} : { accountType: "parent" })
+        }
+      }
+    );
+
+    return next();
   } catch (err) {
     console.error("[canActAsParent] error:", err);
     return res.status(500).send("Parent access check failed");
