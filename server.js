@@ -47,7 +47,7 @@ import stripeWebhookRoutes from "./routes/stripe_webhook.js";
 import billingRoutes from "./routes/billing.js";
 
 import adminPlacementImport from "./routes/admin_placement_import.js";
-
+import studentRoutes from "./routes/student.js";
 
 import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
 
@@ -341,6 +341,8 @@ app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use(adminFinanceRoutes);
 app.use("/", parentAttemptsRoutes);
+
+app.use(studentRoutes);
 
 app.use(scoiMarketplaceRoutes);
 

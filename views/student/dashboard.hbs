@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{child.firstName}} {{child.lastName}} | Quizzes</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+      --green:#1db954;
+      --red:#c0392b;
+      --blue:#3b82f6;
+      --purple:#8b5cf6;
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+    }
+
+    main{
+      max-width:1200px;
+      margin:30px auto;
+      padding:0 20px;
+    }
+
+    h1{ font-size:28px; margin-bottom:4px; }
+    h3{ font-size:17px; margin:0 0 14px; color:var(--gold); }
+    .sub{ color:var(--muted); font-size:14px; }
+
+    /* TABS */
+    .tabs{
+      display:flex;
+      gap:10px;
+      margin-top:20px;
+      border-bottom:1px solid var(--border);
+      overflow-x:auto;
+    }
+
+    .tab{
+      padding:12px 16px;
+      cursor:pointer;
+      font-weight:700;
+      color:var(--muted);
+      border-bottom:3px solid transparent;
+      white-space:nowrap;
+    }
+    .tab.active{ color:var(--gold); border-bottom-color:var(--gold); }
+
+    /* PANELS */
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+      margin-top:18px;
+    }
+
+    /* CARDS */
+    .card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:14px;
+      margin-bottom:12px;
+    }
+    .card strong{ font-size:16px; }
+    .meta{ font-size:13px; color:var(--muted); margin-top:4px; }
+
+    .status{
+      display:inline-block;
+      margin-top:6px;
+      padding:4px 10px;
+      font-size:12px;
+      border-radius:999px;
+      background:#1f1f1f;
+      color:var(--muted);
+    }
+    .status.pending{ color:var(--gold); }
+    .status.passed{ color:var(--green); }
+    .status.failed{ color:var(--red); }
+
+    .actions{ margin-top:10px; }
+    .actions a{
+      color:var(--gold);
+      font-weight:700;
+      font-size:14px;
+      text-decoration:none;
+      margin-right:14px;
+    }
+    .actions a:hover{ text-decoration:underline; }
+
+    .hidden{ display:none; }
+    .back{
+      display:inline-block;
+      margin-bottom:10px;
+      color:var(--muted);
+      text-decoration:none;
+    }
+    .empty{ color:var(--muted); font-size:15px; }
+
+    /* SUBJECT GROUPS */
+    .subject-group{
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:#101010;
+      margin-bottom:18px;
+      overflow:hidden;
+    }
+    .subject-header{
+      position:sticky;
+      top:0;
+      background:#141414;
+      padding:12px 14px;
+      font-weight:700;
+      color:var(--gold);
+      border-bottom:1px solid var(--border);
+      z-index:2;
+    }
+    .subject-quizzes{
+      max-height:260px;
+      overflow-y:auto;
+      padding:12px;
+    }
+    .subject-quizzes::-webkit-scrollbar{ width:6px; }
+    .subject-quizzes::-webkit-scrollbar-thumb{ background:#333; border-radius:10px; }
+
+    /* ============================= */
+    /* PROGRESS TAB STYLES           */
+    /* ============================= */
+
+    .stats-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+      gap:12px;
+      margin-bottom:20px;
+    }
+
+    .stat-card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      text-align:center;
+    }
+    .stat-card .stat-value{
+      font-size:28px;
+      font-weight:900;
+      line-height:1.2;
+    }
+    .stat-card .stat-label{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:4px;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .stat-green .stat-value{ color:var(--green); }
+    .stat-gold .stat-value{ color:var(--gold); }
+    .stat-blue .stat-value{ color:var(--blue); }
+    .stat-purple .stat-value{ color:var(--purple); }
+    .stat-red .stat-value{ color:var(--red); }
+
+    /* COMPLETION RING */
+    .completion-ring-wrap{
+      display:flex;
+      align-items:center;
+      gap:20px;
+      margin-bottom:20px;
+      flex-wrap:wrap;
+    }
+
+    .ring-container{
+      position:relative;
+      width:120px;
+      height:120px;
+      flex-shrink:0;
+    }
+
+    .ring-text{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      text-align:center;
+    }
+    .ring-text .pct{ font-size:24px; font-weight:900; color:var(--green); }
+    .ring-text .lbl{ font-size:11px; color:var(--muted); }
+
+    .completion-details{ flex:1; min-width:200px; }
+    .completion-row{
+      display:flex;
+      justify-content:space-between;
+      padding:6px 0;
+      font-size:14px;
+      border-bottom:1px solid #1a1a1a;
+    }
+    .completion-row:last-child{ border-bottom:none; }
+    .completion-row .label{ color:var(--muted); }
+
+    /* SUBJECT BARS */
+    .subject-bar-wrap{ margin-bottom:14px; }
+    .subject-bar-header{
+      display:flex;
+      justify-content:space-between;
+      font-size:14px;
+      margin-bottom:6px;
+    }
+    .subject-bar-header .score{ font-weight:700; }
+    .bar-track{
+      background:#1a1a1a;
+      border-radius:8px;
+      height:12px;
+      overflow:hidden;
+    }
+    .bar-fill{
+      height:100%;
+      border-radius:8px;
+      transition:width 0.6s ease;
+    }
+
+    /* CHART CONTAINERS */
+    .chart-container{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      margin-bottom:18px;
+    }
+    .chart-container canvas{
+      max-height:280px;
+    }
+
+    /* INSIGHT CARD */
+    .insight{
+      background:linear-gradient(135deg, #1a1a2e, #16213e);
+      border:1px solid #1a3a5c;
+      border-radius:12px;
+      padding:16px 18px;
+      margin-top:16px;
+      font-size:14px;
+      line-height:1.6;
+    }
+    .insight strong{ color:var(--gold); }
+    .insight .emoji{ font-size:18px; margin-right:6px; }
+
+    /* UPGRADE PROMPT */
+    .upgrade-prompt{
+      background:rgba(212,175,55,0.08);
+      border:1px dashed var(--gold);
+      border-radius:12px;
+      padding:16px 18px;
+      text-align:center;
+      margin-top:18px;
+    }
+    .upgrade-prompt .msg{
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:12px;
+    }
+    .btn{
+      display:inline-block;
+      background:var(--gold);
+      color:#000;
+      padding:10px 20px;
+      border-radius:10px;
+      font-weight:800;
+      text-decoration:none;
+      font-size:14px;
+      border:none;
+      cursor:pointer;
+    }
+    .btn:hover{ opacity:0.9; }
+
+    /* PRACTICE MODE STYLES */
+.card[style*="border-left"] {
+  position: relative;
+}
+
+.practice-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+  color: #3b82f6;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status.improvement {
+  background: rgba(192, 57, 43, 0.1);
+  border: 1px solid #c0392b;
+  color: #c0392b;
+}
+
+/* Retry button hover effect */
+.actions a[href*="Practice"] {
+  transition: all 0.2s ease;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #3b82f6;
+}
+
+.actions a[href*="Practice"]:hover {
+  background: #3b82f6;
+  color: #000 !important;
+  text-decoration: none;
+  transform: translateX(4px);
+}
+  </style>
+
+
+
+  
+</head>
+
+<body>
+<main>
+
+ <a href="/org/{{org.slug}}/dashboard" class="back">← Back</a>
+
+
+  <h1>{{child.firstName}} {{child.lastName}}</h1>
+  <div class="sub">Grade {{child.grade}}</div>
+
+  <!-- TABS -->
+ <div class="tabs">
+  <div class="tab active" data-tab="assigned">Assigned Quizzes</div>
+  <div class="tab" data-tab="history">Quiz History</div>
+   <div class="tab" data-tab="practice">Practice</div>
+  <div class="tab" data-tab="progress">Progress</div>
+  <div class="tab" data-tab="knowledge">Knowledge Map</div>
+  <div class="tab" data-tab="certificates">Certificates</div>
+</div>
+
+  <!-- ============================== -->
+  <!-- ASSIGNED QUIZZES               -->
+  <!-- ============================== -->
+<div id="assigned" class="panel tab-content">
+  {{#if quizzesBySubject}}
+    {{#each quizzesBySubject}}
+      <div class="subject-group">
+        <div class="subject-header">
+          {{@key}}
+          <button 
+            onclick="generatePracticeQuiz('{{@key}}', '{{../../child._id}}')" 
+            class="btn" 
+            style="float:right; font-size:12px; padding:6px 12px; margin-top:-2px;"
+          >
+            ⚡ Generate Practice Quiz
+          </button>
+        </div>
+          <div class="subject-quizzes">
+            {{#each this}}
+              <div class="card">
+                <strong>{{quizTitle}}</strong>
+                <span class="status pending">Pending</span>
+                <div class="actions">
+                  <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}">▶ Start Quiz</a>
+                </div>
+              </div>
+            {{/each}}
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <div class="empty">No quizzes assigned.</div>
+    {{/if}}
+  </div>
+
+  <!-- ============================== -->
+  <!-- QUIZ HISTORY                   -->
+  <!-- ============================== -->
+  <div id="history" class="panel tab-content hidden">
+    {{#if attempts.length}}
+      {{#each attempts}}
+        <div class="card">
+          <strong>{{quizTitle}}</strong>
+          <div class="meta">Score: {{percentage}}%</div>
+          {{#if passed}}
+            <span class="status passed">Passed</span>
+          {{else}}
+            <span class="status failed">Failed</span>
+          {{/if}}
+          <div class="actions">
+          <a href="/org/{{../org.slug}}/my-attempts/{{_id}}">Review Attempt</a>
+
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <div class="empty">No quiz history yet.</div>
+    {{/if}}
+  </div>
+
+  <!-- ============================== -->
+  <!-- 📊 PROGRESS TAB               -->
+  <!-- ============================== -->
+  <div id="progress" class="panel tab-content hidden">
+
+    {{#if progressData.length}}
+
+      <!-- TOP STATS -->
+      <div class="stats-grid">
+        <div class="stat-card stat-green">
+          <div class="stat-value">{{avgScore}}%</div>
+          <div class="stat-label">Average Score</div>
+        </div>
+        <div class="stat-card stat-gold">
+          <div class="stat-value">{{passCount}}</div>
+          <div class="stat-label">Quizzes Passed</div>
+        </div>
+        <div class="stat-card stat-red">
+          <div class="stat-value">{{failCount}}</div>
+          <div class="stat-label">Quizzes Failed</div>
+        </div>
+        <div class="stat-card stat-blue">
+          <div class="stat-value" id="completionPctText">0%</div>
+          <div class="stat-label">Completion Rate</div>
+        </div>
+      </div>
+
+      <!-- QUIZ COMPLETION RING -->
+      <div class="chart-container">
+        <h3>📋 Quiz Completion</h3>
+        <div class="completion-ring-wrap">
+          <div class="ring-container">
+            <canvas id="completionRing" width="120" height="120"></canvas>
+            <div class="ring-text">
+              <div class="pct" id="ringPct">0%</div>
+              <div class="lbl">Complete</div>
+            </div>
+          </div>
+          <div class="completion-details">
+            <div class="completion-row">
+              <span class="label">Completed</span>
+              <span id="completedCount" style="color:var(--green); font-weight:700;">0</span>
+            </div>
+            <div class="completion-row">
+              <span class="label">Pending</span>
+              <span id="pendingCount" style="color:var(--gold); font-weight:700;">0</span>
+            </div>
+            <div class="completion-row">
+              <span class="label">Total Assigned</span>
+              <span id="totalCount" style="font-weight:700;">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBJECT SCORE BARS -->
+      {{#if subjectChartData.length}}
+      <div class="chart-container">
+        <h3>📚 Score by Subject</h3>
+        <div id="subjectBars"></div>
+        <canvas id="subjectBarChart" style="margin-top:16px;" height="200"></canvas>
+      </div>
+      {{/if}}
+
+      <!-- SCORE OVER TIME LINE CHART -->
+      {{#if progressData.length}}
+      <div class="chart-container">
+        <h3>📈 Score Over Time</h3>
+        <canvas id="scoreLineChart" height="240"></canvas>
+      </div>
+      {{/if}}
+
+      <!-- INSIGHT -->
+      <div class="insight">
+        <span class="emoji">💡</span>
+        {{#if strongestSubject}}
+          <strong>Strongest subject:</strong> {{strongestSubject}}.
+        {{/if}}
+        {{#if weakestSubject}}
+          <strong>Needs attention:</strong> {{weakestSubject}} — consider extra practice in this area.
+        {{/if}}
+        {{#unless weakestSubject}}
+          {{#if strongestSubject}}
+            Great work! All subjects are looking solid. Keep up the momentum.
+          {{/if}}
+        {{/unless}}
+        {{#unless strongestSubject}}
+          Complete more quizzes to unlock detailed insights on strengths and areas to improve.
+        {{/unless}}
+      </div>
+
+    {{else}}
+
+      <!-- NO DATA YET -->
+      <div style="text-align:center; padding:40px 20px;">
+        <div style="font-size:48px; margin-bottom:12px;">📊</div>
+        <div style="font-size:18px; font-weight:700; margin-bottom:8px;">No Progress Data Yet</div>
+        <div class="empty">
+          Progress analytics will appear here once your child completes their first quiz.
+          Head over to <strong>Assigned Quizzes</strong> to get started!
+        </div>
+      </div>
+
+    {{/if}}
+
+    <!-- UPGRADE PROMPT (trial users) -->
+    {{#unless parentIsPaid}}
+      <div class="upgrade-prompt">
+        <div class="msg">
+          🔒 Unlock full analytics, all subjects, and more quizzes by subscribing.
+        </div>
+        <a href="/parent/dashboard#plans" class="btn">View Plans</a>
+      </div>
+    {{/unless}}
+
+  </div>
+
+
+
+
+
+
+
+
+
+  <!-- ============================== -->
+  <!-- 🗺️ KNOWLEDGE MAP TAB          -->
+  <!-- ============================== -->
+  <div id="knowledge" class="panel tab-content hidden">
+    <div style="margin-bottom:16px;">
+      <h3>🎯 Learning Progress by Topic</h3>
+      <div class="sub">See which topics {{child.firstName}} has mastered and which need more practice</div>
+    </div>
+
+    <div style="text-align:center; margin:30px 0;">
+
+      <a href="/student/knowledge-map" class="btn" style="font-size:16px; padding:14px 28px;">
+
+        📊 View Full Knowledge Map
+      </a>
+    </div>
+
+    <div class="empty" style="margin-top:20px;">
+      The full knowledge map shows:
+      <ul style="text-align:left; max-width:400px; margin:12px auto; color:var(--muted);">
+        <li>📍 Topic-by-topic mastery levels</li>
+        <li>🎨 Color-coded progress (red → yellow → green)</li>
+        <li>🎯 Personalized practice quiz generation</li>
+        <li>📈 Difficulty progression tracking</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ============================== -->
+  <!-- PRACTICE                 -->
+  <!-- ============================== -->
+
+
+<!-- ============================== -->
+<!-- 🔄 PRACTICE TAB                -->
+<!-- ============================== -->
+<div id="practice" class="panel tab-content hidden">
+  <div style="margin-bottom:16px;">
+    <h3>🔄 Practice Mode</h3>
+    <div class="sub">Retry completed quizzes to improve your scores and reinforce learning</div>
+  </div>
+
+  {{#if practiceQuizzesBySubject}}
+    {{#each practiceQuizzesBySubject}}
+      <div class="subject-group">
+        <div class="subject-header">
+          {{@key}}
+        </div>
+        <div class="subject-quizzes">
+          {{#each this}}
+            <div class="card" style="border-left: 4px solid {{#if passed}}#1db954{{else}}#c0392b{{/if}};">
+              <strong>{{quizTitle}}</strong>
+              
+              <div class="meta">
+                {{#if lastScore}}
+                  Best Score: {{lastScore}}% 
+                {{/if}}
+                • Attempted {{attemptCount}}x
+                {{#if lastAttemptDate}}
+                  • Last: {{formatDate lastAttemptDate}}
+                {{/if}}
+              </div>
+
+              {{#if passed}}
+                <span class="status passed">✓ Passed</span>
+              {{else}}
+                <span class="status failed">Need Improvement</span>
+              {{/if}}
+
+              <div class="actions">
+                <a href="/lms/quiz?examId={{examId}}&org={{../../org.slug}}" style="color:#3b82f6; font-size:15px;">
+                  🔄 Practice Again
+                </a>
+              </div>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/each}}
+
+    <!-- Practice Mode Info Box -->
+    <div class="insight" style="margin-top:20px;">
+      <span class="emoji">💡</span>
+      <strong>Practice makes perfect!</strong> Each retry helps you master the material. 
+      Your Knowledge Map updates with every attempt, showing your progress over time.
+    </div>
+
+  {{else}}
+    <div style="text-align:center; padding:40px 20px;">
+      <div style="font-size:48px; margin-bottom:12px;">📚</div>
+      <div style="font-size:18px; font-weight:700; margin-bottom:8px;">No Completed Quizzes Yet</div>
+      <div class="empty">
+        Complete quizzes from the <strong>Assigned Quizzes</strong> tab first, 
+        then they'll appear here for practice and revision.
+      </div>
+    </div>
+  {{/if}}
+</div>
+
+
+  <!-- ============================== -->
+  <!-- CERTIFICATES                   -->
+  <!-- ============================== -->
+  <div id="certificates" class="panel tab-content hidden">
+    {{#if certificates.length}}
+      {{#each certificates}}
+        <div class="card">
+          <strong>{{quizTitle}}</strong>
+          <div class="meta">{{percentage}}% • {{createdAt}}</div>
+          <div class="actions">
+            <a href="/admin/certificates/{{_id}}/download/pdf" target="_blank">Download Certificate</a>
+          </div>
+        </div>
+      {{/each}}
+    {{else}}
+      <div class="empty">No certificates earned yet.</div>
+    {{/if}}
+  </div>
+
+
+
+
+{{#if (and knowledgeMap (eq org.slug "cripfcnt-home"))}}
+  <div class="tab" data-tab="knowledge">Knowledge Map</div>
+{{/if}}
+
+</main>
+
+<!-- ============================== -->
+<!-- SCRIPTS                        -->
+<!-- ============================== -->
+<script>
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  // ---- DATA FROM SERVER ----
+  const progressData = {{{json progressData}}};
+  const subjectChartData = {{{json subjectChartData}}};
+  const passCount = {{passCount}};
+  const failCount = {{failCount}};
+  const totalCompleted = passCount + failCount;
+
+  // Completion stats (completed + pending)
+  const totalPending = {{{json totalPending}}};
+  const totalAssigned = totalCompleted + totalPending;
+  const completionPct = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
+
+  // Update completion text
+  document.getElementById('completionPctText').textContent = completionPct + '%';
+  document.getElementById('ringPct').textContent = completionPct + '%';
+  document.getElementById('completedCount').textContent = totalCompleted;
+  document.getElementById('pendingCount').textContent = totalPending;
+  document.getElementById('totalCount').textContent = totalAssigned;
+
+  // ---- COMPLETION DONUT ----
+  const ringCtx = document.getElementById('completionRing');
+  if (ringCtx) {
+    new Chart(ringCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Completed', 'Pending'],
+        datasets: [{
+          data: [totalCompleted, totalPending],
+          backgroundColor: ['#1db954', '#333'],
+          borderWidth: 0,
+          cutout: '75%'
+        }]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        }
+      }
+    });
+  }
+
+  // ---- SUBJECT BAR CHART ----
+  if (subjectChartData.length) {
+    // CSS bars
+    const barsContainer = document.getElementById('subjectBars');
+    if (barsContainer) {
+      subjectChartData.forEach(s => {
+        const color = s.avg >= 80 ? '#1db954' : s.avg >= 60 ? '#D4AF37' : '#c0392b';
+        barsContainer.innerHTML += `
+          <div class="subject-bar-wrap">
+            <div class="subject-bar-header">
+              <span>${s.subject}</span>
+              <span class="score" style="color:${color}">${s.avg}%</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${s.avg}%; background:${color};"></div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // Chart.js horizontal bar
+    const barCtx = document.getElementById('subjectBarChart');
+    if (barCtx) {
+      const colors = subjectChartData.map(s =>
+        s.avg >= 80 ? '#1db954' : s.avg >= 60 ? '#D4AF37' : '#c0392b'
+      );
+
+      new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: subjectChartData.map(s => s.subject),
+          datasets: [{
+            label: 'Average Score %',
+            data: subjectChartData.map(s => s.avg),
+            backgroundColor: colors,
+            borderRadius: 6,
+            barThickness: 28
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          scales: {
+            x: {
+              min: 0, max: 100,
+              grid: { color: '#1a1a1a' },
+              ticks: { color: '#9aa3ad', callback: v => v + '%' }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: '#fff', font: { weight: 700 } }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.parsed.x + '%'
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // ---- SCORE OVER TIME LINE CHART ----
+  if (progressData.length) {
+    const lineCtx = document.getElementById('scoreLineChart');
+    if (lineCtx) {
+      // Sort by date ascending
+      const sorted = [...progressData].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      const labels = sorted.map((p, i) => {
+        const d = new Date(p.date);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      });
+
+      const scores = sorted.map(p => p.score);
+
+      new Chart(lineCtx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Score %',
+            data: scores,
+            borderColor: '#D4AF37',
+            backgroundColor: 'rgba(212, 175, 55, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointBackgroundColor: scores.map(s =>
+              s >= 80 ? '#1db954' : s >= 60 ? '#D4AF37' : '#c0392b'
+            ),
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            borderWidth: 2.5
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              min: 0, max: 100,
+              grid: { color: '#1a1a1a' },
+              ticks: { color: '#9aa3ad', callback: v => v + '%' }
+            },
+            x: {
+              grid: { color: '#1a1a1a' },
+              ticks: { color: '#9aa3ad' }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => 'Score: ' + ctx.parsed.y + '%'
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+</script>
+
+
+<!-- PRACTICE QUIZ GENERATION -->
+<script>
+  async function generatePracticeQuiz(subject, childId) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating...';
+
+    try {
+      const response = await fetch(`/parent/children/${childId}/generate-practice-quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: subject.toLowerCase() })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.quizId) {
+        window.location.href = data.redirectUrl;
+      } else {
+        alert('Failed to generate quiz. Please try again.');
+        btn.disabled = false;
+        btn.textContent = '⚡ Generate Practice Quiz';
+      }
+    } catch (error) {
+      console.error('Error generating quiz:', error);
+      alert('Error generating quiz. Please try again.');
+      btn.disabled = false;
+      btn.textContent = '⚡ Generate Practice Quiz';
+    }
+  }
+</script>
+</body>
+</html>

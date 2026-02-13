@@ -440,6 +440,7 @@ router.get(
   ensureAuth,
   canActAsParent,
   async (req, res) => {
+
     const parent = await User.findById(req.user._id).lean();
     if (!parent) return res.redirect("/parent/dashboard");
 
@@ -454,33 +455,161 @@ router.get(
     const org = await Organization.findById(child.organization).lean();
     if (!org) return res.status(500).send("Child organization not found");
 
-    const data = await buildStudentDashboardData({
-      userId: child._id,
-      org
-    });
+    const exams = await ExamInstance.find({ userId: child._id })
+      .sort({ createdAt: -1 }).lean();
 
-    let knowledgeMap = null;
-    if (org.slug === HOME_ORG_SLUG && child.grade) {
-      try {
-        knowledgeMap = await getStudentKnowledgeMap(child._id, "math", child.grade);
-      } catch (err) {
-        console.error("[ChildQuizzes] Error getting knowledge map:", err);
+    const examById = {};
+    for (const ex of exams) examById[String(ex.examId)] = ex;
+
+    const rawAttempts = await Attempt.find({
+      userId: child._id, status: "finished"
+    }).sort({ finishedAt: -1 }).lean();
+
+    function normaliseSubject(subject) {
+      if (!subject) return "General";
+      const map = {
+        math: "Mathematics", maths: "Mathematics",
+        english: "English", science: "Science",
+        responsibility: "Responsibility"
+      };
+      return map[String(subject).toLowerCase()] || subject;
+    }
+
+    const progressData = [];
+    const subjectStats = {};
+    let passCount = 0, failCount = 0;
+
+    for (const a of rawAttempts) {
+      const pct = a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0;
+      progressData.push({ date: a.finishedAt, score: pct });
+      a.passed ? passCount++ : failCount++;
+
+      const exam = examById[String(a.examId)];
+      const rawSubject = exam?.meta?.subject || exam?.meta?.ruleSubject || "General";
+      const subject = normaliseSubject(rawSubject);
+
+      if (!subjectStats[subject]) subjectStats[subject] = { total: 0, count: 0 };
+      subjectStats[subject].total += pct;
+      subjectStats[subject].count++;
+    }
+
+    const subjectChartData = Object.entries(subjectStats).map(
+      ([subject, v]) => ({ subject, avg: Math.round(v.total / v.count) })
+    );
+
+    let avgScore = null, trend = "N/A", strongestSubject = null, weakestSubject = null;
+
+    if (progressData.length) {
+      avgScore = Math.round(progressData.reduce((s, p) => s + p.score, 0) / progressData.length);
+      if (progressData.length >= 2) {
+        const first = progressData[progressData.length - 1].score;
+        const last = progressData[0].score;
+        trend = last > first ? "Improving" : last < first ? "Declining" : "Stable";
       }
     }
 
+    if (subjectChartData.length) {
+      const sorted = [...subjectChartData].sort((a, b) => b.avg - a.avg);
+      strongestSubject = sorted[0].subject;
+      if (sorted.length > 1 && sorted[sorted.length - 1].avg < 60) {
+        weakestSubject = sorted[sorted.length - 1].subject;
+      }
+    }
+
+    const attempts = rawAttempts.map(a => ({
+      _id: a._id, examId: a.examId,
+      quizTitle: a.quizTitle || "Quiz",
+      percentage: a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0,
+      passed: !!a.passed, finishedAt: a.finishedAt
+    }));
+
+  // ✅ Build attempt tracking
+const attemptCountByExam = {};
+const lastAttemptByExam = {};
+
+for (const a of rawAttempts) {
+  const eid = String(a.examId);
+  attemptCountByExam[eid] = (attemptCountByExam[eid] || 0) + 1;
+  
+  // Track most recent attempt per exam
+  if (!lastAttemptByExam[eid] || new Date(a.finishedAt) > new Date(lastAttemptByExam[eid].finishedAt)) {
+    lastAttemptByExam[eid] = a;
+  }
+}
+
+// ✅ Separate pending and completed quizzes
+let quizzesBySubject = null;
+let practiceQuizzesBySubject = null;
+
+if (org.slug === "cripfcnt-home") {
+  quizzesBySubject = {};        // Pending quizzes
+  practiceQuizzesBySubject = {}; // Completed quizzes (for practice)
+  
+  exams.forEach(ex => {
+    const examId = String(ex.examId);
+    const subject = ex.meta?.subject || "General";
+    const attemptCount = attemptCountByExam[examId] || 0;
+    const lastAttempt = lastAttemptByExam[examId];
+    
+    const quizData = {
+      examId: ex.examId,
+      quizTitle: ex.quizTitle || "Quiz",
+      attemptCount,
+      lastScore: lastAttempt ? Math.round((lastAttempt.score / lastAttempt.maxScore) * 100) : null,
+      lastAttemptDate: lastAttempt ? lastAttempt.finishedAt : null,
+      passed: lastAttempt ? lastAttempt.passed : false
+    };
+    
+    if (attemptCount === 0) {
+      // Pending quiz - never attempted
+      if (!quizzesBySubject[subject]) quizzesBySubject[subject] = [];
+      quizzesBySubject[subject].push(quizData);
+    } else {
+      // Completed quiz - add to practice tab
+      if (!practiceQuizzesBySubject[subject]) practiceQuizzesBySubject[subject] = [];
+      practiceQuizzesBySubject[subject].push(quizData);
+    }
+  });
+}
+
+    const certificates = await Certificate.find({ userId: child._id, orgId: org._id })
+      .sort({ issuedAt: -1, createdAt: -1 }).lean();
+
     const parentIsPaid = isSubscriptionActive(parent);
 
-    return res.render("parent/child_quizzes", {
-      user: parent,
-      child,
-      org,
-      ...data,
-      knowledgeMap,
-      parentIsPaid
+    // 📊 COMPLETION STATS
+    const totalCompleted = passCount + failCount;
+    const totalPending = await ExamInstance.countDocuments({
+      userId: child._id,
+      status: { $ne: "finished" }
+    });
+
+
+    let knowledgeMap = null;
+
+
+if (org && org.slug === HOME_ORG_SLUG && child.grade) {
+  try {
+    // Get knowledge map for primary subject (math)
+    knowledgeMap = await getStudentKnowledgeMap(
+      child._id,
+      'math',
+      child.grade
+    );
+  } catch (err) {
+    console.error("[ChildQuizzes] Error getting knowledge map:", err);
+  }
+}
+
+    res.render("parent/child_quizzes", {
+      user: parent, child, org, quizzesBySubject, attempts, certificates,
+      progressData, subjectChartData, passCount, failCount,
+      avgScore, trend, strongestSubject, weakestSubject, parentIsPaid,
+      totalPending, knowledgeMap ,  quizzesBySubject,           // ✅ Pending quizzes
+  practiceQuizzesBySubject,
     });
   }
 );
-
 
 // ----------------------------------
 // Parent review attempt
