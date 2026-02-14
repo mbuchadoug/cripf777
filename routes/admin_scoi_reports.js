@@ -4,7 +4,7 @@ import { Router } from "express";
 import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
-import { generateScoiPdf } from "../utils/generateScoiPdf.js";
+import { generateScoiAuditPdf as generateScoiPdf } from "../utils/generateScoiAuditPdf.js";
 
 const router = Router();
 
