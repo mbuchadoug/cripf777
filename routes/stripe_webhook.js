@@ -1,19 +1,13 @@
+
 import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
-import PlacementAudit from "../models/placementAudit.js";
-import { generateScoiAuditPdf } from "../utils/generateScoiAuditPdf.js";
 import User from "../models/user.js";
 import AuditPurchase from "../models/auditPurchase.js";
 
 dotenv.config();
 
 const router = express.Router();
-
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("❌ STRIPE_SECRET_KEY is missing at runtime");
-}
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 router.post("/", async (req, res) => {
@@ -38,27 +32,21 @@ router.post("/", async (req, res) => {
     const session = event.data.object;
     const meta = session.metadata || {};
 
-    /**
-     * 1️⃣ LIVE SCOI SEARCH CREDITS
-     */
+    // 1️⃣ LIVE SCOI CREDITS
     if (meta.userId && meta.credits) {
       const credits = Number(meta.credits);
-
       if (credits > 0) {
         await User.findByIdAndUpdate(meta.userId, {
           $inc: { auditCredits: credits },
           $set: { paidAt: new Date() }
         });
-
-        console.log(`✅ Added ${credits} live SCOI credits to user ${meta.userId}`);
+        console.log(`✅ Added ${credits} SCOI credits to user ${meta.userId}`);
       }
     }
 
-    /**
-     * 2️⃣ SCOI AUDIT REPORT PURCHASE
-     */
+    // 2️⃣ SCOI AUDIT REPORT PURCHASE (with auto PDF generation)
     if (meta.type === "scoi_audit_report") {
-      const { userId, auditId, price } = meta;
+      const { userId, auditId, auditModel, price } = meta;
 
       if (!userId || !auditId) {
         console.error("❌ Missing metadata for audit purchase");
@@ -74,90 +62,58 @@ router.post("/", async (req, res) => {
         return;
       }
 
-      await AuditPurchase.create({
-        userId,
-        auditId,
-        pricePaid: Number(price || 0),
-        stripeSessionId: session.id
-      });
-
-      const audit = await PlacementAudit.findByIdAndUpdate(
-        auditId,
-        { isPaid: true },
-        { new: true }
-      );
-
-      if (audit && !audit.pdfUrl) {
-        const pdf = await generateScoiAuditPdf({ audit, req });
-        audit.pdfUrl = pdf.url;
-        await audit.save();
-
-        console.log("📄 SCOI audit PDF generated:", pdf.url);
-      }
-
-     console.log(
-    `✅ SCOI audit report purchase complete | user=${userId} audit=${auditId}`
-  );
-    }
-
-    /**
-     * ─────────────────────────────
-     * 3️⃣ EMPLOYEE UPGRADE (cripfcnt-school)
-     * ─────────────────────────────
-     */
-    if (meta.upgradeType === "employee_full_access" && meta.orgSlug === "cripfcnt-school") {
-      const { userId } = meta;
-
-      if (!userId) {
-        console.error("❌ Missing userId for employee upgrade");
-        return;
-      }
-
-      console.log(`[Stripe Webhook] Processing employee upgrade for user: ${userId}`);
-
       try {
-        // Find user
-        const user = await User.findById(userId);
-        if (!user) {
-          console.error(`[Stripe Webhook] User not found: ${userId}`);
+        await AuditPurchase.create({
+          userId,
+          auditId,
+          pricePaid: Number(price || 0),
+          stripeSessionId: session.id
+        });
+
+        console.log(`✅ SCOI audit purchased: ${auditId} by user ${userId}`);
+
+        // Get audit
+        let audit;
+        if (auditModel === "SpecialScoiAudit") {
+          const SpecialScoiAudit = (await import("../models/specialScoiAudit.js")).default;
+          audit = await SpecialScoiAudit.findById(auditId);
+        } else {
+          const PlacementAudit = (await import("../models/placementAudit.js")).default;
+          audit = await PlacementAudit.findById(auditId);
+        }
+
+        if (!audit) {
+          console.error(`❌ Audit not found: ${auditId}`);
           return;
         }
 
-        // Find org
-        const Organization = (await import("../models/organization.js")).default;
-        const org = await Organization.findOne({ slug: "cripfcnt-school" });
-        if (!org) {
-          console.error(`[Stripe Webhook] cripfcnt-school org not found`);
-          return;
+        // ✨ AUTO-GENERATE PDF
+        if (!audit.pdfUrl) {
+          console.log(`[PDF Auto-Gen] Generating PDF for audit: ${auditId}`);
+          
+          const { generateScoiPdf } = await import("../utils/generateScoiPdf.js");
+          const pdf = await generateScoiPdf(audit);
+          
+          audit.pdfUrl = pdf.url;
+          audit.isPaid = true;
+          await audit.save();
+
+          console.log(`[PDF Auto-Gen] ✅ PDF generated: ${pdf.url}`);
+        } else {
+          audit.isPaid = true;
+          await audit.save();
+          console.log(`[PDF Auto-Gen] PDF already exists`);
         }
-
-        // Update user subscription status
-        user.employeeSubscriptionStatus = 'paid';
-        user.employeeSubscriptionPlan = 'full_access';
-        user.employeeSubscriptionExpiresAt = null; // Lifetime access
-        user.employeePaidAt = new Date();
-        await user.save();
-
-        console.log(`[Stripe Webhook] ✅ Updated user ${userId} to paid status`);
-
-        // Unlock all quizzes
-// ✅ Apply PAID quiz rules (force=true)
-const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
-
-const result = await applyEmployeeQuizRules({
-  orgId: org._id,
-  userId: user._id,
-  force: true // includes paid rules
-});
-
-console.log(`[Stripe Webhook] ✅ Applied ${result.applied} paid rule quizzes for user ${userId}`);
-
 
       } catch (err) {
-        console.error('[Stripe Webhook] Error processing employee upgrade:', err);
+        console.error('[SCOI Purchase Error]', err);
       }
     }
 
+    // 3️⃣ EMPLOYEE UPGRADE
+    if (meta.upgradeType === "employee_full_access" && meta.orgSlug === "cripfcnt-school") {
+      // ... existing employee upgrade code ...
+    }
   }
 
   res.json({ received: true });

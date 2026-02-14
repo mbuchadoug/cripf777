@@ -1,0 +1,563 @@
+{{!-- views/scoi/audit_view_redesigned.hbs - PROFESSIONAL AUDIT VIEWER --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{audit.subject.name}} | SCOI Intelligence Report</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --gold:#C9A647;
+      --navy:#0A1929;
+      --slate:#475569;
+      --gray-100:#F1F5F9;
+      --gray-200:#E2E8F0;
+      
+      --font-serif:'Crimson Pro',Georgia,serif;
+      --font-body:'Source Sans Pro',system-ui,sans-serif;
+      --font-italic:'Lora',Georgia,serif;
+    }
+
+    *{margin:0;padding:0;box-sizing:border-box}
+
+    body{
+      font-family:var(--font-body);
+      background:#FFFFFF;
+      color:var(--navy);
+      line-height:1.8;
+      font-size:16px;
+    }
+
+    /* PRINT STYLES */
+    @media print{
+      .no-print{display:none !important}
+      body{background:white;font-size:12pt}
+      .document{box-shadow:none;max-width:100%;padding:0}
+      .page-break{page-break-before:always}
+    }
+
+    /* TOOLBAR */
+    .toolbar{
+      background:white;
+      border-bottom:1px solid var(--gray-200);
+      padding:16px 0;
+      position:sticky;
+      top:0;
+      z-index:100;
+      box-shadow:0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .toolbar-container{
+      max-width:900px;
+      margin:0 auto;
+      padding:0 32px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .back-link{
+      color:var(--slate);
+      text-decoration:none;
+      font-weight:600;
+      font-size:14px;
+    }
+
+    .back-link:hover{color:var(--gold)}
+
+    .toolbar-actions{
+      display:flex;
+      gap:12px;
+    }
+
+    .btn{
+      padding:10px 20px;
+      border-radius:8px;
+      font-weight:700;
+      font-size:14px;
+      cursor:pointer;
+      transition:all 0.2s;
+      border:none;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .btn-primary{
+      background:var(--gold);
+      color:var(--navy);
+    }
+
+    .btn-primary:hover{
+      background:#B59537;
+    }
+
+    .btn-outline{
+      background:transparent;
+      border:2px solid var(--gray-200);
+      color:var(--slate);
+    }
+
+    .btn-outline:hover{
+      border-color:var(--gold);
+      color:var(--gold);
+    }
+
+    /* DOCUMENT */
+    .document{
+      max-width:900px;
+      margin:40px auto;
+      padding:60px 80px;
+      background:white;
+      box-shadow:0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    /* HEADER */
+    .doc-header{
+      border-bottom:3px solid var(--gold);
+      padding-bottom:32px;
+      margin-bottom:48px;
+    }
+
+    .doc-framework{
+      font-size:14px;
+      font-weight:700;
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:1.5px;
+      margin-bottom:16px;
+    }
+
+    .doc-title{
+      font-family:var(--font-serif);
+      font-size:48px;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1.2;
+      margin-bottom:20px;
+    }
+
+    .doc-meta{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:24px;
+      margin-top:28px;
+    }
+
+    .meta-item{
+      display:flex;
+      flex-direction:column;
+    }
+
+    .meta-label{
+      font-size:12px;
+      font-weight:700;
+      color:var(--slate);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      margin-bottom:6px;
+    }
+
+    .meta-value{
+      font-size:15px;
+      font-weight:600;
+      color:var(--navy);
+    }
+
+    /* SECTION */
+    .section{
+      margin-bottom:48px;
+    }
+
+    .section-title{
+      font-family:var(--font-serif);
+      font-size:28px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:20px;
+      padding-bottom:12px;
+      border-bottom:2px solid var(--gray-200);
+    }
+
+    .section-subtitle{
+      font-family:var(--font-serif);
+      font-size:22px;
+      font-weight:700;
+      color:var(--navy);
+      margin:32px 0 16px;
+    }
+
+    .section-text{
+      font-size:16px;
+      line-height:1.8;
+      color:var(--navy);
+      margin-bottom:20px;
+    }
+
+    .section-text em{
+      font-family:var(--font-italic);
+      font-style:italic;
+    }
+
+    /* SCORE GRID */
+    .score-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:24px;
+      margin:32px 0;
+    }
+
+    .score-card{
+      background:var(--gray-100);
+      border-left:4px solid var(--gold);
+      padding:24px;
+      border-radius:8px;
+    }
+
+    .score-label{
+      font-size:13px;
+      font-weight:700;
+      color:var(--slate);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      margin-bottom:8px;
+    }
+
+    .score-value{
+      font-family:var(--font-serif);
+      font-size:42px;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1;
+    }
+
+    .score-range{
+      font-size:14px;
+      color:var(--slate);
+      margin-top:8px;
+    }
+
+    /* FINDINGS */
+    .findings-list{
+      list-style:none;
+      margin:24px 0;
+    }
+
+    .findings-list li{
+      padding:16px 20px;
+      margin-bottom:12px;
+      background:var(--gray-100);
+      border-radius:8px;
+      position:relative;
+      padding-left:48px;
+    }
+
+    .findings-list li::before{
+      content:'→';
+      position:absolute;
+      left:20px;
+      color:var(--gold);
+      font-weight:700;
+      font-size:18px;
+    }
+
+    /* QUOTE BOX */
+    .quote-box{
+      background:linear-gradient(135deg,var(--navy),#1A2937);
+      color:white;
+      padding:32px;
+      border-radius:12px;
+      margin:32px 0;
+      border-left:4px solid var(--gold);
+    }
+
+    .quote-box p{
+      font-family:var(--font-italic);
+      font-style:italic;
+      font-size:18px;
+      line-height:1.7;
+      margin-bottom:16px;
+    }
+
+    .quote-box .attribution{
+      font-size:14px;
+      color:rgba(255,255,255,0.7);
+    }
+
+    /* DISCLAIMER */
+    .disclaimer{
+      background:var(--gray-100);
+      padding:24px;
+      border-radius:8px;
+      font-size:14px;
+      color:var(--slate);
+      line-height:1.7;
+      margin-top:48px;
+    }
+
+    .disclaimer strong{
+      color:var(--navy);
+    }
+
+    /* FOOTER */
+    .doc-footer{
+      margin-top:48px;
+      padding-top:32px;
+      border-top:2px solid var(--gray-200);
+      text-align:center;
+      color:var(--slate);
+      font-size:14px;
+    }
+
+    /* RESPONSIVE */
+    @media(max-width:768px){
+      .document{padding:40px 24px}
+      .doc-title{font-size:36px}
+      .doc-meta{grid-template-columns:1fr}
+      .score-grid{grid-template-columns:1fr}
+      .toolbar-actions{flex-direction:column;gap:8px}
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- TOOLBAR -->
+<div class="toolbar no-print">
+  <div class="toolbar-container">
+    <a href="/scoi/purchased" class="back-link">← Back to My Audits</a>
+    
+    <div class="toolbar-actions">
+      <button onclick="window.print()" class="btn btn-outline">
+        🖨️ Print
+      </button>
+      <a href="/scoi/audits/{{audit._id}}/download" class="btn btn-primary">
+        📥 Download PDF
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT -->
+<main class="document">
+
+  <!-- HEADER -->
+  <header class="doc-header">
+    <div class="doc-framework">{{audit.framework}}</div>
+    
+    <h1 class="doc-title">{{audit.subject.name}}</h1>
+
+    <div class="doc-meta">
+      <div class="meta-item">
+        <div class="meta-label">Assessment Window</div>
+        <div class="meta-value">{{audit.assessmentWindow.label}}</div>
+      </div>
+
+      <div class="meta-item">
+        <div class="meta-label">Author</div>
+        <div class="meta-value">{{audit.author}}</div>
+      </div>
+
+      <div class="meta-item">
+        <div class="meta-label">Audit Type</div>
+        <div class="meta-value">
+          {{#if (eq audit.auditClass "special_report")}}
+            Special Report
+          {{else}}
+            Placement Audit
+          {{/if}}
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- PURPOSE -->
+  <section class="section">
+    <h2 class="section-title">Purpose</h2>
+    <p class="section-text">{{audit.purpose}}</p>
+  </section>
+
+  <!-- SCORES (Placement Audits) -->
+  {{#if audit.scores.visibility}}
+    <section class="section">
+      <h2 class="section-title">SCOI Assessment</h2>
+
+      <div class="score-grid">
+        <div class="score-card">
+          <div class="score-label">Visibility</div>
+          <div class="score-value">{{audit.scores.visibility.value}}/10</div>
+          <div class="score-range">{{audit.scores.visibility.definition}}</div>
+        </div>
+
+        <div class="score-card">
+          <div class="score-label">Contribution</div>
+          <div class="score-value">{{audit.scores.contribution.value}}/10</div>
+          <div class="score-range">{{audit.scores.contribution.definition}}</div>
+        </div>
+      </div>
+
+      <!-- Visibility Rationale -->
+      <h3 class="section-subtitle">Visibility Assessment</h3>
+      <p class="section-text">{{audit.scores.visibility.narrative}}</p>
+      <p class="section-text"><em>{{audit.scores.visibility.interpretation}}</em></p>
+
+      <!-- Contribution Rationale -->
+      <h3 class="section-subtitle">Contribution Assessment</h3>
+      <p class="section-text">{{audit.scores.contribution.narrative}}</p>
+      <p class="section-text"><em>{{audit.scores.contribution.interpretation}}</em></p>
+    </section>
+
+    <!-- CALCULATIONS -->
+    {{#if audit.calculations}}
+      <section class="section">
+        <h2 class="section-title">SCOI Calculations</h2>
+
+        <div class="score-grid">
+          <div class="score-card">
+            <div class="score-label">Placement SCOI</div>
+            <div class="score-value">{{audit.calculations.placementSCOI.value}}</div>
+            <div class="score-range">{{audit.calculations.placementSCOI.working}}</div>
+          </div>
+
+          <div class="score-card">
+            <div class="score-label">Grid SCOI</div>
+            <div class="score-value">{{audit.calculations.gridSCOI.value}}</div>
+            <div class="score-range">{{audit.calculations.gridSCOI.working}}</div>
+          </div>
+        </div>
+
+        <p class="section-text">{{audit.calculations.placementSCOI.meaning}}</p>
+        <p class="section-text">{{audit.calculations.gridSCOI.meaning}}</p>
+      </section>
+    {{/if}}
+  {{/if}}
+
+  <!-- FINDINGS (Special Reports) -->
+  {{#if audit.findings}}
+    <section class="section">
+      <h2 class="section-title">Key Findings</h2>
+
+      <div class="quote-box">
+        <p>{{audit.findings.coreFinding}}</p>
+      </div>
+
+      {{#if audit.findings.secondaryFindings}}
+        <h3 class="section-subtitle">Secondary Findings</h3>
+        <ul class="findings-list">
+          {{#each audit.findings.secondaryFindings}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if audit.findings.classification}}
+        <h3 class="section-subtitle">Classification</h3>
+        <p class="section-text">
+          <strong>{{audit.findings.classification.label}}:</strong> 
+          {{audit.findings.classification.definition}}
+        </p>
+      {{/if}}
+    </section>
+  {{/if}}
+
+  <!-- CIVILIZATION RISK SIGNALS -->
+  {{#if audit.civilizationRiskSignals}}
+    <section class="section">
+      <h2 class="section-title">Civilization Risk Signals</h2>
+      
+      {{#each audit.civilizationRiskSignals}}
+        <h3 class="section-subtitle">{{this.riskLabel}}</h3>
+        <p class="section-text">{{this.description}}</p>
+      {{/each}}
+    </section>
+  {{/if}}
+
+  <!-- STRUCTURAL DIAGNOSIS -->
+  {{#if audit.structuralDiagnosis}}
+    <section class="section">
+      <h2 class="section-title">Structural Diagnosis</h2>
+      <p class="section-text">{{audit.structuralDiagnosis}}</p>
+    </section>
+  {{/if}}
+
+  <!-- FINAL STATEMENT -->
+  {{#if audit.finalPlacementStatement}}
+    <section class="section">
+      <h2 class="section-title">Final Placement Statement</h2>
+      <div class="quote-box">
+        <p>{{audit.finalPlacementStatement}}</p>
+      </div>
+    </section>
+  {{/if}}
+
+  <!-- COUNTERFACTUAL -->
+  {{#if audit.counterfactual}}
+    <section class="section">
+      <h2 class="section-title">Counterfactual Framework</h2>
+      
+      <p class="section-text"><strong>Goal:</strong> {{audit.counterfactual.goal}}</p>
+      
+      {{#if audit.counterfactual.requirements}}
+        <h3 class="section-subtitle">Requirements</h3>
+        <ul class="findings-list">
+          {{#each audit.counterfactual.requirements}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if audit.counterfactual.note}}
+        <p class="section-text"><em>{{audit.counterfactual.note}}</em></p>
+      {{/if}}
+    </section>
+  {{/if}}
+
+  <!-- DISCLAIMERS -->
+  {{#if audit.disclaimers}}
+    <div class="disclaimer">
+      <strong>Important Disclaimers:</strong><br><br>
+      
+      {{#if audit.disclaimers.nonPersonal}}
+        <strong>Non-Personal:</strong> {{audit.disclaimers.nonPersonal}}<br><br>
+      {{/if}}
+
+      {{#if audit.disclaimers.nonLegal}}
+        <strong>Non-Legal:</strong> {{audit.disclaimers.nonLegal}}<br><br>
+      {{/if}}
+
+      {{#if audit.disclaimers.nonFinancialAdvice}}
+        <strong>Non-Financial Advice:</strong> {{audit.disclaimers.nonFinancialAdvice}}<br><br>
+      {{/if}}
+
+      {{#if audit.disclaimers.dataLimitations}}
+        <strong>Data Limitations:</strong> {{audit.disclaimers.dataLimitations}}
+      {{/if}}
+    </div>
+  {{/if}}
+
+  <!-- TEMPORAL NOTICE -->
+  {{#if audit.temporalNotice}}
+    <div class="disclaimer" style="margin-top:24px">
+      <strong>Temporal Notice:</strong> {{audit.temporalNotice}}
+    </div>
+  {{/if}}
+
+  <!-- FOOTER -->
+  <footer class="doc-footer">
+    <p>
+      <strong>{{audit.framework}}</strong><br>
+      Author: {{audit.author}}<br>
+      Assessment Window: {{audit.assessmentWindow.label}}<br>
+      Confidence Level: {{audit.confidenceLevel}}<br>
+      Status: {{audit.status}}
+    </p>
+  </footer>
+
+</main>
+
+</body>
+</html>

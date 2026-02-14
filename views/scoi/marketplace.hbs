@@ -1,309 +1,895 @@
+{{!-- views/scoi/marketplace_redesigned.hbs - PROFESSIONAL E-COMMERCE MARKETPLACE --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SCOI Audits | CRIPFCnt</title>
+  <title>SCOI Intelligence Marketplace | CRIPFCnt Professional Audits</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  
+  {{!-- Google Fonts - Professional Typography --}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
     :root{
-      --gold:#D4AF37;
-      --black:#000;
-      --charcoal:#141414;
-      --white:#F5F5F5;
-      --muted:#9AA3AD;
-      --radius:14px;
-      --shadow:0 18px 60px rgba(3,7,18,0.45);
-      --maxw:1200px;
+      /* Professional color palette - Corporate gold & navy */
+      --gold:#C9A647;
+      --gold-light:#D4B666;
+      --gold-dark:#B59537;
+      --navy:#0A1929;
+      --navy-light:#1A2937;
+      --navy-dark:#050C14;
+      --slate:#475569;
+      --slate-light:#64748B;
+      --white:#FFFFFF;
+      --cream:#FAFAF9;
+      --gray-50:#F8FAFC;
+      --gray-100:#F1F5F9;
+      --gray-200:#E2E8F0;
+      --gray-800:#1E293B;
+      
+      /* Semantic colors */
+      --success:#10B981;
+      --info:#3B82F6;
+      --warning:#F59E0B;
+      
+      /* Layout */
+      --max-width:1400px;
+      --radius:12px;
+      --radius-lg:16px;
+      --shadow:0 4px 12px rgba(10,25,41,0.08);
+      --shadow-lg:0 12px 32px rgba(10,25,41,0.12);
+      --shadow-xl:0 20px 48px rgba(10,25,41,0.16);
+      
+      /* Typography - Editorial serif for headings, sans for body */
+      --font-display:'Crimson Pro',Georgia,serif;
+      --font-body:'Work Sans',system-ui,sans-serif;
     }
-    *{box-sizing:border-box}
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
     body{
-      margin:0;
-      font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      background:linear-gradient(180deg,#050505,#0b0b0b);
-      color:var(--white);
-    }
-    a{color:inherit;text-decoration:none}
-    .container{max-width:var(--maxw);margin:36px auto;padding:0 22px}
-
-    /* HERO */
-    .hero{
-      position:relative;
-      border-radius:18px;
-      padding:64px;
-      background:
-        linear-gradient(180deg,rgba(0,0,0,0.55),rgba(0,0,0,0.85)),
-        url("/pics/pic3.jpeg") center/cover no-repeat;
-      box-shadow:var(--shadow);
-    }
-    .eyebrow{
-      display:inline-block;
-      padding:8px 14px;
-      border-radius:999px;
-      background:rgba(212,175,55,0.12);
-      color:var(--gold);
-      font-weight:800;
-      font-size:13px;
-      letter-spacing:0.4px;
-    }
-    h1{
-      margin:16px 0 12px;
-      font-size:44px;
-      line-height:1.05;
-      color:var(--gold);
-      font-weight:900;
-    }
-    .hero p{
-      max-width:760px;
-      font-size:18px;
-      color:rgba(255,255,255,0.9);
-    }
-
-    /* VALUE GRID */
-    .grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:18px;
-      margin-top:28px;
-    }
-    .card{
-      padding:22px;
-      border-radius:14px;
-      background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.12));
-      border:1px solid rgba(255,255,255,0.04);
-    }
-    .card h3{
-      margin:0;
-      color:var(--gold);
-      font-size:16px;
-      font-weight:800;
-    }
-    .card p{
-      margin-top:10px;
-      font-size:14px;
-      color:var(--muted);
+      font-family:var(--font-body);
+      background:var(--cream);
+      color:var(--navy);
       line-height:1.6;
     }
 
-    /* AUDIT PRODUCTS */
-    .products{
-      margin-top:42px;
-    }
-    .products h2{
-      margin:0 0 14px;
-      color:var(--gold);
-      font-size:28px;
-      font-weight:900;
-    }
-    .product-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:20px;
-    }
-    .product{
-      padding:24px;
-      border-radius:16px;
-      background:#070707;
-      border:1px solid rgba(255,255,255,0.05);
+    /* ============================================ */
+    /* NAVIGATION                                  */
+    /* ============================================ */
+    .navbar{
+      background:white;
+      border-bottom:1px solid var(--gray-200);
+      position:sticky;
+      top:0;
+      z-index:100;
       box-shadow:var(--shadow);
+    }
+
+    .nav-container{
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:0 32px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      height:72px;
+    }
+
+    .nav-brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .brand-logo{
+      font-family:var(--font-display);
+      font-size:28px;
+      font-weight:700;
+      color:var(--navy);
+      text-decoration:none;
+      letter-spacing:-0.5px;
+    }
+
+    .brand-logo span{
+      color:var(--gold);
+    }
+
+    .brand-tag{
+      padding:4px 12px;
+      background:rgba(201,166,71,0.1);
+      border:1px solid rgba(201,166,71,0.3);
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      color:var(--gold-dark);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .nav-links{
+      display:flex;
+      align-items:center;
+      gap:32px;
+    }
+
+    .nav-link{
+      color:var(--slate);
+      text-decoration:none;
+      font-weight:600;
+      font-size:14px;
+      transition:color 0.2s;
+    }
+
+    .nav-link:hover{
+      color:var(--navy);
+    }
+
+    .nav-link.active{
+      color:var(--gold);
+    }
+
+    .nav-cart{
+      position:relative;
+      padding:10px 16px;
+      background:var(--navy);
+      color:white;
+      border-radius:var(--radius);
+      text-decoration:none;
+      font-weight:700;
+      font-size:14px;
+      transition:all 0.3s;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .nav-cart:hover{
+      background:var(--navy-light);
+      transform:translateY(-2px);
+    }
+
+    .cart-count{
+      width:20px;
+      height:20px;
+      background:var(--gold);
+      color:var(--navy-dark);
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      font-weight:800;
+    }
+
+    /* ============================================ */
+    /* HERO SECTION                                */
+    /* ============================================ */
+    .hero{
+      background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 100%);
+      padding:80px 0;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .hero::before{
+      content:'';
+      position:absolute;
+      top:-50%;
+      right:-25%;
+      width:150%;
+      height:200%;
+      background:radial-gradient(circle,rgba(201,166,71,0.08),transparent 60%);
+      animation:pulse 20s ease infinite;
+    }
+
+    @keyframes pulse{
+      0%,100%{transform:scale(1) rotate(0deg)}
+      50%{transform:scale(1.1) rotate(5deg)}
+    }
+
+    .hero-container{
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:0 32px;
+      position:relative;
+      z-index:1;
+    }
+
+    .hero-eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 16px;
+      background:rgba(255,255,255,0.1);
+      border:1px solid rgba(255,255,255,0.2);
+      border-radius:999px;
+      color:var(--gold-light);
+      font-size:13px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:24px;
+    }
+
+    .hero h1{
+      font-family:var(--font-display);
+      font-size:64px;
+      font-weight:700;
+      color:white;
+      line-height:1.1;
+      margin-bottom:24px;
+      max-width:900px;
+    }
+
+    .hero p{
+      font-size:20px;
+      color:rgba(255,255,255,0.85);
+      line-height:1.7;
+      max-width:720px;
+      margin-bottom:40px;
+    }
+
+    .hero-stats{
+      display:flex;
+      gap:48px;
+      margin-top:48px;
+    }
+
+    .stat-item{
       display:flex;
       flex-direction:column;
-      justify-content:space-between;
     }
-    .product h3{
-      margin:0;
-      font-size:18px;
-      color:var(--gold);
+
+    .stat-value{
+      font-family:var(--font-display);
+      font-size:42px;
+      font-weight:700;
+      color:var(--gold-light);
+      line-height:1;
+      margin-bottom:8px;
     }
-    .price{
-      margin:14px 0;
-      font-size:32px;
-      font-weight:900;
-      color:#fff;
-    }
-    .product ul{
-      padding-left:18px;
-      margin:10px 0;
-      color:var(--muted);
+
+    .stat-label{
       font-size:14px;
-      line-height:1.6;
+      color:rgba(255,255,255,0.7);
+      font-weight:600;
     }
-    .btn{
-      margin-top:18px;
-      display:inline-block;
-      padding:12px 18px;
-      border-radius:10px;
+
+    /* ============================================ */
+    /* FILTERS & SORTING                           */
+    /* ============================================ */
+    .controls-section{
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:40px 32px;
+    }
+
+    .controls-grid{
+      display:grid;
+      grid-template-columns:2fr 1fr 1fr;
+      gap:16px;
+      background:white;
+      padding:24px;
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow);
+    }
+
+    .control-group{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .control-label{
+      font-size:13px;
+      font-weight:700;
+      color:var(--navy);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .control-input{
+      padding:12px 16px;
+      border:2px solid var(--gray-200);
+      border-radius:var(--radius);
+      font-family:var(--font-body);
+      font-size:15px;
+      color:var(--navy);
+      background:white;
+      transition:all 0.2s;
+    }
+
+    .control-input:focus{
+      outline:none;
+      border-color:var(--gold);
+      box-shadow:0 0 0 4px rgba(201,166,71,0.1);
+    }
+
+    /* ============================================ */
+    /* PRODUCT GRID                                */
+    /* ============================================ */
+    .products-section{
+      max-width:var(--max-width);
+      margin:0 auto 80px;
+      padding:0 32px;
+    }
+
+    .section-header{
+      margin-bottom:32px;
+    }
+
+    .section-title{
+      font-family:var(--font-display);
+      font-size:36px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .section-subtitle{
+      color:var(--slate);
+      font-size:16px;
+    }
+
+    .products-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(380px,1fr));
+      gap:32px;
+    }
+
+    .product-card{
+      background:white;
+      border:1px solid var(--gray-200);
+      border-radius:var(--radius-lg);
+      overflow:hidden;
+      transition:all 0.3s;
+      box-shadow:var(--shadow);
+      position:relative;
+    }
+
+    .product-card:hover{
+      transform:translateY(-4px);
+      box-shadow:var(--shadow-xl);
+      border-color:var(--gold);
+    }
+
+    .product-badge{
+      position:absolute;
+      top:20px;
+      right:20px;
+      padding:6px 14px;
+      border-radius:999px;
+      font-size:11px;
       font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+      z-index:2;
+    }
+
+    .product-badge.premium{
+      background:var(--gold);
+      color:var(--navy-dark);
+    }
+
+    .product-badge.standard{
+      background:var(--navy);
+      color:white;
+    }
+
+    .product-header{
+      background:linear-gradient(135deg,var(--navy-dark),var(--navy));
+      padding:32px;
+      border-bottom:3px solid var(--gold);
+      position:relative;
+    }
+
+    .product-type{
+      font-size:12px;
+      font-weight:700;
+      color:var(--gold-light);
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:12px;
+    }
+
+    .product-title{
+      font-family:var(--font-display);
+      font-size:24px;
+      font-weight:700;
+      color:white;
+      line-height:1.3;
+      margin-bottom:12px;
+    }
+
+    .product-window{
       font-size:14px;
+      color:rgba(255,255,255,0.7);
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .product-body{
+      padding:28px;
+    }
+
+    .product-features{
+      list-style:none;
+      margin-bottom:24px;
+    }
+
+    .product-features li{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      padding:8px 0;
+      font-size:14px;
+      color:var(--slate);
+      border-bottom:1px solid var(--gray-100);
+    }
+
+    .product-features li:last-child{
+      border-bottom:none;
+    }
+
+    .product-features li::before{
+      content:'✓';
+      width:20px;
+      height:20px;
+      background:rgba(201,166,71,0.1);
+      color:var(--gold-dark);
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:12px;
+      flex-shrink:0;
+      margin-top:2px;
+    }
+
+    .product-footer{
+      padding:0 28px 28px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .product-price{
+      display:flex;
+      flex-direction:column;
+    }
+
+    .price-amount{
+      font-family:var(--font-display);
+      font-size:36px;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1;
+    }
+
+    .price-label{
+      font-size:12px;
+      color:var(--slate);
+      margin-top:4px;
+    }
+
+    .btn-purchase{
+      padding:14px 28px;
+      background:var(--gold);
+      color:var(--navy-dark);
+      border:none;
+      border-radius:var(--radius);
+      font-weight:700;
+      font-size:15px;
+      cursor:pointer;
+      transition:all 0.3s;
+      box-shadow:0 4px 12px rgba(201,166,71,0.3);
+      text-decoration:none;
+      display:inline-block;
+    }
+
+    .btn-purchase:hover{
+      background:var(--gold-light);
+      transform:translateY(-2px);
+      box-shadow:0 6px 16px rgba(201,166,71,0.4);
+    }
+
+    /* ============================================ */
+    /* TRUST SIGNALS                               */
+    /* ============================================ */
+    .trust-section{
+      background:white;
+      padding:60px 0;
+      border-top:1px solid var(--gray-200);
+      margin-top:80px;
+    }
+
+    .trust-container{
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:0 32px;
+    }
+
+    .trust-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:40px;
+    }
+
+    .trust-item{
       text-align:center;
     }
-    .btn-primary{
-      background:var(--gold);
-      color:#000;
-    }
-    .btn-outline{
-      border:2px solid rgba(212,175,55,0.9);
-      color:var(--gold);
+
+    .trust-icon{
+      font-size:36px;
+      margin-bottom:16px;
     }
 
-    /* FOOTER NOTE */
-    .note{
-      margin-top:36px;
-      padding:22px;
-      border-radius:14px;
-      background:linear-gradient(180deg,#060606,#0c0c0c);
-      border:1px solid rgba(255,255,255,0.04);
-      color:var(--muted);
+    .trust-title{
+      font-weight:700;
+      font-size:16px;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .trust-text{
       font-size:14px;
-      line-height:1.6;
+      color:var(--slate);
+      line-height:1.5;
     }
 
-    @media(max-width:980px){
-      .grid,.product-grid{grid-template-columns:1fr}
-      .hero{padding:36px}
-      h1{font-size:34px}
+    /* ============================================ */
+    /* EMPTY STATE                                 */
+    /* ============================================ */
+    .empty-state{
+      text-align:center;
+      padding:80px 32px;
+    }
+
+    .empty-icon{
+      font-size:64px;
+      margin-bottom:24px;
+      opacity:0.3;
+    }
+
+    .empty-title{
+      font-family:var(--font-display);
+      font-size:28px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:12px;
+    }
+
+    .empty-text{
+      color:var(--slate);
+      font-size:16px;
+      max-width:500px;
+      margin:0 auto;
+    }
+
+    /* ============================================ */
+    /* RESPONSIVE                                  */
+    /* ============================================ */
+    @media(max-width:1200px){
+      .products-grid{
+        grid-template-columns:repeat(2,1fr);
+      }
+
+      .controls-grid{
+        grid-template-columns:1fr 1fr;
+      }
+    }
+
+    @media(max-width:768px){
+      .hero h1{
+        font-size:42px;
+      }
+
+      .products-grid{
+        grid-template-columns:1fr;
+      }
+
+      .controls-grid{
+        grid-template-columns:1fr;
+      }
+
+      .trust-grid{
+        grid-template-columns:repeat(2,1fr);
+        gap:32px;
+      }
+
+      .hero-stats{
+        flex-direction:column;
+        gap:24px;
+      }
+
+      .nav-links{
+        display:none;
+      }
     }
   </style>
 </head>
+
 <body>
 
-{{> navbar }}
-
-<div class="container">
-
-  <!-- HERO -->
-  <section class="hero">
-    <div class="eyebrow">CRIPFCnt · SCOI INTELLIGENCE</div>
-    <h1>Placement Intelligence For Those Who Carry Weight</h1>
-    <p>
-      SCOI Audits are not opinions, forecasts, or branding tools.
-      They are <strong>structural intelligence reports</strong> that evaluate how visibility,
-      contribution, and responsibility align - or fail - within civilization-scale systems.
-    </p>
-  </section>
-
-  <!-- VALUE PROPOSITION -->
-  <section class="grid">
-    <div class="card">
-      <h3>What This Is</h3>
-      <p>
-        A formal CRIPFCnt audit that quantifies placement using the
-        Social Contract Obligation Index - visibility versus contribution.
-      </p>
+<!-- ================= NAVIGATION ================= -->
+<nav class="navbar">
+  <div class="nav-container">
+    <div class="nav-brand">
+      <a href="/lms" class="brand-logo">CRIPF<span>Cnt</span></a>
+      <span class="brand-tag">Intelligence</span>
     </div>
-    <div class="card">
-      <h3>Who It’s For</h3>
-      <p>
-        Executives, boards, founders, public figures, institutions,
-        and systems operating under scrutiny or influence.
-      </p>
+
+    <div class="nav-links">
+      <a href="/scoi" class="nav-link active">Marketplace</a>
+      <a href="/scoi/purchased" class="nav-link">My Audits</a>
+      {{#if user}}
+        <a href="/parent/dashboard" class="nav-link">Dashboard</a>
+      {{/if}}
     </div>
-    <div class="card">
-      <h3>Why It Matters</h3>
-      <p>
-        Misaligned placement leads to collapse, backlash, and erosion of trust.
-        SCOI audits identify this before it becomes visible failure.
-      </p>
+
+    <div style="display:flex; align-items:center; gap:16px;">
+      {{#if user}}
+        <a href="/scoi/purchased" class="nav-cart">
+          📊 My Audits
+        </a>
+      {{else}}
+        <a href="/auth/google" class="nav-cart">
+          Sign In
+        </a>
+      {{/if}}
     </div>
-  </section>
-
-  <!-- EXISTING ARCHIVED AUDITS (UNCHANGED) -->
-  <section class="products">
-    <h2>Available Archived SCOI Audits</h2>
-
-    {{#if audits.length}}
-      <div class="product-grid">
-        {{#each audits}}
-          <div class="product">
-            <div>
-              <h3>{{this.subject.name}}</h3>
-
-              <p style="color:var(--muted);font-size:14px;margin-top:6px">
-                Assessment Window: {{this.assessmentWindow.label}}
-              </p>
-
-              <!--<div class="price">${{../price}}</div>-->
-
-              <div class="price">${{this.displayPrice}}</div>
-
-
-              <ul>
-                <li>Archived, immutable placement audit</li>
-                <li>Includes Placement & Grid SCOI</li>
-                <li>Structural diagnosis & narrative</li>
-                <li>Historical reference (non-retroactive)</li>
-              </ul>
-            </div>
-
-            <form method="POST" action="/scoi/checkout">
-              <input type="hidden" name="auditId" value="{{this._id}}">
-              <input type="hidden" name="type" value="archived">
-              <button class="btn btn-primary" type="submit">
-                Purchase Audit
-              </button>
-            </form>
-
-          </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <p style="color:var(--muted)">
-        No archived SCOI audits are currently available.
-      </p>
-    {{/if}}
-  </section>
-
-  <!-- ✅ NEW: SPECIAL SCOI AUDITS (ADDED ONLY) -->
-  <section class="products">
-    <h2>Special SCOI Audits (Premium)</h2>
-
-    {{#if specialAudits.length}}
-      <div class="product-grid">
-        {{#each specialAudits}}
-          <div class="product">
-
-            <div>
-              <h3>{{this.subject.name}}</h3>
-
-              <p style="color:var(--muted);font-size:14px;margin-top:6px">
-                Assessment Window: {{this.assessmentWindow.label}}
-              </p>
-
-              <div class="price">$299</div>
-
-              <ul>
-                <li>Non-placement structural audit</li>
-                <li>Civilization risk signals</li>
-                <li>Counterfactual responsibility analysis</li>
-                <li>Doctrine-grade systemic diagnosis</li>
-              </ul>
-            </div>
-
-            <form method="POST" action="/scoi/checkout">
-              <input type="hidden" name="auditId" value="{{this._id}}">
-              <input type="hidden" name="auditModel" value="SpecialScoiAudit">
-              <button class="btn btn-primary" type="submit">
-                Purchase Audit
-              </button>
-            </form>
-
-          </div>
-        {{/each}}
-      </div>
-    {{else}}
-      <p style="color:var(--muted)">
-        No Special SCOI audits are currently available.
-      </p>
-    {{/if}}
-  </section>
-
-  <!-- FOOTER NOTE -->
-  <div class="note">
-    SCOI audits are analytical instruments, not endorsements.
-    They do not predict outcomes - they diagnose structural alignment.
-    Responsibility remains with the entity assessed.
   </div>
+</nav>
 
-</div>
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="hero-container">
+    <div class="hero-eyebrow">
+      🏛️ Professional Intelligence Reports
+    </div>
+
+    <h1>Civilization-Grade<br>Structural Intelligence</h1>
+
+    <p>
+      Access CRIPFCnt SCOI audits—immutable, reference-grade placement intelligence 
+      for organizations, systems, and events operating at civilization scale. 
+      Authored by Donald Mataranyika.
+    </p>
+
+    <div class="hero-stats">
+      <div class="stat-item">
+        <div class="stat-value">{{audits.length}}</div>
+        <div class="stat-label">Available Reports</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">2</div>
+        <div class="stat-label">Report Categories</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">24/7</div>
+        <div class="stat-label">Instant Access</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FILTERS ================= -->
+<section class="controls-section">
+  <div class="controls-grid">
+    <div class="control-group">
+      <label class="control-label">Search Reports</label>
+      <input 
+        type="text" 
+        class="control-input" 
+        placeholder="Search by organization, system, or event..."
+        id="searchInput"
+      />
+    </div>
+
+    <div class="control-group">
+      <label class="control-label">Category</label>
+      <select class="control-input" id="categoryFilter">
+        <option value="">All Categories</option>
+        <option value="special">Special Reports ($299)</option>
+        <option value="placement">Placement Audits ($149)</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label class="control-label">Sort By</label>
+      <select class="control-input" id="sortSelect">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+        <option value="price-high">Price: High to Low</option>
+        <option value="price-low">Price: Low to High</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRODUCTS ================= -->
+<section class="products-section">
+  {{#if audits.length}}
+    <div class="section-header">
+      <h2 class="section-title">Intelligence Reports</h2>
+      <p class="section-subtitle">
+        Archived, immutable structural audits for professional reference and strategic intelligence
+      </p>
+    </div>
+
+    <div class="products-grid" id="productsGrid">
+      {{#each audits}}
+        <article class="product-card" data-category="{{this.auditKind}}" data-price="{{this.displayPrice}}">
+          
+          <span class="product-badge {{#if (eq this.auditKind 'special')}}premium{{else}}standard{{/if}}">
+            {{#if (eq this.auditKind 'special')}}Premium{{else}}Standard{{/if}}
+          </span>
+
+          <div class="product-header">
+            <div class="product-type">
+              {{#if (eq this.auditKind 'special')}}
+                Special SCOI Report
+              {{else}}
+                Placement Audit
+              {{/if}}
+            </div>
+
+            <h3 class="product-title">{{this.subject.name}}</h3>
+
+            <div class="product-window">
+              📅 {{this.assessmentWindow.label}}
+            </div>
+          </div>
+
+          <div class="product-body">
+            <ul class="product-features">
+              {{#if (eq this.auditKind 'special')}}
+                <li>Non-placement structural analysis</li>
+                <li>Civilization risk signals</li>
+                <li>Counterfactual responsibility framework</li>
+                <li>Doctrine-grade systemic diagnosis</li>
+              {{else}}
+                <li>Archived placement audit (immutable)</li>
+                <li>Dual-matrix SCOI calculation</li>
+                <li>Structural diagnosis & interpretation</li>
+                <li>Historical reference (non-retroactive)</li>
+              {{/if}}
+            </ul>
+          </div>
+
+          <div class="product-footer">
+            <div class="product-price">
+              <div class="price-amount">${{this.displayPrice}}</div>
+              <div class="price-label">One-time purchase</div>
+            </div>
+
+            <form method="POST" action="/scoi/checkout" style="margin:0;">
+              <input type="hidden" name="auditId" value="{{this._id}}">
+              <button type="submit" class="btn-purchase">
+                Purchase Report →
+              </button>
+            </form>
+          </div>
+        </article>
+      {{/each}}
+    </div>
+  {{else}}
+    <div class="empty-state">
+      <div class="empty-icon">📊</div>
+      <h2 class="empty-title">No Reports Available</h2>
+      <p class="empty-text">
+        SCOI intelligence reports are being prepared. Check back soon for 
+        civilization-grade structural audits.
+      </p>
+    </div>
+  {{/if}}
+</section>
+
+<!-- ================= TRUST SIGNALS ================= -->
+<section class="trust-section">
+  <div class="trust-container">
+    <div class="trust-grid">
+      <div class="trust-item">
+        <div class="trust-icon">🔒</div>
+        <div class="trust-title">Secure Checkout</div>
+        <div class="trust-text">Stripe-powered payment processing</div>
+      </div>
+
+      <div class="trust-item">
+        <div class="trust-icon">📄</div>
+        <div class="trust-title">Instant Access</div>
+        <div class="trust-text">View & download immediately after purchase</div>
+      </div>
+
+      <div class="trust-item">
+        <div class="trust-icon">♾️</div>
+        <div class="trust-title">Lifetime Access</div>
+        <div class="trust-text">Permanent access to your purchased reports</div>
+      </div>
+
+      <div class="trust-item">
+        <div class="trust-icon">✍️</div>
+        <div class="trust-title">Authored by Donald Mataranyika</div>
+        <div class="trust-text">CRIPFCnt framework creator</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SCRIPTS ================= -->
+<script>
+  // Search functionality
+  const searchInput = document.getElementById('searchInput');
+  const categoryFilter = document.getElementById('categoryFilter');
+  const sortSelect = document.getElementById('sortSelect');
+  const productsGrid = document.getElementById('productsGrid');
+
+  function filterProducts() {
+    const searchTerm = searchInput.value.toLowerCase();
+    const category = categoryFilter.value;
+    const cards = Array.from(document.querySelectorAll('.product-card'));
+
+    let filtered = cards.filter(card => {
+      const title = card.querySelector('.product-title').textContent.toLowerCase();
+      const cardCategory = card.dataset.category;
+
+      const matchesSearch = !searchTerm || title.includes(searchTerm);
+      const matchesCategory = !category || cardCategory === category;
+
+      return matchesSearch && matchesCategory;
+    });
+
+    // Hide all cards first
+    cards.forEach(card => card.style.display = 'none');
+
+    // Show filtered cards
+    filtered.forEach(card => card.style.display = 'block');
+
+    // Sort
+    sortProducts(filtered);
+  }
+
+  function sortProducts(cards) {
+    const sortBy = sortSelect.value;
+
+    cards.sort((a, b) => {
+      const priceA = parseInt(a.dataset.price);
+      const priceB = parseInt(b.dataset.price);
+
+      switch(sortBy) {
+        case 'price-high':
+          return priceB - priceA;
+        case 'price-low':
+          return priceA - priceB;
+        case 'newest':
+          return 0; // Keep original order
+        case 'oldest':
+          return 0; // Keep original order
+        default:
+          return 0;
+      }
+    });
+
+    // Reorder in DOM
+    cards.forEach(card => {
+      productsGrid.appendChild(card);
+    });
+  }
+
+  // Event listeners
+  searchInput.addEventListener('input', filterProducts);
+  categoryFilter.addEventListener('change', filterProducts);
+  sortSelect.addEventListener('change', filterProducts);
+</script>
+
 </body>
 </html>

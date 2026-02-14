@@ -1,4 +1,3 @@
-// routes/scoi_marketplace.js
 import { Router } from "express";
 import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
@@ -7,29 +6,21 @@ const router = Router();
 
 router.get("/scoi", async (req, res) => {
   try {
-    /* ───────────────────────────────
-       Placement Audits ($149)
-    ─────────────────────────────── */
+    // Fetch both audit types
     const placementAudits = await PlacementAudit.find({
       status: "archived_reference"
-    })
-      .sort({ "assessmentWindow.label": -1 })
-      .lean();
+    }).sort({ "assessmentWindow.label": -1 }).lean();
 
+    const specialAudits = await SpecialScoiAudit.find({
+      isPaid: false
+    }).sort({ createdAt: -1 }).lean();
+
+    // Normalize data structure
     const normalizedPlacement = placementAudits.map(a => ({
       ...a,
       displayPrice: 149,
       auditKind: "placement"
     }));
-
-    /* ───────────────────────────────
-       Special SCOI Audits ($299)
-    ─────────────────────────────── */
-    const specialAudits = await SpecialScoiAudit.find({
-      isPaid: false
-    })
-      .sort({ createdAt: -1 })
-      .lean();
 
     const normalizedSpecial = specialAudits.map(a => ({
       ...a,
@@ -40,22 +31,17 @@ router.get("/scoi", async (req, res) => {
       auditKind: "special"
     }));
 
-    /* ───────────────────────────────
-       Merge
-    ─────────────────────────────── */
-    const audits = [
-      ...normalizedSpecial,
-      ...normalizedPlacement
-    ];
+    // Combine and sort
+    const audits = [...normalizedSpecial, ...normalizedPlacement];
 
-    res.render("scoi/marketplace", {
+    res.render("scoi/marketplace_redesigned", {
       user: req.user || null,
-      audits
+      audits,
+      pageTitle: "SCOI Intelligence Marketplace"
     });
-
   } catch (err) {
     console.error("[SCOI marketplace]", err);
-    res.status(500).send("Failed to load SCOI marketplace");
+    res.status(500).send("Failed to load marketplace");
   }
 });
 
