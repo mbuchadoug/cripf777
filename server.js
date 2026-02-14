@@ -56,7 +56,8 @@ import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 import paymentsRouter from "./routes/payments.js";
 
 
-
+// Add these imports
+import adminScoiReports from "./routes/admin_scoi_reports.js";
 
 
 
@@ -334,7 +335,8 @@ app.use("/consumer", consumerQuizRoutes);
 
 app.use("/admin", adminExamRoutes);
 
-
+// Add this route registration
+app.use(adminScoiReports);
 app.use(adminQuizRules);
 app.use(parentRoutes);
 app.use(adminCertificateRoutes);
