@@ -495,6 +495,22 @@ app.get("/start", (req, res) => {
   });
 });
 
+
+// privacy & deletion pages
+app.get("/privacy-policy", (req, res) => {
+  res.render("privacy_policy", {
+    title: "Privacy Policy – Cripfcnt",
+    description: "Privacy policy for Cripfcnt - how we collect and handle data."
+  });
+});
+
+app.get("/data-deletion", (req, res) => {
+  res.render("data_deletion", {
+    title: "Data Deletion Instructions – Cripfcnt",
+    description: "How to request deletion of your account and personal data."
+  });
+});
+
 // -------------------------------
 // 🔹 ROUTE: Chat Stream Endpoint (SSE streaming) with daily search credits
 // -------------------------------
