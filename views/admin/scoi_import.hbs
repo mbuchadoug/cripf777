@@ -1,0 +1,642 @@
+{{!-- views/admin/scoi_import_redesigned.hbs - ADMIN SCOI IMPORT TOOL --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Import SCOI Reports | Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Work+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#6366F1;
+      --primary-dark:#4F46E5;
+      --success:#10B981;
+      --warning:#F59E0B;
+      --danger:#EF4444;
+      --navy:#0F172A;
+      --slate:#64748B;
+      --white:#FFFFFF;
+      --gray-50:#F8FAFC;
+      --gray-100:#F1F5F9;
+      --gray-200:#E2E8F0;
+      --gray-800:#1E293B;
+      
+      --font-mono:'JetBrains Mono',monospace;
+      --font-body:'Work Sans',system-ui,sans-serif;
+      --shadow:0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg:0 12px 32px rgba(0,0,0,0.12);
+    }
+
+    *{margin:0;padding:0;box-sizing:border-box}
+
+    body{
+      font-family:var(--font-body);
+      background:var(--gray-50);
+      color:var(--navy);
+      line-height:1.6;
+    }
+
+    /* HEADER */
+    .header{
+      background:white;
+      border-bottom:1px solid var(--gray-200);
+      padding:20px 0;
+      box-shadow:var(--shadow);
+    }
+
+    .header-container{
+      max-width:1400px;
+      margin:0 auto;
+      padding:0 32px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .brand{
+      font-weight:800;
+      font-size:20px;
+      color:var(--navy);
+    }
+
+    .nav-links{
+      display:flex;
+      gap:24px;
+      align-items:center;
+    }
+
+    .nav-link{
+      color:var(--slate);
+      text-decoration:none;
+      font-weight:600;
+      font-size:14px;
+    }
+
+    .nav-link:hover{color:var(--primary)}
+
+    /* CONTAINER */
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+      padding:60px 32px;
+    }
+
+    /* PAGE HEADER */
+    .page-header{
+      margin-bottom:48px;
+    }
+
+    .breadcrumb{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      color:var(--slate);
+      margin-bottom:16px;
+    }
+
+    .breadcrumb a{
+      color:var(--slate);
+      text-decoration:none;
+    }
+
+    .page-title{
+      font-size:42px;
+      font-weight:800;
+      color:var(--navy);
+      margin-bottom:12px;
+    }
+
+    .page-subtitle{
+      font-size:16px;
+      color:var(--slate);
+    }
+
+    /* ALERTS */
+    .alert{
+      padding:16px 20px;
+      border-radius:12px;
+      margin-bottom:32px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:15px;
+      font-weight:600;
+    }
+
+    .alert-success{
+      background:rgba(16,185,129,0.1);
+      border:1px solid rgba(16,185,129,0.3);
+      color:#047857;
+    }
+
+    .alert-error{
+      background:rgba(239,68,68,0.1);
+      border:1px solid rgba(239,68,68,0.3);
+      color:#DC2626;
+    }
+
+    .alert .icon{font-size:20px}
+
+    /* GRID */
+    .grid{
+      display:grid;
+      grid-template-columns:1.5fr 1fr;
+      gap:32px;
+      margin-bottom:40px;
+    }
+
+    /* CARD */
+    .card{
+      background:white;
+      border-radius:16px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    .card-header{
+      padding:24px 28px;
+      border-bottom:1px solid var(--gray-200);
+    }
+
+    .card-title{
+      font-size:20px;
+      font-weight:800;
+      color:var(--navy);
+      margin-bottom:6px;
+    }
+
+    .card-subtitle{
+      font-size:14px;
+      color:var(--slate);
+    }
+
+    .card-body{
+      padding:28px;
+    }
+
+    /* UPLOAD ZONE */
+    .upload-zone{
+      border:3px dashed var(--gray-200);
+      border-radius:12px;
+      padding:60px 40px;
+      text-align:center;
+      cursor:pointer;
+      transition:all 0.3s;
+      position:relative;
+    }
+
+    .upload-zone:hover{
+      border-color:var(--primary);
+      background:rgba(99,102,241,0.02);
+    }
+
+    .upload-zone.dragover{
+      border-color:var(--primary);
+      background:rgba(99,102,241,0.05);
+    }
+
+    .upload-icon{
+      font-size:56px;
+      margin-bottom:20px;
+    }
+
+    .upload-title{
+      font-size:18px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .upload-text{
+      font-size:14px;
+      color:var(--slate);
+      margin-bottom:20px;
+    }
+
+    .file-input{
+      display:none;
+    }
+
+    .btn{
+      padding:12px 24px;
+      border-radius:10px;
+      font-weight:700;
+      font-size:14px;
+      cursor:pointer;
+      transition:all 0.3s;
+      border:none;
+      display:inline-block;
+      text-decoration:none;
+    }
+
+    .btn-primary{
+      background:var(--primary);
+      color:white;
+      box-shadow:0 4px 12px rgba(99,102,241,0.3);
+    }
+
+    .btn-primary:hover{
+      background:var(--primary-dark);
+      transform:translateY(-2px);
+    }
+
+    .btn-outline{
+      background:transparent;
+      border:2px solid var(--gray-200);
+      color:var(--slate);
+    }
+
+    /* FILE PREVIEW */
+    .file-preview{
+      margin-top:24px;
+      padding:16px;
+      background:var(--gray-50);
+      border-radius:10px;
+      display:none;
+    }
+
+    .file-preview.active{
+      display:block;
+    }
+
+    .file-info{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .file-icon{
+      font-size:32px;
+    }
+
+    .file-details{
+      flex:1;
+    }
+
+    .file-name{
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:4px;
+    }
+
+    .file-size{
+      font-size:13px;
+      color:var(--slate);
+    }
+
+    .remove-file{
+      background:var(--danger);
+      color:white;
+      padding:8px 16px;
+      border-radius:8px;
+      font-size:13px;
+      font-weight:700;
+      cursor:pointer;
+      border:none;
+    }
+
+    /* FORM */
+    .form-group{
+      margin-bottom:24px;
+    }
+
+    .form-label{
+      display:block;
+      font-size:14px;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:8px;
+    }
+
+    .form-select{
+      width:100%;
+      padding:12px 16px;
+      border:2px solid var(--gray-200);
+      border-radius:10px;
+      font-size:15px;
+      font-family:var(--font-body);
+      color:var(--navy);
+      background:white;
+    }
+
+    .form-select:focus{
+      outline:none;
+      border-color:var(--primary);
+      box-shadow:0 0 0 4px rgba(99,102,241,0.1);
+    }
+
+    .submit-btn{
+      width:100%;
+      padding:16px;
+      background:var(--primary);
+      color:white;
+      border:none;
+      border-radius:12px;
+      font-weight:800;
+      font-size:16px;
+      cursor:pointer;
+      transition:all 0.3s;
+    }
+
+    .submit-btn:hover{
+      background:var(--primary-dark);
+      transform:translateY(-2px);
+    }
+
+    .submit-btn:disabled{
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+
+    /* GUIDE */
+    .guide-list{
+      list-style:none;
+      margin-top:20px;
+    }
+
+    .guide-list li{
+      padding:12px 0;
+      border-bottom:1px solid var(--gray-100);
+      font-size:14px;
+      color:var(--slate);
+    }
+
+    .guide-list li:last-child{
+      border-bottom:none;
+    }
+
+    .guide-list li::before{
+      content:'✓';
+      display:inline-block;
+      width:24px;
+      height:24px;
+      background:rgba(99,102,241,0.1);
+      color:var(--primary);
+      border-radius:50%;
+      text-align:center;
+      line-height:24px;
+      font-weight:800;
+      margin-right:10px;
+    }
+
+    /* CODE */
+    .code-block{
+      background:var(--navy);
+      color:#E0E7FF;
+      padding:20px;
+      border-radius:10px;
+      font-family:var(--font-mono);
+      font-size:13px;
+      line-height:1.7;
+      overflow-x:auto;
+      margin-top:16px;
+    }
+
+    /* RESPONSIVE */
+    @media(max-width:1000px){
+      .grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-container">
+    <div class="brand">🏛️ SCOI Admin</div>
+    <div class="nav-links">
+      <a href="/admin" class="nav-link">Dashboard</a>
+      <a href="/admin/scoi/import" class="nav-link">Import</a>
+      <a href="/admin/scoi/financials" class="nav-link">Financials</a>
+      <a href="/scoi" class="nav-link">Marketplace</a>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="container">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div class="breadcrumb">
+      <a href="/admin">Admin</a>
+      <span>→</span>
+      <span>Import SCOI Reports</span>
+    </div>
+
+    <h1 class="page-title">Import Intelligence Reports</h1>
+    <p class="page-subtitle">
+      Upload JSON files containing SCOI placement audits or special reports. Supports bulk import.
+    </p>
+  </div>
+
+  <!-- ALERTS -->
+  {{#if success}}
+    <div class="alert alert-success">
+      <span class="icon">✅</span>
+      <span>{{success}}</span>
+    </div>
+  {{/if}}
+
+  {{#if error}}
+    <div class="alert alert-error">
+      <span class="icon">⚠️</span>
+      <span>{{error}}</span>
+    </div>
+  {{/if}}
+
+  <!-- GRID -->
+  <div class="grid">
+    
+    <!-- UPLOAD CARD -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Upload JSON File</h2>
+        <p class="card-subtitle">Drag & drop or click to browse</p>
+      </div>
+
+      <div class="card-body">
+        <form method="POST" action="/admin/scoi/import" enctype="multipart/form-data" id="uploadForm">
+          
+          <!-- DRAG DROP ZONE -->
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📄</div>
+            <div class="upload-title">Drop JSON file here</div>
+            <p class="upload-text">or click to browse your computer</p>
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+              Choose File
+            </button>
+            <input 
+              type="file" 
+              id="fileInput" 
+              name="auditFile" 
+              accept=".json"
+              class="file-input"
+              required
+            />
+          </div>
+
+          <!-- FILE PREVIEW -->
+          <div class="file-preview" id="filePreview">
+            <div class="file-info">
+              <div class="file-icon">📊</div>
+              <div class="file-details">
+                <div class="file-name" id="fileName"></div>
+                <div class="file-size" id="fileSize"></div>
+              </div>
+              <button type="button" class="remove-file" onclick="removeFile()">
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <!-- AUDIT TYPE -->
+          <div class="form-group" style="margin-top:24px">
+            <label class="form-label">Report Type</label>
+            <select name="auditType" class="form-select" required>
+              <option value="">Select type...</option>
+              <option value="placement">Placement Audit ($149)</option>
+              <option value="special">Special Report ($299)</option>
+            </select>
+          </div>
+
+          <!-- SUBMIT -->
+          <button type="submit" class="submit-btn" id="submitBtn" disabled>
+            📤 Import Reports
+          </button>
+
+        </form>
+      </div>
+    </div>
+
+    <!-- GUIDE CARD -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Import Guide</h2>
+        <p class="card-subtitle">Requirements & best practices</p>
+      </div>
+
+      <div class="card-body">
+        <p style="margin-bottom:16px;color:var(--slate);font-size:14px">
+          Upload valid JSON files containing SCOI audit data. Supports single objects or arrays.
+        </p>
+
+        <ul class="guide-list">
+          <li>Valid JSON format required</li>
+          <li>Single report or array of reports</li>
+          <li>Duplicate detection enabled</li>
+          <li>Maximum file size: 5MB</li>
+          <li>Required fields validated</li>
+        </ul>
+
+        <h3 style="margin:28px 0 12px;font-size:16px;font-weight:700">
+          Example Structure
+        </h3>
+
+        <div class="code-block">
+{
+  "framework": "CRIPFCnt SCOI",
+  "subject": {
+    "name": "Organization Name",
+    "entityType": "organization"
+  },
+  "assessmentWindow": {
+    "label": "2024-12"
+  },
+  "author": "Donald Mataranyika",
+  "purpose": "Audit purpose...",
+  ...
+}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- SCRIPTS -->
+<script>
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  const filePreview = document.getElementById('filePreview');
+  const fileName = document.getElementById('fileName');
+  const fileSize = document.getElementById('fileSize');
+  const submitBtn = document.getElementById('submitBtn');
+
+  // File input change
+  fileInput.addEventListener('change', handleFileSelect);
+
+  // Drag & drop
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+  });
+
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+  });
+
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      fileInput.files = files;
+      handleFileSelect();
+    }
+  });
+
+  // Click to upload
+  uploadZone.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'BUTTON') {
+      fileInput.click();
+    }
+  });
+
+  function handleFileSelect() {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    // Validate JSON
+    if (!file.name.endsWith('.json')) {
+      alert('Please select a JSON file');
+      return;
+    }
+
+    // Show preview
+    fileName.textContent = file.name;
+    fileSize.textContent = formatFileSize(file.size);
+    filePreview.classList.add('active');
+    submitBtn.disabled = false;
+  }
+
+  function removeFile() {
+    fileInput.value = '';
+    filePreview.classList.remove('active');
+    submitBtn.disabled = true;
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  // Form submit loading state
+  document.getElementById('uploadForm').addEventListener('submit', function() {
+    submitBtn.textContent = '⏳ Importing...';
+    submitBtn.disabled = true;
+  });
+</script>
+
+</body>
+</html>
