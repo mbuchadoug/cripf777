@@ -28,7 +28,7 @@ import {
 } from "@handlebars/allow-prototype-access";
 import specialScoiImportRoutes from "./routes/admin_special_scoi_import.js";
 
-
+import metaWebhookRoutes from "./routes/meta_webhook.js";
 
 // routes & utils
 import lmsLoginRoutes from "./routes/lms_login.js";
@@ -331,6 +331,7 @@ app.use("/lms", lmsRoutes);
 app.use("/admin", lmsImportRoutes);
 app.use("/consumer", consumerRoutes);
 app.use("/consumer", consumerQuizRoutes);
+app.use("/meta", metaWebhookRoutes);
 
 
 app.use("/admin", adminExamRoutes);
