@@ -19,7 +19,7 @@ const upload = multer({
 
 // Import page
 router.get("/admin/scoi/import", ensureAuth, (req, res) => {
-  res.render("admin/scoi_import_redesigned", {
+  res.render("admin/scoi_import", {
     title: "Import SCOI Reports",
     user: req.user
   });
@@ -33,7 +33,7 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.render("admin/scoi_import_redesigned", {
+        return res.render("admin/scoi_import", {
           error: "No file uploaded",
           user: req.user
         });
@@ -77,14 +77,14 @@ router.post(
         imported++;
       }
 
-      return res.render("admin/scoi_import_redesigned", {
+      return res.render("admin/scoi_import", {
         success: `✅ Imported ${imported} reports. Skipped ${skipped} duplicates.`,
         user: req.user
       });
 
     } catch (err) {
       console.error("[SCOI import]", err);
-      return res.render("admin/scoi_import_redesigned", {
+      return res.render("admin/scoi_import", {
         error: err.message || "Import failed",
         user: req.user
       });

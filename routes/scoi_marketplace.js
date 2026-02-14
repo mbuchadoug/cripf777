@@ -34,7 +34,7 @@ router.get("/scoi", async (req, res) => {
     // Combine and sort
     const audits = [...normalizedSpecial, ...normalizedPlacement];
 
-    res.render("scoi/marketplace_redesigned", {
+    res.render("scoi/marketplace", {
       user: req.user || null,
       audits,
       pageTitle: "SCOI Intelligence Marketplace"
