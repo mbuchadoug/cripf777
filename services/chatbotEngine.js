@@ -8,6 +8,8 @@ import Product from "../models/product.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
 import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
+import { PACKAGES } from "./packages.js";
+
 import paynow from "./paynow.js";
 import { sendDocument } from "./metaSender.js";
 import {
@@ -1314,9 +1316,34 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   await saveBizSafe(biz);
 
   // Ask user for EcoCash number (EcoCash only notice included)
+   const pkg = PACKAGES[selected];
+
+  const MAP = {
+    invoice: "Invoices",
+    quote: "Quotations",
+    receipt: "Receipts",
+    clients: "Clients",
+    payments: "Payments",
+    reports_daily: "Daily reports",
+    reports_weekly: "Weekly reports",
+    reports_monthly: "Monthly reports",
+    branches: "Branches management",
+    users: "User management"
+  };
+
+  const featureLines = (pkg?.features || []).map(f => `• ${MAP[f] || f}`);
+
   return sendText(
     from,
 `✅ Selected: *${plan.name}* (${plan.price} ${plan.currency})
+
+📦 Package limits:
+• Users: ${pkg?.users}
+• Branches: ${pkg?.branches}
+• Docs per month: ${pkg?.monthlyDocs}
+
+✨ Features:
+${featureLines.join("\n")}
 
 💳 *Payment method: EcoCash only*
 
@@ -1325,6 +1352,7 @@ Example: 0772123456
 
 Or type *same* to use this WhatsApp number.`
   );
+
 }
 
 

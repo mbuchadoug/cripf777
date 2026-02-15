@@ -244,18 +244,19 @@ export async function sendInviteUserMenu(to) {
 
 export async function sendPackagesMenu(to, currentPackage) {
   // Friendly labels for features (keep short: WhatsApp list descriptions are limited)
-  const FEATURE_LABELS = {
-    invoice: "Invoices",
-    quote: "Quotations",
-    receipt: "Receipts",
-    clients: "Clients",
-    payments: "Payments",
-    reports_daily: "Daily reports",
-    reports_weekly: "Weekly reports",
-    reports_monthly: "Monthly reports",
-    branches: "Branches",
-    users: "Users"
-  };
+ const FEATURE_LABELS = {
+  invoice: "Inv",
+  quote: "Quote",
+  receipt: "Rcpt",
+  clients: "Clients",
+  payments: "Pay",
+  reports_daily: "Rpt(D)",
+  reports_weekly: "Rpt(W)",
+  reports_monthly: "Rpt(M)",
+  branches: "Branches",
+  users: "Users"
+};
+
 
   function money(plan) {
     if (!plan) return "";
@@ -270,16 +271,15 @@ export async function sendPackagesMenu(to, currentPackage) {
     const pkg = PACKAGES[pkgKey];
     if (!pkg) return "";
 
-    const base = `Users: ${pkg.users}, Branches: ${pkg.branches}, Docs/mo: ${pkg.monthlyDocs}`;
+  const base = `U:${pkg.users} B:${pkg.branches} D:${pkg.monthlyDocs}/mo`;
 
-    const feats = (pkg.features || [])
-      .map(f => FEATURE_LABELS[f] || f)
-      .slice(0, 4) // keep short for list description limit
-      .join(", ");
+const feats = (pkg.features || [])
+  .map(f => FEATURE_LABELS[f] || f)
+  .slice(0, 5) // show 5 short features
+  .join(", ");
 
-    // Example:
-    // "Users: 2, Branches: 1, Docs/mo: 50 | Invoices, Quotations, Receipts, Clients"
-    return feats ? `${base} | ${feats}` : base;
+return feats ? `${base} | ${feats}` : base;
+
   }
 
   // Use your plans if available (fallback to blank if not)
