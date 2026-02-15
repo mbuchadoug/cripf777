@@ -54,6 +54,9 @@ package: {
   documentCountMonthKey: { type: String },
 
   sessionData: { type: mongoose.Schema.Types.Mixed, default: {} },
+  subscriptionStartedAt: { type: Date },
+subscriptionEndsAt: { type: Date }, // ✅ NEXT DUE DATE
+
 
 }, { timestamps: true });
 

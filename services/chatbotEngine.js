@@ -9,7 +9,7 @@ import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
 import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
 import { PACKAGES } from "./packages.js";
-
+ import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
 import { sendDocument } from "./metaSender.js";
 import {
@@ -54,6 +54,20 @@ import { sendText } from "./metaSender.js";
 
 
 import axios from "axios";
+
+
+function msDays(ms) {
+  return ms / (1000 * 60 * 60 * 24);
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
 
 function normalizeEcocashNumber(input, fallbackWhatsApp) {
   const raw = (input || "").replace(/\D+/g, "");
@@ -849,10 +863,25 @@ if (biz && biz.sessionState === "subscription_enter_ecocash" && !isMetaAction) {
   );
 
   payment.currency = plan.currency;
-  payment.add(`${plan.name} Package`, plan.price);
+const chargeAmount = biz.sessionData?.amount || plan.price;
+payment.add(`${plan.name} Package`, chargeAmount);
+
 
   // ✅ Start EcoCash payment with the user's chosen number
   const response = await paynow.sendMobile(payment, ecocashPhone, "ecocash");
+
+  // ✅ Create subscription payment record
+await SubscriptionPayment.create({
+  businessId: biz._id,
+  packageKey: selected,
+  amount: chargeAmount,
+  currency: plan.currency,
+  reference,
+  pollUrl: response.pollUrl,
+  ecocashPhone,
+  status: "pending"
+});
+
 
   console.log("PAYNOW RESPONSE:", response);
 
@@ -886,16 +915,98 @@ if (biz && biz.sessionState === "subscription_enter_ecocash" && !isMetaAction) {
         clearInterval(pollInterval);
 
         const freshBiz = await Business.findById(biz._id);
+       
+
 
         if (
           freshBiz &&
           freshBiz.sessionState === "subscription_payment_pending" &&
           freshBiz.sessionData?.targetPackage
         ) {
-          freshBiz.package = freshBiz.sessionData.targetPackage;
-          freshBiz.subscriptionStatus = "active";
-          freshBiz.sessionState = "ready";
-          freshBiz.sessionData = {};
+        
+          const now = new Date();
+const target = freshBiz.sessionData?.targetPackage;
+const plan = target ? SUBSCRIPTION_PLANS[target] : null;
+
+if (!plan) return;
+
+// 🔁 Update due date properly
+const currentEnds = freshBiz.subscriptionEndsAt
+  ? new Date(freshBiz.subscriptionEndsAt)
+  : null;
+
+const hasActive = currentEnds && currentEnds.getTime() > now.getTime();
+
+if (!hasActive) {
+  // New cycle
+  freshBiz.subscriptionStartedAt = now;
+  freshBiz.subscriptionEndsAt = new Date(
+    now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
+  );
+}
+
+// Upgrade package immediately
+freshBiz.package = target;
+freshBiz.subscriptionStatus = "active";
+
+// 🔎 Find payment record
+const payRec = await SubscriptionPayment.findOne({
+  businessId: freshBiz._id,
+  reference
+}).sort({ createdAt: -1 });
+
+const receiptNumber = `SUB-${reference.slice(-8).toUpperCase()}`;
+
+const { filename } = await generatePDF({
+  type: "receipt",
+  number: receiptNumber,
+  date: now,
+  billingTo: `${freshBiz.name} (Subscription)`,
+  items: [{
+    item: `${plan.name} Package`,
+    qty: 1,
+    unit: payRec?.amount || plan.price,
+    total: payRec?.amount || plan.price
+  }],
+  bizMeta: {
+    name: "Zimqoute",
+    logoUrl: "",
+    address: "Zimqoute",
+    _id: freshBiz._id.toString(),
+    status: "paid"
+  }
+});
+
+const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+const receiptUrl = `${site}/docs/generated/receipts/${filename}`;
+
+// ✅ Mark payment paid
+if (payRec) {
+  payRec.status = "paid";
+  payRec.paidAt = now;
+  payRec.receiptFilename = filename;
+  payRec.receiptUrl = receiptUrl;
+  await payRec.save();
+}
+
+// Reset session
+freshBiz.sessionState = "ready";
+freshBiz.sessionData = {};
+await freshBiz.save();
+
+// Send receipt
+await sendDocument(from, { link: receiptUrl, filename });
+
+await sendText(
+  from,
+`✅ Payment successful!
+
+Package: *${freshBiz.package.toUpperCase()}*
+Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDateString() : "N/A"}*`
+);
+
+await sendMainMenu(from);
+
           await freshBiz.save();
 
           await sendText(
@@ -1309,10 +1420,56 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
 
   // Save intent first
   biz.sessionState = "subscription_enter_ecocash";
-  biz.sessionData = {
-    targetPackage: selected,
-    amount: plan.price
-  };
+ const now = new Date();
+
+// current plan price (0 if trial/unknown)
+const currentKey = biz.package || "trial";
+const currentPlan = SUBSCRIPTION_PLANS[currentKey];
+const currentPrice = currentPlan?.price || 0;
+
+const endsAt = biz.subscriptionEndsAt ? new Date(biz.subscriptionEndsAt) : null;
+const hasActiveCycle = endsAt && endsAt.getTime() > now.getTime();
+
+// base = full price
+let chargeAmount = plan.price;
+let note = "";
+
+// ✅ PRORATE ONLY WHEN:
+// - user has an active cycle (before due date)
+// - and upgrading to a more expensive plan
+if (hasActiveCycle && plan.price > currentPrice) {
+  const remainingDays = clamp(msDays(endsAt.getTime() - now.getTime()), 0, 30);
+  const diff = plan.price - currentPrice;
+  chargeAmount = round2(diff * (remainingDays / plan.durationDays));
+  // avoid 0 charges if very close to due date
+  if (chargeAmount < 0.01) chargeAmount = 0.01;
+
+  note =
+`🔁 Upgrade proration:
+• Current: ${currentKey.toUpperCase()}
+• New: ${selected.toUpperCase()}
+• Days remaining: ${Math.ceil(remainingDays)}
+• You pay only the difference for remaining days.`;
+} else if (hasActiveCycle && plan.price <= currentPrice) {
+  // optional: if downgrading mid-cycle, you can delay downgrade until next renewal
+  note =
+`ℹ️ Downgrades apply on next renewal date:
+• Your due date stays the same.
+• Plan changes on renewal.`;
+  // keep full price if they are trying to "switch" (or you can block it)
+}
+
+// Save intent first
+biz.sessionState = "subscription_enter_ecocash";
+biz.sessionData = {
+  targetPackage: selected,
+  amount: chargeAmount,
+  prorationNote: note || null,
+  previousPackage: currentKey,
+  cycleEndsAt: endsAt ? endsAt.toISOString() : null
+};
+await saveBizSafe(biz);
+
   await saveBizSafe(biz);
 
   // Ask user for EcoCash number (EcoCash only notice included)
@@ -1335,7 +1492,8 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
 
   return sendText(
     from,
-`✅ Selected: *${plan.name}* (${plan.price} ${plan.currency})
+`✅ Selected: *${plan.name}* (${biz.sessionData.amount} ${plan.currency})
+
 
 📦 Package limits:
 • Users: ${pkg?.users}
