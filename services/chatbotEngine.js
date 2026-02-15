@@ -42,11 +42,13 @@ import {
   sendPaymentsMenu,
   sendBusinessMenu,
   sendSettingsMenu,
-    sendReportsMenu,   // ✅ ADD THIS LINE
-     sendUsersMenu,      // ✅ ADD
-  sendBranchesMenu,    // ✅ ADD,
-  sendProductsMenu 
+  sendReportsMenu,
+  sendUsersMenu,
+  sendBranchesMenu,
+  sendProductsMenu,
+  sendSubscriptionMenu   // ✅ NEW
 } from "./metaMenus.js";
+
 
 // helpers you already use elsewhere
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
@@ -1656,6 +1658,32 @@ if (a === ACTIONS.DELETE_DOC) {
 }
 
 
+if (a.startsWith("subpay_")) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const id = a.replace("subpay_", "");
+  const rec = await SubscriptionPayment.findOne({
+    _id: id,
+    businessId: biz._id
+  }).lean();
+
+  if (!rec) return sendText(from, "Record not found.");
+
+  if (rec.receiptUrl) {
+    return sendDocument(from, {
+      link: rec.receiptUrl,
+      filename: rec.receiptFilename || "receipt.pdf"
+    });
+  }
+
+  return sendText(
+    from,
+    `Status: ${rec.status}\nAmount: ${rec.amount} ${rec.currency}\nRef: ${rec.reference}`
+  );
+}
+
+
   /* =========================
      MENUS
   ========================= */
@@ -2031,6 +2059,10 @@ case ACTIONS.PAYMENT_OUT: {
   return sendBusinessMenu(from);
 }
 
+case ACTIONS.SUBSCRIPTION_MENU:
+  return sendSubscriptionMenu(from);
+
+
 case ACTIONS.SETTINGS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
@@ -2176,7 +2208,36 @@ case ACTIONS.VIEW_PRODUCTS: {
 
   await sendText(from, msg);
   return sendMainMenu(from);
+
 }
+
+case ACTIONS.SUBSCRIPTION_PAYMENTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const rows = await SubscriptionPayment.find({
+    businessId: biz._id
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!rows.length) {
+    await sendText(from, "No subscription payments yet.");
+    return sendSubscriptionMenu(from);
+  }
+
+  return sendList(
+    from,
+    "🧾 Subscription payments",
+    rows.map(r => ({
+      id: `subpay_${r._id}`,
+      title: `${(r.packageKey || "").toUpperCase()} — ${r.amount} ${r.currency}`,
+      description: `${r.status}${r.paidAt ? ` • ${new Date(r.paidAt).toDateString()}` : ""}`
+    }))
+  );
+}
+
 
 /*default: {
   const biz = await getBizForPhone(from);

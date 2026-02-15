@@ -69,6 +69,7 @@ export async function sendMainMenu(to) {
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
     { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
+      { id: ACTIONS.SUBSCRIPTION_MENU, title: "💳 Subscription" }, // ✅ NEW
     { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package" } // owner-only check happens elsewhere
   ];
 
@@ -323,4 +324,14 @@ export async function sendProductsMenu(from) {
       { id: ACTIONS.BACK, title: "⬅ Back" }
     ]
   });
+}
+
+
+export async function sendSubscriptionMenu(to) {
+  return sendList(to, "💳 Subscription", [
+    { id: ACTIONS.BUSINESS_PROFILE, title: "📌 My plan & due date" },
+    { id: ACTIONS.SUBSCRIPTION_PAYMENTS, title: "🧾 Payment history" },
+    { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade package" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }

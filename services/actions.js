@@ -77,6 +77,10 @@ SETTINGS_BRANCHES: "settings_branches",
 UPGRADE_PACKAGE: "upgrade_package",
 CHOOSE_PACKAGE: "choose_package",
 
+SUBSCRIPTION_MENU: "subscription_menu",
+SUBSCRIPTION_PAYMENTS: "subscription_payments",
+
+
 INV_ITEM_CATALOGUE: "inv_item_catalogue",
 INV_ITEM_CUSTOM: "inv_item_custom",
 
