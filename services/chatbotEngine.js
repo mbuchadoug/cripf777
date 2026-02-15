@@ -824,8 +824,10 @@ const settingsStates = [
   "settings_terms",
   "settings_inv_prefix",
   "settings_qt_prefix",
-  "settings_rcpt_prefix"
+  "settings_rcpt_prefix",
+  "settings_address" // ✅ ADD THIS
 ];
+
 
 // ✅ SAFELY load business AFTER onboarding
  //biz = await getBizForPhone(from);
@@ -1059,7 +1061,8 @@ if (
   !isMetaAction &&
   biz &&
   biz.sessionState &&
-  !escapeWords.includes(al)
+  !escapeWords.includes(al) &&
+  !settingsStates.includes(biz.sessionState) // ✅ ADD THIS
 ) {
   const handled = await continueTwilioFlow({
     from,
@@ -1067,6 +1070,7 @@ if (
   });
   if (handled) return;
 }
+
 
 
 if (escapeWords.includes(al)) {
@@ -1390,6 +1394,25 @@ if (a === ACTIONS.SETTINGS_ADDRESS) {
     from,
     `Current address:\n${biz.address || "Not set"}\n\nReply with new address:`
   );
+}
+
+
+// ✅ SETTINGS: ADDRESS (TEXT INPUT HANDLER)
+if (biz?.sessionState === "settings_address" && !isMetaAction) {
+  const addr = (text || "").trim();
+
+  if (!addr || addr.length < 3) {
+    await sendText(from, "❌ Please enter a valid address:");
+    return;
+  }
+
+  biz.address = addr;
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "✅ Address updated successfully.");
+  return sendSettingsMenu(from);
 }
 
 
