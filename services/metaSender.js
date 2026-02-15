@@ -120,28 +120,36 @@ export async function sendButtons(to, payloadOrText, maybeButtons) {
 // services/metaSender.js
 
 export async function sendList(to, title, items) {
-  return axios.post(API, {
-    messaging_product: "whatsapp",
-    to,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      body: { text: title },
-      action: {
-        button: "Select",
-        sections: [
-          {
-            title: "Options",
-            rows: items.map(i => ({
-              id: i.id,
-              title: i.title
-            }))
-          }
-        ]
+  return axios.post(
+    API,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: title },
+        action: {
+          button: "Select",
+          sections: [
+            {
+              title: "Options",
+              rows: items.map(i => ({
+                id: i.id,
+                title: String(i.title || "").slice(0, 24), // WhatsApp title limit
+                ...(i.description
+                  ? { description: String(i.description).slice(0, 72) } // WhatsApp desc limit
+                  : {})
+              }))
+            }
+          ]
+        }
       }
-    }
-  }, { headers });
+    },
+    { headers }
+  );
 }
+
 
 export async function sendDocument(to, document) {
   return axios.post(API, {
