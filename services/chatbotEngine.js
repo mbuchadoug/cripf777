@@ -771,7 +771,19 @@ if (biz && biz.sessionState === "awaiting_business_name") {
   }
 
   biz.name = name;
-  biz.sessionState = "awaiting_currency";
+  //biz.sessionState = "awaiting_currency";
+  biz.sessionState = "awaiting_address";
+await saveBizSafe(biz);
+
+await sendButtons(from, {
+  text: "📍 Would you like to add your business address?\n(It will appear on invoices & receipts)",
+  buttons: [
+    { id: "onb_address_yes", title: "Add address" },
+    { id: "onb_address_skip", title: "Skip" }
+  ]
+});
+return;
+
   await saveBizSafe(biz);
 
   // Ask for currency (buttons)
@@ -1066,6 +1078,57 @@ if (escapeWords.includes(al)) {
 
 
 
+// =========================
+// 📍 ONBOARDING: ADDRESS OPTION
+// =========================
+if (biz && biz.sessionState === "awaiting_address") {
+
+  if (a === "onb_address_yes") {
+    biz.sessionState = "awaiting_address_input";
+    await saveBizSafe(biz);
+
+    return sendText(
+      from,
+      "Please enter your business address:"
+    );
+  }
+
+  if (a === "onb_address_skip") {
+    biz.address = "";
+    biz.sessionState = "awaiting_currency";
+    await saveBizSafe(biz);
+
+    return sendButtons(from, {
+      text: "💱 Select your business currency",
+      buttons: [
+        { id: "onb_currency_USD", title: "USD ($)" },
+        { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
+        { id: "onb_currency_ZAR", title: "ZAR (R)" }
+      ]
+    });
+  }
+}
+
+
+if (biz && biz.sessionState === "awaiting_address_input" && !isMetaAction) {
+
+  if (!text || text.length < 3) {
+    return sendText(from, "Please enter a valid address:");
+  }
+
+  biz.address = text;
+  biz.sessionState = "awaiting_currency";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: "💱 Select your business currency",
+    buttons: [
+      { id: "onb_currency_USD", title: "USD ($)" },
+      { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
+      { id: "onb_currency_ZAR", title: "ZAR (R)" }
+    ]
+  });
+}
 
 
 // =========================
@@ -1312,6 +1375,20 @@ if (a === ACTIONS.SETTINGS_TERMS) {
   return sendText(
     from,
     `Current payment terms: ${biz.paymentTermsDays || 0} days\n\nReply with number of days:`
+  );
+}
+
+
+if (a === ACTIONS.SETTINGS_ADDRESS) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "settings_address";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current address:\n${biz.address || "Not set"}\n\nReply with new address:`
   );
 }
 

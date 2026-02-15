@@ -52,7 +52,7 @@ package: {
   // 📊 USAGE
   documentCountMonth: { type: Number, default: 0 },
   documentCountMonthKey: { type: String },
-
+address: { type: String, default: "" },
   sessionData: { type: mongoose.Schema.Types.Mixed, default: {} },
   subscriptionStartedAt: { type: Date },
 subscriptionEndsAt: { type: Date }, // ✅ NEXT DUE DATE

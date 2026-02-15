@@ -63,12 +63,14 @@ function checkMonthlyLimit(biz) {
     biz.documentCountMonthKey = monthKey;
   }
 
-  if (biz.documentCountMonth >= pkg.documentsPerMonth) {
-    return {
-      allowed: false,
-      limit: pkg.documentsPerMonth
-    };
-  }
+ if (biz.documentCountMonth >= pkg.documentsPerMonth) {
+  return {
+    allowed: false,
+    limit: pkg.documentsPerMonth,
+    packageKey: biz.package || "bronze"
+  };
+}
+
 
   return { allowed: true };
 }
@@ -460,7 +462,9 @@ if (type === "statement") {
 </head>
 <body>
 
-  <h2>${escapeHtml(bizMeta.name || "")}</h2>
+<h2>${escapeHtml(bizMeta.name || "")}</h2>
+${bizMeta.address ? `<div style="font-size:12px; color:#666; margin-top:4px;">${escapeHtml(bizMeta.address)}</div>` : ""}
+
   <div style="margin-top:6px; font-weight:600;">
     Client: ${escapeHtml(billingTo || "—")}
   </div>
@@ -653,14 +657,30 @@ const rowsHtml =
       doc.pipe(stream);
 
       // header (logo or company name) - pdfkit uses local file if present
-      if (bizMeta.logoUrl && bizMeta.logoUrl.startsWith("http")) {
-        try {
-          const localLogo = path.join(process.cwd(), "public", "docs", "logos", `logo-${bizMeta._id || "biz"}.png`);
-          if (fs.existsSync(localLogo)) doc.image(localLogo, 50, 45, { width: 90 });
-        } catch (e) {}
-      } else if (bizMeta.name) {
-        doc.fontSize(18).text(bizMeta.name, 50, 50);
-      }
+  // header (logo or company name) - pdfkit uses local file if present
+try {
+  // Your saveLogoFromTwilio stores: /public/img/logo-<businessId>.png
+  const localLogo = path.join(process.cwd(), "public", "img", `logo-${bizMeta._id || "biz"}.png`);
+  if (fs.existsSync(localLogo)) {
+    doc.image(localLogo, 50, 45, { width: 90 });
+  } else if (bizMeta.name) {
+    doc.fontSize(18).text(bizMeta.name, 50, 50);
+
+    // address under name
+    if (bizMeta.address) {
+      doc.fontSize(10).fillColor("#555").text(bizMeta.address, 50, 70, { width: 300 });
+    }
+  }
+} catch (e) {
+  // fallback to name if logo fails
+  if (bizMeta.name) {
+    doc.fontSize(18).text(bizMeta.name, 50, 50);
+    if (bizMeta.address) {
+      doc.fontSize(10).fillColor("#555").text(bizMeta.address, 50, 70, { width: 300 });
+    }
+  }
+}
+
 
       doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });

@@ -162,6 +162,7 @@ export async function sendSettingsMenu(from) {
     { id: ACTIONS.SETTINGS_QT_PREFIX, title: "📄 Quote prefix", section: "settings" },
     { id: ACTIONS.SETTINGS_RCPT_PREFIX, title: "🧾 Receipt prefix", section: "settings" },
     { id: ACTIONS.SETTINGS_LOGO, title: "🖼️ Business logo", section: "settings" },
+    { id: ACTIONS.SETTINGS_ADDRESS, title: "📍 Business address", section: "settings" }, // ✅ NEW
     { id: ACTIONS.SETTINGS_CLIENTS, title: "👥 View clients", section: "settings" },
     { id: ACTIONS.SETTINGS_BRANCHES, title: "🏬 Branches", section: "branches" }
   ];

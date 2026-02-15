@@ -66,6 +66,7 @@ ASSIGN_BRANCH_USERS: "assign_branch_users",
 // SETTINGS
 SETTINGS_CURRENCY: "settings_currency",
 SETTINGS_TERMS: "settings_terms",
+SETTINGS_ADDRESS: "settings_address",
 SETTINGS_INV_PREFIX: "settings_inv_prefix",
 SETTINGS_QT_PREFIX: "settings_qt_prefix",
 SETTINGS_RCPT_PREFIX: "settings_rcpt_prefix",
