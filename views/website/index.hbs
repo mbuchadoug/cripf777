@@ -1,10 +1,6 @@
 <!DOCTYPE html>
-<html lang="en-zw">
-
-
+<html lang="en">
 <head>
-
-    <!-- Metas -->
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -54,1214 +50,906 @@
 }
 </script>
 
-    <!-- Title  -->
    
 
-    <!-- Favicon -->
-    <link rel="shortcut icon" href="/img/favicon2.png">
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css?family=Poppins:100,200,300,400,500,600,700,800,900&amp;display=swap"
-        rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Allerta+Stencil&amp;display=swap" rel="stylesheet">
-
-    <!-- Font -->
-    <link rel="stylesheet" href="/assets/css/satoshi.css">
-
-    <!-- Font -->
-
-    <!-- Plugins -->
-    <link rel="stylesheet" href="/assets/css/plugins.css">
-
-    <!-- Core Style Css -->
-    <link rel="stylesheet" href="/assets/css/style.css">
-
-    <!-- Google tag (gtag.js) -->
 
     <style>
-        /* General Styles */
-
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 30px;
-            margin-top: 40px;
+        :root {
+            --navy: #1E3A5F;
+            --navy-dark: #0F1C2E;
+            --gold: #C9A961;
+            --gold-light: #E5D4A6;
+            --white: #FFFFFF;
+            --light-gray: #F8F9FA;
+            --medium-gray: #E9ECEF;
+            --dark-gray: #495057;
+            --text-primary: #212529;
+            
+            --font-serif: 'Crimson Pro', serif;
+            --font-sans: 'Inter', sans-serif;
+            
+            --shadow-sm: 0 2px 8px rgba(30, 58, 95, 0.08);
+            --shadow-md: 0 4px 16px rgba(30, 58, 95, 0.12);
+            --shadow-lg: 0 8px 32px rgba(30, 58, 95, 0.16);
         }
-
-        .card {
-            display: flex;
-            gap: 20px;
-            padding: 25px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            background: #f9f9f9;
-            align-items: flex-start;
-            /* Align items to the top */
-        }
-
-        .values-list {
-            list-style-type: none;
-            padding-left: 0;
+        
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-
-        .values-list li {
-            margin-bottom: 8px;
-            padding-left: 25px;
-            position: relative;
+        
+        body {
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            line-height: 1.7;
+            background: var(--white);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-
-        .values-list li:before {
-            content: "•";
-            position: absolute;
-            left: 0;
+        
+        /* Navigation */
+        .navbar {
+            background: var(--white);
+            border-bottom: 1px solid var(--medium-gray);
+            padding: 1.5rem 5%;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow-sm);
         }
-
-        .card h2 {
-            margin-top: 0;
-            line-height: 1.2;
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
             display: flex;
             align-items: center;
-            gap: 20px;
-            /* Space between the icon and text */
+            gap: 1rem;
+            text-decoration: none;
         }
-
-        .icon {
-            width: 60px;
-            height: 60px;
-            flex-shrink: 0;
+        
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--navy);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-serif);
+            font-weight: 700;
+            font-size: 1.4rem;
+            color: var(--gold);
+            border: 2px solid var(--gold);
         }
-
-        .leftaz {
-            margin-left: 80px !important;
-        }
-
-        /* Mobile Responsive Styles */
-        @media (max-width: 768px) {
-            .grid-container {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-
-            .card {
-                flex-direction: column;
-                /* Stacks h2 (with icon) on top and p below */
-                gap: 15px;
-                padding: 20px;
-            }
-
-            .icon {
-                width: 40px;
-                height: 40px;
-                margin-top: 0.2em;
-            }
-
-            .card h2 {
-                min-height: 40px;
-            }
-
-            .card p {
-                font-size: 0.9rem;
-            }
-
-            .leftaz {
-                margin-left: 55px !important;
-            }
-        }
-
-
-        /* Optional: Adjust values list for mobile */
-        @media (max-width: 480px) {
-            .values-list li {
-                font-size: 0.9rem;
-            }
-        }
-
-        .counters-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 2rem;
-            margin: 0 auto;
-        }
-
-        .counter-card {
-            text-align: center;
-            padding: 1.5rem;
-            background-color: #f8f9fa;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
-        }
-
-        .counter-icon {
-            font-size: 2.5rem;
-            color: #2c3e50;
-            margin-bottom: 1rem;
-        }
-
-        .counter-number {
+        
+        .logo-text {
+            font-family: var(--font-serif);
             font-size: 1.8rem;
             font-weight: 700;
-            color: rgb(20, 207, 147) !important;
-            margin: 0.5rem 0;
-            font-family: 'Arial', sans-serif;
+            color: var(--navy);
+            letter-spacing: -0.5px;
         }
-
-        .counter-text {
-            font-size: 1.1rem;
-            color: #34495e;
-            line-height: 1.4;
-            font-family: 'Arial', sans-serif;
+        
+        .nav-links {
+            display: flex;
+            gap: 3rem;
+            list-style: none;
+            align-items: center;
         }
-
-        @media (max-width: 768px) {
-            .counters-container {
-                grid-template-columns: 1fr;
-                padding: 1rem;
-            }
-
-            .counter-card {
-                margin-bottom: 1rem;
-            }
-
-            .counter-number {
-                font-size: 1.5rem;
-            }
-
-            .counter-text {
-                font-size: 1rem;
-            }
+        
+        .nav-links a {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: color 0.3s;
+            letter-spacing: 0.3px;
         }
-
-        .counters-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 2rem;
+        
+        .nav-links a:hover {
+            color: var(--navy);
+        }
+        
+        .nav-cta {
+            background: var(--navy);
+            color: var(--white);
+            padding: 0.75rem 1.75rem;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .nav-cta:hover {
+            background: var(--navy-dark);
+            color: var(--white);
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%);
+            padding: 8rem 5% 6rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.05));
+        }
+        
+        .hero-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero-badge {
+            display: inline-block;
+            background: rgba(201, 169, 97, 0.15);
+            color: var(--gold-light);
+            padding: 0.5rem 1.25rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(201, 169, 97, 0.3);
+        }
+        
+        .hero h1 {
+            font-family: var(--font-serif);
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            font-weight: 700;
+            color: var(--white);
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            max-width: 900px;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.35rem;
+            color: rgba(255, 255, 255, 0.85);
+            max-width: 700px;
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+        
+        .hero-stats {
+            display: flex;
+            gap: 4rem;
+            flex-wrap: wrap;
+            margin-top: 4rem;
+        }
+        
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-number {
+            font-family: var(--font-serif);
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* Trust Bar */
+        .trust-bar {
+            background: var(--light-gray);
+            padding: 3rem 5%;
+            border-bottom: 1px solid var(--medium-gray);
+        }
+        
+        .trust-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        .trust-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--dark-gray);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 2rem;
+        }
+        
+        .trust-logos {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 3rem;
+            flex-wrap: wrap;
+        }
+        
+        .trust-logo {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--dark-gray);
+            padding: 1rem 2rem;
+            background: var(--white);
+            border: 1px solid var(--medium-gray);
+            border-radius: 4px;
+        }
+        
+        /* Framework Section */
+        .framework-section {
+            padding: 7rem 5%;
+            background: var(--white);
+        }
+        
+        .section-container {
+            max-width: 1400px;
             margin: 0 auto;
         }
-
-        .counter-card {
+        
+        .section-header {
             text-align: center;
-            padding: 1.5rem;
-            background-color: #f8f9fa;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
+            margin-bottom: 5rem;
         }
-
-        .counter-icon {
-            font-size: 2.5rem;
-            color: #2c3e50;
+        
+        .section-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--navy);
+            text-transform: uppercase;
+            letter-spacing: 2px;
             margin-bottom: 1rem;
         }
-
-        .numb-count {
-            margin: 0.5rem 0;
-            font-family: 'Arial', sans-serif;
+        
+        .section-title {
+            font-family: var(--font-serif);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            color: var(--navy-dark);
+            margin-bottom: 1.5rem;
+            line-height: 1.3;
         }
-
-        .sub-title {
-            line-height: 1.4;
-            font-family: 'Arial', sans-serif;
+        
+        .section-description {
+            font-size: 1.15rem;
+            color: var(--dark-gray);
+            max-width: 750px;
+            margin: 0 auto;
+            line-height: 1.7;
         }
-
-        @media (max-width: 768px) {
-            .counters-container {
+        
+        /* Pillars Grid */
+        .pillars-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+        }
+        
+        .pillar-card {
+            background: var(--white);
+            border: 1px solid var(--medium-gray);
+            padding: 2.5rem 2rem;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .pillar-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 0;
+            background: var(--gold);
+            transition: height 0.3s;
+        }
+        
+        .pillar-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-4px);
+        }
+        
+        .pillar-card:hover::before {
+            height: 100%;
+        }
+        
+        .pillar-number {
+            font-family: var(--font-serif);
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--gold);
+            opacity: 0.3;
+            margin-bottom: 1rem;
+        }
+        
+        .pillar-name {
+            font-family: var(--font-serif);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.75rem;
+        }
+        
+        .pillar-description {
+            font-size: 0.95rem;
+            color: var(--dark-gray);
+            line-height: 1.6;
+        }
+        
+        /* Value Proposition */
+        .value-section {
+            background: var(--light-gray);
+            padding: 7rem 5%;
+        }
+        
+        .value-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3rem;
+            margin-top: 4rem;
+        }
+        
+        .value-card {
+            background: var(--white);
+            padding: 3rem 2.5rem;
+            border-left: 3px solid var(--gold);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .value-icon {
+            width: 60px;
+            height: 60px;
+            background: var(--navy);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .value-title {
+            font-family: var(--font-serif);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 1rem;
+        }
+        
+        .value-text {
+            color: var(--dark-gray);
+            line-height: 1.7;
+        }
+        
+        /* Applications Section */
+        .applications-section {
+            padding: 7rem 5%;
+            background: var(--white);
+        }
+        
+        .applications-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 4rem;
+        }
+        
+        .application-card {
+            background: var(--light-gray);
+            padding: 3rem;
+            border: 1px solid var(--medium-gray);
+            transition: all 0.3s;
+        }
+        
+        .application-card:hover {
+            background: var(--white);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .application-header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .application-icon {
+            font-size: 2rem;
+        }
+        
+        .application-title {
+            font-family: var(--font-serif);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--navy);
+        }
+        
+        .application-text {
+            color: var(--dark-gray);
+            line-height: 1.7;
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            background: var(--navy);
+            padding: 6rem 5%;
+            text-align: center;
+        }
+        
+        .cta-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .cta-section h2 {
+            font-family: var(--font-serif);
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 1.5rem;
+        }
+        
+        .cta-section p {
+            font-size: 1.15rem;
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 3rem;
+            line-height: 1.7;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 1rem 2.5rem;
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+            letter-spacing: 0.3px;
+        }
+        
+        .btn-primary {
+            background: var(--gold);
+            color: var(--navy-dark);
+            border: 2px solid var(--gold);
+        }
+        
+        .btn-primary:hover {
+            background: var(--gold-light);
+            border-color: var(--gold-light);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: var(--white);
+            border: 2px solid var(--white);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--white);
+            color: var(--navy);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--navy-dark);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 5rem 5% 3rem;
+        }
+        
+        .footer-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 4rem;
+            margin-bottom: 4rem;
+        }
+        
+        .footer-brand {
+            font-family: var(--font-serif);
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin-bottom: 1.5rem;
+        }
+        
+        .footer-description {
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.7;
+            margin-bottom: 2rem;
+        }
+        
+        .footer-title {
+            font-family: var(--font-serif);
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 1.5rem;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.75rem;
+        }
+        
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.3s;
+        }
+        
+        .footer-links a:hover {
+            color: var(--gold);
+        }
+        
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 2rem;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .pillars-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .value-grid {
                 grid-template-columns: 1fr;
-                padding: 1rem;
             }
-
-            .counter-card {
-                margin-bottom: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
             }
-
-            .numb-count {
-                font-size: 1.5rem;
+            
+            .pillars-grid {
+                grid-template-columns: 1fr;
             }
-
-            .sub-title {
-                font-size: 1rem;
+            
+            .applications-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .hero-stats {
+                gap: 2rem;
             }
         }
     </style>
 </head>
-
 <body>
-
-
-
-    <!-- ==================== Start Loading ==================== -->
-
-    <div class="loader-wrap">
-        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
-            <path id="svg" d="M0,1005S175,995,500,995s500,5,500,5V0H0Z"></path>
-        </svg>
-
-        <div class="loader-wrap-heading">
-            <div class="load-text">
-                <span>L</span>
-                <span>o</span>
-                <span>a</span>
-                <span>d</span>
-                <span>i</span>
-                <span>n</span>
-                <span>g</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- ==================== End Loading ==================== -->
-
-
-    <div class="cursor"></div>
-
-
-    <!-- ==================== Start progress-scroll-button ==================== -->
-
-    <div class="progress-wrap cursor-pointer">
-        <svg class="progress-circle svg-content" width="100%" height="100%" viewBox="-1 -1 102 102">
-            <path d="M50,1 a49,49 0 0,1 0,98 a49,49 0 0,1 0,-98" />
-        </svg>
-    </div>
-
-    <!-- ==================== End progress-scroll-button ==================== -->
-
-
-
-    <!-- ==================== Start Navbar ==================== -->
-
-    <nav class="navbar navbar-expand-lg change blur">
-        <div class="container">
-
-            <!-- Logo -->
-            <a class="logo icon-img-140" href="#">
-                <img src="/img/short-white.webp" alt="logo">
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">C</div>
+                <span class="logo-text">CRIPFCnt</span>
             </a>
-
-            <!-- navbar links -->
-            <div class="collapse navbar-collapse justify-content-center" id="navbarSupportedContent">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/"><span class="rolling-text">Home</span></a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/about"><span class="rolling-text">About</span></a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/services"><span class="rolling-text">Services</span></a>
-                    </li>
-
-                   
-                    <li class="nav-item">
-                        <a class="nav-link" href="/scoi"><span class="rolling-text">SCOI</span></a>
-                    </li>
-
-                             <li class="nav-item">
-                        <a class="nav-link" href="/lms"><span class="rolling-text">LMS</span></a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/contact"><span class="rolling-text">Contact
-                                Us</span></a>
-                    </li>
-
-  <li class="nav-item">
-                        <a class="nav-link" href="/auth/school"><span class="rolling-text">Student Portal
-                                </span></a>
-                    </li>
-
-
-                </ul>
-            </div>
-
-            <div class="topnav">
-                <div class="menu-icon cursor-pointer">
-                    <span class="icon ti-align-right"></span>
-                </div>
-            </div>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">Framework</a></li>
+                <li><a href="/scoi">Framework</a></li>
+                <li><a href="/lms">Applications</a></li>
+                <li><a href="/auth/school">Student Portal</a></li>
+                <li><a href="mailto:info@cripfcnt.com" class="nav-cta">Get Started</a></li>
+            </ul>
         </div>
     </nav>
 
-    <div class="hamenu">
-        <div class="logo icon-img-140">
-            <img src="/img/short.webp" alt="">
-        </div>
-        <div class="close-menu cursor-pointer ti-close"></div>
-        <div class="container">
-            <div class="row">
-                <div class="col-lg-2">
-                    <div class="menu-text">
-                        <div class="text">
-                            <h2>Menu</h2>
-                        </div>
-                    </div>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-badge">Intelligence Structuring Framework</div>
+            <h1>Restructuring Human Intelligence & Governance for the AI Age</h1>
+            <p class="hero-subtitle">
+                A comprehensive framework trusted by governments, international organizations, and global institutions for leadership development, governance reform, and intelligence transformation.
+            </p>
+            
+            <div class="hero-stats">
+                <div class="stat-item">
+                    <div class="stat-number">8</div>
+                    <div class="stat-label">Core Pillars</div>
                 </div>
-                <div class="col-lg-7">
-                    <div class="menu-links">
-                        <ul class="main-menu rest">
-                            <li>
-                                <div class="o-hidden">
-                                    <a href="/" class="link"><span class="fill-text"
-                                            data-text="Home">Home</span></a>
-                                </div>
-                            </li>
-                            <li>
-                                <div class="o-hidden">
-                                    <a href="/about" class="link"><span class="fill-text"
-                                            data-text="About">About</span></a>
-                                </div>
-                            </li>
-                            <li>
-                                <div class="o-hidden">
-                                    <a href="/services" class="link"><span class="fill-text"
-                                            data-text="Services">Services</span></a>
-                                </div>
-                            </li>
-                            <li>
-                                <div class="o-hidden">
-                                    <a href="/scoi" class="link"><span class="fill-text"
-                                            data-text="SCOI">SCOI</span></a>
-                                </div>
-                            </li>
-
-                  
-
-                              <li>
-                                <div class="o-hidden">
-                                    <a href="/lms" class="link"><span class="fill-text"
-                                            data-text="LMS">LMS</span></a>
-                                </div>
-                            </li>
-
-                               <li>
-                                <div class="o-hidden">
-                                    <a href="/auth/school" class="link"><span class="fill-text"
-                                            data-text="Student Portal"> Student Portal</span></a>
-                                </div>
-                            </li>
-                            <li>
-                                <div class="o-hidden">
-                                    <a href="/contact" class="link"><span class="fill-text"
-                                            data-text="Contact">Contact</span></a>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+                <div class="stat-item">
+                    <div class="stat-number">2025</div>
+                    <div class="stat-label">Framework Launch</div>
                 </div>
-                <div class="col-lg-3">
-                    <div class="cont-info">
-                        <div class="item mb-50">
-                            <h6 class="sub-title mb-15 opacity-7">Address</h6>
-                            <h5>5 Walford Avenue, Wolverhampton, WV37AZ, United Kingdom</h5>
-                        </div>
-                        <div class="item mb-50">
-                            <h6 class="sub-title mb-15 opacity-7">Social Media</h6>
-                            <ul class="rest social-text">
-                                <li class="mb-10">
-                                    <a href="#0" class="hover-this"><span class="hover-anim">Facebook</span></a>
-                                </li>
-                                <li class="mb-10">
-                                    <a href="https://wa.me/263 772 263 634" target="_blank" class="hover-this"><span
-                                            class="hover-anim">WhatsApp</span></a>
-                                </li>
-                                <li class="mb-10">
-                                    <a href="#0" class="hover-this"><span class="hover-anim">LinkedIn</span></a>
-                                </li>
-                                <li>
-                                    <a href="#0" class="hover-this"><span class="hover-anim">Instagram</span></a>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="item mb-40">
-                            <h6 class="sub-title mb-15 opacity-7">Contact Us</h6>
-                            <h5><a href="mailto:info@cripfcnt.com">info@cripfcnt.com</a></h5>
-                            <h5 class="underline mt-10"><a href="tel:+447940298087">+447940298087</a></h5>
-                        </div>
-                    </div>
+                <div class="stat-item">
+                    <div class="stat-number">Global</div>
+                    <div class="stat-label">Reach & Impact</div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- ==================== End Navbar ==================== -->
-
-    <div id="smooth-wrapper">
-
-
-        <div id="smooth-content">
-
-            <main class="main-bg o-hidden">
-
-
-
-                <!-- ==================== Start Slider ==================== -->
-
-                <header class="header-main full-height valign bg-img parallaxie" data-background="img/road.jpg"
-                    data-overlay-dark="7">
-                    <div class="container ontop">
-                        <div class="row">
-                            <div class="col-lg-8">
-                                <div class="caption">
-                                    <h5 class="fw-300 mb-15">CRIPFCnt</h5>
-                                    <h2 class="fz-80">uniting consciousness and responsibility,</h2>
-                                </div>
-                            </div>
-                            <div class="col-lg-4 d-flex align-items-end justify-content-end justify-end">
-                                <div class="d-flex align-items-center">
-                                    <div>
-                                        <a href="/audit" class="hover-this">
-                                            <div class="circle-button hover-anim">
-                                                <div class="rotate-circle fz-30 text-u">
-                                                    <svg class="textcircle" viewBox="0 0 500 500">
-                                                        <defs>
-                                                            <path id="textcircle"
-                                                                d="M250,400 a150,150 0 0,1 0,-300a150,150 0 0,1 0,300Z">
-                                                            </path>
-                                                        </defs>
-                                                        <text>
-                                                            <textPath xlink:href="#textcircle" textLength="900">Explore
-                                                                More
-                                                                -
-                                                                Explore More -</textPath>
-                                                        </text>
-                                                    </svg>
-                                                </div>
-                                                <div class="arrow">
-                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
-                                                        xmlns="http://www.w3.org/2000/svg">
-                                                        <path
-                                                            d="M13.922 4.5V11.8125C13.922 11.9244 13.8776 12.0317 13.7985 12.1108C13.7193 12.1899 13.612 12.2344 13.5002 12.2344C13.3883 12.2344 13.281 12.1899 13.2018 12.1108C13.1227 12.0317 13.0783 11.9244 13.0783 11.8125V5.51953L4.79547 13.7953C4.71715 13.8736 4.61092 13.9176 4.50015 13.9176C4.38939 13.9176 4.28316 13.8736 4.20484 13.7953C4.12652 13.717 4.08252 13.6108 4.08252 13.5C4.08252 13.3892 4.12652 13.283 4.20484 13.2047L12.4806 4.92188H6.18765C6.07577 4.92188 5.96846 4.87743 5.88934 4.79831C5.81023 4.71919 5.76578 4.61189 5.76578 4.5C5.76578 4.38811 5.81023 4.28081 5.88934 4.20169C5.96846 4.12257 6.07577 4.07813 6.18765 4.07812H13.5002C13.612 4.07813 13.7193 4.12257 13.7985 4.20169C13.8776 4.28081 13.922 4.38811 13.922 4.5Z"
-                                                            fill="currentColor"></path>
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </div>
-                                    <div>
-                                        <h6 class="sub-title">Explore <br> Our Portfolio</h6>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                <!-- ==================== End Slider ==================== -->
-                <section class="intro fix-topa pb-0 position-re">
-                    <div class="container">
-                        <div class="row justify-content-between">
-
-
-                            <div class="sec-head mb-20">
-                                <h6 class="sub-title mb-15 main-color">About Us</h6>
-                                <h2 class="d-slideup wow">
-                                    <span class="sideup-text">
-                                        <span class="up-text">Welcome to CRIPFCnt</span>
-                                    </span>
-                                </h2>
-                            </div>
-
-                            <p class="intro">A movement dedicated to recalibrating civilization. We transform knowledge, systems, and human behavior-empowering individuals, leaders, and organizations to operate in perfect structural alignment.</p>
-
-                            <div class="grid-container">
-                                <!-- First Row -->
-                                <div class="card">
-                                    <h2 class="d-slideup wow">
-                                        <img src="/img/who.png" alt="Boardroom icon" class="icon" />
-                                        <span class="sideup-text">
-                                            <span class="up-text">Who We Are</span>
-                                        </span>
-                                    </h2>
-                                    <p>We are a team of expert consultants dedicated to empowering sustainable
-                                        development with expert solutions.</p>
-                                </div>
-
-
-                                <div class="card">
-                                    <h2 class="d-slideup wow">
-                                        <img src="/img/mission.png" alt="Boardroom icon" class="icon" />
-                                        <span class="sideup-text">
-                                            <span class="up-text">Our Mission</span>
-                                        </span>
-                                    </h2>
-                                    <p>To recalibrate civilization by transforming knowledge, systems, and human behavior from performance orientation to placement alignment, empowering people, leaders, and organizations to function at their structural best.</p>
-                                </div>
-
-                                <!-- Second Row -->
-                                <div class="card">
-                                    <h2 class="d-slideup wow">
-                                        <img src="/img/vision.png" alt="Boardroom icon" class="icon" />
-                                        <span class="sideup-text">
-                                            <span class="up-text">Our Vision</span>
-                                        </span>
-                                    </h2>
-                                    <p>To build a world where knowledge, systems, and human behavior operate in harmony - enabling every individual and organization to function at their highest structural potential.</p>
-                                </div>
-
-                                <div class="card">
-                                    <h2 class="d-slideup wow">
-                                        <img src="/img/values.png" alt="Boardroom icon" class="icon" />
-                                        <span class="sideup-text">
-                                            <span class="up-text">Our Values</span>
-                                        </span>
-                                    </h2>
-                                    <ul class="values-list leftaz">
-                                        <li>Consciousness</li>
-                                        <li>Responsibility</li>
-                                        <li>Interpretation</li>
-                                        <li>Purpose</li>
-                                        <li>Frequencies</li>
-                                         <li>Civilization</li>
-                                          <li>Negotiation</li>
-                                           <li>Technology</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-                <section class="intro section-padding pb-0 position-re">
-                    <div class="container">
-                        <div class="counters-container">
-                            <div class="counter-card">
-                                <i class="counter-icon fas fa-clock"></i>
-                                <h2 class="fz-60 line-height-1"><span class="numb-count count-animate"
-                                        data-count="10">0</span>+</h2>
-                                <span class="sub-title opacity-7 ml-30">of Experience</span>
-                            </div>
-
-                            <div class="counter-card">
-                                <i class="counter-icon fas fa-lightbulb"></i>
-                                <div class="item align-items-center sm-mb30">
-                                    <h2 class="fz-60 line-height-1"><span class="numb-count count-animate"
-                                            data-count="30">0</span>+</h2>
-                                    <span class="sub-title opacity-7 ml-30">Projects Completed</span>
-                                </div>
-                            </div>
-
-                            <div class="counter-card">
-                                <i class="counter-icon fas fa-users"></i>
-                                <h2 class="fz-60 line-height-1"><span class="numb-count count-animate"
-                                        data-count="100000">0</span>+</h2>
-                                <span class="sub-title opacity-7 ml-30">People Impacted</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ==================== Start intro ==================== -->
-
-                <!--<section class="intro section-padding pb-0 position-re">
-                    <div class="container">
-                        <div class="row justify-content-between">
-                            <div class="col-lg-6">
-                                <div class="cont">
-                                    <h4 class="d-slideup wow">
-                                        <span class="sideup-text">
-                                            <span class="up-text">Empowering Sustainable Development
-                                            </span>
-                                        </span>
-                                        <span class="sideup-text">
-                                            <span class="up-text"> <span class="underline"><a href="#"
-                                                        class="main-color">Through Strategic Solutions</a></span></span>
-                                        </span>
-                                    </h4>
-                                    <div class="exp mt-80 md-mb15">
-                                        <h2 class="fz-70 numb-font">10 <span
-                                                class="sub-title main-font opacity-7 ml-15">Years
-                                                of Experience</span></h2>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-5">
-                                <div class="text">
-                                    <p>Our team of experts are trusted nationwide to maximise the potential of
-                                        residential and mixed-use developments across all markets. We want your projects
-                                        to have maximum impact and your team to be engaged, empowered, and inspired.</p>
-                                </div>
-                                <div class="main-marq o-hidden mt-30 mb-30">
-                                    <div class="slide-har st1">
-                                        <div class="box">
-                                            <div class="item">
-                                                <h4 class="d-flex align-items-center"><span>Strategic & Development
-                                                        Planning</span>
-                                                    <span class="fz-50 ml-50 stroke icon">*</span>
-                                                </h4>
-                                            </div>
-                                            <div class="item">
-                                                <h4 class="d-flex align-items-center"><span>Strategic & Development
-                                                        Planning</span>
-                                                    <span class="fz-50 ml-50 stroke icon">*</span>
-                                                </h4>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="line-overlay">
-                        <svg viewBox="0 0 1728 1101" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path
-                                d="M-43 773.821C160.86 662.526 451.312 637.01 610.111 733.104C768.91 829.197 932.595 1062.9 602.782 1098.75C272.969 1134.6 676.888 25.4306 1852 1"
-                                style="stroke-dasharray: 3246.53, 0;"></path>
-                        </svg>
-                    </div>
-                </section>-->
-
-                <!-- ==================== End intro ==================== -->
-
-
-
-
-                <!-- ==================== Start Services ==================== -->
-
-                <!--<section class="skills-img-crev pb-50 section-padding">
-                    <div class="container">
-                        <div class="row justify-content-between">
-                            <div class="col-lg-4 offset-lg-1 valign">
-                                <div class="img md-mb80">
-                                    <img src="img/flag.jpg" alt="" class="radius-30">
-                                </div>
-                            </div>
-                            <div class="col-lg-6 valign">
-                                <div class="content full-width">
-                                    <div class="sec-head mb-50">
-                                        <h6 class="sub-title mb-15 main-color">About Us</h6>
-                                        <h2 class="d-slideup wow">
-                                            <span class="sideup-text">
-                                                <span class="up-text">Why Choose Us</span>
-                                            </span>
-                                        </h2>
-                                    </div>
-                                    <div class="row justify-content-end">
-                                        <div class="col-lg-11">
-                                            <div class="text">
-                                                <p>The Perch Inc Development Consultancy Services (“The Perch
-                                                    Consultancy Services”) is a fully registered Zimbabwean development
-                                                    consultancy which has also established branches in Rwanda and
-                                                    Uganda.<br><br>
-
-                                                    The main aim of the consultancy is to provide top of the range and
-                                                    quality consulting services on regional, rural and urban
-                                                    development, strategic planning, organisational management and
-                                                    institutional development, baselines and evaluations, policy
-                                                    formulation and review, workshop facilitation and moderation,
-                                                    training and capacity building.</p>
-                                            </div>
-                                            <div class="row mt-50 pt-50 bord-thin-top">
-                                                <div class="col-sm-6">
-                                                    <div class="item d-flex align-items-center sm-mb30">
-                                                        <h2 class="fz-60 line-height-1"><span
-                                                                class="numb-count">23</span></h2>
-                                                        <span class="sub-title opacity-7 ml-30">Projects <br>
-                                                            Completed</span>
-                                                    </div>
-                                                </div>
-                                                <div class="col-sm-6">
-                                                    <div class="item d-flex align-items-center">
-                                                        <h2 class="fz-60 line-height-1"><span
-                                                                class="numb-count">100</span>k<span
-                                                                class="fz-30">+</span>
-                                                        </h2>
-                                                        <span class="sub-title opacity-7 ml-30">Lives <br>
-                                                            Touched</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>-->
-                <!--<section class="services section-padding pb-30">
-                    <div class="container">
-                        <div class="sec-head mb-80">
-                            <h6 class="sub-title main-color mb-25">What We Offer</h6>
-                            <div class="bord pt-25 bord-thin-top d-flex align-items-center">
-                                <h2 class="fw-200 text-u ls1">Our <span class="fw-600">Services</span></h2>
-                                <div class="ml-auto">
-                                    <a href="services.html" class="go-more">
-                                        <span class="text">View all services</span>
-                                        <span class="icon ti-arrow-top-right"></span>
-                                    </a>
-                                </div>
-                            </div>
-                            <p class="intro mt-20">At The Perch Inc. Development Consultancy Services, we deliver exceptional consulting services to drive transformative growth in regional, rural, and urban areas. We are committed to providing tailored solutions that address unique challenges, foster sustainable development, and improve livelihoods.</p>
-                        </div>
-                
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="item-box2 mb-30">
-                                    <div class="icon mb-40">
-                                        <img src="assets/imgs/serv-icons/1.png" alt="">
-                                    </div>
-                                    <h5 class="mb-15">Regional, Rural & Urban Development</h5>
-                                    <p>We support communities with sustainable solutions for economic growth, infrastructure planning, and social development to create thriving environments.</p>
-                                    <a href="services.html" class="rmore">
-                                        <div class="arrow">
-                                            <img src="assets/imgs/arrow-right.png" alt="" class="icon-img-20">
-                                        </div>
-                                    </a>
-                                </div>
-                            </div>
-                
-                            <div class="col-md-6">
-                                <div class="item-box2 mb-30">
-                                    <div class="icon mb-40">
-                                        <img src="assets/imgs/serv-icons/2.png" alt="">
-                                    </div>
-                                    <h5 class="mb-15">Strategic Planning & Organizational Management</h5>
-                                    <p>We help businesses, NGOs, and governments create strong strategies, improve efficiency, and drive organizational success.</p>
-                                    <a href="services.html" class="rmore">
-                                        <div class="arrow">
-                                            <img src="assets/imgs/arrow-right.png" alt="" class="icon-img-20">
-                                        </div>
-                                    </a>
-                                </div>
-                            </div>
-                
-                            <div class="col-md-6">
-                                <div class="item-box2 sm-mb30">
-                                    <div class="icon mb-40">
-                                        <img src="assets/imgs/serv-icons/3.png" alt="">
-                                    </div>
-                                    <h5 class="mb-15">Institutional Development & Capacity Building</h5>
-                                    <p>We strengthen institutions by equipping them with the tools, skills, and structures needed to enhance their impact and sustainability.</p>
-                                    <a href="services.html" class="rmore">
-                                        <div class="arrow">
-                                            <img src="assets/imgs/arrow-right.png" alt="" class="icon-img-20">
-                                        </div>
-                                    </a>
-                                </div>
-                            </div>
-                
-                            <div class="col-md-6">
-                                <div class="item-box2">
-                                    <div class="icon mb-40">
-                                        <img src="assets/imgs/serv-icons/4.png" alt="">
-                                    </div>
-                                    <h5 class="mb-15">Policy Formulation & Review</h5>
-                                    <p>We guide policy development and analysis to create impactful governance and regulatory frameworks for sustainable growth.</p>
-                                    <a href="services.html" class="rmore">
-                                        <div class="arrow">
-                                            <img src="assets/imgs/arrow-right.png" alt="" class="icon-img-20">
-                                        </div>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>-->
-                <!-- ==================== End Services ==================== -->
-
-
-
-                <!-- ==================== Start Services ==================== -->
-
-
-                <section class="skills-img fix-topa position-re">
-                    <div class="container">
-                        <div class="row justify-content-between">
-                            <div class="sec-head mb-20">
-                                <h2 class="d-slideup wow">
-                                    <span class="sideup-text">
-                                        <span class="up-text">Our Services</span>
-                                    </span>
-                                </h2>
-                            </div>
-
-                            <p class="intro">At CRIPFCnt, we pioneer structural intelligence through a range of transformative services, from Structural Audits (SCOI) that measure true contribution versus visibility, to Consulting that guides individuals and organizations toward alignment with post-grid civilization models. Through the CRIPFCnt Academy, we deliver courses and leadership programs on placement-based intelligence, while our Publications & Media advance the study of structural psychology and civilization. We also lead the DNA Placement Campaign, connecting identity and biological truth to structural purpose, and drive innovation through Technology Integration, developing AI-aligned recalibration tools for the future.</p>
-
-                                <div class="sec-head mt-20">
-                                    <h3 class="d-slideup wow">
-                                        <span class="sideup-text">
-                                            <span class="up-text">Our Expertise</span>
-                                        </span>
-                                    </h3>
-                                </div>
-                            <div class="col-lg-6 valign">
-                                <div class="content full-width">
-                                    <div class="sec-head mb-30">
-                                    </div>
-                                    <div class="row justify-content-end">
-                                        <div class="col-lg-12">
-                                            <div class="item md-mb50">
-                                                <div class="text mt-15">
-                                                    <ul class="rest dot-list fz-18">
-                                                        <li class="mb-15">Structural Intelligence & Recalibration</li>
-                                                        <li class="mb-15">CRIPFCnt Structural Auditing (SCOI)</li>
-                                                        <li class="mb-15">Organizational & Leadership Transformation</li>
-                                                        <li class="mb-15">Civilization Systems Design</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div class="content full-width">
-                                    <div class="sec-head mb-30">
-                                    </div>
-                                    <div class="row justify-content-end">
-                                        <div class="col-lg-12">
-                                            <div class="item md-mb50">
-                                                <div class="text mt-15">
-                                                    <ul class="rest dot-list fz-18">
-                                                        <li class="mb-15">Placement-Based Education & Training</li>
-                                                        <li class="mb-15">Identity & DNA Alignment Studies</li>
-                                                        <li class="mb-15">AI & Digital Placement Technologies</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p class="intro mt-10">Our dedicated team empowers clients with innovative, practical, and
-                                impactful solutions to achieve their goals.
-                            </p>
-
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ==================== End Services ==================== -->
-
-
-
-                <!-- ==================== Start Marquee ==================== -->
-
-                <!--<section class="pt-30">
-                    <div class="main-marq xlrg o-hidden">
-                        <div class="slide-har st1">
-                            <div class="box">
-                                <div class="item">
-                                    <h4 class="d-flex align-items-center"><span>Policy Formulation & Review</span>
-                                        <span class="fz-50 ml-50 stroke icon">*</span>
-                                    </h4>
-                                </div>
-                                <div class="item">
-                                    <h4 class="d-flex align-items-center"><span>Transformational Leadership
-                                            Development</span>
-                                        <span class="fz-50 ml-50 stroke icon">*</span>
-                                    </h4>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>-->
-
-                <!-- ==================== End Marquee ==================== -->
-
-
-                <!-- ==================== Start Portfolio ==================== 
-
-                <section class="portfolio-carsouel fix-topa fix-bottom" data-scroll-index="3">
-                    <div class="container">
-                        <div class="sec-head mb-80">
-                            <h6 class="sub-title main-color mb-25">Our Portfolio</h6>
-                            <div class="bord pt-25 bord-thin-top d-flex align-items-center">
-                                <h2>Our featured <span class="fw-200">projects</span></h2>
-                                <div class="ml-auto">
-                                    <div class="swiper-arrow-control">
-                                        <div class="swiper-button-prev">
-                                            <span class="ti-arrow-left"></span>
-                                        </div>
-                                        <div class="swiper-button-next">
-                                            <span class="ti-arrow-right"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="work-swiper-center" data-carousel="swiper" data-items="2" data-center="center"
-                            data-loop="true" data-space="100">
-                            <div id="content-carousel-container-unq-work" class="swiper-container"
-                                data-swiper="container">
-                                <div class="swiper-wrapper">
-                                    <div class="swiper-slide">
-                                        <div class="item">
-                                            <div class="img">
-                                                <img src="img/ppl.jpg" alt="">
-                                            </div>
-                                            <div class="cont d-flex align-items-center mt-30 pb-15 bord-thin-bottom">
-                                                <div>
-                                                    <h5>Nespresso, Technoserve & World Bank</h5>
-                                                    <p>Conducting gender assessment in Manicaland Province of Zimbabwe
-                                                    </p>
-                                                </div>
-                                                <div class="ml-auto">
-                                                    <a href="projects.html" class="rmore">
-                                                        <img src="assets/imgs/arrow-right.png" alt=""
-                                                            class="icon-img-20">
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="swiper-slide">
-                                        <div class="item">
-                                            <div class="img">
-                                                <img src="img/4.jpg" alt="">
-                                            </div>
-                                            <div class="cont d-flex align-items-center mt-30 pb-15 bord-thin-bottom">
-                                                <div>
-                                                    <h5>IOM Somalia</h5>
-                                                    <p>Conducting a capacity assessment for Centre for Community
-                                                        Development Solutions </p>
-                                                </div>
-                                                <div class="ml-auto">
-                                                    <a href="projects.html" class="rmore">
-                                                        <img src="assets/imgs/arrow-right.png" alt=""
-                                                            class="icon-img-20">
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="swiper-slide">
-                                        <div class="item">
-                                            <div class="img">
-                                                <img src="img/foto.jpg" alt="">
-                                            </div>
-                                            <div class="cont d-flex align-items-center mt-30 pb-15 bord-thin-bottom">
-                                                <div>
-                                                    <h5>IOM/UNDP Somalia</h5>
-                                                    <p>Conducting an Institutional Assessment </p>
-                                                </div>
-                                                <div class="ml-auto">
-                                                    <a href="projects.html" class="rmore">
-                                                        <img src="assets/imgs/arrow-right.png" alt=""
-                                                            class="icon-img-20">
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>-->
-
-                <!-- ==================== End Portfolio ==================== -->
-
-
-
-
-                <!-- ==================== Start Blog ==================== 
-
-                <section class="blog-list-half section-padding sub-bg">
-                    <div class="container">
-                        <div class="sec-head mb-80">
-                            <h6 class="sub-title main-color mb-25">Our Blog</h6>
-                            <div class="bord pt-25 bord-thin-top d-flex align-items-center">
-                                <h2 class="fw-600 d-rotate wow">
-                                    <span class="rotate-text">Read Latest <span class="fw-200">News</span></span>
-                                </h2>
-                                <div class="ml-auto">
-                                    <a href="blog-list2.html" class="go-more">
-                                        <span class="text">View all posts</span>
-                                        <span class="icon ti-arrow-top-right"></span>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-lg-6">
-                                <div class="item main-bg md-mb50">
-                                    <div class="row rest">
-                                        <div class="col-lg-6 col-md-5 img rest">
-                                            <img src="img/kid.jpg" alt="" class="img-post">
-                                        </div>
-                                        <div class="col-lg-6 col-md-7 cont valign">
-                                            <div class="full-width">
-                                                <div class="tags mb-15">
-                                                    <a href="#">Development</a>
-                                                </div>
-                                                <h5>
-                                                    <a href="blog-details.html">5 Key Strategies for Effective Community
-                                                        Development in Rural Areas</a>
-                                                </h5>
-                                                <span class="date fz-12 ls1 text-u opacity-7 mt-80">August 12,
-                                                    2024</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-6">
-                                <div class="item main-bg">
-                                    <div class="row rest">
-                                        <div class="col-lg-6 col-md-5 img rest">
-                                            <img src="img/girl.jpg" alt="" class="img-post">
-                                        </div>
-                                        <div class="col-lg-6 col-md-7 cont valign">
-                                            <div class="full-width">
-                                                <div class="tags mb-15">
-                                                    <a href="#">Leadership</a>
-                                                    <a href="#">Sustainability</a>
-                                                </div>
-                                                <h5>
-                                                    <a href="blog-details.html">How Transformational Leadership Drives
-                                                        Sustainable Change in Organizations</a>
-                                                </h5>
-                                                <span class="date fz-12 ls1 text-u opacity-7 mt-80">April 23,
-                                                    2024</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>-->
-
-                <!-- ==================== End Blog ==================== -->
-
-
-
-            </main>
-
-
-            <!-- ==================== Start Footer ==================== -->
-
-            <footer class="sub-bg ">
-                <div class="container pb-40 pt-20 ontop">
-                    <div class="d-flex justify-content-center mb-30">
-                        <div class="logo icon-img-14">
-                            <img src="/img/short.webp" alt="">
-                        </div>
-                    </div>
-                    <div
-                        class="info-comp d-flex align-items-center justify-content-center pt-40 pb-40 bord-thin-bottom bord-thin-top">
-                        <div class="mr-30">
-                            <span class="icon main-color mr-10 ti-email"></span>
-                            <span class="text">info@cripfcnt.com</span>
-                        </div>
-                        <div class="mr-30">
-                            <span class="icon main-color mr-10 ti-mobile"></span>
-                            <span class="text">+447940298087</span>
-                        </div>
-                        <div>
-                            <span class="icon main-color mr-10 ti-location-pin"></span>
-                            <span class="text"> <span class="text">5 Walford Avenue, Wolverhampton, WV37AZ, United Kingdom</span></span>
-                        </div>
-                    </div>
-                    <div class="row sub-footer mt-40 pt-25 pb-25 main-bg radius-30 padding-rl-30">
-                        <div class="col-lg-4 col-md-6 md-mb15">
-                            <ul class="rest d-flex align-items-center">
-                                <li class="hover-this cursor-pointer">
-                                    <a href="#0" class="hover-anim">
-                                        <i class="fab fa-facebook-f"></i>
-                                    </a>
-                                </li>
-                                <li class="hover-this cursor-pointer ml-30">
-                                    <a href="#0" class="hover-anim">
-                                        <i class="fab fa-linkedin-in"></i>
-                                    </a>
-                                </li>
-                                <li class="hover-this cursor-pointer ml-30">
-                                    <a href="#0" class="hover-anim">
-                                        <i class="fab fa-instagram"></i>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="col-lg-4 order-md-3">
-                            <div class="text-center">
-                                <p class="fz-14">© 2025 CRIPFCnt <span
-                                        class="underline main-color"><a href="#" target="_blank"></a></span></p>
-                            </div>
-                        </div>
-                        <div class="col-lg-4 col-md-6 md-mb15 order-md-2">
-                            <div class="links d-flex justify-content-end">
-                                <ul class="rest d-flex align-items-center">
-                                    <li>
-                                        <a href="/about">About Us</a>
-                                    </li>
-                                    <li class="ml-30">
-                                        <a href="/services">Services</a>
-                                    </li>
-                                    <li class="ml-30">
-                                        <a href="/contact">Contact Us</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </footer>
-
-            <!-- ==================== End Footer ==================== -->
-
-
-
+    </section>
+
+    <!-- Trust Bar -->
+    <section class="trust-bar">
+        <div class="trust-container">
+            <div class="trust-title">Designed for Global Institutions</div>
+            <div class="trust-logos">
+                <div class="trust-logo">Government Agencies</div>
+                <div class="trust-logo">NGOs & Foundations</div>
+                <div class="trust-logo">Think Tanks</div>
+                <div class="trust-logo">Public Companies</div>
+                <div class="trust-logo">International Organizations</div>
+            </div>
         </div>
+    </section>
 
+    <!-- Framework Section -->
+    <section class="framework-section" id="framework">
+        <div class="section-container">
+            <div class="section-header">
+                <div class="section-label">The CRIPFCnt Framework</div>
+                <h2 class="section-title">Eight Pillars of Intelligence & Governance Transformation</h2>
+                <p class="section-description">
+                    A systematic approach to restructuring institutional intelligence, enhancing decision-making capabilities, and implementing governance reform at scale.
+                </p>
+            </div>
+            
+            <div class="pillars-grid">
+                <div class="pillar-card">
+                    <div class="pillar-number">01</div>
+                    <h3 class="pillar-name">Consciousness</h3>
+                    <p class="pillar-description">Institutional awareness and strategic foresight as fundamental organizational assets.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">02</div>
+                    <h3 class="pillar-name">Responsibility</h3>
+                    <p class="pillar-description">Accountability frameworks and performance measurement systems driving organizational evolution.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">03</div>
+                    <h3 class="pillar-name">Interpretation</h3>
+                    <p class="pillar-description">Evidence-based analysis frameworks for complex decision-making environments.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">04</div>
+                    <h3 class="pillar-name">Purpose</h3>
+                    <p class="pillar-description">Mission clarity and strategic alignment across organizational hierarchies.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">05</div>
+                    <h3 class="pillar-name">Frequencies</h3>
+                    <p class="pillar-description">Communication protocols and stakeholder engagement optimization.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">06</div>
+                    <h3 class="pillar-name">Civilization</h3>
+                    <p class="pillar-description">Societal infrastructure and institutional frameworks for sustainable development.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">07</div>
+                    <h3 class="pillar-name">Negotiation</h3>
+                    <p class="pillar-description">Strategic dialogue and consensus-building methodologies for multi-stakeholder environments.</p>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-number">08</div>
+                    <h3 class="pillar-name">Technology</h3>
+                    <p class="pillar-description">AI-age tools and digital transformation strategies for institutional advancement.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Value Proposition -->
+    <section class="value-section">
+        <div class="section-container">
+            <div class="section-header">
+                <div class="section-label">Value Proposition</div>
+                <h2 class="section-title">Why Global Institutions Choose CRIPFCnt</h2>
+            </div>
+            
+            <div class="value-grid">
+                <div class="value-card">
+                    <div class="value-icon">📊</div>
+                    <h3 class="value-title">Evidence-Based Framework</h3>
+                    <p class="value-text">Grounded in governance research, organizational psychology, and leadership science. Designed for measurable institutional outcomes and sustained transformation.</p>
+                </div>
+                
+                <div class="value-card">
+                    <div class="value-icon">🌍</div>
+                    <h3 class="value-title">Global Applicability</h3>
+                    <p class="value-text">Tested across diverse institutional contexts. Adaptable to government agencies, NGOs, international organizations, and public sector entities worldwide.</p>
+                </div>
+                
+                <div class="value-card">
+                    <div class="value-icon">⚖️</div>
+                    <h3 class="value-title">Governance Excellence</h3>
+                    <p class="value-text">Developed by chartered governance specialists. Integrates compliance frameworks, accountability mechanisms, and institutional best practices.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Applications -->
+    <section class="applications-section" id="applications">
+        <div class="section-container">
+            <div class="section-header">
+                <div class="section-label">Applications</div>
+                <h2 class="section-title">Institutional Implementation Pathways</h2>
+                <p class="section-description">
+                    CRIPFCnt provides structured methodologies for organizational transformation, leadership development, and governance reform.
+                </p>
+            </div>
+            
+            <div class="applications-grid">
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">🏛️</div>
+                        <h3 class="application-title">Government & Public Sector</h3>
+                    </div>
+                    <p class="application-text">
+                        Policy development frameworks, institutional capacity building, public administration reform, and governance modernization programs for national and local government entities.
+                    </p>
+                </div>
+                
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">🌐</div>
+                        <h3 class="application-title">International Organizations</h3>
+                    </div>
+                    <p class="application-text">
+                        Strategic planning methodologies, multi-stakeholder coordination frameworks, and organizational effectiveness tools for NGOs, foundations, and multilateral institutions.
+                    </p>
+                </div>
+                
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">🎓</div>
+                        <h3 class="application-title">Think Tanks & Research</h3>
+                    </div>
+                    <p class="application-text">
+                        Analytical frameworks for policy research, institutional intelligence assessment, and evidence-based decision support for academic and research institutions.
+                    </p>
+                </div>
+                
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">🏢</div>
+                        <h3 class="application-title">Public Companies</h3>
+                    </div>
+                    <p class="application-text">
+                        Corporate governance frameworks, board development programs, executive leadership training, and ESG integration methodologies for publicly-traded entities.
+                    </p>
+                </div>
+                
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">📜</div>
+                        <h3 class="application-title">Professional Certification</h3>
+                    </div>
+                    <p class="application-text">
+                        Accredited certification programs for governance professionals, policy advisors, institutional leaders, and organizational development specialists.
+                    </p>
+                </div>
+                
+                <div class="application-card">
+                    <div class="application-header">
+                        <div class="application-icon">📚</div>
+                        <h3 class="application-title">Knowledge Resources</h3>
+                    </div>
+                    <p class="application-text">
+                        Comprehensive frameworks documented in "CRIPFCnt: Taking Psychology to the People" alongside supplementary research papers and institutional guidelines.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section" id="contact">
+        <div class="cta-container">
+            <h2>Partner with CRIPFCnt for Institutional Transformation</h2>
+            <p>
+                Contact our team to explore how the CRIPFCnt framework can support your organization's governance reform, leadership development, and institutional intelligence objectives.
+            </p>
+            <div class="cta-buttons">
+                <a href="mailto:info@cripfcnt.com" class="btn btn-primary">Request Consultation</a>
+                <a href="about.html" class="btn btn-secondary">Explore Framework</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-grid">
+                <div>
+                    <div class="footer-brand">CRIPFCnt</div>
+                    <p class="footer-description">
+                        A comprehensive framework for institutional intelligence restructuring, governance reform, and leadership development in the AI age.
+                    </p>
+                    <p class="footer-description">
+                        <strong style="color: var(--gold);">Donald Mataranyika</strong><br>
+                        Chartered Secretary & Governance Specialist<br>
+                        Framework Developer
+                    </p>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Framework</h4>
+                    <ul class="footer-links">
+                        <li><a href="about.html">About CRIPFCnt</a></li>
+                        <li><a href="about.html#pillars">Eight Pillars</a></li>
+                        <li><a href="#">Methodology</a></li>
+                        <li><a href="#">Research Papers</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Services</h4>
+                    <ul class="footer-links">
+                        <li><a href="#">Institutional Consulting</a></li>
+                        <li><a href="#">Leadership Development</a></li>
+                        <li><a href="#">Professional Certification</a></li>
+                        <li><a href="#">SCOI Assessment</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="footer-title">Contact</h4>
+                    <ul class="footer-links">
+                        <li>5 Walford Avenue</li>
+                        <li>Wolverhampton, WV3 7AZ</li>
+                        <li>United Kingdom</li>
+                        <li style="margin-top: 1rem;"><a href="tel:+447940298087">+44 7940 298087</a></li>
+                        <li><a href="mailto:info@cripfcnt.com">info@cripfcnt.com</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 CRIPFCnt. All rights reserved. Intelligence Structuring Framework.</p>
+            </div>
+        </footer>
     </div>
-
-
-
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const counters = document.querySelectorAll(".count-animate");
-
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    entries.forEach((entry) => {
-                        if (entry.isIntersecting) {
-                            const target = +entry.target.getAttribute("data-count");
-                            const duration = 2000; // Animation duration in milliseconds
-                            const startTime = performance.now();
-
-                            const animateCount = (currentTime) => {
-                                const elapsedTime = currentTime - startTime;
-                                const progress = Math.min(elapsedTime / duration, 1);
-                                const value = Math.floor(progress * target);
-
-                                entry.target.textContent = value.toLocaleString();
-
-                                if (progress < 1) {
-                                    requestAnimationFrame(animateCount);
-                                }
-                            };
-
-                            requestAnimationFrame(animateCount);
-                            observer.unobserve(entry.target); // Stop observing after animation
-                        }
-                    });
-                }, {
-                    threshold: 0.5, // Trigger when 50% of the element is visible
-                }
-            );
-
-            counters.forEach((counter) => {
-                observer.observe(counter);
-            });
-        });
-    </script>
-
-
-    <!-- jQuery -->
-    <script src="/assets/js/jquery-3.6.0.min.js"></script>
-    <script src="/assets/js/jquery-migrate-3.4.0.min.js"></script>
-
-    <!-- plugins -->
-    <script src="/assets/js/plugins.js"></script>
-
-    <script src="/assets/js/gsap.min.js"></script>
-    <script src="/assets/js/ScrollSmoother.min.js"></script>
-    <script src="/assets/js/ScrollTrigger.min.js"></script>
-    <script src="/assets/js/smoother-script.js"></script>
-
-    <!-- custom scripts -->
-    <script src="/assets/js/scripts.js"></script>
-
 </body>
-
-
 </html>
