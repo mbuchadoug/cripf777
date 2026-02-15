@@ -52,6 +52,41 @@ import { sendText } from "./metaSender.js";
 
 
 import axios from "axios";
+
+function normalizeEcocashNumber(input, fallbackWhatsApp) {
+  const raw = (input || "").replace(/\D+/g, "");
+  const fb = (fallbackWhatsApp || "").replace(/\D+/g, "");
+
+  let phone =
+    raw.toLowerCase?.() === "same"
+      ? fb
+      : raw;
+
+  // If user typed "same" we may have non-digits already removed above, so handle properly:
+  if ((input || "").trim().toLowerCase() === "same") {
+    phone = fb;
+  }
+
+  // Now normalize Zimbabwe formats:
+  // Accept: 0772..., +263772..., 263772...
+  if (phone.startsWith("263") && phone.length === 12) {
+    // Paynow EcoCash wants 07...
+    return "0" + phone.slice(3);
+  }
+
+  if (phone.startsWith("0") && phone.length === 10) {
+    return phone; // 0772xxxxxx
+  }
+
+  // Also accept 772xxxxxx (missing leading 0)
+  if (phone.length === 9 && phone.startsWith("7")) {
+    return "0" + phone;
+  }
+
+  return null;
+}
+
+
 async function forwardToTwilioWebhook({ from, text }) {
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
 
@@ -767,6 +802,127 @@ const settingsStates = [
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
 
+// =========================
+// 💳 SUBSCRIPTION: ENTER ECOCASH NUMBER (TEXT INPUT)
+// =========================
+if (biz && biz.sessionState === "subscription_enter_ecocash" && !isMetaAction) {
+  const waDigits = from.replace(/\D+/g, "");
+  const ecocashPhone = normalizeEcocashNumber(text, waDigits);
+
+  if (!ecocashPhone) {
+    await sendText(
+      from,
+      "❌ Invalid EcoCash number.\n\nSend like: 0772123456\nOr type *same* to use this WhatsApp number."
+    );
+    return;
+  }
+
+  // Save chosen EcoCash number, then proceed to payment
+  biz.sessionState = "subscription_payment_pending";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    ecocashPhone
+  };
+  await saveBizSafe(biz);
+
+  // Kick off Paynow using the chosen EcoCash number
+  // (We call the same logic that used to run immediately after pkg selection)
+  const selected = biz.sessionData?.targetPackage;
+  const plan = selected ? SUBSCRIPTION_PLANS[selected] : null;
+
+  if (!plan) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ Package info missing. Please select a package again.");
+    return sendMainMenu(from);
+  }
+
+  // Build Paynow reference tied to BUSINESS (this is what guarantees correct activation)
+  const reference = `SUB_${biz._id}_${Date.now()}`;
+
+  const payment = paynow.createPayment(
+    reference,
+    biz.ownerEmail || "bmusasa99@gmail.com"
+  );
+
+  payment.currency = plan.currency;
+  payment.add(`${plan.name} Package`, plan.price);
+
+  // ✅ Start EcoCash payment with the user's chosen number
+  const response = await paynow.sendMobile(payment, ecocashPhone, "ecocash");
+
+  console.log("PAYNOW RESPONSE:", response);
+
+  if (!response.success) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ Failed to start EcoCash payment. Try again.");
+    return sendMainMenu(from);
+  }
+
+  // Save tracking (so even if user pays from another number, we still upgrade THIS biz)
+  biz.sessionData.paynow = {
+    reference,
+    pollUrl: response.pollUrl
+  };
+  await saveBizSafe(biz);
+
+  // Poll (your existing logic, unchanged except it’s now after number capture)
+  const pollUrl = response.pollUrl;
+  let attempts = 0;
+  const MAX_ATTEMPTS = 15;
+
+  const pollInterval = setInterval(async () => {
+    attempts++;
+    try {
+      const status = await paynow.pollTransaction(pollUrl);
+      console.log("PAYNOW POLL STATUS:", status);
+
+      if (status.status && status.status.toLowerCase() === "paid") {
+        clearInterval(pollInterval);
+
+        const freshBiz = await Business.findById(biz._id);
+
+        if (
+          freshBiz &&
+          freshBiz.sessionState === "subscription_payment_pending" &&
+          freshBiz.sessionData?.targetPackage
+        ) {
+          freshBiz.package = freshBiz.sessionData.targetPackage;
+          freshBiz.subscriptionStatus = "active";
+          freshBiz.sessionState = "ready";
+          freshBiz.sessionData = {};
+          await freshBiz.save();
+
+          await sendText(
+            from,
+            `✅ Payment successful!\n\nYour package has been upgraded to *${freshBiz.package.toUpperCase()}* 🎉`
+          );
+
+          await sendMainMenu(from);
+        }
+      }
+
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(pollInterval);
+        console.warn("⏰ Paynow polling timed out");
+      }
+    } catch (err) {
+      console.error("Paynow polling failed:", err);
+    }
+  }, 10000);
+
+  // User instruction message
+  await sendText(
+    from,
+    `💳 ${plan.name} Package (${plan.price} ${plan.currency})\nEcoCash number: ${ecocashPhone}\n\nPlease confirm the payment on your phone.`
+  );
+
+  return;
+}
+
 
 // ✅ Only pass text to Twilio AFTER onboarding
 // 🚨 DO NOT forward menu / hi / start to Twilio
@@ -1144,132 +1300,33 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
     return sendText(from, "❌ Invalid package selected.");
   }
 
-const plan = SUBSCRIPTION_PLANS[selected];
+  const plan = SUBSCRIPTION_PLANS[selected];
+  if (!plan) {
+    return sendText(from, "❌ Invalid package selected.");
+  }
 
-if (!plan) {
-  return sendText(from, "❌ Invalid package selected.");
-}
-
-
-  // ⛔ DO NOT upgrade yet
-  // Save intent instead
-  biz.sessionState = "subscription_payment_pending";
+  // Save intent first
+  biz.sessionState = "subscription_enter_ecocash";
   biz.sessionData = {
     targetPackage: selected,
     amount: plan.price
   };
   await saveBizSafe(biz);
 
+  // Ask user for EcoCash number (EcoCash only notice included)
+  return sendText(
+    from,
+`✅ Selected: *${plan.name}* (${plan.price} ${plan.currency})
 
+💳 *Payment method: EcoCash only*
 
-  const reference = `SUB_${biz._id}_${Date.now()}`;
+Please enter the EcoCash number you want to pay with:
+Example: 0772123456
 
-let phone = from.replace(/\D+/g, "");
-
-// Convert 263 → 0 for ZW numbers
-if (phone.startsWith("263")) {
-  phone = "0" + phone.slice(3);
+Or type *same* to use this WhatsApp number.`
+  );
 }
 
-
-
-// 🔐 Create Paynow payment
-const payment = paynow.createPayment(
-  reference,
-  biz.ownerEmail || "bmusasa99@gmail.com"
-);
-
-
-// MUST match Paynow dashboard (EcoCash = ZWL)
-payment.currency = plan.currency;
-
-// Add line item
-payment.add(
-  `${plan.name} Package`,
-  plan.price
-);
-
-// 🚀 START MOBILE PAYMENT
-const response = await paynow.sendMobile(
-  payment,
-  phone,
-  "ecocash"
-);
-
-console.log("PAYNOW RESPONSE:", response);
-
-if (!response.success) {
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return sendText(from, "❌ Failed to start payment. Try again.");
-}
-
-// ✅ ONLY poll if payment was created
-const pollUrl = response.pollUrl;
-let attempts = 0;
-const MAX_ATTEMPTS = 15; // ~2.5 minutes
-
-const pollInterval = setInterval(async () => {
-  attempts++;
-
-  try {
-    const status = await paynow.pollTransaction(pollUrl);
-    console.log("PAYNOW POLL STATUS:", status);
-
-    if (status.status && status.status.toLowerCase() === "paid") {
-      clearInterval(pollInterval);
-
-      const freshBiz = await Business.findById(biz._id);
-
-      if (
-        freshBiz &&
-        freshBiz.sessionState === "subscription_payment_pending" &&
-        freshBiz.sessionData?.targetPackage
-      ) {
-        freshBiz.package = freshBiz.sessionData.targetPackage;
-        freshBiz.subscriptionStatus = "active";
-        freshBiz.sessionState = "ready";
-        freshBiz.sessionData = {};
-
-        await freshBiz.save();
-
-        await sendText(
-          from,
-          `✅ Payment successful!\n\nYour package has been upgraded to *${freshBiz.package.toUpperCase()}* 🎉`
-        );
-
-        await sendMainMenu(from);
-      }
-    }
-
-    // stop polling if it takes too long
-    if (attempts >= MAX_ATTEMPTS) {
-      clearInterval(pollInterval);
-      console.warn("⏰ Paynow polling timed out");
-    }
-  } catch (err) {
-    console.error("Paynow polling failed:", err);
-  }
-}, 10000); // every 10 seconds
-
-
-
- 
-  // save Paynow tracking
-  biz.sessionData.paynow = {
-    reference,
-    pollUrl: response.pollUrl
-  };
-  await saveBizSafe(biz);
-
-return sendText(
-  from,
-  `💳 ${plan.name} Package (${plan.price} ${plan.currency})\n\nPlease confirm the payment on your phone.`
-);
-
-}
 
 
 // ===============================

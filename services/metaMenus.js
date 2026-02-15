@@ -1,5 +1,9 @@
 import { ACTIONS } from "./actions.js";
 import { sendList, sendText, sendButtons } from "./metaSender.js";
+
+import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
+import { PACKAGES } from "./packages.js";
+
 import { canAccessSection } from "./roleGuard.js";
 import UserRole from "../models/userRole.js";
  import { normalizePhone } from "./phone.js";
@@ -239,17 +243,74 @@ export async function sendInviteUserMenu(to) {
 
 
 export async function sendPackagesMenu(to, currentPackage) {
-  return sendList(
-    to,
-    `📦 Your current package: *${currentPackage.toUpperCase()}*\n\nChoose a package:`,
-    [
-      
-      { id: "pkg_bronze", title: "🥉 Bronze" },
-      { id: "pkg_silver", title: "🥈 Silver" },
-      { id: "pkg_gold", title: "🥇 Gold" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
-    ]
-  );
+  // Friendly labels for features (keep short: WhatsApp list descriptions are limited)
+  const FEATURE_LABELS = {
+    invoice: "Invoices",
+    quote: "Quotations",
+    receipt: "Receipts",
+    clients: "Clients",
+    payments: "Payments",
+    reports_daily: "Daily reports",
+    reports_weekly: "Weekly reports",
+    reports_monthly: "Monthly reports",
+    branches: "Branches",
+    users: "Users"
+  };
+
+  function money(plan) {
+    if (!plan) return "";
+    const cur = (plan.currency || "").toUpperCase();
+    const amt = plan.price ?? "";
+    if (!cur || amt === "") return "";
+    // display like "28 USD/mo" (simple + consistent)
+    return `${amt} ${cur}/mo`;
+  }
+
+  function packageDesc(pkgKey) {
+    const pkg = PACKAGES[pkgKey];
+    if (!pkg) return "";
+
+    const base = `Users: ${pkg.users}, Branches: ${pkg.branches}, Docs/mo: ${pkg.monthlyDocs}`;
+
+    const feats = (pkg.features || [])
+      .map(f => FEATURE_LABELS[f] || f)
+      .slice(0, 4) // keep short for list description limit
+      .join(", ");
+
+    // Example:
+    // "Users: 2, Branches: 1, Docs/mo: 50 | Invoices, Quotations, Receipts, Clients"
+    return feats ? `${base} | ${feats}` : base;
+  }
+
+  // Use your plans if available (fallback to blank if not)
+  const bronzePlan = SUBSCRIPTION_PLANS?.bronze;
+  const silverPlan = SUBSCRIPTION_PLANS?.silver;
+  const goldPlan = SUBSCRIPTION_PLANS?.gold;
+
+  const header =
+`📦 Your current package: *${currentPackage.toUpperCase()}*
+
+✅ *Payment method: EcoCash only*
+Please select a package below. You’ll be asked to enter the EcoCash number to pay with.`;
+
+  return sendList(to, header, [
+    {
+      id: "pkg_bronze",
+      title: `🥉 Bronze - ${money(bronzePlan)}`,
+      description: packageDesc("bronze")
+    },
+    {
+      id: "pkg_silver",
+      title: `🥈 Silver - ${money(silverPlan)}`,
+      description: packageDesc("silver")
+    },
+    {
+      id: "pkg_gold",
+      title: `🥇 Gold - ${money(goldPlan)}`,
+      description: packageDesc("gold")
+    },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }
 
 
