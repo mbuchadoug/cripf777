@@ -1,4 +1,4 @@
-{{!-- views/admin/scoi_reports_list_mobile_optimized.hbs - MOBILE-OPTIMIZED VERSION --}}
+{{!-- views/admin/scoi_reports_list.hbs - ADMIN SCOI REPORTS VIEWER --}}
 <!doctype html>
 <html lang="en">
 <head>
@@ -110,7 +110,6 @@
       display:inline-flex;
       align-items:center;
       gap:8px;
-      white-space:nowrap;
     }
 
     .btn-primary{
@@ -204,15 +203,7 @@
       font-weight:600;
     }
 
-    /* DESKTOP TABLE */
-    .desktop-view{
-      display:block;
-    }
-
-    .mobile-view{
-      display:none;
-    }
-
+    /* TABLE */
     .table-card{
       background:white;
       border-radius:16px;
@@ -303,73 +294,6 @@
       font-size:13px;
       border-radius:8px;
       font-weight:600;
-      white-space:nowrap;
-    }
-
-    /* MOBILE CARD LAYOUT */
-    .report-card{
-      background:white;
-      padding:20px;
-      border-radius:12px;
-      box-shadow:var(--shadow);
-      margin-bottom:16px;
-    }
-
-    .card-header{
-      margin-bottom:16px;
-      padding-bottom:16px;
-      border-bottom:2px solid var(--gray-100);
-    }
-
-    .card-title{
-      font-size:16px;
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:8px;
-    }
-
-    .card-badges{
-      display:flex;
-      gap:8px;
-      margin-bottom:12px;
-      flex-wrap:wrap;
-    }
-
-    .card-meta{
-      font-size:13px;
-      color:var(--slate);
-      line-height:1.6;
-    }
-
-    .card-meta-row{
-      display:flex;
-      justify-content:space-between;
-      margin-bottom:6px;
-    }
-
-    .card-label{
-      font-weight:600;
-      color:var(--navy);
-    }
-
-    .card-actions{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-      margin-top:16px;
-    }
-
-    .card-btn{
-      padding:12px;
-      text-align:center;
-      font-weight:700;
-      font-size:14px;
-      border-radius:8px;
-      text-decoration:none;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
     }
 
     /* EMPTY STATE */
@@ -404,58 +328,9 @@
     }
 
     @media(max-width:768px){
-      .container{
-        padding:40px 16px;
-      }
-
-      .header-container{
-        padding:0 16px;
-        flex-direction:column;
-        gap:16px;
-        align-items:flex-start;
-      }
-
-      .nav-links{
-        width:100%;
-        overflow-x:auto;
-        gap:16px;
-      }
-
-      .page-header{
-        flex-direction:column;
-      }
-
-      .header-left h1{
-        font-size:28px;
-      }
-
-      .header-actions{
-        width:100%;
-        flex-direction:column;
-      }
-
-      .header-actions .btn{
-        width:100%;
-        justify-content:center;
-      }
-
-      .filters{
-        grid-template-columns:1fr;
-        gap:16px;
-      }
-
-      .stats-bar{
-        grid-template-columns:1fr;
-      }
-
-      /* Hide desktop table, show mobile cards */
-      .desktop-view{
-        display:none !important;
-      }
-
-      .mobile-view{
-        display:block !important;
-      }
+      .filters{grid-template-columns:1fr}
+      .stats-bar{grid-template-columns:1fr}
+      .action-buttons{flex-direction:column}
     }
   </style>
 </head>
@@ -468,7 +343,7 @@
     <div class="brand">🏛️ SCOI Admin</div>
     <div class="nav-links">
       <a href="/admin" class="nav-link">Dashboard</a>
-      <a href="/admin/scoi/reports" class="nav-link active">Reports</a>
+      <a href="/admin/scoi/reports" class="nav-link active">Reports Library</a>
       <a href="/admin/scoi/import" class="nav-link">Import</a>
       <a href="/admin/scoi/financials" class="nav-link">Financials</a>
     </div>
@@ -482,15 +357,15 @@
   <div class="page-header">
     <div class="header-left">
       <h1>SCOI Reports Library</h1>
-      <p>View, manage, and download reports</p>
+      <p>View, manage, and download all imported intelligence reports</p>
     </div>
 
     <div class="header-actions">
       <a href="/admin/scoi/import" class="btn btn-outline">
-        📤 Import
+        📤 Import New
       </a>
       <button onclick="generateAllPdfs()" class="btn btn-primary">
-        📥 Generate All
+        📥 Generate All PDFs
       </button>
     </div>
   </div>
@@ -504,17 +379,17 @@
 
     <div class="stat-card" style="border-left-color:#10B981">
       <div class="stat-value">{{stats.placement}}</div>
-      <div class="stat-label">Placement</div>
+      <div class="stat-label">Placement Audits</div>
     </div>
 
     <div class="stat-card" style="border-left-color:#6366F1">
       <div class="stat-value">{{stats.special}}</div>
-      <div class="stat-label">Special</div>
+      <div class="stat-label">Special Reports</div>
     </div>
 
     <div class="stat-card" style="border-left-color:#F59E0B">
       <div class="stat-value">{{stats.withPdf}}</div>
-      <div class="stat-label">PDFs</div>
+      <div class="stat-label">PDFs Generated</div>
     </div>
   </div>
 
@@ -526,21 +401,21 @@
         type="text" 
         class="filter-input" 
         id="searchInput"
-        placeholder="Search..."
+        placeholder="Search by organization or event..."
       />
     </div>
 
     <div class="filter-group">
       <label class="filter-label">Type</label>
       <select class="filter-input" id="typeFilter">
-        <option value="">All</option>
-        <option value="placement">Placement</option>
-        <option value="special">Special</option>
+        <option value="">All Types</option>
+        <option value="placement">Placement Audits</option>
+        <option value="special">Special Reports</option>
       </select>
     </div>
 
     <div class="filter-group">
-      <label class="filter-label">PDF</label>
+      <label class="filter-label">PDF Status</label>
       <select class="filter-input" id="pdfFilter">
         <option value="">All</option>
         <option value="with-pdf">With PDF</option>
@@ -549,166 +424,93 @@
     </div>
 
     <button onclick="applyFilters()" class="btn btn-primary">
-      🔍
+      🔍 Filter
     </button>
   </div>
 
+  <!-- TABLE -->
   {{#if reports.length}}
-    
-    <!-- DESKTOP TABLE VIEW -->
-    <div class="desktop-view">
-      <div class="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Report Details</th>
-              <th>Type</th>
-              <th>Window</th>
-              <th>Status</th>
-              <th>PDF</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="desktopTable">
-            {{#each reports}}
-              <tr data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}">
-                <td>
-                  <div class="report-title">{{this.subject.name}}</div>
-                  <div class="report-meta">
-                    {{this.author}} | {{this.subject.entityType}}
-                  </div>
-                </td>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Report Details</th>
+            <th>Type</th>
+            <th>Assessment Window</th>
+            <th>Status</th>
+            <th>PDF</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="reportsTable">
+          {{#each reports}}
+            <tr data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}">
+              <td>
+                <div class="report-title">{{this.subject.name}}</div>
+                <div class="report-meta">
+                  Author: {{this.author}} | 
+                  Entity: {{this.subject.entityType}}
+                </div>
+              </td>
 
-                <td>
-                  {{#if (eq this.auditKind "special")}}
-                    <span class="badge badge-special">Special</span>
-                  {{else}}
-                    <span class="badge badge-placement">Placement</span>
-                  {{/if}}
-                </td>
+              <td>
+                {{#if (eq this.auditKind "special")}}
+                  <span class="badge badge-special">Special</span>
+                {{else}}
+                  <span class="badge badge-placement">Placement</span>
+                {{/if}}
+              </td>
 
-                <td>{{this.assessmentWindow.label}}</td>
+              <td>{{this.assessmentWindow.label}}</td>
 
-                <td>
-                  {{#if this.isPaid}}
-                    <span class="badge badge-paid">✓ Paid</span>
-                  {{else}}
-                    <span class="badge badge-unpaid">Available</span>
-                  {{/if}}
-                </td>
+              <td>
+                {{#if this.isPaid}}
+                  <span class="badge badge-paid">✓ Paid</span>
+                {{else}}
+                  <span class="badge badge-unpaid">Available</span>
+                {{/if}}
+              </td>
 
-                <td>
+              <td>
+                {{#if this.pdfUrl}}
+                  <span style="color:var(--success)">✓ Generated</span>
+                {{else}}
+                  <span style="color:var(--slate)">Not yet</span>
+                {{/if}}
+              </td>
+
+              <td>
+                <div class="action-buttons">
+                  <a 
+                    href="/admin/scoi/reports/{{this._id}}/view" 
+                    target="_blank"
+                    class="btn btn-outline btn-sm"
+                  >
+                    👁️ View
+                  </a>
+
                   {{#if this.pdfUrl}}
-                    <span style="color:var(--success)">✓ Yes</span>
-                  {{else}}
-                    <span style="color:var(--slate)">No</span>
-                  {{/if}}
-                </td>
-
-                <td>
-                  <div class="action-buttons">
                     <a 
-                      href="/admin/scoi/reports/{{this._id}}/view" 
+                      href="{{this.pdfUrl}}" 
                       target="_blank"
-                      class="btn btn-outline btn-sm"
+                      class="btn btn-primary btn-sm"
                     >
-                      👁️ View
+                      📥 PDF
                     </a>
-
-                    {{#if this.pdfUrl}}
-                      <a 
-                        href="{{this.pdfUrl}}" 
-                        target="_blank"
-                        class="btn btn-primary btn-sm"
-                      >
-                        📥 PDF
-                      </a>
-                    {{else}}
-                      <button 
-                        onclick="generatePdf('{{this._id}}')"
-                        class="btn btn-primary btn-sm"
-                      >
-                        📄 Gen
-                      </button>
-                    {{/if}}
-                  </div>
-                </td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- MOBILE CARD VIEW -->
-    <div class="mobile-view" id="mobileCards">
-      {{#each reports}}
-        <div class="report-card" data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}">
-          <div class="card-header">
-            <div class="card-badges">
-              {{#if (eq this.auditKind "special")}}
-                <span class="badge badge-special">Special</span>
-              {{else}}
-                <span class="badge badge-placement">Placement</span>
-              {{/if}}
-              
-              {{#if this.isPaid}}
-                <span class="badge badge-paid">✓ Paid</span>
-              {{else}}
-                <span class="badge badge-unpaid">Available</span>
-              {{/if}}
-
-              {{#if this.pdfUrl}}
-                <span class="badge" style="background:rgba(16,185,129,0.1);color:#047857">PDF ✓</span>
-              {{/if}}
-            </div>
-
-            <div class="card-title">{{this.subject.name}}</div>
-          </div>
-
-          <div class="card-meta">
-            <div class="card-meta-row">
-              <span class="card-label">Window:</span>
-              <span>{{this.assessmentWindow.label}}</span>
-            </div>
-            <div class="card-meta-row">
-              <span class="card-label">Author:</span>
-              <span>{{this.author}}</span>
-            </div>
-            <div class="card-meta-row">
-              <span class="card-label">Entity:</span>
-              <span>{{this.subject.entityType}}</span>
-            </div>
-          </div>
-
-          <div class="card-actions">
-            <a 
-              href="/admin/scoi/reports/{{this._id}}/view" 
-              target="_blank"
-              class="card-btn btn-outline"
-            >
-              👁️ View
-            </a>
-
-            {{#if this.pdfUrl}}
-              <a 
-                href="{{this.pdfUrl}}" 
-                target="_blank"
-                class="card-btn btn-primary"
-              >
-                📥 Download PDF
-              </a>
-            {{else}}
-              <button 
-                onclick="generatePdf('{{this._id}}')"
-                class="card-btn btn-primary"
-              >
-                📄 Generate PDF
-              </button>
-            {{/if}}
-          </div>
-        </div>
-      {{/each}}
+                  {{else}}
+                    <button 
+                      onclick="generatePdf('{{this._id}}')"
+                      class="btn btn-primary btn-sm"
+                    >
+                      📄 Generate
+                    </button>
+                  {{/if}}
+                </div>
+              </td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
     </div>
 
   {{else}}
@@ -738,9 +540,9 @@
     const type = document.getElementById('typeFilter').value;
     const pdfStatus = document.getElementById('pdfFilter').value;
 
-    // Filter desktop table
-    const desktopRows = document.querySelectorAll('#desktopTable tr');
-    desktopRows.forEach(row => {
+    const rows = document.querySelectorAll('#reportsTable tr');
+
+    rows.forEach(row => {
       const text = row.textContent.toLowerCase();
       const rowType = row.dataset.type;
       const rowPdf = row.dataset.pdf;
@@ -750,20 +552,6 @@
       const matchesPdf = !pdfStatus || rowPdf === pdfStatus;
 
       row.style.display = (matchesSearch && matchesType && matchesPdf) ? '' : 'none';
-    });
-
-    // Filter mobile cards
-    const mobileCards = document.querySelectorAll('#mobileCards .report-card');
-    mobileCards.forEach(card => {
-      const text = card.textContent.toLowerCase();
-      const cardType = card.dataset.type;
-      const cardPdf = card.dataset.pdf;
-
-      const matchesSearch = !search || text.includes(search);
-      const matchesType = !type || cardType === type;
-      const matchesPdf = !pdfStatus || cardPdf === pdfStatus;
-
-      card.style.display = (matchesSearch && matchesType && matchesPdf) ? '' : 'none';
     });
   }
 
@@ -789,27 +577,27 @@
         alert('✅ PDF generated successfully!');
         window.location.reload();
       } else {
-        alert('❌ Failed: ' + (data.error || 'Unknown error'));
+        alert('❌ Failed to generate PDF: ' + (data.error || 'Unknown error'));
         btn.disabled = false;
-        btn.textContent = '📄 Generate PDF';
+        btn.textContent = '📄 Generate';
       }
     } catch (error) {
       console.error('Error:', error);
       alert('❌ Failed to generate PDF');
       btn.disabled = false;
-      btn.textContent = '📄 Generate PDF';
+      btn.textContent = '📄 Generate';
     }
   }
 
   // Generate all PDFs
   async function generateAllPdfs() {
-    if (!confirm('Generate PDFs for all reports without PDFs?')) {
+    if (!confirm('Generate PDFs for all reports without PDFs? This may take a while.')) {
       return;
     }
 
     const btn = event.target;
     btn.disabled = true;
-    btn.textContent = '⏳ Working...';
+    btn.textContent = '⏳ Generating All...';
 
     try {
       const response = await fetch('/admin/scoi/reports/generate-all-pdfs', {
@@ -819,18 +607,18 @@
       const data = await response.json();
 
       if (data.success) {
-        alert(`✅ Generated ${data.generated} PDFs!`);
+        alert(`✅ Generated ${data.generated} PDFs successfully!`);
         window.location.reload();
       } else {
         alert('❌ Failed: ' + (data.error || 'Unknown error'));
         btn.disabled = false;
-        btn.textContent = '📥 Generate All';
+        btn.textContent = '📥 Generate All PDFs';
       }
     } catch (error) {
       console.error('Error:', error);
       alert('❌ Failed to generate PDFs');
       btn.disabled = false;
-      btn.textContent = '📥 Generate All';
+      btn.textContent = '📥 Generate All PDFs';
     }
   }
 </script>
