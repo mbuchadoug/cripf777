@@ -1,16 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRIPFCnt | Framework for Intelligence & Governance Transformation</title>
-    <meta name="description" content="CRIPFCnt: A comprehensive framework for institutional intelligence restructuring, governance reform, and leadership development. Trusted by governments, NGOs, and global organizations.">
-    
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+   
+
+<!-- Open Graph -->
+<meta property="og:site_name" content="CRIPFCnt" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CRIPFCnt | Recalibrating Intelligence & Society" />
+<meta property="og:description" content="CRIPFCnt: an eight-pillar framework and life manual redefining consciousness, responsibility and interpretation for the data age." />
+<meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
+<meta property="og:image" content="{{siteUrl}}/static/img/logo.png" />
+<meta property="og:image:alt" content="CRIPFCnt | " />
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="CRIPFCnt | Recalibrating Intelligence & Society" />
+<meta name="twitter:description" content="CRIPFCnt | an eight-pillar framework and life manual for society, leadership." />
+<meta name="twitter:image" content="{{siteUrl}}/static/img/logo.png" />
+
+<!-- Structured Data: Organization + WebSite + Breadcrumb + SocialProfile (adjust URLs) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "CRIPFCnt",
+  "url": "{{siteUrl}}",
+  "logo": "{{siteUrl}}/static/img/logo.png",
+  "sameAs": [
+    "https://www.facebook.com/your-page",
+    "https://twitter.com/your-handle",
+    "https://www.linkedin.com/company/your-page"
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "url": "{{siteUrl}}",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "{{siteUrl}}/search?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+
+   
+
+
     <style>
         :root {
             --navy: #1E3A5F;
@@ -70,7 +112,6 @@
             align-items: center;
             gap: 1rem;
             text-decoration: none;
-            z-index: 1001;
         }
         
         .logo-icon {
@@ -127,38 +168,6 @@
         .nav-cta:hover {
             background: var(--navy-dark);
             color: var(--white);
-        }
-        
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle {
-            display: none;
-            flex-direction: column;
-            gap: 5px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 0.5rem;
-            z-index: 1001;
-        }
-        
-        .mobile-menu-toggle span {
-            width: 28px;
-            height: 3px;
-            background: var(--navy);
-            transition: all 0.3s;
-            border-radius: 2px;
-        }
-        
-        .mobile-menu-toggle.active span:nth-child(1) {
-            transform: rotate(45deg) translate(8px, 8px);
-        }
-        
-        .mobile-menu-toggle.active span:nth-child(2) {
-            opacity: 0;
-        }
-        
-        .mobile-menu-toggle.active span:nth-child(3) {
-            transform: rotate(-45deg) translate(7px, -7px);
         }
         
         /* Hero Section */
@@ -271,7 +280,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 2rem;
+            gap: 3rem;
             flex-wrap: wrap;
         }
         
@@ -626,45 +635,8 @@
         }
         
         @media (max-width: 768px) {
-            .mobile-menu-toggle {
-                display: flex;
-            }
-            
             .nav-links {
-                position: fixed;
-                top: 0;
-                right: -100%;
-                width: 80%;
-                max-width: 350px;
-                height: 100vh;
-                background: var(--white);
-                flex-direction: column;
-                gap: 0;
-                padding: 6rem 2rem 2rem;
-                box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-                transition: right 0.3s;
-                align-items: flex-start;
-            }
-            
-            .nav-links.active {
-                right: 0;
-            }
-            
-            .nav-links li {
-                width: 100%;
-                border-bottom: 1px solid var(--medium-gray);
-            }
-            
-            .nav-links a {
-                display: block;
-                padding: 1.25rem 0;
-                font-size: 1.1rem;
-            }
-            
-            .nav-cta {
-                width: 100%;
-                text-align: center;
-                margin-top: 1rem;
+                display: none;
             }
             
             .pillars-grid {
@@ -682,15 +654,6 @@
             .hero-stats {
                 gap: 2rem;
             }
-            
-            .trust-logos {
-                gap: 1rem;
-            }
-            
-            .trust-logo {
-                padding: 0.75rem 1.5rem;
-                font-size: 0.85rem;
-            }
         }
     </style>
 </head>
@@ -702,21 +665,13 @@
                 <div class="logo-icon">C</div>
                 <span class="logo-text">CRIPFCnt</span>
             </a>
-            
-            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
-            
-            <ul class="nav-links" id="navLinks">
-                 <li><a href="/">Home</a></li>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
                 <li><a href="/about">Framework</a></li>
                 <li><a href="/scoi">Audits</a></li>
                 <li><a href="/lms">Applications</a></li>
                 <li><a href="/auth/school">Student Portal</a></li>
                 <li><a href="mailto:info@cripfcnt.com" class="nav-cta">Get Started</a></li>
-              
             </ul>
         </div>
     </nav>
@@ -962,7 +917,7 @@
                 <div>
                     <h4 class="footer-title">Framework</h4>
                     <ul class="footer-links">
-                        <li><a href="/about">About CRIPFCnt</a></li>
+                        <li><a href="about.html">About CRIPFCnt</a></li>
                         <li><a href="about.html#pillars">Eight Pillars</a></li>
                         <li><a href="#">Methodology</a></li>
                         <li><a href="#">Research Papers</a></li>
@@ -994,34 +949,7 @@
             <div class="footer-bottom">
                 <p>&copy; 2025 CRIPFCnt. All rights reserved. Intelligence Structuring Framework.</p>
             </div>
-        </div>
-    </footer>
-
-    <!-- Mobile Menu Script -->
-    <script>
-        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
-        const navLinks = document.getElementById('navLinks');
-        
-        mobileMenuToggle.addEventListener('click', () => {
-            mobileMenuToggle.classList.toggle('active');
-            navLinks.classList.toggle('active');
-        });
-        
-        // Close menu when clicking a link
-        navLinks.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', () => {
-                mobileMenuToggle.classList.remove('active');
-                navLinks.classList.remove('active');
-            });
-        });
-        
-        // Close menu when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!mobileMenuToggle.contains(e.target) && !navLinks.contains(e.target)) {
-                mobileMenuToggle.classList.remove('active');
-                navLinks.classList.remove('active');
-            }
-        });
-    </script>
+        </footer>
+    </div>
 </body>
 </html>
