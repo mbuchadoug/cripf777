@@ -734,7 +734,7 @@ if (state === "payment_method") {
 
   const method = methodMap[trimmed];
   if (!method) {
-    await sendText(from, "❌ Invalid option. Choose 1–4.");
+    await sendText(from, "❌ Invalid option. Choose 1-4.");
     return true;
   }
 
@@ -1307,7 +1307,7 @@ return true;
   if (state === "creating_invoice_set_discount") {
     const pct = Number(trimmed);
     if (isNaN(pct) || pct < 0 || pct > 100) {
-      await sendText(from, "❌ Invalid discount. Enter a percent (0–100):");
+      await sendText(from, "❌ Invalid discount. Enter a percent (0-100):");
       return true;
     }
 
@@ -1341,7 +1341,7 @@ return sendInvoiceConfirmMenu(
   if (state === "creating_invoice_set_vat") {
     const pct = Number(trimmed);
     if (isNaN(pct) || pct < 0 || pct > 100) {
-      await sendText(from, "❌ Invalid VAT. Enter a percent (0–100):");
+      await sendText(from, "❌ Invalid VAT. Enter a percent (0-100):");
       return true;
     }
 

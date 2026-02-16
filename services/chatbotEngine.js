@@ -457,7 +457,7 @@ if (a === "inv_set_discount") {
   biz.sessionState = "creating_invoice_set_discount";
   await saveBizSafe(biz);
 
-  return sendText(from, "Enter discount percent (0–100):");
+  return sendText(from, "Enter discount percent (0-100):");
 }
 
 // ✅ Set VAT %
@@ -468,7 +468,7 @@ if (a === "inv_set_vat") {
   biz.sessionState = "creating_invoice_set_vat";
   await saveBizSafe(biz);
 
-  return sendText(from, "Enter VAT percent (0–100):");
+  return sendText(from, "Enter VAT percent (0-100):");
 }
 
 if (a === "inv_item_catalogue") {

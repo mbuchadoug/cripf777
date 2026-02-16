@@ -25,7 +25,7 @@ export async function assignEmployeeTrialQuizzes({ orgId, userId }) {
   const trialQuizzes = [
     { module: "inclusion", title: "Inclusion Is Not Absorption" },
     { module: "responsibility", title: "Responsibility Is Not Blame" },
-    { module: "grid", title: "The Grid – How the World Actually Operates" }
+    { module: "grid", title: "The Grid - How the World Actually Operates" }
   ];
 
   let assignedCount = 0;
