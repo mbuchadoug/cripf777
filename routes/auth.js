@@ -143,13 +143,24 @@ const memberships = await OrgMembership
   .lean();
 
 // ✅ Redirect by signup flow (parent vs employee), not by req.user.role
+// ✅ Redirect by signup flow AND role
 const isParentFlow = req.session?.signupSource === "parent";
+const isTeacherFlow = req.session?.signupSource === "private_teacher";
 
-if (isParentFlow) {
+// 🔥 PRIORITY: Check role first (handles existing users who sign in again)
+if (req.user.role === "private_teacher") {
+  redirectPath = "/teacher/dashboard";
+}
+// Then check signup flow (handles new signups)
+else if (isTeacherFlow) {
+  redirectPath = "/teacher/dashboard";
+}
+else if (isParentFlow || req.user.role === "parent") {
   redirectPath = "/parent/dashboard";
-} else if (memberships.length > 0 && memberships[0].org?.slug) {
+}
+else if (memberships.length > 0 && memberships[0].org?.slug) {
   redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
-} 
+}
         else {
           // 3️⃣ New user → auto-enrol into default org
           const org = await Organization.findOne({ slug: defaultOrgSlug }).lean();
