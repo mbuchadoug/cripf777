@@ -869,29 +869,18 @@ if (state === "adding_client_phone") {
       { upsert: true, new: true }
     );
 
-     biz.sessionData.client = client;
-  biz.sessionData.clientId = client._id;
+    biz.sessionData.client = client;
+    biz.sessionData.clientId = client._id; // ✅ CRITICAL FIX
+    biz.sessionState = "creating_invoice_add_items";
+    biz.sessionData.items = [];
+    biz.sessionData.awaitingItemDesc = false;
 
-  biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.items = [];
+    await saveBizSafe(biz);
 
-  // 🔥 ensure we start with catalogue/custom choice (no manual prompt)
-  biz.sessionData.itemMode = null;
-  biz.sessionData.lastItem = null;
-  biz.sessionData.expectingQty = false;
-  biz.sessionData.lastItemSource = null;
-
-  await saveBizSafe(biz);
-
-  await sendButtons(from, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
-  });
-
-
+    await sendText(
+      from,
+      `Client saved: ${client.name || client.phone}\n\nSend item description (e.g. Website design)`
+    );
     return true;
   }
 
@@ -913,6 +902,7 @@ if (state === "creating_invoice_add_items") {
       text: "How would you like to add an item?",
       buttons: [
         { id: "inv_item_catalogue", title: "📦 Catalogue" },
+        { id: "inv_view_products", title: "👀 View items" },
         { id: "inv_item_custom", title: "✍️ Custom item" }
       ]
     });

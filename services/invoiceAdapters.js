@@ -96,7 +96,6 @@ return sendButtons(to, {
   text: "How would you like to add an item?",
   buttons: [
     { id: "inv_item_catalogue", title: "📦 Catalogue" },
-    { id: "inv_view_products", title: "👀 View items" },
     { id: "inv_item_custom", title: "✍️ Custom item" }
   ]
 });
