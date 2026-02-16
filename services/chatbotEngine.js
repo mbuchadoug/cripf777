@@ -71,6 +71,23 @@ function round2(n) {
 }
 
 
+function currencySymbol(cur) {
+  const c = (cur || "").toUpperCase();
+  if (c === "USD") return "$";
+  if (c === "ZWL") return "Z$";
+  if (c === "ZAR") return "R";
+  return c ? c + " " : ""; // fallback: "KES " etc
+}
+
+function formatMoney(amount, currency) {
+  const sym = currencySymbol(currency);
+  // keep it simple + safe
+  const n = Number(amount);
+  if (Number.isNaN(n)) return `${sym}${amount}`;
+  return `${sym}${n}`;
+}
+
+
 function normalizeEcocashNumber(input, fallbackWhatsApp) {
   const raw = (input || "").replace(/\D+/g, "");
   const fb = (fallbackWhatsApp || "").replace(/\D+/g, "");
@@ -499,7 +516,9 @@ if (a === "inv_item_catalogue") {
     "Select item",
     products.map(p => ({
       id: `prod_${p._id}`,
-      title: `${p.name} (${p.unitPrice})`
+      //title: `${p.name} (${p.unitPrice})`
+      title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
+
     }))
   );
 }
@@ -535,7 +554,9 @@ if (a === "inv_item_custom") {
   let msg = "📦 Product catalogue:\n\n";
 
   products.forEach((p, i) => {
-    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+    //msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+    msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
+
   });
 
   msg += `\nReply *menu* to cancel or choose *Pick from catalogue* to add items.`;
@@ -2308,7 +2329,9 @@ case ACTIONS.VIEW_PRODUCTS: {
   let msg = "📦 Products:\n\n";
 
   products.forEach((p, i) => {
-    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+   // msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+   msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
+
   });
 
   await sendText(from, msg);
