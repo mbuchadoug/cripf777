@@ -28,7 +28,7 @@ const PLANS = {
   },
   teacher_starter: {
     name: "Teacher Starter",
-    amount: 20,
+    amount: 0.1,
     maxChildren: 15,
     aiQuizCredits: 20,
     durationDays: 30
