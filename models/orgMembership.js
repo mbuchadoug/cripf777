@@ -11,15 +11,9 @@ const OrgMembershipSchema = new mongoose.Schema({
 }
 ,
 
- role: {
+role: {
   type: String,
-  enum: [
-    "employee",
-    "manager",
-    "admin",
-    "student",
-    "parent"
-  ],
+  enum: ["student", "teacher", "employee", "org_admin", "super_admin", "parent", "private_teacher"],  // ✅ ADD THESE TWO
   required: true
 }
 ,
