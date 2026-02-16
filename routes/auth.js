@@ -55,6 +55,15 @@ router.get("/parent", (req, res) => {
   res.redirect("/auth/google");
 });
 
+
+
+/* ================================================================== */
+/*  ✅ PRIVATE TEACHER SIGNUP ROUTE                                   */
+/* ================================================================== */
+router.get("/teacher", (req, res) => {
+  req.session.signupSource = "private_teacher";   // ✅ MARK AS TEACHER FLOW
+  res.redirect("/auth/google");
+});
 /**
  * GET /auth/google
  */

@@ -31,6 +31,7 @@ export default function configurePassport() {
       async (req, accessToken, refreshToken, profile, done) => {
         try {
           const isParentSignup = req.session?.signupSource === "parent";
+          const isTeacherSignup = req.session?.signupSource === "private_teacher";  // ✅ ADD
 
           // Extract common fields
           const googleId = profile.id;
@@ -74,7 +75,12 @@ if (isParentSignup) {
 
   // only set role if new user
   updateDoc.$setOnInsert.role = "parent";
-} else {
+} else if (isTeacherSignup) {  // ✅ ADD THIS BLOCK
+  updateDoc.$set.consumerEnabled = true;
+  updateDoc.$set.accountType = "parent"; // Teachers use parent features
+  updateDoc.$setOnInsert.role = "private_teacher";
+}
+else {
   // only set role if new user
   updateDoc.$setOnInsert.role = "employee";
 }
@@ -90,7 +96,7 @@ if (isParentSignup) {
 // IMPORTANT: do NOT overwrite valid parent accounts.
 // ✅ accountType is ONLY for consumer accounts (parents/guardians/student_self)
 // ✅ Keep consumer flags based on flow (NOT user.role)
-if (isParentSignup) {
+if (isParentSignup || isTeacherSignup) {  
   // allow employee to also be a parent
   if (!user.accountType) user.accountType = "parent";
   user.consumerEnabled = true;
@@ -125,7 +131,7 @@ const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
 const schoolOrg = await Organization.findOne({ slug: "cripfcnt-school" }).lean();
 
 // ✅ If they came via /auth/parent => ensure HOME membership
-if (isParentSignup && homeOrg) {
+if ((isParentSignup || isTeacherSignup) && homeOrg) {
   const homeMembership = await OrgMembership.findOne({
     org: homeOrg._id,
     user: user._id
@@ -135,11 +141,13 @@ if (isParentSignup && homeOrg) {
     await OrgMembership.create({
       org: homeOrg._id,
       user: user._id,
-      role: "parent",
+      //role: "parent",
+            role: isTeacherSignup ? "private_teacher" : "parent", 
       joinedAt: new Date()
     });
 
-    console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as parent`);
+    //console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as parent`);
+     console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as ${isTeacherSignup ? 'private_teacher' : 'parent'}`);
   } else {
     console.log(`[passport] ${user.email} already member of cripfcnt-home`);
   }

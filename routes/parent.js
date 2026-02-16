@@ -27,7 +27,9 @@ const HOME_ORG_SLUG = "cripfcnt-home";
 const PLAN_LIMITS = {
   none:   { maxChildren: 0, label: "Free Trial" },
   silver: { maxChildren: 2, label: "Silver" },
-  gold:   { maxChildren: 5, label: "Gold" }
+  gold:   { maxChildren: 5, label: "Gold" },
+   starter: { maxChildren: 10, label: "Teacher Starter" },  // ✅ ADD
+  professional: { maxChildren: 30, label: "Teacher Professional" }  // ✅ ADD
 };
 
 const TRIAL_MAX_CHILDREN = 1;
@@ -58,12 +60,25 @@ async function generateUniqueStudentId(UserModel) {
 
 
 function getChildLimit(user) {
+  // ✅ Private teacher check
+  if (user.role === "private_teacher") {
+    if (!user.isTeacherSubscriptionActive || !user.isTeacherSubscriptionActive()) return 0;
+    return user.getTeacherChildLimit ? user.getTeacherChildLimit() : 0;
+  }
+
+
   if (!isSubscriptionActive(user)) return 0;
   const plan = user.subscriptionPlan || "none";
   return PLAN_LIMITS[plan]?.maxChildren ?? 0;
 }
 
 function isSubscriptionActive(user) {
+
+    // ✅ Private teacher check
+  if (user.role === "private_teacher") {
+    return user.isTeacherSubscriptionActive && user.isTeacherSubscriptionActive();
+  }
+
   if (user.subscriptionStatus !== "paid") return false;
   if (!user.subscriptionExpiresAt) return false;
   return new Date() < new Date(user.subscriptionExpiresAt);

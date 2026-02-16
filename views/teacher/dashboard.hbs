@@ -1,0 +1,540 @@
+{{!-- views/teacher/dashboard.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Private Teacher Dashboard | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    
+    body {
+      font-family:'Inter',system-ui,sans-serif;
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      min-height:100vh;
+      color:#1f2937;
+    }
+    
+    .container {
+      max-width:1400px;
+      margin:0 auto;
+      padding:40px 20px;
+    }
+    
+    .header {
+      background:white;
+      border-radius:16px;
+      padding:32px;
+      margin-bottom:32px;
+      box-shadow:0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 {
+      font-size:32px;
+      font-weight:800;
+      margin-bottom:8px;
+    }
+    
+    .header .subtitle {
+      color:#6b7280;
+      font-size:16px;
+    }
+    
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+      gap:20px;
+      margin-bottom:32px;
+    }
+    
+    .stat-card {
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      box-shadow:0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card .icon {
+      font-size:32px;
+      margin-bottom:12px;
+    }
+    
+    .stat-card .value {
+      font-size:36px;
+      font-weight:800;
+      margin-bottom:4px;
+    }
+    
+    .stat-card .label {
+      color:#6b7280;
+      font-size:14px;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+    
+    .section {
+      background:white;
+      border-radius:16px;
+      padding:32px;
+      margin-bottom:32px;
+      box-shadow:0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .section-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:24px;
+    }
+    
+    .section-title {
+      font-size:24px;
+      font-weight:700;
+    }
+    
+    .btn {
+      padding:12px 24px;
+      border-radius:8px;
+      font-weight:600;
+      text-decoration:none;
+      display:inline-block;
+      transition:all 0.2s;
+      border:none;
+      cursor:pointer;
+    }
+    
+    .btn-primary {
+      background:#667eea;
+      color:white;
+    }
+    
+    .btn-primary:hover {
+      background:#5568d3;
+      transform:translateY(-2px);
+    }
+    
+    .btn-success {
+      background:#10b981;
+      color:white;
+    }
+    
+    .quiz-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+      gap:20px;
+    }
+    
+    .quiz-card {
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:20px;
+      transition:all 0.2s;
+    }
+    
+    .quiz-card:hover {
+      box-shadow:0 4px 12px rgba(0,0,0,0.1);
+      transform:translateY(-4px);
+    }
+    
+    .quiz-card h3 {
+      font-size:18px;
+      margin-bottom:8px;
+    }
+    
+    .quiz-meta {
+      display:flex;
+      gap:16px;
+      font-size:14px;
+      color:#6b7280;
+      margin-bottom:16px;
+    }
+    
+    .student-list {
+      display:grid;
+      gap:12px;
+    }
+    
+    .student-card {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:16px;
+      background:#f9fafb;
+      border-radius:8px;
+    }
+    
+    .empty-state {
+      text-align:center;
+      padding:60px 20px;
+      color:#6b7280;
+    }
+    
+    .empty-state .icon {
+      font-size:64px;
+      margin-bottom:16px;
+      opacity:0.5;
+    }
+    
+    .modal {
+      display:none;
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,0.5);
+      z-index:1000;
+      align-items:center;
+      justify-content:center;
+    }
+    
+    .modal.active {
+      display:flex;
+    }
+    
+    .modal-content {
+      background:white;
+      border-radius:16px;
+      padding:32px;
+      max-width:600px;
+      width:90%;
+      max-height:90vh;
+      overflow-y:auto;
+    }
+    
+    .form-group {
+      margin-bottom:20px;
+    }
+    
+    .form-group label {
+      display:block;
+      font-weight:600;
+      margin-bottom:8px;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width:100%;
+      padding:12px;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+      font-size:14px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+  
+  <!-- HEADER -->
+  <div class="header">
+    <h1>👨‍🏫 Private Teacher Dashboard</h1>
+    <p class="subtitle">Welcome back, {{user.firstName}}! Manage your students and AI-generated quizzes.</p>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="icon">👥</div>
+      <div class="value">{{students.length}}/{{studentLimit}}</div>
+      <div class="label">Students</div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="icon">🧠</div>
+      <div class="value">{{aiCredits}}</div>
+      <div class="label">AI Quiz Credits</div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="icon">📝</div>
+      <div class="value">{{aiQuizzes.length}}</div>
+      <div class="label">Generated Quizzes</div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="icon">💎</div>
+      <div class="value">{{planLabel}}</div>
+      <div class="label">Current Plan</div>
+    </div>
+  </div>
+
+  <!-- AI QUIZ GENERATION -->
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">🧠 Generate AI Quiz</h2>
+    </div>
+    
+    <button class="btn btn-primary" onclick="openGenerateModal()">
+      ⚡ Generate New Quiz
+    </button>
+  </div>
+
+  <!-- MY AI QUIZZES -->
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">📚 My AI Quizzes</h2>
+      <a href="/teacher/quizzes" class="btn btn-primary">View All</a>
+    </div>
+    
+    {{#if aiQuizzes.length}}
+      <div class="quiz-grid">
+        {{#each aiQuizzes}}
+          <div class="quiz-card">
+            <h3>{{title}}</h3>
+            <div class="quiz-meta">
+              <span>📐 {{subject}}</span>
+              <span>🎓 Grade {{grade}}</span>
+              <span>⚡ {{difficulty}}</span>
+            </div>
+            <p style="color:#6b7280;font-size:14px;margin-bottom:16px;">
+              {{questionCount}} questions • {{assignedCount}} assignments
+            </p>
+            <button 
+              class="btn btn-success" 
+              onclick="openAssignModal('{{_id}}', '{{title}}')"
+              style="width:100%"
+            >
+              ➕ Assign to Students
+            </button>
+          </div>
+        {{/each}}
+      </div>
+    {{else}}
+      <div class="empty-state">
+        <div class="icon">📝</div>
+        <p>No AI quizzes generated yet. Click "Generate New Quiz" to create one!</p>
+      </div>
+    {{/if}}
+  </div>
+
+  <!-- MY STUDENTS -->
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">👥 My Students</h2>
+      {{#if canAddStudent}}
+        <a href="/parent/children/new" class="btn btn-primary">Add Student</a>
+      {{/if}}
+    </div>
+    
+    {{#if students.length}}
+      <div class="student-list">
+        {{#each students}}
+          <div class="student-card">
+            <div>
+              <strong>{{firstName}} {{lastName}}</strong>
+              <span style="color:#6b7280;margin-left:12px;">Grade {{grade}}</span>
+            </div>
+            <a href="/parent/children/{{_id}}/quizzes" class="btn btn-primary">
+              View Progress
+            </a>
+          </div>
+        {{/each}}
+      </div>
+    {{else}}
+      <div class="empty-state">
+        <div class="icon">👥</div>
+        <p>No students added yet. Add your first student to get started!</p>
+      </div>
+    {{/if}}
+  </div>
+
+</div>
+
+<!-- GENERATE QUIZ MODAL -->
+<div id="generateModal" class="modal">
+  <div class="modal-content">
+    <h2 style="margin-bottom:24px;">🧠 Generate AI Quiz</h2>
+    
+    <form id="generateForm">
+      <div class="form-group">
+        <label>Subject</label>
+        <select name="subject" required>
+          <option value="">Select subject...</option>
+          <option value="math">Mathematics</option>
+          <option value="english">English</option>
+          <option value="science">Science</option>
+          <option value="social_studies">Social Studies</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label>Grade Level</label>
+        <select name="grade" required>
+          <option value="">Select grade...</option>
+          <option value="1">Grade 1</option>
+          <option value="2">Grade 2</option>
+          <option value="3">Grade 3</option>
+          <option value="4">Grade 4</option>
+          <option value="5">Grade 5</option>
+          <option value="6">Grade 6</option>
+          <option value="7">Grade 7</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label>Topic</label>
+        <input type="text" name="topic" placeholder="e.g., Fractions, Photosynthesis, Shakespeare" required>
+      </div>
+      
+      <div class="form-group">
+        <label>Difficulty</label>
+        <select name="difficulty" required>
+          <option value="">Select difficulty...</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label>Number of Questions</label>
+        <input type="number" name="questionCount" value="10" min="5" max="20" required>
+      </div>
+      
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">
+          Generate Quiz (Uses 1 Credit)
+        </button>
+        <button type="button" class="btn" onclick="closeGenerateModal()" style="background:#e5e7eb;">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ASSIGN MODAL -->
+<div id="assignModal" class="modal">
+  <div class="modal-content">
+    <h2 style="margin-bottom:24px;">➕ Assign Quiz to Students</h2>
+    <p id="assignQuizTitle" style="color:#6b7280;margin-bottom:24px;"></p>
+    
+    <form id="assignForm">
+      <input type="hidden" id="assignQuizId" name="quizId">
+      
+      <div class="form-group">
+        <label>Select Students</label>
+        <div id="studentCheckboxes" style="max-height:300px;overflow-y:auto;">
+          {{#each students}}
+            <label style="display:block;padding:12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;cursor:pointer;">
+              <input type="checkbox" name="studentIds[]" value="{{_id}}" style="margin-right:8px;">
+              {{firstName}} {{lastName}} (Grade {{grade}})
+            </label>
+          {{/each}}
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button type="submit" class="btn btn-success" style="flex:1;">
+          Assign Quiz
+        </button>
+        <button type="button" class="btn" onclick="closeAssignModal()" style="background:#e5e7eb;">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openGenerateModal() {
+    document.getElementById('generateModal').classList.add('active');
+  }
+  
+  function closeGenerateModal() {
+    document.getElementById('generateModal').classList.remove('active');
+  }
+  
+  function openAssignModal(quizId, quizTitle) {
+    document.getElementById('assignQuizId').value = quizId;
+    document.getElementById('assignQuizTitle').textContent = quizTitle;
+    document.getElementById('assignModal').classList.add('active');
+  }
+  
+  function closeAssignModal() {
+    document.getElementById('assignModal').classList.remove('active');
+  }
+  
+  // Generate Quiz Form
+  document.getElementById('generateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = '⏳ Generating...';
+    
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+      const response = await fetch('/teacher/generate-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('✅ Quiz generated successfully!');
+        window.location.reload();
+      } else {
+        alert('❌ ' + result.error);
+        btn.disabled = false;
+        btn.textContent = 'Generate Quiz (Uses 1 Credit)';
+      }
+    } catch (error) {
+      alert('❌ Failed to generate quiz');
+      btn.disabled = false;
+      btn.textContent = 'Generate Quiz (Uses 1 Credit)';
+    }
+  });
+  
+  // Assign Quiz Form
+  document.getElementById('assignForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = '⏳ Assigning...';
+    
+    const formData = new FormData(e.target);
+    const studentIds = formData.getAll('studentIds[]');
+    const quizId = formData.get('quizId');
+    
+    if (studentIds.length === 0) {
+      alert('Please select at least one student');
+      btn.disabled = false;
+      btn.textContent = 'Assign Quiz';
+      return;
+    }
+    
+    try {
+      const response = await fetch('/teacher/assign-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quizId, studentIds })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`✅ Quiz assigned to ${result.assigned} student(s)`);
+        window.location.reload();
+      } else {
+        alert('❌ ' + result.error);
+        btn.disabled = false;
+        btn.textContent = 'Assign Quiz';
+      }
+    } catch (error) {
+      alert('❌ Failed to assign quiz');
+      btn.disabled = false;
+      btn.textContent = 'Assign Quiz';
+    }
+  });
+</script>
+
+</body>
+</html>

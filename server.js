@@ -24,6 +24,8 @@ import adminFinanceRoutes from "./routes/admin_finance.js";
 
 import twilioBizRoutes from "./routes/twilio_biz.js";
 
+import privateTeacherRoutes from "./routes/privateTeacher.js";
+
 
 
 import {
@@ -357,6 +359,8 @@ app.use("/payments", paymentsRouter);
 app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use("/twilio_biz", twilioBizRoutes);
+// ... after other route registrations
+app.use("/teacher", privateTeacherRoutes);
 app.use(adminFinanceRoutes);
 app.use("/", parentAttemptsRoutes);
 

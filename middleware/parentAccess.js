@@ -18,7 +18,8 @@ export async function canActAsParent(req, res, next) {
   try {
     if (!req.user) return res.status(401).send("Not logged in");
 
-    const allowedRoles = ["parent", "admin", "employee", "org_admin", "super_admin"];
+  //  const allowedRoles = ["parent", "admin", "employee", "org_admin", "super_admin"];
+  const allowedRoles = ["parent", "guardian", "private_teacher", "admin", "super_admin"];  // ✅ ADD private_teacher
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).send("Parent access denied");
     }

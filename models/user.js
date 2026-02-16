@@ -24,6 +24,7 @@ const UserSchema = new mongoose.Schema({
       "employee",
       "org_admin",
       "super_admin",
+          "private_teacher",  // ✅ ADD THIS
       "parent"
     ],
     default: "parent"
@@ -156,6 +157,44 @@ employeeTrialQuizzesCompleted: {
   default: 0
 },
 
+// ==============================
+// 👨‍🏫 PRIVATE TEACHER SUBSCRIPTION
+// ==============================
+teacherSubscriptionStatus: {
+  type: String,
+  enum: ["trial", "paid"],
+  default: "trial",
+  index: true
+},
+
+teacherSubscriptionPlan: {
+  type: String,
+  enum: ["none", "starter", "professional"],
+  default: "none",
+  index: true
+},
+
+teacherSubscriptionExpiresAt: {
+  type: Date,
+  default: null,
+  index: true
+},
+
+teacherPaidAt: {
+  type: Date,
+  default: null
+},
+
+// AI quiz credits (monthly reset)
+aiQuizCredits: {
+  type: Number,
+  default: 0
+},
+
+aiQuizCreditsResetAt: {
+  type: Date,
+  default: null
+},
   paidAt: { type: Date, default: null }
 }, { strict: true });
 
@@ -195,6 +234,49 @@ UserSchema.methods.canUpgradeEmployeeAccount = function () {
   // Must complete all trial quizzes to upgrade
   return this.employeeTrialQuizzesCompleted >= 3 && 
          this.employeeSubscriptionStatus === "trial";
+};
+
+
+// ==============================
+// 👨‍🏫 PRIVATE TEACHER HELPERS
+// ==============================
+
+UserSchema.methods.isTeacherSubscriptionActive = function () {
+  if (this.teacherSubscriptionStatus !== "paid") return false;
+  if (!this.teacherSubscriptionExpiresAt) return false;
+  return new Date() < this.teacherSubscriptionExpiresAt;
+};
+
+UserSchema.methods.getTeacherChildLimit = function () {
+  if (!this.isTeacherSubscriptionActive()) return 0;
+  if (this.teacherSubscriptionPlan === "starter") return 10;
+  if (this.teacherSubscriptionPlan === "professional") return 30;
+  return 0;
+};
+
+UserSchema.methods.getTeacherPlanLabel = function () {
+  if (this.teacherSubscriptionPlan === "professional") return "Professional (30 students)";
+  if (this.teacherSubscriptionPlan === "starter") return "Starter (10 students)";
+  return "Trial";
+};
+
+UserSchema.methods.hasAIQuizCredits = function () {
+  return this.aiQuizCredits > 0;
+};
+
+UserSchema.methods.resetAIQuizCredits = function () {
+  const now = new Date();
+  const lastReset = this.aiQuizCreditsResetAt || new Date(0);
+  
+  // Reset monthly (30 days)
+  if (now - lastReset > 30 * 24 * 60 * 60 * 1000) {
+    if (this.teacherSubscriptionPlan === "starter") {
+      this.aiQuizCredits = 20; // 20 AI quizzes/month
+    } else if (this.teacherSubscriptionPlan === "professional") {
+      this.aiQuizCredits = 50; // 50 AI quizzes/month
+    }
+    this.aiQuizCreditsResetAt = now;
+  }
 };
 // ==============================
 // 💳 PLAN HELPERS
