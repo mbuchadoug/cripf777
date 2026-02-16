@@ -1287,7 +1287,7 @@
       to build strong academic foundations and accountability skills from age 6.
     </p>
 
-    <div class="cta-buttons">
+   <div class="cta-buttons">
   {{#if user}}
     {{#if (eq user.role "private_teacher")}}
       <a href="/teacher/dashboard" class="btn-hero btn-hero-primary">
@@ -1299,19 +1299,14 @@
       </a>
     {{/if}}
   {{else}}
-    <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
-      Go to Dashboard →
+    <a href="/auth/parent" class="btn-hero btn-hero-primary">
+      Start Free Trial →
+    </a>
+    <a href="/lms" class="btn-hero btn-hero-secondary">
+      Back to Home
     </a>
   {{/if}}
-      {{else}}
-        <a href="/auth/parent" class="btn-hero btn-hero-primary">
-          Start Free Trial →
-        </a>
-        <a href="/lms" class="btn-hero btn-hero-secondary">
-          Back to Home
-        </a>
-      {{/if}}
-    </div>
+</div>
   </div>
 </section>
 
