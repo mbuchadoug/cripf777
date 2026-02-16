@@ -32,11 +32,12 @@ package: {
 },
 
 
-  subscriptionStatus: {
-    type: String,
-    enum: ["active", "expired"],
-    default: "active"
-  },
+subscriptionStatus: {
+  type: String,
+  enum: ["inactive", "active", "expired"],
+  default: "inactive"
+},
+
 
   // 🧪 TRIAL CONTROL (1 DAY)
   trialStartedAt: {
