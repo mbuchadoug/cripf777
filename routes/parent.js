@@ -371,7 +371,7 @@ router.post("/parent/children", ensureAuth, async (req, res) => {
     effectiveParentId = parentId;
   }
 
-  if (!["parent", "admin", "employee", "org_admin", "super_admin"].includes(req.user.role)) {
+ if (!["parent", "admin", "employee", "org_admin", "super_admin", "private_teacher"].includes(req.user.role)) {
     return res.status(403).send("Not allowed");
   }
 
