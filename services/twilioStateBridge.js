@@ -11,6 +11,8 @@ import { sendDocument } from "./metaSender.js";
 import { sendButtons } from "./metaSender.js";
 import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
+import InvoicePayment from "../models/invoicePayment.js";
+
 //import { sendSettingsMenu } from "./metaMenus.js";
 
 
@@ -323,12 +325,10 @@ if (state === "settings_rcpt_prefix") {
   createdAt: { $gte: start, $lte: end }
 }).lean();
 
-const payments = await (await import("../models/payment.js")).default.find({
+const payments = await InvoicePayment.find({
   businessId: biz._id,
-  ...branchFilter,
   createdAt: { $gte: start, $lte: end }
 }).lean();
-
 
  const expenses = await Expense.find({
   businessId: biz._id,
@@ -763,8 +763,22 @@ if (state === "payment_method") {
 
   await invoice.save();
 
+  
   // 🧾 GENERATE RECEIPT
   const receiptNumber = `RCPT-${Date.now()}`;
+
+
+// store payment row (THIS is what statements should read)
+await InvoicePayment.create({
+  businessId: biz._id,
+  clientId: invoice.clientId,
+  invoiceId: invoice._id,
+  amount,
+  method,
+  receiptNumber,
+  createdBy: from
+});
+
 
   const { filename } = await generatePDF({
     type: "receipt",

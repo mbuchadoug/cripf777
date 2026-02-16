@@ -1,5 +1,5 @@
 import Invoice from "../models/invoice.js";
-import Payment from "../models/payment.js";
+import InvoicePayment from "../models/invoicePayment.js";
 
 /**
  * Build a client ledger with running balance
@@ -17,12 +17,10 @@ export async function buildClientStatement({
     .lean();
 
   // 2️⃣ Fetch payments / receipts
-  const payments = await Payment.find({
-    businessId,
-    clientId
-  })
-    .select("amount createdAt invoiceId")
-    .lean();
+const payments = await InvoicePayment.find({ businessId, clientId })
+  .select("amount createdAt invoiceId receiptNumber method")
+  .lean();
+
 
   // 3️⃣ Normalize into ledger rows
   const ledger = [];
