@@ -57,17 +57,15 @@ async function generateUniqueStudentId(UserModel) {
   throw new Error("Failed to generate unique studentId");
 }
 
+
+
 function getChildLimit(user) {
   // ✅ Private teacher check
   if (user.role === "private_teacher") {
-    if (user.teacherSubscriptionStatus !== "paid") return 0;
-    if (!user.teacherSubscriptionExpiresAt) return 0;
-    if (new Date() >= new Date(user.teacherSubscriptionExpiresAt)) return 0;
-    
-    if (user.teacherSubscriptionPlan === "starter") return 15;
-    if (user.teacherSubscriptionPlan === "professional") return 40;
-    return 0;
+    if (!user.isTeacherSubscriptionActive || !user.isTeacherSubscriptionActive()) return 0;
+    return user.getTeacherChildLimit ? user.getTeacherChildLimit() : 0;
   }
+
 
   if (!isSubscriptionActive(user)) return 0;
   const plan = user.subscriptionPlan || "none";
@@ -75,17 +73,17 @@ function getChildLimit(user) {
 }
 
 function isSubscriptionActive(user) {
-  // ✅ Private teacher check (lean object compatible)
+
+    // ✅ Private teacher check
   if (user.role === "private_teacher") {
-    if (user.teacherSubscriptionStatus !== "paid") return false;
-    if (!user.teacherSubscriptionExpiresAt) return false;
-    return new Date() < new Date(user.teacherSubscriptionExpiresAt);
+    return user.isTeacherSubscriptionActive && user.isTeacherSubscriptionActive();
   }
 
   if (user.subscriptionStatus !== "paid") return false;
   if (!user.subscriptionExpiresAt) return false;
   return new Date() < new Date(user.subscriptionExpiresAt);
 }
+
 // ----------------------------------
 // Parent dashboard
 // ----------------------------------
@@ -197,18 +195,7 @@ router.get(
   async (req, res) => {
     const freshUser = await User.findById(req.user._id).lean();
 
-    // ✅ Check subscription based on role
-    const hasActiveSubscription = freshUser.role === "private_teacher"
-      ? (freshUser.teacherSubscriptionStatus === "paid" && 
-         freshUser.teacherSubscriptionExpiresAt && 
-         new Date() < new Date(freshUser.teacherSubscriptionExpiresAt))
-      : isSubscriptionActive(freshUser);
-
-    if (!hasActiveSubscription) {
-      // ✅ Redirect teachers to teacher pricing
-      if (freshUser.role === "private_teacher") {
-        return res.redirect("/teacher/pricing");
-      }
+    if (!isSubscriptionActive(freshUser)) {
       return res.render("parent/subscribe_first", { user: freshUser });
     }
 
@@ -220,16 +207,6 @@ router.get(
     const childLimit = getChildLimit(freshUser);
 
     if (childCount >= childLimit) {
-      // ✅ Different error page for teachers
-      if (freshUser.role === "private_teacher") {
-        return res.render("parent/child_limit", {
-          user: freshUser,
-          maxChildren: childLimit,
-          currentPlan: `Teacher ${freshUser.teacherSubscriptionPlan || "Trial"}`,
-          isTeacher: true
-        });
-      }
-
       return res.render("parent/child_limit", {
         user: freshUser,
         maxChildren: childLimit,
