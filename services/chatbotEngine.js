@@ -290,14 +290,17 @@ Reply *menu* to start.`
   // 🟢 ONBOARDING GATE (META)
   // =========================
 // ✅ SOURCE OF TRUTH: ownership comes from UserRole, not ownerPhone
+// ✅ SOURCE OF TRUTH: ownership comes from UserRole, not ownerPhone
 const ownerRole = await UserRole.findOne({
   phone,
   role: "owner",
   pending: false
 }).lean();
 
-if (ownerRole?.businessId) {
-  const existingBiz = await Business.findById(ownerRole.businessId).lean();
+// ✅ FIX: only auto-open menu if we don't already have an active biz in session
+// (prevents hijacking onboarding messages like business name)
+if (!biz && ownerRole?.businessId) {
+  const existingBiz = await Business.findById(ownerRole.businessId);
 
   if (existingBiz) {
     await UserSession.findOneAndUpdate(
@@ -306,13 +309,11 @@ if (ownerRole?.businessId) {
       { upsert: true }
     );
 
-    await sendText(from, "✅ You already have a business. Opening your menu...");
+    await sendText(from, "✅ Welcome back. Opening your menu...");
     await sendMainMenu(from);
     return;
   }
 }
-
-
 
 
   const a = action || "";
