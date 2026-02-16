@@ -25,6 +25,20 @@ const PLANS = {
     amount: 10,
     maxChildren: 5,
     durationDays: 30
+  },
+  teacher_starter: {
+    name: "Teacher Starter",
+    amount: 20,
+    maxChildren: 15,
+    aiQuizCredits: 20,
+    durationDays: 30
+  },
+  teacher_professional: {
+    name: "Teacher Professional",
+    amount: 40,
+    maxChildren: 40,
+    aiQuizCredits: 50,
+    durationDays: 30
   }
 };
 
@@ -137,16 +151,29 @@ router.post("/paynow/result", async (req, res) => {
       }
 
       // 4️⃣ Update parent with plan details
+// 4️⃣ Update user with plan details
+      const updateFields = {
+        subscriptionStatus: "paid",
+        subscriptionPlan: planKey,
+        maxChildren: planConfig.maxChildren,
+        subscriptionExpiresAt: expiresAt,
+        paidAt: now,
+        consumerEnabled: true
+      };
+
+      // ✅ Teacher-specific updates
+      if (planKey.startsWith("teacher_")) {
+        updateFields.teacherSubscriptionStatus = "paid";
+        updateFields.teacherSubscriptionPlan = planKey === "teacher_starter" ? "starter" : "professional";
+        updateFields.teacherSubscriptionExpiresAt = expiresAt;
+        updateFields.teacherPaidAt = now;
+        updateFields.aiQuizCredits = planConfig.aiQuizCredits;
+        updateFields.aiQuizCreditsResetAt = now;
+      }
+
       const updatedParent = await User.findByIdAndUpdate(
         payment.userId,
-        {
-          subscriptionStatus: "paid",
-          subscriptionPlan: planKey,
-          maxChildren: planConfig.maxChildren,
-          subscriptionExpiresAt: expiresAt,
-          paidAt: now,
-          consumerEnabled: true
-        },
+        updateFields,
         { new: true }
       );
 

@@ -217,4 +217,98 @@ router.get(
   }
 );
 
+
+
+
+/**
+ * GET /teacher/quiz/:id/preview
+ * Preview AI quiz before assigning
+ */
+router.get(
+  "/quiz/:id/preview",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const quiz = await AIQuiz.findOne({
+      _id: req.params.id,
+      teacherId: req.user._id
+    }).lean();
+
+    if (!quiz) {
+      return res.status(404).send("Quiz not found");
+    }
+
+    res.render("teacher/quiz_preview", {
+      user: req.user,
+      quiz
+    });
+  }
+);
+
+/**
+ * GET /teacher/pricing
+ * Teacher pricing plans
+ */
+router.get(
+  "/pricing",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const teacher = await User.findById(req.user._id);
+    res.render("teacher/pricing", {
+      user: teacher,
+      currentPlan: teacher.teacherSubscriptionPlan || "trial",
+      currentCredits: teacher.aiQuizCredits || 0
+    });
+  }
+);
+
+/**
+ * GET /teacher/student/:studentId/progress
+ * View student progress (redirect to parent route)
+ */
+router.get(
+  "/student/:studentId/progress",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const student = await User.findOne({
+      _id: req.params.studentId,
+      parentUserId: req.user._id,
+      role: "student"
+    });
+
+    if (!student) {
+      return res.status(404).send("Student not found");
+    }
+
+    return res.redirect(`/parent/children/${req.params.studentId}/quizzes`);
+  }
+);
+
+/**
+ * GET /teacher/student/:studentId/knowledge-map
+ * View student knowledge map
+ */
+router.get(
+  "/student/:studentId/knowledge-map",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const student = await User.findOne({
+      _id: req.params.studentId,
+      parentUserId: req.user._id,
+      role: "student"
+    });
+
+    if (!student) {
+      return res.status(404).send("Student not found");
+    }
+
+    return res.redirect(`/parent/children/${req.params.studentId}/knowledge-map`);
+  }
+);
+
+
+
 export default router;

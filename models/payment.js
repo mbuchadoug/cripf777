@@ -20,12 +20,19 @@ const PaymentSchema = new mongoose.Schema({
     required: true
   },
 
-  plan: {
+  /*plan: {
     type: String,
     enum: ["silver", "gold"],
     default: "silver",
     index: true
-  },
+  },*/
+
+  plan: {
+  type: String,
+  enum: ["silver", "gold", "teacher_starter", "teacher_professional"],
+  default: "silver",
+  index: true
+},
 
   pollUrl: {
     type: String,

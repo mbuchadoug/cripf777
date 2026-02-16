@@ -255,10 +255,15 @@
       <div class="label">Generated Quizzes</div>
     </div>
     
-    <div class="stat-card">
+   <div class="stat-card">
       <div class="icon">💎</div>
       <div class="value">{{planLabel}}</div>
       <div class="label">Current Plan</div>
+      {{#if (eq user.teacherSubscriptionStatus "trial")}}
+        <a href="/teacher/pricing" style="display:block;margin-top:12px;color:#667eea;font-size:13px;font-weight:700;text-decoration:none;">
+          📊 Upgrade Plan →
+        </a>
+      {{/if}}
     </div>
   </div>
 
@@ -293,13 +298,22 @@
             <p style="color:#6b7280;font-size:14px;margin-bottom:16px;">
               {{questionCount}} questions • {{assignedCount}} assignments
             </p>
-            <button 
-              class="btn btn-success" 
-              onclick="openAssignModal('{{_id}}', '{{title}}')"
-              style="width:100%"
-            >
-              ➕ Assign to Students
-            </button>
+      <div style="display:flex;gap:8px;">
+              <a 
+                href="/teacher/quiz/{{_id}}/preview" 
+                class="btn btn-primary"
+                style="flex:1;text-align:center;text-decoration:none;"
+              >
+                👁️ Preview
+              </a>
+              <button 
+                class="btn btn-success" 
+                onclick="openAssignModal('{{_id}}', '{{title}}')"
+                style="flex:1;"
+              >
+                ➕ Assign
+              </button>
+            </div>
           </div>
         {{/each}}
       </div>
@@ -313,10 +327,14 @@
 
   <!-- MY STUDENTS -->
   <div class="section">
-    <div class="section-header">
-      <h2 class="section-title">👥 My Students</h2>
+  <div class="section-header">
+      <h2 class="section-title">👥 My Students ({{students.length}}/{{studentLimit}})</h2>
       {{#if canAddStudent}}
-        <a href="/parent/children/new" class="btn btn-primary">Add Student</a>
+        <a href="/parent/children/new" class="btn btn-primary">➕ Add Student</a>
+      {{else}}
+        <a href="/teacher/pricing" class="btn" style="background:#fbbf24;color:#78350f;text-decoration:none;">
+          🔒 Upgrade to Add More
+        </a>
       {{/if}}
     </div>
     
@@ -328,9 +346,14 @@
               <strong>{{firstName}} {{lastName}}</strong>
               <span style="color:#6b7280;margin-left:12px;">Grade {{grade}}</span>
             </div>
-            <a href="/parent/children/{{_id}}/quizzes" class="btn btn-primary">
-              View Progress
-            </a>
+        <div style="display:flex;gap:8px;">
+              <a href="/teacher/student/{{_id}}/progress" class="btn btn-primary" style="flex:1;text-decoration:none;text-align:center;">
+                📊 Progress
+              </a>
+              <a href="/teacher/student/{{_id}}/knowledge-map" class="btn btn-primary" style="flex:1;text-decoration:none;text-align:center;">
+                🗺️ Map
+              </a>
+            </div>
           </div>
         {{/each}}
       </div>

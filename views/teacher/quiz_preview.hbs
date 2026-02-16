@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Preview: {{quiz.title}} | Teacher Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Inter',sans-serif;
+      background:#f3f4f6;
+      padding:40px 20px;
+      min-height:100vh;
+    }
+    .container { max-width:900px; margin:0 auto; }
+    .header {
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      margin-bottom:24px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header h1 { font-size:28px; margin-bottom:8px; color:#1f2937; }
+    .header .meta {
+      color:#6b7280;
+      font-size:14px;
+      display:flex;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    .question-card {
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      margin-bottom:20px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
+    .question-number {
+      font-weight:700;
+      color:#667eea;
+      margin-bottom:12px;
+      font-size:14px;
+    }
+    .question-text {
+      font-size:18px;
+      font-weight:600;
+      margin-bottom:16px;
+      line-height:1.5;
+      color:#1f2937;
+    }
+    .choice {
+      padding:12px 16px;
+      border:2px solid #e5e7eb;
+      border-radius:8px;
+      margin-bottom:8px;
+    }
+    .choice.correct {
+      background:#d1fae5;
+      border-color:#10b981;
+    }
+    .choice.correct::after {
+      content:' ✓';
+      color:#10b981;
+      font-weight:800;
+    }
+    .explanation {
+      background:#f0fdf4;
+      border-left:4px solid #10b981;
+      padding:12px 16px;
+      margin-top:16px;
+      border-radius:4px;
+    }
+    .explanation-title {
+      font-weight:700;
+      color:#10b981;
+      margin-bottom:4px;
+      font-size:13px;
+    }
+    .actions {
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+      display:flex;
+      gap:12px;
+      justify-content:center;
+    }
+    .btn {
+      padding:12px 24px;
+      border-radius:8px;
+      font-weight:600;
+      text-decoration:none;
+      display:inline-block;
+      cursor:pointer;
+      border:none;
+      font-size:14px;
+      transition:all 0.2s;
+    }
+    .btn-primary { background:#667eea; color:white; }
+    .btn-primary:hover { background:#5568d3; }
+    .btn-secondary { background:#e5e7eb; color:#374151; }
+    .btn-secondary:hover { background:#d1d5db; }
+  </style>
+</head>
+
+<body>
+<div class="container">
+  
+  <div class="header">
+    <h1>📝 {{quiz.title}}</h1>
+    <div class="meta">
+      <span>📐 {{quiz.subject}}</span>
+      <span>🎓 Grade {{quiz.grade}}</span>
+      <span>⚡ {{quiz.difficulty}}</span>
+      <span>📊 {{quiz.questionCount}} questions</span>
+    </div>
+  </div>
+
+  {{#each quiz.questions}}
+    <div class="question-card">
+      <div class="question-number">Question {{@index}} of {{../quiz.questionCount}}</div>
+      <div class="question-text">{{text}}</div>
+      
+      {{#each choices}}
+        <div class="choice {{#if (eq @index ../correctIndex)}}correct{{/if}}">
+          {{@index}}. {{this}}
+        </div>
+      {{/each}}
+      
+      <div class="explanation">
+        <div class="explanation-title">💡 Explanation</div>
+        {{explanation}}
+      </div>
+    </div>
+  {{/each}}
+
+  <div class="actions">
+    <a href="/teacher/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    <button 
+      class="btn btn-primary" 
+      onclick="if(confirm('Ready to assign this quiz?')) window.location.href='/teacher/dashboard'"
+    >
+      ➕ Assign to Students
+    </button>
+  </div>
+
+</div>
+</body>
+</html>

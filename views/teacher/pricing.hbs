@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Teacher Plans | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Inter',sans-serif;
+      background:linear-gradient(135deg,#667eea,#764ba2);
+      min-height:100vh;
+      padding:40px 20px;
+    }
+    .container { max-width:1200px; margin:0 auto; }
+    .header { text-align:center; color:white; margin-bottom:48px; }
+    .header h1 { font-size:42px; margin-bottom:12px; }
+    .header p { font-size:18px; opacity:0.9; }
+    .pricing-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+      gap:24px;
+      margin-bottom:32px;
+    }
+    .plan-card {
+      background:white;
+      border-radius:16px;
+      padding:32px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.2);
+      position:relative;
+      transition:all 0.3s;
+    }
+    .plan-card:hover { transform:translateY(-8px); }
+    .plan-card.featured { border:3px solid #fbbf24; }
+    .badge {
+      position:absolute;
+      top:-12px;
+      right:24px;
+      background:#fbbf24;
+      color:#78350f;
+      padding:4px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+    }
+    .plan-name { font-size:24px; font-weight:800; margin-bottom:8px; color:#1f2937; }
+    .plan-price { font-size:48px; font-weight:800; color:#667eea; margin-bottom:8px; }
+    .plan-price span { font-size:18px; color:#6b7280; }
+    .plan-features { list-style:none; margin:24px 0; }
+    .plan-features li {
+      padding:12px 0;
+      border-bottom:1px solid #e5e7eb;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:#1f2937;
+    }
+    .plan-features li::before {
+      content:'✓';
+      color:#10b981;
+      font-weight:800;
+      font-size:18px;
+    }
+    .btn {
+      width:100%;
+      padding:16px;
+      border-radius:8px;
+      font-weight:700;
+      font-size:16px;
+      border:none;
+      cursor:pointer;
+      background:#667eea;
+      color:white;
+      margin-top:16px;
+      transition:all 0.2s;
+    }
+    .btn:hover { background:#5568d3; transform:translateY(-2px); }
+    .back-link { text-align:center; margin-top:32px; }
+    .back-link a { color:white; text-decoration:underline; font-size:14px; }
+  </style>
+</head>
+
+<body>
+<div class="container">
+  
+  <div class="header">
+    <h1>👨‍🏫 Teacher Plans</h1>
+    <p>Choose the plan that fits your teaching needs</p>
+  </div>
+
+  <div class="pricing-grid">
+    
+    <div class="plan-card">
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">$20<span>/month</span></div>
+      <ul class="plan-features">
+        <li>15 students max</li>
+        <li>20 AI quiz credits/month</li>
+        <li>Progress tracking</li>
+        <li>Knowledge maps</li>
+        <li>Certificate generation</li>
+        <li>Student management</li>
+      </ul>
+      <form action="/payments/paynow/init" method="POST">
+        <input type="hidden" name="plan" value="teacher_starter">
+        <button type="submit" class="btn">Choose Starter</button>
+      </form>
+    </div>
+
+    <div class="plan-card featured">
+      <div class="badge">⭐ POPULAR</div>
+      <div class="plan-name">Professional</div>
+      <div class="plan-price">$40<span>/month</span></div>
+      <ul class="plan-features">
+        <li>40 students max</li>
+        <li>50 AI quiz credits/month</li>
+        <li>Progress tracking</li>
+        <li>Knowledge maps</li>
+        <li>Certificate generation</li>
+        <li>Student management</li>
+        <li>Priority support</li>
+      </ul>
+      <form action="/payments/paynow/init" method="POST">
+        <input type="hidden" name="plan" value="teacher_professional">
+        <button type="submit" class="btn">Choose Professional</button>
+      </form>
+    </div>
+
+  </div>
+
+  <div class="back-link">
+    <a href="/teacher/dashboard">← Back to Dashboard</a>
+  </div>
+
+</div>
+</body>
+</html>
