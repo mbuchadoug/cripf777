@@ -137,20 +137,34 @@ if ((isParentSignup || isTeacherSignup) && homeOrg) {
     user: user._id
   });
 
-  if (!homeMembership) {
-    await OrgMembership.create({
-      org: homeOrg._id,
-      user: user._id,
-      //role: "parent",
-            role: isTeacherSignup ? "private_teacher" : "parent", 
-      joinedAt: new Date()
-    });
+ if (!homeMembership) {
+  await OrgMembership.create({
+    org: homeOrg._id,
+    user: user._id,
+    role: isTeacherSignup ? "private_teacher" : "parent", 
+    joinedAt: new Date()
+  });
 
-    //console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as parent`);
-     console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as ${isTeacherSignup ? 'private_teacher' : 'parent'}`);
-  } else {
-    console.log(`[passport] ${user.email} already member of cripfcnt-home`);
+  console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as ${isTeacherSignup ? 'private_teacher' : 'parent'}`);
+  
+  // ✅ INITIALIZE AI CREDITS FOR NEW TEACHERS
+  if (isTeacherSignup) {
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          teacherSubscriptionStatus: "trial",
+          teacherSubscriptionPlan: "starter",
+          aiQuizCredits: 20,
+          aiQuizCreditsResetAt: new Date()
+        }
+      }
+    );
+    console.log(`[passport] ✅ Initialized ${user.email} with 20 AI quiz credits (starter trial)`);
   }
+} else {
+  console.log(`[passport] ${user.email} already member of cripfcnt-home`);
+}
 }
 
 // ✅ If they did NOT come via parent flow => ensure SCHOOL membership

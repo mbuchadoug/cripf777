@@ -916,10 +916,14 @@
   <div class="nav-container">
     <a href="/lms" class="brand">CRIPF<span>Cnt</span></a>
 
-    <div class="nav-right">
-      {{#if user}}
-        <a href="/parent/dashboard" class="nav-link">Dashboard</a>
-        <a href="/auth/logout" class="btn-nav">Sign Out</a>
+ <div class="nav-right">
+  {{#if user}}
+    {{#if (eq user.role "private_teacher")}}
+      <a href="/teacher/dashboard" class="nav-link">Dashboard</a>
+    {{else}}
+      <a href="/parent/dashboard" class="nav-link">Dashboard</a>
+    {{/if}}
+    <a href="/auth/logout" class="btn-nav">Sign Out</a>
       {{else}}
         <a href="/lms" class="nav-link">Back to Home</a>
         <a href="/auth/parent" class="btn-nav">Get Started</a>
@@ -950,10 +954,16 @@
     </p>
 
     <div class="hero-cta">
-      {{#if user}}
-        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
-          Open Dashboard →
-        </a>
+  {{#if user}}
+    {{#if (eq user.role "private_teacher")}}
+      <a href="/teacher/dashboard" class="btn-hero btn-hero-primary">
+        Open Dashboard →
+      </a>
+ {{else}}
+      <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+        Open Dashboard →
+      </a>
+    {{/if}}
       {{else}}
         <a href="/auth/parent" class="btn-hero btn-hero-primary">
           Start Free Trial →
@@ -1245,9 +1255,15 @@
       </ul>
 
       {{#if user}}
-        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
-          Go to Dashboard →
-        </a>
+  {{#if (eq user.role "private_teacher")}}
+    <a href="/teacher/dashboard" class="btn-hero btn-hero-primary">
+      Go to Dashboard →
+    </a>
+  {{else}}
+    <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+      Go to Dashboard →
+    </a>
+  {{/if}}
       {{else}}
         <a href="/auth/parent" class="btn-hero btn-hero-primary">
           Start Free Trial Now →
@@ -1272,10 +1288,21 @@
     </p>
 
     <div class="cta-buttons">
-      {{#if user}}
-        <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
-          Open Dashboard →
-        </a>
+  {{#if user}}
+    {{#if (eq user.role "private_teacher")}}
+      <a href="/teacher/dashboard" class="btn-hero btn-hero-primary">
+        Open Dashboard →
+      </a>
+    {{else}}
+      <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+        Open Dashboard →
+      </a>
+    {{/if}}
+  {{else}}
+    <a href="/parent/dashboard" class="btn-hero btn-hero-primary">
+      Go to Dashboard →
+    </a>
+  {{/if}}
       {{else}}
         <a href="/auth/parent" class="btn-hero btn-hero-primary">
           Start Free Trial →

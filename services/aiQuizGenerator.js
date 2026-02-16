@@ -18,10 +18,21 @@ export async function generateAIQuiz({
   difficulty,
   questionCount = 10
 }) {
-  // Verify teacher has credits
   const teacher = await User.findById(teacherId);
-  if (!teacher || teacher.role !== "private_teacher") {
-    throw new Error("Invalid teacher");
+  
+  // ✅ Reset credits if needed (this updates in memory)
+  teacher.resetAIQuizCredits();
+  
+  // ✅ Save the reset before checking
+  await teacher.save();
+  
+  // ✅ Reload to get fresh data
+  const freshTeacher = await User.findById(teacherId);
+  
+  console.log(`[AI Quiz] Teacher ${teacherId} has ${freshTeacher.aiQuizCredits} credits`);
+  
+  if (!freshTeacher.hasAIQuizCredits() || freshTeacher.aiQuizCredits <= 0) {
+    throw new Error("No AI quiz credits remaining this month");
   }
 
   // Check and reset credits if needed
@@ -87,10 +98,13 @@ Return ONLY a JSON array of questions, no additional text.`;
     });
 
     // Deduct credit
-    teacher.aiQuizCredits -= 1;
-    await teacher.save();
+  // ✅ Deduct credit using freshTeacher
+freshTeacher.aiQuizCredits -= 1;
+await freshTeacher.save();
 
-    return aiQuiz;
+console.log(`[AI Quiz] Credit used. Remaining: ${freshTeacher.aiQuizCredits}`);
+
+return aiQuiz;
 
   } catch (error) {
     console.error("[AI Quiz Generation Error]", error);

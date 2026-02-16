@@ -194,4 +194,27 @@ router.get(
   }
 );
 
+
+
+// Add this temporary route to routes/privateTeacher.js (remove after use)
+router.get(
+  "/reset-credits",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const teacher = await User.findById(req.user._id);
+    
+    teacher.teacherSubscriptionPlan = "starter";
+    teacher.aiQuizCredits = 20;
+    teacher.aiQuizCreditsResetAt = new Date();
+    await teacher.save();
+    
+    res.json({
+      success: true,
+      credits: teacher.aiQuizCredits,
+      plan: teacher.teacherSubscriptionPlan
+    });
+  }
+);
+
 export default router;
