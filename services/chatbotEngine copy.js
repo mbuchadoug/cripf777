@@ -480,16 +480,10 @@ if (a === "inv_item_catalogue") {
   }).limit(20);
 
   if (!products.length) {
-    // 🔥 Quick-add product flow (save product + price to DB)
-    biz.sessionState = "invoice_quick_add_product_name";
-    biz.sessionData = biz.sessionData || {};
-    biz.sessionData.itemMode = "catalogue";
-    biz.sessionData.quickAddProduct = {}; // { name, price }
+    biz.sessionData.itemMode = "custom";
     await saveBizSafe(biz);
-
-    return sendText(from, "No catalogue items yet.\n\n📦 Send product name:");
+    return sendText(from, "No catalogue items yet. Send item description:");
   }
-
 
   biz.sessionState = "creating_invoice_pick_product";
   await saveBizSafe(biz);

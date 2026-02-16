@@ -5,7 +5,7 @@ import { sendText } from "./metaSender.js";
 import { sendInvoiceConfirmMenu, sendMainMenu, sendSettingsMenu } from "./metaMenus.js";
 import Invoice from "../models/invoice.js";
 import Expense from "../models/expense.js";
-
+import Product from "../models/product.js";
 import { generatePDF } from "../routes/twilio_biz.js";
 import { sendDocument } from "./metaSender.js";
 import { sendButtons } from "./metaSender.js";
@@ -894,6 +894,84 @@ if (state === "adding_client_phone") {
 
     return true;
   }
+
+
+/* ===========================
+   📦 INVOICE: QUICK ADD PRODUCT (NAME)
+=========================== */
+if (state === "invoice_quick_add_product_name") {
+  const name = trimmed;
+
+  if (!name || name.length < 2) {
+    await sendText(from, "❌ Please enter a valid product name:");
+    return true;
+  }
+
+  biz.sessionData.quickAddProduct = biz.sessionData.quickAddProduct || {};
+  biz.sessionData.quickAddProduct.name = name;
+
+  biz.sessionState = "invoice_quick_add_product_price";
+  await saveBizSafe(biz);
+
+  await sendText(from, "💰 Enter product price:");
+  return true;
+}
+
+/* ===========================
+   💰 INVOICE: QUICK ADD PRODUCT (PRICE → SAVE DB → ASK QTY)
+=========================== */
+if (state === "invoice_quick_add_product_price") {
+  const price = Number(trimmed);
+
+  if (isNaN(price) || price <= 0) {
+    await sendText(from, "❌ Enter a valid price (e.g. 10):");
+    return true;
+  }
+
+  const name = biz.sessionData?.quickAddProduct?.name;
+  if (!name) {
+    // safety reset
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+    await sendText(from, "⚠️ Product name missing. Try again.");
+    return true;
+  }
+
+  // ✅ SAVE PRODUCT IMMEDIATELY
+  const product = await Product.create({
+    businessId: biz._id,
+    name,
+    unitPrice: price,
+    isActive: true
+  });
+
+  // ✅ Inject as catalogue item into invoice flow
+  biz.sessionData.lastItem = {
+    description: product.name,
+    unit: product.unitPrice,
+    source: "catalogue"
+  };
+
+  biz.sessionData.expectingQty = true;
+  biz.sessionData.itemMode = "catalogue";
+  biz.sessionData.quickAddProduct = null;
+
+  // Continue invoice item flow
+  biz.sessionState = "creating_invoice_add_items";
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Saved: ${product.name} (${product.unitPrice})\n\nEnter quantity (e.g. 1):`
+  );
+  return true;
+}
+
+
+
+
+
+
 
   /* ===========================
      ITEM ADDING
