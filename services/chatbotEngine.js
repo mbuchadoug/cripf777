@@ -57,6 +57,62 @@ import { sendText } from "./metaSender.js";
 
 import axios from "axios";
 
+async function startOnboarding(from, phone) {
+  // If they already have an owner role pointing to a biz, load it
+  const existingOwner = await UserRole.findOne({
+    phone,
+    role: "owner",
+    pending: false
+  }).lean();
+
+  if (existingOwner?.businessId) {
+    const b = await Business.findById(existingOwner.businessId);
+    if (b) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { activeBusinessId: b._id },
+        { upsert: true }
+      );
+
+      // continue their onboarding if needed
+      if (!b.sessionState) {
+        b.sessionState = "awaiting_business_name";
+        b.sessionData = {};
+        await saveBizSafe(b);
+      }
+
+      await sendText(from, "👋 Welcome back! Send your business name:");
+      return;
+    }
+  }
+
+  // Otherwise create a new business stub + owner role
+  const newBiz = await Business.create({
+    name: "",
+    currency: "USD",
+    package: "trial",
+    subscriptionStatus: "inactive",
+    sessionState: "awaiting_business_name",
+    sessionData: {},
+    ownerPhone: phone // optional if you still keep it, but ownership is via UserRole now
+  });
+
+  await UserRole.create({
+    phone,
+    role: "owner",
+    pending: false,
+    businessId: newBiz._id
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { activeBusinessId: newBiz._id },
+    { upsert: true }
+  );
+
+  await sendText(from, "👋 Welcome! Let’s set up your business.\n\nSend your business name:");
+}
+
 
 function msDays(ms) {
   return ms / (1000 * 60 * 60 * 24);
@@ -1052,6 +1108,11 @@ if (
 
 
 if (escapeWords.includes(al)) {
+  // If no business, don't crash — start onboarding instead
+  if (!biz) {
+    return startOnboarding(from, phone); // we'll add this helper below
+  }
+
   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
@@ -2335,13 +2396,15 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 default: {
   const biz = await getBizForPhone(from);
 
-  // 🔒 DO NOT INTERRUPT ACTIVE FLOWS
-  if (biz?.sessionState && biz.sessionState !== "ready") {
-    return;
+  if (!biz) {
+    return startOnboarding(from, phone);
   }
+
+  if (biz.sessionState && biz.sessionState !== "ready") return;
 
   return sendMainMenu(from);
 }
+
 
 
 
