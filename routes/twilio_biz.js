@@ -1181,13 +1181,20 @@ You are not linked to any business.`,
 
 
   // 🔒 Ensure user has no businesses
-  const roles = await UserRole.find({ phone: providerId });
-  if (roles.length > 0) {
-    return sendTwimlText(
-      res,
-      "You are already linked to a business. Reply *menu*."
-    );
-  }
+// 🔒 If user already belongs to a business, attach their session and allow menu
+const roles = await UserRole.find({ phone: providerId, pending: false }).lean();
+
+if (roles.length > 0) {
+  const firstBizId = roles[0].businessId;
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: firstBizId },
+    { upsert: true }
+  );
+
+  return sendTwimlText(res, "✅ Welcome back. Reply *menu* to continue.");
+}
 
   // ✅ CREATE BUSINESS
   const now = new Date();
@@ -1196,7 +1203,8 @@ You are not linked to any business.`,
     currency: "USD",
     provider: "whatsapp",
     package: "trial",
-    subscriptionStatus: "active",
+    //subscriptionStatus: "active",
+      subscriptionStatus: "trial",   // ✅ FIX
     trialStartedAt: now,
     trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
   });
@@ -2750,7 +2758,8 @@ Or reply *JOIN* to this message.`;
       res,
 `🚫 Monthly document limit reached
 
-Package: ${limitCheck.package}
+Package: ${PACKAGES[limitCheck.packageKey]?.label || limitCheck.packageKey}
+
 Limit: ${limitCheck.limit} documents per month
 
 Reply *upgrade* to unlock more.`
