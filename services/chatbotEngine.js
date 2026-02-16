@@ -162,7 +162,7 @@ async function showSalesDocs(from, type) {
     `📄 Select ${type}`,
     docs.map(d => ({
       id: `doc_${d._id}`,
-      title: `${d.number} — ${d.total} ${d.currency}`
+      title: `${d.number} - ${d.total} ${d.currency}`
     }))
   );
 }
@@ -2360,7 +2360,7 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
     "🧾 Subscription payments",
     rows.map(r => ({
       id: `subpay_${r._id}`,
-      title: `${(r.packageKey || "").toUpperCase()} — ${r.amount} ${r.currency}`,
+      title: `${(r.packageKey || "").toUpperCase()} - ${r.amount} ${r.currency}`,
       description: `${r.status}${r.paidAt ? ` • ${new Date(r.paidAt).toDateString()}` : ""}`
     }))
   );
