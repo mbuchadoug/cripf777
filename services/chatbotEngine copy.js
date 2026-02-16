@@ -232,7 +232,8 @@ const biz = await Business.create({
   currency: "USD",
   provider: "whatsapp",
   package: "trial",
-  subscriptionStatus: "active",
+  subscriptionStatus: "trial",
+
   trialStartedAt: now,
   trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
 });

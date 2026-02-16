@@ -172,6 +172,15 @@ export async function handleIncomingMessage({ from, action }) {
   // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
   // =========================
   const phone = from.replace(/\D+/g, "");
+  // ✅ HARD GUARD: prevent shared-session corruption
+// If phone is empty/invalid, NEVER read/write UserSession or Business.
+if (!phone || phone.length < 9 || phone.length > 15) {
+  console.error("❌ Invalid phone for session key:", { from, phone, action });
+  // Optional: tell user something friendly
+  // await sendText(from, "❌ Could not read your number. Please try again.");
+  return;
+}
+
   const text =
     typeof action === "string" ? action.trim() : "";
   const al = text.toLowerCase();
@@ -224,102 +233,29 @@ Reply *menu* to start.`
   // =========================
   // 🟢 ONBOARDING GATE (META)
   // =========================
-  if (!biz) {
-    const text = (action || "").trim();
-
-    if (/^create$/i.test(text)) {
-      // 1️⃣ ACK META (CRITICAL)
-      await sendText(from, "⏳ Creating your business, please wait...");
-
-      // 2️⃣ DELEGATE TO TWILIO STATE MACHINE
-
-
-/*const phone = from.replace(/\D+/g, "");
-
-const existing = await Business.findOne({ ownerPhone: phone });
-if (existing) {
-  await sendText(from, "You already have a business. Reply *menu*.");
-  return;
-}*/
-
-const existing = await Business.findOne({ ownerPhone: phone });
-
-if (existing) {
-  await UserSession.findOneAndUpdate(
-    { phone },
-    { activeBusinessId: existing._id },
-    { upsert: true }
-  );
-
-  await sendText(from, "✅ You already have a business. Opening your menu...");
-  await sendMainMenu(from);
-  return;
-}
-
-
-const now = new Date();
-
-const biz = await Business.create({
-  ownerPhone: phone,          
-  name: null,
-  currency: "USD",
-  provider: "whatsapp",
-  package: "trial",
-  subscriptionStatus: "active",
-  trialStartedAt: now,
-  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
-});
-
-const branch = await Branch.create({
-  businessId: biz._id,
-  name: "Main Branch",
-  isDefault: true
-});
-
-await UserRole.create({
-  businessId: biz._id,
-  branchId: branch._id,
+// ✅ SOURCE OF TRUTH: ownership comes from UserRole, not ownerPhone
+const ownerRole = await UserRole.findOne({
   phone,
   role: "owner",
   pending: false
-});
+}).lean();
 
-await UserSession.findOneAndUpdate(
-  { phone },
-  { activeBusinessId: biz._id },
-  { upsert: true }
-);
+if (ownerRole?.businessId) {
+  const existingBiz = await Business.findById(ownerRole.businessId).lean();
 
-biz.sessionState = "awaiting_business_name";
-await biz.save();
+  if (existingBiz) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { activeBusinessId: existingBiz._id },
+      { upsert: true }
+    );
 
-await sendText(from, "\nWhat is your business name?");
-return;
-
-
-
-      //return;
-    }
-
-    /*if (/^join$/i.test(text)) {
-      await sendText(from, "⏳ Processing invitation...");
-      await continueTwilioFlow({
-        from,
-        text: "JOIN"
-      });
-      return;
-    }*/
-
-return sendButtons(from, {
-  text: "👋 Welcome!\n\nYou don’t have a business yet.",
-  buttons: [
-    { id: "create", title: "➕ Create business" }
-  ]
-});
-
-
-
+    await sendText(from, "✅ You already have a business. Opening your menu...");
+    await sendMainMenu(from);
+    return;
   }
+}
+
 
 
 

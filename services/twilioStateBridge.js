@@ -28,6 +28,13 @@ async function saveBizSafe(biz) {
 export async function continueTwilioFlow({ from, text }) {
   const phone = from.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
+
+  // ✅ HARD GUARD: prevent shared-session corruption
+if (!phone || phone.length < 9 || phone.length > 15) {
+  console.error("❌ Invalid phone for session key:", { from, phone, text });
+  return true; // stop flow
+}
+
   if (!session?.activeBusinessId) return false;
 
   const biz = await Business.findById(session.activeBusinessId);
