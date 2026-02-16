@@ -234,17 +234,33 @@ Reply *menu* to start.`
       // 2️⃣ DELEGATE TO TWILIO STATE MACHINE
 
 
-const phone = from.replace(/\D+/g, "");
+/*const phone = from.replace(/\D+/g, "");
 
 const existing = await Business.findOne({ ownerPhone: phone });
 if (existing) {
   await sendText(from, "You already have a business. Reply *menu*.");
   return;
+}*/
+
+const existing = await Business.findOne({ ownerPhone: phone });
+
+if (existing) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { activeBusinessId: existing._id },
+    { upsert: true }
+  );
+
+  await sendText(from, "✅ You already have a business. Opening your menu...");
+  await sendMainMenu(from);
+  return;
 }
+
 
 const now = new Date();
 
 const biz = await Business.create({
+  ownerPhone: phone,          
   name: null,
   currency: "USD",
   provider: "whatsapp",
