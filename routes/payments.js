@@ -92,6 +92,12 @@ router.post("/paynow/init", ensureAuth, async (req, res) => {
    PAYNOW RETURN (Browser redirect)
 -------------------------------- */
 router.get("/paynow/return", ensureAuth, async (req, res) => {
+  const user = await User.findById(req.user._id).lean();
+  
+  if (user.role === "private_teacher") {
+    return res.redirect("/teacher/dashboard");
+  }
+  
   return res.redirect("/parent/dashboard");
 });
 
@@ -152,23 +158,32 @@ router.post("/paynow/result", async (req, res) => {
 
       // 4️⃣ Update parent with plan details
 // 4️⃣ Update user with plan details
-      const updateFields = {
-        subscriptionStatus: "paid",
-        subscriptionPlan: planKey,
-        maxChildren: planConfig.maxChildren,
-        subscriptionExpiresAt: expiresAt,
-        paidAt: now,
-        consumerEnabled: true
-      };
+  // 4️⃣ Update user with plan details
+      let updateFields;
 
-      // ✅ Teacher-specific updates
+      // ✅ TEACHER PLANS (teacher_starter, teacher_professional)
       if (planKey.startsWith("teacher_")) {
-        updateFields.teacherSubscriptionStatus = "paid";
-        updateFields.teacherSubscriptionPlan = planKey === "teacher_starter" ? "starter" : "professional";
-        updateFields.teacherSubscriptionExpiresAt = expiresAt;
-        updateFields.teacherPaidAt = now;
-        updateFields.aiQuizCredits = planConfig.aiQuizCredits;
-        updateFields.aiQuizCreditsResetAt = now;
+        updateFields = {
+          teacherSubscriptionStatus: "paid",
+          teacherSubscriptionPlan: planKey === "teacher_starter" ? "starter" : "professional",
+          teacherSubscriptionExpiresAt: expiresAt,
+          teacherPaidAt: now,
+          aiQuizCredits: planConfig.aiQuizCredits,
+          aiQuizCreditsResetAt: now,
+          maxChildren: planConfig.maxChildren,
+          consumerEnabled: true
+        };
+      }
+      // ✅ PARENT PLANS (silver, gold)
+      else {
+        updateFields = {
+          subscriptionStatus: "paid",
+          subscriptionPlan: planKey,
+          maxChildren: planConfig.maxChildren,
+          subscriptionExpiresAt: expiresAt,
+          paidAt: now,
+          consumerEnabled: true
+        };
       }
 
       const updatedParent = await User.findByIdAndUpdate(
@@ -176,7 +191,6 @@ router.post("/paynow/result", async (req, res) => {
         updateFields,
         { new: true }
       );
-
       // 5️⃣ Enable all existing children
       await User.updateMany(
         { parentUserId: updatedParent._id, role: "student" },
