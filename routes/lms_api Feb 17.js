@@ -1044,19 +1044,12 @@ if (exam?.meta?.isAIGenerated && exam?.meta?.aiQuizId) {
       };
     }
 
-  // Create/update attempt
-    // ✅ FIX: Resolve org from student if exam.org is missing
-    let attemptOrgId = exam?.org || null;
-    if (!attemptOrgId) {
-      const studentForOrg = await User.findById(attemptUserId).select("organization").lean();
-      attemptOrgId = studentForOrg?.organization || null;
-    }
-
+    // Create/update attempt
     const attemptDoc = {
       examId: finalExamId,
       userId: attemptUserId,
-      organization: attemptOrgId,
-      module: exam?.module || aiQuiz.subject || null,
+      organization: exam?.org || null,
+      module: exam?.module || null,
       questionIds: answers.map(a => a.questionId),
       answers: aiSavedAnswers,
       score: aiScore,
@@ -1089,24 +1082,17 @@ if (exam?.meta?.isAIGenerated && exam?.meta?.aiQuizId) {
       const serial = "CERT-" + Date.now().toString(36).toUpperCase() + "-" + 
                      Math.random().toString(36).slice(2, 6).toUpperCase();
 
-     // ✅ FIX: Resolve org from student if exam.org is missing
-let aiOrgId = exam?.org || null;
-if (!aiOrgId) {
-  const studentDoc = await User.findById(attemptUserId).select("organization").lean();
-  aiOrgId = studentDoc?.organization || null;
-}
-
-savedCertificate = await Certificate.create({
-  userId: attemptUserId,
-  orgId: aiOrgId,
-  examId: finalExamId,
-  quizTitle: aiQuiz.title,
-  moduleName: exam?.module || aiQuiz.subject || null,
-  courseTitle: exam?.module || aiQuiz.subject || "AI Quiz",
-  score: aiScore,
-  percentage: aiPercentage,
-  serial
-});
+      savedCertificate = await Certificate.create({
+        userId: attemptUserId,
+        orgId: exam?.org || null,
+        examId: finalExamId,
+        quizTitle: aiQuiz.title,
+        moduleName: exam?.module || null,
+        courseTitle: exam?.module || "AI Quiz",
+        score: aiScore,
+        percentage: aiPercentage,
+        serial
+      });
     }
 
     // Generate certificate PDF if passed
@@ -1155,17 +1141,6 @@ savedCertificate = await Certificate.create({
       }
     }
 
-
-    // ✅ FIX: Update topic mastery for AI quizzes too
-if (savedAttempt && savedAttempt._id) {
-  updateTopicMasteryFromAttempt(savedAttempt._id)
-    .then(result => {
-      console.log(`[AI Quiz] Topic mastery updated:`, result);
-    })
-    .catch(err => {
-      console.error("[AI Quiz] Failed to update topic mastery:", err);
-    });
-}
     // Return AI quiz results
     return res.json({
       examId: finalExamId,

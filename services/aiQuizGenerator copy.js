@@ -146,34 +146,29 @@ export async function assignAIQuizToStudents({
     // Create exam instance
     const examId = crypto.randomUUID();
     
-  // Get the student's org so exam is properly linked
-const student = await User.findById(studentId).select("organization").lean();
-
-const exam = await ExamInstance.create({
-  examId,
-  userId: studentId,
-  org: student?.organization || null,          // ✅ FIX: link to org
-  title: aiQuiz.title,
-  quizTitle: aiQuiz.title,
-  module: aiQuiz.subject,                      // "math", "english", etc.
-  subject: aiQuiz.subject,                     // ✅ FIX: also set subject field
-  grade: aiQuiz.grade,                         // ✅ FIX: set grade
-  targetRole: "student",
-  status: "pending",
-  durationMinutes: aiQuiz.questionCount * 2,
-  
-  questionIds: aiQuiz.questions.map((_, idx) => `ai:${aiQuizId}:${idx}`),
-  choicesOrder: aiQuiz.questions.map(q => 
-    Array.from({ length: q.choices.length }, (_, i) => i)
-  ),
-  
-  meta: {
-    aiQuizId: aiQuizId,
-    isAIGenerated: true,
-    teacherId,
-    difficulty: aiQuiz.difficulty
-  }
-});
+    const exam = await ExamInstance.create({
+      examId,
+      userId: studentId,
+      title: aiQuiz.title,
+      quizTitle: aiQuiz.title,
+      module: aiQuiz.subject,
+      targetRole: "student",
+      status: "pending",
+      durationMinutes: aiQuiz.questionCount * 2, // 2 min per question
+      
+      // Store questions directly (not refs)
+      questionIds: aiQuiz.questions.map((_, idx) => `ai:${aiQuizId}:${idx}`),
+      choicesOrder: aiQuiz.questions.map(q => 
+        Array.from({ length: q.choices.length }, (_, i) => i)
+      ),
+      
+      meta: {
+        aiQuizId: aiQuizId,
+        isAIGenerated: true,
+        teacherId,
+        difficulty: aiQuiz.difficulty
+      }
+    });
 
     // Track assignment
     aiQuiz.assignedTo.push({
