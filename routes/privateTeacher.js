@@ -1135,7 +1135,7 @@ function buildReportHtml(data, teacher) {
   ` : ""}
   
   <div class="footer">
-    <p>This report was generated using AI-assisted analysis by CRIPFCnt Education Platform.</p>
+    <p>This report was generated  by CRIPFCnt Education Platform.</p>
     <p>For questions, contact your educational administrator.</p>
   </div>
 </div>
