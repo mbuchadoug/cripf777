@@ -129,7 +129,7 @@ export async function assignAIQuizToStudents({
   });
 
   if (!aiQuiz) {
-    throw new Error("AI Quiz not found");
+    throw new Error("Quiz not found");
   }
 
   const assignments = [];

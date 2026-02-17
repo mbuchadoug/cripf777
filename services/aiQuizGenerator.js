@@ -32,14 +32,14 @@ export async function generateAIQuiz({
   console.log(`[AI Quiz] Teacher ${teacherId} has ${freshTeacher.aiQuizCredits} credits`);
   
   if (!freshTeacher.hasAIQuizCredits() || freshTeacher.aiQuizCredits <= 0) {
-    throw new Error("No AI quiz credits remaining this month");
+    throw new Error("No quiz geneation credits remaining this month");
   }
 
   // Check and reset credits if needed
   teacher.resetAIQuizCredits();
   
   if (!teacher.hasAIQuizCredits()) {
-    throw new Error("No AI quiz credits remaining this month");
+    throw new Error("No quiz geenation credits remaining this month");
   }
 
   // Build prompt
@@ -129,7 +129,7 @@ export async function assignAIQuizToStudents({
   });
 
   if (!aiQuiz) {
-    throw new Error("AI Quiz not found");
+    throw new Error(" Quiz not found");
   }
 
   const assignments = [];
