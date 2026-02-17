@@ -64,7 +64,9 @@ export async function sendMainMenu(to) {
   const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
     { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
-      { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
+      //{ id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
+      { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
+
     { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments", section: "payments" },
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
@@ -318,12 +320,16 @@ Please select a package below. You’ll be asked to enter the EcoCash number to 
 
 export async function sendProductsMenu(from) {
   return sendButtons(from, {
-    text: "📦 Products Catalogue",
-    buttons: [
-      { id: ACTIONS.ADD_PRODUCT, title: "➕ Add product" },
-      { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View products" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
-    ]
+    //text: "📦 Products Catalogue",
+    text: "📦 Products & Services",
+
+ buttons: [
+  { id: ACTIONS.ADD_PRODUCT, title: "➕ Add item" },
+  { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View items" },
+  { id: ACTIONS.BULK_UPLOAD_PRODUCTS, title: "📥 Bulk upload" },
+  { id: ACTIONS.BACK, title: "⬅ Back" }
+]
+
   });
 }
 

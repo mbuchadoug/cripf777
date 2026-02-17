@@ -88,6 +88,15 @@ INV_ITEM_CUSTOM: "inv_item_custom",
 PRODUCTS_MENU: "products_menu",
 ADD_PRODUCT: "add_product",
 VIEW_PRODUCTS: "view_products",
+BULK_UPLOAD_PRODUCTS: "bulk_upload_products",
+
+
+  // PRODUCTS & SERVICES (BULK UPLOAD)
+  BULK_UPLOAD_MENU: "bulk_upload_menu",
+  BULK_DOWNLOAD_TEMPLATE: "bulk_download_template",
+  BULK_PASTE_MODE: "bulk_paste_mode",
+
+
 
 
 

@@ -790,6 +790,156 @@ if (biz?.sessionState === "product_add_price") {
   return sendMainMenu(from);
 }
 
+if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
+  const msg = (text || "").trim();
+
+  // exits
+  if (msg.toLowerCase() === "cancel") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ Bulk upload cancelled.");
+    return sendProductsMenu(from);
+  }
+
+  if (msg.toLowerCase() === "done") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "✅ Bulk upload finished.");
+    return sendProductsMenu(from);
+  }
+
+  // Parse pasted lines:
+  // Accept: "Name - Price" OR "Name | Price" OR "Name : Price"
+  const lines = msg.split("\n").map(l => l.trim()).filter(Boolean);
+
+  const parsed = [];
+  const failed = [];
+
+  for (const line of lines) {
+    const m = line.match(/^(.+?)\s*[-|:]\s*(\d+(\.\d+)?)\s*$/);
+    if (!m) {
+      failed.push(line);
+      continue;
+    }
+
+    const name = m[1].trim();
+    const unitPrice = Number(m[2]);
+
+    if (!name || Number.isNaN(unitPrice) || unitPrice < 0) {
+      failed.push(line);
+      continue;
+    }
+
+    parsed.push({ name, unitPrice });
+  }
+
+  if (!parsed.length) {
+    await sendText(
+      from,
+      `❌ I couldn't read any valid lines.\n\nUse:\nMilk 1L - 1.50\nMath Lesson | 10\n\nInvalid:\n${failed.slice(0, 5).join("\n") || "(none)"}`
+    );
+    return;
+  }
+
+  const Product = (await import("../models/product.js")).default;
+
+  // Insert in bulk
+  await Product.insertMany(
+    parsed.map(p => ({
+      businessId: biz._id,
+      name: p.name,
+      unitPrice: p.unitPrice,
+      isActive: true
+    })),
+    { ordered: false }
+  ).catch(() => {
+    // ordered:false may still throw if duplicates etc — ignore and continue
+  });
+
+  let reply =
+`✅ Imported: ${parsed.length}`;
+
+  if (failed.length) {
+    reply += `\n❌ Skipped: ${failed.length}\n\nExamples skipped:\n${failed.slice(0, 5).join("\n")}`;
+  }
+
+  reply += `\n\nSend more lines, or reply *done* to finish.`;
+
+  return sendText(from, reply);
+}
+
+// =========================
+// 📥 BULK PASTE INPUT
+// =========================
+if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
+  const textRaw = (text || "").trim();
+
+  if (!textRaw) {
+    await sendText(from, "❌ Paste at least one line or type *done* to cancel.");
+    return;
+  }
+
+  if (textRaw.toLowerCase() === "done") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "✅ Bulk paste cancelled.");
+    return sendProductsMenu(from);
+  }
+
+  // Split lines (supports newline paste)
+  const lines = textRaw
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const Product = (await import("../models/product.js")).default;
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const line of lines) {
+    // Accept: name,price OR name,price,description
+    const parts = line.split(",").map(p => p.trim());
+    const name = parts[0];
+    const priceStr = parts[1];
+    const description = parts.slice(2).join(",") || "";
+
+    const unitPrice = Number(priceStr);
+
+    if (!name || name.length < 2 || Number.isNaN(unitPrice) || unitPrice <= 0) {
+      skipped++;
+      continue;
+    }
+
+    await Product.create({
+      businessId: biz._id,
+      name,
+      description,
+      unitPrice,
+      isActive: true
+    });
+
+    created++;
+  }
+
+  await sendText(
+    from,
+`✅ Bulk paste complete
+
+Created: ${created}
+Skipped: ${skipped}
+
+Tip: Skipped lines usually have missing name or invalid price.`
+  );
+
+  // Keep them in paste mode so they can paste again, or type done
+  await sendText(from, "Paste more lines, or reply *done* to exit.");
+  return;
+}
+
   /* =========================
    ONBOARDING — BUSINESS NAME
 ========================= */
@@ -860,7 +1010,8 @@ const settingsStates = [
   "settings_inv_prefix",
   "settings_qt_prefix",
   "settings_rcpt_prefix",
-  "settings_address" // ✅ ADD THIS
+  "settings_address", // ✅ ADD THIS
+  "bulk_upload_products" // ✅ ADD THIS
 ];
 
 
@@ -2352,6 +2503,107 @@ case ACTIONS.VIEW_PRODUCTS: {
   return sendMainMenu(from);
 
 }
+
+
+case ACTIONS.BULK_UPLOAD_PRODUCTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "bulk_upload_products";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`📥 Bulk upload (Products & Services)
+
+Send in ONE of these ways:
+
+✅ Option A: Upload a CSV file
+Columns: name, unitPrice
+Optional: description
+Example:
+Milk 1L,1.50
+Math Lesson,10
+
+✅ Option B: Paste lines (one per item)
+Format:
+Name - Price
+Name | Price
+Name : Price
+
+Example:
+Milk 1L - 1.50
+Math Lesson | 10
+Delivery Fee : 3
+
+Reply *done* when finished, or *cancel* to exit.`
+  );
+}
+
+case ACTIONS.BULK_UPLOAD_MENU: {
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+
+  return sendButtons(from, {
+    text:
+`📥 Bulk Upload (Products & Services)
+
+Choose an option below:`,
+    buttons: [
+      { id: ACTIONS.BULK_DOWNLOAD_TEMPLATE, title: "⬇ Download CSV template" },
+      { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  });
+}
+
+case ACTIONS.BULK_DOWNLOAD_TEMPLATE: {
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/templates/products_template.csv`;
+
+  // ✅ Button tap → bot sends the download link (works reliably)
+  await sendText(
+    from,
+`⬇ Download your CSV template here:
+${url}
+
+Format:
+name,unitPrice,description
+
+After editing, upload the CSV file here in WhatsApp.`
+  );
+
+  // Optional: show the bulk menu again
+  return sendButtons(from, {
+    text: "Want to paste instead?",
+    buttons: [
+      { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
+      { id: ACTIONS.BULK_UPLOAD_MENU, title: "⬅ Back" }
+    ]
+  });
+}
+
+case ACTIONS.BULK_PASTE_MODE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // Put user into paste-input state
+  biz.sessionState = "bulk_paste_input";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`📋 Paste items now (one per line)
+
+Examples:
+Milk 1L,1.50,Groceries
+Math Lesson,10,Private tuition service
+
+When done, reply: *done*`
+  );
+}
+
 
 case ACTIONS.SUBSCRIPTION_PAYMENTS: {
   const biz = await getBizForPhone(from);
