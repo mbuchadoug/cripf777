@@ -241,6 +241,15 @@ if (!phone || phone.length < 9 || phone.length > 15) {
     typeof action === "string" ? action.trim() : "";
   const al = text.toLowerCase();
 
+
+  const a = (action || "").trim().toLowerCase();
+
+// ✅ Meta action = known button/list IDs only (MUST be defined before any use)
+const isMetaAction =
+  typeof action === "string" &&
+  Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a);
+
+
   if (al === "join") {
     const invite = await UserRole.findOne({
       phone,
@@ -316,7 +325,7 @@ if (!biz && ownerRole?.businessId) {
 }
 
 
-  const a = action || "";
+.
   /*const al = a.toLowerCase();
 const text = typeof action === "string" ? action.trim() : "";*/
 
@@ -991,9 +1000,7 @@ return;
 // 🔑 In Meta Cloud, typed text ALSO arrives as `action`
 
 // ✅ Meta action = known button/list IDs only
-const isMetaAction =
-  typeof action === "string" &&
-  Object.values(ACTIONS).includes(action);
+
 
 
 // Anything that is NOT a Meta action → Twilio state machine
