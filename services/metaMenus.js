@@ -318,20 +318,15 @@ Please select a package below. You’ll be asked to enter the EcoCash number to 
 }
 
 
-export async function sendProductsMenu(from) {
-  return sendButtons(from, {
-    //text: "📦 Products Catalogue",
-    text: "📦 Products & Services",
-
- buttons: [
-  { id: ACTIONS.ADD_PRODUCT, title: "➕ Add item" },
-  { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View items" },
-  { id: ACTIONS.BULK_UPLOAD_PRODUCTS, title: "📥 Bulk upload" },
-  { id: ACTIONS.BACK, title: "⬅ Back" }
-]
-
-  });
+export async function sendProductsMenu(to) {
+  return sendList(to, "📦 Products & Services", [
+    { id: ACTIONS.ADD_PRODUCT, title: "➕ Add item" },
+    { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View items" },
+    { id: ACTIONS.BULK_UPLOAD_MENU, title: "📥 Bulk upload (CSV / Paste)" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }
+
 
 
 export async function sendSubscriptionMenu(to) {
