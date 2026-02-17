@@ -2550,7 +2550,7 @@ case ACTIONS.BULK_UPLOAD_MENU: {
 
 Choose an option below:`,
     buttons: [
-      { id: ACTIONS.BULK_DOWNLOAD_TEMPLATE, title: "⬇ Download CSV template" },
+      { id: ACTIONS.BULK_DOWNLOAD_TEMPLATE, title: "⬇ CSV template" },
       { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
       { id: ACTIONS.BACK, title: "⬅ Back" }
     ]
