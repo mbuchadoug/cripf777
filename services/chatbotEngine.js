@@ -248,63 +248,6 @@ if (!phone || phone.length < 9 || phone.length > 15) {
   return;
 }
 
-// ✅ HANDLE META DOCUMENT UPLOADS (CSV)
-if (action && typeof action === "object" && action.type === "document") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  // Only accept when user is in bulk upload mode
-  if (biz.sessionState !== "bulk_upload_products") {
-    await sendText(
-      from,
-      "📄 CSV received, but you are not in Bulk Upload mode.\n\nGo to: Products → Bulk upload (CSV / Paste) then upload again."
-    );
-    return;
-  }
-
-  const doc = action.document;
-  const mediaId = doc?.id;
-  const mime = (doc?.mime_type || "").toLowerCase();
-  const filename = doc?.filename || "upload.csv";
-
-  const isCsv =
-    mime.includes("text/csv") ||
-    mime.includes("application/csv") ||
-    mime.includes("application/vnd.ms-excel") ||
-    filename.toLowerCase().endsWith(".csv");
-
-  if (!isCsv) {
-    await sendText(
-      from,
-      "❌ Please upload a CSV file.\n\nExpected columns: name,unitPrice (optional: description)"
-    );
-    return;
-  }
-
-  if (!mediaId) {
-    await sendText(from, "❌ Could not read the document ID. Please re-upload.");
-    return;
-  }
-
-  await sendText(from, "⏳ CSV received. Importing...");
-
-  try {
-    const result = await importCsvFromMetaDocument({
-      mediaId,
-      bizId: biz._id
-    });
-
-    await sendText(
-      from,
-      `✅ Upload successful!\n\nImported: ${result.imported}\nSkipped: ${result.skipped}\n\nUpload another CSV or reply *done* to finish.`
-    );
-    return;
-  } catch (err) {
-    console.error("CSV import failed:", err);
-    await sendText(from, "❌ Failed to import CSV. Please check file format and try again.");
-    return;
-  }
-}
 
 
   const text =

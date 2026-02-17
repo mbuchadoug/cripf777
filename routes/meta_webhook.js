@@ -356,8 +356,8 @@ await sendText(from, "✅ Logo updated successfully.");
     }
 
     // 🔥 IMPORTANT: do NOT touch res below this line
-    //await handleIncomingMessage({ from, action });
-    await handleIncomingMessage({ from, action: msg });
+    await handleIncomingMessage({ from, action });
+    //await handleIncomingMessage({ from, action: msg });
 
 
   } catch (e) {
