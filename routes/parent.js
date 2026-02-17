@@ -237,11 +237,12 @@ router.get(
       });
     }
 
-    res.render("parent/new_child", {
-      user: freshUser,
-      childCount,
-      childLimit
-    });
+res.render("parent/new_child", {
+  user: freshUser,
+  childCount,
+  childLimit,
+  dashboardUrl: freshUser.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
+});
   }
 );
 
@@ -348,10 +349,11 @@ await child.save();
     }
 
    // return res.redirect("/parent/dashboard");
-   return res.render("parent/student_credentials", {
+ return res.render("parent/student_credentials", {
   childName: `${child.firstName} ${child.lastName || ""}`.trim(),
   studentId: child.studentId,
-  pin
+  pin,
+  dashboardUrl: req.user.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
 });
 
   }
@@ -462,10 +464,11 @@ await child.save();
   }
 
  // return res.redirect("/parent/dashboard");
- return res.render("parent/student_credentials", {
+return res.render("parent/student_credentials", {
   childName: `${child.firstName} ${child.lastName || ""}`.trim(),
   studentId: child.studentId,
-  pin
+  pin,
+  dashboardUrl: req.user.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
 });
 
 });
