@@ -148,19 +148,21 @@ if ((isParentSignup || isTeacherSignup) && homeOrg) {
   console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-home as ${isTeacherSignup ? 'private_teacher' : 'parent'}`);
   
   // ✅ INITIALIZE AI CREDITS FOR NEW TEACHERS
+// ✅ INITIALIZE TEACHER ACCOUNT (0 credits until paid)
   if (isTeacherSignup) {
     await User.updateOne(
       { _id: user._id },
       {
         $set: {
           teacherSubscriptionStatus: "trial",
-          teacherSubscriptionPlan: "starter",
-          aiQuizCredits: 20,
-          aiQuizCreditsResetAt: new Date()
+          teacherSubscriptionPlan: "none",
+          aiQuizCredits: 0,
+          aiQuizCreditsResetAt: null,
+          needsProfileSetup: true
         }
       }
     );
-    console.log(`[passport] ✅ Initialized ${user.email} with 20 AI quiz credits (starter trial)`);
+    console.log(`[passport] ✅ Initialized ${user.email} as teacher (0 credits, needs profile setup)`);
   }
 } else {
   console.log(`[passport] ${user.email} already member of cripfcnt-home`);

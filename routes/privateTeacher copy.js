@@ -38,12 +38,7 @@ router.get(
   ensurePrivateTeacher,
   async (req, res) => {
     const teacher = await User.findById(req.user._id);
-
-    // Redirect to setup if not configured
-    if (teacher.needsProfileSetup || !teacher.schoolLevelsEnabled?.length) {
-      return res.redirect("/teacher/setup");
-    }
-
+    
     // Reset credits if needed
     teacher.resetAIQuizCredits();
     await teacher.save();
@@ -59,8 +54,7 @@ router.get(
     }).sort({ createdAt: -1 }).lean();
 
     const ExamInstance = (await import("../models/examInstance.js")).default;
-    const Attempt = (await import("../models/attempt.js")).default;
-
+    
     // Get assignment counts
     for (const quiz of aiQuizzes) {
       quiz.assignedCount = await ExamInstance.countDocuments({
@@ -68,94 +62,31 @@ router.get(
       });
     }
 
-    // ✅ Compute subscription status
-    const now = new Date();
-    const subExpires = teacher.teacherSubscriptionExpiresAt
-      ? new Date(teacher.teacherSubscriptionExpiresAt)
-      : null;
-    const isExpired = subExpires && now >= subExpires;
-    const daysRemaining = subExpires && !isExpired
-      ? Math.ceil((subExpires - now) / (1000 * 60 * 60 * 24))
-      : 0;
-    const isPaid = teacher.teacherSubscriptionStatus === "paid" && !isExpired;
+   // ✅ Compute subscription status
+const now = new Date();
+const subExpires = teacher.teacherSubscriptionExpiresAt 
+  ? new Date(teacher.teacherSubscriptionExpiresAt) 
+  : null;
+const isExpired = subExpires && now >= subExpires;
+const daysRemaining = subExpires && !isExpired
+  ? Math.ceil((subExpires - now) / (1000 * 60 * 60 * 24))
+  : 0;
+const isPaid = teacher.teacherSubscriptionStatus === "paid" && !isExpired;
 
-    // ✅ Student performance data
-    const studentPerformance = [];
-    for (const student of students) {
-      const attempts = await Attempt.find({
-        userId: student._id,
-        status: "finished"
-      }).select("percentage passed module").lean();
-
-      const avgScore = attempts.length
-        ? Math.round(attempts.reduce((s, a) => s + (a.percentage || 0), 0) / attempts.length)
-        : null;
-      const passRate = attempts.length
-        ? Math.round((attempts.filter(a => a.passed).length / attempts.length) * 100)
-        : null;
-
-      studentPerformance.push({
-        _id: student._id,
-        firstName: student.firstName,
-        lastName: student.lastName,
-        grade: student.grade,
-        quizCount: attempts.length,
-        avgScore,
-        passRate
-      });
-    }
-
-    // Sort: best and worst performers
-    const withScores = studentPerformance.filter(s => s.avgScore !== null);
-    const topPerformers = [...withScores].sort((a, b) => b.avgScore - a.avgScore).slice(0, 5);
-    const lowPerformers = [...withScores].sort((a, b) => a.avgScore - b.avgScore).slice(0, 5);
-
-    // ✅ Load system quizzes based on school levels
-    const Question = (await import("../models/question.js")).default;
-    const Organization = (await import("../models/organization.js")).default;
-    const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
-
-    let systemQuizzes = [];
-    if (homeOrg) {
-      const levelFilter = teacher.schoolLevelsEnabled || [];
-      const gradeRanges = [];
-      if (levelFilter.includes("junior")) gradeRanges.push({ $gte: 1, $lte: 7 });
-      if (levelFilter.includes("high")) gradeRanges.push({ $gte: 8, $lte: 13 });
-
-      // Build grade query
-      let gradeQuery = {};
-      if (gradeRanges.length === 1) {
-        gradeQuery = { grade: gradeRanges[0] };
-      } else if (gradeRanges.length === 2) {
-        gradeQuery = { $or: gradeRanges.map(r => ({ grade: r })) };
-      }
-
-      const QuizRule = (await import("../models/quizRule.js")).default;
-      systemQuizzes = await QuizRule.find({
-        org: homeOrg._id,
-        enabled: true,
-        ...gradeQuery
-      }).select("quizTitle subject grade module quizType questionCount durationMinutes").lean();
-    }
-
-    res.render("teacher/dashboard", {
-      user: teacher,
-      students,
-      aiQuizzes,
-      studentLimit: teacher.getTeacherChildLimit(),
-      planLabel: teacher.getTeacherPlanLabel(),
-      aiCredits: teacher.aiQuizCredits || 0,
-      canAddStudent: isPaid && students.length < teacher.getTeacherChildLimit(),
-      isPaid,
-      isExpired,
-      daysRemaining,
-      expiresAt: subExpires ? subExpires.toISOString().slice(0, 10) : null,
-      canGenerateAI: isPaid && (teacher.aiQuizCredits || 0) > 0,
-      topPerformers,
-      lowPerformers,
-      systemQuizzes,
-      schoolLevels: teacher.schoolLevelsEnabled || []
-    });
+res.render("teacher/dashboard", {
+  user: teacher,
+  students,
+  aiQuizzes,
+  studentLimit: teacher.getTeacherChildLimit(),
+  planLabel: teacher.getTeacherPlanLabel(),
+  aiCredits: teacher.aiQuizCredits || 0,
+  canAddStudent: isPaid && students.length < teacher.getTeacherChildLimit(),
+  isPaid,
+  isExpired,
+  daysRemaining,
+  expiresAt: subExpires ? subExpires.toISOString().slice(0, 10) : null,
+  canGenerateAI: isPaid && (teacher.aiQuizCredits || 0) > 0
+});
   }
 );
 

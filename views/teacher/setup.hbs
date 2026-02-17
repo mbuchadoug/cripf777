@@ -1,0 +1,248 @@
+{{!-- views/teacher/setup.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Set Up Your Profile | CRIPFCnt Teacher Studio</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#0f172a; --ink-soft:#475569; --ink-muted:#94a3b8;
+      --surface:#f8fafc; --card:#fff; --border:#e2e8f0;
+      --accent:#6366f1; --accent-light:#818cf8; --accent-bg:#eef2ff;
+      --green:#10b981; --green-bg:#ecfdf5;
+      --radius:16px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'DM Sans',system-ui,sans-serif;
+      background:var(--surface);
+      color:var(--ink);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .setup-container {
+      max-width:520px;
+      width:100%;
+    }
+    .logo {
+      text-align:center;
+      margin-bottom:32px;
+    }
+    .logo h1 {
+      font-family:'Playfair Display',serif;
+      font-size:28px;
+      font-weight:800;
+    }
+    .logo p {
+      color:var(--ink-soft);
+      font-size:14px;
+      margin-top:4px;
+    }
+    .setup-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:36px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.06);
+    }
+    .setup-card h2 {
+      font-size:20px;
+      font-weight:700;
+      margin-bottom:8px;
+    }
+    .setup-card .desc {
+      color:var(--ink-soft);
+      font-size:14px;
+      margin-bottom:28px;
+      line-height:1.5;
+    }
+    .level-options {
+      display:grid;
+      gap:12px;
+      margin-bottom:28px;
+    }
+    .level-option {
+      position:relative;
+      border:2px solid var(--border);
+      border-radius:12px;
+      padding:20px;
+      cursor:pointer;
+      transition:all 0.2s;
+    }
+    .level-option:hover {
+      border-color:var(--accent-light);
+      background:var(--accent-bg);
+    }
+    .level-option.selected {
+      border-color:var(--accent);
+      background:var(--accent-bg);
+    }
+    .level-option input {
+      position:absolute;
+      opacity:0;
+      pointer-events:none;
+    }
+    .level-option .level-header {
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:6px;
+    }
+    .level-option .level-icon {
+      width:44px;
+      height:44px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+    }
+    .level-option .level-title {
+      font-size:16px;
+      font-weight:700;
+    }
+    .level-option .level-desc {
+      font-size:13px;
+      color:var(--ink-soft);
+      margin-left:56px;
+    }
+    .level-option .check-indicator {
+      position:absolute;
+      top:16px;
+      right:16px;
+      width:24px;
+      height:24px;
+      border-radius:6px;
+      border:2px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      color:transparent;
+      transition:all 0.15s;
+    }
+    .level-option.selected .check-indicator {
+      background:var(--accent);
+      border-color:var(--accent);
+      color:white;
+    }
+    .btn-continue {
+      width:100%;
+      padding:14px;
+      border-radius:10px;
+      background:var(--accent);
+      color:white;
+      font-size:15px;
+      font-weight:700;
+      border:none;
+      cursor:pointer;
+      transition:all 0.2s;
+    }
+    .btn-continue:hover {
+      background:var(--accent-light);
+      transform:translateY(-1px);
+    }
+    .btn-continue:disabled {
+      opacity:0.4;
+      cursor:not-allowed;
+      transform:none;
+    }
+    .error-msg {
+      color:#ef4444;
+      font-size:13px;
+      margin-bottom:12px;
+      display:none;
+    }
+    .welcome-badge {
+      display:inline-block;
+      background:var(--green-bg);
+      color:var(--green);
+      font-size:11px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      padding:4px 10px;
+      border-radius:6px;
+      margin-bottom:12px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="setup-container">
+  <div class="logo">
+    <h1>CRIPFCnt Teacher Studio</h1>
+    <p>Private tutoring made powerful</p>
+  </div>
+
+  <div class="setup-card">
+    <span class="welcome-badge">Welcome, {{user.firstName}}!</span>
+    <h2>Set up your teaching profile</h2>
+    <p class="desc">
+      Tell us what level you teach so we can give you access to the right quizzes, materials, and curriculum.
+      You can change this later in your settings.
+    </p>
+
+    <form id="setupForm" method="POST" action="/teacher/setup">
+      <div class="level-options">
+        <label class="level-option" id="opt-junior">
+          <input type="checkbox" name="schoolLevels" value="junior">
+          <div class="level-header">
+            <div class="level-icon" style="background:#eef2ff;">🏫</div>
+            <div class="level-title">Primary / Junior School</div>
+          </div>
+          <div class="level-desc">Grades 1–7 · Mathematics, English, Science, Social Studies, Responsibility</div>
+          <div class="check-indicator">✓</div>
+        </label>
+
+        <label class="level-option" id="opt-high">
+          <input type="checkbox" name="schoolLevels" value="high">
+          <div class="level-header">
+            <div class="level-icon" style="background:#fef3c7;">🎓</div>
+            <div class="level-title">High School</div>
+          </div>
+          <div class="level-desc">Grades 8–13 · Advanced subjects · Coming soon — you'll get access when available</div>
+          <div class="check-indicator">✓</div>
+        </label>
+      </div>
+
+      <div class="error-msg" id="errorMsg">Please select at least one level.</div>
+
+      <button type="submit" class="btn-continue" id="continueBtn" disabled>
+        Continue to Dashboard →
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+  const options = document.querySelectorAll('.level-option');
+  const btn = document.getElementById('continueBtn');
+  const errorMsg = document.getElementById('errorMsg');
+
+  options.forEach(opt => {
+    const cb = opt.querySelector('input[type="checkbox"]');
+    cb.addEventListener('change', () => {
+      opt.classList.toggle('selected', cb.checked);
+      const anyChecked = document.querySelectorAll('.level-option input:checked').length > 0;
+      btn.disabled = !anyChecked;
+      errorMsg.style.display = 'none';
+    });
+  });
+
+  document.getElementById('setupForm').addEventListener('submit', e => {
+    const checked = document.querySelectorAll('.level-option input:checked');
+    if (!checked.length) {
+      e.preventDefault();
+      errorMsg.style.display = 'block';
+    }
+  });
+</script>
+
+</body>
+</html>

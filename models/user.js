@@ -195,6 +195,13 @@ aiQuizCreditsResetAt: {
   type: Date,
   default: null
 },
+
+// Profile setup flag for new teachers
+needsProfileSetup: {
+  type: Boolean,
+  default: false
+},
+
   paidAt: { type: Date, default: null }
 }, { strict: true });
 

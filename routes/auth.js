@@ -148,23 +148,19 @@ const isParentFlow = req.session?.signupSource === "parent";
 const isTeacherFlow = req.session?.signupSource === "private_teacher";
 
 // 🔥 PRIORITY: Check role first (handles existing users who sign in again)
+// 🔥 PRIORITY: Check role first (handles existing users who sign in again)
 if (req.user.role === "private_teacher") {
-  redirectPath = "/teacher/dashboard";
+  // Check if teacher needs profile setup
+  const teacherDoc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+  if (teacherDoc?.needsProfileSetup || !teacherDoc?.schoolLevelsEnabled?.length) {
+    redirectPath = "/teacher/setup";
+  } else {
+    redirectPath = "/teacher/dashboard";
+  }
 }
-
 else if (isTeacherFlow) {
-  // ✅ Ensure new teachers start with 0 credits
-  await User.updateOne(
-    { _id: req.user._id, aiQuizCredits: { $exists: false } },
-    { $set: { aiQuizCredits: 0 } }
-  );
-  redirectPath = "/teacher/dashboard";
+  redirectPath = "/teacher/setup";
 }
-// Then check signup flow (handles new signups)
-else if (isTeacherFlow) {
-  redirectPath = "/teacher/dashboard";
-}
-
 
 else if (isParentFlow || req.user.role === "parent") {
   redirectPath = "/parent/dashboard";
