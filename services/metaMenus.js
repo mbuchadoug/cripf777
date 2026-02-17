@@ -322,7 +322,7 @@ export async function sendProductsMenu(to) {
   return sendList(to, "📦 Products & Services", [
     { id: ACTIONS.ADD_PRODUCT, title: "➕ Add item" },
     { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View items" },
-    { id: ACTIONS.BULK_UPLOAD_MENU, title: "📥 Bulk upload (CSV / Paste)" },
+   { id: ACTIONS.BULK_UPLOAD_MENU, title: "📋 Bulk paste list" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }

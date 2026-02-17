@@ -235,98 +235,15 @@ await sendText(from, "✅ Logo updated successfully.");
 
 
 ///////////////////////////
-    // ===============================
-    // 📄 HANDLE CSV BULK UPLOAD (META)
-    // ===============================
-    if (msg.type === "document") {
-      const from = msg.from;
-
-      const biz = await getBizForPhone(from);
-      if (!biz || biz.sessionState !== "bulk_upload_products") {
-        return; // ignore documents unless user is in bulk upload mode
-      }
-
-      const doc = msg.document;
-      const mediaId = doc?.id;
-      const mime = (doc?.mime_type || "").toLowerCase();
-      const filename = doc?.filename || "upload.csv";
-
-      // Accept common CSV mimes
-      const isCsv =
-        mime.includes("text/csv") ||
-        mime.includes("application/csv") ||
-        mime.includes("application/vnd.ms-excel") || // some phones send csv as this
-        filename.toLowerCase().endsWith(".csv");
-
-      if (!isCsv) {
-        await sendText(
-          from,
-          "❌ Please upload a CSV file.\n\nExpected columns: name,unitPrice (optional: description)"
-        );
-        return;
-      }
-
-      if (!mediaId) {
-        await sendText(from, "❌ Could not read the document. Please try again.");
-        return;
-      }
-
-      try {
-        const mediaUrl = await getMetaMediaUrl(mediaId);
-        if (!mediaUrl) {
-          await sendText(from, "❌ Could not fetch the file URL. Try again.");
-          return;
-        }
-
-        const csvText = await downloadMetaMediaAsText(mediaUrl);
-
-        const rows = parseLooseCSV(csvText);
-
-        if (!rows.length) {
-          await sendText(
-            from,
-            "❌ No valid rows found.\n\nMake sure your CSV has:\nname,unitPrice\nExample:\nMilk 1L,1.50"
-          );
-          return;
-        }
-
-        const Product = (await import("../models/product.js")).default;
-
-        // Bulk insert (ignore partial failures)
-        let inserted = 0;
-        try {
-          const resInsert = await Product.insertMany(
-            rows.map(r => ({
-              businessId: biz._id,
-              name: r.name,
-              unitPrice: r.unitPrice,
-              description: r.description || "",
-              isActive: true
-            })),
-            { ordered: false }
-          );
-          inserted = resInsert?.length || 0;
-        } catch (err) {
-          // insertMany with ordered:false may throw but still insert many
-          // We can approximate inserted count by continuing without crashing.
-          console.error("CSV insertMany warning:", err?.message || err);
-          // fallback: try counting as "rows attempted"
-          inserted = Math.max(inserted, 0);
-        }
-
-        await sendText(
-          from,
-          `✅ CSV processed: ${rows.length} rows\n✅ Imported: ${inserted || rows.length}\n\nYou can upload another CSV, paste lines, or reply *done* to finish.`
-        );
-
-        // keep them in bulk mode (so they can upload more files or paste)
-        return;
-      } catch (err) {
-        console.error("CSV BULK UPLOAD ERROR:", err);
-        await sendText(from, "❌ Failed to process CSV. Please try again.");
-        return;
-      }
-    }
+// ===============================
+// 🚫 DOCUMENTS DISABLED (PASTE-ONLY MODE)
+// ===============================
+if (msg.type === "document") {
+  const from = msg.from;
+  // Optional: if you want a friendly message:
+  // await sendText(from, "📄 File uploads are disabled. Please use Paste list to add items.");
+  return;
+}
 
 
 

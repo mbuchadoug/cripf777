@@ -2567,46 +2567,20 @@ Reply *done* when finished, or *cancel* to exit.`
 }
 
 case ACTIONS.BULK_UPLOAD_MENU: {
-  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-
   return sendButtons(from, {
     text:
-`📥 Bulk Upload (Products & Services)
+`📋 Bulk Paste (Products & Services)
 
-Choose an option below:`,
+Paste items (one per line).`,
     buttons: [
-      { id: ACTIONS.BULK_DOWNLOAD_TEMPLATE, title: "⬇ CSV template" },
       { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
       { id: ACTIONS.BACK, title: "⬅ Back" }
     ]
   });
 }
 
-case ACTIONS.BULK_DOWNLOAD_TEMPLATE: {
-  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-  const url = `${site}/templates/products_template.csv`;
 
-  // ✅ Button tap → bot sends the download link (works reliably)
-  await sendText(
-    from,
-`⬇ Download your CSV template here:
-${url}
 
-Format:
-name,unitPrice,description
-
-After editing, upload the CSV file here in WhatsApp.`
-  );
-
-  // Optional: show the bulk menu again
-  return sendButtons(from, {
-    text: "Want to paste instead?",
-    buttons: [
-      { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
-      { id: ACTIONS.BULK_UPLOAD_MENU, title: "⬅ Back" }
-    ]
-  });
-}
 
 case ACTIONS.BULK_PASTE_MODE: {
   const biz = await getBizForPhone(from);
