@@ -1,0 +1,46 @@
+{{!-- views/teacher/upload_quiz.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Upload Quiz | CRIPFCnt Teacher Studio</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#0f172a; --ink-soft:#475569; --surface:#f8fafc; --card:#fff; --border:#e2e8f0; --accent:#6366f1; --radius:12px; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',system-ui,sans-serif; background:var(--surface); color:var(--ink); }
+    .container { max-width:700px; margin:0 auto; padding:32px 20px; }
+    .back { color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; display:inline-block; margin-bottom:20px; }
+    h1 { font-family:'Playfair Display',serif; font-size:26px; margin-bottom:8px; }
+    .subtitle { color:var(--ink-soft); font-size:14px; margin-bottom:28px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:28px; }
+    .info-box { background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:14px 18px; margin-bottom:20px; font-size:13px; color:#4338ca; line-height:1.6; }
+    .info-box code { background:#c7d2fe; padding:2px 6px; border-radius:4px; font-size:12px; }
+    pre { background:#0f172a; color:#e2e8f0; padding:14px; border-radius:8px; font-size:12px; overflow-x:auto; margin:8px 0 16px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="/teacher/dashboard" class="back">← Back to Dashboard</a>
+  <h1>Upload Quiz</h1>
+  <p class="subtitle">Upload your own quiz questions in JSON format</p>
+  
+  <div class="info-box">
+    <strong>JSON Format:</strong> Upload a JSON array where each question has <code>text</code>, <code>choices</code> (array of strings), and <code>correctIndex</code> (0-based).
+    <pre>[
+  {
+    "text": "What is 2 + 2?",
+    "choices": ["3", "4", "5", "6"],
+    "correctIndex": 1,
+    "explanation": "2 + 2 = 4"
+  }
+]</pre>
+  </div>
+
+  <div class="card">
+    <p style="text-align:center;color:var(--ink-soft);">Use the Upload button on your dashboard to upload quizzes directly.</p>
+  </div>
+</div>
+</body>
+</html>

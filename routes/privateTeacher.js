@@ -5,6 +5,19 @@ import User from "../models/user.js";
 import AIQuiz from "../models/aiQuiz.js";
 import { generateAIQuiz, assignAIQuizToStudents } from "../services/aiQuizGenerator.js";
 
+import Organization from "../models/organization.js";
+import ExamInstance from "../models/examInstance.js";
+import Question from "../models/question.js";
+import crypto from "crypto";
+import multer from "multer";
+import Attempt from "../models/attempt.js";
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+
+
+
+
 const router = Router();
 
 // ✅ Middleware: Ensure private teacher
@@ -49,15 +62,31 @@ router.get(
       });
     }
 
-    res.render("teacher/dashboard", {
-      user: teacher,
-      students,
-      aiQuizzes,
-      studentLimit: teacher.getTeacherChildLimit(),
-      planLabel: teacher.getTeacherPlanLabel(),
-      aiCredits: teacher.aiQuizCredits,
-      canAddStudent: students.length < teacher.getTeacherChildLimit()
-    });
+   // ✅ Compute subscription status
+const now = new Date();
+const subExpires = teacher.teacherSubscriptionExpiresAt 
+  ? new Date(teacher.teacherSubscriptionExpiresAt) 
+  : null;
+const isExpired = subExpires && now >= subExpires;
+const daysRemaining = subExpires && !isExpired
+  ? Math.ceil((subExpires - now) / (1000 * 60 * 60 * 24))
+  : 0;
+const isPaid = teacher.teacherSubscriptionStatus === "paid" && !isExpired;
+
+res.render("teacher/dashboard", {
+  user: teacher,
+  students,
+  aiQuizzes,
+  studentLimit: teacher.getTeacherChildLimit(),
+  planLabel: teacher.getTeacherPlanLabel(),
+  aiCredits: teacher.aiQuizCredits || 0,
+  canAddStudent: isPaid && students.length < teacher.getTeacherChildLimit(),
+  isPaid,
+  isExpired,
+  daysRemaining,
+  expiresAt: subExpires ? subExpires.toISOString().slice(0, 10) : null,
+  canGenerateAI: isPaid && (teacher.aiQuizCredits || 0) > 0
+});
   }
 );
 
@@ -310,5 +339,739 @@ router.get(
 );
 
 
+
+
+/**
+ * GET /teacher/upload-quiz
+ * Show quiz upload form
+ */
+router.get(
+  "/upload-quiz",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    res.render("teacher/upload_quiz", { user: req.user });
+  }
+);
+
+/**
+ * POST /teacher/upload-quiz
+ * Upload quiz JSON (same format as admin import)
+ */
+router.post(
+  "/upload-quiz",
+  ensureAuth,
+  ensurePrivateTeacher,
+  upload.single("quizFile"),
+  async (req, res) => {
+    try {
+      const { subject, grade, quizTitle, durationMinutes } = req.body;
+      
+      if (!subject || !grade || !quizTitle) {
+        return res.status(400).json({ error: "Subject, grade, and title required" });
+      }
+
+      let questions = [];
+      
+      // Parse from file upload
+      if (req.file) {
+        const raw = req.file.buffer.toString("utf8");
+        questions = JSON.parse(raw);
+      } 
+      // Parse from textarea
+      else if (req.body.questionsJson) {
+        questions = JSON.parse(req.body.questionsJson);
+      }
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ error: "No valid questions found" });
+      }
+
+      // Get home org
+      const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+      if (!org) return res.status(500).json({ error: "Home org not found" });
+
+      // Validate and normalize questions
+      const validQuestions = questions.map((q, idx) => {
+        if (!q.text || !Array.isArray(q.choices) || q.choices.length < 2) {
+          throw new Error(`Question ${idx + 1}: missing text or choices`);
+        }
+        
+        const correctIndex = typeof q.correctIndex === "number" 
+          ? q.correctIndex 
+          : (typeof q.answerIndex === "number" ? q.answerIndex : 0);
+
+        return {
+          text: q.text,
+          choices: q.choices.map(c => typeof c === "string" ? c : (c.text || String(c))),
+          correctIndex,
+          explanation: q.explanation || null,
+          tags: q.tags || [],
+          difficulty: q.difficulty || "medium",
+          subject: subject.toLowerCase(),
+          grade: Number(grade),
+          module: subject.toLowerCase(),
+          organization: org._id,
+          teacherId: req.user._id,
+          type: "mcq",
+          meta: { uploadedBy: req.user._id, isTeacherUpload: true }
+        };
+      });
+
+      // Insert questions into DB
+      const insertedQuestions = await Question.insertMany(validQuestions);
+
+      // Create a parent question to group them
+      const parentQuestion = await Question.create({
+        text: quizTitle,
+        type: "comprehension",
+        passage: `${quizTitle} - ${subject} Grade ${grade}`,
+        questionIds: insertedQuestions.map(q => q._id),
+        organization: org._id,
+        module: subject.toLowerCase(),
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        teacherId: req.user._id,
+        meta: { isTeacherUpload: true }
+      });
+
+      // Also save as AIQuiz for teacher's quiz list
+      const aiQuiz = await AIQuiz.create({
+        teacherId: req.user._id,
+        title: quizTitle,
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        topic: quizTitle,
+        difficulty: "mixed",
+        questionCount: insertedQuestions.length,
+        questions: insertedQuestions.map(q => ({
+          text: q.text,
+          choices: q.choices,
+          correctIndex: q.correctIndex,
+          explanation: q.explanation || ""
+        })),
+        durationMinutes: Number(durationMinutes) || 30,
+        aiProvider: "manual_upload",
+        status: "active",
+        meta: {
+          parentQuestionId: parentQuestion._id,
+          isManualUpload: true
+        }
+      });
+
+      return res.json({
+        success: true,
+        quizId: aiQuiz._id,
+        questionCount: insertedQuestions.length
+      });
+
+    } catch (error) {
+      console.error("[Upload Quiz Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /teacher/bulk-assign
+ * Assign multiple quizzes to multiple students with duration
+ */
+router.post(
+  "/bulk-assign",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const { quizIds, studentIds, durationMinutes } = req.body;
+
+      if (!Array.isArray(quizIds) || !quizIds.length) {
+        return res.status(400).json({ error: "Select at least one quiz" });
+      }
+      if (!Array.isArray(studentIds) || !studentIds.length) {
+        return res.status(400).json({ error: "Select at least one student" });
+      }
+
+      const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+      if (!org) return res.status(500).json({ error: "Home org not found" });
+
+      let totalAssigned = 0;
+      let totalSkipped = 0;
+
+      for (const quizId of quizIds) {
+        const aiQuiz = await AIQuiz.findOne({
+          _id: quizId,
+          teacherId: req.user._id
+        }).lean();
+
+        if (!aiQuiz) continue;
+
+        for (const studentId of studentIds) {
+          // Check if already assigned
+          const existing = await ExamInstance.findOne({
+            userId: studentId,
+            "meta.aiQuizId": quizId
+          }).lean();
+
+          if (existing) {
+            totalSkipped++;
+            continue;
+          }
+
+          const student = await User.findById(studentId).select("organization").lean();
+
+          const examId = crypto.randomUUID();
+          await ExamInstance.create({
+            examId,
+            userId: studentId,
+            org: student?.organization || org._id,
+            title: aiQuiz.title,
+            quizTitle: aiQuiz.title,
+            module: aiQuiz.subject,
+            subject: aiQuiz.subject,
+            grade: aiQuiz.grade,
+            targetRole: "student",
+            status: "pending",
+            durationMinutes: Number(durationMinutes) || aiQuiz.durationMinutes || (aiQuiz.questionCount * 2),
+            questionIds: aiQuiz.questions.map((_, idx) => `ai:${quizId}:${idx}`),
+            choicesOrder: aiQuiz.questions.map(q =>
+              Array.from({ length: q.choices.length }, (_, i) => i)
+            ),
+            meta: {
+              aiQuizId: quizId,
+              isAIGenerated: true,
+              teacherId: req.user._id,
+              difficulty: aiQuiz.difficulty
+            }
+          });
+
+          // Track assignment
+          await AIQuiz.updateOne(
+            { _id: quizId },
+            { $push: { assignedTo: { studentId, assignedAt: new Date() } } }
+          );
+
+          totalAssigned++;
+        }
+      }
+
+      return res.json({
+        success: true,
+        assigned: totalAssigned,
+        skipped: totalSkipped
+      });
+
+    } catch (error) {
+      console.error("[Bulk Assign Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /teacher/upload-material
+ * Upload learning material for students
+ */
+router.post(
+  "/upload-material",
+  ensureAuth,
+  ensurePrivateTeacher,
+  upload.single("materialFile"),
+  async (req, res) => {
+    try {
+      const { title, subject, grade, description, studentIds } = req.body;
+      
+      if (!title || !subject || !grade) {
+        return res.status(400).json({ error: "Title, subject, and grade required" });
+      }
+
+      const LearningMaterial = (await import("../models/learningMaterial.js")).default;
+      
+      let fileUrl = null;
+      let fileType = null;
+
+      if (req.file) {
+        const fs = (await import("fs")).default;
+        const path = (await import("path")).default;
+        
+        const uploadsDir = path.join(process.cwd(), "public", "uploads", "materials");
+        await fs.promises.mkdir(uploadsDir, { recursive: true });
+        
+        const filename = `material-${Date.now()}-${req.file.originalname}`;
+        const filepath = path.join(uploadsDir, filename);
+        await fs.promises.writeFile(filepath, req.file.buffer);
+        
+        fileUrl = `/uploads/materials/${filename}`;
+        fileType = req.file.mimetype;
+      }
+
+      // Parse content from textarea if provided
+      const content = req.body.content || null;
+
+      const material = await LearningMaterial.create({
+        teacherId: req.user._id,
+        title,
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        description: description || "",
+        content,
+        fileUrl,
+        fileType,
+        assignedTo: Array.isArray(studentIds) ? studentIds : (studentIds ? [studentIds] : []),
+        status: "active"
+      });
+
+      return res.json({ success: true, materialId: material._id });
+
+    } catch (error) {
+      console.error("[Upload Material Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * GET /teacher/materials
+ * List all learning materials
+ */
+router.get(
+  "/materials",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const LearningMaterial = (await import("../models/learningMaterial.js")).default;
+    
+    const materials = await LearningMaterial.find({
+      teacherId: req.user._id,
+      status: "active"
+    }).sort({ createdAt: -1 }).lean();
+
+    const students = await User.find({
+      parentUserId: req.user._id,
+      role: "student"
+    }).lean();
+
+    res.render("teacher/materials", {
+      user: req.user,
+      materials,
+      students
+    });
+  }
+);
+
+/**
+ * GET /teacher/quiz/:id/assignments
+ * View who has been assigned a quiz and their results
+ */
+router.get(
+  "/quiz/:id/assignments",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const quiz = await AIQuiz.findOne({
+      _id: req.params.id,
+      teacherId: req.user._id
+    }).lean();
+
+    if (!quiz) return res.status(404).send("Quiz not found");
+
+    const ExamInst = (await import("../models/examInstance.js")).default;
+    
+    const assignments = await ExamInst.find({
+      "meta.aiQuizId": quiz._id
+    }).lean();
+
+    // Get student details and attempt results
+    const enriched = [];
+    for (const assign of assignments) {
+      const student = await User.findById(assign.userId)
+        .select("firstName lastName grade")
+        .lean();
+      
+      const attempt = await Attempt.findOne({
+        examId: assign.examId,
+        userId: assign.userId,
+        status: "finished"
+      }).lean();
+
+      enriched.push({
+        ...assign,
+        student,
+        attempt,
+        completed: !!attempt,
+        score: attempt?.percentage || null
+      });
+    }
+
+    res.render("teacher/quiz_assignments", {
+      user: req.user,
+      quiz,
+      assignments: enriched
+    });
+  }
+);
+
+
+
+
+
+/**
+ * POST /teacher/generate-report
+ * Generate AI assessment report
+ */
+router.post(
+  "/generate-report",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const { studentIds, subject, dateFrom, dateTo, teacherNotes } = req.body;
+      
+      if (!Array.isArray(studentIds) || !studentIds.length) {
+        return res.status(400).json({ error: "Select at least one student" });
+      }
+
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      // Build data for each student
+      const studentReports = [];
+      
+      for (const studentId of studentIds) {
+        const student = await User.findOne({
+          _id: studentId,
+          parentUserId: req.user._id,
+          role: "student"
+        }).select("firstName lastName grade").lean();
+
+        if (!student) continue;
+
+        // Build query for attempts
+        const attemptQuery = {
+          userId: studentId,
+          status: "finished"
+        };
+
+        if (subject && subject !== "all") {
+          attemptQuery.module = subject.toLowerCase();
+        }
+
+        if (dateFrom || dateTo) {
+          attemptQuery.finishedAt = {};
+          if (dateFrom) attemptQuery.finishedAt.$gte = new Date(dateFrom);
+          if (dateTo) attemptQuery.finishedAt.$lte = new Date(dateTo + "T23:59:59Z");
+        }
+
+        const attempts = await Attempt.find(attemptQuery)
+          .sort({ finishedAt: 1 })
+          .lean();
+
+        // Group by subject
+        const bySubject = {};
+        for (const a of attempts) {
+          const subj = a.module || "general";
+          if (!bySubject[subj]) bySubject[subj] = [];
+          bySubject[subj].push({
+            title: a.quizTitle || "Quiz",
+            score: a.score,
+            maxScore: a.maxScore,
+            percentage: a.percentage || Math.round((a.score / Math.max(1, a.maxScore)) * 100),
+            passed: a.passed,
+            date: a.finishedAt,
+            duration: a.duration
+          });
+        }
+
+        studentReports.push({
+          name: `${student.firstName} ${student.lastName || ""}`.trim(),
+          grade: student.grade,
+          totalQuizzes: attempts.length,
+          avgScore: attempts.length
+            ? Math.round(attempts.reduce((s, a) => s + (a.percentage || 0), 0) / attempts.length)
+            : 0,
+          passRate: attempts.length
+            ? Math.round((attempts.filter(a => a.passed).length / attempts.length) * 100)
+            : 0,
+          bySubject
+        });
+      }
+
+      if (!studentReports.length) {
+        return res.status(400).json({ error: "No student data found" });
+      }
+
+      // Build AI prompt
+      const prompt = `You are an experienced educational assessment specialist. Generate a detailed, professional student assessment report based on the following data.
+
+TEACHER NOTES/INSTRUCTIONS: ${teacherNotes || "None provided"}
+
+STUDENT DATA:
+${JSON.stringify(studentReports, null, 2)}
+
+DATE RANGE: ${dateFrom || "All time"} to ${dateTo || "Present"}
+SUBJECT FILTER: ${subject || "All subjects"}
+
+Generate a comprehensive report in the following JSON structure:
+{
+  "reportTitle": "Student Assessment Report",
+  "generatedDate": "${new Date().toISOString().slice(0, 10)}",
+  "summary": "Executive summary paragraph",
+  "students": [
+    {
+      "name": "Student Name",
+      "grade": 1,
+      "overallAssessment": "Detailed paragraph about overall performance",
+      "strengths": ["strength 1", "strength 2"],
+      "areasForImprovement": ["area 1", "area 2"],
+      "subjectAnalysis": [
+        {
+          "subject": "math",
+          "performance": "Detailed analysis",
+          "grade": "A/B/C/D/E",
+          "trend": "improving/stable/declining",
+          "recommendations": "Specific recommendations"
+        }
+      ],
+      "recommendations": "Personalized next steps paragraph"
+    }
+  ],
+  "classOverview": "Overall class analysis if multiple students",
+  "teacherRecommendations": "Professional recommendations for the teacher"
+}
+
+Return ONLY valid JSON, no markdown or extra text.`;
+
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: prompt }]
+      });
+
+      const content = message.content[0].text;
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      
+      if (!jsonMatch) {
+        throw new Error("Failed to parse AI report");
+      }
+
+      const reportData = JSON.parse(jsonMatch[0]);
+
+      // Generate PDF
+      const pdfBuffer = await generateReportPdf(reportData, req.user);
+
+      // Save report
+      const fs = (await import("fs")).default;
+      const path = (await import("path")).default;
+      
+      const reportsDir = path.join(process.cwd(), "public", "docs", "reports");
+      await fs.promises.mkdir(reportsDir, { recursive: true });
+      
+      const filename = `report-${Date.now().toString(36)}.pdf`;
+      const filepath = path.join(reportsDir, filename);
+      await fs.promises.writeFile(filepath, pdfBuffer);
+
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      const reportUrl = `${site}/docs/reports/${filename}`;
+
+      return res.json({
+        success: true,
+        reportUrl,
+        reportData
+      });
+
+    } catch (error) {
+      console.error("[Generate Report Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * Helper: Generate report PDF using Puppeteer
+ */
+async function generateReportPdf(reportData, teacher) {
+  const html = buildReportHtml(reportData, teacher);
+  
+  let puppeteer = null;
+  try {
+    puppeteer = (await import("puppeteer")).default;
+  } catch {
+    try { puppeteer = (await import("puppeteer-core")).default; } catch { puppeteer = null; }
+  }
+
+  if (puppeteer) {
+    const launchOpts = { args: ["--no-sandbox", "--disable-setuid-sandbox"] };
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    
+    const browser = await puppeteer.launch(launchOpts);
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+      await page.emulateMediaType("screen");
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" }
+      });
+      return pdf;
+    } finally {
+      await browser.close();
+    }
+  }
+
+  throw new Error("PDF generation requires Puppeteer");
+}
+
+function buildReportHtml(data, teacher) {
+  const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  
+  const studentsHtml = (data.students || []).map(s => `
+    <div class="student-section">
+      <div class="student-header">
+        <h2>${esc(s.name)}</h2>
+        <span class="grade-badge">Grade ${s.grade}</span>
+      </div>
+      
+      <div class="assessment-text">${esc(s.overallAssessment)}</div>
+      
+      <div class="two-col">
+        <div class="col strengths">
+          <h4>Strengths</h4>
+          <ul>${(s.strengths || []).map(st => `<li>${esc(st)}</li>`).join("")}</ul>
+        </div>
+        <div class="col improvements">
+          <h4>Areas for Improvement</h4>
+          <ul>${(s.areasForImprovement || []).map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+        </div>
+      </div>
+      
+      ${(s.subjectAnalysis || []).map(sub => `
+        <div class="subject-analysis">
+          <div class="subject-row">
+            <span class="subject-name">${esc(sub.subject)}</span>
+            <span class="subject-grade grade-${(sub.grade || "C").toLowerCase()}">${esc(sub.grade)}</span>
+            <span class="trend trend-${sub.trend}">${sub.trend === "improving" ? "↗" : sub.trend === "declining" ? "↘" : "→"} ${esc(sub.trend)}</span>
+          </div>
+          <p>${esc(sub.performance)}</p>
+          <p class="rec"><strong>Recommendation:</strong> ${esc(sub.recommendations)}</p>
+        </div>
+      `).join("")}
+      
+      <div class="recommendations-box">
+        <h4>Next Steps</h4>
+        <p>${esc(s.recommendations)}</p>
+      </div>
+    </div>
+  `).join("");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Assessment Report</title>
+<style>
+  @page { margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; font-size: 11pt; line-height: 1.6; }
+  
+  .page { padding: 40px 50px; }
+  
+  .report-header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: white; padding: 40px 50px; margin: -40px -50px 30px;
+  }
+  .report-header h1 { font-size: 26pt; font-weight: 800; margin-bottom: 6px; }
+  .report-header .meta { opacity: 0.8; font-size: 10pt; }
+  .report-header .teacher { margin-top: 8px; font-size: 10pt; opacity: 0.7; }
+  
+  .summary-box {
+    background: #f0f4ff; border-left: 4px solid #3b82f6;
+    padding: 16px 20px; border-radius: 0 8px 8px 0; margin-bottom: 30px;
+  }
+  .summary-box h3 { color: #1e40af; margin-bottom: 8px; font-size: 12pt; }
+  
+  .student-section {
+    page-break-inside: avoid; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 24px; margin-bottom: 24px;
+  }
+  .student-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+  .student-header h2 { font-size: 16pt; color: #1a1a2e; }
+  .grade-badge { background: #3b82f6; color: white; padding: 4px 12px; border-radius: 20px; font-size: 9pt; font-weight: 700; }
+  
+  .assessment-text { margin-bottom: 16px; color: #374151; }
+  
+  .two-col { display: flex; gap: 20px; margin-bottom: 16px; }
+  .col { flex: 1; padding: 14px; border-radius: 8px; }
+  .strengths { background: #f0fdf4; border: 1px solid #86efac; }
+  .improvements { background: #fef3c7; border: 1px solid #fcd34d; }
+  .col h4 { font-size: 10pt; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .strengths h4 { color: #166534; }
+  .improvements h4 { color: #92400e; }
+  .col ul { padding-left: 18px; font-size: 10pt; }
+  .col li { margin-bottom: 4px; }
+  
+  .subject-analysis {
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .subject-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .subject-name { font-weight: 700; text-transform: capitalize; font-size: 11pt; }
+  .subject-grade { font-weight: 800; padding: 2px 10px; border-radius: 4px; font-size: 10pt; }
+  .grade-a { background: #dcfce7; color: #166534; }
+  .grade-b { background: #dbeafe; color: #1e40af; }
+  .grade-c { background: #fef3c7; color: #92400e; }
+  .grade-d { background: #fee2e2; color: #991b1b; }
+  .grade-e { background: #fecaca; color: #7f1d1d; }
+  .trend { font-size: 9pt; padding: 2px 8px; border-radius: 4px; }
+  .trend-improving { background: #dcfce7; color: #166534; }
+  .trend-stable { background: #e0e7ff; color: #3730a3; }
+  .trend-declining { background: #fee2e2; color: #991b1b; }
+  .rec { font-size: 10pt; color: #6b7280; margin-top: 6px; }
+  
+  .recommendations-box {
+    background: linear-gradient(135deg, #eff6ff, #f0f4ff);
+    border: 1px solid #93c5fd; border-radius: 8px; padding: 16px; margin-top: 16px;
+  }
+  .recommendations-box h4 { color: #1e40af; margin-bottom: 8px; }
+  
+  .footer { margin-top: 30px; text-align: center; color: #9ca3af; font-size: 9pt; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="report-header">
+    <h1>${esc(data.reportTitle || "Student Assessment Report")}</h1>
+    <div class="meta">Generated: ${esc(data.generatedDate)} | CRIPFCnt Education Platform</div>
+    <div class="teacher">Prepared by: ${esc(teacher.firstName)} ${esc(teacher.lastName || "")}</div>
+  </div>
+  
+  <div class="summary-box">
+    <h3>Executive Summary</h3>
+    <p>${esc(data.summary)}</p>
+  </div>
+  
+  ${studentsHtml}
+  
+  ${data.classOverview ? `
+    <div class="summary-box" style="border-left-color: #8b5cf6; background: #f5f3ff;">
+      <h3 style="color: #6d28d9;">Class Overview</h3>
+      <p>${esc(data.classOverview)}</p>
+    </div>
+  ` : ""}
+  
+  ${data.teacherRecommendations ? `
+    <div class="recommendations-box">
+      <h4>Professional Recommendations</h4>
+      <p>${esc(data.teacherRecommendations)}</p>
+    </div>
+  ` : ""}
+  
+  <div class="footer">
+    <p>This report was generated using AI-assisted analysis by CRIPFCnt Education Platform.</p>
+    <p>For questions, contact your educational administrator.</p>
+  </div>
+</div>
+</body>
+</html>`;
+}
 
 export default router;

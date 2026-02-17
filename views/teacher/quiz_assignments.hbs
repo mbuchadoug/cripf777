@@ -1,0 +1,123 @@
+{{!-- views/teacher/quiz_assignments.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{quiz.title}} — Assignments | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#0f172a; --ink-soft:#475569; --ink-muted:#94a3b8;
+      --surface:#f8fafc; --card:#fff; --border:#e2e8f0;
+      --accent:#6366f1; --green:#10b981; --red:#ef4444; --amber:#f59e0b;
+      --radius:12px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',system-ui,sans-serif; background:var(--surface); color:var(--ink); }
+    .container { max-width:900px; margin:0 auto; padding:32px 20px; }
+    .back { color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; display:inline-block; margin-bottom:20px; }
+    .back:hover { text-decoration:underline; }
+    h1 { font-family:'Playfair Display',serif; font-size:26px; margin-bottom:4px; }
+    .subtitle { color:var(--ink-soft); font-size:14px; margin-bottom:28px; }
+    .quiz-info { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+    .tag { font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px; background:var(--surface); border:1px solid var(--border); color:var(--ink-soft); }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .card-header { padding:16px 20px; border-bottom:1px solid var(--border); font-weight:700; font-size:14px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; padding:12px 20px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-muted); border-bottom:1px solid var(--border); }
+    td { padding:14px 20px; border-bottom:1px solid #f1f5f9; font-size:14px; }
+    tr:last-child td { border-bottom:none; }
+    .status { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+    .status-pending { background:#fffbeb; color:var(--amber); }
+    .status-completed { background:#ecfdf5; color:var(--green); }
+    .status-failed { background:#fef2f2; color:var(--red); }
+    .score { font-weight:800; font-size:16px; }
+    .score.high { color:var(--green); }
+    .score.mid { color:var(--amber); }
+    .score.low { color:var(--red); }
+    .empty { text-align:center; padding:40px; color:var(--ink-muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="/teacher/dashboard" class="back">← Back to Dashboard</a>
+  
+  <h1>{{quiz.title}}</h1>
+  <p class="subtitle">Assignment tracking and student results</p>
+  
+  <div class="quiz-info">
+    <span class="tag">{{quiz.subject}}</span>
+    <span class="tag">Grade {{quiz.grade}}</span>
+    <span class="tag">{{quiz.difficulty}}</span>
+    <span class="tag">{{quiz.questionCount}} questions</span>
+    <span class="tag">{{assignments.length}} assigned</span>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Student Assignments</div>
+    
+    {{#if assignments.length}}
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Grade</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each assignments}}
+            <tr>
+              <td style="font-weight:600;">
+                {{#if student}}
+                  {{student.firstName}} {{student.lastName}}
+                {{else}}
+                  Unknown Student
+                {{/if}}
+              </td>
+              <td>
+                {{#if student}}Grade {{student.grade}}{{/if}}
+              </td>
+              <td>
+                {{#if completed}}
+                  {{#if attempt.passed}}
+                    <span class="status status-completed">Passed</span>
+                  {{else}}
+                    <span class="status status-failed">Failed</span>
+                  {{/if}}
+                {{else}}
+                  <span class="status status-pending">Pending</span>
+                {{/if}}
+              </td>
+              <td>
+                {{#if score}}
+                  <span class="score {{#if (gte score 80)}}high{{else if (gte score 60)}}mid{{else}}low{{/if}}">
+                    {{score}}%
+                  </span>
+                {{else}}
+                  <span style="color:var(--ink-muted);">—</span>
+                {{/if}}
+              </td>
+              <td style="color:var(--ink-muted);font-size:13px;">
+                {{#if attempt.finishedAt}}
+                  {{attempt.finishedAt}}
+                {{else}}
+                  Not started
+                {{/if}}
+              </td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    {{else}}
+      <div class="empty">
+        <p>No students have been assigned this quiz yet.</p>
+      </div>
+    {{/if}}
+  </div>
+</div>
+</body>
+</html>

@@ -151,10 +151,21 @@ const isTeacherFlow = req.session?.signupSource === "private_teacher";
 if (req.user.role === "private_teacher") {
   redirectPath = "/teacher/dashboard";
 }
+
+else if (isTeacherFlow) {
+  // ✅ Ensure new teachers start with 0 credits
+  await User.updateOne(
+    { _id: req.user._id, aiQuizCredits: { $exists: false } },
+    { $set: { aiQuizCredits: 0 } }
+  );
+  redirectPath = "/teacher/dashboard";
+}
 // Then check signup flow (handles new signups)
 else if (isTeacherFlow) {
   redirectPath = "/teacher/dashboard";
 }
+
+
 else if (isParentFlow || req.user.role === "parent") {
   redirectPath = "/parent/dashboard";
 }

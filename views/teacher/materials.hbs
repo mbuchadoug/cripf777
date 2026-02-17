@@ -1,0 +1,60 @@
+{{!-- views/teacher/materials.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Learning Materials | CRIPFCnt Teacher Studio</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#0f172a; --ink-soft:#475569; --ink-muted:#94a3b8; --surface:#f8fafc; --card:#fff; --border:#e2e8f0; --accent:#6366f1; --green:#10b981; --radius:12px; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',system-ui,sans-serif; background:var(--surface); color:var(--ink); }
+    .container { max-width:900px; margin:0 auto; padding:32px 20px; }
+    .back { color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; display:inline-block; margin-bottom:20px; }
+    h1 { font-family:'Playfair Display',serif; font-size:26px; margin-bottom:4px; }
+    .subtitle { color:var(--ink-soft); font-size:14px; margin-bottom:28px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+    .material-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; transition:all 0.2s; }
+    .material-card:hover { border-color:var(--accent); box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+    .material-card h3 { font-size:15px; margin-bottom:6px; }
+    .material-card .meta { font-size:12px; color:var(--ink-muted); margin-bottom:10px; }
+    .material-card .desc { font-size:13px; color:var(--ink-soft); margin-bottom:12px; }
+    .tag { font-size:11px; font-weight:600; padding:3px 8px; border-radius:6px; background:var(--surface); border:1px solid var(--border); color:var(--ink-soft); }
+    .btn { padding:8px 16px; border-radius:8px; font-size:12px; font-weight:700; border:none; cursor:pointer; text-decoration:none; display:inline-block; background:var(--accent); color:white; }
+    .empty { text-align:center; padding:48px; color:var(--ink-muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="/teacher/dashboard" class="back">← Back to Dashboard</a>
+  <h1>Learning Materials</h1>
+  <p class="subtitle">{{materials.length}} materials uploaded</p>
+
+  {{#if materials.length}}
+    <div class="grid">
+      {{#each materials}}
+        <div class="material-card">
+          <h3>{{title}}</h3>
+          <div class="meta">
+            <span class="tag">{{subject}}</span>
+            <span class="tag">Grade {{grade}}</span>
+          </div>
+          {{#if description}}
+            <div class="desc">{{description}}</div>
+          {{/if}}
+          {{#if fileUrl}}
+            <a href="{{fileUrl}}" target="_blank" class="btn">📥 Download</a>
+          {{/if}}
+        </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <div class="empty">
+      <div style="font-size:48px;margin-bottom:12px;opacity:0.4;">📚</div>
+      <p>No materials uploaded yet.</p>
+    </div>
+  {{/if}}
+</div>
+</body>
+</html>
