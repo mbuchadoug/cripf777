@@ -1,0 +1,112 @@
+{{!-- views/teacher/library_quiz_preview.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Preview: {{rule.quizTitle}} | Teacher Studio</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#0f172a; --ink-soft:#475569; --ink-muted:#94a3b8;
+      --surface:#f8fafc; --card:#fff; --border:#e2e8f0;
+      --accent:#6366f1; --accent-bg:#eef2ff;
+      --green:#10b981; --green-bg:#ecfdf5;
+      --red:#ef4444; --red-bg:#fef2f2;
+      --radius:12px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',system-ui,sans-serif; background:var(--surface); color:var(--ink); min-height:100vh; }
+    .container { max-width:800px; margin:0 auto; padding:32px 20px; }
+    .back-link { display:inline-flex; align-items:center; gap:6px; color:var(--ink-soft); text-decoration:none; font-size:14px; font-weight:600; margin-bottom:24px; }
+    .back-link:hover { color:var(--accent); }
+    .quiz-header {
+      background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+      padding:28px; margin-bottom:24px;
+    }
+    .quiz-header h1 { font-family:'Playfair Display',serif; font-size:24px; font-weight:800; margin-bottom:8px; }
+    .quiz-meta { display:flex; gap:8px; flex-wrap:wrap; }
+    .tag {
+      font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px;
+      background:var(--surface); color:var(--ink-soft); border:1px solid var(--border);
+    }
+    .tag.math { background:#ede9fe; color:#7c3aed; border-color:#c4b5fd; }
+    .tag.english { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+    .tag.science { background:#ecfdf5; color:#065f46; border-color:#6ee7b7; }
+    .tag.responsibility { background:#fff1f2; color:#9f1239; border-color:#fda4af; }
+    .question-card {
+      background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+      padding:24px; margin-bottom:12px;
+    }
+    .q-number { font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+    .q-text { font-size:15px; font-weight:600; margin-bottom:14px; line-height:1.5; }
+    .choices { display:grid; gap:8px; }
+    .choice {
+      padding:10px 14px; border-radius:8px; font-size:14px;
+      border:1px solid var(--border); background:var(--surface);
+      display:flex; align-items:center; gap:10px;
+    }
+    .choice.correct { background:var(--green-bg); border-color:#86efac; }
+    .choice-letter {
+      width:24px; height:24px; border-radius:6px; background:var(--border);
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; font-weight:700; flex-shrink:0;
+    }
+    .choice.correct .choice-letter { background:var(--green); color:white; }
+    .summary {
+      background:var(--accent-bg); border:1px solid #a5b4fc; border-radius:var(--radius);
+      padding:20px; text-align:center; margin-top:24px;
+    }
+    .summary p { font-size:14px; color:var(--ink-soft); }
+    .summary strong { color:var(--ink); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="/teacher/dashboard" class="back-link">← Back to Dashboard</a>
+
+  <div class="quiz-header">
+    <h1>{{rule.quizTitle}}</h1>
+    <div class="quiz-meta">
+      <span class="tag {{rule.subject}}">{{rule.subject}}</span>
+      <span class="tag">Grade {{rule.grade}}</span>
+      {{#if rule.quizType}}<span class="tag">{{rule.quizType}}</span>{{/if}}
+      <span class="tag">{{questions.length}} questions</span>
+      <span class="tag">{{rule.durationMinutes}} min</span>
+    </div>
+  </div>
+
+  {{#each questions}}
+  <div class="question-card">
+    <div class="q-number">Question {{inc @index}}</div>
+    <div class="q-text">{{text}}</div>
+    <div class="choices">
+      {{#each choices}}
+        {{#if (eq @index ../correctIndex)}}
+          <div class="choice correct">
+            <span class="choice-letter">{{letters @index}}</span>
+            {{#if (eq (typeof this) "string")}}{{this}}{{else}}{{this.text}}{{/if}} ✓
+          </div>
+        {{else}}
+          <div class="choice">
+            <span class="choice-letter">{{letters @index}}</span>
+            {{#if (eq (typeof this) "string")}}{{this}}{{else}}{{this.text}}{{/if}}
+          </div>
+        {{/if}}
+      {{/each}}
+    </div>
+  </div>
+  {{/each}}
+
+  {{#unless questions.length}}
+    <div class="question-card" style="text-align:center;padding:40px;">
+      <p style="color:var(--ink-muted);">No questions loaded for preview. This quiz may use dynamic question selection.</p>
+    </div>
+  {{/unless}}
+
+  <div class="summary">
+    <p><strong>{{questions.length}}</strong> questions · <strong>{{rule.durationMinutes}}</strong> minutes · <strong>{{rule.subject}}</strong> · Grade <strong>{{rule.grade}}</strong></p>
+  </div>
+</div>
+</body>
+</html>
