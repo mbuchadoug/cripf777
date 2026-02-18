@@ -50,7 +50,19 @@ function decodeState(state) {
 /* ================================================================== */
 /*  ✅ PARENT SIGNUP ROUTE (renamed from /start to avoid conflict)    */
 /* ================================================================== */
-router.get("/parent", (req, res) => {
+router.get("/parent", async (req, res) => {
+  // Already logged in — switch role directly, no need to re-authenticate
+  if (req.user) {
+    if (!["parent", "private_teacher"].includes(req.user.role)) {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { role: "parent", consumerEnabled: true, accountType: "parent" } }
+      );
+      req.user.role = "parent";
+    }
+    return res.redirect("/parent/dashboard");
+  }
+  // Not logged in — go through Google OAuth
   req.session.signupSource = "parent";
   req.session.save(() => {
     res.redirect("/auth/google");
@@ -61,7 +73,24 @@ router.get("/parent", (req, res) => {
 /* ================================================================== */
 /*  ✅ PRIVATE TEACHER SIGNUP ROUTE                                   */
 /* ================================================================== */
-router.get("/teacher", (req, res) => {
+router.get("/teacher", async (req, res) => {
+  // Already logged in — switch role directly, no need to re-authenticate
+  if (req.user) {
+    if (req.user.role !== "private_teacher") {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { role: "private_teacher", needsProfileSetup: true, consumerEnabled: true } }
+      );
+      req.user.role = "private_teacher";
+    }
+    // Check if setup needed
+    const doc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+    if (doc?.needsProfileSetup || !doc?.schoolLevelsEnabled?.length) {
+      return res.redirect("/teacher/setup");
+    }
+    return res.redirect("/teacher/dashboard");
+  }
+  // Not logged in — go through Google OAuth
   req.session.signupSource = "private_teacher";
   req.session.save(() => {
     res.redirect("/auth/google");
