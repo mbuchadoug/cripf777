@@ -51,18 +51,21 @@ function decodeState(state) {
 /*  ✅ PARENT SIGNUP ROUTE (renamed from /start to avoid conflict)    */
 /* ================================================================== */
 router.get("/parent", (req, res) => {
-  req.session.signupSource = "parent";   // ✅ MARK AS PARENT FLOW
-  res.redirect("/auth/google");
+  req.session.signupSource = "parent";
+  req.session.save(() => {
+    res.redirect("/auth/google");
+  });
 });
-
 
 
 /* ================================================================== */
 /*  ✅ PRIVATE TEACHER SIGNUP ROUTE                                   */
 /* ================================================================== */
 router.get("/teacher", (req, res) => {
-  req.session.signupSource = "private_teacher";   // ✅ MARK AS TEACHER FLOW
-  res.redirect("/auth/google");
+  req.session.signupSource = "private_teacher";
+  req.session.save(() => {
+    res.redirect("/auth/google");
+  });
 });
 /**
  * GET /auth/google
