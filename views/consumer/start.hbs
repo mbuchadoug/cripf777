@@ -233,10 +233,9 @@
 </nav>
 
 <!-- ================= ROLE PICKER ================= -->
-{{#unless user}}
 <section class="role-picker">
   <div class="role-grid">
-    <a href="/auth/parent" class="role-card role-card-parent">
+    <a href="{{#if user}}{{#if (eq user.role "parent")}}/parent/dashboard{{else}}/auth/parent{{/if}}{{else}}/auth/parent{{/if}}" class="role-card role-card-parent">
       <span class="role-badge">For Parents & Guardians</span>
       <div class="role-icon">👨‍👩‍👧</div>
       <h3>I'm a Parent / Guardian</h3>
@@ -250,7 +249,7 @@
       <span class="role-cta">Start Free Trial <span class="role-arrow">→</span></span>
     </a>
 
-    <a href="/auth/teacher" class="role-card role-card-teacher">
+   <a href="{{#if user}}{{#if (eq user.role "private_teacher")}}/teacher/dashboard{{else}}/auth/teacher{{/if}}{{else}}/auth/teacher{{/if}}" class="role-card role-card-teacher">
       <span class="role-badge">For Private Teachers & Tutors</span>
       <div class="role-icon">👨‍🏫</div>
       <h3>I'm a Private Teacher</h3>
@@ -265,7 +264,7 @@
     </a>
   </div>
 </section>
-{{/unless}}
+
 
 <!-- ================= HERO ================= -->
 <section class="hero">

@@ -12,7 +12,7 @@ const router = Router();
 function ensureConsumer(req, res, next) {
   const role = String(req.user?.role || "").toLowerCase();
 
-  if (!["parent", "guardian", "student_self"].includes(role)) {
+if (!["parent", "guardian", "student_self", "employee", "org_admin", "private_teacher", "admin", "super_admin"].includes(role)) {
     return res.status(403).json({
       error: "Consumer accounts only"
     });

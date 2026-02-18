@@ -152,8 +152,14 @@ if (req.session?.signupSource) {
 }
 
 // 1️⃣ NEW SIGNUP FLOWS (first-time users coming from /auth/teacher or /auth/parent)
+// 1️⃣ NEW SIGNUP FLOWS (user explicitly chose a role from /start page)
 if (signupSource === "private_teacher" && req.user.role !== "private_teacher") {
-  // First-time teacher signup — role not yet set, send to setup
+  // Switch role to private_teacher
+  await User.updateOne(
+    { _id: req.user._id },
+    { $set: { role: "private_teacher", needsProfileSetup: true, consumerEnabled: true } }
+  );
+  req.user.role = "private_teacher"; // update in-memory too
   redirectPath = "/teacher/setup";
 }
 else if (signupSource === "private_teacher" && req.user.role === "private_teacher") {
@@ -165,6 +171,14 @@ else if (signupSource === "private_teacher" && req.user.role === "private_teache
   }
 }
 else if (signupSource === "parent") {
+  // If not already parent or private_teacher, switch to parent
+  if (!["parent", "private_teacher"].includes(req.user.role)) {
+    await User.updateOne(
+      { _id: req.user._id },
+      { $set: { role: "parent", consumerEnabled: true, accountType: "parent" } }
+    );
+    req.user.role = "parent";
+  }
   redirectPath = "/parent/dashboard";
 }
 // 2️⃣ RETURNING USERS (no signup source — route by role)
