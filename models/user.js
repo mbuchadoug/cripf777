@@ -256,14 +256,14 @@ UserSchema.methods.isTeacherSubscriptionActive = function () {
 
 UserSchema.methods.getTeacherChildLimit = function () {
   if (!this.isTeacherSubscriptionActive()) return 0;
-  if (this.teacherSubscriptionPlan === "starter") return 10;
-  if (this.teacherSubscriptionPlan === "professional") return 30;
+  if (this.teacherSubscriptionPlan === "starter") return 15;
+  if (this.teacherSubscriptionPlan === "professional") return 40;
   return 0;
 };
 
 UserSchema.methods.getTeacherPlanLabel = function () {
-  if (this.teacherSubscriptionPlan === "professional") return "Professional (30 students)";
-  if (this.teacherSubscriptionPlan === "starter") return "Starter (10 students)";
+  if (this.teacherSubscriptionPlan === "professional") return "Professional (40 students)";
+  if (this.teacherSubscriptionPlan === "starter") return "Starter (15 students)";
   return "Trial";
 };
 

@@ -1195,8 +1195,124 @@ router.post(
       }
     );
 
+
+
+
+
     return res.redirect("/teacher/dashboard");
   }
 );
 
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * GET /teacher/library-quiz/:ruleId/preview
+ * Preview a system (library) quiz
+ */
+router.get(
+  "/library-quiz/:ruleId/preview",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const QuizRule = (await import("../models/quizRule.js")).default;
+      const rule = await QuizRule.findById(req.params.ruleId).lean();
+      if (!rule) return res.status(404).send("Quiz not found");
+
+      // Get the questions for this rule
+      const questions = await Question.find({
+        _id: { $in: rule.questionIds || [] }
+      }).lean();
+
+      // If rule uses a parent question (comprehension), get sub-questions
+      let allQuestions = questions;
+      if (questions.length === 1 && questions[0].type === "comprehension" && questions[0].questionIds?.length) {
+        allQuestions = await Question.find({
+          _id: { $in: questions[0].questionIds }
+        }).lean();
+      }
+
+      res.render("teacher/library_quiz_preview", {
+        user: req.user,
+        rule,
+        questions: allQuestions
+      });
+    } catch (err) {
+      console.error("[Library Preview Error]", err);
+      return res.status(500).send("Failed to load preview");
+    }
+  }
+);
+
+/**
+ * POST /teacher/assign-library-quiz
+ * Assign a system (library) quiz to students
+ */
+router.post(
+  "/assign-library-quiz",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const { ruleId, studentIds, durationMinutes } = req.body;
+
+      if (!ruleId || !Array.isArray(studentIds) || !studentIds.length) {
+        return res.status(400).json({ error: "Rule ID and student IDs required" });
+      }
+
+      const QuizRule = (await import("../models/quizRule.js")).default;
+      const { assignQuizFromRule } = await import("../services/quizAssignment.js");
+      
+      const rule = await QuizRule.findById(ruleId).lean();
+      if (!rule) return res.status(404).json({ error: "Quiz rule not found" });
+
+      let assigned = 0;
+      let skipped = 0;
+
+      for (const studentId of studentIds) {
+        // Verify student belongs to teacher
+        const student = await User.findOne({
+          _id: studentId,
+          parentUserId: req.user._id,
+          role: "student"
+        }).lean();
+
+        if (!student) { skipped++; continue; }
+
+        // Check if already assigned
+        const existing = await ExamInstance.findOne({
+          userId: studentId,
+          ruleId: rule._id,
+          status: { $ne: "finished" }
+        }).lean();
+
+        if (existing) { skipped++; continue; }
+
+        await assignQuizFromRule({
+          rule,
+          userId: studentId,
+          orgId: student.organization || rule.org,
+          force: true,
+          overrideDuration: durationMinutes ? Number(durationMinutes) : undefined
+        });
+
+        assigned++;
+      }
+
+      return res.json({ success: true, assigned, skipped });
+    } catch (error) {
+      console.error("[Assign Library Quiz Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
 export default router;

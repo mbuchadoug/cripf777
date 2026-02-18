@@ -850,7 +850,11 @@
                 if (q.grade) html += '<span class="tag">Grade ' + q.grade + '</span>';
                 if (q.quizType) html += '<span class="tag">' + q.quizType + '</span>';
                 html += '</div>';
-                html += '<div class="quiz-meta">' + (q.questionCount || '?') + ' questions · ' + (q.durationMinutes || 30) + ' min</div>';
+               html += '<div class="quiz-meta">' + (q.questionCount || '?') + ' questions · ' + (q.durationMinutes || 30) + ' min</div>';
+                html += '<div class="actions">';
+                html += '<a href="/teacher/library-quiz/' + q._id + '/preview" class="btn btn-outline">Preview</a>';
+                html += '<button class="btn btn-success" onclick="openAssignLibrary(\'' + q._id + '\', \'' + (q.quizTitle || '').replace(/'/g, "\\'") + '\')">Assign</button>';
+                html += '</div>';
                 html += '</div>';
               });
               html += '</div></div>';
@@ -1202,6 +1206,35 @@
   </div>
 </div>
 
+<!-- ASSIGN LIBRARY QUIZ MODAL -->
+<div id="assignLibraryModal" class="modal-overlay">
+  <div class="modal-box">
+    <h2>Assign Library Quiz</h2>
+    <p id="assignLibraryTitle" style="color:var(--ink-soft);margin-bottom:16px;"></p>
+    <form id="assignLibraryForm">
+      <input type="hidden" id="assignLibraryRuleId" name="ruleId">
+      <div class="form-group">
+        <label>Select Students</label>
+        <div class="checkbox-list">
+          {{#each students}}
+            <label class="checkbox-item">
+              <input type="checkbox" name="studentIds[]" value="{{_id}}">
+              <span>{{firstName}} {{lastName}} (Grade {{grade}})</span>
+            </label>
+          {{/each}}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" name="durationMinutes" value="30" min="5" max="180">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button type="submit" class="btn btn-success" style="flex:1;">Assign</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal('assignLibraryModal')">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
@@ -1406,6 +1439,38 @@
       else { showToast(result.error, 'error'); }
     } catch { showToast('Failed', 'error'); }
     btn.disabled = false; btn.textContent = '📈 Generate Report';
+  });
+
+
+
+  // ==============================
+  // ASSIGN LIBRARY QUIZ
+  // ==============================
+  function openAssignLibrary(ruleId, title) {
+    document.getElementById('assignLibraryRuleId').value = ruleId;
+    document.getElementById('assignLibraryTitle').textContent = title;
+    openModal('assignLibraryModal');
+  }
+
+  document.getElementById('assignLibraryForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Assigning...';
+    const fd = new FormData(e.target);
+    const studentIds = fd.getAll('studentIds[]');
+    const ruleId = fd.get('ruleId');
+    const durationMinutes = fd.get('durationMinutes');
+    if (!studentIds.length) { showToast('Select students', 'error'); btn.disabled = false; btn.textContent = 'Assign'; return; }
+    try {
+      const r = await fetch('/teacher/assign-library-quiz', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruleId, studentIds, durationMinutes: Number(durationMinutes) })
+      });
+      const result = await r.json();
+      if (result.success) { showToast(`Assigned to ${result.assigned} student(s), ${result.skipped} skipped`); closeModal('assignLibraryModal'); }
+      else { showToast(result.error, 'error'); }
+    } catch { showToast('Failed', 'error'); }
+    btn.disabled = false; btn.textContent = 'Assign';
   });
 </script>
 
