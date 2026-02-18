@@ -80,21 +80,24 @@
   <div class="question-card">
     <div class="q-number">Question {{inc @index}}</div>
     <div class="q-text">{{text}}</div>
-    <div class="choices">
+  
+<div class="choices">
       {{#each choices}}
         {{#if (eq @index ../correctIndex)}}
           <div class="choice correct">
             <span class="choice-letter">{{letters @index}}</span>
-            {{#if (eq (typeof this) "string")}}{{this}}{{else}}{{this.text}}{{/if}} ✓
+            {{#if this.text}}{{this.text}}{{else}}{{this}}{{/if}} ✓
           </div>
         {{else}}
           <div class="choice">
             <span class="choice-letter">{{letters @index}}</span>
-            {{#if (eq (typeof this) "string")}}{{this}}{{else}}{{this.text}}{{/if}}
+            {{#if this.text}}{{this.text}}{{else}}{{this}}{{/if}}
           </div>
         {{/if}}
       {{/each}}
     </div>
+
+
   </div>
   {{/each}}
 

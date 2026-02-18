@@ -1225,20 +1225,119 @@ router.get(
   async (req, res) => {
     try {
       const QuizRule = (await import("../models/quizRule.js")).default;
+      const mongoose = (await import("mongoose")).default;
       const rule = await QuizRule.findById(req.params.ruleId).lean();
       if (!rule) return res.status(404).send("Quiz not found");
 
-      // Get the questions for this rule
-      const questions = await Question.find({
-        _id: { $in: rule.questionIds || [] }
-      }).lean();
+      let allQuestions = [];
+      const rawIds = rule.questionIds || [];
 
-      // If rule uses a parent question (comprehension), get sub-questions
-      let allQuestions = questions;
-      if (questions.length === 1 && questions[0].type === "comprehension" && questions[0].questionIds?.length) {
-        allQuestions = await Question.find({
-          _id: { $in: questions[0].questionIds }
+      // Step 1: Separate parent: tokens and plain ObjectIds
+      const parentIds = [];
+      const plainIds = [];
+
+      for (const token of rawIds) {
+        const str = String(token);
+        if (str.startsWith("parent:")) {
+          const pid = str.split(":")[1];
+          if (mongoose.isValidObjectId(pid)) parentIds.push(pid);
+        } else if (mongoose.isValidObjectId(str)) {
+          plainIds.push(str);
+        }
+      }
+
+      // Step 2: Load parent docs and any plain question docs
+      const allIds = [...parentIds, ...plainIds];
+      const docs = allIds.length
+        ? await Question.find({ _id: { $in: allIds } }).lean()
+        : [];
+
+      const byId = {};
+      for (const d of docs) byId[String(d._id)] = d;
+
+      // Step 3: Expand parents → load their children
+      const childIds = new Set();
+      for (const pid of parentIds) {
+        const parentDoc = byId[pid];
+        if (parentDoc && Array.isArray(parentDoc.questionIds)) {
+          for (const cid of parentDoc.questionIds) {
+            if (mongoose.isValidObjectId(String(cid))) {
+              childIds.add(String(cid));
+            }
+          }
+        }
+      }
+
+      // Also check if any plainIds are comprehension parents
+      for (const pid of plainIds) {
+        const doc = byId[pid];
+        if (doc?.type === "comprehension" && Array.isArray(doc.questionIds)) {
+          for (const cid of doc.questionIds) {
+            if (mongoose.isValidObjectId(String(cid))) {
+              childIds.add(String(cid));
+            }
+          }
+        }
+      }
+
+      // Step 4: Fetch child questions
+      if (childIds.size) {
+        const children = await Question.find({
+          _id: { $in: Array.from(childIds) }
         }).lean();
+
+        // Preserve parent ordering
+        const childById = {};
+        for (const c of children) childById[String(c._id)] = c;
+
+        // Build ordered list from parents first
+        for (const pid of parentIds) {
+          const parentDoc = byId[pid];
+          if (parentDoc?.questionIds) {
+            for (const cid of parentDoc.questionIds) {
+              const child = childById[String(cid)];
+              if (child) allQuestions.push(child);
+            }
+          }
+        }
+
+        // Then add comprehension parents found in plainIds
+        for (const pid of plainIds) {
+          const doc = byId[pid];
+          if (doc?.type === "comprehension" && doc.questionIds) {
+            for (const cid of doc.questionIds) {
+              const child = childById[String(cid)];
+              if (child && !allQuestions.find(q => String(q._id) === String(child._id))) {
+                allQuestions.push(child);
+              }
+            }
+          }
+        }
+      }
+
+      // Step 5: If no children found, use plain questions directly (non-comprehension)
+      if (!allQuestions.length) {
+        for (const pid of plainIds) {
+          const doc = byId[pid];
+          if (doc && doc.type !== "comprehension") {
+            allQuestions.push(doc);
+          }
+        }
+      }
+
+      // Step 6: If STILL nothing, try loading questions by org+subject+grade match
+      if (!allQuestions.length) {
+        const matchQuery = {
+          organization: rule.org,
+          type: { $ne: "comprehension" }
+        };
+        if (rule.subject) matchQuery.subject = rule.subject;
+        if (rule.grade) matchQuery.grade = rule.grade;
+        if (rule.module) matchQuery.module = rule.module;
+
+        allQuestions = await Question.find(matchQuery)
+          .limit(rule.questionCount || 20)
+          .lean();
       }
 
       res.render("teacher/library_quiz_preview", {
