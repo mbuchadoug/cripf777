@@ -144,13 +144,19 @@ const memberships = await OrgMembership
 
 // ✅ Redirect by signup flow (parent vs employee), not by req.user.role
 // ✅ Redirect by signup flow AND role
-const isParentFlow = req.session?.signupSource === "parent";
-const isTeacherFlow = req.session?.signupSource === "private_teacher";
+const signupSource = req.session?.signupSource || null;
 
-// 🔥 PRIORITY: Check role first (handles existing users who sign in again)
-// 🔥 PRIORITY: Check role first (handles existing users who sign in again)
-if (req.user.role === "private_teacher") {
-  // Check if teacher needs profile setup
+// Clear signup source after reading
+if (req.session?.signupSource) {
+  delete req.session.signupSource;
+}
+
+// 1️⃣ NEW SIGNUP FLOWS (first-time users coming from /auth/teacher or /auth/parent)
+if (signupSource === "private_teacher" && req.user.role !== "private_teacher") {
+  // First-time teacher signup — role not yet set, send to setup
+  redirectPath = "/teacher/setup";
+}
+else if (signupSource === "private_teacher" && req.user.role === "private_teacher") {
   const teacherDoc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
   if (teacherDoc?.needsProfileSetup || !teacherDoc?.schoolLevelsEnabled?.length) {
     redirectPath = "/teacher/setup";
@@ -158,14 +164,23 @@ if (req.user.role === "private_teacher") {
     redirectPath = "/teacher/dashboard";
   }
 }
-else if (isTeacherFlow) {
-  redirectPath = "/teacher/setup";
+else if (signupSource === "parent") {
+  redirectPath = "/parent/dashboard";
 }
-
-else if (isParentFlow || req.user.role === "parent") {
+// 2️⃣ RETURNING USERS (no signup source — route by role)
+else if (req.user.role === "private_teacher") {
+  const teacherDoc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
+  if (teacherDoc?.needsProfileSetup || !teacherDoc?.schoolLevelsEnabled?.length) {
+    redirectPath = "/teacher/setup";
+  } else {
+    redirectPath = "/teacher/dashboard";
+  }
+}
+else if (req.user.role === "parent") {
   redirectPath = "/parent/dashboard";
 }
 else if (memberships.length > 0 && memberships[0].org?.slug) {
+  // Employees, org_admins, etc. → their org dashboard
   redirectPath = `/org/${memberships[0].org.slug}/dashboard`;
 }
         else {
@@ -191,6 +206,58 @@ else if (memberships.length > 0 && memberships[0].org?.slug) {
           }
         }
       }
+
+
+
+// 3️⃣ AUTO-ENROLL: Ensure user has cripfcnt-home membership (for parent/teacher features)
+if (signupSource === "private_teacher" || signupSource === "parent" || 
+    req.user.role === "private_teacher" || req.user.role === "parent") {
+  try {
+    const homeOrg = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+    if (homeOrg) {
+      const hasHomeMembership = await OrgMembership.findOne({
+        org: homeOrg._id,
+        user: req.user._id
+      }).lean();
+
+      if (!hasHomeMembership) {
+        await OrgMembership.create({
+          org: homeOrg._id,
+          user: req.user._id,
+          role: req.user.role === "private_teacher" ? "private_teacher" : "parent",
+          joinedAt: new Date()
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[auth] auto-enroll cripfcnt-home failed:", e.message);
+  }
+}
+
+// 4️⃣ AUTO-ENROLL: Ensure employee/parent/teacher also has cripfcnt-school access
+if (req.user.role === "employee" || req.user.role === "parent" || req.user.role === "private_teacher") {
+  try {
+    const schoolOrg = await Organization.findOne({ slug: "cripfcnt-school" }).lean();
+    if (schoolOrg) {
+      const hasSchoolMembership = await OrgMembership.findOne({
+        org: schoolOrg._id,
+        user: req.user._id
+      }).lean();
+
+      if (!hasSchoolMembership) {
+        await OrgMembership.create({
+          org: schoolOrg._id,
+          user: req.user._id,
+          role: req.user.role === "employee" ? "employee" : req.user.role,
+          joinedAt: new Date()
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[auth] auto-enroll cripfcnt-school failed:", e.message);
+  }
+}
+
 
       console.log("[/auth/google/callback] redirecting to:", redirectPath);
 
