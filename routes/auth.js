@@ -131,7 +131,13 @@ router.get(
       }
 
       const defaultOrgSlug = "cripfcnt-school";
-      let redirectPath = null;
+   let redirectPath = null;
+
+      // Read and clear signup source BEFORE the if/else (so it's in scope everywhere)
+      const signupSource = req.session?.signupSource || null;
+      if (req.session?.signupSource) {
+        delete req.session.signupSource;
+      }
 
       // 1️⃣ Respect explicit return paths first
       if (fromState || fromSession) {
@@ -141,15 +147,6 @@ const memberships = await OrgMembership
   .find({ user: req.user._id })
   .populate("org")
   .lean();
-
-// ✅ Redirect by signup flow (parent vs employee), not by req.user.role
-// ✅ Redirect by signup flow AND role
-const signupSource = req.session?.signupSource || null;
-
-// Clear signup source after reading
-if (req.session?.signupSource) {
-  delete req.session.signupSource;
-}
 
 // 1️⃣ NEW SIGNUP FLOWS (first-time users coming from /auth/teacher or /auth/parent)
 // 1️⃣ NEW SIGNUP FLOWS (user explicitly chose a role from /start page)
