@@ -28,17 +28,19 @@
     </div>
 
     <form method="POST" action="/c/{{campaign.slug}}/exam/{{exam.examId}}/submit">
-      {{#each questions}}
-        <div class="card">
-          <div class="qtext">{{text}}</div>
-          {{#each choices}}
-            <label class="choice">
-              <input type="radio" name="a_{{../../idToken}}" value="{{@index}}" required>
-              <strong>{{label}}.</strong> {{text}}
-            </label>
-          {{/each}}
-        </div>
-      {{/each}}
+     {{#each questions}}
+  <div class="card">
+    <div class="qtext">{{text}}</div>
+
+    {{#each choices}}
+      <label class="choice">
+        <input type="radio" name="a_{{../idToken}}" value="{{@index}}" required>
+        <strong>{{label}}.</strong> {{text}}
+      </label>
+    {{/each}}
+
+  </div>
+{{/each}}
 
       <button class="btn" type="submit">Submit</button>
     </form>
