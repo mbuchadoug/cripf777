@@ -769,6 +769,46 @@
         </div>
       </div>
 
+<!-- ============================== -->
+<!-- PUBLIC CAMPAIGN CREATOR       -->
+<!-- ============================== -->
+
+<div class="section-card" style="margin-bottom:20px;">
+  <div class="section-header">
+    <h3>🌍 Create Public Campaign (TikTok / Social)</h3>
+  </div>
+  <div class="section-body">
+
+    <form id="createCampaignForm" style="display:grid;gap:12px;">
+      
+      <div class="form-group">
+        <label>Campaign Title</label>
+        <input type="text" name="title" placeholder="e.g. Grade 5 Fractions Challenge" required>
+      </div>
+
+      <div class="form-group">
+        <label>Select Quiz</label>
+        <select name="aiQuizId" required>
+          <option value="">Select your quiz...</option>
+          {{#each aiQuizzes}}
+            <option value="{{_id}}">{{title}} (Grade {{grade}} - {{subject}})</option>
+          {{/each}}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:200px;">
+        🚀 Create Campaign
+      </button>
+
+    </form>
+
+    <div id="campaignResult" style="margin-top:15px;"></div>
+
+  </div>
+</div>
+
+
+
       {{#if aiQuizzes.length}}
         <div class="quiz-grid">
           {{#each aiQuizzes}}
@@ -1584,6 +1624,55 @@ document.getElementById('uploadTextForm').addEventListener('submit', async e => 
     } catch { showToast('Failed', 'error'); }
     btn.disabled = false; btn.textContent = 'Assign';
   });
+
+
+
+  // ==============================
+// CREATE PUBLIC CAMPAIGN
+// ==============================
+
+document.getElementById('createCampaignForm')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const btn = this.querySelector('button');
+  const original = btn.innerHTML;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating...';
+
+  const data = Object.fromEntries(new FormData(this));
+
+  try {
+    const res = await fetch('/teacher/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      document.getElementById('campaignResult').innerHTML =
+        `<div style="margin-top:10px;">
+          <strong>Campaign Created!</strong><br>
+          Share this link:<br>
+          <a href="${result.shareUrl}" target="_blank">${result.shareUrl}</a>
+        </div>`;
+
+      this.reset();
+      showToast('Campaign created successfully!');
+    } else {
+      showToast(result.error || 'Failed', 'error');
+    }
+
+  } catch {
+    showToast('Server error', 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = original;
+});
+
 </script>
 
 </body>

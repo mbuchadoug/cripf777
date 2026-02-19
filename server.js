@@ -16,6 +16,7 @@ import consumerQuizRoutes from "./routes/consumer_quiz.js";
 import adminQuizRules from "./routes/admin_quiz_rules.js";
 import adminExamRoutes from "./routes/admin_exams.js";
 import publicCreatorQuizRoutes from "./routes/publicCreatorQuiz.js";
+import creatorCampaignRoutes from "./routes/creatorCampaigns.js";
 
 import parentRoutes from "./routes/parent.js";
 import parentAttemptsRoutes from "./routes/parent_attempts.js";
@@ -325,6 +326,7 @@ app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
 // API routes — keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
+app.use("/", creatorCampaignRoutes);
 
 // Admin attempts UI
 app.use("/", adminAttempts);
