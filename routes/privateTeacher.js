@@ -583,17 +583,25 @@ router.post(
 
         return {
           text: q.text,
-          choices: q.choices,
+          //choices: q.choices,
           correctIndex: q.correctIndex,
           explanation: q.explanation || null,
           tags: [],
-          difficulty: "medium",
+          //difficulty: "medium",
           subject: subject.toLowerCase(),
           grade: Number(grade),
           module: subject.toLowerCase(),
           organization: org._id,
           teacherId: req.user._id,
-          type: "mcq",
+          // 1) Use a valid enum value for type (see the debug snippet below)
+type: VALID_TYPE,
+
+// 2) Store difficulty as number
+difficulty: difficultyNumber, // e.g. 2
+
+// 3) Store choices as embedded docs
+choices: parsedChoicesArray.map(t => ({ text: String(t).trim() })),
+
           meta: { uploadedBy: req.user._id, isTeacherUpload: true, source: "plain_text" }
         };
       });
