@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{campaign.title}}</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;}
+    .wrap{max-width:1000px;margin:0 auto;}
+    .card{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:12px;}
+    .row{display:flex;justify-content:space-between;gap:10px;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff;}
+    a{color:#6366f1;text-decoration:none;font-weight:900;}
+    .meta{color:#6b7280;font-size:13px;margin-top:4px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <a href="/teacher/campaigns">Back</a>
+      <div style="font-weight:900;font-size:18px;margin-top:8px;">{{campaign.title}}</div>
+      <div class="meta">Public link: /c/{{campaign.slug}}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900;">Leaderboard</div>
+      {{#each leaderboard}}
+        <div class="row">
+          <div>{{publicParticipant.name}} (Grade {{publicParticipant.grade}})</div>
+          <div style="font-weight:900;">{{percentage}}%</div>
+        </div>
+      {{/each}}
+      {{#unless leaderboard.length}}
+        <div class="meta">No attempts yet.</div>
+      {{/unless}}
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900;">Recent attempts</div>
+      {{#each attempts}}
+        <div class="row">
+          <div>{{publicParticipant.name}} · Grade {{publicParticipant.grade}}</div>
+          <div>{{percentage}}%</div>
+        </div>
+      {{/each}}
+      {{#unless attempts.length}}
+        <div class="meta">No attempts yet.</div>
+      {{/unless}}
+    </div>
+  </div>
+</body>
+</html>

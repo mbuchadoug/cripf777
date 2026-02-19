@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{quizTitle}}</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;}
+    .wrap{max-width:900px;margin:0 auto;}
+    .head{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:16px;}
+    .card{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:12px;}
+    .qtext{font-weight:800;color:#111827;margin-bottom:10px;line-height:1.4;}
+    .choice{display:block;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;}
+    .choice input{margin-right:10px;}
+    .btn{width:100%;background:#10b981;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:900;font-size:14px;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div style="font-weight:900;font-size:18px;">{{quizTitle}}</div>
+      {{#if participant.name}}
+        <div style="color:#6b7280;font-size:13px;margin-top:4px;">{{participant.name}} · Grade {{participant.grade}}</div>
+      {{/if}}
+      {{#if passage}}
+        <div style="margin-top:12px;color:#111827;white-space:pre-line;">{{passage}}</div>
+      {{/if}}
+    </div>
+
+    <form method="POST" action="/c/{{campaign.slug}}/exam/{{exam.examId}}/submit">
+      {{#each questions}}
+        <div class="card">
+          <div class="qtext">{{text}}</div>
+          {{#each choices}}
+            <label class="choice">
+              <input type="radio" name="a_{{../../idToken}}" value="{{@index}}" required>
+              <strong>{{label}}.</strong> {{text}}
+            </label>
+          {{/each}}
+        </div>
+      {{/each}}
+
+      <button class="btn" type="submit">Submit</button>
+    </form>
+  </div>
+</body>
+</html>

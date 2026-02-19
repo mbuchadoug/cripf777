@@ -15,6 +15,7 @@ import consumerRoutes from "./routes/consumer.js";
 import consumerQuizRoutes from "./routes/consumer_quiz.js";
 import adminQuizRules from "./routes/admin_quiz_rules.js";
 import adminExamRoutes from "./routes/admin_exams.js";
+import publicCreatorQuizRoutes from "./routes/publicCreatorQuiz.js";
 
 import parentRoutes from "./routes/parent.js";
 import parentAttemptsRoutes from "./routes/parent_attempts.js";
@@ -362,6 +363,8 @@ app.use("/twilio_biz", twilioBizRoutes);
 // ... after other route registrations
 app.use("/teacher", privateTeacherRoutes);
 app.use(adminFinanceRoutes);
+app.use(publicCreatorQuizRoutes);
+
 app.use("/", parentAttemptsRoutes);
 
 app.use(studentRoutes);

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{quizTitle}}</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;}
+    .box{max-width:720px;margin:0 auto;background:#fff;border-radius:12px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.08);}
+    h1{margin:0 0 8px;font-size:22px;}
+    .meta{color:#6b7280;font-size:13px;margin-bottom:18px;}
+    .btn{display:inline-block;background:#6366f1;color:#fff;padding:12px 16px;border-radius:10px;text-decoration:none;font-weight:700;}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>{{quizTitle}}</h1>
+    <div class="meta">{{questionCount}} questions</div>
+    <a class="btn" href="/c/{{campaign.slug}}/start">Start Quiz</a>
+  </div>
+</body>
+</html>

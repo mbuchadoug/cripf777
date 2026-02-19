@@ -3,143 +3,73 @@ import mongoose from "mongoose";
 
 const ExamInstanceSchema = new mongoose.Schema(
   {
-examId: { type: String, required: true, index: true },
+    examId: { type: String, required: true, index: true },
 
-ruleId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "QuizRule",
-  index: true,
-  default: null   // ✅ optional
-},
+    ruleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "QuizRule",
+      index: true,
+      default: null
+    },
 
+    // Public attempt mode (TikTok / creator link)
+    isPublic: { type: Boolean, default: false, index: true },
 
+    isOnboarding: { type: Boolean, default: false, index: true },
 
-    isOnboarding: {
-  type: Boolean,
-  default: false,
-  index: true
-}
-,
+    org: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      index: true,
+      default: null
+    },
 
-    // Organization that owns this exam (nullable for platform/global)
-    org: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", index: true, default: null },
+    module: { type: String, default: null, index: true },
 
-    // Module key (e.g. "responsibility")
-    module: { type: String, default: "general", index: true },
-modules: [{
-  type: String,
-  index: true
-}]
-,
+    modules: [{ type: String, index: true }],
 
-// Assigned user (REQUIRED)
-userId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "User",
-  required: true,
-  index: true
-},
+    // Assigned user (required for normal exams)
+    // Public exams can have userId null
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: function () {
+        return !this.isPublic;
+      },
+      index: true,
+      default: null
+    },
 
-// 🔵 Consumer mode: learner profile (NULL for org quizzes)
-learnerProfileId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "LearnerProfile",
-  default: null,
-  index: true
-},
+    // Consumer mode: learner profile (null for org quizzes)
+    learnerProfileId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LearnerProfile",
+      default: null,
+      index: true
+    },
 
-// Who this quiz is for
-targetRole: {
-  type: String,
-  enum: ["student", "teacher", "employee"],
-  required: true,
-  index: true
-},
+    // Quiz title
+    title: { type: String, default: null },
+    quizTitle: { type: String, default: null },
 
+    // target role / status
+    targetRole: { type: String, default: "student" },
+    status: { type: String, default: "pending", index: true }, // pending | started | finished
 
+    durationMinutes: { type: Number, default: 0 },
 
-    // Assigned user (optional for generic attempts)
-   // user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    // question set + ordering
+    questionIds: [{ type: mongoose.Schema.Types.Mixed }],
+    choicesOrder: [{ type: [Number] }],
 
-    /**
-     * questionIds intentionally uses Mixed so it can hold:
-     *  - ObjectId (native child/regular question ids)
-     *  - String ids (stringified ObjectId)
-     *  - Marker strings like "parent:<parentId>"
-     *
-     * This keeps compatibility with the "parent:..." marker approach used
-     * when you want to render a passage followed by child questions.
-     */
-    questionIds: { type: [mongoose.Schema.Types.Mixed], default: [] },
-
-    /**
-     * choicesOrder is an array where each entry corresponds to the question
-     * position in questionIds. For parent markers you may have [] or null.
-     * Use Mixed to avoid casting issues (arrays of numbers are typical).
-     */
-    choicesOrder: { type: [mongoose.Schema.Types.Mixed], default: [] },
-
-    // optional expiry timestamp
-    expiresAt: { type: Date, default: null },
-    assignmentId: {
-  type: String,
-  index: true
-},
-
-
-    durationMinutes: {
-  type: Number,
-  default: null
-}
-,
-
-  // 🔥 REQUIRED: human-readable quiz title
-  title: {
-    type: String,
-    index: true
-  },
-
-  // optional backward-compat / safety
-  quizTitle: {
-    type: String,
-    index: true
-  },
-
-    // status: pending/finished/expired etc.
-    status: { type: String, default: "pending", index: true },
-
-    // IP of creator for audit
-    createdByIp: { type: String, default: null },
-
-    // optional free-form metadata
-    meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // optional metadata
+    meta: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
   {
-    timestamps: true, // createdAt & updatedAt
+    timestamps: true,
     toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    toObject: { virtuals: true }
   }
 );
 
-// convenience virtual for question count (counts only real child entries — but includes markers)
-ExamInstanceSchema.virtual("questionCount").get(function () {
-  if (!Array.isArray(this.questionIds)) return 0;
-  return this.questionIds.length;
-});
-
-// add a small helper method to normalize questionIds to string array
-ExamInstanceSchema.methods.normalizedQuestionIds = function () {
-  return (this.questionIds || []).map((qid) => {
-    if (!qid && qid !== 0) return qid;
-    // if it's an ObjectId -> toString
-    if (typeof qid === "object" && typeof qid.toString === "function") return qid.toString();
-    return String(qid);
-  });
-};
-
-// basic indexes that will help lookups
-ExamInstanceSchema.index({ org: 1, userId: 1, examId: 1 });
-
-
-const ExamInstance = mongoose.models.ExamInstance || mongoose.model("ExamInstance", ExamInstanceSchema);
-export default ExamInstance;
+export default mongoose.models.ExamInstance || mongoose.model("ExamInstance", ExamInstanceSchema);

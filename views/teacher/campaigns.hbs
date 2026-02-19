@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Campaigns</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;}
+    .wrap{max-width:1000px;margin:0 auto;}
+    .card{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:12px;}
+    a{color:#6366f1;text-decoration:none;font-weight:900;}
+    .meta{color:#6b7280;font-size:13px;margin-top:4px;}
+    .row{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div style="font-weight:900;font-size:18px;">Creator Campaigns</div>
+      <div class="meta">Your public quiz links</div>
+    </div>
+
+    {{#each campaigns}}
+      <div class="card">
+        <div class="row">
+          <div>
+            <div style="font-weight:900;">{{title}}</div>
+            <div class="meta">Public link: /c/{{slug}}</div>
+            <div class="meta">Attempts: {{totalAttempts}} · Avg: {{avgPercentage}}%</div>
+          </div>
+          <div>
+            <a href="/teacher/campaign/{{_id}}">View</a>
+          </div>
+        </div>
+      </div>
+    {{/each}}
+  </div>
+</body>
+</html>

@@ -11,6 +11,7 @@ import Question from "../models/question.js";
 import crypto from "crypto";
 import multer from "multer";
 import Attempt from "../models/attempt.js";
+import CreatorCampaign from "../models/creatorCampaign.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1646,5 +1647,77 @@ function parsePlainTextQuiz(input) {
 
   return { quizTitle, subject, grade, durationMinutes, passage, questions };
 }
+
+
+
+
+router.get("/campaigns", ensureAuth, ensurePrivateTeacher, async (req, res) => {
+  const campaigns = await CreatorCampaign.find({ creatorId: req.user._id })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const enriched = [];
+  for (const c of campaigns) {
+    const totalAttempts = await Attempt.countDocuments({
+      isPublic: true,
+      campaignId: c._id,
+      status: "finished"
+    });
+
+    const avgAgg = await Attempt.aggregate([
+      { $match: { isPublic: true, campaignId: c._id, status: "finished" } },
+      { $group: { _id: null, avg: { $avg: "$percentage" } } }
+    ]);
+    const avgPercentage = avgAgg?.[0]?.avg != null ? Math.round(avgAgg[0].avg) : 0;
+
+    enriched.push({
+      ...c,
+      totalAttempts,
+      avgPercentage
+    });
+  }
+
+  res.render("teacher/campaigns", {
+    user: req.user,
+    campaigns: enriched
+  });
+});
+
+router.get("/campaign/:id", ensureAuth, ensurePrivateTeacher, async (req, res) => {
+  const campaign = await CreatorCampaign.findOne({
+    _id: req.params.id,
+    creatorId: req.user._id
+  }).lean();
+
+  if (!campaign) return res.status(404).send("Campaign not found");
+
+  const leaderboard = await Attempt.find({
+    isPublic: true,
+    campaignId: campaign._id,
+    status: "finished"
+  })
+    .sort({ percentage: -1, "duration.totalSeconds": 1, createdAt: 1 })
+    .limit(20)
+    .select("percentage publicParticipant duration createdAt")
+    .lean();
+
+  const attempts = await Attempt.find({
+    isPublic: true,
+    campaignId: campaign._id,
+    status: "finished"
+  })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .select("percentage publicParticipant duration createdAt")
+    .lean();
+
+  res.render("teacher/campaign_detail", {
+    user: req.user,
+    campaign,
+    leaderboard,
+    attempts
+  });
+});
+
 
 export default router;

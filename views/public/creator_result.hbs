@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Result</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px;}
+    .wrap{max-width:900px;margin:0 auto;}
+    .box{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:16px;}
+    .big{font-size:26px;font-weight:900;color:#111827;margin:0;}
+    .meta{color:#6b7280;font-size:13px;margin-top:6px;}
+    .row{display:flex;justify-content:space-between;gap:10px;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff;}
+    .badge{font-weight:900;color:#10b981;}
+    .q{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-top:10px;background:#fff;}
+    .ok{color:#10b981;font-weight:900;}
+    .bad{color:#ef4444;font-weight:900;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="box">
+      <p class="big">{{attempt.percentage}}%</p>
+      <div class="meta">
+        {{participant.name}} · Grade {{participant.grade}} · Score {{attempt.score}} / {{attempt.maxScore}}
+      </div>
+    </div>
+
+    {{#if leaderboard.length}}
+      <div class="box">
+        <div style="font-weight:900;">Leaderboard</div>
+        {{#each leaderboard}}
+          <div class="row">
+            <div>{{publicParticipant.name}} (Grade {{publicParticipant.grade}})</div>
+            <div class="badge">{{percentage}}%</div>
+          </div>
+        {{/each}}
+      </div>
+    {{/if}}
+
+    {{#if showAnswers}}
+      <div>
+        {{#each review}}
+          <div class="q">
+            <div style="font-weight:900;">{{text}}</div>
+            <div style="margin-top:6px;">
+              {{#if correct}}<span class="ok">Correct</span>{{else}}<span class="bad">Wrong</span>{{/if}}
+            </div>
+            {{#if explanation}}
+              <div style="margin-top:8px;color:#374151;">{{explanation}}</div>
+            {{/if}}
+          </div>
+        {{/each}}
+      </div>
+    {{/if}}
+  </div>
+</body>
+</html>
