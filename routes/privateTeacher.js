@@ -470,21 +470,38 @@ router.post(
           ? q.correctIndex 
           : (typeof q.answerIndex === "number" ? q.answerIndex : 0);
 
-        return {
-          text: q.text,
-          choices: q.choices.map(c => typeof c === "string" ? c : (c.text || String(c))),
-          correctIndex,
-          explanation: q.explanation || null,
-          tags: q.tags || [],
-          difficulty: q.difficulty || "medium",
-          subject: subject.toLowerCase(),
-          grade: Number(grade),
-          module: subject.toLowerCase(),
-          organization: org._id,
-          teacherId: req.user._id,
-          type: "mcq",
-          meta: { uploadedBy: req.user._id, isTeacherUpload: true }
-        };
+      return {
+  text: q.text.trim(),
+
+  // ✅ YOUR schema expects embedded objects with label + text
+  choices: q.choices.map((choiceText, i) => ({
+    label: String.fromCharCode(65 + i), // A, B, C, D
+    text: String(choiceText).trim()
+  })),
+
+  correctIndex: q.correctIndex,
+  explanation: q.explanation || null,
+
+  tags: [],
+  difficulty: 2, // must be number 1–5 (your schema requires Number)
+
+  subject: subject.toLowerCase(),
+  grade: Number(grade),
+  module: subject.toLowerCase(),
+
+  organization: org._id,
+  teacherId: req.user._id,
+
+  // ✅ IMPORTANT: your enum only allows these:
+  type: "question",
+
+  meta: {
+    uploadedBy: req.user._id,
+    isTeacherUpload: true,
+    source: "plain_text"
+  }
+};
+
       });
 
       // Insert questions into DB
@@ -573,7 +590,7 @@ router.post(
       if (!org) return res.status(500).json({ error: "Home org not found" });
 
       // Insert MCQ questions
-      const validQuestions = questions.map((q, idx) => {
+           const validQuestions = questions.map((q, idx) => {
         if (!q.text || !Array.isArray(q.choices) || q.choices.length < 2) {
           throw new Error(`Question ${idx + 1}: missing text or choices`);
         }
@@ -581,26 +598,37 @@ router.post(
           throw new Error(`Question ${idx + 1}: invalid ANSWER`);
         }
 
+        // ✅ determine allowed Question.type enum at runtime (so we never guess)
+        const allowedTypes = (Question.schema?.path("type")?.enumValues || []);
+        const VALID_TYPE = allowedTypes.includes("mcq")
+          ? "mcq"
+          : (allowedTypes[0] || undefined);
+
+        if (!VALID_TYPE) {
+          throw new Error("Question schema has no valid enum values for `type`");
+        }
+
         return {
-          text: q.text,
-          //choices: q.choices,
+          text: q.text.trim(),
+
+          // ✅ embedded choices (your schema expects objects, not strings)
+          choices: q.choices.map(t => ({ text: String(t).trim() })),
+
           correctIndex: q.correctIndex,
           explanation: q.explanation || null,
           tags: [],
-          //difficulty: "medium",
+          
+          // ✅ difficulty must be a Number in YOUR schema
+          difficulty: 2,
+
           subject: subject.toLowerCase(),
           grade: Number(grade),
           module: subject.toLowerCase(),
           organization: org._id,
           teacherId: req.user._id,
-          // 1) Use a valid enum value for type (see the debug snippet below)
-type: VALID_TYPE,
 
-// 2) Store difficulty as number
-difficulty: difficultyNumber, // e.g. 2
-
-// 3) Store choices as embedded docs
-choices: parsedChoicesArray.map(t => ({ text: String(t).trim() })),
+          // ✅ type must match enum
+          type: VALID_TYPE,
 
           meta: { uploadedBy: req.user._id, isTeacherUpload: true, source: "plain_text" }
         };
