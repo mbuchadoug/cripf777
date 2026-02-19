@@ -123,17 +123,11 @@
       <div class="question-number">Question {{@index}} of {{../quiz.questionCount}}</div>
       <div class="question-text">{{text}}</div>
       
-    {{#each choices}}
-  <div class="choice {{#if (eq @index ../correctIndex)}}correct{{/if}}">
-    {{@index}}.
-    {{#if this.text}}
-      {{this.text}}
-    {{else}}
-      {{this}}
-    {{/if}}
-  </div>
-{{/each}}
-
+      {{#each choices}}
+        <div class="choice {{#if (eq @index ../correctIndex)}}correct{{/if}}">
+          {{@index}}. {{this}}
+        </div>
+      {{/each}}
       
       <div class="explanation">
         <div class="explanation-title">💡 Explanation</div>

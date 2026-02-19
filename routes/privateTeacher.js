@@ -612,7 +612,11 @@ router.post(
           text: q.text.trim(),
 
           // ✅ embedded choices (your schema expects objects, not strings)
-          choices: q.choices.map(t => ({ text: String(t).trim() })),
+          choices: q.choices.map((t, i) => ({
+  label: String.fromCharCode(65 + i), // A, B, C, D
+  text: String(t).trim()
+})),
+
 
           correctIndex: q.correctIndex,
           explanation: q.explanation || null,
