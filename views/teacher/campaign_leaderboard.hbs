@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Leaderboard</title></head>
+<body style="font-family:system-ui;padding:20px;background:#f3f4f6;">
+  <a href="/teacher/campaigns">← Back</a>
+  <h2 style="margin-top:12px;">🏆 {{campaign.title}} Leaderboard</h2>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;">
+    <div style="background:#fff;padding:10px 14px;border-radius:10px;">Attempts: <b>{{stats.attempts}}</b></div>
+    <div style="background:#fff;padding:10px 14px;border-radius:10px;">Avg: <b>{{stats.avgScore}}%</b></div>
+    <div style="background:#fff;padding:10px 14px;border-radius:10px;">Best: <b>{{stats.bestScore}}%</b></div>
+  </div>
+
+  <div style="background:#fff;border-radius:12px;padding:12px;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="text-align:left;color:#6b7280;font-size:12px;">
+          <th style="padding:8px;">#</th>
+          <th style="padding:8px;">Name</th>
+          <th style="padding:8px;">Grade</th>
+          <th style="padding:8px;">Score</th>
+          <th style="padding:8px;">Time</th>
+          <th style="padding:8px;">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each leaderboard}}
+          <tr style="border-top:1px solid #eee;">
+            <td style="padding:8px;">{{inc @index}}</td>
+            <td style="padding:8px;">{{publicParticipant.name}}</td>
+            <td style="padding:8px;">{{publicParticipant.grade}}</td>
+            <td style="padding:8px;"><b>{{percentage}}%</b></td>
+            <td style="padding:8px;">{{duration.totalSeconds}}s</td>
+            <td style="padding:8px;">{{createdAt}}</td>
+          </tr>
+        {{/each}}
+        {{#unless leaderboard.length}}
+          <tr><td colspan="6" style="padding:12px;color:#6b7280;">No attempts yet.</td></tr>
+        {{/unless}}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

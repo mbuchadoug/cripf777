@@ -13,6 +13,9 @@ import multer from "multer";
 import Attempt from "../models/attempt.js";
 import CreatorCampaign from "../models/creatorCampaign.js";
 
+
+
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 
@@ -139,9 +142,35 @@ router.get(
       }).select("quizTitle subject grade module quizType questionCount durationMinutes").lean();
     }
 
+
+        // ✅ My public campaigns (for dashboard quick links)
+    const campaigns = await CreatorCampaign.find({ creatorId: teacher._id })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    // (optional) add attempts + avg (same as /teacher/campaigns does)
+    const enrichedCampaigns = [];
+    for (const c of campaigns) {
+      const totalAttempts = await Attempt.countDocuments({
+        isPublic: true,
+        campaignId: c._id,
+        status: "finished"
+      });
+
+      const avgAgg = await Attempt.aggregate([
+        { $match: { isPublic: true, campaignId: c._id, status: "finished" } },
+        { $group: { _id: null, avg: { $avg: "$percentage" } } }
+      ]);
+      const avgPercentage = avgAgg?.[0]?.avg != null ? Math.round(avgAgg[0].avg) : 0;
+
+      enrichedCampaigns.push({ ...c, totalAttempts, avgPercentage });
+    }
+
     res.render("teacher/dashboard", {
       user: teacher,
       students,
+       campaigns: enrichedCampaigns,
       aiQuizzes,
       studentLimit: teacher.getTeacherChildLimit(),
       planLabel: teacher.getTeacherPlanLabel(),

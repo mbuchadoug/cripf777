@@ -807,6 +807,51 @@
   </div>
 </div>
 
+<!-- ============================== -->
+<!-- MY CAMPAIGNS (NEW)             -->
+<!-- ============================== -->
+<div class="section-card" style="margin-bottom:20px;">
+  <div class="section-header">
+    <h3>📣 My Public Campaigns</h3>
+    <a class="btn btn-outline" href="/teacher/campaigns">View All</a>
+  </div>
+
+  <div class="section-body">
+    {{#if campaigns.length}}
+      <div class="student-grid">
+        {{#each campaigns}}
+          <div class="student-row">
+            <div class="student-info">
+              <div class="student-avatar">📣</div>
+              <div>
+                <div class="student-name">{{title}}</div>
+                <div class="student-grade" style="margin-top:2px;">
+                  Slug: <span style="font-weight:600;">{{slug}}</span>
+                  {{#if startsAt}} · Starts {{startsAt}}{{/if}}
+                  {{#if endsAt}} · Ends {{endsAt}}{{/if}}
+                </div>
+              </div>
+            </div>
+
+            <div class="student-actions">
+              <a class="btn btn-outline" style="font-size:12px;padding:7px 12px;"
+                 href="/c/{{slug}}" target="_blank">🔗 Open</a>
+
+              <a class="btn btn-outline" style="font-size:12px;padding:7px 12px;"
+   href="/teacher/campaign/{{_id}}">🏆 Leaderboard</a>
+
+            </div>
+          </div>
+        {{/each}}
+      </div>
+    {{else}}
+      <div class="empty-state">
+        <div class="empty-icon">📣</div>
+        <p>No public campaigns yet. Create one above and it will appear here.</p>
+      </div>
+    {{/if}}
+  </div>
+</div>
 
 
       {{#if aiQuizzes.length}}
