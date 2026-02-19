@@ -991,9 +991,8 @@
         <a href="/org/cripfcnt-school/dashboard" class="btn-nav-outline">Dashboard</a>
         <a href="/auth/logout" class="btn-nav-primary">Sign Out</a>
       {{else}}
-      <a href="/org/cripfcnt-school/dashboard" class="btn-nav-outline">CRIPFCnt School</a>
-<a href="/start" class="btn-nav-primary">🎓 Start Junior Academy</a>
-
+        <a href="/auth/school" class="btn-nav-outline">School Login</a>
+        <a href="/start" class="btn-nav-primary">🎓 Start Junior Academy</a>
       {{/if}}
     </div>
   </div>
@@ -1033,23 +1032,19 @@
   <!-- JUNIOR ACADEMY SPOTLIGHT CARD -->
   <div class="hero-card">
     <div class="hero-card-inner">
-    <span class="hero-card-badge">Primary & High School</span>
-
+      <span class="hero-card-badge">For Ages 6-12</span>
       <h2>Junior Academy</h2>
-    <p>
-  Parents, guardians, and private teachers: Build responsibility foundations 
-  across Primary and High School levels with structured quizzes in Math, English,
-  Science, and Responsibility modules.
-</p>
-
+      <p>
+        Private teachers, parents and guardians: Build responsibility foundations 
+        with structured quizzes across Math, English, Science and Responsibility modules.
+      </p>
 
       <ul class="hero-card-features">
-    <li>Create learner profiles (Primary & High School)</li>
-<li>Assign quizzes by subject and module</li>
-<li>Track progress and completion rates</li>
-<li>Earn certificates on mastery</li>
-<li>Build accountability foundations early</li>
-
+        <li>Create child profiles by grade level</li>
+        <li>Assign quizzes by subject and module</li>
+        <li>Track progress and completion rates</li>
+        <li>Earn certificates on mastery</li>
+        <li>Build accountability from age 6</li>
       </ul>
 
       {{#if user}}
@@ -1087,20 +1082,11 @@
 <section class="features">
   <div class="section-header">
     <div class="section-eyebrow">Platform Features</div>
- <h2 class="section-title">
-  Professional Training & Junior Academy
-</h2>
-<p class="section-subtitle">
-  Dual-track system serving professional learners, primary school students,
-  and high school learners through parents, guardians, and private teachers.
-</p>
-
-<p style="text-align:center; margin-top:16px;">
-  <a href="/org/cripfcnt-school/dashboard" style="font-weight:700; color:#FFB800; text-decoration:none;">
-    Enter CRIPFCnt School →
-  </a>
-</p>
-
+    <h2 class="section-title">Professional Training & Junior Academy</h2>
+    <p class="section-subtitle">
+      Dual-track system serving both professional learners and primary school students 
+      through parents, guardians, and private teachers.
+    </p>
   </div>
 
   <div class="features-grid">
@@ -1124,13 +1110,11 @@
 
     <div class="feature-card">
       <div class="feature-icon">🧒</div>
-    <h3>Junior & High School Track</h3>
-<p>
-  Math, English, Science, and Responsibility quizzes for Grades 1–7 
-  and extended modules for High School learners. Parents and private 
-  teachers track progress, assign work, and monitor completion.
-</p>
-
+      <h3>Primary School Track</h3>
+      <p>
+        Math, English, Science, and Responsibility quizzes for Grades 1-7. 
+        Parents track progress, assign work, monitor completion.
+      </p>
     </div>
 
     <div class="feature-card">
@@ -1167,19 +1151,16 @@
   <div class="academy-container">
     <div class="academy-grid">
       <div class="academy-content">
-        <h2><span class="emoji">🎓</span> Junior Academy<br>Primary & High School Platform</h2>
-
-       <p>
-  Built for <strong>parents</strong>, <strong>guardians</strong>, 
-  and <strong>private teachers</strong> supporting learners from 
-  Primary through High School levels.
-</p>
-
-       <p>
-  Create learner profiles, assign grade-appropriate quizzes, and track completion 
-  across Math, English, Science, and Responsibility modules. Build accountability 
-  foundations early and extend structured learning into High School development.
-</p>
+        <h2><span class="emoji">🎓</span> Junior Academy<br>Primary School Platform</h2>
+        <p>
+          Built specifically for <strong>parents</strong>, <strong>guardians</strong>, 
+          and <strong>private teachers</strong> supporting learners ages 6-12.
+        </p>
+        <p>
+          Create child profiles, assign grade-appropriate quizzes, track completion 
+          across Math, English, Science, and Responsibility modules. Build accountability 
+          foundations early with structured learning paths.
+        </p>
 
         <div class="academy-benefits">
           <div class="benefit">
@@ -1281,10 +1262,9 @@
           <a href="/start" class="btn-cta btn-cta-dark">
             🎓 Start Junior Academy
           </a>
-        <a href="/org/cripfcnt-school/dashboard" class="btn-cta btn-cta-light">
-  CRIPFCnt School
-</a>
-
+          <a href="/auth/school" class="btn-cta btn-cta-light">
+            School Login
+          </a>
         {{/if}}
       </div>
     </div>
