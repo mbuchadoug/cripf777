@@ -1069,100 +1069,50 @@
 <!-- UPLOAD QUIZ MODAL -->
 <div id="uploadModal" class="modal-overlay">
   <div class="modal-box">
-  
-<h2>Upload Quiz</h2>
-
-<!-- Upload type tabs -->
-<div style="display:flex;gap:8px;margin-bottom:14px;">
-  <button type="button" class="btn btn-primary" id="tabJsonBtn" onclick="switchUploadTab('json')">JSON Upload</button>
-  <button type="button" class="btn btn-outline" id="tabTextBtn" onclick="switchUploadTab('text')">Plain Text</button>
-</div>
-
-<!-- ========================= -->
-<!-- JSON FORM (UNCHANGED)     -->
-<!-- ========================= -->
-<form id="uploadForm" data-upload-tab="json">
-  <div class="form-group">
-    <label>Quiz Title</label>
-    <input type="text" name="quizTitle" required placeholder="e.g., Fractions Test">
-  </div>
-  <div class="form-row">
-    <div class="form-group">
-      <label>Subject</label>
-      <select name="subject" required>
-        <option value="">Select...</option>
-        <option value="math">Mathematics</option>
-        <option value="english">English</option>
-        <option value="science">Science</option>
-        <option value="social_studies">Social Studies</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Grade</label>
-      <select name="grade" required>
-        <option value="">Select...</option>
-        <option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option>
-        <option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option>
-        <option value="7">Grade 7</option>
-      </select>
-    </div>
-  </div>
-  <div class="form-group">
-    <label>Duration (minutes)</label>
-    <input type="number" name="durationMinutes" value="30" min="5" max="180">
-  </div>
-  <div class="form-group">
-    <label>Upload JSON File</label>
-    <input type="file" name="quizFile" accept=".json">
-  </div>
-  <div class="form-group">
-    <label>Or Paste JSON</label>
-    <textarea name="questionsJson" rows="6" placeholder='[{"text":"What is 2+2?","choices":["3","4","5","6"],"correctIndex":1}]'></textarea>
-  </div>
-  <div style="display:flex;gap:10px;margin-top:20px;">
-    <button type="submit" class="btn btn-primary" style="flex:1;">Upload Quiz</button>
-    <button type="button" class="btn btn-outline" onclick="closeModal('uploadModal')">Cancel</button>
-  </div>
-</form>
-
-<!-- ========================= -->
-<!-- PLAIN TEXT FORM (NEW)     -->
-<!-- ========================= -->
-<form id="uploadTextForm" data-upload-tab="text" style="display:none;">
-  <div class="form-group">
-    <label>Paste Plain Text</label>
-    <textarea name="plainText" rows="12" required
-      placeholder="TITLE: Fractions Test
-SUBJECT: math
-GRADE: 5
-DURATION: 30
-
-PASSAGE:
-(Optional) Paste passage/instructions here
-ENDPASSAGE
-
-Q1) What is 1/2 + 1/4?
-A) 1/4
-B) 3/4
-C) 2/6
-D) 1/2
-ANSWER: B
-EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
-"></textarea>
-  </div>
-
-  <div style="display:flex;gap:10px;margin-top:20px;">
-    <button type="submit" class="btn btn-primary" style="flex:1;">Upload Plain Text</button>
-    <button type="button" class="btn btn-outline" onclick="closeModal('uploadModal')">Cancel</button>
-  </div>
-
-  <p style="margin-top:10px;color:var(--ink-muted);font-size:12px;line-height:1.4;">
-    Required: TITLE, SUBJECT, GRADE. Optional PASSAGE..ENDPASSAGE. Questions use Q1) then A) B) ... and ANSWER: A/B/C/D.
-  </p>
-</form>
-
-
-
+    <h2>Upload Quiz</h2>
+    <form id="uploadForm">
+      <div class="form-group">
+        <label>Quiz Title</label>
+        <input type="text" name="quizTitle" required placeholder="e.g., Fractions Test">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Subject</label>
+          <select name="subject" required>
+            <option value="">Select...</option>
+            <option value="math">Mathematics</option>
+            <option value="english">English</option>
+            <option value="science">Science</option>
+            <option value="social_studies">Social Studies</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Grade</label>
+          <select name="grade" required>
+            <option value="">Select...</option>
+            <option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option>
+            <option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option>
+            <option value="7">Grade 7</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" name="durationMinutes" value="30" min="5" max="180">
+      </div>
+      <div class="form-group">
+        <label>Upload JSON File</label>
+        <input type="file" name="quizFile" accept=".json">
+      </div>
+      <div class="form-group">
+        <label>Or Paste JSON</label>
+        <textarea name="questionsJson" rows="6" placeholder='[{"text":"What is 2+2?","choices":["3","4","5","6"],"correctIndex":1}]'></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Upload Quiz</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal('uploadModal')">Cancel</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1342,38 +1292,13 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
   // ==============================
   // MODAL
   // ==============================
-function openModal(id) {
-  document.getElementById(id).classList.add('active');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
-}
-
-/* ✅ NEW: Switch Upload Modal Tabs */
-function switchUploadTab(which) {
-  const jsonForm = document.querySelector('form[data-upload-tab="json"]');
-  const textForm = document.querySelector('form[data-upload-tab="text"]');
-  const jsonBtn = document.getElementById('tabJsonBtn');
-  const textBtn = document.getElementById('tabTextBtn');
-
-  if (!jsonForm || !textForm) return;
-
-  if (which === 'text') {
-    jsonForm.style.display = 'none';
-    textForm.style.display = 'block';
-    jsonBtn.classList.remove('btn-primary'); jsonBtn.classList.add('btn-outline');
-    textBtn.classList.remove('btn-outline'); textBtn.classList.add('btn-primary');
-  } else {
-    textForm.style.display = 'none';
-    jsonForm.style.display = 'block';
-    textBtn.classList.remove('btn-primary'); textBtn.classList.add('btn-outline');
-    jsonBtn.classList.remove('btn-outline'); jsonBtn.classList.add('btn-primary');
+  function openModal(id) {
+    document.getElementById(id).classList.add('active');
   }
-}
 
-
-
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+  }
 
   function openAssignSingle(quizId, title) {
     document.getElementById('assignSingleQuizId').value = quizId;
@@ -1433,43 +1358,6 @@ function switchUploadTab(which) {
       else { showToast(result.error, 'error'); btn.disabled = false; btn.textContent = 'Upload Quiz'; }
     } catch { showToast('Upload failed', 'error'); btn.disabled = false; btn.textContent = 'Upload Quiz'; }
   });
-
-
-// ==============================
-// UPLOAD QUIZ (PLAIN TEXT) ✅ NEW
-// ==============================
-document.getElementById('uploadTextForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type="submit"]');
-  const origText = btn.textContent;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Uploading...';
-
-  try {
-    const plainText = new FormData(e.target).get('plainText');
-
-    const r = await fetch('/teacher/upload-quiz-text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plainText })
-    });
-
-    const result = await r.json();
-
-    if (result.success) {
-      showToast(`Uploaded! ${result.questionCount} questions.`);
-      setTimeout(() => location.reload(), 800);
-    } else {
-      showToast(result.error || 'Upload failed', 'error');
-      btn.disabled = false;
-      btn.textContent = origText;
-    }
-  } catch {
-    showToast('Upload failed', 'error');
-    btn.disabled = false;
-    btn.textContent = origText;
-  }
-});
 
   // ==============================
   // UPLOAD MATERIAL

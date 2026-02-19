@@ -541,6 +541,113 @@ router.post(
   }
 );
 
+
+
+/**
+ * POST /teacher/upload-quiz-text
+ * Upload quiz in plain text format (admin-like)
+ */
+router.post(
+  "/upload-quiz-text",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const plainText = String(req.body?.plainText || "").trim();
+      if (!plainText) {
+        return res.status(400).json({ error: "Plain text is required" });
+      }
+
+      const parsed = parsePlainTextQuiz(plainText);
+      const { quizTitle, subject, grade, durationMinutes, passage, questions } = parsed;
+
+      if (!quizTitle || !subject || !grade) {
+        return res.status(400).json({ error: "TITLE, SUBJECT, and GRADE are required" });
+      }
+      if (!questions.length) {
+        return res.status(400).json({ error: "No questions found. Use Q1) ... A) ... ANSWER: B" });
+      }
+
+      // Get home org
+      const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+      if (!org) return res.status(500).json({ error: "Home org not found" });
+
+      // Insert MCQ questions
+      const validQuestions = questions.map((q, idx) => {
+        if (!q.text || !Array.isArray(q.choices) || q.choices.length < 2) {
+          throw new Error(`Question ${idx + 1}: missing text or choices`);
+        }
+        if (typeof q.correctIndex !== "number" || q.correctIndex < 0 || q.correctIndex >= q.choices.length) {
+          throw new Error(`Question ${idx + 1}: invalid ANSWER`);
+        }
+
+        return {
+          text: q.text,
+          choices: q.choices,
+          correctIndex: q.correctIndex,
+          explanation: q.explanation || null,
+          tags: [],
+          difficulty: "medium",
+          subject: subject.toLowerCase(),
+          grade: Number(grade),
+          module: subject.toLowerCase(),
+          organization: org._id,
+          teacherId: req.user._id,
+          type: "mcq",
+          meta: { uploadedBy: req.user._id, isTeacherUpload: true, source: "plain_text" }
+        };
+      });
+
+      const insertedQuestions = await Question.insertMany(validQuestions);
+
+      // Create comprehension parent (stores passage/instructions)
+      const parentQuestion = await Question.create({
+        text: quizTitle,
+        type: "comprehension",
+        passage: passage || `${quizTitle} - ${subject} Grade ${grade}`,
+        questionIds: insertedQuestions.map(q => q._id),
+        organization: org._id,
+        module: subject.toLowerCase(),
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        teacherId: req.user._id,
+        meta: { isTeacherUpload: true, source: "plain_text" }
+      });
+
+      // Also save as AIQuiz for teacher list (same as JSON upload behavior)
+      const aiQuiz = await AIQuiz.create({
+        teacherId: req.user._id,
+        title: quizTitle,
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        topic: quizTitle,
+        difficulty: "mixed",
+        questionCount: insertedQuestions.length,
+        questions: insertedQuestions.map(q => ({
+          text: q.text,
+          choices: q.choices,
+          correctIndex: q.correctIndex,
+          explanation: q.explanation || ""
+        })),
+        durationMinutes: Number(durationMinutes) || 30,
+        aiProvider: "plain_text_upload",
+        status: "active",
+        meta: { parentQuestionId: parentQuestion._id, isManualUpload: true, source: "plain_text" }
+      });
+
+      return res.json({
+        success: true,
+        quizId: aiQuiz._id,
+        questionCount: insertedQuestions.length
+      });
+
+    } catch (error) {
+      console.error("[Upload Plain Text Quiz Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
 /**
  * POST /teacher/bulk-assign
  * Assign multiple quizzes to multiple students with duration
@@ -1413,4 +1520,90 @@ router.post(
     }
   }
 );
+
+
+
+
+
+/* ==============================
+   ✅ Plain Text Quiz Parser
+============================== */
+function parsePlainTextQuiz(input) {
+  const text = String(input || "").replace(/\r\n/g, "\n").trim();
+
+  // Header fields
+  const header = {};
+  const lines = text.split("\n");
+
+  for (let i = 0; i < Math.min(lines.length, 60); i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const m = line.match(/^(TITLE|SUBJECT|GRADE|DURATION)\s*:\s*(.+)$/i);
+    if (m) header[m[1].toUpperCase()] = m[2].trim();
+  }
+
+  // Optional PASSAGE block
+  let passage = "";
+  const hasPassage = /^\s*PASSAGE\s*:\s*$/im.test(text) && /^\s*ENDPASSAGE\s*$/im.test(text);
+  if (hasPassage) {
+    const startIdx = text.toLowerCase().indexOf("passage:");
+    const endIdx = text.toLowerCase().indexOf("endpassage");
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      passage = text.slice(startIdx, endIdx).split("\n").slice(1).join("\n").trim();
+    }
+  }
+
+  // Split questions by "Qn)"
+  const blocks = text.split(/\n(?=\s*Q\d+\)\s*)/g);
+
+  const questions = [];
+
+  for (const block of blocks) {
+    const b = block.trim();
+    if (!/^Q\d+\)\s*/i.test(b)) continue;
+
+    const firstLineEnd = b.indexOf("\n");
+    const firstLine = firstLineEnd === -1 ? b : b.slice(0, firstLineEnd);
+    const qText = firstLine.replace(/^Q\d+\)\s*/i, "").trim();
+    if (!qText) throw new Error("A question is missing text after Qn)");
+
+    // Choices like A) ....
+    const choiceMatches = [...b.matchAll(/^\s*([A-Z])\)\s*(.+)\s*$/gmi)];
+    const choices = choiceMatches.map(m => m[2].trim());
+    if (!choices.length) throw new Error(`Question "${qText.slice(0, 60)}..." has no choices (A) B) ...)`);
+
+    // ANSWER: B
+    const ansMatch = b.match(/^\s*ANSWER\s*:\s*([A-Z]|\d+)\s*$/im);
+    if (!ansMatch) throw new Error(`Missing ANSWER for question "${qText.slice(0, 60)}..."`);
+
+    const token = ansMatch[1].trim();
+    let correctIndex = 0;
+
+    if (/^\d+$/.test(token)) {
+      correctIndex = Math.max(0, Number(token) - 1);
+    } else {
+      const letter = token.toUpperCase();
+      correctIndex = letter.charCodeAt(0) - "A".charCodeAt(0);
+    }
+
+    if (correctIndex < 0 || correctIndex >= choices.length) {
+      throw new Error(`ANSWER out of range for question "${qText.slice(0, 60)}..."`);
+    }
+
+    // Optional EXPLANATION
+    const expMatch = b.match(/^\s*EXPLANATION\s*:\s*(.+)\s*$/im);
+    const explanation = expMatch ? expMatch[1].trim() : "";
+
+    questions.push({ text: qText, choices, correctIndex, explanation });
+  }
+
+  const quizTitle = header.TITLE || "";
+  const subject = (header.SUBJECT || "").toLowerCase();
+  const grade = Number(header.GRADE || 0) || null;
+  const durationMinutes = Number(header.DURATION || 30) || 30;
+
+  return { quizTitle, subject, grade, durationMinutes, passage, questions };
+}
+
 export default router;
