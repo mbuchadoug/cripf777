@@ -657,7 +657,8 @@ router.post(
         subject: subject.toLowerCase(),
         grade: Number(grade),
         topic: quizTitle,
-        difficulty: "mixed",
+     difficulty: (AIQuiz.schema?.path("difficulty")?.enumValues || [])[0] || "medium",
+
         questionCount: insertedQuestions.length,
         questions: insertedQuestions.map(q => ({
           text: q.text,
