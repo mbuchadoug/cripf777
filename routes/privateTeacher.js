@@ -1738,11 +1738,34 @@ router.get("/campaign/:id", ensureAuth, ensurePrivateTeacher, async (req, res) =
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-const leaderboardPretty = leaderboard.map(r => ({
-  ...r,
-  durationLabel: fmtDuration(r.duration?.totalSeconds),
-  dateLabel: r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ") : ""
-}));
+function safeCode(code) {
+  const c = String(code || "").trim().toUpperCase();
+  return /^[A-Z0-9]{4,10}$/.test(c) ? c : null;
+}
+
+function fallbackCode(attemptId) {
+  // deterministic fallback for old attempts without participantCode
+  // uses last 6 chars of ObjectId (good enough + stable)
+  const s = String(attemptId || "");
+  return s.slice(-6).toUpperCase();
+}
+
+const leaderboardPretty = leaderboard.map(r => {
+  const existing = safeCode(r.publicParticipant?.participantCode);
+  const code = existing || fallbackCode(r._id);
+
+  return {
+    ...r,
+    publicParticipant: {
+      ...(r.publicParticipant || {}),
+      participantCode: code
+    },
+    durationLabel: fmtDuration(r.duration?.totalSeconds),
+    dateLabel: r.createdAt
+      ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ")
+      : ""
+  };
+});
 
   const attempts = await Attempt.find({
     isPublic: true,

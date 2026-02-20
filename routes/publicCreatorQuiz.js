@@ -11,6 +11,11 @@ import Organization from "../models/organization.js";
 
 const router = Router();
 
+
+function makeParticipantCode() {
+  // 6-char code. Easy to read, no extra DB work.
+  return crypto.randomBytes(4).toString("hex").toUpperCase().slice(0, 6);
+}
 function getClientIp(req) {
   const xf = req.headers["x-forwarded-for"];
   if (xf) return String(xf).split(",")[0].trim();
@@ -166,6 +171,7 @@ router.post("/c/:slug/start", async (req, res) => {
   const grade = req.body?.grade ? Number(req.body.grade) : null;
   const phone = String(req.body?.phone || "").trim();
   const school = String(req.body?.school || "").trim();
+  const participantCode = makeParticipantCode();
 
   if (campaign.settings?.requireName && !name) return res.status(400).send("Name is required");
   if (campaign.settings?.requireGrade && (!grade || grade < 1 || grade > 13)) {
@@ -199,7 +205,7 @@ router.post("/c/:slug/start", async (req, res) => {
     meta: {
       campaignId: campaign._id,
       creatorId: campaign.creatorId,
-      participant: { name, grade, phone, school },
+     participant: { name, grade, phone, school, participantCode },
       source: req.query?.ref ? String(req.query.ref) : "tiktok",
       shareId: req.query?.v ? String(req.query.v) : null
     }

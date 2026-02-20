@@ -16,7 +16,8 @@
       <thead>
         <tr style="text-align:left;color:#6b7280;font-size:12px;">
           <th style="padding:8px;">#</th>
-          <th style="padding:8px;">Name</th>
+       <th style="padding:8px;">Name</th>
+<th style="padding:8px;">Code</th>
           <th style="padding:8px;">Grade</th>
           <th style="padding:8px;">Score</th>
           <th style="padding:8px;">Time</th>
@@ -27,8 +28,9 @@
         {{#each leaderboard}}
           <tr style="border-top:1px solid #eee;">
             <td style="padding:8px;">{{inc @index}}</td>
-            <td style="padding:8px;">{{publicParticipant.name}}</td>
-            <td style="padding:8px;">{{publicParticipant.grade}}</td>
+      <td style="padding:8px;">{{publicParticipant.name}}</td>
+<td style="padding:8px;"><b>#{{publicParticipant.participantCode}}</b></td>
+<td style="padding:8px;">{{publicParticipant.grade}}</td>
             <td style="padding:8px;"><b>{{percentage}}%</b></td>
          <td style="padding:8px;">{{durationLabel}}</td>
 <td style="padding:8px;">{{dateLabel}}</td>
@@ -36,7 +38,7 @@
           </tr>
         {{/each}}
         {{#unless leaderboard.length}}
-          <tr><td colspan="6" style="padding:12px;color:#6b7280;">No attempts yet.</td></tr>
+          <tr><td colspan="7" style="padding:12px;color:#6b7280;">No attempts yet.</td></tr>
         {{/unless}}
       </tbody>
     </table>
