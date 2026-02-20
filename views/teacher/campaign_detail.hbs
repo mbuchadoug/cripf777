@@ -36,12 +36,19 @@
 
     <div class="card">
       <div style="font-weight:900;">Recent attempts</div>
-      {{#each attempts}}
-        <div class="row">
-          <div>{{publicParticipant.name}} · Grade {{publicParticipant.grade}}</div>
-          <div>{{percentage}}%</div>
-        </div>
-      {{/each}}
+     {{#each attempts}}
+  <div class="row">
+    <div>
+      <div style="font-weight:800;">{{publicParticipant.name}} · Grade {{publicParticipant.grade}}</div>
+      <div class="meta">Code: {{publicParticipant.participantCode}}</div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div style="font-weight:900;">{{percentage}}%</div>
+      <a href="/teacher/public-attempt/{{_id}}">View</a>
+    </div>
+  </div>
+{{/each}}
       {{#unless attempts.length}}
         <div class="meta">No attempts yet.</div>
       {{/unless}}

@@ -32,6 +32,109 @@ function ensurePrivateTeacher(req, res, next) {
   next();
 }
 
+
+function normalizeChoices(rawChoices) {
+  if (!Array.isArray(rawChoices)) return [];
+
+  if (rawChoices.length && typeof rawChoices[0] === "object" && rawChoices[0] !== null) {
+    return rawChoices.map((c, i) => ({
+      label: c.label || String.fromCharCode(65 + i),
+      text: c.text != null ? String(c.text) : ""
+    }));
+  }
+
+  return rawChoices.map((t, i) => ({
+    label: String.fromCharCode(65 + i),
+    text: String(t)
+  }));
+}
+
+async function getCampaignQuizPayload(campaign) {
+  // 1) AIQuiz
+  if (campaign.aiQuizId) {
+    const quiz = await AIQuiz.findById(campaign.aiQuizId).lean();
+    if (!quiz) return null;
+
+    return {
+      title: quiz.title || campaign.title,
+      passage: quiz.passage || null,
+      questions: (quiz.questions || []).map((q, idx) => ({
+        idToken: `ai:${quiz._id}:${idx}`,
+        text: q.text || "",
+        choices: normalizeChoices(q.choices || []),
+        correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : null,
+        explanation: q.explanation || ""
+      }))
+    };
+  }
+
+  // 2) Parent question
+  if (campaign.parentQuestionId) {
+    const parent = await Question.findById(campaign.parentQuestionId).lean();
+    if (!parent) return null;
+
+    let questions = [];
+    if (parent.type === "comprehension" && Array.isArray(parent.questionIds) && parent.questionIds.length) {
+      const raw = await Question.find({ _id: { $in: parent.questionIds } }).lean();
+      const byId = {};
+      for (const q of raw) byId[String(q._id)] = q;
+      questions = parent.questionIds.map((id) => byId[String(id)]).filter(Boolean);
+    } else if (Array.isArray(parent.choices) && parent.choices.length) {
+      questions = [parent];
+    }
+
+    return {
+      title: parent.text || campaign.title,
+      passage: parent.passage || null,
+      questions: questions.map((q) => ({
+        idToken: String(q._id),
+        text: q.text || "",
+        choices: normalizeChoices(q.choices || []),
+        correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : null,
+        explanation: q.explanation || ""
+      }))
+    };
+  }
+
+  // 3) QuizRule
+  if (campaign.quizRuleId) {
+    const QuizRule = (await import("../models/quizRule.js")).default;
+    const mongoose = (await import("mongoose")).default;
+
+    const rule = await QuizRule.findById(campaign.quizRuleId).lean();
+    if (!rule) return null;
+
+    const parentId = rule.quizQuestionId;
+    if (!parentId || !mongoose.isValidObjectId(String(parentId))) return null;
+
+    const parent = await Question.findById(parentId).lean();
+    if (!parent) return null;
+
+    let questions = [];
+    if (parent.type === "comprehension" && Array.isArray(parent.questionIds) && parent.questionIds.length) {
+      const raw = await Question.find({ _id: { $in: parent.questionIds } }).lean();
+      const byId = {};
+      for (const q of raw) byId[String(q._id)] = q;
+      questions = parent.questionIds.map((id) => byId[String(id)]).filter(Boolean);
+    } else if (Array.isArray(parent.choices) && parent.choices.length) {
+      questions = [parent];
+    }
+
+    return {
+      title: rule.quizTitle || parent.text || campaign.title,
+      passage: parent.passage || null,
+      questions: questions.map((q) => ({
+        idToken: String(q._id),
+        text: q.text || "",
+        choices: normalizeChoices(q.choices || []),
+        correctIndex: typeof q.correctIndex === "number" ? q.correctIndex : null,
+        explanation: q.explanation || ""
+      }))
+    };
+  }
+
+  return null;
+}
 /**
  * GET /teacher/dashboard
  * Main dashboard for private teachers
@@ -1727,7 +1830,7 @@ router.get("/campaign/:id", ensureAuth, ensurePrivateTeacher, async (req, res) =
   })
     .sort({ percentage: -1, "duration.totalSeconds": 1, createdAt: 1 })
     .limit(20)
-    .select("percentage publicParticipant duration createdAt")
+      .select("_id percentage publicParticipant duration createdAt")
     .lean();
 
 
@@ -1814,4 +1917,98 @@ router.get("/attempt/:attemptId", ensureAuth, ensurePrivateTeacher, async (req, 
   });
 });
 
+
+
+// ✅ Private teacher view: PUBLIC campaign attempt review
+router.get(
+  "/public-attempt/:attemptId",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const attempt = await Attempt.findById(req.params.attemptId).lean();
+    if (!attempt) return res.status(404).send("Attempt not found");
+    if (!attempt.isPublic) return res.status(400).send("Not a public attempt");
+
+    // ✅ Security: only allow the campaign owner (teacher) to view
+    if (String(attempt.creator || "") !== String(req.user._id)) {
+      return res.status(403).send("Forbidden");
+    }
+
+    const campaign = await CreatorCampaign.findById(attempt.campaignId).lean();
+    if (!campaign) return res.status(404).send("Campaign not found");
+
+    // Build quiz payload (same source of truth as public student flow)
+    const payload = await getCampaignQuizPayload(campaign);
+    if (!payload) return res.status(404).send("Quiz not found for this campaign");
+
+    const showAnswers = true; // teacher always sees answers + solutions
+
+    const byToken = {};
+    for (const q of payload.questions) byToken[q.idToken] = q;
+
+    const review = (attempt.answers || []).map((a, idx) => {
+      const q = byToken[String(a.questionId)];
+
+      const choices = q?.choices || [];
+      const selectedIndex = typeof a.choiceIndex === "number" ? a.choiceIndex : null;
+
+      const correctIndex =
+        typeof a.correctIndex === "number"
+          ? a.correctIndex
+          : (typeof q?.correctIndex === "number" ? q.correctIndex : null);
+
+      const selectedChoice =
+        selectedIndex != null && choices[selectedIndex]
+          ? choices[selectedIndex]
+          : null;
+
+      const correctChoice =
+        correctIndex != null && choices[correctIndex]
+          ? choices[correctIndex]
+          : null;
+
+      const correct =
+        typeof a.correct === "boolean"
+          ? a.correct
+          : (selectedIndex != null && correctIndex != null && selectedIndex === correctIndex);
+
+      let solutionText = "";
+      if (showAnswers) {
+        const hasExplanation = !!(q?.explanation && String(q.explanation).trim());
+        if (hasExplanation) {
+          solutionText = String(q.explanation).trim();
+        } else if (correctChoice) {
+          const label = correctChoice.label || String.fromCharCode(65 + correctIndex);
+          solutionText = `Correct answer is ${label}: ${String(correctChoice.text || "").trim()}`;
+        } else {
+          solutionText = "Correct answer not available for this question.";
+        }
+      }
+
+      return {
+        number: idx + 1,
+        text: q?.text || "(Question text missing)",
+        choices,
+        selectedIndex,
+        selectedLabel: selectedChoice?.label || (selectedIndex != null ? String.fromCharCode(65 + selectedIndex) : ""),
+        selectedText: selectedChoice?.text || "",
+        correctIndex,
+        correctLabel: correctChoice?.label || (correctIndex != null ? String.fromCharCode(65 + correctIndex) : ""),
+        correctText: correctChoice?.text || "",
+        correct,
+        solutionText
+      };
+    });
+
+    return res.render("teacher/public_attempt_review", {
+      user: req.user,
+      campaign,
+      attempt,
+      participant: attempt.publicParticipant || {},
+      quizTitle: payload.title,
+      passage: payload.passage,
+      review
+    });
+  }
+);
 export default router;
