@@ -307,7 +307,6 @@ if (state === "settings_rcpt_prefix") {
 
 async function runDailyReportMeta({ biz, from }) {
   const UserRole = (await import("../models/userRole.js")).default;
-  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
 
   const caller = await UserRole.findOne({
     businessId: biz._id,
@@ -321,7 +320,7 @@ async function runDailyReportMeta({ biz, from }) {
   const end = new Date();
   end.setHours(23, 59, 59, 999);
 
-  // ✅ Manager: restricted to branch
+  // ✅ Managers are restricted to their branch (keep your behavior)
   if (caller?.role === "manager" && caller.branchId) {
     const branchFilter = { branchId: caller.branchId };
 
@@ -344,22 +343,9 @@ async function runDailyReportMeta({ biz, from }) {
     }).lean();
 
     const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-    const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const received = payments.reduce((s, p) => s + (p.amount || 0), 0);
     const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-    const profit = cashReceived - spent;
-
-    // 📋 Expense breakdown
-    const expenseByCategory = {};
-    expenses.forEach(e => {
-      const cat = e.category || "Other";
-      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
-    });
-
-    let expenseDetails = "";
-    Object.keys(expenseByCategory).forEach(cat => {
-      expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
-    });
 
     biz.sessionState = "ready";
     biz.sessionData = {};
@@ -369,18 +355,10 @@ async function runDailyReportMeta({ biz, from }) {
       from,
 `📊 Daily Report (${start.toISOString().slice(0,10)})
 
-💰 CASH FLOW
-Invoiced: ${invoiced} ${biz.currency}
-Cash received: ${cashReceived} ${biz.currency}
-Outstanding: ${outstanding} ${biz.currency}
-
-💸 EXPENSES (${spent} ${biz.currency})
-${expenseDetails || "  None\n"}
-
-📈 PROFIT: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}
-
----
-${invoices.length} invoices | ${payments.length} payments | ${expenses.length} expenses`
+Sales: ${invoiced} ${biz.currency}
+Cash received: ${received} ${biz.currency}
+Expenses: ${spent} ${biz.currency}
+Outstanding: ${outstanding} ${biz.currency}`
     );
 
     await sendMainMenu(from);
@@ -393,7 +371,7 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
 
   const branchMap = new Map(branches.map(b => [String(b._id), b.name]));
 
-  // Aggregate invoices
+  // Aggregate invoices by branch
   const invAgg = await Invoice.aggregate([
     {
       $match: {
@@ -405,13 +383,13 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
       $group: {
         _id: { $ifNull: ["$branchId", "UNASSIGNED"] },
         count: { $sum: 1 },
-        invoiced: { $sum: { $ifNull: ["$total", 0] } },
+        sales: { $sum: { $ifNull: ["$total", 0] } },
         outstanding: { $sum: { $ifNull: ["$balance", 0] } }
       }
     }
   ]);
 
-  // Aggregate payments (CASH RECEIVED)
+  // Aggregate payments by branch (uses branchId on payment going forward)
   const payAgg = await InvoicePayment.aggregate([
     {
       $match: {
@@ -422,12 +400,12 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
     {
       $group: {
         _id: { $ifNull: ["$branchId", "UNASSIGNED"] },
-        cashReceived: { $sum: { $ifNull: ["$amount", 0] } }
+        received: { $sum: { $ifNull: ["$amount", 0] } }
       }
     }
   ]);
 
-  // Aggregate expenses
+  // Aggregate expenses by branch
   const expAgg = await Expense.aggregate([
     {
       $match: {
@@ -443,7 +421,7 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
     }
   ]);
 
-  // Merge results
+  // Merge results into a single per-branch table
   const rows = new Map();
 
   function ensureRow(branchKey) {
@@ -452,8 +430,8 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
       const name =
         k === "UNASSIGNED"
           ? "Unassigned/Main"
-          : (branchMap.get(k) || "Unknown");
-      rows.set(k, { name, invoices: 0, invoiced: 0, cashReceived: 0, spent: 0, outstanding: 0 });
+          : (branchMap.get(k) || "Unknown branch");
+      rows.set(k, { name, invoices: 0, sales: 0, received: 0, spent: 0, outstanding: 0 });
     }
     return rows.get(k);
   }
@@ -461,13 +439,13 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
   for (const r of invAgg) {
     const row = ensureRow(r._id);
     row.invoices = r.count || 0;
-    row.invoiced = r.invoiced || 0;
+    row.sales = r.sales || 0;
     row.outstanding = r.outstanding || 0;
   }
 
   for (const r of payAgg) {
     const row = ensureRow(r._id);
-    row.cashReceived = r.cashReceived || 0;
+    row.received = r.received || 0;
   }
 
   for (const r of expAgg) {
@@ -476,36 +454,31 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
   }
 
   // Build message
-  let msg = `📊 Daily Report (${start.toISOString().slice(0,10)})\n\n`;
+  let msg = `📊 Daily Report by Branch (${start.toISOString().slice(0,10)})\n`;
 
-  let tInvoiced = 0, tCash = 0, tSpent = 0, tOut = 0;
+  let tSales = 0, tRecv = 0, tSpent = 0, tOut = 0;
 
   for (const row of rows.values()) {
-    tInvoiced += row.invoiced;
-    tCash += row.cashReceived;
+    tSales += row.sales;
+    tRecv += row.received;
     tSpent += row.spent;
     tOut += row.outstanding;
 
-    const profit = row.cashReceived - row.spent;
-
-    msg += `🏬 ${row.name}\n` +
+    msg += `\n🏬 ${row.name}\n` +
            `Invoices: ${row.invoices}\n` +
-           `Invoiced: ${row.invoiced} ${biz.currency}\n` +
-           `Cash received: ${row.cashReceived} ${biz.currency}\n` +
+           `Sales: ${row.sales} ${biz.currency}\n` +
+           `Received: ${row.received} ${biz.currency}\n` +
            `Expenses: ${row.spent} ${biz.currency}\n` +
-           `Profit: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}\n` +
-           `Outstanding: ${row.outstanding} ${biz.currency}\n\n`;
+           `Outstanding: ${row.outstanding} ${biz.currency}\n`;
   }
 
-  const totalProfit = tCash - tSpent;
-
-  msg += `📌 TOTAL\n` +
-         `Invoiced: ${tInvoiced} ${biz.currency}\n` +
-         `Cash received: ${tCash} ${biz.currency}\n` +
+  msg += `\n📌 TOTAL\n` +
+         `Sales: ${tSales} ${biz.currency}\n` +
+         `Received: ${tRecv} ${biz.currency}\n` +
          `Expenses: ${tSpent} ${biz.currency}\n` +
-         `💰 PROFIT: ${totalProfit >= 0 ? "+" : ""}${totalProfit} ${biz.currency}\n` +
          `Outstanding: ${tOut} ${biz.currency}`;
 
+  // reset state
   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
@@ -517,183 +490,11 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
 
 
 
-async function runWeeklyReportMeta({ biz, from }) {
-  const UserRole = (await import("../models/userRole.js")).default;
-  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-  const start = new Date(end);
-  start.setDate(start.getDate() - 6);
-  start.setHours(0, 0, 0, 0);
-
-  const query = {
-    businessId: biz._id,
-    createdAt: { $gte: start, $lte: end }
-  };
-
-  if (caller?.role === "manager" && caller.branchId) {
-    query.branchId = caller.branchId;
-  }
-
-  const invoices = await Invoice.find(query).lean();
-  const payments = await InvoicePayment.find(query).lean();
-  const expenses = await Expense.find(query).lean();
-
-  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
-  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-  const profit = cashReceived - spent;
-
-  // Expense breakdown
-  const expenseByCategory = {};
-  expenses.forEach(e => {
-    const cat = e.category || "Other";
-    expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
-  });
-
-  let expenseDetails = "";
-  Object.keys(expenseByCategory).forEach(cat => {
-    expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
-  });
-
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(
-    from,
-`📊 Weekly Report (${start.toISOString().slice(0,10)} → ${end.toISOString().slice(0,10)})
-
-💰 CASH FLOW
-Invoiced: ${invoiced} ${biz.currency}
-Cash received: ${cashReceived} ${biz.currency}
-Outstanding: ${outstanding} ${biz.currency}
-
-💸 EXPENSES (${spent} ${biz.currency})
-${expenseDetails || "  None\n"}
-
-📈 PROFIT: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}
-
----
-${invoices.length} invoices | ${payments.length} payments | ${expenses.length} expenses`
-  );
-
-  await sendMainMenu(from);
-  return true;
-}
-
-
-
-
-async function runMonthlyReportMeta({ biz, from }) {
-  const UserRole = (await import("../models/userRole.js")).default;
-  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  const start = new Date();
-  start.setDate(1);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-  const query = {
-    businessId: biz._id,
-    createdAt: { $gte: start, $lte: end }
-  };
-
-  if (caller?.role === "manager" && caller.branchId) {
-    query.branchId = caller.branchId;
-  }
-
-  const invoices = await Invoice.find(query).lean();
-  const payments = await InvoicePayment.find(query).lean();
-  const expenses = await Expense.find(query).lean();
-
-  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
-  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-  const profit = cashReceived - spent;
-
-  // Expense breakdown
-  const expenseByCategory = {};
-  expenses.forEach(e => {
-    const cat = e.category || "Other";
-    expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
-  });
-
-  let expenseDetails = "";
-  Object.keys(expenseByCategory).forEach(cat => {
-    expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
-  });
-
-  // Top 5 invoices
-  const topInvoices = invoices
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5);
-
-  let topInvoicesList = "";
-  topInvoices.forEach(inv => {
-    topInvoicesList += `  ${inv.number}: ${inv.total} ${biz.currency}\n`;
-  });
-
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(
-    from,
-`📊 Monthly Report (${start.toISOString().slice(0,7)})
-
-💰 CASH FLOW
-Invoiced: ${invoiced} ${biz.currency}
-Cash received: ${cashReceived} ${biz.currency}
-Outstanding: ${outstanding} ${biz.currency}
-
-💸 EXPENSES (${spent} ${biz.currency})
-${expenseDetails || "  None\n"}
-
-📈 PROFIT: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}
-
-🔝 TOP INVOICES
-${topInvoicesList || "  None\n"}
-
----
-${invoices.length} invoices | ${payments.length} payments | ${expenses.length} expenses`
-  );
-
-  await sendMainMenu(from);
-  return true;
-}
-
-
-
 if (state === "report_daily") {
   return runDailyReportMeta({ biz, from });
 }
 
-if (state === "report_weekly") {
-  return runWeeklyReportMeta({ biz, from });
-}
 
-if (state === "report_monthly") {
-  return runMonthlyReportMeta({ biz, from });
-}
 
 
 /* ===========================
