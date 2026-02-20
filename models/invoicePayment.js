@@ -8,10 +8,16 @@ const InvoicePaymentSchema = new mongoose.Schema({
     index: true
   },
 
-  clientId: {
+clientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
     required: true,
+    index: true
+  },
+
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Branch",
     index: true
   },
 
