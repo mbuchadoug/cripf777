@@ -61,12 +61,15 @@ const AttemptSchema = new mongoose.Schema(
     shareId: { type: String, default: null, index: true }, // attribution token (optional)
     source: { type: String, default: null, index: true }, // "tiktok", "whatsapp", etc.
 
-    publicParticipant: {
-      name: { type: String, default: "" },
-      grade: { type: Number, default: null },
-      phone: { type: String, default: "" },
-      school: { type: String, default: "" }
-    },
+  publicParticipant: {
+  name: { type: String, default: "" },
+  grade: { type: Number, default: null },
+  phone: { type: String, default: "" },
+  school: { type: String, default: "" },
+
+  // ✅ add this (THIS is the missing field)
+  participantCode: { type: String, default: "" }
+},
 
     attemptIp: { type: String, default: null }
   },

@@ -173,6 +173,11 @@ router.post("/c/:slug/start", async (req, res) => {
   const school = String(req.body?.school || "").trim();
   const participantCode = makeParticipantCode();
 
+  const safeParticipantCode = String(participantCode || "")
+  .toUpperCase()
+  .replace(/[^A-Z0-9]/g, "")
+  .slice(0, 10);
+
   if (campaign.settings?.requireName && !name) return res.status(400).send("Name is required");
   if (campaign.settings?.requireGrade && (!grade || grade < 1 || grade > 13)) {
     return res.status(400).send("Valid grade is required");
@@ -205,7 +210,7 @@ router.post("/c/:slug/start", async (req, res) => {
     meta: {
       campaignId: campaign._id,
       creatorId: campaign.creatorId,
-     participant: { name, grade, phone, school, participantCode },
+    participant: { name, grade, phone, school, participantCode: safeParticipantCode },
       source: req.query?.ref ? String(req.query.ref) : "tiktok",
       shareId: req.query?.v ? String(req.query.v) : null
     }
@@ -354,6 +359,10 @@ router.get("/c/:slug/result/:attemptId", async (req, res) => {
   if (!campaign) return res.status(404).send("Campaign not found or inactive");
 
   const attempt = await Attempt.findById(req.params.attemptId).lean();
+
+  const myCode =
+  safeCode(attempt?.publicParticipant?.participantCode) ||
+  fallbackCode(attempt?._id);
   if (!attempt || !attempt.isPublic) return res.status(404).send("Result not found");
   if (String(attempt.campaignId || "") !== String(campaign._id)) return res.status(403).send("Forbidden");
 
@@ -367,6 +376,16 @@ router.get("/c/:slug/result/:attemptId", async (req, res) => {
     return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
   }
 
+  function safeCode(code) {
+  const c = String(code || "").trim().toUpperCase();
+  return /^[A-Z0-9]{4,10}$/.test(c) ? c : null;
+}
+
+function fallbackCode(attemptId) {
+  const s = String(attemptId || "");
+  return s.slice(-6).toUpperCase();
+}
+
   let leaderboard = [];
   if (campaign.settings?.showLeaderboard) {
     const raw = await Attempt.find({
@@ -379,13 +398,22 @@ router.get("/c/:slug/result/:attemptId", async (req, res) => {
       .select("percentage publicParticipant duration createdAt")
       .lean();
 
-    leaderboard = raw.map(r => ({
-      ...r,
-      durationLabel: fmtDuration(r.duration?.totalSeconds),
-      dateLabel: r.createdAt
-        ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ")
-        : ""
-    }));
+   leaderboard = raw.map(r => {
+  const existing = safeCode(r.publicParticipant?.participantCode);
+  const code = existing || fallbackCode(r._id);
+
+  return {
+    ...r,
+    publicParticipant: {
+      ...(r.publicParticipant || {}),
+      participantCode: code
+    },
+    durationLabel: fmtDuration(r.duration?.totalSeconds),
+    dateLabel: r.createdAt
+      ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ")
+      : ""
+  };
+});
   }
 
   const showAnswers = !!campaign.settings?.showAnswersAfterSubmit;
@@ -409,7 +437,10 @@ router.get("/c/:slug/result/:attemptId", async (req, res) => {
   res.render("public/creator_result", {
     campaign,
     attempt,
-    participant: attempt.publicParticipant || {},
+    participant: {
+  ...(attempt.publicParticipant || {}),
+  participantCode: myCode
+},
     leaderboard,
     showAnswers,
     review
