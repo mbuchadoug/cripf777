@@ -26,23 +26,44 @@
       </div>
     </div>
 
-    {{#if leaderboard.length}}
-      <div class="box">
-        <div style="font-weight:900;">Leaderboard</div>
-     {{#each leaderboard}}
-  <div class="row">
-    <div>
-      {{publicParticipant.name}} (Grade {{publicParticipant.grade}})
-      <div style="color:#6b7280;font-size:12px;margin-top:2px;">
-        Time: <b>{{durationLabel}}</b>
+   {{#if leaderboard.length}}
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div style="font-weight:900;">Leaderboard</div>
+      <div style="color:#6b7280;font-size:12px;">
+        Top {{leaderboard.length}}
       </div>
     </div>
-    <div class="badge">{{percentage}}%</div>
-  </div>
-{{/each}}
 
-      </div>
-    {{/if}}
+    <div style="margin-top:10px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left;color:#6b7280;font-size:12px;background:#f9fafb;">
+            <th style="padding:10px 12px;">#</th>
+            <th style="padding:10px 12px;">Name</th>
+            <th style="padding:10px 12px;">Grade</th>
+            <th style="padding:10px 12px;">Score</th>
+            <th style="padding:10px 12px;">Time</th>
+            <th style="padding:10px 12px;">Date</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {{#each leaderboard}}
+            <tr style="border-top:1px solid #e5e7eb;">
+              <td style="padding:10px 12px;">{{inc @index}}</td>
+              <td style="padding:10px 12px;">{{publicParticipant.name}}</td>
+              <td style="padding:10px 12px;">{{publicParticipant.grade}}</td>
+              <td style="padding:10px 12px;"><b class="badge">{{percentage}}%</b></td>
+              <td style="padding:10px 12px;">{{durationLabel}}</td>
+              <td style="padding:10px 12px;">{{dateLabel}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{{/if}}
 
     {{#if showAnswers}}
       <div>

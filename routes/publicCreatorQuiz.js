@@ -344,19 +344,6 @@ router.post("/c/:slug/exam/:examId/submit", async (req, res) => {
 
 // Result page (+ leaderboard + optional answers)
 router.get("/c/:slug/result/:attemptId", async (req, res) => {
-
-    function fmtDuration(sec) {
-  sec = Math.max(0, Number(sec) || 0);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-leaderboard = leaderboard.map(r => ({
-  ...r,
-  durationLabel: fmtDuration(r.duration?.totalSeconds)
-}));
-
   const campaign = await loadCampaignOr404(req.params.slug);
   if (!campaign) return res.status(404).send("Campaign not found or inactive");
 
@@ -367,9 +354,16 @@ leaderboard = leaderboard.map(r => ({
   const payload = await getCampaignQuizPayload(campaign);
   if (!payload) return res.status(404).send("Quiz not found");
 
+  function fmtDuration(sec) {
+    sec = Math.max(0, Number(sec) || 0);
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
   let leaderboard = [];
   if (campaign.settings?.showLeaderboard) {
-    leaderboard = await Attempt.find({
+    const raw = await Attempt.find({
       isPublic: true,
       campaignId: campaign._id,
       status: "finished"
@@ -379,18 +373,13 @@ leaderboard = leaderboard.map(r => ({
       .select("percentage publicParticipant duration createdAt")
       .lean();
 
-      function fmtDuration(sec) {
-  sec = Math.max(0, Number(sec) || 0);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-}
-
-leaderboard = leaderboard.map(r => ({
-  ...r,
-  durationLabel: fmtDuration(r.duration?.totalSeconds)
-}));
-
+    leaderboard = raw.map(r => ({
+      ...r,
+      durationLabel: fmtDuration(r.duration?.totalSeconds),
+      dateLabel: r.createdAt
+        ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ")
+        : ""
+    }));
   }
 
   const showAnswers = !!campaign.settings?.showAnswersAfterSubmit;
