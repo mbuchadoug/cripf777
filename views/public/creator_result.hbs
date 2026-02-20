@@ -68,21 +68,53 @@
   </div>
 {{/if}}
 
-    {{#if showAnswers}}
-      <div>
-        {{#each review}}
-          <div class="q">
-            <div style="font-weight:900;">{{text}}</div>
-            <div style="margin-top:6px;">
-              {{#if correct}}<span class="ok">Correct</span>{{else}}<span class="bad">Wrong</span>{{/if}}
-            </div>
-            {{#if explanation}}
-              <div style="margin-top:8px;color:#374151;">{{explanation}}</div>
-            {{/if}}
+   {{#if showAnswers}}
+  <div>
+    {{#each review}}
+      <div class="q">
+        <div style="font-weight:900;">Q{{number}}. {{text}}</div>
+
+        {{#if choices.length}}
+          <div style="margin-top:10px;">
+            <div style="font-weight:800;font-size:13px;color:#111827;margin-bottom:6px;">Choices</div>
+            <ul style="margin:0;padding-left:18px;color:#374151;">
+              {{#each choices}}
+                <li><b>{{label}})</b> {{text}}</li>
+              {{/each}}
+            </ul>
           </div>
-        {{/each}}
+        {{/if}}
+
+        <div style="margin-top:10px;">
+          {{#if correct}}
+            <div class="ok">✅ Correct</div>
+          {{else}}
+            <div class="bad">❌ Wrong</div>
+          {{/if}}
+
+          <div style="margin-top:6px;color:#374151;">
+            Your answer:
+            <b>{{selectedLabel}}) {{selectedText}}</b>
+          </div>
+
+          {{#unless correct}}
+            <div style="margin-top:6px;color:#111827;">
+              Correct answer:
+              <b>{{correctLabel}}) {{correctText}}</b>
+            </div>
+          {{/unless}}
+        </div>
+
+        {{#if solutionText}}
+          <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#f9fafb;border:1px solid #e5e7eb;">
+            <div style="font-weight:900;color:#111827;margin-bottom:4px;">Solution</div>
+            <div style="color:#374151;">{{solutionText}}</div>
+          </div>
+        {{/if}}
       </div>
-    {{/if}}
+    {{/each}}
+  </div>
+{{/if}}
   </div>
 </body>
 </html>

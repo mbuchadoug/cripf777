@@ -12,7 +12,7 @@ import crypto from "crypto";
 import multer from "multer";
 import Attempt from "../models/attempt.js";
 import CreatorCampaign from "../models/creatorCampaign.js";
-
+import { buildAttemptReview } from "../services/attemptReview.js";
 
 
 
@@ -1786,5 +1786,32 @@ const leaderboardPretty = leaderboard.map(r => {
 
 });
 
+
+// ✅ Teacher view of a specific attempt (full review)
+router.get("/attempt/:attemptId", ensureAuth, ensurePrivateTeacher, async (req, res) => {
+  const attempt = await Attempt.findById(req.params.attemptId).lean();
+  if (!attempt) return res.status(404).send("Attempt not found");
+
+  // Teachers should only view their own students' attempts
+  const teacher = await User.findById(req.user._id).lean();
+  const students = await User.find({ parentUserId: teacher._id, role: "student" }).select("_id").lean();
+  const studentIds = new Set(students.map(s => String(s._id)));
+
+  if (attempt.userId && !studentIds.has(String(attempt.userId))) {
+    return res.status(403).send("Forbidden");
+  }
+
+  const exam = await ExamInstance.findOne({ examId: attempt.examId }).lean();
+  if (!exam) return res.status(404).send("Exam instance not found");
+
+  const { quizTitle, review } = await buildAttemptReview({ attempt, exam });
+
+  return res.render("teacher/attempt_review", {
+    user: req.user,
+    attempt,
+    quizTitle,
+    review
+  });
+});
 
 export default router;

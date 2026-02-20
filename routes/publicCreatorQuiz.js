@@ -421,18 +421,60 @@ function fallbackCode(attemptId) {
   const byToken = {};
   for (const q of payload.questions) byToken[q.idToken] = q;
 
-  const review = (attempt.answers || []).map((a) => {
-    const q = byToken[String(a.questionId)];
-    return {
-      questionId: a.questionId,
-      text: q?.text || "",
-      choices: q?.choices || [],
-      correctIndex: q?.correctIndex,
-      explanation: showAnswers ? (q?.explanation || "") : "",
-      selected: a.choiceIndex,
-      correct: !!a.correct
-    };
-  });
+ const review = (attempt.answers || []).map((a, idx) => {
+  const q = byToken[String(a.questionId)];
+
+  const choices = q?.choices || [];
+  const selectedIndex = typeof a.choiceIndex === "number" ? a.choiceIndex : null;
+
+  const correctIndex =
+    typeof a.correctIndex === "number"
+      ? a.correctIndex
+      : (typeof q?.correctIndex === "number" ? q.correctIndex : null);
+
+  const selectedChoice =
+    selectedIndex != null && choices[selectedIndex]
+      ? choices[selectedIndex]
+      : null;
+
+  const correctChoice =
+    correctIndex != null && choices[correctIndex]
+      ? choices[correctIndex]
+      : null;
+
+  const correct =
+    typeof a.correct === "boolean"
+      ? a.correct
+      : (selectedIndex != null && correctIndex != null && selectedIndex === correctIndex);
+
+  // ✅ Professional solution text even if no explanation exists
+  let solutionText = "";
+  if (showAnswers) {
+    const hasExplanation = !!(q?.explanation && String(q.explanation).trim());
+    if (hasExplanation) {
+      solutionText = String(q.explanation).trim();
+    } else if (correctChoice) {
+      const label = correctChoice.label || String.fromCharCode(65 + correctIndex);
+      solutionText = `Correct answer is ${label}: ${String(correctChoice.text || "").trim()}`;
+    } else {
+      solutionText = "Correct answer not available for this question.";
+    }
+  }
+
+  return {
+    number: idx + 1,
+    text: q?.text || "(Question text missing)",
+    choices,
+    selectedIndex,
+    selectedLabel: selectedChoice?.label || (selectedIndex != null ? String.fromCharCode(65 + selectedIndex) : ""),
+    selectedText: selectedChoice?.text || "",
+    correctIndex,
+    correctLabel: correctChoice?.label || (correctIndex != null ? String.fromCharCode(65 + correctIndex) : ""),
+    correctText: correctChoice?.text || "",
+    correct,
+    solutionText
+  };
+});
 
   res.render("public/creator_result", {
     campaign,
