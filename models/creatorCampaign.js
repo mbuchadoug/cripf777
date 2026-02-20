@@ -21,7 +21,8 @@ const CreatorCampaignSchema = new mongoose.Schema(
       requireGrade: { type: Boolean, default: true },
       requirePhone: { type: Boolean, default: false },
       showAnswersAfterSubmit: { type: Boolean, default: true },
-      showLeaderboard: { type: Boolean, default: true }
+      showLeaderboard: { type: Boolean, default: true },
+       durationMinutes: { type: Number, default: 10, min: 1, max: 180 }
     }
   },
   { timestamps: true }
