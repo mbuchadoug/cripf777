@@ -29,12 +29,18 @@
     {{#if leaderboard.length}}
       <div class="box">
         <div style="font-weight:900;">Leaderboard</div>
-        {{#each leaderboard}}
-          <div class="row">
-            <div>{{publicParticipant.name}} (Grade {{publicParticipant.grade}})</div>
-            <div class="badge">{{percentage}}%</div>
-          </div>
-        {{/each}}
+     {{#each leaderboard}}
+  <div class="row">
+    <div>
+      {{publicParticipant.name}} (Grade {{publicParticipant.grade}})
+      <div style="color:#6b7280;font-size:12px;margin-top:2px;">
+        Time: <b>{{durationLabel}}</b>
+      </div>
+    </div>
+    <div class="badge">{{percentage}}%</div>
+  </div>
+{{/each}}
+
       </div>
     {{/if}}
 

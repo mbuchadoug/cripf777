@@ -1730,6 +1730,20 @@ router.get("/campaign/:id", ensureAuth, ensurePrivateTeacher, async (req, res) =
     .select("percentage publicParticipant duration createdAt")
     .lean();
 
+
+    function fmtDuration(sec) {
+  sec = Math.max(0, Number(sec) || 0);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const leaderboardPretty = leaderboard.map(r => ({
+  ...r,
+  durationLabel: fmtDuration(r.duration?.totalSeconds),
+  dateLabel: r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 19).replace("T", " ") : ""
+}));
+
   const attempts = await Attempt.find({
     isPublic: true,
     campaignId: campaign._id,
@@ -1740,12 +1754,13 @@ router.get("/campaign/:id", ensureAuth, ensurePrivateTeacher, async (req, res) =
     .select("percentage publicParticipant duration createdAt")
     .lean();
 
-  res.render("teacher/campaign_detail", {
-    user: req.user,
-    campaign,
-    leaderboard,
-    attempts
-  });
+ res.render("teacher/campaign_detail", {
+  user: req.user,
+  campaign,
+  leaderboard: leaderboardPretty,
+  attempts
+});
+
 });
 
 

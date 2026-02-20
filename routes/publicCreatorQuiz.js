@@ -192,7 +192,8 @@ router.post("/c/:slug/start", async (req, res) => {
     module: "public",
     targetRole: "student",
     status: "pending",
-    durationMinutes: payload.questions.length * 2,
+   // durationMinutes: payload.questions.length * 2,
+   durationMinutes: Number(campaign.settings?.durationMinutes) || (payload.questions.length * 2),
     questionIds,
     choicesOrder,
     meta: {
@@ -213,6 +214,15 @@ router.get("/c/:slug/exam/:examId", async (req, res) => {
   if (!campaign) return res.status(404).send("Campaign not found or inactive");
 
   const exam = await ExamInstance.findOne({ examId: req.params.examId, isPublic: true }).lean();
+
+  const totalDurationSeconds =
+  (Number(exam.durationMinutes) || 0) * 60;
+
+const startedAt = exam.createdAt ? new Date(exam.createdAt) : new Date();
+const now = new Date();
+const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+const remainingSeconds = Math.max(0, totalDurationSeconds - elapsedSeconds);
+
   if (!exam) return res.status(404).send("Exam not found");
   if (String(exam.meta?.campaignId || "") !== String(campaign._id)) {
     return res.status(403).send("Exam does not belong to this campaign");
@@ -229,6 +239,8 @@ router.get("/c/:slug/exam/:examId", async (req, res) => {
   res.render("public/creator_exam", {
     campaign,
     exam,
+    totalDurationSeconds,
+remainingSeconds,
     quizTitle: payload.title,
     passage: payload.passage,
     questions,
@@ -332,6 +344,19 @@ router.post("/c/:slug/exam/:examId/submit", async (req, res) => {
 
 // Result page (+ leaderboard + optional answers)
 router.get("/c/:slug/result/:attemptId", async (req, res) => {
+
+    function fmtDuration(sec) {
+  sec = Math.max(0, Number(sec) || 0);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+leaderboard = leaderboard.map(r => ({
+  ...r,
+  durationLabel: fmtDuration(r.duration?.totalSeconds)
+}));
+
   const campaign = await loadCampaignOr404(req.params.slug);
   if (!campaign) return res.status(404).send("Campaign not found or inactive");
 
@@ -353,6 +378,19 @@ router.get("/c/:slug/result/:attemptId", async (req, res) => {
       .limit(20)
       .select("percentage publicParticipant duration createdAt")
       .lean();
+
+      function fmtDuration(sec) {
+  sec = Math.max(0, Number(sec) || 0);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+leaderboard = leaderboard.map(r => ({
+  ...r,
+  durationLabel: fmtDuration(r.duration?.totalSeconds)
+}));
+
   }
 
   const showAnswers = !!campaign.settings?.showAnswersAfterSubmit;

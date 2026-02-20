@@ -15,11 +15,19 @@ router.post("/teacher/campaigns", ensureAuth, async (req, res) => {
       return res.status(403).json({ error: "Only teachers can create campaigns" });
     }
 
-    const { title, aiQuizId } = req.body;
+   const { title, aiQuizId, durationMinutes } = req.body;
+
 
     if (!title || !aiQuizId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+
+    const dur = Number(durationMinutes);
+
+if (!dur || dur < 1 || dur > 180) {
+  return res.status(400).json({ error: "Duration must be between 1 and 180 minutes" });
+}
+
 
     // Generate professional unique slug
     const baseSlug = title
@@ -42,7 +50,8 @@ router.post("/teacher/campaigns", ensureAuth, async (req, res) => {
         requireGrade: true,
         requirePhone: false,
         showLeaderboard: true,
-        showAnswersAfterSubmit: true
+        showAnswersAfterSubmit: true,
+        durationMinutes: dur // ✅ NEW
       },
       createdAt: new Date(),
       updatedAt: new Date()

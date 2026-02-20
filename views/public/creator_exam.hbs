@@ -13,11 +13,47 @@
     .choice{display:block;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;}
     .choice input{margin-right:10px;}
     .btn{width:100%;background:#10b981;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:900;font-size:14px;cursor:pointer;}
+    .timerbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:12px;
+  padding:10px 12px;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  background:#f9fafb;
+}
+.timerpill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-weight:900;
+  padding:6px 10px;
+  border-radius:999px;
+  background:#111827;
+  color:#fff;
+  font-size:13px;
+}
+.timerhint{
+  color:#6b7280;
+  font-size:12px;
+}
+
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="head">
+        <div class="timerbar">
+  <div class="timerpill">
+    ⏱️ Time Left: <span id="timeLeft">--:--</span>
+  </div>
+  <div class="timerhint">
+    This quiz will auto-submit when time ends.
+  </div>
+</div>
+
       <div style="font-weight:900;font-size:18px;">{{quizTitle}}</div>
       {{#if participant.name}}
         <div style="color:#6b7280;font-size:13px;margin-top:4px;">{{participant.name}} · Grade {{participant.grade}}</div>
@@ -45,5 +81,53 @@
       <button class="btn" type="submit">Submit</button>
     </form>
   </div>
+
+  <script>
+  (function(){
+    // Server-provided values (seconds)
+    const TOTAL = Number("{{totalDurationSeconds}}") || 0;
+    const REMAINING0 = Number("{{remainingSeconds}}") || 0;
+
+    const el = document.getElementById('timeLeft');
+    const form = document.querySelector('form');
+
+    if (!el || !form || !TOTAL) return;
+
+    let remaining = Math.max(0, REMAINING0);
+    let submitted = false;
+
+    function fmt(sec){
+      sec = Math.max(0, Math.floor(sec));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
+    }
+
+    function tick(){
+      el.textContent = fmt(remaining);
+
+      if (remaining <= 0 && !submitted) {
+        submitted = true;
+
+        // Professional: disable submit button to prevent double submit
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Submitting...";
+        }
+
+        form.submit(); // ✅ auto-submit
+        return;
+      }
+
+      remaining -= 1;
+    }
+
+    // initial paint + interval
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+
 </body>
 </html>

@@ -30,8 +30,9 @@
             <td style="padding:8px;">{{publicParticipant.name}}</td>
             <td style="padding:8px;">{{publicParticipant.grade}}</td>
             <td style="padding:8px;"><b>{{percentage}}%</b></td>
-            <td style="padding:8px;">{{duration.totalSeconds}}s</td>
-            <td style="padding:8px;">{{createdAt}}</td>
+         <td style="padding:8px;">{{durationLabel}}</td>
+<td style="padding:8px;">{{dateLabel}}</td>
+
           </tr>
         {{/each}}
         {{#unless leaderboard.length}}
