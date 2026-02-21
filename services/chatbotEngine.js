@@ -267,7 +267,8 @@ const isMetaAction =
   typeof action === "string" &&
   (
     Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
-   a.startsWith("report_branch_") // ✅ branch list selections are meta IDs too
+    a.startsWith("report_branch_") ||
+    a.startsWith("branch_") // ✅ backward compatibility
   );
 
 
@@ -1289,25 +1290,28 @@ const escapeWords = ["menu", "hi", "hello", "start"];
 // ===============================
 
 
-if (a.startsWith("report_branch_")) {
+if (a.startsWith("report_branch_") || a.startsWith("branch_")) {
   const bizForBranch = await getBizForPhone(from);
   if (!bizForBranch) return sendMainMenu(from);
 
-  const branchId = a.replace("report_branch_", "");
+  // Support both: report_branch_<id> and branch_<id>
+  let branchId = a.startsWith("report_branch_")
+    ? a.replace("report_branch_", "")
+    : a.replace("branch_", "");
 
-  // ✅ Guard
-  if (!mongoose.Types.ObjectId.isValid(branchId) && branchId !== "all") {
-    await sendText(from, "⚠️ Invalid branch selected. Please try again.");
-    return sendMainMenu(from);
-  }
-
-  const reportType = bizForBranch.sessionData?.reportType || "daily";
-
+  // normalize "all"
   if (branchId === "all") {
     delete bizForBranch.sessionData.reportBranchId;
   } else {
+    // ✅ Guard
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      await sendText(from, "⚠️ Invalid branch selected. Please try again.");
+      return sendMainMenu(from);
+    }
     bizForBranch.sessionData.reportBranchId = branchId;
   }
+
+  const reportType = bizForBranch.sessionData?.reportType || "daily";
 
   bizForBranch.sessionState = "ready";
   await saveBizSafe(bizForBranch);
