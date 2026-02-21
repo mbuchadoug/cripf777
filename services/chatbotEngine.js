@@ -267,7 +267,7 @@ const isMetaAction =
   typeof action === "string" &&
   (
     Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
-    a.startsWith("branch_") // ✅ branch list selections are meta IDs too
+   a.startsWith("report_branch_") // ✅ branch list selections are meta IDs too
   );
 
 
@@ -1287,25 +1287,31 @@ const escapeWords = ["menu", "hi", "hello", "start"];
 // ===============================
 // 🏢 BRANCH SELECTION (MUST RUN BEFORE continueTwilioFlow)
 // ===============================
-if (a.startsWith("branch_")) {
+
+
+if (a.startsWith("report_branch_")) {
   const bizForBranch = await getBizForPhone(from);
   if (!bizForBranch) return sendMainMenu(from);
 
-  const branchId = a.replace("branch_", "");
+  const branchId = a.replace("report_branch_", "");
+
+  // ✅ Guard
+  if (!mongoose.Types.ObjectId.isValid(branchId) && branchId !== "all") {
+    await sendText(from, "⚠️ Invalid branch selected. Please try again.");
+    return sendMainMenu(from);
+  }
+
   const reportType = bizForBranch.sessionData?.reportType || "daily";
 
-  // save selection
   if (branchId === "all") {
     delete bizForBranch.sessionData.reportBranchId;
   } else {
     bizForBranch.sessionData.reportBranchId = branchId;
   }
 
-  // IMPORTANT: do NOT leave them in report_choose_branch
   bizForBranch.sessionState = "ready";
   await saveBizSafe(bizForBranch);
 
-  // Run the chosen report
   if (reportType === "daily") {
     const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
     return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
@@ -1321,8 +1327,6 @@ if (a.startsWith("branch_")) {
 
   return sendMainMenu(from);
 }
-
-
 
 
 if (
@@ -2788,65 +2792,7 @@ default: {
   // ═══════════════════════════════════════════════════════════
   // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
   // ═══════════════════════════════════════════════════════════
-  if (a && a.startsWith("branch_")) {
-    console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
-    
-    // ... rest of your code
-  // ═══════════════════════════════════════════════════════════
-  // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
-  // ═══════════════════════════════════════════════════════════
 
-    console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
-    
-    // ⚡ CRITICAL: Reload business here
-    const bizForBranch = await getBizForPhone(from);
-    
-    if (!bizForBranch) {
-      console.error("❌ No business found for branch selection");
-      return sendMainMenu(from);
-    }
-    
-    const branchId = a.replace("branch_", "");
-    
-    console.log("📊 Current state:", bizForBranch.sessionState);
-    console.log("📊 Report type:", bizForBranch.sessionData?.reportType);
-    console.log("📊 Branch ID:", branchId);
-    
-    const reportType = bizForBranch.sessionData?.reportType || "daily";
-    
-    // Save branch selection to sessionData
-    if (branchId === "all") {
-      delete bizForBranch.sessionData.reportBranchId;
-    } else {
-      bizForBranch.sessionData.reportBranchId = branchId;
-    }
-    
-    console.log("💾 Branch saved to sessionData:", bizForBranch.sessionData.reportBranchId);
-    
-    // Set state to ready (kills the loop)
-    bizForBranch.sessionState = "ready";
-    await saveBizSafe(bizForBranch);
-    
-    console.log("✅ State cleared, calling report function");
-    
-    // Call report function directly
-    if (reportType === "daily") {
-      console.log("📞 CALLING DAILY REPORT");
-      const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
-      return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
-    } else if (reportType === "weekly") {
-      console.log("📞 CALLING WEEKLY REPORT");
-      const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
-      return runWeeklyReportMetaEnhanced({ biz: bizForBranch, from });
-    } else if (reportType === "monthly") {
-      console.log("📞 CALLING MONTHLY REPORT");
-      const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
-      return runMonthlyReportMetaEnhanced({ biz: bizForBranch, from });
-    }
-    
-    console.log("⚠️ Unknown report type:", reportType);
-    return sendMainMenu(from);
-  }
   
   // Regular default case logic
   const bizFinal = biz || await getBizForPhone(from);

@@ -428,3 +428,31 @@ export async function sendSubscriptionMenu(to) {
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
+
+
+
+export async function sendReportBranchPicker(to) {
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
+
+  const biz = await getBizForPhone(to);
+  if (!biz) {
+    await sendText(to, "❌ No business found.");
+    return sendMainMenu(to);
+  }
+
+  const branches = await Branch.find({ businessId: biz._id })
+    .sort({ name: 1 })
+    .lean();
+
+  const items = [
+    { id: "report_branch_all", title: "🌍 All branches" },
+    ...branches.map(b => ({
+      id: `report_branch_${b._id}`,
+      title: `🏬 ${b.name}`
+    })),
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "🏢 Select a branch", items);
+}
