@@ -369,13 +369,15 @@ return runMonthlyReportMetaEnhanced({ biz, from });
    BRANCH REPORT - CHOOSE BRANCH
 =========================== */
 if (state === "report_choose_branch") {
-  // ⛔ If a branch was already selected, skip showing menu again
-  if ("reportBranchId" in (biz.sessionData || {})) {
-    return false;
+  // ⛔ CRITICAL: If branch already selected, SKIP this handler
+  // This prevents the infinite loop
+  if (biz.sessionData?.reportBranchId) {
+    return false; // Let it fall through to report generation
   }
   
   const Branch = (await import("../models/branch.js")).default;
   
+  // Get all branches for this business
   const branches = await Branch.find({ businessId: biz._id }).lean();
   
   if (!branches || branches.length === 0) {
@@ -390,6 +392,7 @@ if (state === "report_choose_branch") {
     return true;
   }
   
+  // Build branch selection list
   const branchOptions = branches.map(b => ({
     id: `branch_${b._id}`,
     title: `🏬 ${b.name}`

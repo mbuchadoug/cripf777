@@ -2750,7 +2750,8 @@ default: {
     // ... rest of your code
   // ═══════════════════════════════════════════════════════════
   // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
-  // ═════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+
     console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
     
     // ⚡ CRITICAL: Reload business here
