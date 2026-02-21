@@ -2738,32 +2738,54 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 
 default: {
   if (action && action.startsWith("branch_")) {
+    console.log("🔥 BRANCH CLICKED:", action);
+    
     const branchId = action.replace("branch_", "");
     
     const biz = await getBizForPhone(from);
     if (!biz) return sendMainMenu(from);
     
+    console.log("📊 BEFORE SAVE:", {
+      currentState: biz.sessionState,
+      reportType: biz.sessionData?.reportType,
+      branchId: branchId
+    });
+    
     const reportType = biz.sessionData?.reportType || "daily";
     
-    // ✅ Save branch selection
+    // Save branch selection
     if (branchId === "all") {
       delete biz.sessionData.reportBranchId;
     } else {
       biz.sessionData.reportBranchId = branchId;
     }
     
-    // ⚡ CRITICAL FIX: Change state FIRST, then save, THEN call report
-    biz.sessionState = "ready";  // ← MOVE THIS HERE
-    await saveBizSafe(biz);      // ← SAVE IMMEDIATELY
+    // Clear state completely
+    biz.sessionState = "ready";
+    biz.sessionData = {
+      reportBranchId: branchId === "all" ? null : branchId,
+      reportType: reportType
+    };
     
-    // ✅ NOW call report function
+    await saveBizSafe(biz);
+    
+    console.log("💾 AFTER SAVE:", {
+      state: biz.sessionState,
+      branchId: biz.sessionData.reportBranchId,
+      reportType: biz.sessionData.reportType
+    });
+    
+    // Call report directly
     if (reportType === "daily") {
+      console.log("📞 CALLING DAILY REPORT");
       const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
       return runDailyReportMetaEnhanced({ biz, from });
     } else if (reportType === "weekly") {
+      console.log("📞 CALLING WEEKLY REPORT");
       const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
       return runWeeklyReportMetaEnhanced({ biz, from });
     } else if (reportType === "monthly") {
+      console.log("📞 CALLING MONTHLY REPORT");
       const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
       return runMonthlyReportMetaEnhanced({ biz, from });
     }
