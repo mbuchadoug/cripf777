@@ -921,27 +921,31 @@ if (state === "adding_client_phone") {
     return true;
   }
 
-  if (state === "creating_invoice_new_client_phone") {
-    const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
+if (state === "creating_invoice_new_client_phone") {
+  const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
 
-    const client = await Client.findOneAndUpdate(
-      { businessId: biz._id, phone: phoneVal },
-      { $set: { name: biz.sessionData.clientName, phone: phoneVal } },
-      { upsert: true, new: true }
-    );
+  const client = await Client.findOneAndUpdate(
+    { businessId: biz._id, phone: phoneVal },
+    { $set: { name: biz.sessionData.clientName, phone: phoneVal } },
+    { upsert: true, new: true }
+  );
 
-     biz.sessionData.client = client;
-  biz.sessionData.clientId = client._id;
+  // ✅ PRESERVE docType before resetting
+  const docType = biz.sessionData?.docType || "invoice";
+
+  // ✅ REBUILD sessionData preserving docType
+  biz.sessionData = {
+    docType,  // ✅ Keep original type
+    client,
+    clientId: client._id,
+    items: [],
+    itemMode: null,
+    lastItem: null,
+    expectingQty: false,
+    lastItemSource: null
+  };
 
   biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.items = [];
-
-  // 🔥 ensure we start with catalogue/custom choice (no manual prompt)
-  biz.sessionData.itemMode = null;
-  biz.sessionData.lastItem = null;
-  biz.sessionData.expectingQty = false;
-  biz.sessionData.lastItemSource = null;
-
   await saveBizSafe(biz);
 
   await sendButtons(from, {
@@ -952,9 +956,8 @@ if (state === "adding_client_phone") {
     ]
   });
 
-
-    return true;
-  }
+  return true;
+}
 
 
 /* ===========================
