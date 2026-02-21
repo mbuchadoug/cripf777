@@ -41,19 +41,20 @@ const caller = await UserRole.findOne({
     pending: false
   });
 
-  // ✅ CHECK FOR BRANCH FILTER FROM SESSION (for owner selecting specific branch)
+  // ✅ CHECK FOR BRANCH FILTER FROM SESSION
   const sessionBranchId = biz.sessionData?.reportBranchId;
   
-  // If owner selected a specific branch, treat them as a manager for that branch
+  // ✅ CRITICAL: Clear IMMEDIATELY to prevent re-triggering
+  if (sessionBranchId) {
+    delete biz.sessionData.reportBranchId;
+    biz.sessionState = "ready"; // ✅ FORCE STATE TO READY
+    await biz.save();
+  }
+  
+  // If owner selected a specific branch, treat them as a manager
   const effectiveCaller = sessionBranchId && caller?.role === "owner"
     ? { role: "manager", branchId: sessionBranchId }
     : caller;
-  
-  // Clear the session branch filter after using it
-  if (sessionBranchId) {
-    delete biz.sessionData.reportBranchId;
-    await biz.save();
-  }
 
   const start = new Date();
   start.setHours(0, 0, 0, 0);
