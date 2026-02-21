@@ -392,32 +392,29 @@ if (state === "report_choose_branch") {
     return true;
   }
   
-  // Build branch selection list
-   // Build branch selection list (✅ MUST MATCH chatbotEngine handler)
+  // ✅ Import ACTIONS dynamically to avoid circular dependency
+  const { ACTIONS } = await import("./actions.js");
+  const { sendList } = await import("./metaSender.js");
+  
+  // Build branch selection list (✅ MUST MATCH chatbotEngine handler)
   const branchOptions = branches.map(b => ({
-    id: `report_branch_${b._id}`,     // ✅ CHANGED
+    id: `report_branch_${b._id}`,
     title: `🏬 ${b.name}`
   }));
 
   branchOptions.push({
-    id: "report_branch_all",          // ✅ CHANGED
+    id: "report_branch_all",
     title: "📊 All Branches"
   });
 
-  branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+  branchOptions.push({ 
+    id: ACTIONS.BACK, 
+    title: "⬅ Back" 
+  });
 
   const reportType = biz.sessionData?.reportType || "daily";
   await sendList(from, `Select branch for ${reportType} report:`, branchOptions);
 
-  return true;
-  
-  const { ACTIONS } = await import("./actions.js");
-  branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
-  
-  const { sendList } = await import("./metaSender.js");
- // const reportType = biz.sessionData?.reportType || "daily";
-  await sendList(from, `Select branch for ${reportType} report:`, branchOptions);
-  
   return true;
 }
 
