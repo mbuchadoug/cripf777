@@ -370,7 +370,7 @@ return runMonthlyReportMetaEnhanced({ biz, from });
 =========================== */
 if (state === "report_choose_branch") {
   // ⛔ If a branch was already selected, skip showing menu again
-  if (biz.sessionData?.reportBranchId !== undefined) {
+  if ("reportBranchId" in (biz.sessionData || {})) {
     return false;
   }
   
