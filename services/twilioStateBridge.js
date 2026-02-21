@@ -369,7 +369,42 @@ return runMonthlyReportMetaEnhanced({ biz, from });
    BRANCH REPORT - CHOOSE BRANCH
 =========================== */
 if (state === "report_choose_branch") {
-  return false;
+  // ⛔ If a branch was already selected, skip showing menu again
+  if (biz.sessionData?.reportBranchId !== undefined) {
+    return false;
+  }
+  
+  const Branch = (await import("../models/branch.js")).default;
+  
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+  
+  if (!branches || branches.length === 0) {
+    await sendText(from, "⚠️ No branches found. Create a branch first.");
+    
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    const { sendMainMenu } = await import("./metaMenus.js");
+    await sendMainMenu(from);
+    return true;
+  }
+  
+  const branchOptions = branches.map(b => ({
+    id: `branch_${b._id}`,
+    title: `🏬 ${b.name}`
+  }));
+  
+  branchOptions.push({ id: "branch_all", title: "📊 All Branches" });
+  
+  const { ACTIONS } = await import("./actions.js");
+  branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+  
+  const { sendList } = await import("./metaSender.js");
+  const reportType = biz.sessionData?.reportType || "daily";
+  await sendList(from, `Select branch for ${reportType} report:`, branchOptions);
+  
+  return true;
 }
 
 /* ===========================
