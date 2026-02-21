@@ -2737,10 +2737,20 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 }*/
 
 default: {
+  console.log("🎯 REACHED DEFAULT CASE");
+  console.log("🎯 Action 'a':", a);
+  console.log("🎯 Starts with branch_?", a && a.startsWith("branch_"));
+  
   // ═══════════════════════════════════════════════════════════
   // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
   // ═══════════════════════════════════════════════════════════
   if (a && a.startsWith("branch_")) {
+    console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
+    
+    // ... rest of your code
+  // ═══════════════════════════════════════════════════════════
+  // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
+  // ═════════════════════════════════════════════════════════
     console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
     
     // ⚡ CRITICAL: Reload business here
