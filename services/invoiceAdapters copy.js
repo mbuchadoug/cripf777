@@ -19,16 +19,16 @@ export async function handleChooseSavedClient(to) {
     .limit(10)
     .lean();
 
-  if (!clients.length) {
-    // ✅ PRESERVE docType before resetting
-    const docType = biz.sessionData?.docType || "invoice";
-    
-    biz.sessionState = "creating_invoice_new_client";
-    biz.sessionData = { docType };  // ✅ Keep docType
-    biz.markModified("sessionData");
-    await biz.save();
-    return sendText(to, "No saved clients. Enter client name:");
-  }
+if (!clients.length) {
+  // ✅ PRESERVE docType before resetting
+  const docType = biz.sessionData?.docType || "invoice";
+  
+  biz.sessionState = "creating_invoice_new_client";
+  biz.sessionData = { docType };  // ✅ Keep docType
+  biz.markModified("sessionData");
+  await biz.save();
+  return sendText(to, "No saved clients. Enter client name:");
+}
 
   biz.sessionState = "creating_invoice_choose_client_index";
   biz.sessionData.recentClients = clients;
@@ -39,12 +39,16 @@ export async function handleChooseSavedClient(to) {
     to,
     "Select client",
     clients.map(c => ({
-      id: `client_${c._id}`,
+      id: `client_${c._id}`, // ✅ correct
       title: c.name || c.phone
     }))
   );
 }
 
+/**
+ * Meta: New client from invoice
+ * Maps to Twilio state: creating_invoice_new_client
+ */
 /**
  * Meta: New client from invoice
  * Maps to Twilio state: creating_invoice_new_client
@@ -83,6 +87,14 @@ export async function handleClientPicked(to, clientId) {
   // ✅ PRESERVE docType before resetting
   const docType = biz.sessionData?.docType || "invoice";
 
+  // 🔒 CRITICAL FIX — persist durable ID
+  biz.sessionData.clientId = client._id;
+
+  // Optional cache (safe)
+  biz.sessionData.client = client;
+
+  biz.sessionState = "creating_invoice_add_items";
+  
   // ✅ RESET sessionData but PRESERVE docType
   biz.sessionData = {
     docType,  // ✅ Keep the original type
@@ -94,7 +106,6 @@ export async function handleClientPicked(to, clientId) {
     expectingQty: false
   };
 
-  biz.sessionState = "creating_invoice_add_items";
   biz.markModified("sessionData");
   await biz.save();
 
