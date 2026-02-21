@@ -369,45 +369,7 @@ return runMonthlyReportMetaEnhanced({ biz, from });
    BRANCH REPORT - CHOOSE BRANCH
 =========================== */
 if (state === "report_choose_branch") {
-  // ⛔ CRITICAL: If branch already selected, SKIP this handler
-  // This prevents the infinite loop
-  if (biz.sessionData?.reportBranchId) {
-    return false; // Let it fall through to report generation
-  }
-  
-  const Branch = (await import("../models/branch.js")).default;
-  
-  // Get all branches for this business
-  const branches = await Branch.find({ businessId: biz._id }).lean();
-  
-  if (!branches || branches.length === 0) {
-    await sendText(from, "⚠️ No branches found. Create a branch first.");
-    
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-    
-    const { sendMainMenu } = await import("./metaMenus.js");
-    await sendMainMenu(from);
-    return true;
-  }
-  
-  // Build branch selection list
-  const branchOptions = branches.map(b => ({
-    id: `branch_${b._id}`,
-    title: `🏬 ${b.name}`
-  }));
-  
-  branchOptions.push({ id: "branch_all", title: "📊 All Branches" });
-  
-  const { ACTIONS } = await import("./actions.js");
-  branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
-  
-  const { sendList } = await import("./metaSender.js");
-  const reportType = biz.sessionData?.reportType || "daily";
-  await sendList(from, `Select branch for ${reportType} report:`, branchOptions);
-  
-  return true;
+  return false;
 }
 
 /* ===========================
