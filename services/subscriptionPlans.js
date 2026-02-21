@@ -16,7 +16,7 @@ export const SUBSCRIPTION_PLANS = {
   gold: {
     key: "gold",
     name: "Gold",
-    price: 10,
+    price: 0.05,
     currency: "USD",
     durationDays: 30
   }
