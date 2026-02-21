@@ -2740,34 +2740,37 @@ default: {
   // ═══════════════════════════════════════════════════════════
   // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
   // ═══════════════════════════════════════════════════════════
-  if (a && a.startsWith("branch_")) {  // ← USE 'a' NOT 'action'
+  if (a && a.startsWith("branch_")) {
     console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
     
-    const branchId = a.replace("branch_", "");
+    // ⚡ CRITICAL: Reload business here
+    const bizForBranch = await getBizForPhone(from);
     
-    if (!biz) {
+    if (!bizForBranch) {
       console.error("❌ No business found for branch selection");
       return sendMainMenu(from);
     }
     
-    console.log("📊 Current state:", biz.sessionState);
-    console.log("📊 Report type:", biz.sessionData?.reportType);
+    const branchId = a.replace("branch_", "");
+    
+    console.log("📊 Current state:", bizForBranch.sessionState);
+    console.log("📊 Report type:", bizForBranch.sessionData?.reportType);
     console.log("📊 Branch ID:", branchId);
     
-    const reportType = biz.sessionData?.reportType || "daily";
+    const reportType = bizForBranch.sessionData?.reportType || "daily";
     
     // Save branch selection to sessionData
     if (branchId === "all") {
-      delete biz.sessionData.reportBranchId;
+      delete bizForBranch.sessionData.reportBranchId;
     } else {
-      biz.sessionData.reportBranchId = branchId;
+      bizForBranch.sessionData.reportBranchId = branchId;
     }
     
-    console.log("💾 Branch saved to sessionData:", biz.sessionData.reportBranchId);
+    console.log("💾 Branch saved to sessionData:", bizForBranch.sessionData.reportBranchId);
     
     // Set state to ready (kills the loop)
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
+    bizForBranch.sessionState = "ready";
+    await saveBizSafe(bizForBranch);
     
     console.log("✅ State cleared, calling report function");
     
@@ -2775,15 +2778,15 @@ default: {
     if (reportType === "daily") {
       console.log("📞 CALLING DAILY REPORT");
       const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
-      return runDailyReportMetaEnhanced({ biz, from });
+      return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
     } else if (reportType === "weekly") {
       console.log("📞 CALLING WEEKLY REPORT");
       const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
-      return runWeeklyReportMetaEnhanced({ biz, from });
+      return runWeeklyReportMetaEnhanced({ biz: bizForBranch, from });
     } else if (reportType === "monthly") {
       console.log("📞 CALLING MONTHLY REPORT");
       const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
-      return runMonthlyReportMetaEnhanced({ biz, from });
+      return runMonthlyReportMetaEnhanced({ biz: bizForBranch, from });
     }
     
     console.log("⚠️ Unknown report type:", reportType);
@@ -2791,11 +2794,13 @@ default: {
   }
   
   // Regular default case logic
-  if (!biz) {
+  const bizFinal = biz || await getBizForPhone(from);
+  
+  if (!bizFinal) {
     return startOnboarding(from, phone);
   }
 
-  if (biz.sessionState && biz.sessionState !== "ready") return;
+  if (bizFinal.sessionState && bizFinal.sessionState !== "ready") return;
 
   return sendMainMenu(from);
 }
