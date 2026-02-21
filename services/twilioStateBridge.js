@@ -369,6 +369,12 @@ return runMonthlyReportMetaEnhanced({ biz, from });
    BRANCH REPORT - CHOOSE BRANCH
 =========================== */
 if (state === "report_choose_branch") {
+  // ⛔ CRITICAL: If branch already selected, SKIP this handler
+  // This prevents the infinite loop
+  if (biz.sessionData?.reportBranchId) {
+    return false; // Let it fall through to report generation
+  }
+  
   const Branch = (await import("../models/branch.js")).default;
   
   // Get all branches for this business
@@ -381,6 +387,7 @@ if (state === "report_choose_branch") {
     biz.sessionData = {};
     await saveBizSafe(biz);
     
+    const { sendMainMenu } = await import("./metaMenus.js");
     await sendMainMenu(from);
     return true;
   }
@@ -392,8 +399,11 @@ if (state === "report_choose_branch") {
   }));
   
   branchOptions.push({ id: "branch_all", title: "📊 All Branches" });
+  
+  const { ACTIONS } = await import("./actions.js");
   branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
   
+  const { sendList } = await import("./metaSender.js");
   const reportType = biz.sessionData?.reportType || "daily";
   await sendList(from, `Select branch for ${reportType} report:`, branchOptions);
   

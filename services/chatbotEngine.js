@@ -2737,9 +2737,6 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 }*/
 
 default: {
-  // ═══════════════════════════════════════════════════════════
-  // HANDLE BRANCH SELECTION (branch_XXXXX pattern)
-  // ═══════════════════════════════════════════════════════════
   if (action && action.startsWith("branch_")) {
     const branchId = action.replace("branch_", "");
     
@@ -2748,32 +2745,17 @@ default: {
     
     const reportType = biz.sessionData?.reportType || "daily";
     
+    // ✅ Save branch selection
     if (branchId === "all") {
-      // Run report for all branches (owner view)
-      // ✅ CLEAR the reportBranchId to signal "all branches"
       delete biz.sessionData.reportBranchId;
-      biz.sessionState = `report_${reportType}`;
-      await saveBizSafe(biz);
-      
-      // ✅ DIRECTLY call report function instead of continueTwilioFlow
-      if (reportType === "daily") {
-        const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
-        return runDailyReportMetaEnhanced({ biz, from });
-      } else if (reportType === "weekly") {
-        const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
-        return runWeeklyReportMetaEnhanced({ biz, from });
-      } else if (reportType === "monthly") {
-        const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
-        return runMonthlyReportMetaEnhanced({ biz, from });
-      }
+    } else {
+      biz.sessionData.reportBranchId = branchId;
     }
     
-    // Run report for specific branch
-    biz.sessionData.reportBranchId = branchId;
     biz.sessionState = `report_${reportType}`;
     await saveBizSafe(biz);
     
-    // ✅ DIRECTLY call report function instead of continueTwilioFlow
+    // ✅ DIRECTLY call report function
     if (reportType === "daily") {
       const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
       return runDailyReportMetaEnhanced({ biz, from });
@@ -2784,7 +2766,19 @@ default: {
       const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
       return runMonthlyReportMetaEnhanced({ biz, from });
     }
+    
+    return true;
   }
+  
+  const biz = await getBizForPhone(from);
+
+  if (!biz) {
+    return startOnboarding(from, phone);
+  }
+
+  if (biz.sessionState && biz.sessionState !== "ready") return;
+
+  return sendMainMenu(from);
 }
 
 
