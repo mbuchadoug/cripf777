@@ -338,14 +338,23 @@ async function runDailyReportMeta({ biz, from }) {
       createdAt: { $gte: start, $lte: end }
     }).lean();
 
-    const expenses = await Expense.find({
+    const receipts = await Invoice.find({
+      businessId: biz._id,
+      type: "receipt",
+      ...branchFilter,
+      createdAt: { $gte: start, $lte: end }
+    }).lean();
+
+   const expenses = await Expense.find({
       businessId: biz._id,
       ...branchFilter,
       createdAt: { $gte: start, $lte: end }
     }).lean();
 
     const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-    const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const paymentCash = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const receiptCash = receipts.reduce((s, r) => s + (r.total || 0), 0);
+    const cashReceived = paymentCash + receiptCash;
     const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
     const profit = cashReceived - spent;
@@ -395,13 +404,15 @@ async function runDailyReportMeta({ biz, from }) {
     biz.sessionData = {};
     await saveBizSafe(biz);
 
-    await sendText(
+  await sendText(
       from,
 `📊 Daily Report (${start.toISOString().slice(0,10)})
 
 💰 CASH FLOW
 Invoiced: ${invoiced} ${biz.currency}
-Cash received: ${cashReceived} ${biz.currency}
+Cash in: ${cashReceived} ${biz.currency}
+  • Invoice payments: ${paymentCash} ${biz.currency}
+  • Direct sales: ${receiptCash} ${biz.currency}
 Outstanding: ${outstanding} ${biz.currency}
 
 💸 EXPENSES (${spent} ${biz.currency})
@@ -410,7 +421,7 @@ ${expenseDetails || "  None\n"}
 📈 PROFIT: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}
 
 ---
-${invoices.length} invoices | ${payments.length} payments | ${expenses.length} expenses`
+${invoices.length} invoices | ${payments.length} payments | ${receipts.length} receipts | ${expenses.length} expenses`
     );
 
     await sendMainMenu(from);
@@ -444,6 +455,7 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
   ]);
 
   // Aggregate payments (CASH RECEIVED)
+// Aggregate payments (CASH RECEIVED from invoice payments)
   const payAgg = await InvoicePayment.aggregate([
     {
       $match: {
@@ -455,6 +467,23 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
       $group: {
         _id: { $ifNull: ["$branchId", "UNASSIGNED"] },
         cashReceived: { $sum: { $ifNull: ["$amount", 0] } }
+      }
+    }
+  ]);
+
+  // ✅ ADD: Aggregate direct sales receipts (CASH RECEIVED from receipts)
+  const receiptAgg = await Invoice.aggregate([
+    {
+      $match: {
+        businessId: biz._id,
+        type: "receipt",
+        createdAt: { $gte: start, $lte: end }
+      }
+    },
+    {
+      $group: {
+        _id: { $ifNull: ["$branchId", "UNASSIGNED"] },
+        receiptsTotal: { $sum: { $ifNull: ["$total", 0] } }
       }
     }
   ]);
@@ -497,9 +526,15 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
     row.outstanding = r.outstanding || 0;
   }
 
-  for (const r of payAgg) {
+for (const r of payAgg) {
     const row = ensureRow(r._id);
     row.cashReceived = r.cashReceived || 0;
+  }
+
+  // ✅ ADD: Merge receipt sales into cash received
+  for (const r of receiptAgg) {
+    const row = ensureRow(r._id);
+    row.cashReceived += r.receiptsTotal || 0; // Add to existing cash
   }
 
   for (const r of expAgg) {
@@ -512,14 +547,13 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
 
   let tInvoiced = 0, tCash = 0, tSpent = 0, tOut = 0;
 
-  for (const row of rows.values()) {
+for (const row of rows.values()) {
     tInvoiced += row.invoiced;
     tCash += row.cashReceived;
     tSpent += row.spent;
     tOut += row.outstanding;
 
     const profit = row.cashReceived - row.spent;
-
 
     msg += `🏬 ${row.name}\n` +
            `Invoices: ${row.invoices}\n` +
@@ -532,12 +566,41 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
 
   const totalProfit = tCash - tSpent;
 
- msg += `📌 TOTAL\n` +
+msg += `📌 TOTAL\n` +
          `Invoiced: ${tInvoiced} ${biz.currency}\n` +
          `Cash in: ${tCash} ${biz.currency}\n` +
          `Cash out: ${tSpent} ${biz.currency}\n` +
          `💰 PROFIT: ${totalProfit >= 0 ? "+" : ""}${totalProfit} ${biz.currency}\n` +
          `Unpaid: ${tOut} ${biz.currency}`;
+
+  // ✅ NEW: Sales breakdown (invoices + receipts)
+  if (tCash > 0) {
+    const allPayments = await InvoicePayment.find({
+      businessId: biz._id,
+      createdAt: { $gte: start, $lte: end }
+    }).lean();
+
+    const allReceipts = await Invoice.find({
+      businessId: biz._id,
+      type: "receipt",
+      createdAt: { $gte: start, $lte: end }
+    }).lean();
+
+    const paymentTotal = allPayments.reduce((s, p) => s + p.amount, 0);
+    const receiptTotal = allReceipts.reduce((s, r) => s + r.total, 0);
+
+    if (paymentTotal > 0 || receiptTotal > 0) {
+      msg += `\n\n💵 SALES BREAKDOWN\n`;
+      
+      if (paymentTotal > 0) {
+        msg += `Invoice payments: ${paymentTotal} ${biz.currency} (${allPayments.length} payments)\n`;
+      }
+      
+      if (receiptTotal > 0) {
+        msg += `Direct sales: ${receiptTotal} ${biz.currency} (${allReceipts.length} receipts)\n`;
+      }
+    }
+  }
 
   // 📋 Add expense breakdown (all branches combined)
   if (tSpent > 0) {
@@ -623,15 +686,24 @@ async function runWeeklyReportMeta({ biz, from }) {
     query.branchId = caller.branchId;
   }
 
- const invoices = await Invoice.find({
+const invoices = await Invoice.find({
     ...query,
-    type: "invoice"  // ✅ ONLY INVOICES
+    type: "invoice"
   }).lean();
+  
+  const receipts = await Invoice.find({
+    ...query,
+    type: "receipt"
+  }).lean();
+  
   const payments = await InvoicePayment.find(query).lean();
   const expenses = await Expense.find(query).lean();
 
   const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const paymentCash = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const receiptCash = receipts.reduce((s, r) => s + (r.total || 0), 0);
+  const cashReceived = paymentCash + receiptCash;
+
   const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
   const profit = cashReceived - spent;
@@ -1629,11 +1701,14 @@ Upgrade to continue creating invoices.`
 }
 
 
+// ✅ Receipts are ALWAYS paid (instant cash sales)
+  const isReceipt = docType === "receipt";
+
   const invoiceDoc = await Invoice.create({
     businessId: biz._id,
     clientId: client._id,
-    type: docType, // 🔥 ADD THIS LINE
-     branchId: caller?.branchId || null, // ✅ ADD THIS
+    type: docType,
+    branchId: caller?.branchId || null,
     number,
     currency: biz.currency,
 
@@ -1651,9 +1726,9 @@ Upgrade to continue creating invoices.`
     vatAmount,
     total,
 
-    amountPaid: 0,
-    balance: total,
-    status: "unpaid",
+    amountPaid: isReceipt ? total : 0,  // ✅ Receipts paid in full
+    balance: isReceipt ? 0 : total,      // ✅ No balance for receipts
+    status: isReceipt ? "paid" : "unpaid", // ✅ Receipts always paid
 
     createdBy: from
   });
