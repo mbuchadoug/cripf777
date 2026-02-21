@@ -2737,45 +2737,41 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 }*/
 
 default: {
-  if (action && action.startsWith("branch_")) {
-    console.log("🔥 BRANCH CLICKED:", action);
+  // ═══════════════════════════════════════════════════════════
+  // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
+  // ═══════════════════════════════════════════════════════════
+  if (a && a.startsWith("branch_")) {  // ← USE 'a' NOT 'action'
+    console.log("🔥 BRANCH HANDLER TRIGGERED:", a);
     
-    const branchId = action.replace("branch_", "");
+    const branchId = a.replace("branch_", "");
     
-    const biz = await getBizForPhone(from);
-    if (!biz) return sendMainMenu(from);
+    if (!biz) {
+      console.error("❌ No business found for branch selection");
+      return sendMainMenu(from);
+    }
     
-    console.log("📊 BEFORE SAVE:", {
-      currentState: biz.sessionState,
-      reportType: biz.sessionData?.reportType,
-      branchId: branchId
-    });
+    console.log("📊 Current state:", biz.sessionState);
+    console.log("📊 Report type:", biz.sessionData?.reportType);
+    console.log("📊 Branch ID:", branchId);
     
     const reportType = biz.sessionData?.reportType || "daily";
     
-    // Save branch selection
+    // Save branch selection to sessionData
     if (branchId === "all") {
       delete biz.sessionData.reportBranchId;
     } else {
       biz.sessionData.reportBranchId = branchId;
     }
     
-    // Clear state completely
-    biz.sessionState = "ready";
-    biz.sessionData = {
-      reportBranchId: branchId === "all" ? null : branchId,
-      reportType: reportType
-    };
+    console.log("💾 Branch saved to sessionData:", biz.sessionData.reportBranchId);
     
+    // Set state to ready (kills the loop)
+    biz.sessionState = "ready";
     await saveBizSafe(biz);
     
-    console.log("💾 AFTER SAVE:", {
-      state: biz.sessionState,
-      branchId: biz.sessionData.reportBranchId,
-      reportType: biz.sessionData.reportType
-    });
+    console.log("✅ State cleared, calling report function");
     
-    // Call report directly
+    // Call report function directly
     if (reportType === "daily") {
       console.log("📞 CALLING DAILY REPORT");
       const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
@@ -2790,11 +2786,11 @@ default: {
       return runMonthlyReportMetaEnhanced({ biz, from });
     }
     
-    return true;
+    console.log("⚠️ Unknown report type:", reportType);
+    return sendMainMenu(from);
   }
   
-  const biz = await getBizForPhone(from);
-
+  // Regular default case logic
   if (!biz) {
     return startOnboarding(from, phone);
   }
