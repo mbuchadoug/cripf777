@@ -35,25 +35,11 @@ export async function runDailyReportMetaEnhanced({ biz, from }) {
   const { sendText } = await import("./metaSender.js");
   const { sendMainMenu } = await import("./metaMenus.js");
 
-const caller = await UserRole.findOne({
+  const caller = await UserRole.findOne({
     businessId: biz._id,
     phone: from.replace(/\D+/g, ""),
     pending: false
   });
-
-  // ✅ CHECK FOR BRANCH FILTER FROM SESSION (for owner selecting specific branch)
-  const sessionBranchId = biz.sessionData?.reportBranchId;
-  
-  // If owner selected a specific branch, treat them as a manager for that branch
-  const effectiveCaller = sessionBranchId && caller?.role === "owner"
-    ? { role: "manager", branchId: sessionBranchId }
-    : caller;
-  
-  // Clear the session branch filter after using it
-  if (sessionBranchId) {
-    delete biz.sessionData.reportBranchId;
-    await biz.save();
-  }
 
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -64,8 +50,9 @@ const caller = await UserRole.findOne({
   // ═══════════════════════════════════════════════════════════════
   // MANAGER REPORT (Branch-Specific)
   // ═══════════════════════════════════════════════════════════════
-  if (caller?.role === "manager" && caller.branchId) {
-    const branchFilter = { branchId: caller.branchId };
+
+  if (effectiveCaller?.role === "manager" && effectiveCaller.branchId) {
+    const branchFilter = { branchId: effectiveCaller.branchId };
 
     const invoices = await Invoice.find({
       businessId: biz._id,
@@ -189,58 +176,58 @@ const caller = await UserRole.findOne({
 
 ━━━━━━━━━━━━━━━━━━━━
 
-💰 YOUR MONEY TODAY
-Total Sales: ${invoiced} ${biz.currency}
-Money In: ${cashReceived} ${biz.currency} (${metrics.collectionRate}% paid)
-Money Out: ${spent} ${biz.currency}
-📈 PROFIT: ${metrics.netProfit >= 0 ? '+' : ''}${metrics.netProfit} ${biz.currency}
+💰 BOTTOM LINE
+Revenue: ${invoiced} ${biz.currency}
+Cash Collected: ${cashReceived} ${biz.currency} (${metrics.collectionRate}%)
+Expenses: ${spent} ${biz.currency}
+📈 NET PROFIT: ${metrics.netProfit >= 0 ? '+' : ''}${metrics.netProfit} ${biz.currency}
 
-⚡ QUICK STATS
-Avg Sale: ${metrics.avgSale} ${biz.currency}
-${metrics.collectionRate}% Paid
-${metrics.profitMargin}% Profit
-
-━━━━━━━━━━━━━━━━━━━━
-
-💵 WHERE MONEY CAME FROM
-Total Sales: ${invoiced} ${biz.currency}
-
-Cash Received:
-├─ From Invoices: ${paymentCash} ${biz.currency} (${payments.length} payments)
-└─ Direct Sales: ${receiptCash} ${biz.currency} (${receipts.length} sales)
-
-Invoice Status:
-├─ ✅ Fully Paid: ${paymentStatus.paid.count} invoices (${paymentStatus.paid.amount} ${biz.currency})
-├─ 🟡 Partly Paid: ${paymentStatus.partial.count} invoices (${paymentStatus.partial.amount} ${biz.currency})
-└─ ⚠️ Not Paid Yet: ${paymentStatus.unpaid.count} invoices (${paymentStatus.unpaid.amount} ${biz.currency})
+⚡ KEY METRICS
+Average Sale: ${metrics.avgSale} ${biz.currency}
+Collection Rate: ${metrics.collectionRate}%
+Profit Margin: ${metrics.profitMargin}%
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 WHAT SOLD BEST
+💵 REVENUE SOURCES
+Total Invoiced: ${invoiced} ${biz.currency}
+
+Sales Breakdown:
+├─ Invoice Payments: ${paymentCash} ${biz.currency} (${payments.length} payments)
+└─ Direct Sales: ${receiptCash} ${biz.currency} (${receipts.length} receipts)
+
+Status Breakdown:
+├─ ✅ Paid: ${paymentStatus.paid.amount} ${biz.currency} (${paymentStatus.paid.count} invoices)
+├─ 🟡 Partial: ${paymentStatus.partial.amount} ${biz.currency} (${paymentStatus.partial.count} invoices)
+└─ ⚠️ Unpaid: ${paymentStatus.unpaid.amount} ${biz.currency} (${paymentStatus.unpaid.count} invoices)
+
+━━━━━━━━━━━━━━━━━━━━
+
+📦 TOP SELLING ITEMS
 ${formatProductList(productData.topProducts, biz.currency)}
-💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
+💡 ${productData.totalUnits} units sold across ${productData.uniqueProducts} product${productData.uniqueProducts !== 1 ? 's' : ''}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-⚠️ CUSTOMERS OWE YOU (${outstanding} ${biz.currency})
+⚠️ MONEY OWED (${outstanding} ${biz.currency})
 
-Late Payments (more than ${biz.paymentTermsDays || 30} days):
+Overdue (>${biz.paymentTermsDays || 30} days):
 ${formatOverdueList(overdueData.overdue, biz.currency)}
-Recent (less than ${biz.paymentTermsDays || 30} days):
+Current Outstanding (0-${biz.paymentTermsDays || 30} days):
 ${formatCurrentList(overdueData.current, biz.currency)}
 ━━━━━━━━━━━━━━━━━━━━
 
-💸 WHAT YOU SPENT (${spent} ${biz.currency})
-${expenseDetails || "  Nothing spent today\n"}
+💸 EXPENSES (${spent} ${biz.currency})
+${expenseDetails || "  None\n"}
 ━━━━━━━━━━━━━━━━━━━━
 
-💡 WHAT THIS MEANS
+💡 BUSINESS INSIGHTS
 ${formatInsightsList(insights)}
-🎯 WHAT TO DO NEXT
+🎯 ACTION ITEMS
 ${formatActionsList(actions)}
 ━━━━━━━━━━━━━━━━━━━━
 
-📋 ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} direct sales | ${expenses.length} expenses`;
+📋 Summary: ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} receipts | ${expenses.length} expenses`;
 
     biz.sessionState = "ready";
     biz.sessionData = {};
@@ -256,6 +243,7 @@ ${formatActionsList(actions)}
   // ═══════════════════════════════════════════════════════════════
 
   const Branch = (await import("../models/branch.js")).default;
+ 
 
   const branches = await Branch.find({ businessId: biz._id }).lean();
   const branchMap = new Map(branches.map(b => [String(b._id), b.name]));
@@ -496,49 +484,49 @@ ${formatActionsList(actions)}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-💰 YOUR MONEY TODAY
-Total Sales: ${tInvoiced} ${biz.currency}
-Money In: ${tCash} ${biz.currency} (${metrics.collectionRate}% paid)
-Money Out: ${tSpent} ${biz.currency}
-📈 PROFIT: ${metrics.netProfit >= 0 ? '+' : ''}${metrics.netProfit} ${biz.currency}
+💰 BOTTOM LINE
+Revenue: ${tInvoiced} ${biz.currency}
+Cash Collected: ${tCash} ${biz.currency} (${metrics.collectionRate}%)
+Expenses: ${tSpent} ${biz.currency}
+📈 NET PROFIT: ${metrics.netProfit >= 0 ? '+' : ''}${metrics.netProfit} ${biz.currency}
 
-⚡ QUICK STATS
-Avg Sale: ${metrics.avgSale} ${biz.currency}
-${metrics.collectionRate}% Paid
-${metrics.profitMargin}% Profit
-
-━━━━━━━━━━━━━━━━━━━━
-
-💵 WHERE MONEY CAME FROM
-Total Sales: ${tInvoiced} ${biz.currency}
-
-Cash Received:
-├─ From Invoices: ${tPaymentCash} ${biz.currency} (${allPayments.length} payments)
-└─ Direct Sales: ${tReceiptCash} ${biz.currency} (${allReceipts.length} sales)
-
-Invoice Status:
-├─ ✅ Fully Paid: ${paymentStatus.paid.count} invoices (${paymentStatus.paid.amount} ${biz.currency})
-├─ 🟡 Partly Paid: ${paymentStatus.partial.count} invoices (${paymentStatus.partial.amount} ${biz.currency})
-└─ ⚠️ Not Paid Yet: ${paymentStatus.unpaid.count} invoices (${paymentStatus.unpaid.amount} ${biz.currency})
+⚡ KEY METRICS
+Average Sale: ${metrics.avgSale} ${biz.currency}
+Collection Rate: ${metrics.collectionRate}%
+Profit Margin: ${metrics.profitMargin}%
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 WHAT SOLD BEST
+💵 REVENUE SOURCES
+Total Invoiced: ${tInvoiced} ${biz.currency}
+
+Sales Breakdown:
+├─ Invoice Payments: ${tPaymentCash} ${biz.currency} (${allPayments.length} payments)
+└─ Direct Sales: ${tReceiptCash} ${biz.currency} (${allReceipts.length} receipts)
+
+Status Breakdown:
+├─ ✅ Paid: ${paymentStatus.paid.amount} ${biz.currency} (${paymentStatus.paid.count} invoices)
+├─ 🟡 Partial: ${paymentStatus.partial.amount} ${biz.currency} (${paymentStatus.partial.count} invoices)
+└─ ⚠️ Unpaid: ${paymentStatus.unpaid.amount} ${biz.currency} (${paymentStatus.unpaid.count} invoices)
+
+━━━━━━━━━━━━━━━━━━━━
+
+📦 TOP SELLING ITEMS
 ${formatProductList(productData.topProducts, biz.currency)}
-💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
+💡 ${productData.totalUnits} units sold across ${productData.uniqueProducts} product${productData.uniqueProducts !== 1 ? 's' : ''}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-⚠️ CUSTOMERS OWE YOU (${tOut} ${biz.currency})
+⚠️ MONEY OWED (${tOut} ${biz.currency})
 
-Late Payments (more than ${biz.paymentTermsDays || 30} days):
+Overdue (>${biz.paymentTermsDays || 30} days):
 ${formatOverdueList(overdueData.overdue, biz.currency)}
-Recent (less than ${biz.paymentTermsDays || 30} days):
+Current Outstanding (0-${biz.paymentTermsDays || 30} days):
 ${formatCurrentList(overdueData.current, biz.currency)}
 ━━━━━━━━━━━━━━━━━━━━
 
-💸 WHAT YOU SPENT (${tSpent} ${biz.currency})
-${expenseDetails || "  Nothing spent today\n"}
+💸 EXPENSES (${tSpent} ${biz.currency})
+${expenseDetails || "  None\n"}
 ━━━━━━━━━━━━━━━━━━━━
 
 🏬 BY BRANCH
@@ -546,13 +534,13 @@ ${expenseDetails || "  Nothing spent today\n"}
 ${branchSection}
 ━━━━━━━━━━━━━━━━━━━━
 
-💡 WHAT THIS MEANS
+💡 BUSINESS INSIGHTS
 ${formatInsightsList(insights)}
-🎯 WHAT TO DO NEXT
+🎯 ACTION ITEMS
 ${formatActionsList(actions)}
 ━━━━━━━━━━━━━━━━━━━━
 
-📋 ${allInvoices.length} invoices | ${allPayments.length} payments | ${allReceipts.length} direct sales | ${allExpenses.length} expenses`;
+📋 Summary: ${allInvoices.length} invoices | ${allPayments.length} payments | ${allReceipts.length} receipts | ${allExpenses.length} expenses`;
 
   biz.sessionState = "ready";
   biz.sessionData = {};

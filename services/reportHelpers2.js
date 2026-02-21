@@ -261,41 +261,41 @@ export function generateInsights({
 
   // ✅ PERFORMANCE INSIGHTS
   if (profitMargin > 50) {
-    insights.push(`✅ Great! You're keeping ${profitMargin}% of sales as profit`);
+    insights.push(`✅ Excellent profit margin (${profitMargin}%)`);
   } else if (profitMargin > 30) {
-    insights.push(`✅ Good profit - ${profitMargin}% of sales is yours`);
+    insights.push(`✅ Healthy profit margin (${profitMargin}%)`);
   } else if (profitMargin > 0) {
-    insights.push(`⚠️ Profit is only ${profitMargin}% - watch your costs`);
+    insights.push(`⚠️ Low profit margin (${profitMargin}%) - Review expenses`);
   } else {
-    insights.push(`❌ You're losing money - cut costs or raise prices`);
+    insights.push(`❌ Operating at a loss - Immediate action needed`);
   }
 
   // 📦 PRODUCT INSIGHTS
   if (topProduct) {
-    insights.push(`📦 Best seller: ${topProduct.name} (${topProduct.revenue} ${currency})`);
+    insights.push(`📦 Top seller: ${topProduct.name} (${topProduct.revenue} ${currency})`);
   }
 
   // 💰 COLLECTION INSIGHTS
   if (collectionRate < 60) {
-    insights.push(`⚠️ Only ${collectionRate}% paid - chase up customers`);
+    insights.push(`⚠️ Low collection rate (${collectionRate}%) - Focus on follow-ups`);
   } else if (collectionRate < 80) {
-    insights.push(`💡 ${collectionRate}% paid - aim for 80%+`);
+    insights.push(`💡 Collection rate at ${collectionRate}% (Target: 80%+)`);
   } else {
-    insights.push(`✅ ${collectionRate}% paid - customers paying well!`);
+    insights.push(`✅ Strong collections (${collectionRate}%)`);
   }
 
   // ⚠️ OVERDUE ALERTS
   if (overdueCount > 0) {
-    insights.push(`⚠️ ${overdueCount} late payment${overdueCount > 1 ? 's' : ''} (${overdueAmount} ${currency} owed)`);
+    insights.push(`⚠️ ${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} (${overdueAmount} ${currency})`);
   }
 
   // 📈 PROFITABILITY
   if (netProfit > 0) {
-    insights.push(`📈 Made ${netProfit} ${currency} profit`);
+    insights.push(`📈 Profitable period: +${netProfit} ${currency}`);
   } else if (netProfit < 0) {
-    insights.push(`📉 Lost ${Math.abs(netProfit)} ${currency}`);
+    insights.push(`📉 Loss period: ${netProfit} ${currency}`);
   } else {
-    insights.push(`⚖️ Broke even (no profit, no loss)`);
+    insights.push(`⚖️ Break-even period`);
   }
 
   return insights;
@@ -322,24 +322,24 @@ export function generateActionItems({
     const topOverdue = overdueInvoices.slice(0, 2);
     topOverdue.forEach(inv => {
       actions.push(
-        `📞 Call ${inv.clientName} - ${inv.number} (late ${inv.daysOverdue} days)`
+        `📞 Contact ${inv.clientName} - ${inv.number} (${inv.daysOverdue}d overdue)`
       );
     });
   }
 
   // Low collection rate
   if (collectionRate < 70 && currentOutstanding.length > 0) {
-    actions.push(`💰 Send ${currentOutstanding.length} reminder${currentOutstanding.length > 1 ? 's' : ''} for payment`);
+    actions.push(`💰 Send reminders to ${currentOutstanding.length} client${currentOutstanding.length > 1 ? 's' : ''}`);
   }
 
   // Low profit margin
   if (profitMargin < 20 && profitMargin > 0) {
-    actions.push(`📊 Check your prices - only ${profitMargin}% profit`);
+    actions.push(`📊 Review pricing - profit margin only ${profitMargin}%`);
   }
 
   // No urgent actions
   if (actions.length === 0) {
-    actions.push(`✅ All good - keep it up!`);
+    actions.push(`✅ No urgent actions - business running smoothly`);
   }
 
   return actions;

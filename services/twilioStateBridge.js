@@ -332,6 +332,40 @@ return runMonthlyReportMetaEnhanced({ biz, from });
 }
 
 /* ===========================
+   BRANCH REPORT - CHOOSE BRANCH
+=========================== */
+if (state === "report_choose_branch") {
+  const Branch = (await import("../models/branch.js")).default;
+  
+  // Get all branches for this business
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+  
+  if (!branches || branches.length === 0) {
+    await sendText(from, "⚠️ No branches found. Create a branch first.");
+    
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    await sendMainMenu(from);
+    return true;
+  }
+  
+  // Build branch selection list
+  const branchOptions = branches.map(b => ({
+    id: `branch_${b._id}`,
+    title: `🏬 ${b.name}`
+  }));
+  
+  branchOptions.push({ id: "branch_all", title: "📊 All Branches" });
+  branchOptions.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+  
+  await sendList(from, "Select a branch for the report:", branchOptions);
+  
+  return true;
+}
+
+/* ===========================
    INVITE USER: ENTER PHONE
 =========================== */
 if (state === "invite_user_phone") {

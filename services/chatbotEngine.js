@@ -760,6 +760,19 @@ if (a === ACTIONS.MONTHLY_REPORT) {
   return continueTwilioFlow({ from, text: "auto" });
 }
 
+
+// 🏢 Branch Report (Gold only)
+if (a === ACTIONS.BRANCH_REPORT) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "report_choose_branch";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({ from, text: "auto" });
+}
+
 // 🏢 Branch Summary Report (Gold only)
 if (a === ACTIONS.BRANCH_REPORT) {
   const biz = await getBizForPhone(from);

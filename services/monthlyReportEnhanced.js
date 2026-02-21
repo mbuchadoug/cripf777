@@ -304,85 +304,85 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
   // BUILD REPORT MESSAGE
   // ═══════════════════════════════════════════════════════════════
 
-  const msg = `📊 Monthly Report (${start.toISOString().slice(0,7)})
+ const msg = `📊 Monthly Report (${start.toISOString().slice(0,7)})
 
 ━━━━━━━━━━━━━━━━━━━━
 
-💰 BOTTOM LINE
-Revenue: ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
-Cash Collected: ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
-Expenses: ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
-📈 NET PROFIT: ${profit >= 0 ? '+' : ''}${profit} ${biz.currency} ${formatGrowth(profitGrowth)}
+💰 YOUR MONEY THIS MONTH
+Total Sales: ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
+Money In: ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
+Money Out: ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
+📈 PROFIT: ${profit >= 0 ? '+' : ''}${profit} ${biz.currency} ${formatGrowth(profitGrowth)}
 
-⚡ KEY METRICS
-Average Sale: ${metrics.avgSale} ${biz.currency}
-Collection Rate: ${metrics.collectionRate}%
-Profit Margin: ${metrics.profitMargin}%
+⚡ QUICK STATS
+Avg Sale: ${metrics.avgSale} ${biz.currency}
+${metrics.collectionRate}% Paid
+${metrics.profitMargin}% Profit
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 MONTH-OVER-MONTH TRENDS
-Revenue: ${prevInvoiced} → ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
-Cash: ${prevCashReceived} → ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
-Expenses: ${prevSpent} → ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
+📊 COMPARED TO LAST MONTH
+Sales: ${prevInvoiced} → ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
+Money In: ${prevCashReceived} → ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
+Costs: ${prevSpent} → ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
 Profit: ${prevProfit >= 0 ? '+' : ''}${prevProfit} → ${profit >= 0 ? '+' : ''}${profit} ${biz.currency} ${formatGrowth(profitGrowth)}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-💵 REVENUE SOURCES
-Total Invoiced: ${invoiced} ${biz.currency}
+💵 WHERE MONEY CAME FROM
+Total Sales: ${invoiced} ${biz.currency}
 
-Sales Breakdown:
-├─ Invoice Payments: ${paymentCash} ${biz.currency} (${payments.length} payments)
-└─ Direct Sales: ${receiptCash} ${biz.currency} (${receipts.length} receipts)
+Cash Received:
+├─ From Invoices: ${paymentCash} ${biz.currency} (${payments.length} payments)
+└─ Direct Sales: ${receiptCash} ${biz.currency} (${receipts.length} sales)
 
-Status Breakdown:
-├─ ✅ Paid: ${paymentStatus.paid.amount} ${biz.currency} (${paymentStatus.paid.count} invoices)
-├─ 🟡 Partial: ${paymentStatus.partial.amount} ${biz.currency} (${paymentStatus.partial.count} invoices)
-└─ ⚠️ Unpaid: ${paymentStatus.unpaid.amount} ${biz.currency} (${paymentStatus.unpaid.count} invoices)
+Invoice Status:
+├─ ✅ Fully Paid: ${paymentStatus.paid.count} invoices
+├─ 🟡 Partly Paid: ${paymentStatus.partial.count} invoices
+└─ ⚠️ Not Paid Yet: ${paymentStatus.unpaid.count} invoices
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 TOP SELLING ITEMS (This Month)
+📦 WHAT SOLD BEST THIS MONTH
 ${formatProductList(productData.topProducts, biz.currency)}
-💡 ${productData.totalUnits} units sold across ${productData.uniqueProducts} product${productData.uniqueProducts !== 1 ? 's' : ''}
+💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
 
 ━━━━━━━━━━━━━━━━━━━━
 
-👥 TOP CUSTOMERS (This Month)
+👥 BEST CUSTOMERS THIS MONTH
 ${topCustomers.map((c, i) => `${i + 1}. ${c.name} - ${c.amount} ${biz.currency}`).join('\n') || '  No customer data'}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📅 PERFORMANCE HIGHLIGHTS
+📅 BEST & WORST DAYS
 ${bestDay ? `Best Day: ${bestDay[0]} (${bestDay[1]} ${biz.currency})` : 'No sales data'}
 ${worstDay && worstDay !== bestDay ? `Slowest Day: ${worstDay[0]} (${worstDay[1]} ${biz.currency})` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🔝 TOP INVOICES (Largest)
+🔝 BIGGEST INVOICES
 ${topInvoicesList || "  None\n"}
 ━━━━━━━━━━━━━━━━━━━━
 
-⚠️ MONEY OWED (${outstanding} ${biz.currency})
+⚠️ CUSTOMERS OWE YOU (${outstanding} ${biz.currency})
 
-Overdue (>${biz.paymentTermsDays || 30} days):
+Late Payments (more than ${biz.paymentTermsDays || 30} days):
 ${formatOverdueList(overdueData.overdue, biz.currency)}
-Current Outstanding (0-${biz.paymentTermsDays || 30} days):
+Recent (less than ${biz.paymentTermsDays || 30} days):
 ${formatCurrentList(overdueData.current, biz.currency)}
 ━━━━━━━━━━━━━━━━━━━━
 
-💸 EXPENSES (${spent} ${biz.currency})
-${expenseDetails || "  None\n"}
+💸 WHAT YOU SPENT (${spent} ${biz.currency})
+${expenseDetails || "  Nothing spent\n"}
 ━━━━━━━━━━━━━━━━━━━━
 
-💡 BUSINESS INSIGHTS
+💡 WHAT THIS MEANS
 ${formatInsightsList(insights)}
-🎯 ACTION ITEMS
+🎯 WHAT TO DO NEXT
 ${formatActionsList(actions)}
 ━━━━━━━━━━━━━━━━━━━━
 
-📋 Summary: ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} receipts | ${expenses.length} expenses`;
+📋 ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} direct sales | ${expenses.length} expenses`;
 
   biz.sessionState = "ready";
   biz.sessionData = {};
