@@ -2750,30 +2750,41 @@ default: {
     
     if (branchId === "all") {
       // Run report for all branches (owner view)
+      // ✅ CLEAR the reportBranchId to signal "all branches"
+      delete biz.sessionData.reportBranchId;
       biz.sessionState = `report_${reportType}`;
       await saveBizSafe(biz);
-      return continueTwilioFlow({ from, text: "" });
+      
+      // ✅ DIRECTLY call report function instead of continueTwilioFlow
+      if (reportType === "daily") {
+        const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
+        return runDailyReportMetaEnhanced({ biz, from });
+      } else if (reportType === "weekly") {
+        const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
+        return runWeeklyReportMetaEnhanced({ biz, from });
+      } else if (reportType === "monthly") {
+        const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
+        return runMonthlyReportMetaEnhanced({ biz, from });
+      }
     }
     
     // Run report for specific branch
     biz.sessionData.reportBranchId = branchId;
     biz.sessionState = `report_${reportType}`;
     await saveBizSafe(biz);
-    return continueTwilioFlow({ from, text: "" });
+    
+    // ✅ DIRECTLY call report function instead of continueTwilioFlow
+    if (reportType === "daily") {
+      const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
+      return runDailyReportMetaEnhanced({ biz, from });
+    } else if (reportType === "weekly") {
+      const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
+      return runWeeklyReportMetaEnhanced({ biz, from });
+    } else if (reportType === "monthly") {
+      const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
+      return runMonthlyReportMetaEnhanced({ biz, from });
+    }
   }
-  
-  // ═══════════════════════════════════════════════════════════
-  // NORMAL DEFAULT HANDLING
-  // ═══════════════════════════════════════════════════════════
-  const biz = await getBizForPhone(from);
-
-  if (!biz) {
-    return startOnboarding(from, phone);
-  }
-
-  if (biz.sessionState && biz.sessionState !== "ready") return;
-
-  return sendMainMenu(from);
 }
 
 
