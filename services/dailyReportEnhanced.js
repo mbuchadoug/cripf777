@@ -242,8 +242,7 @@ ${formatActionsList(actions)}
   // ═══════════════════════════════════════════════════════════════
 
   const Branch = (await import("../models/branch.js")).default;
-  const Invoice = (await import("../models/invoice.js")).default;
-  const Expense = (await import("../models/expense.js")).default;
+ 
 
   const branches = await Branch.find({ businessId: biz._id }).lean();
   const branchMap = new Map(branches.map(b => [String(b._id), b.name]));
