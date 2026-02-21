@@ -1291,27 +1291,7 @@ const escapeWords = ["menu", "hi", "hello", "start"];
 // ===============================
 
 
-if (a.startsWith("report_branch_") || a.startsWith("branch_")) {
-  const bizForBranch = await getBizForPhone(from);
-  if (!bizForBranch) return sendMainMenu(from);
 
-  // Support both: report_branch_<id> and branch_<id>
-  let branchId = a.startsWith("report_branch_")
-    ? a.replace("report_branch_", "")
-    : a.replace("branch_", "");
-
-  // ✅ FIX: Handle "all" BEFORE validation
-  if (branchId === "all") {
-    bizForBranch.sessionData.reportBranchId = null; // ✅ Set to null instead of delete
-  } else {
-    // ✅ Validate ObjectId ONLY for non-"all" values
-    if (!mongoose.Types.ObjectId.isValid(branchId)) {
-      await sendText(from, "⚠️ Invalid branch selected. Please try again.");
-      return sendMainMenu(from);
-    }
-    bizForBranch.sessionData.reportBranchId = branchId;
-  }
-}
 
 
 if (
@@ -2770,25 +2750,53 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 }*/
 
 default: {
-  console.log("🎯 REACHED DEFAULT CASE");
-  console.log("🎯 Action 'a':", a);
-  console.log("🎯 Starts with branch_?", a && a.startsWith("branch_"));
-  
   // ═══════════════════════════════════════════════════════════
-  // 🏢 BRANCH SELECTION HANDLER (MUST BE IN DEFAULT)
+  // 🏢 BRANCH SELECTION HANDLER (MUST BE FIRST IN DEFAULT)
   // ═══════════════════════════════════════════════════════════
+  if (a && (a.startsWith("report_branch_") || a.startsWith("branch_"))) {
+    const bizForBranch = await getBizForPhone(from);
+    if (!bizForBranch) return sendMainMenu(from);
 
-  
-  // Regular default case logic
-  const bizFinal = biz || await getBizForPhone(from);
-  
-  if (!bizFinal) {
-    return startOnboarding(from, phone);
+    let branchId = a.startsWith("report_branch_")
+      ? a.replace("report_branch_", "")
+      : a.replace("branch_", "");
+
+    // Handle "all" before validation
+    if (branchId === "all") {
+      bizForBranch.sessionData.reportBranchId = null;
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        await sendText(from, "⚠️ Invalid branch selected. Please try again.");
+        return sendMainMenu(from);
+      }
+      bizForBranch.sessionData.reportBranchId = branchId;
+    }
+
+    const reportType = bizForBranch.sessionData?.reportType || "daily";
+
+    bizForBranch.sessionState = "ready";
+    await saveBizSafe(bizForBranch);
+
+    // Call report function directly
+    if (reportType === "daily") {
+      const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
+      return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
+    }
+    if (reportType === "weekly") {
+      const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
+      return runWeeklyReportMetaEnhanced({ biz: bizForBranch, from });
+    }
+    if (reportType === "monthly") {
+      const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
+      return runMonthlyReportMetaEnhanced({ biz: bizForBranch, from });
+    }
+
+    return sendMainMenu(from);
   }
 
-  if (bizFinal.sessionState && bizFinal.sessionState !== "ready") return;
+  // Regular default case logic
+  const bizFinal = biz || await getBizForPhone(from);
 
-  return sendMainMenu(from);
 }
 
 
