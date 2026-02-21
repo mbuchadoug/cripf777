@@ -805,19 +805,64 @@ async function runMonthlyReportMeta({ biz, from }) {
   }
 const invoices = await Invoice.find({
     ...query,
-    type: "invoice"  // ✅ ONLY INVOICES
+    type: "invoice"
   }).lean();
+  
+  const receipts = await Invoice.find({
+    ...query,
+    type: "receipt"
+  }).lean();
+  
   const payments = await InvoicePayment.find(query).lean();
   const expenses = await Expense.find(query).lean();
 
-  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const cashReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+ const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const receiptCash = receipts.reduce((s, r) => s + (r.total || 0), 0);
+  const paymentCash = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const cashReceived = paymentCash + receiptCash;
   const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
   const profit = cashReceived - spent;
 
-  // Expense breakdown
-const cat = e.category || "Other";
+  // 📋 Expense breakdown with descriptions
+  const expensesByCategory = {};
+  expenses.forEach(e => {
+    const cat = e.category || "Other";
+    if (!expensesByCategory[cat]) {
+      expensesByCategory[cat] = [];
+    }
+    expensesByCategory[cat].push({
+      desc: e.description || cat,
+      amount: e.amount
+    });
+  });
+
+  let expenseDetails = "";
+  Object.keys(expensesByCategory).forEach(cat => {
+    const items = expensesByCategory[cat];
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    
+    expenseDetails += `${cat} (${total} ${biz.currency}):\n`;
+    
+    const grouped = {};
+    items.forEach(item => {
+      if (!grouped[item.desc]) {
+        grouped[item.desc] = { count: 0, total: 0 };
+      }
+      grouped[item.desc].count++;
+      grouped[item.desc].total += item.amount;
+    });
+    
+    Object.keys(grouped).forEach(desc => {
+      const g = grouped[desc];
+      if (g.count > 1) {
+        expenseDetails += `  • ${desc} (×${g.count}): ${g.total} ${biz.currency}\n`;
+      } else {
+        expenseDetails += `  • ${desc}: ${g.total} ${biz.currency}\n`;
+      }
+    });
+  });
+
 
   // Top 5 invoices
   const topInvoices = invoices
