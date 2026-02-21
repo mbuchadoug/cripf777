@@ -39,6 +39,19 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
     pending: false
   });
 
+
+  // ✅ CHECK FOR BRANCH FILTER FROM SESSION (Owner branch report)
+const sessionBranchId = biz.sessionData?.reportBranchId;
+
+if (sessionBranchId) {
+  delete biz.sessionData.reportBranchId;
+  biz.sessionState = "ready";
+  await biz.save();
+}
+
+const effectiveCaller = sessionBranchId && caller?.role === "owner"
+  ? { role: "manager", branchId: sessionBranchId }
+  : caller;
   // Current month
   const start = new Date();
   start.setDate(1);
@@ -65,12 +78,12 @@ export async function runMonthlyReportMetaEnhanced({ biz, from }) {
   };
 
  // Managers AND Clerks see branch-restricted reports
-  if (caller?.role === "manager" || caller?.role === "clerk") {
-    if (caller.branchId) {
-      query.branchId = caller.branchId;
-      prevQuery.branchId = caller.branchId;
-    }
+if (effectiveCaller?.role === "manager" || effectiveCaller?.role === "clerk") {
+  if (effectiveCaller.branchId) {
+    query.branchId = effectiveCaller.branchId;
+    prevQuery.branchId = effectiveCaller.branchId;
   }
+}
 
   // ═══════════════════════════════════════════════════════════════
   // FETCH CURRENT MONTH DATA

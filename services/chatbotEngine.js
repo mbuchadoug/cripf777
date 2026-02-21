@@ -265,7 +265,10 @@ if (!phone || phone.length < 9 || phone.length > 15) {
 // ✅ Meta action = known button/list IDs only (MUST be defined before any use)
 const isMetaAction =
   typeof action === "string" &&
-  Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a);
+  (
+    Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
+    a.startsWith("branch_") // ✅ branch list selections are meta IDs too
+  );
 
 
   if (al === "join") {
@@ -1280,6 +1283,47 @@ await sendMainMenu(from);
 // ✅ Only pass text to Twilio AFTER onboarding
 // 🚨 DO NOT forward menu / hi / start to Twilio
 const escapeWords = ["menu", "hi", "hello", "start"];
+
+// ===============================
+// 🏢 BRANCH SELECTION (MUST RUN BEFORE continueTwilioFlow)
+// ===============================
+if (a.startsWith("branch_")) {
+  const bizForBranch = await getBizForPhone(from);
+  if (!bizForBranch) return sendMainMenu(from);
+
+  const branchId = a.replace("branch_", "");
+  const reportType = bizForBranch.sessionData?.reportType || "daily";
+
+  // save selection
+  if (branchId === "all") {
+    delete bizForBranch.sessionData.reportBranchId;
+  } else {
+    bizForBranch.sessionData.reportBranchId = branchId;
+  }
+
+  // IMPORTANT: do NOT leave them in report_choose_branch
+  bizForBranch.sessionState = "ready";
+  await saveBizSafe(bizForBranch);
+
+  // Run the chosen report
+  if (reportType === "daily") {
+    const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
+    return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
+  }
+  if (reportType === "weekly") {
+    const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
+    return runWeeklyReportMetaEnhanced({ biz: bizForBranch, from });
+  }
+  if (reportType === "monthly") {
+    const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
+    return runMonthlyReportMetaEnhanced({ biz: bizForBranch, from });
+  }
+
+  return sendMainMenu(from);
+}
+
+
+
 
 if (
   !isMetaAction &&

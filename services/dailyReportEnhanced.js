@@ -35,11 +35,16 @@ export async function runDailyReportMetaEnhanced({ biz, from }) {
   const { sendText } = await import("./metaSender.js");
   const { sendMainMenu } = await import("./metaMenus.js");
 
+const { normalizePhone } = await import("./phone.js");
+
+let phone = normalizePhone(from);
+if (phone.startsWith("0")) phone = "263" + phone.slice(1);
+
 const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
+  businessId: biz._id,
+  phone,
+  pending: false
+});
 
   // ✅ CHECK FOR BRANCH FILTER FROM SESSION
   const sessionBranchId = biz.sessionData?.reportBranchId;
