@@ -74,31 +74,36 @@ export async function handleClientPicked(to, clientId) {
   const client = await Client.findById(clientId);
   if (!client) return sendText(to, "❌ Client not found.");
 
+  // ✅ PRESERVE docType before resetting
+  const docType = biz.sessionData?.docType || "invoice";
+
   // 🔒 CRITICAL FIX — persist durable ID
   biz.sessionData.clientId = client._id;
 
   // Optional cache (safe)
   biz.sessionData.client = client;
 
- biz.sessionState = "creating_invoice_add_items";
-biz.sessionData.items = [];
-
-// 🔥 CRITICAL RESET
-biz.sessionData.itemMode = null;
-biz.sessionData.lastItem = null;
-biz.sessionData.expectingQty = false;
-
+  biz.sessionState = "creating_invoice_add_items";
+  
+  // ✅ RESET sessionData but PRESERVE docType
+  biz.sessionData = {
+    docType,  // ✅ Keep the original type
+    clientId: client._id,
+    client,
+    items: [],
+    itemMode: null,
+    lastItem: null,
+    expectingQty: false
+  };
 
   biz.markModified("sessionData");
   await biz.save();
 
-return sendButtons(to, {
-  text: "How would you like to add an item?",
-  buttons: [
-    { id: "inv_item_catalogue", title: "📦 Catalogue" },
-    { id: "inv_item_custom", title: "✍️ Custom item" }
-  ]
-});
-
-
+  return sendButtons(to, {
+    text: "How would you like to add an item?",
+    buttons: [
+      { id: "inv_item_catalogue", title: "📦 Catalogue" },
+      { id: "inv_item_custom", title: "✍️ Custom item" }
+    ]
+  });
 }
