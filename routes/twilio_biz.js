@@ -577,11 +577,21 @@ const rowsHtml =
     </div>
   </div>
 
-  <div style="margin-top:18px; display:flex; justify-content:space-between;">
+ <div style="margin-top:18px; display:flex; justify-content:space-between;">
     <div>
       <div style="font-size:12px; color:#666;">Bill To</div>
-      <div style="font-weight:700; margin-top:6px;">${escapeHtml(billingTo || "")}</div>
-      ${ email ? `<div style="font-size:12px; color:#666;">${escapeHtml(email)}</div>` : "" }
+      <div style="font-weight:700; margin-top:6px;">${
+        // ✅ Handle generic/walk-in customers
+        (!billingTo || billingTo === "Walk-in Customer" || billingTo === "walk-in") 
+          ? "—" 
+          : escapeHtml(billingTo)
+      }</div>
+      ${ 
+        // ✅ Only show email if not a generic client
+        (email && billingTo && billingTo !== "Walk-in Customer" && billingTo !== "walk-in") 
+          ? `<div style="font-size:12px; color:#666;">${escapeHtml(email)}</div>` 
+          : "" 
+      }
     </div>
 
     <div style="text-align:right; font-size:12px; color:#666;">

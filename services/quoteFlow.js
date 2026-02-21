@@ -1,6 +1,6 @@
 import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
-import { sendButtons } from "./metaSender.js";
+import { sendButtons, sendText } from "./metaSender.js";
 
 export async function startQuoteFlow(to) {
   const phone = to.replace(/\D+/g, "");
@@ -12,20 +12,19 @@ export async function startQuoteFlow(to) {
   }
 
   biz.sessionState = "creating_invoice_choose_client";
-  biz.sessionData = {
-    docType: "quote",   // ✅ ONLY DIFFERENCE
-    items: []
+  biz.sessionData = { 
+    docType: "quote", 
+    items: [] 
   };
-
+  
   await biz.save();
 
-return sendButtons(to, {
-  text: "📝 New Quotation\n\nChoose client option:",
-  buttons: [
-    { id: "INV_USE_CLIENT", title: "📋 Use saved client" },
-    { id: "INV_NEW_CLIENT", title: "➕ New client" },
-    { id: "INV_CANCEL", title: "⬅ Cancel" }
-  ]
-});
-
+  return sendButtons(to, {
+    text: "📋 New Quotation\n\nChoose client option:",
+    buttons: [
+      { id: "INV_SKIP_CLIENT", title: "⏭ Skip client" },      // ✅ NEW
+      { id: "INV_USE_CLIENT", title: "📋 Saved client" },
+      { id: "INV_NEW_CLIENT", title: "➕ New client" }
+    ]
+  });
 }

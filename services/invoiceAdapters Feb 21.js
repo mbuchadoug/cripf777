@@ -2,83 +2,12 @@ import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendList, sendText, sendButtons } from "./metaSender.js";
-import Business from "../models/business.js";
-import UserSession from "../models/userSession.js";
-import Client from "../models/client.js";
-import { sendList, sendText, sendButtons } from "./metaSender.js";
-
-/**
- * ✅ NEW: Create or get generic "Walk-in Customer" client
- */
-async function getOrCreateGenericClient(businessId) {
-  const genericClient = await Client.findOneAndUpdate(
-    { 
-      businessId, 
-      phone: "walk-in" 
-    },
-    { 
-      $setOnInsert: {
-        businessId,
-        name: "Walk-in Customer",
-        phone: "walk-in",
-        isGeneric: true
-      }
-    },
-    { 
-      upsert: true, 
-      new: true 
-    }
-  );
-
-  return genericClient;
-}
-
-/**
- * ✅ NEW: Handle skip client action (Meta)
- */
-export async function handleSkipClient(to) {
-  const phone = to.replace(/\D+/g, "");
-  const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
-
-  if (!biz) return sendText(to, "❌ No active business.");
-
-  // Create or get generic client
-  const client = await getOrCreateGenericClient(biz._id);
-
-  // ✅ PRESERVE docType before resetting
-  const docType = biz.sessionData?.docType || "invoice";
-
-  // ✅ RESET sessionData but PRESERVE docType
-  biz.sessionData = {
-    docType,
-    clientId: client._id,
-    client,
-    items: [],
-    itemMode: null,
-    lastItem: null,
-    expectingQty: false
-  };
-
-  biz.sessionState = "creating_invoice_add_items";
-  biz.markModified("sessionData");
-  await biz.save();
-
-  return sendButtons(to, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
-  });
-}
 
 /**
  * Meta: Use saved client
  * Maps to Twilio state: creating_invoice_choose_client_index
  */
 export async function handleChooseSavedClient(to) {
-
   const phone = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
   const biz = await Business.findById(session?.activeBusinessId);

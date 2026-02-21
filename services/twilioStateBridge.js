@@ -916,12 +916,53 @@ if (state === "adding_client_phone") {
 
     await sendText(
       from,
-      "Enter client phone number (or type *same* to use this WhatsApp number):"
+      "Enter client phone number:\n\n• Type *same* to use this WhatsApp number\n• Type *skip* to skip phone number"
     );
     return true;
   }
 
-if (state === "creating_invoice_new_client_phone") {
+
+  if (state === "creating_invoice_new_client_phone") {
+  // ✅ NEW: Allow skipping phone number
+  if (trimmed.toLowerCase() === "skip") {
+    const clientName = biz.sessionData.clientName || "Customer";
+    
+    const client = await Client.findOneAndUpdate(
+      { businessId: biz._id, name: clientName, phone: null },
+      { $set: { name: clientName, phone: null } },
+      { upsert: true, new: true }
+    );
+
+    // ✅ PRESERVE docType before resetting
+    const docType = biz.sessionData?.docType || "invoice";
+
+    // ✅ REBUILD sessionData preserving docType
+    biz.sessionData = {
+      docType,
+      client,
+      clientId: client._id,
+      items: [],
+      itemMode: null,
+      lastItem: null,
+      expectingQty: false,
+      lastItemSource: null
+    };
+
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+
+    await sendButtons(from, {
+      text: "How would you like to add an item?",
+      buttons: [
+        { id: "inv_item_catalogue", title: "📦 Catalogue" },
+        { id: "inv_item_custom", title: "✍️ Custom item" }
+      ]
+    });
+
+    return true;
+  }
+
+  // ✅ EXISTING CODE: Handle "same" and regular phone input
   const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
 
   const client = await Client.findOneAndUpdate(

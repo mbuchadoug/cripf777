@@ -431,6 +431,12 @@ Reply *menu* to start.`
     return;
   }
 
+  // ✅ NEW: Skip client (invoices/receipts/quotes)
+if (al === "inv_skip_client") {
+  const { handleSkipClient } = await import("./invoiceAdapters.js");
+  await handleSkipClient(from);
+  return;
+}
 
 if (a.startsWith("payinv_")) {
   const invoiceId = a.replace("payinv_", "");
