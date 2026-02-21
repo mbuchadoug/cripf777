@@ -64,8 +64,11 @@ const caller = await UserRole.findOne({
   // ═══════════════════════════════════════════════════════════════
   // MANAGER REPORT (Branch-Specific)
   // ═══════════════════════════════════════════════════════════════
-  if (caller?.role === "manager" && caller.branchId) {
-    const branchFilter = { branchId: caller.branchId };
+  // Managers AND Clerks see branch-restricted reports
+  if ((effectiveCaller?.role === "manager" || caller?.role === "clerk" || caller?.role === "manager") && 
+      (effectiveCaller?.branchId || caller?.branchId)) {
+    const branchFilter = { branchId: effectiveCaller?.branchId || caller.branchId };
+    //const branchFilter = { branchId: caller.branchId };
 
     const invoices = await Invoice.find({
       businessId: biz._id,
@@ -216,7 +219,7 @@ Invoice Status:
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 WHAT SOLD BEST
+📦 WHAT WAS SOLD
 ${formatProductList(productData.topProducts, biz.currency)}
 💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
 

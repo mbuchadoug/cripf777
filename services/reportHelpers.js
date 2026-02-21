@@ -66,10 +66,11 @@ export async function buildProductSummary(invoices, receipts) {
     });
   });
 
-  // Sort by revenue (highest first) and take top 5
+
+ // Sort by revenue (highest first) and return ALL products
   const sorted = Object.entries(productMap)
-    .sort((a, b) => b[1].revenue - a[1].revenue)
-    .slice(0, 5);
+    .sort((a, b) => b[1].revenue - a[1].revenue);
+  // Removed .slice(0, 5) to show all products
 
   // Calculate totals
   const totalUnits = Object.values(productMap)

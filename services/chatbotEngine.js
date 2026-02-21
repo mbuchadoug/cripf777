@@ -2658,7 +2658,7 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
   return sendMainMenu(from);
 }*/
 
-default: {
+/*default: {
   const biz = await getBizForPhone(from);
 
   if (!biz) {
@@ -2668,7 +2668,41 @@ default: {
   if (biz.sessionState && biz.sessionState !== "ready") return;
 
   return sendMainMenu(from);
-}
+}*/
+
+default: {
+      // Handle branch selection (branch_XXXXX pattern)
+      if (action && action.startsWith("branch_")) {
+        const branchId = action.replace("branch_", "");
+        
+        const biz = await getBizForPhone(from);
+        if (!biz) return sendMainMenu(from);
+        
+        if (branchId === "all") {
+          // Run report for all branches (owner view)
+          biz.sessionState = "report_daily";
+          await saveBizSafe(biz);
+          return continueTwilioFlow({ from, text: "" });
+        }
+        
+        // Run report for specific branch
+        // Temporarily set branch filter in session
+        biz.sessionData.reportBranchId = branchId;
+        biz.sessionState = "report_daily";
+        await saveBizSafe(biz);
+        return continueTwilioFlow({ from, text: "" });
+      }
+      
+      const biz = await getBizForPhone(from);
+
+      if (!biz) {
+        return startOnboarding(from, phone);
+      }
+
+      if (biz.sessionState && biz.sessionState !== "ready") return;
+
+      return sendMainMenu(from);
+    }
 
 
 

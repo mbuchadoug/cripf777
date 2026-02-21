@@ -63,9 +63,12 @@ export async function runWeeklyReportMetaEnhanced({ biz, from }) {
     createdAt: { $gte: prevStart, $lte: prevEnd }
   };
 
-  if (caller?.role === "manager" && caller.branchId) {
-    query.branchId = caller.branchId;
-    prevQuery.branchId = caller.branchId;
+ // Managers AND Clerks see branch-restricted reports
+  if (caller?.role === "manager" || caller?.role === "clerk") {
+    if (caller.branchId) {
+      query.branchId = caller.branchId;
+      prevQuery.branchId = caller.branchId;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -264,8 +267,7 @@ Invoice Status:
 └─ ⚠️ Not Paid Yet: ${paymentStatus.unpaid.count} invoices
 
 ━━━━━━━━━━━━━━━━━━━━
-
-📦 WHAT SOLD BEST THIS WEEK
+📦 WHAT WAS SOLD
 ${formatProductList(productData.topProducts, biz.currency)}
 💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
 
