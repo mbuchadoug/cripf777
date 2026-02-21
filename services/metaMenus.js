@@ -186,7 +186,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 
 
 
-export async function sendReportsMenu(to, isGold = false) {
+/*export async function sendReportsMenu(to, isGold = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
   const items = [
@@ -205,6 +205,96 @@ export async function sendReportsMenu(to, isGold = false) {
 
   const filtered = await filterMenuByRole({ from: to, biz, items });
   return sendList(to, "📈 Reports", filtered);
+}*/
+
+
+export async function sendReportsMenu(to, isGold = false) {
+  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
+  const UserRole = (await import("../models/userRole.js")).default;
+
+  // Get user role
+  const phone = to.replace(/\D+/g, "");
+  let normalizedPhone = phone;
+  if (normalizedPhone.startsWith("0")) {
+    normalizedPhone = "263" + normalizedPhone.slice(1);
+  }
+
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone: normalizedPhone,
+    pending: false
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // MANAGER/CLERK: Only see their branch reports (no menu, direct to daily)
+  // ═══════════════════════════════════════════════════════════
+  if (caller?.role === "manager" || caller?.role === "clerk") {
+    const items = [
+      { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" }
+    ];
+
+    if (isGold) {
+      items.push(
+        { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+        { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
+      );
+    }
+
+    items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+
+    return sendList(to, "📈 Reports (Your Branch Only)", items);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // OWNER: Two-tier menu (Overall Reports vs Branch Reports)
+  // ═══════════════════════════════════════════════════════════
+  const items = [
+    { id: "overall_reports", title: "📊 Overall Reports" },
+    { id: "branch_reports", title: "🏢 Branch Reports" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "📈 Reports", items);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW FUNCTION: Overall Reports Sub-Menu (Owner Only)
+// ═══════════════════════════════════════════════════════════
+export async function sendOverallReportsMenu(to, isGold = false) {
+  const items = [
+    { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" }
+  ];
+
+  if (isGold) {
+    items.push(
+      { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
+    );
+  }
+
+  items.push({ id: ACTIONS.BACK, title: "⬅ Back to Reports" });
+
+  return sendList(to, "📊 Overall Reports (All Branches)", items);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW FUNCTION: Branch Reports Sub-Menu (Owner Only)
+// ═══════════════════════════════════════════════════════════
+export async function sendBranchReportsMenu(to, isGold = false) {
+  const items = [
+    { id: "branch_daily", title: "📅 Daily Report" }
+  ];
+
+  if (isGold) {
+    items.push(
+      { id: "branch_weekly", title: "📊 Weekly Report" },
+      { id: "branch_monthly", title: "📆 Monthly Report" }
+    );
+  }
+
+  items.push({ id: ACTIONS.BACK, title: "⬅ Back to Reports" });
+
+  return sendList(to, "🏢 Branch Reports (Select Branch)", items);
 }
 
 

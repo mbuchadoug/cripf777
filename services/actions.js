@@ -48,6 +48,14 @@ WEEKLY_REPORT: "weekly_report",
 MONTHLY_REPORT: "monthly_report",
 BRANCH_REPORT: "branch_report",
 
+
+// ✅ ADD THESE NEW ONES:
+OVERALL_REPORTS: "overall_reports",
+BRANCH_REPORTS: "branch_reports",
+BRANCH_DAILY: "branch_daily",
+BRANCH_WEEKLY: "branch_weekly",
+BRANCH_MONTHLY: "branch_monthly",
+
 // BUSINESS
 BUSINESS_PROFILE: "business_profile",
 USERS_MENU: "users_menu",

@@ -2057,6 +2057,72 @@ case ACTIONS.REPORTS_MENU: {
 }
 
 
+
+// ═══════════════════════════════════════════════════════════
+// OWNER: OVERALL REPORTS MENU
+// ═══════════════════════════════════════════════════════════
+case "overall_reports": {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const { sendOverallReportsMenu } = await import("./metaMenus.js");
+  const isGold = biz.package === "gold";
+  return sendOverallReportsMenu(from, isGold);
+}
+
+// ═══════════════════════════════════════════════════════════
+// OWNER: BRANCH REPORTS MENU
+// ═══════════════════════════════════════════════════════════
+case "branch_reports": {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const { sendBranchReportsMenu } = await import("./metaMenus.js");
+  const isGold = biz.package === "gold";
+  return sendBranchReportsMenu(from, isGold);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BRANCH REPORTS: DAILY (Trigger branch selector)
+// ═══════════════════════════════════════════════════════════
+case "branch_daily": {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "report_choose_branch";
+  biz.sessionData = { reportType: "daily" };
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({ from, text: "auto" });
+}
+
+// ═══════════════════════════════════════════════════════════
+// BRANCH REPORTS: WEEKLY (Trigger branch selector)
+// ═══════════════════════════════════════════════════════════
+case "branch_weekly": {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "report_choose_branch";
+  biz.sessionData = { reportType: "weekly" };
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({ from, text: "auto" });
+}
+
+// ═══════════════════════════════════════════════════════════
+// BRANCH REPORTS: MONTHLY (Trigger branch selector)
+// ═══════════════════════════════════════════════════════════
+case "branch_monthly": {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "report_choose_branch";
+  biz.sessionData = { reportType: "monthly" };
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({ from, text: "auto" });
+}
 case ACTIONS.BUSINESS_PROFILE: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
@@ -2671,38 +2737,44 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
 }*/
 
 default: {
-      // Handle branch selection (branch_XXXXX pattern)
-      if (action && action.startsWith("branch_")) {
-        const branchId = action.replace("branch_", "");
-        
-        const biz = await getBizForPhone(from);
-        if (!biz) return sendMainMenu(from);
-        
-        if (branchId === "all") {
-          // Run report for all branches (owner view)
-          biz.sessionState = "report_daily";
-          await saveBizSafe(biz);
-          return continueTwilioFlow({ from, text: "" });
-        }
-        
-        // Run report for specific branch
-        // Temporarily set branch filter in session
-        biz.sessionData.reportBranchId = branchId;
-        biz.sessionState = "report_daily";
-        await saveBizSafe(biz);
-        return continueTwilioFlow({ from, text: "" });
-      }
-      
-      const biz = await getBizForPhone(from);
-
-      if (!biz) {
-        return startOnboarding(from, phone);
-      }
-
-      if (biz.sessionState && biz.sessionState !== "ready") return;
-
-      return sendMainMenu(from);
+  // ═══════════════════════════════════════════════════════════
+  // HANDLE BRANCH SELECTION (branch_XXXXX pattern)
+  // ═══════════════════════════════════════════════════════════
+  if (action && action.startsWith("branch_")) {
+    const branchId = action.replace("branch_", "");
+    
+    const biz = await getBizForPhone(from);
+    if (!biz) return sendMainMenu(from);
+    
+    const reportType = biz.sessionData?.reportType || "daily";
+    
+    if (branchId === "all") {
+      // Run report for all branches (owner view)
+      biz.sessionState = `report_${reportType}`;
+      await saveBizSafe(biz);
+      return continueTwilioFlow({ from, text: "" });
     }
+    
+    // Run report for specific branch
+    biz.sessionData.reportBranchId = branchId;
+    biz.sessionState = `report_${reportType}`;
+    await saveBizSafe(biz);
+    return continueTwilioFlow({ from, text: "" });
+  }
+  
+  // ═══════════════════════════════════════════════════════════
+  // NORMAL DEFAULT HANDLING
+  // ═══════════════════════════════════════════════════════════
+  const biz = await getBizForPhone(from);
+
+  if (!biz) {
+    return startOnboarding(from, phone);
+  }
+
+  if (biz.sessionState && biz.sessionState !== "ready") return;
+
+  return sendMainMenu(from);
+}
 
 
 
