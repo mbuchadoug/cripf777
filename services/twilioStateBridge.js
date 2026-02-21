@@ -325,8 +325,9 @@ async function runDailyReportMeta({ biz, from }) {
   if (caller?.role === "manager" && caller.branchId) {
     const branchFilter = { branchId: caller.branchId };
 
-    const invoices = await Invoice.find({
+  const invoices = await Invoice.find({
       businessId: biz._id,
+      type: "invoice",  // ✅ ONLY ACTUAL INVOICES
       ...branchFilter,
       createdAt: { $gte: start, $lte: end }
     }).lean();
@@ -350,15 +351,44 @@ async function runDailyReportMeta({ biz, from }) {
     const profit = cashReceived - spent;
 
     // 📋 Expense breakdown
-    const expenseByCategory = {};
+   // 📋 Expense breakdown with descriptions
+    const expensesByCategory = {};
     expenses.forEach(e => {
       const cat = e.category || "Other";
-      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
+      if (!expensesByCategory[cat]) {
+        expensesByCategory[cat] = [];
+      }
+      expensesByCategory[cat].push({
+        desc: e.description || cat,
+        amount: e.amount
+      });
     });
 
     let expenseDetails = "";
-    Object.keys(expenseByCategory).forEach(cat => {
-      expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
+    Object.keys(expensesByCategory).forEach(cat => {
+      const items = expensesByCategory[cat];
+      const total = items.reduce((s, i) => s + i.amount, 0);
+      
+      expenseDetails += `  ${cat} (${total} ${biz.currency}):\n`;
+      
+      // Group by description
+      const grouped = {};
+      items.forEach(item => {
+        if (!grouped[item.desc]) {
+          grouped[item.desc] = { count: 0, total: 0 };
+        }
+        grouped[item.desc].count++;
+        grouped[item.desc].total += item.amount;
+      });
+      
+      Object.keys(grouped).forEach(desc => {
+        const g = grouped[desc];
+        if (g.count > 1) {
+          expenseDetails += `    • ${desc} (×${g.count}): ${g.total} ${biz.currency}\n`;
+        } else {
+          expenseDetails += `    • ${desc}: ${g.total} ${biz.currency}\n`;
+        }
+      });
     });
 
     biz.sessionState = "ready";
@@ -394,10 +424,12 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
   const branchMap = new Map(branches.map(b => [String(b._id), b.name]));
 
   // Aggregate invoices
+ // Aggregate invoices (EXCLUDE receipts)
   const invAgg = await Invoice.aggregate([
     {
       $match: {
         businessId: biz._id,
+        type: "invoice",  // ✅ ONLY ACTUAL INVOICES
         createdAt: { $gte: start, $lte: end }
       }
     },
@@ -488,23 +520,71 @@ ${invoices.length} invoices | ${payments.length} payments | ${expenses.length} e
 
     const profit = row.cashReceived - row.spent;
 
+
     msg += `🏬 ${row.name}\n` +
            `Invoices: ${row.invoices}\n` +
            `Invoiced: ${row.invoiced} ${biz.currency}\n` +
-           `Cash received: ${row.cashReceived} ${biz.currency}\n` +
-           `Expenses: ${row.spent} ${biz.currency}\n` +
-           `Profit: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}\n` +
-           `Outstanding: ${row.outstanding} ${biz.currency}\n\n`;
+           `Cash in: ${row.cashReceived} ${biz.currency}\n` +
+           `Cash out: ${row.spent} ${biz.currency}\n` +
+           `💰 Profit: ${profit >= 0 ? "+" : ""}${profit} ${biz.currency}\n` +
+           `Unpaid: ${row.outstanding} ${biz.currency}\n\n`;
   }
 
   const totalProfit = tCash - tSpent;
 
-  msg += `📌 TOTAL\n` +
+ msg += `📌 TOTAL\n` +
          `Invoiced: ${tInvoiced} ${biz.currency}\n` +
-         `Cash received: ${tCash} ${biz.currency}\n` +
-         `Expenses: ${tSpent} ${biz.currency}\n` +
+         `Cash in: ${tCash} ${biz.currency}\n` +
+         `Cash out: ${tSpent} ${biz.currency}\n` +
          `💰 PROFIT: ${totalProfit >= 0 ? "+" : ""}${totalProfit} ${biz.currency}\n` +
-         `Outstanding: ${tOut} ${biz.currency}`;
+         `Unpaid: ${tOut} ${biz.currency}`;
+
+  // 📋 Add expense breakdown (all branches combined)
+  if (tSpent > 0) {
+    const allExpenses = await Expense.find({
+      businessId: biz._id,
+      createdAt: { $gte: start, $lte: end }
+    }).lean();
+
+    const expensesByCategory = {};
+    allExpenses.forEach(e => {
+      const cat = e.category || "Other";
+      if (!expensesByCategory[cat]) {
+        expensesByCategory[cat] = [];
+      }
+      expensesByCategory[cat].push({
+        desc: e.description || cat,
+        amount: e.amount
+      });
+    });
+
+    msg += `\n\n💸 EXPENSE BREAKDOWN\n`;
+    Object.keys(expensesByCategory).forEach(cat => {
+      const items = expensesByCategory[cat];
+      const total = items.reduce((s, i) => s + i.amount, 0);
+      
+      msg += `${cat} (${total} ${biz.currency}):\n`;
+      
+      // Group by description
+      const grouped = {};
+      items.forEach(item => {
+        if (!grouped[item.desc]) {
+          grouped[item.desc] = { count: 0, total: 0 };
+        }
+        grouped[item.desc].count++;
+        grouped[item.desc].total += item.amount;
+      });
+      
+      Object.keys(grouped).forEach(desc => {
+        const g = grouped[desc];
+        if (g.count > 1) {
+          msg += `  • ${desc} (×${g.count}): ${g.total} ${biz.currency}\n`;
+        } else {
+          msg += `  • ${desc}: ${g.total} ${biz.currency}\n`;
+        }
+      });
+    });
+  }
 
   biz.sessionState = "ready";
   biz.sessionData = {};
@@ -543,7 +623,10 @@ async function runWeeklyReportMeta({ biz, from }) {
     query.branchId = caller.branchId;
   }
 
-  const invoices = await Invoice.find(query).lean();
+ const invoices = await Invoice.find({
+    ...query,
+    type: "invoice"  // ✅ ONLY INVOICES
+  }).lean();
   const payments = await InvoicePayment.find(query).lean();
   const expenses = await Expense.find(query).lean();
 
@@ -554,16 +637,7 @@ async function runWeeklyReportMeta({ biz, from }) {
   const profit = cashReceived - spent;
 
   // Expense breakdown
-  const expenseByCategory = {};
-  expenses.forEach(e => {
-    const cat = e.category || "Other";
-    expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
-  });
-
-  let expenseDetails = "";
-  Object.keys(expenseByCategory).forEach(cat => {
-    expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
-  });
+  const cat = e.category || "Other";
 
   biz.sessionState = "ready";
   biz.sessionData = {};
@@ -619,8 +693,10 @@ async function runMonthlyReportMeta({ biz, from }) {
   if (caller?.role === "manager" && caller.branchId) {
     query.branchId = caller.branchId;
   }
-
-  const invoices = await Invoice.find(query).lean();
+const invoices = await Invoice.find({
+    ...query,
+    type: "invoice"  // ✅ ONLY INVOICES
+  }).lean();
   const payments = await InvoicePayment.find(query).lean();
   const expenses = await Expense.find(query).lean();
 
@@ -631,16 +707,7 @@ async function runMonthlyReportMeta({ biz, from }) {
   const profit = cashReceived - spent;
 
   // Expense breakdown
-  const expenseByCategory = {};
-  expenses.forEach(e => {
-    const cat = e.category || "Other";
-    expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
-  });
-
-  let expenseDetails = "";
-  Object.keys(expenseByCategory).forEach(cat => {
-    expenseDetails += `  ${cat}: ${expenseByCategory[cat]} ${biz.currency}\n`;
-  });
+const cat = e.category || "Other";
 
   // Top 5 invoices
   const topInvoices = invoices
