@@ -369,10 +369,10 @@ return runMonthlyReportMetaEnhanced({ biz, from });
    BRANCH REPORT - CHOOSE BRANCH
 =========================== */
 if (state === "report_choose_branch") {
-  // ⛔ CRITICAL: If branch already selected, SKIP this handler
-  // This prevents the infinite loop
-  if (biz.sessionData?.reportBranchId) {
-    return false; // Let it fall through to report generation
+  // ⛔ CRITICAL: Check if branch property exists (even if null)
+  // Use 'in' operator to detect property existence
+  if ("reportBranchId" in (biz.sessionData || {})) {
+    return false; // Branch already selected, skip menu
   }
   
   const Branch = (await import("../models/branch.js")).default;

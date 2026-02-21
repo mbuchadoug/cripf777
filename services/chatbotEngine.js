@@ -1300,37 +1300,17 @@ if (a.startsWith("report_branch_") || a.startsWith("branch_")) {
     ? a.replace("report_branch_", "")
     : a.replace("branch_", "");
 
-  // normalize "all"
+  // ✅ FIX: Handle "all" BEFORE validation
   if (branchId === "all") {
-    delete bizForBranch.sessionData.reportBranchId;
+    bizForBranch.sessionData.reportBranchId = null; // ✅ Set to null instead of delete
   } else {
-    // ✅ Guard
+    // ✅ Validate ObjectId ONLY for non-"all" values
     if (!mongoose.Types.ObjectId.isValid(branchId)) {
       await sendText(from, "⚠️ Invalid branch selected. Please try again.");
       return sendMainMenu(from);
     }
     bizForBranch.sessionData.reportBranchId = branchId;
   }
-
-  const reportType = bizForBranch.sessionData?.reportType || "daily";
-
-  bizForBranch.sessionState = "ready";
-  await saveBizSafe(bizForBranch);
-
-  if (reportType === "daily") {
-    const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
-    return runDailyReportMetaEnhanced({ biz: bizForBranch, from });
-  }
-  if (reportType === "weekly") {
-    const { runWeeklyReportMetaEnhanced } = await import("./weeklyReportEnhanced.js");
-    return runWeeklyReportMetaEnhanced({ biz: bizForBranch, from });
-  }
-  if (reportType === "monthly") {
-    const { runMonthlyReportMetaEnhanced } = await import("./monthlyReportEnhanced.js");
-    return runMonthlyReportMetaEnhanced({ biz: bizForBranch, from });
-  }
-
-  return sendMainMenu(from);
 }
 
 
