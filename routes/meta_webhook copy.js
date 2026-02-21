@@ -182,17 +182,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
 
 
-// ⛔ IGNORE: Status updates, delivery receipts, empty messages
-if (!msg || !msg.from || !msg.type) {
-  console.log("⏭️  Ignoring: status update or malformed message");
-  return;
-}
-
-// ⛔ IGNORE: Read receipts and other non-message events
-if (msg.type === "reaction" || msg.type === "unsupported") {
-  console.log("⏭️  Ignoring: reaction or unsupported type");
-  return;
-}
+    if (!msg) return;
 
 
 
