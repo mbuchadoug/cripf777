@@ -2752,10 +2752,11 @@ default: {
       biz.sessionData.reportBranchId = branchId;
     }
     
-    biz.sessionState = `report_${reportType}`;
-    await saveBizSafe(biz);
+    // ⚡ CRITICAL FIX: Change state FIRST, then save, THEN call report
+    biz.sessionState = "ready";  // ← MOVE THIS HERE
+    await saveBizSafe(biz);      // ← SAVE IMMEDIATELY
     
-    // ✅ DIRECTLY call report function
+    // ✅ NOW call report function
     if (reportType === "daily") {
       const { runDailyReportMetaEnhanced } = await import("./dailyReportEnhanced.js");
       return runDailyReportMetaEnhanced({ biz, from });
