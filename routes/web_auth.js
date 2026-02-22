@@ -23,7 +23,6 @@ const otpLimiter = rateLimit({
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-in-production";
 
-dotenv.config();
 
 // ✅ HELPER FUNCTION: Get Twilio Client
 function getTwilioClient() {
