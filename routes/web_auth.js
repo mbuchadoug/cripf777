@@ -1,21 +1,18 @@
+import dotenv from "dotenv";
 import express from "express";
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import OTPCode from "../models/otpCode.js";
 import UserRole from "../models/userRole.js";
 import Business from "../models/business.js";
 import WebSession from "../models/webSession.js";
-import twilio from "twilio";
+import dotenv from "dotenv";
 
 dotenv.config();
-const router = express.Router();
+// ✅ FIX: Import twilio function, initialize client INSIDE route handlers
+import twilio from "twilio";
 
-// Twilio client
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+const router = express.Router();
 
 // Rate limiter for OTP requests
 const otpLimiter = rateLimit({
@@ -26,6 +23,20 @@ const otpLimiter = rateLimit({
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-in-production";
+
+dotenv.config();
+
+// ✅ HELPER FUNCTION: Get Twilio Client
+function getTwilioClient() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  
+  if (!accountSid || !authToken) {
+    throw new Error("Twilio credentials not configured. Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env");
+  }
+  
+  return twilio(accountSid, authToken);
+}
 
 /**
  * GET /web/login
@@ -46,7 +57,7 @@ router.get("/login", (req, res) => {
 
 /**
  * POST /web/auth/request-otp
- * Send OTP to user's WhatsApp
+ * Send OTP to user's phone via SMS
  */
 router.post("/auth/request-otp", otpLimiter, async (req, res) => {
   try {
@@ -92,23 +103,43 @@ router.post("/auth/request-otp", otpLimiter, async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000)
     });
     
-    // Send via WhatsApp
-    const message = `🔐 Your ZimQuote web login code is:\n\n*${code}*\n\nValid for 5 minutes.\nDo not share this code.`;
+    // ✅ SEND VIA SMS (NOT WhatsApp)
+    const message = `Your ZimQuote login code is: ${code}. Valid for 5 minutes. Do not share this code.`;
     
     try {
+      // ✅ Initialize Twilio client
+      const twilioClient = getTwilioClient();
+      
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+      
+      if (!fromNumber) {
+        throw new Error("TWILIO_PHONE_NUMBER not configured in .env");
+      }
+      
+      console.log("📤 Sending SMS OTP to:", phone);
+      console.log("📞 From number:", fromNumber);
+      
+      // ✅ REGULAR SMS (no "whatsapp:" prefix)
       await twilioClient.messages.create({
-        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-        to: `whatsapp:${phone}`,
+        from: fromNumber,  // ← NO "whatsapp:" prefix
+        to: `+${phone}`,   // ← Add + for international format
         body: message
       });
+      
+      console.log("✅ SMS sent successfully");
+      
     } catch (twilioError) {
-      console.error("Twilio error:", twilioError);
-      return res.status(500).json({ error: "Failed to send OTP. Please try again." });
+      console.error("❌ Twilio SMS error:", twilioError);
+      await OTPCode.deleteMany({ phone, code }); // Clean up failed OTP
+      return res.status(500).json({ 
+        error: "Failed to send OTP. Please try again.",
+        details: process.env.NODE_ENV === 'development' ? twilioError.message : undefined
+      });
     }
     
     res.json({
       success: true,
-      message: "OTP sent to your WhatsApp",
+      message: "OTP sent to your phone via SMS",
       phone: phone.slice(-4) // Show last 4 digits only
     });
     
