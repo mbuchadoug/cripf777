@@ -31,6 +31,12 @@
       background: #555;
     }
     
+    /* Fix body */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    
     /* Mobile menu - hidden by default on mobile */
     @media (max-width: 1023px) {
       .mobile-menu {
@@ -39,6 +45,13 @@
       }
       .mobile-menu.active {
         transform: translateX(0);
+      }
+    }
+    
+    /* Desktop sidebar - always visible and fixed */
+    @media (min-width: 1024px) {
+      .mobile-menu {
+        transform: translateX(0) !important;
       }
     }
     
@@ -53,14 +66,14 @@
 <body class="bg-gray-50">
   
   <!-- Mobile Menu Overlay -->
-  <div id="mobileMenuOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden"></div>
+  <div id="mobileMenuOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden lg:hidden"></div>
   
   <!-- Sidebar -->
-  <aside id="sidebar" class="mobile-menu fixed lg:static inset-y-0 left-0 w-64 bg-white shadow-lg z-50">
-    <div class="flex flex-col h-screen">
+  <aside id="sidebar" class="mobile-menu fixed inset-y-0 left-0 w-64 bg-white shadow-lg z-50">
+    <div class="flex flex-col h-full overflow-hidden">
       
       <!-- Logo -->
-      <div class="flex items-center justify-between px-6 py-4 border-b">
+      <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
         <div class="flex items-center space-x-2">
           {{#if user.logoUrl}}
             <img src="{{user.logoUrl}}" alt="Logo" class="h-8 w-8 rounded">
@@ -77,7 +90,7 @@
       </div>
       
       <!-- User Info -->
-      <div class="px-6 py-4 border-b bg-gray-50">
+      <div class="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
         <div class="flex items-center space-x-3">
           <div class="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
             {{substring user.businessName 0 1}}
@@ -135,7 +148,7 @@
       </nav>
       
       <!-- Logout -->
-      <div class="border-t p-4">
+      <div class="border-t p-4 flex-shrink-0">
         <a href="/web/logout" class="flex items-center px-6 py-2 text-red-600 hover:bg-red-50 rounded-lg">
           <i class="fas fa-sign-out-alt w-5"></i>
           <span class="ml-3">Logout</span>
@@ -145,8 +158,8 @@
     </div>
   </aside>
   
-  <!-- Main Content -->
-  <div class="lg:ml-64 min-h-screen flex flex-col">
+  <!-- Main Content Wrapper -->
+  <div class="lg:ml-64">
     
     <!-- Top Bar -->
     <header class="bg-white shadow-sm sticky top-0 z-30 no-print">
@@ -188,7 +201,7 @@
     </header>
     
     <!-- Page Content -->
-    <main class="flex-1 p-4 sm:p-6 lg:p-8">
+    <main class="p-4 sm:p-6 lg:p-8 min-h-screen">
       {{{body}}}
     </main>
     
