@@ -1,44 +1,12 @@
 import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
-import Invoice from "../models/invoice.js"; // adjust if your model name differs
+import Invoice from "../models/invoice.js";
 import { sendList, sendText } from "./metaSender.js";
 
-export async function showUnpaidInvoices(to) {
-  const phone = to.replace(/\D+/g, "");
-  const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
-
-  if (!biz) {
-    return sendText(to, "❌ No active business.");
-  }
-
- const invoices = await Invoice.find({
-  businessId: biz._id,
-  type: "invoice",        // 🔥 THIS IS THE FIX
-  status: { $ne: "paid" }
-})
-  .sort({ createdAt: -1 })
-  .limit(10)
-  .lean();
-
-
-  if (!invoices.length) {
-    return sendText(to, "✅ No unpaid invoices found.");
-  }
-
-  return sendList(
-    to,
-    "📄 Select Invoice to Record Payment",
-    invoices.map(inv => ({
-      id: `payinv_${inv._id}`,
-title: `${inv.number} – ${inv.balance} ${inv.currency}`
-
-    }))
-  );
-}
-
-
-
+/**
+ * Show unpaid invoices filtered by user role and branch
+ * @param {string} from - User's phone number
+ */
 export async function showUnpaidInvoices(from) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(from);
   if (!biz) return;
@@ -53,11 +21,10 @@ export async function showUnpaidInvoices(from) {
     pending: false
   });
 
-  const Invoice = (await import("../models/invoice.js")).default;
-  
   // ✅ BUILD QUERY WITH BRANCH FILTER
   const query = {
     businessId: biz._id,
+    type: "invoice",  // ✅ ONLY INVOICES (not quotes/receipts)
     status: { $in: ["unpaid", "partial"] }
   };
 
@@ -76,7 +43,7 @@ export async function showUnpaidInvoices(from) {
       ? "✅ No unpaid invoices in your branch."
       : "✅ No unpaid invoices.";
     
-    await (await import("./metaSender.js")).sendText(from, msg);
+    await sendText(from, msg);
     return (await import("./metaMenus.js")).sendPaymentsMenu(from);
   }
 
@@ -84,7 +51,7 @@ export async function showUnpaidInvoices(from) {
     ? "💰 Unpaid Invoices (Your Branch)"
     : "💰 Select invoice to pay";
 
-  return (await import("./metaSender.js")).sendList(
+  return sendList(
     from,
     header,
     unpaid.map(inv => ({
