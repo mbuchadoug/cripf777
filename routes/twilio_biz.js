@@ -502,18 +502,22 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
   const companyAddress = bizMeta.address || "";
 
   // ✅ COLOR CODING BY DOCUMENT TYPE
-  const accentColor = 
-    type === "invoice" ? "#2563eb" :  // Blue
-    type === "quote" ? "#ea580c" :     // Orange
-    "#16a34a";                          // Green (receipt)
+// ✅ UNIVERSAL NEUTRAL COLOR SCHEME (works with any logo)
+  const accentColor = "#1f2937";  // Sophisticated dark gray (universal)
+  
+  // ✅ Document type indicators (subtle, non-invasive)
+  const typeIndicator = 
+    type === "invoice" ? "rgba(31, 41, 55, 0.05)" :  // Very subtle gray
+    type === "quote" ? "rgba(31, 41, 55, 0.05)" :     // Same gray
+    "rgba(31, 41, 55, 0.05)";                         // Same gray
 
-  const statusBadge = bizMeta.status 
+const statusBadge = bizMeta.status 
     ? `<span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; ${
         bizMeta.status === "paid" 
-          ? "background: #dcfce7; color: #166534;" 
+          ? "background: #f3f4f6; color: #374151; border: 1px solid #d1d5db;" 
           : bizMeta.status === "partial"
-          ? "background: #fef3c7; color: #92400e;"
-          : "background: #fee2e2; color: #991b1b;"
+          ? "background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db;"
+          : "background: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb;"
       }">${bizMeta.status}</span>`
     : "";
 
@@ -566,7 +570,11 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
   <meta charset="utf-8"/>
   <title>${escapeHtml(typeLabel)} ${escapeHtml(number)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
+  
+
+
+
+<style>
     @page { 
       margin: 0; 
       size: A4;
@@ -590,7 +598,7 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
       justify-content: space-between;
       align-items: flex-start;
       padding-bottom: 32px;
-      border-bottom: 3px solid ${accentColor};
+      border-bottom: 2px solid #111827;
       margin-bottom: 32px;
     }
     .company-info {
@@ -622,8 +630,10 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
     .doc-type {
       font-size: 28px;
       font-weight: 700;
-      color: ${accentColor};
+      color: #111827;
       margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
     }
     .doc-number {
       font-size: 13px;
@@ -643,6 +653,7 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
       padding: 20px;
       background: #f9fafb;
       border-radius: 8px;
+      border: 1px solid #e5e7eb;
     }
     .bill-to {
       flex: 1;
@@ -723,27 +734,27 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
     .totals-table tr:last-child td {
       font-weight: 700;
       font-size: 16px;
-      color: ${accentColor};
+      color: #111827;
     }
     
     /* ✅ NOTES */
     .notes {
       margin-top: 32px;
       padding: 16px;
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
+      background: #f9fafb;
+      border-left: 4px solid #111827;
       border-radius: 4px;
     }
     .notes-label {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      color: #92400e;
+      color: #374151;
       margin-bottom: 8px;
     }
     .notes-content {
       font-size: 13px;
-      color: #78350f;
+      color: #4b5563;
       line-height: 1.6;
     }
     
