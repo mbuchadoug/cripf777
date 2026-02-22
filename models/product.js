@@ -8,6 +8,13 @@ const productSchema = new mongoose.Schema(
       required: true
     },
 
+    // ✅ ADD BRANCH REFERENCE
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      default: null
+    },
+
     name: { type: String, required: true },
     description: String,
 

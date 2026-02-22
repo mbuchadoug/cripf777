@@ -95,20 +95,21 @@ INV_ITEM_CATALOGUE: "inv_item_catalogue",
 INV_ITEM_CUSTOM: "inv_item_custom",
 
 PRODUCTS_MENU: "products_menu",
-ADD_PRODUCT: "add_product",
-VIEW_PRODUCTS: "view_products",
-BULK_UPLOAD_PRODUCTS: "bulk_upload_products",
-
+  ADD_PRODUCT: "add_product",
+  VIEW_PRODUCTS: "view_products",
+  BULK_UPLOAD_PRODUCTS: "bulk_upload_products",
 
   // PRODUCTS & SERVICES (BULK UPLOAD)
   BULK_UPLOAD_MENU: "bulk_upload_menu",
   BULK_PASTE_MODE: "bulk_paste_mode",
 
-
-
-
-
+  // ✅ BRANCH SELECTORS (OWNERS)
+  SELECT_BRANCH_INVOICES: "select_branch_invoices",
+  SELECT_BRANCH_QUOTES: "select_branch_quotes",
+  SELECT_BRANCH_RECEIPTS: "select_branch_receipts",
+  SELECT_BRANCH_PRODUCTS: "select_branch_products",
 
   // NAV
   BACK: "back"
+
 };

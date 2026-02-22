@@ -1043,8 +1043,9 @@ if (state === "invoice_quick_add_product_price") {
   }
 
   // ✅ SAVE PRODUCT IMMEDIATELY
-  const product = await Product.create({
+   const product = await Product.create({
     businessId: biz._id,
+    branchId: caller?.branchId || null,  // ✅ SAVE BRANCH
     name,
     unitPrice: price,
     isActive: true

@@ -456,3 +456,112 @@ export async function sendReportBranchPicker(to) {
 
   return sendList(to, "🏢 Select a branch", items);
 }
+
+
+
+
+
+
+/* =========================
+   BRANCH SELECTOR: INVOICES (OWNER)
+========================= */
+export async function sendBranchSelectorInvoices(to) {
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
+
+  const biz = await getBizForPhone(to);
+  if (!biz) return sendMainMenu(to);
+
+  const branches = await Branch.find({ businessId: biz._id })
+    .sort({ name: 1 })
+    .lean();
+
+  const items = [
+    { id: "view_all_invoices", title: "🌍 All Branches" },
+    ...branches.map(b => ({
+      id: `view_invoices_branch_${b._id}`,
+      title: `🏬 ${b.name}`
+    })),
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "📄 View Invoices - Select Branch", items);
+}
+
+/* =========================
+   BRANCH SELECTOR: QUOTES (OWNER)
+========================= */
+export async function sendBranchSelectorQuotes(to) {
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
+
+  const biz = await getBizForPhone(to);
+  if (!biz) return sendMainMenu(to);
+
+  const branches = await Branch.find({ businessId: biz._id })
+    .sort({ name: 1 })
+    .lean();
+
+  const items = [
+    { id: "view_all_quotes", title: "🌍 All Branches" },
+    ...branches.map(b => ({
+      id: `view_quotes_branch_${b._id}`,
+      title: `🏬 ${b.name}`
+    })),
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "📄 View Quotes - Select Branch", items);
+}
+
+/* =========================
+   BRANCH SELECTOR: RECEIPTS (OWNER)
+========================= */
+export async function sendBranchSelectorReceipts(to) {
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
+
+  const biz = await getBizForPhone(to);
+  if (!biz) return sendMainMenu(to);
+
+  const branches = await Branch.find({ businessId: biz._id })
+    .sort({ name: 1 })
+    .lean();
+
+  const items = [
+    { id: "view_all_receipts", title: "🌍 All Branches" },
+    ...branches.map(b => ({
+      id: `view_receipts_branch_${b._id}`,
+      title: `🏬 ${b.name}`
+    })),
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "📄 View Receipts - Select Branch", items);
+}
+
+/* =========================
+   BRANCH SELECTOR: PRODUCTS (OWNER)
+========================= */
+export async function sendBranchSelectorProducts(to) {
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
+
+  const biz = await getBizForPhone(to);
+  if (!biz) return sendMainMenu(to);
+
+  const branches = await Branch.find({ businessId: biz._id })
+    .sort({ name: 1 })
+    .lean();
+
+  const items = [
+    { id: "view_all_products", title: "🌍 All Branches" },
+    ...branches.map(b => ({
+      id: `view_products_branch_${b._id}`,
+      title: `🏬 ${b.name}`
+    })),
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ];
+
+  return sendList(to, "📦 View Products - Select Branch", items);
+}

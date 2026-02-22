@@ -204,7 +204,7 @@ async function forwardToTwilioWebhook({ from, text }) {
 }
 
 
-async function showSalesDocs(from, type) {
+async function showSalesDocs(from, type, ownerBranchId = undefined) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
@@ -224,8 +224,15 @@ async function showSalesDocs(from, type) {
     type
   };
 
+  // ✅ OWNER with specific branch selected
+  if (caller?.role === "owner" && ownerBranchId !== undefined) {
+    if (ownerBranchId !== null) {
+      query.branchId = ownerBranchId;
+    }
+    // else: ownerBranchId is null = show all branches (no filter)
+  }
   // ✅ CLERKS & MANAGERS: only see their branch
-  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+  else if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
     query.branchId = caller.branchId;
   }
 
@@ -239,9 +246,22 @@ async function showSalesDocs(from, type) {
     return sendSalesMenu(from);
   }
 
+  // ✅ Show branch name in header if filtered
+  let header = `📄 Select ${type}`;
+  
+  if (ownerBranchId && caller?.role === "owner") {
+    const Branch = (await import("../models/branch.js")).default;
+    const branch = await Branch.findById(ownerBranchId);
+    if (branch) {
+      header = `📄 ${type}s - ${branch.name}`;
+    }
+  } else if (caller?.role === "owner" && ownerBranchId === null) {
+    header = `📄 ${type}s - All Branches`;
+  }
+
   return sendList(
     from,
-    `📄 Select ${type}`,
+    header,
     docs.map(d => ({
       id: `doc_${d._id}`,
       title: `${d.number} - ${d.total} ${d.currency}`
@@ -556,10 +576,28 @@ if (a === "inv_set_vat") {
 if (a === "inv_item_catalogue") {
   const biz = await getBizForPhone(from);
 
-  const products = await Product.find({
+  // ✅ GET USER BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ BUILD QUERY WITH BRANCH FILTER
+  const query = {
     businessId: biz._id,
     isActive: true
-  }).limit(20);
+  };
+
+  // ✅ CLERKS & MANAGERS: only see their branch products
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    query.branchId = caller.branchId;
+  }
+
+  const products = await Product.find(query).limit(20);
 
   if (!products.length) {
     // 🔥 Quick-add product flow (save product + price to DB)
@@ -572,7 +610,6 @@ if (a === "inv_item_catalogue") {
     return sendText(from, "No catalogue items yet.\n\n📦 Send product name:");
   }
 
-
   biz.sessionState = "creating_invoice_pick_product";
   await saveBizSafe(biz);
 
@@ -581,9 +618,7 @@ if (a === "inv_item_catalogue") {
     "Select item",
     products.map(p => ({
       id: `prod_${p._id}`,
-      //title: `${p.name} (${p.unitPrice})`
       title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
-
     }))
   );
 }
@@ -871,10 +906,21 @@ if (biz?.sessionState === "product_add_price") {
     return;
   }
 
+  // ✅ GET CALLER BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
   const Product = (await import("../models/product.js")).default;
 
   await Product.create({
     businessId: biz._id,
+    branchId: caller?.branchId || null,  // ✅ SAVE BRANCH
     name: biz.sessionData.productName,
     unitPrice: price,
     isActive: true
@@ -941,12 +987,23 @@ if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
     return;
   }
 
+ // ✅ GET CALLER BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
   const Product = (await import("../models/product.js")).default;
 
   // Insert in bulk
   await Product.insertMany(
     parsed.map(p => ({
       businessId: biz._id,
+      branchId: caller?.branchId || null,  // ✅ SAVE BRANCH
       name: p.name,
       unitPrice: p.unitPrice,
       isActive: true
@@ -955,7 +1012,6 @@ if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
   ).catch(() => {
     // ordered:false may still throw if duplicates etc — ignore and continue
   });
-
   let reply =
 `✅ Imported: ${parsed.length}`;
 
@@ -2648,16 +2704,71 @@ case ACTIONS.NEW_RECEIPT: {
 }
 
 
+case ACTIONS.VIEW_INVOICES: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
-case ACTIONS.VIEW_INVOICES:
+  // ✅ GET USER ROLE
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ OWNERS: Show branch selector
+  if (caller?.role === "owner") {
+    const { sendBranchSelectorInvoices } = await import("./metaMenus.js");
+    return sendBranchSelectorInvoices(from);
+  }
+
+  // ✅ CLERKS/MANAGERS: Direct to their branch
   return showSalesDocs(from, "invoice");
+}
 
-case ACTIONS.VIEW_QUOTES:
+case ACTIONS.VIEW_QUOTES: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (caller?.role === "owner") {
+    const { sendBranchSelectorQuotes } = await import("./metaMenus.js");
+    return sendBranchSelectorQuotes(from);
+  }
+
   return showSalesDocs(from, "quote");
+}
 
-case ACTIONS.VIEW_RECEIPTS:
+case ACTIONS.VIEW_RECEIPTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (caller?.role === "owner") {
+    const { sendBranchSelectorReceipts } = await import("./metaMenus.js");
+    return sendBranchSelectorReceipts(from);
+  }
+
   return showSalesDocs(from, "receipt");
-
+}
 
 
     case ACTIONS.ADD_CLIENT:
@@ -2681,29 +2792,48 @@ case ACTIONS.VIEW_PRODUCTS: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  const products = await Product.find({
+  // ✅ GET USER ROLE
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ OWNERS: Show branch selector
+  if (caller?.role === "owner") {
+    const { sendBranchSelectorProducts } = await import("./metaMenus.js");
+    return sendBranchSelectorProducts(from);
+  }
+
+  // ✅ CLERKS/MANAGERS: Filter by their branch
+  const query = {
     businessId: biz._id,
     isActive: true
-  }).lean();
+  };
+
+  if (caller?.branchId) {
+    query.branchId = caller.branchId;
+  }
+
+  const products = await Product.find(query).lean();
 
   if (!products.length) {
-    await sendText(from, "📦 No products found.");
+    await sendText(from, "📦 No products found for your branch.");
     return sendMainMenu(from);
   }
 
-  let msg = "📦 Products:\n\n";
+  let msg = "📦 Products (Your Branch):\n\n";
 
   products.forEach((p, i) => {
-   // msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
-   msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
-
+    msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
   });
 
   await sendText(from, msg);
   return sendMainMenu(from);
-
 }
-
 
 case ACTIONS.BULK_UPLOAD_PRODUCTS: {
   const biz = await getBizForPhone(from);
@@ -2836,6 +2966,92 @@ default: {
   // ═══════════════════════════════════════════════════════════
   // 🏢 BRANCH SELECTION HANDLER (MUST BE FIRST IN DEFAULT)
   // ═══════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════
+  // 📄 OWNER: VIEW DOCUMENTS BY BRANCH
+  // ═══════════════════════════════════════════════════════════
+  if (a === "view_all_invoices") {
+    return showSalesDocs(from, "invoice", null); // null = all branches
+  }
+
+  if (a.startsWith("view_invoices_branch_")) {
+    const branchId = a.replace("view_invoices_branch_", "");
+    return showSalesDocs(from, "invoice", branchId);
+  }
+
+  if (a === "view_all_quotes") {
+    return showSalesDocs(from, "quote", null);
+  }
+
+  if (a.startsWith("view_quotes_branch_")) {
+    const branchId = a.replace("view_quotes_branch_", "");
+    return showSalesDocs(from, "quote", branchId);
+  }
+
+  if (a === "view_all_receipts") {
+    return showSalesDocs(from, "receipt", null);
+  }
+
+  if (a.startsWith("view_receipts_branch_")) {
+    const branchId = a.replace("view_receipts_branch_", "");
+    return showSalesDocs(from, "receipt", branchId);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 📦 OWNER: VIEW PRODUCTS BY BRANCH
+  // ═══════════════════════════════════════════════════════════
+  if (a === "view_all_products") {
+    const biz = await getBizForPhone(from);
+    if (!biz) return sendMainMenu(from);
+
+    const products = await Product.find({
+      businessId: biz._id,
+      isActive: true
+    }).lean();
+
+    if (!products.length) {
+      await sendText(from, "📦 No products found.");
+      return sendProductsMenu(from);
+    }
+
+    let msg = "📦 All Products (All Branches):\n\n";
+
+    products.forEach((p, i) => {
+      msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
+    });
+
+    await sendText(from, msg);
+    return sendProductsMenu(from);
+  }
+
+  if (a.startsWith("view_products_branch_")) {
+    const branchId = a.replace("view_products_branch_", "");
+    const biz = await getBizForPhone(from);
+    if (!biz) return sendMainMenu(from);
+
+    const Branch = (await import("../models/branch.js")).default;
+    const branch = await Branch.findById(branchId);
+
+    const products = await Product.find({
+      businessId: biz._id,
+      branchId,
+      isActive: true
+    }).lean();
+
+    if (!products.length) {
+      await sendText(from, `📦 No products found for ${branch?.name || "this branch"}.`);
+      return sendProductsMenu(from);
+    }
+
+    let msg = `📦 Products (${branch?.name || "Branch"}):\n\n`;
+
+    products.forEach((p, i) => {
+      msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
+    });
+
+    await sendText(from, msg);
+    return sendProductsMenu(from);
+  }
   if (a && (a.startsWith("report_branch_") || a.startsWith("branch_"))) {
     const bizForBranch = await getBizForPhone(from);
     if (!bizForBranch) return sendMainMenu(from);
