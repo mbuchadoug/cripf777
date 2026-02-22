@@ -430,49 +430,50 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
   }
 
   // Build HTML from template (bootstrap 3.3.7 + your layout)
-  function buildHtml() {
-const typeLabel =
-  type === "invoice" ? "INVOICE" :
-  type === "quote" ? "QUOTATION" :
-  type === "statement" ? "STATEMENT" :
-  "RECEIPT";
-if (type === "statement") {
-  const rows = ledger.map(r => `
-    <tr>
-      <td>${new Date(r.date).toISOString().slice(0,10)}</td>
-      <td>${escapeHtml(r.ref || "")}</td>
-      <td style="text-align:right">${r.debit ? formatMoney(r.debit) : "-"}</td>
-      <td style="text-align:right">${r.credit ? formatMoney(r.credit) : "-"}</td>
-      <td style="text-align:right">${formatMoney(r.balance)}</td>
-    </tr>
-  `).join("");
+ function buildHtml() {
+  const typeLabel =
+    type === "invoice" ? "INVOICE" :
+    type === "quote" ? "QUOTATION" :
+    type === "statement" ? "STATEMENT" :
+    "RECEIPT";
 
-  return `
+  // ✅ STATEMENT LAYOUT (unchanged)
+  if (type === "statement") {
+    const rows = ledger.map(r => `
+      <tr>
+        <td>${new Date(r.date).toISOString().slice(0,10)}</td>
+        <td>${escapeHtml(r.ref || "")}</td>
+        <td style="text-align:right">${r.debit ? formatMoney(r.debit) : "-"}</td>
+        <td style="text-align:right">${r.credit ? formatMoney(r.credit) : "-"}</td>
+        <td style="text-align:right">${formatMoney(r.balance)}</td>
+      </tr>
+    `).join("");
+
+    return `
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <title>Client Statement</title>
   <style>
-    body { font-family: Arial; padding: 20px; }
+    body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; padding: 20px; color: #1f2937; }
     table { width:100%; border-collapse:collapse; margin-top:20px; }
-    th, td { border:1px solid #333; padding:8px; font-size:12px; }
-    th { background:#f2f2f2; }
+    th, td { border:1px solid #e5e7eb; padding:10px; font-size:13px; }
+    th { background:#f9fafb; font-weight: 600; }
   </style>
 </head>
 <body>
-
-<h2>${escapeHtml(bizMeta.name || "")}</h2>
-${bizMeta.address ? `<div style="font-size:12px; color:#666; margin-top:4px;">${escapeHtml(bizMeta.address)}</div>` : ""}
-
-  <div style="margin-top:6px; font-weight:600;">
+  <h2 style="color: #111827; margin-bottom: 4px;">${escapeHtml(bizMeta.name || "")}</h2>
+  ${bizMeta.address ? `<div style="font-size:12px; color:#6b7280; margin-top:4px;">${escapeHtml(bizMeta.address)}</div>` : ""}
+  
+  <div style="margin-top:16px; font-weight:600; font-size: 15px;">
     Client: ${escapeHtml(billingTo || "—")}
   </div>
-  <div style="font-size:12px; color:#666;">
+  <div style="font-size:12px; color:#6b7280; margin-top: 4px;">
     Date: ${new Date().toISOString().slice(0,10)}
   </div>
 
-  <h3 style="margin-top:20px;">Statement</h3>
+  <h3 style="margin-top:24px; color: #111827;">Statement</h3>
 
   <table>
     <thead>
@@ -488,146 +489,400 @@ ${bizMeta.address ? `<div style="font-size:12px; color:#666; margin-top:4px;">${
       ${rows}
     </tbody>
   </table>
-
 </body>
 </html>`;
-}
+  }
 
-    const companyName = bizMeta.name || "";
-    const logoUrl = logoForHtml || "";
-    const companyAddress = bizMeta.address || "";
+  // ═══════════════════════════════════════════════════════════
+  // 🎨 MODERN INVOICE/QUOTE/RECEIPT LAYOUT
+  // ═══════════════════════════════════════════════════════════
 
-    const discountPercentDoc = Number(bizMeta.discountPercent || 0);
-const rowsHtml =
-  type === "statement"
-    ? ledger.map(r => `
+  const companyName = bizMeta.name || "";
+  const logoUrl = logoForHtml || "";
+  const companyAddress = bizMeta.address || "";
+
+  // ✅ COLOR CODING BY DOCUMENT TYPE
+  const accentColor = 
+    type === "invoice" ? "#2563eb" :  // Blue
+    type === "quote" ? "#ea580c" :     // Orange
+    "#16a34a";                          // Green (receipt)
+
+  const statusBadge = bizMeta.status 
+    ? `<span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; ${
+        bizMeta.status === "paid" 
+          ? "background: #dcfce7; color: #166534;" 
+          : bizMeta.status === "partial"
+          ? "background: #fef3c7; color: #92400e;"
+          : "background: #fee2e2; color: #991b1b;"
+      }">${bizMeta.status}</span>`
+    : "";
+
+  // Calculate totals
+  const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
+  const discountPercent = Number(bizMeta.discountPercent || 0);
+  const discountAmount = +(subtotal * (discountPercent / 100));
+  const taxableBase = subtotal - discountAmount;
+  const vatPercent = Number(bizMeta.vatPercent || 0);
+  const applyVat = (bizMeta.applyVat === false) ? false : true;
+  const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
+  const total = taxableBase + vat;
+
+  // ✅ SIMPLIFIED RECEIPT LAYOUT (no discount/VAT columns)
+  const isReceipt = type === "receipt";
+
+  const rowsHtml = items.map(it => {
+    const qty = Number(it.qty || 1);
+    const rate = Number(it.unit || it.rate || 0);
+    const amount = qty * rate;
+
+    if (isReceipt) {
+      // 📄 RECEIPT: Simple 3-column table (Item, Qty, Amount)
+      return `
         <tr>
-          <td>${r.date}</td>
-          <td>${r.ref}</td>
-          <td style="text-align:right;">${formatMoney(r.debit)}</td>
-          <td style="text-align:right;">${formatMoney(r.credit)}</td>
-          <td style="text-align:right;">${formatMoney(r.balance)}</td>
+          <td style="padding: 12px 8px; border-bottom: 1px solid #f3f4f6;">${escapeHtml(it.item || "")}</td>
+          <td style="padding: 12px 8px; text-align:center; border-bottom: 1px solid #f3f4f6; color: #6b7280;">${qty}</td>
+          <td style="padding: 12px 8px; text-align:right; border-bottom: 1px solid #f3f4f6; font-weight: 500;">${formatMoney(amount)}</td>
         </tr>
-      `).join("")
-    : items.map(it => {
-        const qty = Number(it.qty || 1);
-        const rate = Number(it.unit || it.rate || 0);
-        const discount = Number(it.discount || 0);
-        const amount = qty * rate;
+      `;
+    } else {
+      // 📄 INVOICE/QUOTE: Full 5-column table
+      const discount = Number(it.discount || 0);
+      return `
+        <tr>
+          <td style="padding: 12px 8px; border-bottom: 1px solid #f3f4f6;">${escapeHtml(it.item || "")}</td>
+          <td style="padding: 12px 8px; text-align:center; border-bottom: 1px solid #f3f4f6; color: #6b7280;">${qty}</td>
+          <td style="padding: 12px 8px; text-align:right; border-bottom: 1px solid #f3f4f6; color: #6b7280;">${formatMoney(rate)}</td>
+          <td style="padding: 12px 8px; text-align:right; border-bottom: 1px solid #f3f4f6; color: #6b7280;">${formatMoney(discount)}</td>
+          <td style="padding: 12px 8px; text-align:right; border-bottom: 1px solid #f3f4f6; font-weight: 500;">${formatMoney(amount)}</td>
+        </tr>
+      `;
+    }
+  }).join("");
 
-        return `
-          <tr>
-            <td style="text-align:center;">${qty}</td>
-            <td>${escapeHtml(it.item || "")}</td>
-            <td style="text-align:right;">${formatMoney(rate)}</td>
-            <td style="text-align:right;">${formatMoney(discount)}</td>
-            <td style="text-align:right;">${formatMoney(amount)}</td>
-          </tr>
-        `;
-      }).join("");
-
-
-    const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
-    const discountPercent = Number(bizMeta.discountPercent || 0);
-    const discountAmount = +(subtotal * (discountPercent / 100));
-    const taxableBase = subtotal - discountAmount;
-    const vatPercent = Number(bizMeta.vatPercent || 0);
-    const applyVat = (bizMeta.applyVat === false) ? false : true;
-    const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
-    const total = taxableBase + vat;
-
-    return `
+  return `
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <title>${escapeHtml(typeLabel)} ${escapeHtml(number)}</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    @page{ margin:0; }
-    body{ font-family: Arial, Helvetica, sans-serif; padding:18px; color:#222; }
-    .top{ display:flex; align-items:center; justify-content:space-between; }
-    .brand{ display:flex; align-items:center; gap:12px; }
-    .brand img{ max-height:90px; max-width:200px; object-fit:contain; }
-    .company-name{ font-size:20px; font-weight:700; }
-    .meta{text-align:right;}
-    table.items{ width:100%; border-collapse:collapse; margin-top:18px; }
-    table.items th, table.items td{ border:1px solid #222; padding:8px; font-size:12px; }
-    table.items th{ background:#f2f2f2; font-weight:700; text-align:center; }
-    .totals{ width:320px; float:right; margin-top:12px; border:1px solid #222; border-collapse:collapse; }
-    .totals td{ padding:8px; border-bottom:1px solid #222; }
-    .totals tr:last-child td{ font-weight:800; font-size:14px; }
-    body { margin: 0!important; }
+    @page { 
+      margin: 0; 
+      size: A4;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body { 
+      font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      padding: 40px;
+      background: #ffffff;
+    }
+    
+    /* ✅ HEADER SECTION */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 32px;
+      border-bottom: 3px solid ${accentColor};
+      margin-bottom: 32px;
+    }
+    .company-info {
+      flex: 1;
+    }
+    .company-logo {
+      max-width: 180px;
+      max-height: 80px;
+      object-fit: contain;
+      margin-bottom: 12px;
+    }
+    .company-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+    .company-address {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.6;
+    }
+    
+    /* ✅ DOCUMENT INFO (RIGHT SIDE) */
+    .doc-info {
+      text-align: right;
+      min-width: 200px;
+    }
+    .doc-type {
+      font-size: 28px;
+      font-weight: 700;
+      color: ${accentColor};
+      margin-bottom: 8px;
+    }
+    .doc-number {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .doc-date {
+      font-size: 13px;
+      color: #6b7280;
+    }
+    
+    /* ✅ BILLING SECTION */
+    .billing-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding: 20px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+    .bill-to {
+      flex: 1;
+    }
+    .bill-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #6b7280;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .bill-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+    .bill-email {
+      font-size: 13px;
+      color: #6b7280;
+    }
+    
+    /* ✅ ITEMS TABLE */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 32px;
+    }
+    .items-table thead th {
+      background: #f9fafb;
+      padding: 12px 8px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #6b7280;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    .items-table thead th.text-center {
+      text-align: center;
+    }
+    .items-table thead th.text-right {
+      text-align: right;
+    }
+    
+    /* ✅ TOTALS SECTION */
+    .totals-section {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 32px;
+    }
+    .totals-table {
+      min-width: 320px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .totals-table tr {
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .totals-table tr:last-child {
+      border-bottom: none;
+      background: #f9fafb;
+    }
+    .totals-table td {
+      padding: 12px 16px;
+      font-size: 14px;
+    }
+    .totals-table td:first-child {
+      color: #6b7280;
+    }
+    .totals-table td:last-child {
+      text-align: right;
+      font-weight: 500;
+    }
+    .totals-table tr:last-child td {
+      font-weight: 700;
+      font-size: 16px;
+      color: ${accentColor};
+    }
+    
+    /* ✅ NOTES */
+    .notes {
+      margin-top: 32px;
+      padding: 16px;
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      border-radius: 4px;
+    }
+    .notes-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #92400e;
+      margin-bottom: 8px;
+    }
+    .notes-content {
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.6;
+    }
+    
+    /* ✅ FOOTER */
+    .footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      font-size: 11px;
+      color: #9ca3af;
+    }
   </style>
 </head>
 <body>
-  <div class="top">
-    <div class="brand">
-    ${logoUrl
-      ? `<div style="display:flex; align-items:center; gap:12px;"><img src="${escapeHtml(logoUrl)}" alt="logo" /><div><div class="company-name">${escapeHtml(companyName)}</div><div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div></div></div>`
-      : `<div><div class="company-name">${escapeHtml(companyName)}</div><div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div></div>`
-    }
-  </div>
 
-    <div class="meta">
-      <div style="font-weight:700; font-size:16px">${escapeHtml(typeLabel)}</div>
-      <div style="margin-top:6px">No: <strong>${escapeHtml(number)}</strong></div>
-      <div style="margin-top:6px">Date: ${escapeHtml(date.toISOString().slice(0,10))}</div>
-      ${ dueDate ? `<div>Due: ${escapeHtml(dueDate.toISOString().slice(0,10))}</div>` : ""}
+  <!-- ✅ HEADER -->
+  <div class="header">
+    <div class="company-info">
+      ${logoUrl 
+        ? `<img src="${escapeHtml(logoUrl)}" alt="logo" class="company-logo" />`
+        : `<div class="company-name">${escapeHtml(companyName)}</div>`
+      }
+      ${logoUrl && companyName ? `<div class="company-name">${escapeHtml(companyName)}</div>` : ""}
+      ${companyAddress ? `<div class="company-address">${escapeHtml(companyAddress)}</div>` : ""}
+    </div>
+    
+    <div class="doc-info">
+      <div class="doc-type">${escapeHtml(typeLabel)}</div>
+      ${statusBadge}
+      <div class="doc-number">No: <strong>${escapeHtml(number)}</strong></div>
+      <div class="doc-date">Date: ${escapeHtml(date.toISOString().slice(0,10))}</div>
+      ${dueDate ? `<div class="doc-date">Due: ${escapeHtml(dueDate.toISOString().slice(0,10))}</div>` : ""}
     </div>
   </div>
 
- <div style="margin-top:18px; display:flex; justify-content:space-between;">
-    <div>
-      <div style="font-size:12px; color:#666;">Bill To</div>
-      <div style="font-weight:700; margin-top:6px;">${
-        // ✅ Handle generic/walk-in customers
+  <!-- ✅ BILLING SECTION -->
+  <div class="billing-section">
+    <div class="bill-to">
+      <div class="bill-label">Bill To</div>
+      <div class="bill-name">${
         (!billingTo || billingTo === "Walk-in Customer" || billingTo === "walk-in") 
           ? "—" 
           : escapeHtml(billingTo)
       }</div>
-      ${ 
-        // ✅ Only show email if not a generic client
+      ${
         (email && billingTo && billingTo !== "Walk-in Customer" && billingTo !== "walk-in") 
-          ? `<div style="font-size:12px; color:#666;">${escapeHtml(email)}</div>` 
-          : "" 
+          ? `<div class="bill-email">${escapeHtml(email)}</div>` 
+          : ""
       }
     </div>
-
-    <div style="text-align:right; font-size:12px; color:#666;">
-      Document #: <strong>${escapeHtml(number)}</strong>
+    <div style="text-align: right;">
+      <div class="bill-label">Document #</div>
+      <div class="bill-name">${escapeHtml(number)}</div>
     </div>
   </div>
 
-  <table class="items">
+  <!-- ✅ ITEMS TABLE -->
+  <table class="items-table">
     <thead>
       <tr>
-        <th style="width:6%;">Qty</th>
-        <th style="width:40%;">Item</th>
-        <th style="width:12%;">Rate ($)</th>
-        <th style="width:8%;">Discount (%)</th>
-        <th style="width:20%;">Amount ($)</th>
+        ${isReceipt 
+          ? `
+            <th>Item</th>
+            <th class="text-center">Qty</th>
+            <th class="text-right">Amount</th>
+          `
+          : `
+            <th>Item</th>
+            <th class="text-center" style="width: 60px;">Qty</th>
+            <th class="text-right" style="width: 100px;">Rate</th>
+            <th class="text-right" style="width: 80px;">Disc %</th>
+            <th class="text-right" style="width: 100px;">Amount</th>
+          `
+        }
       </tr>
     </thead>
     <tbody>
-     ${rowsHtml}
-
+      ${rowsHtml}
     </tbody>
   </table>
 
-  <table class="totals" cellpadding="0" cellspacing="0">
-    <tr><td style="width:60%;">Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
-    <tr><td>Discount (${formatMoney(discountPercent)}%)</td><td style="text-align:right;">${formatMoney(discountAmount)}</td></tr>
-    <tr><td>VAT (${formatMoney(vatPercent)}%)</td><td style="text-align:right;">${formatMoney(vat)}</td></tr>
-    <tr><td>Total</td><td style="text-align:right;">${formatMoney(total)}</td></tr>
-  </table>
+  <!-- ✅ TOTALS SECTION -->
+  ${isReceipt 
+    ? `
+      <div class="totals-section">
+        <table class="totals-table">
+          <tr>
+            <td>Total</td>
+            <td>${formatMoney(total)}</td>
+          </tr>
+        </table>
+      </div>
+    `
+    : `
+      <div class="totals-section">
+        <table class="totals-table">
+          <tr>
+            <td>Subtotal</td>
+            <td>${formatMoney(subtotal)}</td>
+          </tr>
+          ${discountPercent > 0 ? `
+            <tr>
+              <td>Discount (${formatMoney(discountPercent)}%)</td>
+              <td>-${formatMoney(discountAmount)}</td>
+            </tr>
+          ` : ""}
+          ${vat > 0 ? `
+            <tr>
+              <td>VAT (${formatMoney(vatPercent)}%)</td>
+              <td>${formatMoney(vat)}</td>
+            </tr>
+          ` : ""}
+          <tr>
+            <td>Total</td>
+            <td>${formatMoney(total)}</td>
+          </tr>
+        </table>
+      </div>
+    `
+  }
 
-  ${ notes ? `<div style="clear:both; margin-top:16px; border-left:4px solid #1f6feb; background:#fbfdff; padding:10px; border-radius:4px;">${escapeHtml(notes)}</div>` : "" }
+  <!-- ✅ NOTES -->
+  ${notes ? `
+    <div class="notes">
+      <div class="notes-label">Notes</div>
+      <div class="notes-content">${escapeHtml(notes)}</div>
+    </div>
+  ` : ""}
+
+  <!-- ✅ FOOTER -->
+  <div class="footer">
+    Thank you for your business
+  </div>
 
 </body>
 </html>
-    `;
-  }
+  `;
+}
 
   function escapeHtml(s) {
     if (s === undefined || s === null) return "";
