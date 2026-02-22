@@ -1,0 +1,227 @@
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800 mb-2">Invoices</h1>
+    <p class="text-sm text-gray-600">Manage and track all your invoices</p>
+  </div>
+  <a href="/web/invoices/create" class="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95">
+    <i class="fas fa-plus mr-2"></i>
+    New Invoice
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+  <form method="GET" class="flex flex-col sm:flex-row gap-4">
+    
+    <!-- Status Filter -->
+    <div class="flex-1">
+      <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+      <select name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" onchange="this.form.submit()">
+        <option value="">All Statuses</option>
+        <option value="unpaid" {{#if (eq filters.status 'unpaid')}}selected{{/if}}>Unpaid</option>
+        <option value="partial" {{#if (eq filters.status 'partial')}}selected{{/if}}>Partially Paid</option>
+        <option value="paid" {{#if (eq filters.status 'paid')}}selected{{/if}}>Paid</option>
+      </select>
+    </div>
+    
+    <!-- Search -->
+    <div class="flex-1">
+      <label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+      <input 
+        type="text" 
+        name="search" 
+        placeholder="Invoice number or client..."
+        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        value="{{filters.search}}"
+      >
+    </div>
+    
+    <!-- Reset -->
+    <div class="flex items-end">
+      <a href="/web/invoices" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+        <i class="fas fa-redo mr-1"></i> Reset
+      </a>
+    </div>
+    
+  </form>
+</div>
+
+<!-- Invoice Table (Desktop) -->
+<div class="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-gray-50 border-b">
+      <tr>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {{#each invoices}}
+        <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location.href='/web/invoices/{{this._id}}'">
+          <td class="px-6 py-4">
+            <span class="font-medium text-gray-800">{{this.number}}</span>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-600">{{this.clientName}}</td>
+          <td class="px-6 py-4 text-sm text-gray-600">{{formatDate this.createdAt}}</td>
+          <td class="px-6 py-4">
+            <span class="font-medium text-gray-800">{{this.currency}} {{this.total}}</span>
+            {{#if (gt this.amountPaid 0)}}
+              <p class="text-xs text-gray-500">Paid: {{this.currency}} {{this.amountPaid}}</p>
+            {{/if}}
+          </td>
+          <td class="px-6 py-4">
+            <span class="inline-block px-3 py-1 text-xs font-medium rounded-full {{#if (eq this.status 'paid')}}bg-green-100 text-green-800{{else if (eq this.status 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
+              {{this.status}}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-right" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-end space-x-2">
+              <a href="/web/invoices/{{this._id}}" class="text-blue-600 hover:text-blue-700" title="View">
+                <i class="fas fa-eye"></i>
+              </a>
+              <button onclick="downloadPDF('{{this._id}}')" class="text-green-600 hover:text-green-700" title="Download PDF">
+                <i class="fas fa-download"></i>
+              </button>
+              {{#if (or (eq ../user.role 'owner') (eq ../user.role 'manager'))}}
+                {{#if (ne this.status 'paid')}}
+                  <button onclick="deleteInvoice('{{this._id}}')" class="text-red-600 hover:text-red-700" title="Delete">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                {{/if}}
+              {{/if}}
+            </div>
+          </td>
+        </tr>
+      {{else}}
+        <tr>
+          <td colspan="6" class="px-6 py-12 text-center">
+            <i class="fas fa-inbox text-4xl text-gray-300 mb-4"></i>
+            <p class="text-gray-500">No invoices found</p>
+            <a href="/web/invoices/create" class="inline-block mt-4 text-blue-600 hover:underline">
+              Create your first invoice
+            </a>
+          </td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Invoice Cards (Mobile) -->
+<div class="md:hidden space-y-4">
+  {{#each invoices}}
+    <div class="bg-white rounded-xl shadow-sm p-4" onclick="window.location.href='/web/invoices/{{this._id}}'">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <h3 class="font-semibold text-gray-800">{{this.number}}</h3>
+          <p class="text-sm text-gray-600">{{this.clientName}}</p>
+        </div>
+        <span class="inline-block px-3 py-1 text-xs font-medium rounded-full {{#if (eq this.status 'paid')}}bg-green-100 text-green-800{{else if (eq this.status 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
+          {{this.status}}
+        </span>
+      </div>
+      
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm text-gray-600">{{formatDate this.createdAt}}</span>
+        <span class="font-semibold text-gray-800">{{this.currency}} {{this.total}}</span>
+      </div>
+      
+      {{#if (gt this.amountPaid 0)}}
+        <div class="flex items-center justify-between text-xs text-gray-500 mb-3">
+          <span>Paid: {{this.currency}} {{this.amountPaid}}</span>
+          <span>Balance: {{this.currency}} {{this.balance}}</span>
+        </div>
+      {{/if}}
+      
+      <div class="flex items-center space-x-3 pt-3 border-t" onclick="event.stopPropagation()">
+        <a href="/web/invoices/{{this._id}}" class="flex-1 text-center py-2 text-blue-600 hover:bg-blue-50 rounded">
+          <i class="fas fa-eye mr-1"></i> View
+        </a>
+        <button onclick="downloadPDF('{{this._id}}')" class="flex-1 text-center py-2 text-green-600 hover:bg-green-50 rounded">
+          <i class="fas fa-download mr-1"></i> PDF
+        </button>
+        {{#if (or (eq ../user.role 'owner') (eq ../user.role 'manager'))}}
+          {{#if (ne this.status 'paid')}}
+            <button onclick="deleteInvoice('{{this._id}}')" class="flex-1 text-center py-2 text-red-600 hover:bg-red-50 rounded">
+              <i class="fas fa-trash mr-1"></i> Delete
+            </button>
+          {{/if}}
+        {{/if}}
+      </div>
+    </div>
+  {{else}}
+    <div class="bg-white rounded-xl shadow-sm p-12 text-center">
+      <i class="fas fa-inbox text-4xl text-gray-300 mb-4"></i>
+      <p class="text-gray-500 mb-4">No invoices found</p>
+      <a href="/web/invoices/create" class="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        Create Invoice
+      </a>
+    </div>
+  {{/each}}
+</div>
+
+<!-- Pagination -->
+{{#if (gt pagination.totalPages 1)}}
+  <div class="flex items-center justify-center space-x-2 mt-6">
+    {{#if pagination.hasPrev}}
+      <a href="?page={{math pagination.currentPage '-' 1}}{{#if filters.status}}&status={{filters.status}}{{/if}}" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+    {{/if}}
+    
+    <span class="px-4 py-2 text-sm text-gray-600">
+      Page {{pagination.currentPage}} of {{pagination.totalPages}}
+    </span>
+    
+    {{#if pagination.hasNext}}
+      <a href="?page={{math pagination.currentPage '+' 1}}{{#if filters.status}}&status={{filters.status}}{{/if}}" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+        <i class="fas fa-chevron-right"></i>
+      </a>
+    {{/if}}
+  </div>
+{{/if}}
+
+<script>
+  async function downloadPDF(invoiceId) {
+    try {
+      const response = await fetch(`/web/invoices/${invoiceId}/pdf`);
+      const data = await response.json();
+      
+      if (data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        alert('Failed to generate PDF');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to download PDF');
+    }
+  }
+  
+  async function deleteInvoice(invoiceId) {
+    if (!confirm('Are you sure you want to delete this invoice?')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/web/invoices/${invoiceId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to delete invoice');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete invoice');
+    }
+  }
+</script>

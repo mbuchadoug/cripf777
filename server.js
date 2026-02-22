@@ -28,7 +28,16 @@ import twilioBizRoutes from "./routes/twilio_biz.js";
 
 import privateTeacherRoutes from "./routes/privateTeacher.js";
 
-
+//----------------------------------------businessWhtasapp
+import cookieParser from "cookie-parser";
+import webAuthRoutes from "./routes/web_auth.js";
+import webDashboardRoutes from "./routes/web_dashboard.js";
+import webInvoicesRoutes from "./routes/web_invoices.js";
+import webProductsRoutes from "./routes/web_products.js";
+import webClientsRoutes from "./routes/web_clients.js";
+import webReportsRoutes from "./routes/web_reports.js";
+import webFilesRoutes from "./routes/web_files.js";
+//-------------------------------------------------------
 
 import {
   allowInsecurePrototypeAccess
@@ -120,6 +129,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+app.use(cookieParser());
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
 app.use((req, res, next) => {
   if (typeof req.next !== "function") req.next = next;
@@ -202,6 +212,10 @@ json: (context) => {
     const y = Number(b);
     if (!Number.isFinite(x) || !Number.isFinite(y) || y === 0) return null;
     return (x / y).toFixed(3);
+  },
+   // Helper to check current page
+  currentPage: (req, page) => {
+    return req.path.includes(page) ? 'active' : '';
   },
 
   formatDate: (date) => {
@@ -343,7 +357,16 @@ app.use("/meta", metaWebhookRoutes);
 
 
 app.use("/admin", adminExamRoutes);
-
+// ========================================
+// 🌐 WEB PLATFORM ROUTES (NEW)
+// ========================================
+app.use("/web", webAuthRoutes);
+app.use("/web", webDashboardRoutes);
+app.use("/web", webInvoicesRoutes);
+app.use("/web", webProductsRoutes);
+app.use("/web", webClientsRoutes);
+app.use("/web", webReportsRoutes);
+app.use("/web", webFilesRoutes);
 // Add this route registration
 app.use(adminScoiReports);
 app.use(adminQuizRules);

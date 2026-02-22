@@ -1,0 +1,100 @@
+<!-- Page Header -->
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-800 mb-2">File Download Center</h1>
+  <p class="text-sm text-gray-600">Download all your invoices, quotes, and receipts</p>
+</div>
+
+<!-- Document Type Tabs -->
+<div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+  <div class="flex flex-wrap gap-2">
+    <button onclick="filterDocs('all')" class="doc-filter-btn px-4 py-2 rounded-lg bg-blue-600 text-white" data-type="all">
+      All Documents
+    </button>
+    <button onclick="filterDocs('invoice')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="invoice">
+      Invoices
+    </button>
+    <button onclick="filterDocs('quote')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="quote">
+      Quotes
+    </button>
+    <button onclick="filterDocs('receipt')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="receipt">
+      Receipts
+    </button>
+  </div>
+</div>
+
+<!-- Documents Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {{#each documents}}
+    <div class="doc-card bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow" data-type="{{this.type}}">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center space-x-2 mb-2">
+            <i class="fas {{#if (eq this.type 'invoice')}}fa-file-invoice{{else if (eq this.type 'quote')}}fa-file-contract{{else}}fa-receipt{{/if}} text-blue-600"></i>
+            <span class="text-xs font-medium uppercase px-2 py-1 rounded {{#if (eq this.type 'invoice')}}bg-blue-100 text-blue-800{{else if (eq this.type 'quote')}}bg-purple-100 text-purple-800{{else}}bg-green-100 text-green-800{{/if}}">
+              {{this.type}}
+            </span>
+          </div>
+          <h3 class="font-semibold text-gray-800 truncate">{{this.number}}</h3>
+          <p class="text-sm text-gray-500 truncate">{{this.clientName}}</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-sm text-gray-600">{{formatDate this.createdAt}}</span>
+        <span class="font-semibold text-gray-800">{{this.currency}} {{this.total}}</span>
+      </div>
+      
+      <button onclick="downloadDoc('{{this._id}}', '{{this.folder}}')" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 active:scale-95">
+        <i class="fas fa-download mr-2"></i> Download PDF
+      </button>
+    </div>
+  {{else}}
+    <div class="col-span-full bg-white rounded-xl shadow-sm p-12 text-center">
+      <i class="fas fa-folder-open text-4xl text-gray-300 mb-4"></i>
+      <p class="text-gray-500">No documents found</p>
+    </div>
+  {{/each}}
+</div>
+
+<script>
+  function filterDocs(type) {
+    const cards = document.querySelectorAll('.doc-card');
+    const buttons = document.querySelectorAll('.doc-filter-btn');
+    
+    // Update button styles
+    buttons.forEach(btn => {
+      if (btn.dataset.type === type) {
+        btn.classList.add('bg-blue-600', 'text-white');
+        btn.classList.remove('border', 'border-gray-300', 'hover:bg-gray-50');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white');
+        btn.classList.add('border', 'border-gray-300', 'hover:bg-gray-50');
+      }
+    });
+    
+    // Filter cards
+    cards.forEach(card => {
+      if (type === 'all' || card.dataset.type === type) {
+        card.style.display = 'block';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  }
+  
+  async function downloadDoc(docId, folder) {
+    try {
+      const response = await fetch(`/web/invoices/${docId}/pdf`);
+      const data = await response.json();
+      
+      if (data.url) {
+        window.open(data.url, '_blank');
+      } else {
+        alert('Failed to generate PDF');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to download PDF');
+    }
+  }
+</script>

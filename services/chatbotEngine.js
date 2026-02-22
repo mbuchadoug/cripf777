@@ -1012,6 +1012,7 @@ if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
   ).catch(() => {
     // ordered:false may still throw if duplicates etc — ignore and continue
   });
+  
   let reply =
 `✅ Imported: ${parsed.length}`;
 
