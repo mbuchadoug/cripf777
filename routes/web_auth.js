@@ -6,7 +6,6 @@ import OTPCode from "../models/otpCode.js";
 import UserRole from "../models/userRole.js";
 import Business from "../models/business.js";
 import WebSession from "../models/webSession.js";
-import dotenv from "dotenv";
 
 dotenv.config();
 // ✅ FIX: Import twilio function, initialize client INSIDE route handlers
