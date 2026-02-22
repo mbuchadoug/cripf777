@@ -1,5 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import OTPCode from "../models/otpCode.js";
 import UserRole from "../models/userRole.js";
@@ -7,6 +8,7 @@ import Business from "../models/business.js";
 import WebSession from "../models/webSession.js";
 import twilio from "twilio";
 
+dotenv.config();
 const router = express.Router();
 
 // Twilio client
