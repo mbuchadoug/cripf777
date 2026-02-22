@@ -66,6 +66,7 @@
 </div>
 
 <!-- Charts & Activity -->
+<!-- Charts & Activity -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
   
   <!-- Revenue Chart -->
@@ -74,7 +75,9 @@
       <i class="fas fa-chart-area text-blue-600 mr-2"></i>
       Revenue (Last 30 Days)
     </h2>
-    <canvas id="revenueChart" height="100"></canvas>
+    <div style="height: 300px;">
+      <canvas id="revenueChart"></canvas>
+    </div>
   </div>
   
   <!-- Recent Activity -->
@@ -109,6 +112,85 @@
   </div>
   
 </div>
+
+<!-- Quick Actions -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  
+  <a href="/web/invoices/create" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-blue-200">
+      <i class="fas fa-plus text-blue-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">New Invoice</p>
+  </a>
+  
+  <a href="/web/products" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-green-200">
+      <i class="fas fa-box text-green-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Products</p>
+  </a>
+  
+  <a href="/web/clients" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-200">
+      <i class="fas fa-users text-purple-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Clients</p>
+  </a>
+  
+  <a href="/web/reports" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-yellow-200">
+      <i class="fas fa-chart-bar text-yellow-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Reports</p>
+  </a>
+  
+</div>
+
+<script>
+  // Load revenue chart data
+  fetch('/web/api/revenue-chart')
+    .then(res => res.json())
+    .then(data => {
+      const ctx = document.getElementById('revenueChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }),
+          datasets: [{
+            label: 'Revenue',
+            data: data.map(d => d.revenue),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '{{user.currency}} ' + value;
+                }
+              }
+            }
+          }
+        }
+      });
+    })
+    .catch(err => console.error('Chart error:', err));
+</script>
 
 <!-- Quick Actions -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
