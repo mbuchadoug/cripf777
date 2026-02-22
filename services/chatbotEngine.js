@@ -208,10 +208,28 @@ async function showSalesDocs(from, type) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  const docs = await Invoice.find({
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ BUILD QUERY WITH BRANCH FILTER
+  const query = {
     businessId: biz._id,
     type
-  })
+  };
+
+  // ✅ CLERKS & MANAGERS: only see their branch
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    query.branchId = caller.branchId;
+  }
+
+  const docs = await Invoice.find(query)
     .sort({ createdAt: -1 })
     .limit(10)
     .lean();
@@ -619,8 +637,37 @@ if (a === ACTIONS.CLIENT_STATEMENT) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ GET CLIENTS (FILTERED BY BRANCH IF NEEDED)
   const Client = (await import("../models/client.js")).default;
-  const clients = await Client.find({ businessId: biz._id }).lean();
+  
+  let clients;
+  
+  // ✅ CLERKS & MANAGERS: only see clients from their branch invoices
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    // Get unique client IDs from invoices in this branch
+    const branchInvoices = await Invoice.find({
+      businessId: biz._id,
+      branchId: caller.branchId
+    }).distinct('clientId');
+    
+    clients = await Client.find({
+      businessId: biz._id,
+      _id: { $in: branchInvoices }
+    }).lean();
+  } else {
+    // OWNERS: see all clients
+    clients = await Client.find({ businessId: biz._id }).lean();
+  }
 
   if (!clients.length) {
     await sendText(from, "No clients found.");
@@ -1873,8 +1920,6 @@ if (
   a !== ACTIONS.VIEW_DOC &&
   a !== ACTIONS.DELETE_DOC
 ) {
-
-
   const docId = a.replace("doc_", "");
   const biz = await getBizForPhone(from);
 
@@ -1884,20 +1929,37 @@ if (
     return sendSalesMenu(from);
   }
 
+  // ✅ GET USER ROLE
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
   biz.sessionState = "sales_doc_action";
   biz.sessionData = { docId };
   await saveBizSafe(biz);
 
+  // ✅ BUILD BUTTONS BASED ON ROLE
+  const buttons = [
+    { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" }
+  ];
+
+  // ✅ ONLY MANAGERS & OWNERS CAN DELETE
+  if (caller && ["owner", "manager"].includes(caller.role)) {
+    buttons.push({ id: ACTIONS.DELETE_DOC, title: "🗑 Delete" });
+  }
+
+  buttons.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+
   return sendButtons(from, {
     text: `📄 ${doc.number}\nStatus: ${doc.status}`,
-    buttons: [
-  { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" },
-  { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
-  { id: ACTIONS.BACK, title: "⬅ Back" }
-]
+    buttons
   });
 }
-
 
 
 
@@ -1981,6 +2043,21 @@ if (a === ACTIONS.DELETE_DOC) {
   const biz = await getBizForPhone(from);
   if (!biz?.sessionData?.docId) {
     await sendText(from, "❌ No document selected.");
+    return sendSalesMenu(from);
+  }
+
+  // ✅ ROLE CHECK: ONLY MANAGERS & OWNERS
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (!caller || !["owner", "manager"].includes(caller.role)) {
+    await sendText(from, "🔒 Only managers and owners can delete documents.");
     return sendSalesMenu(from);
   }
 

@@ -4,23 +4,26 @@ import InvoicePayment from "../models/invoicePayment.js";
 /**
  * Build a client ledger with running balance
  */
-export async function buildClientStatement({
-  businessId,
-  clientId
-}) {
-  // 1️⃣ Fetch invoices
-  const invoices = await Invoice.find({
-    businessId,
-    clientId
-  })
-    .select("number total createdAt")
+export async function buildClientStatement({ businessId, clientId, branchId = null }) {
+  const Invoice = (await import("../models/invoice.js")).default;
+  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+
+  // ✅ BUILD QUERY WITH OPTIONAL BRANCH FILTER
+  const query = { businessId, clientId };
+  
+  if (branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query)
+    .sort({ createdAt: 1 })
     .lean();
 
-  // 2️⃣ Fetch payments / receipts
-const payments = await InvoicePayment.find({ businessId, clientId })
-  .select("amount createdAt invoiceId receiptNumber method")
-  .lean();
+  const payments = await InvoicePayment.find(query)
+    .sort({ createdAt: 1 })
+    .lean();
 
+ 
 
   // 3️⃣ Normalize into ledger rows
   const ledger = [];
