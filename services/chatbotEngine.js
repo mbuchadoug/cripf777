@@ -2392,6 +2392,167 @@ if (a.startsWith("subpay_")) {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
+  case ACTIONS.CASH_BALANCE_MENU: {
+  const { sendCashBalanceMenu } = await import("./metaMenus.js");
+  return sendCashBalanceMenu(from);
+}
+
+case ACTIONS.VIEW_CASH_BALANCE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (!caller?.branchId) {
+    await sendText(from, "❌ No branch assigned. Contact your manager.");
+    return sendMainMenu(from);
+  }
+
+  const CashBalance = (await import("../models/cashBalance.js")).default;
+
+  // Get today's date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const balance = await CashBalance.findOne({
+    businessId: biz._id,
+    branchId: caller.branchId,
+    date: today
+  }).lean();
+
+  if (!balance) {
+    await sendText(
+      from,
+`💰 Cash Balance
+
+No balance recorded for today yet.
+
+Opening Balance: 0 ${biz.currency}
+Cash In: 0 ${biz.currency}
+Cash Out: 0 ${biz.currency}
+Closing Balance: 0 ${biz.currency}
+
+Tip: Set your opening balance to start tracking.`
+    );
+  } else {
+    await sendText(
+      from,
+`💰 Cash Balance (${today.toISOString().slice(0,10)})
+
+Opening: ${balance.openingBalance} ${biz.currency}
+Cash In: ${balance.cashIn} ${biz.currency}
+Cash Out: ${balance.cashOut} ${biz.currency}
+Closing: ${balance.closingBalance} ${biz.currency}
+
+${balance.closingBalance > balance.openingBalance ? "📈" : "📉"} ${Math.abs(balance.closingBalance - balance.openingBalance)} ${biz.currency}`
+    );
+  }
+
+  const { sendCashBalanceMenu } = await import("./metaMenus.js");
+  return sendCashBalanceMenu(from);
+}
+
+case ACTIONS.SET_OPENING_BALANCE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (!caller?.branchId) {
+    await sendText(from, "❌ No branch assigned. Contact your manager.");
+    return sendMainMenu(from);
+  }
+
+  // ✅ CHECK IF OPENING BALANCE ALREADY SET TODAY
+  const CashBalance = (await import("../models/cashBalance.js")).default;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const existing = await CashBalance.findOne({
+    businessId: biz._id,
+    branchId: caller.branchId,
+    date: today
+  }).lean();
+
+  if (existing && existing.openingBalance > 0) {
+    await sendText(
+      from,
+`⚠️ Opening balance already set for today: ${existing.openingBalance} ${biz.currency}
+
+If you need to change it, please contact your manager.`
+    );
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
+  }
+
+  biz.sessionState = "cash_set_opening_balance";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`📝 Set Opening Balance
+
+Enter the amount of cash in the till at the start of today:
+
+Example: 500
+
+Reply *cancel* to go back.`
+  );
+}
+
+case ACTIONS.RECORD_PAYOUT: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (!caller?.branchId) {
+    await sendText(from, "❌ No branch assigned. Contact your manager.");
+    return sendMainMenu(from);
+  }
+
+  biz.sessionState = "cash_payout_amount";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`💸 Record Payout/Drawing
+
+Enter the amount taken out of the till:
+
+Example: 100
+
+Reply *cancel* to go back.`
+  );
+}
+
 case ACTIONS.REPORTS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);

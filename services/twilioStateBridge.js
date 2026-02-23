@@ -92,6 +92,11 @@ const restrictedStateMap = {
   expense_amount: "payments",
   expense_category: "payments",
 
+  // ✅ ADD CASH BALANCE STATES
+  cash_set_opening_balance: "payments",
+  cash_payout_amount: "payments",
+  cash_payout_reason: "payments",
+
   invite_user_phone: "users"
 };
 

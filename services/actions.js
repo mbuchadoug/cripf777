@@ -38,6 +38,12 @@ PAYMENT_OUT: "payment_out",
 VIEW_EXPENSE_RECEIPTS: "view_expense_receipts",
   VIEW_PAYMENT_HISTORY: "view_payment_history",
 
+  // ✅ CASH BALANCE MANAGEMENT (NEW)
+  CASH_BALANCE_MENU: "cash_balance_menu",
+  SET_OPENING_BALANCE: "set_opening_balance",
+  RECORD_PAYOUT: "record_payout",
+  VIEW_CASH_BALANCE: "view_cash_balance",
+
   INV_ADD_ANOTHER_ITEM: "inv_add_item",
   INV_ENTER_PRICES: "inv_enter_prices",
    INV_SKIP_CLIENT: "inv_skip_client", 

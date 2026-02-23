@@ -1697,6 +1697,233 @@ if (state === "payment_start") {
   return sendTwimlText(res, msg);
 }
 
+
+/* ===========================
+   💰 CASH BALANCE: SET OPENING BALANCE
+=========================== */
+if (state === "cash_set_opening_balance") {
+  if (trimmed.toLowerCase() === "cancel") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
+  }
+
+  const amount = Number(trimmed);
+
+  if (isNaN(amount) || amount < 0) {
+    await sendText(from, "❌ Enter a valid amount (e.g. 500):");
+    return true;
+  }
+
+  const CashBalance = (await import("../models/cashBalance.js")).default;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // ✅ Update or create today's cash balance
+  await CashBalance.findOneAndUpdate(
+    {
+      businessId: biz._id,
+      branchId: caller.branchId,
+      date: today
+    },
+    {
+      $set: {
+        openingBalance: amount,
+        closingBalance: amount  // Initial closing = opening
+      }
+    },
+    { upsert: true }
+  );
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+`✅ Opening balance set: ${amount} ${biz.currency}
+
+Your cash tracking is now active for today!`
+  );
+
+  const { sendCashBalanceMenu } = await import("./metaMenus.js");
+  return sendCashBalanceMenu(from);
+}
+
+/* ===========================
+   💸 CASH BALANCE: RECORD PAYOUT (AMOUNT)
+=========================== */
+if (state === "cash_payout_amount") {
+  if (trimmed.toLowerCase() === "cancel") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
+  }
+
+  const amount = Number(trimmed);
+
+  if (isNaN(amount) || amount <= 0) {
+    await sendText(from, "❌ Enter a valid amount greater than 0:");
+    return true;
+  }
+
+  biz.sessionData.payoutAmount = amount;
+  biz.sessionState = "cash_payout_reason";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`💸 Payout: ${amount} ${biz.currency}
+
+Enter reason for payout:
+
+Examples:
+- Owner drawing
+- Petty cash
+- Bank deposit
+- Supplier payment
+
+Reply *cancel* to go back.`
+  );
+}
+
+/* ===========================
+   💸 CASH BALANCE: RECORD PAYOUT (REASON) → SAVE
+=========================== */
+if (state === "cash_payout_reason") {
+  if (trimmed.toLowerCase() === "cancel") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
+  }
+
+  const reason = trimmed;
+
+  if (!reason || reason.length < 3) {
+    await sendText(from, "❌ Enter a valid reason (at least 3 characters):");
+    return true;
+  }
+
+  const amount = biz.sessionData.payoutAmount;
+  
+  const CashBalance = (await import("../models/cashBalance.js")).default;
+  const Expense = (await import("../models/expense.js")).default;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // ✅ GET TODAY'S CASH BALANCE
+  let balance = await CashBalance.findOne({
+    businessId: biz._id,
+    branchId: caller.branchId,
+    date: today
+  });
+
+  if (!balance) {
+    await sendText(
+      from,
+`⚠️ No cash balance recorded for today.
+
+Please set your opening balance first.`
+    );
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
+  }
+
+  // ✅ CHECK IF SUFFICIENT CASH
+  if (amount > balance.closingBalance) {
+    await sendText(
+      from,
+`❌ Insufficient cash in till
+
+Available: ${balance.closingBalance} ${biz.currency}
+Payout amount: ${amount} ${biz.currency}
+
+Please enter a smaller amount.`
+    );
+    biz.sessionState = "cash_payout_amount";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    return true;
+  }
+
+  // ✅ RECORD AS EXPENSE (Payout category)
+  const expense = await Expense.create({
+    businessId: biz._id,
+    branchId: caller.branchId,
+    amount,
+    category: "Payout",  // Special category
+    description: reason,
+    method: "Cash",
+    createdBy: from
+  });
+
+  // ✅ UPDATE CASH BALANCE
+  balance.cashOut += amount;
+  balance.closingBalance -= amount;
+  balance.expenses += amount;
+  await balance.save();
+
+  // ✅ GENERATE RECEIPT
+  const receiptNumber = `PAYOUT-${expense._id.toString().slice(-6)}`;
+
+  const { filename } = await generatePDF({
+    type: "receipt",
+    number: receiptNumber,
+    date: new Date(),
+    billingTo: "Cash Payout",
+    items: [{
+      item: reason,
+      qty: 1,
+      unit: amount,
+      total: amount
+    }],
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      _id: biz._id.toString(),
+      status: "paid"
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/receipts/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+`✅ Payout recorded
+
+Amount: ${amount} ${biz.currency}
+Reason: ${reason}
+
+New cash balance: ${balance.closingBalance} ${biz.currency}`
+  );
+
+  const { sendCashBalanceMenu } = await import("./metaMenus.js");
+  return sendCashBalanceMenu(from);
+}
+
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
 

@@ -118,12 +118,25 @@ export async function sendPaymentsMenu(to) {
     { id: ACTIONS.PAYMENT_IN, title: "💵 Record payment (IN)" },
     { id: ACTIONS.PAYMENT_OUT, title: "💸 Record expense (OUT)" },
     { id: ACTIONS.BULK_EXPENSE_MODE, title: "📋 Bulk add expenses" },
+    { id: ACTIONS.CASH_BALANCE_MENU, title: "💰 Cash Management" },  // ✅ NEW
     { id: ACTIONS.VIEW_EXPENSE_RECEIPTS, title: "🧾 View expense receipts" },
     { id: ACTIONS.VIEW_PAYMENT_HISTORY, title: "📜 View payment history" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
 
+
+/* =========================
+   CASH BALANCE MANAGEMENT MENU
+========================= */
+export async function sendCashBalanceMenu(to) {
+  return sendList(to, "💰 Cash Management", [
+    { id: ACTIONS.VIEW_CASH_BALANCE, title: "💵 View cash balance" },
+    { id: ACTIONS.SET_OPENING_BALANCE, title: "📝 Set opening balance" },
+    { id: ACTIONS.RECORD_PAYOUT, title: "💸 Record payout/drawing" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
 
 
 /* =========================
