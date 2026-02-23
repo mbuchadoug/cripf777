@@ -532,7 +532,7 @@ Invoice Status:
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 WHAT SOLD BEST
+📦 Products / Services Sold
 ${formatProductList(productData.topProducts, biz.currency)}
 💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
 

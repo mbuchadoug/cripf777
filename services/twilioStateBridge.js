@@ -1008,7 +1008,7 @@ if (state === "invoice_quick_add_product_name") {
   const name = trimmed;
 
   if (!name || name.length < 2) {
-    await sendText(from, "❌ Please enter a valid product name:");
+    await sendText(from, "❌ Please enter a valid product / service name:");
     return true;
   }
 
@@ -1018,7 +1018,7 @@ if (state === "invoice_quick_add_product_name") {
   biz.sessionState = "invoice_quick_add_product_price";
   await saveBizSafe(biz);
 
-  await sendText(from, "💰 Enter product price:");
+  await sendText(from, "💰 Enter product/service price:");
   return true;
 }
 
@@ -1038,7 +1038,7 @@ if (state === "invoice_quick_add_product_price") {
     // safety reset
     biz.sessionState = "creating_invoice_add_items";
     await saveBizSafe(biz);
-    await sendText(from, "⚠️ Product name missing. Try again.");
+    await sendText(from, "⚠️ Product/Service name missing. Try again.");
     return true;
   }
 
@@ -1171,7 +1171,7 @@ const summary = biz.sessionData.items
 
 return sendInvoiceConfirmMenu(
   from,
-  `🧾 Invoice Summary\n\n${summary}`
+  `🧾 File Summary\n\n${summary}`
 );
 
 }

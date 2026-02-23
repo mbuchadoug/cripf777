@@ -1125,206 +1125,91 @@ canUpgradeEmployee,
 
 
 
-/* ------------------------------------------------------------------ */
-/*  ADD THIS ROUTE TO routes/org_management.js                        */
-/*  Place it RIGHT AFTER the /org/:slug/dashboard route              */
-/* ------------------------------------------------------------------ */
 
-router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
-  try {
-    const slug = String(req.params.slug || "").trim();
-    const quizId = String(req.query.quizId || "").trim();
 
-    if (!quizId || !mongoose.isValidObjectId(quizId)) {
-      return res.status(400).send("Invalid quiz ID");
-    }
-
-    const org = await Organization.findOne({ slug }).lean();
-    if (!org) return res.status(404).send("Organization not found");
-
-    // Check if user already has an exam instance for this quiz
-    let examInstance = await ExamInstance.findOne({
-      org: org._id,
-      userId: req.user._id,
-      'meta.catalogQuizId': mongoose.Types.ObjectId(quizId)
-    }).lean();
-
-    // If exists, redirect to existing exam
-    if (examInstance) {
-      return res.redirect(`/org/${org.slug}/quiz?assignmentId=${examInstance.assignmentId}`);
-    }
-
-    // Load the parent quiz question
-    const parent = await Question.findById(quizId).lean();
-    if (!parent) {
-      return res.status(404).send("Quiz not found");
-    }
-
-    const childIds = Array.isArray(parent.questionIds) 
-      ? parent.questionIds.map(String) 
-      : [];
-
-    if (!childIds.length) {
-      return res.status(400).send("Quiz has no questions");
-    }
-
-    // Build questionIds array with parent marker
-    const questionIds = [`parent:${String(parent._id)}`, ...childIds];
-    
-    // Build shuffled choicesOrder for each child
-    const choicesOrder = [[]]; // Empty for parent marker
-
-    for (const cid of childIds) {
-      try {
-        const childDoc = await Question.findById(cid).select('choices').lean();
-        const nChoices = childDoc && Array.isArray(childDoc.choices) 
-          ? childDoc.choices.length 
-          : 0;
-
-        // Fisher-Yates shuffle
-        const indices = Array.from({ length: nChoices }, (_, i) => i);
-        for (let i = indices.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [indices[i], indices[j]] = [indices[j], indices[i]];
-        }
-
-        choicesOrder.push(indices);
-      } catch (e) {
-        console.error('[take-quiz] Failed to load child:', cid, e);
-        choicesOrder.push([]);
-      }
-    }
-
-    // Create new exam instance
-    const examId = crypto.randomUUID();
-    const assignmentId = crypto.randomUUID();
-
-    const moduleKey = parent.module || 'general';
-    const quizTitle = parent.text || 'Quiz';
-
-    examInstance = await ExamInstance.create({
-      examId,
-      assignmentId,
-      org: org._id,
-      userId: req.user._id,
-      module: moduleKey,
-      modules: parent.modules || [moduleKey],
-      title: quizTitle,
-      quizTitle: quizTitle,
-      questionIds,
-      choicesOrder,
-      isOnboarding: false,
-      targetRole: 'teacher',
-      durationMinutes: 30,
-      meta: {
-        catalogQuizId: parent._id,
-        isAdminAttempt: true,
-        topics: parent.topics || [],
-        series: parent.series
-      },
-      createdAt: new Date()
-    });
-
-    // Redirect to quiz using assignmentId (same as regular quizzes)
-    return res.redirect(`/org/${org.slug}/quiz?assignmentId=${examInstance.assignmentId}`);
-
-  } catch (err) {
-    console.error('[take-quiz] error:', err);
-    return res.status(500).send(`Failed: ${err.message}`);
-  }
-});
 /* ------------------------------------------------------------------ */
 /*  🆕 ADMIN: Take quiz from catalog (creates exam instance on-demand) */
 /*  GET /org/:slug/take-quiz?quizId=...                               */
 /* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
+// ADMIN: Take quiz from catalog (creates exam instance on-demand)
+// GET /org/:slug/take-quiz?quizId=...
+// ------------------------------------------------------------------
 router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || "").trim();
-    const quizId = String(req.query.quizId || "").trim();
+    const quizIdRaw = String(req.query.quizId || "").trim();
 
-    if (!quizId || !mongoose.isValidObjectId(quizId)) {
+    if (!mongoose.isValidObjectId(quizIdRaw)) {
       return res.status(400).send("Invalid quiz ID");
     }
+    const quizObjectId = new mongoose.Types.ObjectId(quizIdRaw);
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
+    // ✅ 1) Platform admin check
+    const platformAdmin = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(e => e.trim().toLowerCase())
+      .includes(String(req.user.email || "").toLowerCase());
 
-    // Check if admin
-   
+    // ✅ 2) Membership lookup (needed for non-platform admins)
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id
+    }).lean();
 
-    // ✅ 1) Check if platform admin FIRST
-const platformAdmin = (process.env.ADMIN_EMAILS || "")
-  .split(",")
-  .map(e => e.trim().toLowerCase())
-  .includes(String(req.user.email || "").toLowerCase());
+    if (!membership && !platformAdmin) {
+      return res.status(403).send("You are not a member of this organization");
+    }
 
-// ✅ 2) Load membership (needed for non-platform admins)
-const membership = await OrgMembership.findOne({
-  org: org._id,
-  user: req.user._id
-}).lean();
+    const role = String(membership?.role || "").toLowerCase();
+    const isAdmin =
+      platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
 
-// ✅ 3) If not a platform admin, user must be a member
-if (!membership && !platformAdmin) {
-  return res.status(403).send("You are not a member of this organization");
-}
+    if (!isAdmin) {
+      return res.status(403).send("Only admins can take quizzes from the catalog");
+    }
 
-// ✅ 4) Determine role safely (membership might be null for platform admin)
-const role = String(membership?.role || "").toLowerCase();
-
-// ✅ 5) Allow if platform admin OR org admin roles
-const isAdmin =
-  platformAdmin ||
-  role === "admin" ||
-  role === "manager" ||
-  role === "org_admin";
-
-if (!isAdmin) {
-  return res.status(403).send("Only admins can take quizzes from the catalog");
-}
-
-    // Load the quiz
-    const quiz = await Question.findById(quizId).lean();
-    if (!quiz || quiz.type !== 'comprehension') {
+    // ✅ Load the quiz (parent comprehension)
+    const quiz = await Question.findById(quizObjectId).lean();
+    if (!quiz || quiz.type !== "comprehension") {
       return res.status(404).send("Quiz not found");
     }
 
-    // Check if admin already has an exam instance for this quiz
+    // ✅ Reuse existing exam instance for THIS admin + THIS quiz
     let examInstance = await ExamInstance.findOne({
       org: org._id,
       userId: req.user._id,
-      'meta.catalogQuizId': quizId
+      "meta.catalogQuizId": quizObjectId
     }).lean();
 
-    // If no exam instance exists, create one
     if (!examInstance) {
       const examId = crypto.randomUUID();
-      const assignmentId = crypto.randomUUID();
 
-      const childIds = Array.isArray(quiz.questionIds) ? quiz.questionIds.map(String) : [];
-      
-      const questionIds = [];
-      const choicesOrder = [];
+      // IMPORTANT: assignmentId must be unique PER quiz PER user,
+      // but we won't rely on it for routing anyway.
+      const assignmentId = `catalog-${String(req.user._id)}-${String(quizObjectId)}`;
 
-      // Add parent marker
-      questionIds.push(`parent:${String(quiz._id)}`);
-      choicesOrder.push([]);
+      const childIds = Array.isArray(quiz.questionIds)
+        ? quiz.questionIds.map(String)
+        : [];
 
-      // Add child questions with shuffled choices
+      const questionIds = [`parent:${String(quiz._id)}`, ...childIds];
+
+      const choicesOrder = [[]]; // parent marker has no choices order
+
       for (const cid of childIds) {
-        questionIds.push(String(cid));
-
         let nChoices = 0;
         try {
-          const childDoc = await Question.findById(String(cid)).lean();
-          if (childDoc) nChoices = Array.isArray(childDoc.choices) ? childDoc.choices.length : 0;
-        } catch (e) {
+          const childDoc = await Question.findById(cid).select("choices").lean();
+          nChoices = Array.isArray(childDoc?.choices) ? childDoc.choices.length : 0;
+        } catch (_) {
           nChoices = 0;
         }
 
-        const indices = Array.from({ length: Math.max(0, nChoices) }, (_, i) => i);
-        // Shuffle
+        const indices = Array.from({ length: nChoices }, (_, i) => i);
         for (let i = indices.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -1337,33 +1222,43 @@ if (!isAdmin) {
         assignmentId,
         org: org._id,
         userId: req.user._id,
-        module: quiz.module || 'general',
-        modules: quiz.modules || [quiz.module || 'general'],
-        title: quiz.text || 'Quiz',
-        quizTitle: quiz.text || 'Quiz',
+
+        module: quiz.module || "general",
+        modules: Array.isArray(quiz.modules) && quiz.modules.length
+          ? quiz.modules
+          : [quiz.module || "general"],
+
+        title: quiz.text || "Quiz",
+        quizTitle: quiz.text || "Quiz",
+
         questionIds,
         choicesOrder,
+
         isOnboarding: false,
-        targetRole: 'admin',
+        targetRole: "admin",
+        durationMinutes: 30,
+
         meta: {
-          catalogQuizId: quizId, // Track which catalog quiz this is from
+          catalogQuizId: quizObjectId,   // ✅ ObjectId stored consistently
           topics: quiz.topics || [],
           series: quiz.series,
           isAdminAttempt: true
         },
+
         createdAt: new Date()
       });
 
-      console.log(`[take-quiz] Created exam instance ${examId} for admin ${req.user._id}`);
+      // if you need the doc as plain object for next lines:
+      examInstance = examInstance.toObject();
     }
 
-    // Redirect to quiz page
+    // ✅ Redirect DIRECTLY to lms with the correct examId for THIS quiz
+    const quizTitle = examInstance.quizTitle || examInstance.title || "Quiz";
     return res.redirect(
-      `/lms/quiz?examId=${encodeURIComponent(examInstance.examId)}&org=${encodeURIComponent(org.slug)}&quizTitle=${encodeURIComponent(examInstance.quizTitle || examInstance.title)}`
+      `/lms/quiz?examId=${encodeURIComponent(examInstance.examId)}&org=${encodeURIComponent(org.slug)}&quizTitle=${encodeURIComponent(quizTitle)}`
     );
-
   } catch (err) {
-    console.error("[take-quiz] error:", err);
+    console.error("[take-quiz] error:", err && (err.stack || err));
     return res.status(500).send("failed");
   }
 });
