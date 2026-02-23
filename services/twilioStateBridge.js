@@ -710,12 +710,21 @@ if (state === ACTIONS.EXPENSE_METHOD) {
 
   await sendDocument(from, { link: url, filename });
 
-  biz.sessionState = "ready";
+ biz.sessionState = "expense_saved";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   await sendText(from, "✅ Expense recorded successfully.");
-  await sendMainMenu(from);
+  
+  // ✅ SHOW BUTTON TO ADD ANOTHER
+  await sendButtons(from, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "add_another_expense", title: "➕ Add another expense" },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+    ]
+  });
+  
   return true;
 }
 

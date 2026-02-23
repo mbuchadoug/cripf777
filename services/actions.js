@@ -25,6 +25,7 @@ DELETE_DOC: "delete_doc",
 
   // CLIENTS
   ADD_CLIENT: "add_client",
+  VIEW_CLIENTS: "view_clients",
   CLIENT_STATEMENT: "client_statement",
 
   // PAYMENTS
@@ -33,6 +34,10 @@ DELETE_DOC: "delete_doc",
 
 PAYMENT_IN: "payment_in",
 PAYMENT_OUT: "payment_out",
+
+VIEW_EXPENSE_RECEIPTS: "view_expense_receipts",
+  VIEW_PAYMENT_HISTORY: "view_payment_history",
+
   INV_ADD_ANOTHER_ITEM: "inv_add_item",
   INV_ENTER_PRICES: "inv_enter_prices",
    INV_SKIP_CLIENT: "inv_skip_client", 
@@ -42,6 +47,7 @@ PAYMENT_OUT: "payment_out",
   // EXPENSE FLOW
 EXPENSE_CATEGORY: "expense_category",
 EXPENSE_METHOD: "expense_method",
+BULK_EXPENSE_MODE: "bulk_expense_mode",
 
 // REPORTS
 DAILY_REPORT: "daily_report",

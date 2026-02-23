@@ -600,29 +600,87 @@ if (a === "inv_item_catalogue") {
   const products = await Product.find(query).limit(20);
 
   if (!products.length) {
-    // 🔥 Quick-add product flow (save product + price to DB)
-    biz.sessionState = "invoice_quick_add_product_name";
-    biz.sessionData = biz.sessionData || {};
-    biz.sessionData.itemMode = "catalogue";
-    biz.sessionData.quickAddProduct = {}; // { name, price }
+    // ✅ NEW: Show options when catalogue is empty
+    biz.sessionState = "creating_invoice_add_items";
+    biz.sessionData.itemMode = "choose_catalogue_or_custom";
     await saveBizSafe(biz);
 
-    return sendText(from, "No catalogue items yet.\n\n📦 Send product name:");
+    return sendButtons(from, {
+      text: "📦 No items in catalogue yet.\n\nWhat would you like to do?",
+      buttons: [
+        { id: "inv_add_new_product", title: "➕ Add new product" },
+        { id: "inv_item_custom", title: "✍️ Custom item" }
+      ]
+    });
   }
 
+  // ✅ NEW: Add options at the bottom of product list
   biz.sessionState = "creating_invoice_pick_product";
+  await saveBizSafe(biz);
+
+  const productList = products.map(p => ({
+    id: `prod_${p._id}`,
+    title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
+  }));
+
+  // ✅ Add action buttons
+  productList.push(
+    { id: "inv_add_new_product", title: "➕ Add new product" },
+    { id: "inv_item_custom", title: "✍️ Enter custom item" }
+  );
+
+  return sendList(
+    from,
+    "📦 Select item",
+    productList
+  );
+}
+
+
+if (a === "add_another_expense") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
   return sendList(
     from,
-    "Select item",
-    products.map(p => ({
-      id: `prod_${p._id}`,
-      title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
-    }))
+    "📂 Select Expense Category",
+    [
+      { id: "exp_cat_rent", title: "🏢 Rent" },
+      { id: "exp_cat_utilities", title: "💡 Utilities" },
+      { id: "exp_cat_transport", title: "🚗 Transport" },
+      { id: "exp_cat_supplies", title: "📦 Supplies" },
+      { id: "exp_cat_other", title: "📝 Other" }
+    ]
   );
 }
 
+// ✅ NEW: Handle "Add New Product" action
+if (a === "inv_add_new_product") {
+  const biz = await getBizForPhone(from);
+  
+  biz.sessionState = "invoice_quick_add_product_name";
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.itemMode = "catalogue";
+  biz.sessionData.quickAddProduct = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "📦 Enter product/service name:");
+}
+
+
+if (a === "add_another_product") {
+  const biz = await getBizForPhone(from);
+  
+  biz.sessionState = "product_add_name";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "📦 Enter product name:");
+}
 
 if (a === "inv_item_custom") {
   const biz = await getBizForPhone(from);
@@ -920,20 +978,27 @@ if (biz?.sessionState === "product_add_price") {
 
   await Product.create({
     businessId: biz._id,
-    branchId: caller?.branchId || null,  // ✅ SAVE BRANCH
+    branchId: caller?.branchId || null,
     name: biz.sessionData.productName,
     unitPrice: price,
     isActive: true
   });
 
-  biz.sessionState = "ready";
+  biz.sessionState = "product_add_name_or_menu";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   await sendText(from, "✅ Product saved successfully!");
-  return sendMainMenu(from);
+  
+  // ✅ SHOW BUTTON TO ADD ANOTHER OR GO TO MENU
+  return sendButtons(from, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "add_another_product", title: "➕ Add another product" },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+    ]
+  });
 }
-
 if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
   const msg = (text || "").trim();
 
@@ -1025,14 +1090,12 @@ if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
   return sendText(from, reply);
 }
 
-// =========================
-// 📥 BULK PASTE INPUT
-// =========================
-if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
+// ✅ BULK EXPENSE INPUT HANDLER
+if (biz && biz.sessionState === "bulk_expense_input" && !isMetaAction) {
   const textRaw = (text || "").trim();
 
   if (!textRaw) {
-    await sendText(from, "❌ Paste at least one line or type *done* to cancel.");
+    await sendText(from, "❌ Paste at least one expense or type *done* to finish.");
     return;
   }
 
@@ -1040,28 +1103,130 @@ if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
     biz.sessionState = "ready";
     biz.sessionData = {};
     await saveBizSafe(biz);
-    await sendText(from, "✅ Bulk paste cancelled.");
-    return sendProductsMenu(from);
+    await sendText(from, "✅ Bulk expense entry complete.");
+    return sendPaymentsMenu(from);
   }
 
-  // Split lines (supports newline paste)
-  const lines = textRaw
-    .split("\n")
-    .map(l => l.trim())
+  // ✅ Use | as separator
+  const items = textRaw
+    .split("|")
+    .map(i => i.trim())
     .filter(Boolean);
 
-  const Product = (await import("../models/product.js")).default;
+  const Expense = (await import("../models/expense.js")).default;
+
+  // ✅ GET CALLER BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
 
   let created = 0;
   let skipped = 0;
 
-  for (const line of lines) {
-    // Accept: name,price OR name,price,description
-    const parts = line.split(",").map(p => p.trim());
+  const validCategories = ["Rent", "Utilities", "Transport", "Supplies", "Other"];
+
+  for (const item of items) {
+    const parts = item.split(",").map(p => p.trim());
+    
+    if (parts.length < 3) {
+      skipped++;
+      continue;
+    }
+
+    const description = parts[0];
+    const amount = Number(parts[1]);
+    const category = parts[2];
+
+    if (!description || !amount || amount <= 0 || !validCategories.includes(category)) {
+      skipped++;
+      continue;
+    }
+
+    await Expense.create({
+      businessId: biz._id,
+      branchId: caller?.branchId || null,
+      description,
+      amount,
+      category,
+      method: "Cash", // Default method for bulk
+      createdBy: from
+    });
+
+    created++;
+  }
+
+  await sendText(
+    from,
+`✅ Recorded ${created} expenses
+${skipped > 0 ? `⚠️ Skipped ${skipped} (invalid format)` : ""}
+
+Total: ${items.reduce((sum, item) => {
+  const parts = item.split(",");
+  const amt = Number(parts[1]);
+  return sum + (isNaN(amt) ? 0 : amt);
+}, 0)} ${biz.currency}
+
+Type more or reply *done* to finish.`
+  );
+
+  return;
+}
+// =========================
+// 📥 BULK PASTE INPUT
+// =========================
+if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
+  const textRaw = (text || "").trim();
+
+  if (!textRaw) {
+    await sendText(from, "❌ Paste at least one product or type *done* to finish.");
+    return;
+  }
+
+  if (textRaw.toLowerCase() === "done") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "✅ Bulk paste complete.");
+    return sendProductsMenu(from);
+  }
+
+  // ✅ NEW: Use | as separator instead of line breaks
+  const items = textRaw
+    .split("|")
+    .map(i => i.trim())
+    .filter(Boolean);
+
+  const Product = (await import("../models/product.js")).default;
+
+  // ✅ GET CALLER BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const item of items) {
+    // ✅ UPDATED: Accept "Name, Price" format only (no description)
+    const parts = item.split(",").map(p => p.trim());
+    
+    if (parts.length < 2) {
+      skipped++;
+      continue;
+    }
+
     const name = parts[0];
     const priceStr = parts[1];
-    const description = parts.slice(2).join(",") || "";
-
     const unitPrice = Number(priceStr);
 
     if (!name || name.length < 2 || Number.isNaN(unitPrice) || unitPrice <= 0) {
@@ -1071,8 +1236,8 @@ if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
 
     await Product.create({
       businessId: biz._id,
+      branchId: caller?.branchId || null,
       name,
-      description,
       unitPrice,
       isActive: true
     });
@@ -1082,16 +1247,14 @@ if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
 
   await sendText(
     from,
-`✅ Bulk paste complete
+`✅ Imported ${created} products
+${skipped > 0 ? `⚠️ Skipped ${skipped} (invalid format)` : ""}
 
-Created: ${created}
-Skipped: ${skipped}
+${created > 0 ? "Products added to your catalogue!" : ""}
 
-Tip: Skipped lines usually have missing name or invalid price.`
+Type more products or reply *done* to finish.`
   );
 
-  // Keep them in paste mode so they can paste again, or type done
-  await sendText(from, "Paste more lines, or reply *done* to exit.");
   return;
 }
 
@@ -1550,13 +1713,38 @@ if (biz && biz.sessionState === "awaiting_logo") {
 // =========================
 // 🖼 ONBOARDING: LOGO UPLOAD (META IMAGE OR SKIP)
 // =========================
+// =========================
+// 🖼 ONBOARDING: LOGO UPLOAD (META IMAGE OR SKIP)
+// =========================
 if (biz && biz.sessionState === "awaiting_logo_upload") {
   // User types skip
   if (text && text.toLowerCase() === "skip") {
+    // ✅ CREATE MAIN BRANCH
+    const Branch = (await import("../models/branch.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+
+    const mainBranch = await Branch.create({
+      businessId: biz._id,
+      name: "Main Branch",
+      isDefault: true
+    });
+
+    // ✅ ASSIGN OWNER TO MAIN BRANCH
+    await UserRole.findOneAndUpdate(
+      {
+        businessId: biz._id,
+        phone,
+        role: "owner"
+      },
+      {
+        branchId: mainBranch._id
+      }
+    );
+
     biz.sessionState = "ready";
     await saveBizSafe(biz);
 
-    await sendText(from, "✅ Setup complete! Logo skipped.");
+    await sendText(from, "✅ Setup complete!\n\n🏢 Main Branch created and assigned to you.");
     return sendMainMenu(from);
   }
 
@@ -1571,10 +1759,32 @@ if (biz && biz.sessionState === "awaiting_logo_upload") {
    */
 
   if (biz.logoUrl) {
+    // ✅ CREATE MAIN BRANCH
+    const Branch = (await import("../models/branch.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+
+    const mainBranch = await Branch.create({
+      businessId: biz._id,
+      name: "Main Branch",
+      isDefault: true
+    });
+
+    // ✅ ASSIGN OWNER TO MAIN BRANCH
+    await UserRole.findOneAndUpdate(
+      {
+        businessId: biz._id,
+        phone,
+        role: "owner"
+      },
+      {
+        branchId: mainBranch._id
+      }
+    );
+
     biz.sessionState = "ready";
     await saveBizSafe(biz);
 
-    await sendText(from, "✅ Logo uploaded successfully!");
+    await sendText(from, "✅ Setup complete!\n\n🏢 Main Branch created and assigned to you.");
     return sendMainMenu(from);
   }
 
@@ -2001,6 +2211,7 @@ if (
   await saveBizSafe(biz);
 
   // ✅ BUILD BUTTONS BASED ON ROLE
+ // ✅ BUILD BUTTONS BASED ON ROLE
   const buttons = [
     { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" }
   ];
@@ -2010,7 +2221,8 @@ if (
     buttons.push({ id: ACTIONS.DELETE_DOC, title: "🗑 Delete" });
   }
 
-  buttons.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+  buttons.push({ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" });
+  buttons.push({ id: ACTIONS.BACK, title: "⬅ Back to List" });
 
   return sendButtons(from, {
     text: `📄 ${doc.number}\nStatus: ${doc.status}`,
@@ -2892,23 +3104,52 @@ case ACTIONS.BULK_PASTE_MODE: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // Put user into paste-input state
   biz.sessionState = "bulk_paste_input";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   return sendText(
     from,
-`📋 Paste items now (one per line)
+`📋 Bulk Add Products
 
-Examples:
-Milk 1L,1.50,Groceries
-Math Lesson,10,Private tuition service
+✅ Format: Name, Price | Name, Price | Name, Price
 
-When done, reply: *done*`
+Example:
+Milk 1L, 1.50 | Bread, 2 | Math Lesson, 10
+
+⚠️ Important:
+- Use *|* (pipe) to separate products
+- Use comma between name and price
+- NO line breaks needed
+
+Paste now, or reply *done* to finish.`
   );
 }
 
+case ACTIONS.BULK_EXPENSE_MODE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "bulk_expense_input";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`📋 Bulk Add Expenses
+
+✅ Format: Description, Amount, Category | Description, Amount, Category
+
+Example:
+Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
+
+Categories: Rent, Utilities, Transport, Supplies, Other
+
+Use *|* to separate expenses.
+
+Paste now, or reply *done* to finish.`
+  );
+}
 
 case ACTIONS.SUBSCRIPTION_PAYMENTS: {
   const biz = await getBizForPhone(from);
@@ -2937,6 +3178,164 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
   );
 }
 
+
+case ACTIONS.VIEW_EXPENSE_RECEIPTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ BUILD QUERY WITH BRANCH FILTER
+  const query = {
+    businessId: biz._id
+  };
+
+  // ✅ CLERKS & MANAGERS: only see their branch expenses
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    query.branchId = caller.branchId;
+  }
+
+  const Expense = (await import("../models/expense.js")).default;
+  
+  const expenses = await Expense.find(query)
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!expenses.length) {
+    await sendText(from, "📋 No expense receipts found.");
+    return sendPaymentsMenu(from);
+  }
+
+  let msg = "🧾 Recent Expense Receipts:\n\n";
+
+  expenses.forEach((e, i) => {
+    const date = new Date(e.createdAt).toLocaleDateString();
+    msg += `${i + 1}. ${e.category || "Other"} - ${e.amount} ${biz.currency}\n`;
+    msg += `   ${e.description || "No description"}\n`;
+    msg += `   ${date} (${e.method || "Unknown method"})\n\n`;
+  });
+
+  await sendText(from, msg);
+  return sendPaymentsMenu(from);
+}
+
+case ACTIONS.VIEW_PAYMENT_HISTORY: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  // ✅ BUILD QUERY WITH BRANCH FILTER
+  const query = {
+    businessId: biz._id
+  };
+
+  // ✅ CLERKS & MANAGERS: only see their branch payments
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    query.branchId = caller.branchId;
+  }
+
+  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+  const Invoice = (await import("../models/invoice.js")).default;
+  
+  const payments = await InvoicePayment.find(query)
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!payments.length) {
+    await sendText(from, "📋 No payment history found.");
+    return sendPaymentsMenu(from);
+  }
+
+  let msg = "💵 Recent Payments:\n\n";
+
+  for (const p of payments) {
+    const invoice = await Invoice.findById(p.invoiceId).lean();
+    const date = new Date(p.createdAt).toLocaleDateString();
+    
+    msg += `• ${p.amount} ${biz.currency} (${p.method})\n`;
+    msg += `  Invoice: ${invoice?.number || "Unknown"}\n`;
+    msg += `  Date: ${date}\n\n`;
+  }
+
+  await sendText(from, msg);
+  return sendPaymentsMenu(from);
+}
+
+case ACTIONS.VIEW_CLIENTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // ✅ GET USER ROLE & BRANCH
+  const phone = from.replace(/\D+/g, "");
+  const UserRole = (await import("../models/userRole.js")).default;
+  
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  const Client = (await import("../models/client.js")).default;
+  const Invoice = (await import("../models/invoice.js")).default;
+  
+  let clients;
+  
+  // ✅ CLERKS & MANAGERS: only see clients from their branch invoices
+  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+    const branchInvoices = await Invoice.find({
+      businessId: biz._id,
+      branchId: caller.branchId
+    }).distinct('clientId');
+    
+    clients = await Client.find({
+      businessId: biz._id,
+      _id: { $in: branchInvoices }
+    }).lean();
+  } else {
+    // OWNERS: see all clients
+    clients = await Client.find({ businessId: biz._id }).lean();
+  }
+
+  if (!clients.length) {
+    await sendText(from, "📋 No clients found.");
+    return sendClientsMenu(from);
+  }
+
+  let msg = "👥 Your Clients:\n\n";
+
+  clients.forEach((c, i) => {
+    msg += `${i + 1}. ${c.name || "No name"}\n`;
+    if (c.phone) msg += `   📞 ${c.phone}\n`;
+    if (c.email) msg += `   📧 ${c.email}\n`;
+    msg += "\n";
+  });
+
+  await sendText(from, msg);
+  return sendClientsMenu(from);
+}
+
+
+case ACTIONS.MAIN_MENU:
+  return sendMainMenu(from);
 
 /*default: {
   const biz = await getBizForPhone(from);

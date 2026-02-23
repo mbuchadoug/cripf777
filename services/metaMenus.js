@@ -86,9 +86,9 @@ export async function sendMainMenu(to) {
 export async function sendSalesMenu(to) {
     console.log("🔥 SALES MENU v2 LOADED");
   return sendList(to, "🧾 Sales", [
-    { id: ACTIONS.NEW_INVOICE, title: "New Invoice" },
-    { id: ACTIONS.NEW_QUOTE, title: "New Quotation" },
-    { id: ACTIONS.NEW_RECEIPT, title: "New Receipt" },
+    { id: ACTIONS.NEW_INVOICE, title: "📄 New Invoice" },
+    { id: ACTIONS.NEW_QUOTE, title: "📋 New Quotation" },
+    { id: ACTIONS.NEW_RECEIPT, title: "🧾 New Receipt" },
 
     { id: ACTIONS.VIEW_INVOICES, title: "📄 View Invoices" },
     { id: ACTIONS.VIEW_QUOTES, title: "📄 View Quotations" },
@@ -104,6 +104,7 @@ export async function sendSalesMenu(to) {
 export async function sendClientsMenu(to) {
   return sendList(to, "👥 Clients", [
     { id: ACTIONS.ADD_CLIENT, title: "➕ Add Client" },
+    { id: ACTIONS.VIEW_CLIENTS, title: "📋 View Clients" },
     { id: ACTIONS.CLIENT_STATEMENT, title: "📄 Client Statement" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -114,12 +115,14 @@ export async function sendClientsMenu(to) {
 ========================= */
 export async function sendPaymentsMenu(to) {
   return sendList(to, "💰 Payments", [
-    { id: ACTIONS.PAYMENT_IN, title: "Record payment (IN)" },
-    { id: ACTIONS.PAYMENT_OUT, title: "Record expense (OUT)" },
+    { id: ACTIONS.PAYMENT_IN, title: "💵 Record payment (IN)" },
+    { id: ACTIONS.PAYMENT_OUT, title: "💸 Record expense (OUT)" },
+    { id: ACTIONS.BULK_EXPENSE_MODE, title: "📋 Bulk add expenses" },
+    { id: ACTIONS.VIEW_EXPENSE_RECEIPTS, title: "🧾 View expense receipts" },
+    { id: ACTIONS.VIEW_PAYMENT_HISTORY, title: "📜 View payment history" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
-
 
 
 

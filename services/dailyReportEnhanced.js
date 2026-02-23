@@ -26,6 +26,7 @@ import {
   formatInsightsList,
   formatActionsList
 } from "./reportHelpers.js";
+const CashBalance = (await import("../models/cashBalance.js")).default;
 
 export async function runDailyReportMetaEnhanced({ biz, from }) {
   const UserRole = (await import("../models/userRole.js")).default;
@@ -497,6 +498,58 @@ ${formatActionsList(actions)}
            `Unpaid: ${row.outstanding} ${biz.currency}\n\n`;
   }
 
+
+  // ═══════════════════════════════════════════════════════════════
+// 💰 CASH BALANCE CALCULATION
+// ═══════════════════════════════════════════════════════════════
+
+// Get yesterday's closing balance
+const yesterday = new Date(start);
+yesterday.setDate(yesterday.getDate() - 1);
+
+const branchFilter = effectiveCaller?.branchId || caller?.branchId
+  ? { branchId: effectiveCaller?.branchId || caller.branchId }
+  : {};
+
+const yesterdayBalance = await CashBalance.findOne({
+  businessId: biz._id,
+  ...branchFilter,
+  date: yesterday
+}).lean();
+
+const openingBalance = yesterdayBalance?.closingBalance || 0;
+const closingBalance = openingBalance + cashReceived - spent;
+
+// Save today's balance
+await CashBalance.findOneAndUpdate(
+  {
+    businessId: biz._id,
+    ...branchFilter,
+    date: start
+  },
+  {
+    openingBalance,
+    closingBalance,
+    cashIn: cashReceived,
+    cashOut: spent,
+    invoicePayments: paymentCash,
+    receiptSales: receiptCash,
+    expenses: spent
+  },
+  { upsert: true }
+);
+
+const cashBalanceSection = `
+━━━━━━━━━━━━━━━━━━━━
+
+💰 CASH BALANCE
+Opening (start of day): ${openingBalance} ${biz.currency}
+Cash In today: +${cashReceived} ${biz.currency}
+Cash Out today: -${spent} ${biz.currency}
+Closing (end of day): ${closingBalance} ${biz.currency}
+
+${closingBalance > openingBalance ? "📈 Cash increased" : "📉 Cash decreased"} by ${Math.abs(closingBalance - openingBalance)} ${biz.currency}
+`;
   // ═══════════════════════════════════════════════════════════════
   // FINAL OWNER REPORT MESSAGE
   // ═══════════════════════════════════════════════════════════════
