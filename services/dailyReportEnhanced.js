@@ -183,13 +183,67 @@ const caller = await UserRole.findOne({
       currency: biz.currency
     });
 
-    // 7. Generate Actions
+ // 7. Generate Actions
     const actions = generateActionItems({
       overdueInvoices: overdueData.overdue,
       currentOutstanding: overdueData.current,
       collectionRate: metrics.collectionRate,
       profitMargin: metrics.profitMargin
     });
+
+    // ═══════════════════════════════════════════════════════════════
+    // 💰 CASH BALANCE CALCULATION (MANAGER/CLERK)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Get yesterday's closing balance
+    const yesterday = new Date(start);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const yesterdayBalance = await CashBalance.findOne({
+      businessId: biz._id,
+      ...branchFilter,
+      date: yesterday
+    }).lean();
+
+    const openingBalance = yesterdayBalance?.closingBalance || 0;
+    const closingBalance = openingBalance + cashReceived - spent;
+
+    // Save today's balance
+    await CashBalance.findOneAndUpdate(
+      {
+        businessId: biz._id,
+        ...branchFilter,
+        date: start
+      },
+      {
+        openingBalance,
+        closingBalance,
+        cashIn: cashReceived,
+        cashOut: spent,
+        invoicePayments: paymentCash,
+        receiptSales: receiptCash,
+        expenses: spent
+      },
+      { upsert: true }
+    );
+
+    const cashBalanceSection = `
+━━━━━━━━━━━━━━━━━━━━
+
+💰 CASH BALANCE
+Opening (start of day): ${openingBalance} ${biz.currency}
+Cash In today: +${cashReceived} ${biz.currency}
+Cash Out today: -${spent} ${biz.currency}
+Closing (end of day): ${closingBalance} ${biz.currency}
+
+${closingBalance > openingBalance ? "📈 Cash increased" : "📉 Cash decreased"} by ${Math.abs(closingBalance - openingBalance)} ${biz.currency}
+`;
+
+    // ═══════════════════════════════════════════════════════════════
+    // BUILD REPORT MESSAGE
+    // ═══════════════════════════════════════════════════════════════
+
+    //const msg = `📊 Daily Report (${start.toISOString().slice(0,10)})
 
     // ═══════════════════════════════════════════════════════════════
     // BUILD REPORT MESSAGE
@@ -248,10 +302,10 @@ ${expenseDetails || "  Nothing spent today\n"}
 ${formatInsightsList(insights)}
 🎯 WHAT TO DO NEXT
 ${formatActionsList(actions)}
+${cashBalanceSection}
 ━━━━━━━━━━━━━━━━━━━━
 
 📋 ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} direct sales | ${expenses.length} expenses`;
-
     biz.sessionState = "ready";
     biz.sessionData = {};
     await biz.save();
@@ -365,12 +419,64 @@ ${formatActionsList(actions)}
     currency: biz.currency
   });
 
-  const actions = generateActionItems({
+ const actions = generateActionItems({
     overdueInvoices: overdueData.overdue,
     currentOutstanding: overdueData.current,
     collectionRate: metrics.collectionRate,
     profitMargin: metrics.profitMargin
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // 💰 CASH BALANCE CALCULATION (OWNER - ALL BRANCHES)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Get yesterday's closing balance (owner sees combined balance)
+  const yesterday = new Date(start);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const yesterdayBalance = await CashBalance.findOne({
+    businessId: biz._id,
+    branchId: null, // Owner's combined balance
+    date: yesterday
+  }).lean();
+
+  const openingBalance = yesterdayBalance?.closingBalance || 0;
+  const closingBalance = openingBalance + tCash - tSpent;
+
+  // Save today's balance
+  await CashBalance.findOneAndUpdate(
+    {
+      businessId: biz._id,
+      branchId: null, // Owner's combined balance
+      date: start
+    },
+    {
+      openingBalance,
+      closingBalance,
+      cashIn: tCash,
+      cashOut: tSpent,
+      invoicePayments: tPaymentCash,
+      receiptSales: tReceiptCash,
+      expenses: tSpent
+    },
+    { upsert: true }
+  );
+
+  const cashBalanceSection = `
+━━━━━━━━━━━━━━━━━━━━
+
+💰 CASH BALANCE (ALL BRANCHES)
+Opening (start of day): ${openingBalance} ${biz.currency}
+Cash In today: +${tCash} ${biz.currency}
+Cash Out today: -${tSpent} ${biz.currency}
+Closing (end of day): ${closingBalance} ${biz.currency}
+
+${closingBalance > openingBalance ? "📈 Cash increased" : "📉 Cash decreased"} by ${Math.abs(closingBalance - openingBalance)} ${biz.currency}
+`;
+
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD OWNER REPORT WITH BRANCH BREAKDOWN
+  // ═══════════════════════════════════════════════════════════════
 
   // ═══════════════════════════════════════════════════════════════
   // BUILD OWNER REPORT WITH BRANCH BREAKDOWN
@@ -500,57 +606,6 @@ ${formatActionsList(actions)}
 
 
   // ═══════════════════════════════════════════════════════════════
-// 💰 CASH BALANCE CALCULATION
-// ═══════════════════════════════════════════════════════════════
-
-// Get yesterday's closing balance
-const yesterday = new Date(start);
-yesterday.setDate(yesterday.getDate() - 1);
-
-const branchFilter = effectiveCaller?.branchId || caller?.branchId
-  ? { branchId: effectiveCaller?.branchId || caller.branchId }
-  : {};
-
-const yesterdayBalance = await CashBalance.findOne({
-  businessId: biz._id,
-  ...branchFilter,
-  date: yesterday
-}).lean();
-
-const openingBalance = yesterdayBalance?.closingBalance || 0;
-const closingBalance = openingBalance + cashReceived - spent;
-
-// Save today's balance
-await CashBalance.findOneAndUpdate(
-  {
-    businessId: biz._id,
-    ...branchFilter,
-    date: start
-  },
-  {
-    openingBalance,
-    closingBalance,
-    cashIn: cashReceived,
-    cashOut: spent,
-    invoicePayments: paymentCash,
-    receiptSales: receiptCash,
-    expenses: spent
-  },
-  { upsert: true }
-);
-
-const cashBalanceSection = `
-━━━━━━━━━━━━━━━━━━━━
-
-💰 CASH BALANCE
-Opening (start of day): ${openingBalance} ${biz.currency}
-Cash In today: +${cashReceived} ${biz.currency}
-Cash Out today: -${spent} ${biz.currency}
-Closing (end of day): ${closingBalance} ${biz.currency}
-
-${closingBalance > openingBalance ? "📈 Cash increased" : "📉 Cash decreased"} by ${Math.abs(closingBalance - openingBalance)} ${biz.currency}
-`;
-  // ═══════════════════════════════════════════════════════════════
   // FINAL OWNER REPORT MESSAGE
   // ═══════════════════════════════════════════════════════════════
 
@@ -606,6 +661,7 @@ ${expenseDetails || "  Nothing spent today\n"}
 🏬 BY BRANCH
 
 ${branchSection}
+${cashBalanceSection}
 ━━━━━━━━━━━━━━━━━━━━
 
 💡 WHAT THIS MEANS
