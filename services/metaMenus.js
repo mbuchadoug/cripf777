@@ -400,7 +400,7 @@ async function _salesDocBranchSelector(to, type, label) {
     : type === "quote" ? "view_quotes_branch_"
     : "view_receipts_branch_";
 
-  return sendList(to, `${label} — Select Branch`, [
+  return sendList(to, `${label} - Select Branch`, [
     { id: `view_all_${type}s`, title: "🌍 All Branches" },
     ...branches.map(b => ({ id: `${prefix}${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
@@ -417,7 +417,7 @@ export async function sendBranchSelectorProducts(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "📦 View Products — Select Branch", [
+  return sendList(to, "📦 View Products - Select Branch", [
     { id: "view_all_products", title: "🌍 All Branches" },
     ...branches.map(b => ({ id: `view_products_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
@@ -434,7 +434,7 @@ export async function sendBranchSelectorAddProduct(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "📦 Add Product — Select Branch", [
+  return sendList(to, "📦 Add Product - Select Branch", [
     ...branches.map(b => ({ id: `add_product_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -454,7 +454,7 @@ export async function sendBranchSelectorNewDoc(to, docType) {
     : docType === "quote" ? "📋 New Quotation"
     : "🧾 New Receipt";
 
-  return sendList(to, `${label} — Select Branch`, [
+  return sendList(to, `${label} - Select Branch`, [
     ...branches.map(b => ({ id: `new_doc_branch_${docType}_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -470,7 +470,7 @@ export async function sendBranchSelectorPaymentIn(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "💵 Record Payment — Select Branch", [
+  return sendList(to, "💵 Record Payment - Select Branch", [
     ...branches.map(b => ({ id: `payment_in_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -486,7 +486,7 @@ export async function sendBranchSelectorExpense(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "💸 Record Expense — Select Branch", [
+  return sendList(to, "💸 Record Expense - Select Branch", [
     ...branches.map(b => ({ id: `expense_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -502,7 +502,7 @@ export async function sendBranchSelectorBulkExpense(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "📋 Bulk Expenses — Select Branch", [
+  return sendList(to, "📋 Bulk Expenses - Select Branch", [
     ...branches.map(b => ({ id: `bulk_expense_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -518,7 +518,7 @@ export async function sendBranchSelectorViewExpenses(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "🧾 Expense Receipts — Select Branch", [
+  return sendList(to, "🧾 Expense Receipts - Select Branch", [
     { id: "view_expense_receipts_branch_all", title: "🌍 All Branches" },
     ...branches.map(b => ({ id: `view_expense_receipts_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
@@ -535,7 +535,7 @@ export async function sendBranchSelectorPaymentHistory(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "📜 Payment History — Select Branch", [
+  return sendList(to, "📜 Payment History - Select Branch", [
     { id: "view_payment_history_branch_all", title: "🌍 All Branches" },
     ...branches.map(b => ({ id: `view_payment_history_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
@@ -552,7 +552,7 @@ export async function sendBranchSelectorAddClient(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "👥 Add Client — Select Branch", [
+  return sendList(to, "👥 Add Client - Select Branch", [
     ...branches.map(b => ({ id: `add_client_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
@@ -568,7 +568,7 @@ export async function sendBranchSelectorViewClients(to) {
   if (!biz) return sendMainMenu(to);
   const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  return sendList(to, "📋 View Clients — Select Branch", [
+  return sendList(to, "📋 View Clients - Select Branch", [
     { id: "view_clients_branch_all", title: "🌍 All Branches" },
     ...branches.map(b => ({ id: `view_clients_branch_${b._id}`, title: `🏬 ${b.name}` })),
     { id: ACTIONS.BACK, title: "⬅ Back" }
