@@ -1,0 +1,272 @@
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+  
+  <!-- Today's Revenue -->
+  <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-600 mb-1">Today's Revenue</p>
+        <h3 class="text-2xl font-bold text-gray-800">
+          {{user.currency}} {{stats.todayRevenue}}
+        </h3>
+      </div>
+      <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+        <i class="fas fa-calendar-day text-blue-600 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Monthly Revenue -->
+  <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-600 mb-1">This Month</p>
+        <h3 class="text-2xl font-bold text-gray-800">
+          {{user.currency}} {{stats.monthRevenue}}
+        </h3>
+        <p class="text-xs mt-1 {{#if (gt stats.growth 0)}}text-green-600{{else}}text-red-600{{/if}}">
+          <i class="fas fa-arrow-{{#if (gt stats.growth 0)}}up{{else}}down{{/if}}"></i>
+          {{stats.growth}}% vs last month
+        </p>
+      </div>
+      <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+        <i class="fas fa-chart-line text-green-600 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Unpaid Invoices -->
+  <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-600 mb-1">Unpaid Invoices</p>
+        <h3 class="text-2xl font-bold text-gray-800">{{stats.unpaidInvoices}}</h3>
+        <p class="text-xs text-gray-500 mt-1">{{stats.paidInvoices}} paid</p>
+      </div>
+      <div class="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center">
+        <i class="fas fa-file-invoice-dollar text-yellow-600 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Total Clients -->
+  <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-600 mb-1">Total Clients</p>
+        <h3 class="text-2xl font-bold text-gray-800">{{stats.totalClients}}</h3>
+        <p class="text-xs text-gray-500 mt-1">{{stats.totalProducts}} products</p>
+      </div>
+      <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
+        <i class="fas fa-users text-purple-600 text-xl"></i>
+      </div>
+    </div>
+  </div>
+  
+</div>
+
+<!-- Charts & Activity -->
+<!-- Charts & Activity -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+  
+  <!-- Revenue Chart -->
+  <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">
+      <i class="fas fa-chart-area text-blue-600 mr-2"></i>
+      Revenue (Last 30 Days)
+    </h2>
+    <div style="height: 300px;">
+      <canvas id="revenueChart"></canvas>
+    </div>
+  </div>
+  
+  <!-- Recent Activity -->
+  <div class="bg-white rounded-xl shadow-sm p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">
+      <i class="fas fa-clock text-blue-600 mr-2"></i>
+      Recent Invoices
+    </h2>
+    
+    <div class="space-y-3">
+      {{#each recentInvoices}}
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer" onclick="window.location.href='/web/invoices/{{this._id}}'">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">{{this.number}}</p>
+            <p class="text-xs text-gray-500 truncate">{{this.clientName}}</p>
+          </div>
+          <div class="text-right ml-2">
+            <p class="text-sm font-semibold text-gray-800">{{this.total}}</p>
+            <span class="inline-block px-2 py-1 text-xs rounded-full {{#if (eq this.status 'paid')}}bg-green-100 text-green-800{{else if (eq this.status 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
+              {{this.status}}
+            </span>
+          </div>
+        </div>
+      {{else}}
+        <p class="text-sm text-gray-500 text-center py-8">No recent invoices</p>
+      {{/each}}
+    </div>
+    
+    <a href="/web/invoices" class="block mt-4 text-center text-sm text-blue-600 hover:text-blue-700 font-medium">
+      View All Invoices <i class="fas fa-arrow-right ml-1"></i>
+    </a>
+  </div>
+  
+</div>
+
+<!-- Quick Actions -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  
+  <a href="/web/invoices/create" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-blue-200">
+      <i class="fas fa-plus text-blue-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">New Invoice</p>
+  </a>
+  
+  <a href="/web/products" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-green-200">
+      <i class="fas fa-box text-green-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Products</p>
+  </a>
+  
+  <a href="/web/clients" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-200">
+      <i class="fas fa-users text-purple-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Clients</p>
+  </a>
+  
+  <a href="/web/reports" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md text-center group">
+    <div class="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-yellow-200">
+      <i class="fas fa-chart-bar text-yellow-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Reports</p>
+  </a>
+  
+</div>
+
+<script>
+  // Load revenue chart data
+  fetch('/web/api/revenue-chart')
+    .then(res => res.json())
+    .then(data => {
+      const ctx = document.getElementById('revenueChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }),
+          datasets: [{
+            label: 'Revenue',
+            data: data.map(d => d.revenue),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '{{user.currency}} ' + value;
+                }
+              }
+            }
+          }
+        }
+      });
+    })
+    .catch(err => console.error('Chart error:', err));
+</script>
+
+<!-- Quick Actions -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  
+  <a href="/web/invoices/create" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow text-center group">
+    <div class="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-blue-200">
+      <i class="fas fa-plus text-blue-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">New Invoice</p>
+  </a>
+  
+  <a href="/web/products" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow text-center group">
+    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-green-200">
+      <i class="fas fa-box text-green-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Products</p>
+  </a>
+  
+  <a href="/web/clients" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow text-center group">
+    <div class="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-200">
+      <i class="fas fa-users text-purple-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Clients</p>
+  </a>
+  
+  <a href="/web/reports" class="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow text-center group">
+    <div class="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-yellow-200">
+      <i class="fas fa-chart-bar text-yellow-600 text-xl"></i>
+    </div>
+    <p class="text-sm font-medium text-gray-800">Reports</p>
+  </a>
+  
+</div>
+
+<script>
+  // Load revenue chart data
+  fetch('/web/api/revenue-chart')
+    .then(res => res.json())
+    .then(data => {
+      const ctx = document.getElementById('revenueChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }),
+          datasets: [{
+            label: 'Revenue',
+            data: data.map(d => d.revenue),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '{{user.currency}} ' + value;
+                }
+              }
+            }
+          }
+        }
+      });
+    })
+    .catch(err => console.error('Chart error:', err));
+</script>

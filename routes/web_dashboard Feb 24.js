@@ -4,33 +4,34 @@ import Invoice from "../models/invoice.js";
 import Expense from "../models/expense.js";
 import Client from "../models/client.js";
 import Product from "../models/product.js";
-import Branch from "../models/branch.js";
-import UserRole from "../models/userRole.js";
 
 const router = express.Router();
 
+// All routes require authentication
 router.use(requireWebAuth);
 
 /**
  * GET /web/dashboard
- * Main dashboard — owners see all branches + overall, clerks/managers see their branch only
+ * Main dashboard page
  */
 router.get("/dashboard", async (req, res) => {
   try {
     const { businessId, branchId, role } = req.webUser;
-
-    // Build base query
+    
+    // Build query based on role
     const query = { businessId };
     if (role !== "owner" && branchId) {
       query.branchId = branchId;
     }
-
+    
     // Date ranges
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-
+    
+    // Get statistics
     const [
       todayRevenue,
       monthRevenue,
@@ -41,74 +42,55 @@ router.get("/dashboard", async (req, res) => {
       totalProducts,
       recentInvoices
     ] = await Promise.all([
+      // Today's revenue
       Invoice.aggregate([
         { $match: { ...query, createdAt: { $gte: today }, type: "invoice" } },
         { $group: { _id: null, total: { $sum: "$total" } } }
       ]),
+      
+      // This month's revenue
       Invoice.aggregate([
         { $match: { ...query, createdAt: { $gte: thisMonth }, type: "invoice" } },
         { $group: { _id: null, total: { $sum: "$total" } } }
       ]),
+      
+      // Last month's revenue
       Invoice.aggregate([
         { $match: { ...query, createdAt: { $gte: lastMonth, $lt: thisMonth }, type: "invoice" } },
         { $group: { _id: null, total: { $sum: "$total" } } }
       ]),
+      
+      // Unpaid invoices
       Invoice.countDocuments({ ...query, type: "invoice", status: { $in: ["unpaid", "partial"] } }),
+      
+      // Paid invoices
       Invoice.countDocuments({ ...query, type: "invoice", status: "paid" }),
+      
+      // Total clients
       Client.countDocuments({ businessId }),
+      
+      // Total products
       Product.countDocuments({
         businessId,
         isActive: true,
         ...(role !== "owner" && branchId ? { branchId } : {})
       }),
+      
+      // Recent invoices
       Invoice.find(query)
         .populate("clientId", "name phone")
         .sort({ createdAt: -1 })
         .limit(5)
         .lean()
     ]);
-
+    
+    // Calculate growth
     const currentMonth = monthRevenue[0]?.total || 0;
     const previousMonth = lastMonthRevenue[0]?.total || 0;
     const growth = previousMonth > 0
       ? ((currentMonth - previousMonth) / previousMonth * 100).toFixed(1)
       : 0;
-
-    // ── Branch performance (owners only) ─────────────────────────────────────
-    let branchPerformance = [];
-    if (role === "owner") {
-      const branches = await Branch.find({ businessId }).lean();
-
-      branchPerformance = await Promise.all(
-        branches.map(async (branch) => {
-          const bQuery = { businessId, branchId: branch._id };
-
-          const [rev, unpaid, expenses, users] = await Promise.all([
-            Invoice.aggregate([
-              { $match: { ...bQuery, createdAt: { $gte: thisMonth }, type: "invoice" } },
-              { $group: { _id: null, total: { $sum: "$total" }, paid: { $sum: "$amountPaid" } } }
-            ]),
-            Invoice.countDocuments({ ...bQuery, type: "invoice", status: { $in: ["unpaid", "partial"] } }),
-            Expense.aggregate([
-              { $match: { ...bQuery, createdAt: { $gte: thisMonth } } },
-              { $group: { _id: null, total: { $sum: "$amount" } } }
-            ]),
-            UserRole.countDocuments({ businessId, branchId: branch._id, pending: false })
-          ]);
-
-          return {
-            _id: branch._id,
-            name: branch.name,
-            revenue: rev[0]?.total || 0,
-            collected: rev[0]?.paid || 0,
-            unpaidCount: unpaid,
-            expenses: expenses[0]?.total || 0,
-            userCount: users
-          };
-        })
-      );
-    }
-
+    
     res.render("web/dashboard", {
       layout: "web",
       title: "Dashboard - ZimQuote",
@@ -125,11 +107,9 @@ router.get("/dashboard", async (req, res) => {
       recentInvoices: recentInvoices.map(inv => ({
         ...inv,
         clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown"
-      })),
-      branchPerformance,
-      isOwner: role === "owner"
+      }))
     });
-
+    
   } catch (error) {
     console.error("Dashboard error:", error);
     res.status(500).render("web/error", {
@@ -148,17 +128,23 @@ router.get("/dashboard", async (req, res) => {
 router.get("/api/revenue-chart", async (req, res) => {
   try {
     const { businessId, branchId, role } = req.webUser;
-
+    
     const query = { businessId, type: "invoice" };
     if (role !== "owner" && branchId) {
       query.branchId = branchId;
     }
-
+    
+    // Last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
+    
     const data = await Invoice.aggregate([
-      { $match: { ...query, createdAt: { $gte: thirtyDaysAgo } } },
+      {
+        $match: {
+          ...query,
+          createdAt: { $gte: thirtyDaysAgo }
+        }
+      },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -168,66 +154,16 @@ router.get("/api/revenue-chart", async (req, res) => {
       },
       { $sort: { _id: 1 } }
     ]);
-
-    res.json(data.map(d => ({ date: d._id, revenue: d.revenue, count: d.count })));
-
+    
+    res.json(data.map(d => ({
+      date: d._id,
+      revenue: d.revenue,
+      count: d.count
+    })));
+    
   } catch (error) {
     console.error("Revenue chart error:", error);
     res.status(500).json({ error: "Failed to load chart data" });
-  }
-});
-
-/**
- * GET /web/api/branch-chart
- * Branch comparison chart data for current month (owners only)
- */
-router.get("/api/branch-chart", async (req, res) => {
-  try {
-    const { businessId, role } = req.webUser;
-
-    if (role !== "owner") {
-      return res.status(403).json({ error: "Owners only" });
-    }
-
-    const thisMonth = new Date();
-    thisMonth.setDate(1);
-    thisMonth.setHours(0, 0, 0, 0);
-
-    const data = await Invoice.aggregate([
-      {
-        $match: {
-          businessId,
-          type: "invoice",
-          createdAt: { $gte: thisMonth }
-        }
-      },
-      {
-        $group: {
-          _id: "$branchId",
-          revenue: { $sum: "$total" },
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Populate branch names
-    const Branch = (await import("../models/branch.js")).default;
-    const branches = await Branch.find({ businessId }).lean();
-
-    const result = data.map(d => {
-      const branch = branches.find(b => b._id.toString() === d._id?.toString());
-      return {
-        branch: branch?.name || "Unknown",
-        revenue: d.revenue,
-        count: d.count
-      };
-    });
-
-    res.json(result);
-
-  } catch (error) {
-    console.error("Branch chart error:", error);
-    res.status(500).json({ error: "Failed to load branch chart data" });
   }
 });
 

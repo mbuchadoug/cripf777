@@ -1,138 +1,288 @@
-<!-- Page Header -->
-<div class="mb-6">
-  <h1 class="text-2xl font-bold text-gray-800 mb-2">Sales Reports</h1>
-  <p class="text-sm text-gray-600">Analyze your business performance</p>
+{{!-- views/web/reports/sales.hbs --}}
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Reports</h1>
+    <p class="text-sm text-gray-500 mt-1">Business performance overview</p>
+  </div>
+  <div class="mt-4 sm:mt-0 flex gap-2">
+    <button onclick="exportCSV()"
+      class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
+      <i class="fas fa-download"></i> Export CSV
+    </button>
+    <button onclick="window.print()"
+      class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 no-print">
+      <i class="fas fa-print"></i> Print
+    </button>
+  </div>
 </div>
 
-<!-- Filters -->
-<div class="bg-white rounded-xl shadow-sm p-6 mb-6">
-  <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    
+{{!-- Filter Bar --}}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6 no-print">
+  <form method="GET" class="flex flex-wrap items-end gap-4">
+
+    {{!-- Period presets --}}
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-      <input 
-        type="date" 
-        name="startDate" 
-        value="{{filters.startDate}}"
-        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      >
-    </div>
-    
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-      <input 
-        type="date" 
-        name="endDate" 
-        value="{{filters.endDate}}"
-        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      >
-    </div>
-    
-    {{#if (eq user.role 'owner')}}
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">Branch</label>
-        <select name="branchFilter" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-          <option value="">All Branches</option>
-          <!-- Branches will be populated here -->
-        </select>
+      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Period</label>
+      <div class="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+        {{#each (array 'today' 'week' 'month' 'lastmonth' 'year')}}
+          <a href="?period={{this}}{{#if ../filters.branchFilter}}&branchFilter={{../filters.branchFilter}}{{/if}}"
+             class="px-3 py-2 {{#if (eq ../filters.period this)}}bg-blue-600 text-white{{else}}bg-white text-gray-600 hover:bg-gray-50{{/if}} border-r border-gray-200 last:border-r-0 capitalize">
+            {{this}}
+          </a>
+        {{/each}}
       </div>
+    </div>
+
+    {{!-- Custom range --}}
+    <div class="flex items-end gap-2">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">From</label>
+        <input type="date" name="startDate" value="{{filters.startDate}}"
+          class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">To</label>
+        <input type="date" name="endDate" value="{{filters.endDate}}"
+          class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      </div>
+    </div>
+
+    {{!-- Branch filter (owners only) --}}
+    {{#if isOwner}}
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Branch</label>
+      <select name="branchFilter"
+        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <option value="">All Branches</option>
+        {{#each branches}}
+          <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>
+            {{this.name}}
+          </option>
+        {{/each}}
+      </select>
+    </div>
     {{/if}}
-    
-    <div class="flex items-end space-x-2">
-      <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+
+    <div class="flex gap-2">
+      <button type="submit"
+        class="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
         Apply
       </button>
-      <a href="/web/reports" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-        <i class="fas fa-redo"></i>
+      <a href="/web/reports"
+        class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+        Reset
       </a>
     </div>
-    
   </form>
 </div>
 
-<!-- Sales Summary -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-  
-  {{#each salesData}}
-    <div class="bg-white rounded-xl shadow-sm p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-medium text-gray-600 uppercase">{{this._id}} Invoices</h3>
-        <span class="inline-block px-3 py-1 text-xs font-medium rounded-full {{#if (eq this._id 'paid')}}bg-green-100 text-green-800{{else if (eq this._id 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
-          {{this.count}}
-        </span>
-      </div>
-      
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between">
-          <span class="text-gray-600">Total:</span>
-          <span class="font-semibold">{{../user.currency}} {{this.total}}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-gray-600">Paid:</span>
-          <span class="text-green-600">{{../user.currency}} {{this.paid}}</span>
-        </div>
-        {{#if (gt this.balance 0)}}
-          <div class="flex justify-between">
-            <span class="text-gray-600">Balance:</span>
-            <span class="text-red-600">{{../user.currency}} {{this.balance}}</span>
-          </div>
-        {{/if}}
-      </div>
-    </div>
-  {{/each}}
-  
+{{!-- Summary KPIs --}}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Total Invoiced</p>
+    <p class="text-2xl font-bold text-gray-900">{{user.currency}} {{summary.totalRevenue}}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Collected</p>
+    <p class="text-2xl font-bold text-green-600">{{user.currency}} {{summary.totalCollected}}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Expenses</p>
+    <p class="text-2xl font-bold text-red-500">{{user.currency}} {{summary.totalExpenses}}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Net Profit</p>
+    <p class="text-2xl font-bold {{#if (gt summary.netProfit 0)}}text-emerald-600{{else}}text-red-600{{/if}}">
+      {{user.currency}} {{summary.netProfit}}
+    </p>
+  </div>
 </div>
 
-<!-- Expenses Summary -->
+{{!-- Invoice Status Breakdown --}}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  {{#each salesData}}
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-gray-700 capitalize">{{this._id}}</span>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+        {{#if (eq this._id 'paid')}}bg-green-100 text-green-700
+        {{else if (eq this._id 'partial')}}bg-amber-100 text-amber-700
+        {{else}}bg-red-100 text-red-700{{/if}}">
+        {{this.count}} invoices
+      </span>
+    </div>
+    <p class="text-xl font-bold text-gray-900 mb-3">{{../user.currency}} {{this.total}}</p>
+    <div class="space-y-1 text-xs text-gray-500">
+      <div class="flex justify-between">
+        <span>Paid</span>
+        <span class="text-green-600 font-medium">{{../user.currency}} {{this.paid}}</span>
+      </div>
+      {{#if (gt this.balance 0)}}
+      <div class="flex justify-between">
+        <span>Outstanding</span>
+        <span class="text-red-500 font-medium">{{../user.currency}} {{this.balance}}</span>
+      </div>
+      {{/if}}
+    </div>
+  </div>
+  {{/each}}
+</div>
+
+{{!-- Branch Breakdown (owners, no branch filter) --}}
+{{#if branchBreakdown.length}}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+  <h2 class="font-semibold text-gray-800 mb-4">Branch Comparison</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-100">
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Branch</th>
+          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Revenue</th>
+          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Collected</th>
+          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Expenses</th>
+          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Profit</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {{#each branchBreakdown}}
+        <tr>
+          <td class="py-3 font-medium text-gray-800">{{this.name}}</td>
+          <td class="py-3 text-right text-gray-700">{{../user.currency}} {{this.revenue}}</td>
+          <td class="py-3 text-right text-green-600">{{../user.currency}} {{this.collected}}</td>
+          <td class="py-3 text-right text-red-500">{{../user.currency}} {{this.expenses}}</td>
+          <td class="py-3 text-right font-semibold {{#if (gt this.profit 0)}}text-emerald-600{{else}}text-red-600{{/if}}">
+            {{../user.currency}} {{this.profit}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/if}}
+
+{{!-- Expenses by Category --}}
 {{#if expenseData.length}}
-  <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-4">Expenses by Category</h2>
-    
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {{#each expenseData}}
-        <div class="border border-gray-200 rounded-lg p-4">
-          <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-800">{{this._id}}</span>
-            <span class="text-sm text-gray-500">{{this.count}} items</span>
-          </div>
-          <p class="text-xl font-bold text-red-600 mt-2">{{../user.currency}} {{this.total}}</p>
-        </div>
-      {{/each}}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+  <h2 class="font-semibold text-gray-800 mb-4">Expenses by Category</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    {{#each expenseData}}
+    <div class="border border-gray-100 rounded-lg p-4">
+      <p class="text-sm font-medium text-gray-700 mb-1">{{this._id}}</p>
+      <p class="text-xs text-gray-400 mb-2">{{this.count}} entries</p>
+      <p class="text-lg font-bold text-red-500">{{../user.currency}} {{this.total}}</p>
     </div>
+    {{/each}}
   </div>
+</div>
 {{/if}}
 
-<!-- Payment Methods -->
+{{!-- Payment Methods --}}
 {{#if paymentData.length}}
-  <div class="bg-white rounded-xl shadow-sm p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-4">Payments by Method</h2>
-    
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {{#each paymentData}}
-        <div class="border border-gray-200 rounded-lg p-4 text-center">
-          <i class="fas {{#if (eq this._id 'Cash')}}fa-money-bill-wave{{else if (eq this._id 'Bank')}}fa-university{{else if (eq this._id 'EcoCash')}}fa-mobile-alt{{else}}fa-credit-card{{/if}} text-2xl text-blue-600 mb-2"></i>
-          <p class="text-sm font-medium text-gray-800">{{this._id}}</p>
-          <p class="text-xs text-gray-500">{{this.count}} transactions</p>
-          <p class="text-lg font-bold text-green-600 mt-2">{{../user.currency}} {{this.total}}</p>
-        </div>
-      {{/each}}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+  <h2 class="font-semibold text-gray-800 mb-4">Payments by Method</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    {{#each paymentData}}
+    <div class="border border-gray-100 rounded-xl p-4 text-center">
+      <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-2">
+        <i class="fas {{#if (eq this._id 'Cash')}}fa-money-bill-wave text-green-600
+          {{else if (eq this._id 'EcoCash')}}fa-mobile-alt text-red-500
+          {{else if (eq this._id 'Bank')}}fa-university text-blue-600
+          {{else}}fa-credit-card text-purple-600{{/if}}"></i>
+      </div>
+      <p class="text-sm font-medium text-gray-700">{{this._id}}</p>
+      <p class="text-xs text-gray-400 mb-1">{{this.count}} transactions</p>
+      <p class="text-base font-bold text-gray-900">{{../user.currency}} {{this.total}}</p>
     </div>
+    {{/each}}
   </div>
+</div>
 {{/if}}
 
-<!-- Export Options -->
-<div class="mt-6 flex justify-center space-x-4 no-print">
-  <button onclick="window.print()" class="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-    <i class="fas fa-print mr-2"></i> Print Report
-  </button>
-  <button onclick="exportToCSV()" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-    <i class="fas fa-file-excel mr-2"></i> Export to CSV
-  </button>
+{{!-- Activity Log: who entered what --}}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="font-semibold text-gray-800">Activity Log <span class="text-xs text-gray-400 ml-2">— who entered what</span></h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" id="activityTable">
+      <thead>
+        <tr class="border-b border-gray-100">
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Doc #</th>
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Branch</th>
+          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Created By</th>
+          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {{#each activityLog}}
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="py-3">
+            <a href="/web/invoices/{{this._id}}" class="text-blue-600 hover:underline font-mono text-xs">
+              {{this.number}}
+            </a>
+          </td>
+          <td class="py-3 text-gray-700">{{this.clientName}}</td>
+          <td class="py-3 text-gray-500 text-xs">{{this.branchName}}</td>
+          <td class="py-3 text-right font-medium text-gray-900">{{../user.currency}} {{this.total}}</td>
+          <td class="py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+              {{#if (eq this.status 'paid')}}bg-green-100 text-green-700
+              {{else if (eq this.status 'partial')}}bg-amber-100 text-amber-700
+              {{else}}bg-red-100 text-red-700{{/if}}">
+              {{this.status}}
+            </span>
+          </td>
+          <td class="py-3 text-xs font-mono text-gray-500">{{this.createdBy}}</td>
+          <td class="py-3 text-xs text-gray-400">{{formatDate this.createdAt}}</td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="7" class="py-10 text-center text-gray-400 text-sm">No records in this period</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>
-  function exportToCSV() {
-    // Simple CSV export
-    alert('CSV export feature coming soon!');
-  }
+// ── CSV Export ──────────────────────────────────────────────────────────────
+function exportCSV() {
+  const period = '{{filters.period}}' || 'month';
+  const start  = '{{filters.startDate}}';
+  const end    = '{{filters.endDate}}';
+  const branch = '{{filters.branchFilter}}';
+
+  let url = `/web/reports/export?period=${period}`;
+  if (start) url += `&startDate=${start}`;
+  if (end)   url += `&endDate=${end}`;
+  if (branch) url += `&branchFilter=${branch}`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.rows || !data.rows.length) {
+        alert('No data to export for this period.');
+        return;
+      }
+      const headers = Object.keys(data.rows[0]);
+      const csvRows = [
+        headers.join(','),
+        ...data.rows.map(row =>
+          headers.map(h => JSON.stringify(row[h] ?? '')).join(',')
+        )
+      ];
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `report-${period}-${Date.now()}.csv`;
+      a.click();
+    })
+    .catch(() => alert('Export failed. Try again.'));
+}
 </script>
