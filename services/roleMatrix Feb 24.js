@@ -1,6 +1,5 @@
 export const ROLE_MATRIX = {
   owner: {
-    // Owner sees everything, including owner_only items
     allow: ["*"]
   },
 
@@ -13,7 +12,6 @@ export const ROLE_MATRIX = {
       "branches",
       "users",
       "settings"
-      // ✅ owner_only intentionally excluded
     ]
   },
 
@@ -24,7 +22,6 @@ export const ROLE_MATRIX = {
       "payments",
       "reports",
       "settings"
-      // ✅ owner_only intentionally excluded — no subscription/upgrade
     ]
   },
 
@@ -34,7 +31,6 @@ export const ROLE_MATRIX = {
       "clients",
       "payments",
       "reports"
-      // ✅ owner_only intentionally excluded — no subscription/upgrade
     ]
   }
 };
