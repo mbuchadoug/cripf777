@@ -11,14 +11,18 @@ export async function startInvoiceFlow(to) {
     return sendText(to, "❌ No active business. Reply *menu*.");
   }
 
-  biz.sessionState = "creating_invoice_choose_client";
-  biz.sessionData = {
-    docType: "invoice",
-    items: [],
-    itemMode: null,
-    lastItem: null,
-    expectingQty: false
-  };
+biz.sessionState = "creating_invoice_choose_client";
+
+const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve owner branch selection
+
+biz.sessionData = {
+  docType: "invoice",
+  targetBranchId, // ✅ keep it
+  items: [],
+  itemMode: null,
+  lastItem: null,
+  expectingQty: false
+};
 
   await biz.save();
 

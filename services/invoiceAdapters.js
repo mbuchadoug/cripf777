@@ -44,18 +44,19 @@ export async function handleSkipClient(to) {
   const client = await getOrCreateGenericClient(biz._id);
 
   // ✅ PRESERVE docType before resetting
-  const docType = biz.sessionData?.docType || "invoice";
+const docType = biz.sessionData?.docType || "invoice";
+const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
 
-  // ✅ RESET sessionData but PRESERVE docType
-  biz.sessionData = {
-    docType,
-    clientId: client._id,
-    client,
-    items: [],
-    itemMode: null,
-    lastItem: null,
-    expectingQty: false
-  };
+biz.sessionData = {
+  docType,
+  targetBranchId, // ✅ keep it
+  clientId: client._id,
+  client,
+  items: [],
+  itemMode: null,
+  lastItem: null,
+  expectingQty: false
+};
 
   biz.sessionState = "creating_invoice_add_items";
   biz.markModified("sessionData");
@@ -125,10 +126,11 @@ export async function handleNewClientFromInvoice(to) {
   if (!biz) return sendText(to, "❌ No active business.");
 
   // ✅ PRESERVE docType before resetting
-  const docType = biz.sessionData?.docType || "invoice";
+const docType = biz.sessionData?.docType || "invoice";
+const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
 
-  biz.sessionState = "creating_invoice_new_client";
-  biz.sessionData = { docType };  // ✅ Keep docType when resetting
+biz.sessionState = "creating_invoice_new_client";
+biz.sessionData = { docType, targetBranchId };
   await biz.save();
 
   return sendText(to, "Enter client name:");
@@ -150,18 +152,18 @@ export async function handleClientPicked(to, clientId) {
 
   // ✅ PRESERVE docType before resetting
   const docType = biz.sessionData?.docType || "invoice";
+const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
 
-  // ✅ RESET sessionData but PRESERVE docType
-  biz.sessionData = {
-    docType,  // ✅ Keep the original type
-    clientId: client._id,
-    client,
-    items: [],
-    itemMode: null,
-    lastItem: null,
-    expectingQty: false
-  };
-
+biz.sessionData = {
+  docType,
+  targetBranchId, // ✅ keep it
+  clientId: client._id,
+  client,
+  items: [],
+  itemMode: null,
+  lastItem: null,
+  expectingQty: false
+};
   biz.sessionState = "creating_invoice_add_items";
   biz.markModified("sessionData");
   await biz.save();
