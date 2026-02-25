@@ -1,4 +1,6 @@
 import axios from "axios";
+import dotenv from "dotenv";
+dotenv.config();
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v24.0";
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
