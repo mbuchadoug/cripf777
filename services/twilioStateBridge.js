@@ -249,21 +249,77 @@ export async function continueTwilioFlow({ from, text }) {
   }
 
 
-  if (state === "select_branch") {
+/* ===========================
+   SELECT BRANCH (generic)
+   - First entry: show list
+   - Next message: accept number, set targetBranchId, resume via branchReturn
+=========================== */
+if (state === "select_branch") {
   const Branch = (await import("../models/branch.js")).default;
-  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-  // Safety: if somehow none, create default then re-fetch
+  // Always ensure there is at least one branch
+  let branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
   if (!branches.length) {
     const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
     await ensureDefaultBranch(biz._id);
-    const refetch = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
-    branches.splice(0, branches.length, ...refetch);
+    branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
   }
 
-  // Twilio: show numbered list
-  const lines = branches.map((b, idx) => `${idx + 1}) ${b.name}`).join("\n");
-  await sendText(from, `Select branch:\n${lines}\n\nReply with number.`);
+  // 1) If we haven't shown the list yet → show it and mark as shown
+  if (!biz.sessionData?.branchPickerShown) {
+    const lines = branches.map((b, idx) => `${idx + 1}) ${b.name}`).join("\n");
+
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.branchPickerShown = true;
+    await saveBizSafe(biz);
+
+    await sendText(from, `🏢 Select branch:\n${lines}\n\nReply with number.`);
+    return true;
+  }
+
+  // 2) We already showed the list → now we expect a number reply
+  const choice = Number(trimmed);
+  if (isNaN(choice) || choice < 1 || choice > branches.length) {
+    await sendText(from, `❌ Invalid choice. Reply with a number between 1 and ${branches.length}.`);
+    return true;
+  }
+
+  const selected = branches[choice - 1];
+
+  // Store selection
+  biz.sessionData = biz.sessionData || {};
+  const ret = biz.sessionData.branchReturn; // { kind: "...", ... }
+  biz.sessionData.targetBranchId = selected._id.toString();
+
+  // Clear picker flags
+  delete biz.sessionData.branchPickerShown;
+  delete biz.sessionData.branchReturn;
+
+  await saveBizSafe(biz);
+
+  // ✅ Resume flow depending on why we asked for branch
+  // (A) New doc flow
+  if (ret?.kind === "new_doc") {
+    biz.sessionState = "creating_invoice_choose_client"; // your start state
+    biz.sessionData = { ...(biz.sessionData || {}), docType: ret.docType, items: [] };
+    await saveBizSafe(biz);
+    await sendText(from, `${ret.docType.toUpperCase()}:\n1) Use saved client\n2) New client\n3) Cancel`);
+    return true;
+  }
+
+  // (B) Add client flow
+  if (ret?.kind === "add_client") {
+    biz.sessionState = "adding_client_name";
+    biz.sessionData = { ...(biz.sessionData || {}) };
+    await saveBizSafe(biz);
+    await sendText(from, "Enter client name:");
+    return true;
+  }
+
+  // Fallback
+  biz.sessionState = "ready";
+  await saveBizSafe(biz);
+  await sendMainMenu(from);
   return true;
 }
   /* ===========================
@@ -356,12 +412,7 @@ They must click it to join.`);
   }
 
   // (2) View lists: send the same selector menu again (now includes the new branch)
-  if (ret?.kind === "view_docs") {
-    const { sendBranchSelectorInvoices, sendBranchSelectorQuotes, sendBranchSelectorReceipts } = await import("./metaMenus.js");
-    if (ret.type === "invoice") return sendBranchSelectorInvoices(from);
-    if (ret.type === "quote") return sendBranchSelectorQuotes(from);
-    if (ret.type === "receipt") return sendBranchSelectorReceipts(from);
-  }
+ 
 
   // fallback
   await sendMainMenu(from);
