@@ -189,49 +189,60 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
     // ===============================
     // 🖼️ HANDLE LOGO UPLOAD (META)
     // ===============================
-    if (msg.type === "image") {
-      const from = msg.from;
-      const imageUrl = msg.image?.url;
+ if (msg.type === "image") {
+  const from = msg.from;
 
-      if (!imageUrl) return;
+  // ✅ Meta gives image.id, not image.url
+  const mediaId = msg.image?.id;
+  if (!mediaId) {
+    await sendText(from, "❌ Image received but missing media id. Please resend the logo.");
+    return;
+  }
 
-      const biz = await getBizForPhone(from);
+  // ✅ Convert mediaId -> downloadable URL (Graph API)
+  let imageUrl = null;
+  try {
+    imageUrl = await getMetaMediaUrl(mediaId);
+  } catch (e) {
+    console.error("META getMetaMediaUrl error:", e?.response?.data || e?.message || e);
+  }
 
-      // Only accept image when user is in logo upload mode
-      if (!biz || biz.sessionState !== "awaiting_logo_upload") {
-        return;
-      }
+  if (!imageUrl) {
+    await sendText(from, "❌ Failed to fetch image from Meta. Please resend the logo.");
+    return;
+  }
 
-      try {
-        const logoUrl = await saveMetaLogo({
-          imageUrl,
-          businessId: biz._id.toString()
-        });
+  const biz = await getBizForPhone(from);
 
-      biz.logoUrl = logoUrl;
+  // Only accept image when user is in logo upload mode
+  if (!biz || biz.sessionState !== "awaiting_logo_upload") {
+    // optional: give a hint instead of silent return
+    // await sendText(from, "Reply *menu* then choose Upload logo first.");
+    return;
+  }
 
-// 🔑 COMPLETE ONBOARDING IF THIS WAS ONBOARDING
-if (biz.sessionState === "awaiting_logo_upload") {
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await biz.save();
+  try {
+    const logoUrl = await saveMetaLogo({
+      imageUrl,
+      businessId: biz._id.toString()
+    });
 
-  await sendText(from, "✅ Logo uploaded successfully!");
-  return sendMainMenu(from);
+    biz.logoUrl = logoUrl;
+
+    // 🔑 COMPLETE ONBOARDING IF THIS WAS ONBOARDING
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await biz.save();
+
+    await sendText(from, "✅ Logo uploaded successfully!");
+    return sendMainMenu(from);
+
+  } catch (err) {
+    console.error("META LOGO SAVE ERROR:", err);
+    await sendText(from, "❌ Failed to save logo. Please try again.");
+    return;
+  }
 }
-
-// ⚙️ Settings flow fallback
-await biz.save();
-await sendText(from, "✅ Logo updated successfully.");
-
-
-      } catch (err) {
-        console.error("META LOGO SAVE ERROR:", err);
-        await sendText(from, "❌ Failed to save logo. Please try again.");
-      }
-
-      return; // 🚫 STOP — do NOT continue to text handling
-    }
 
 
 ///////////////////////////
