@@ -88,16 +88,17 @@ export async function handleChooseSavedClient(to) {
     .limit(10)
     .lean();
 
-  if (!clients.length) {
-    // ✅ PRESERVE docType before resetting
-    const docType = biz.sessionData?.docType || "invoice";
-    
-    biz.sessionState = "creating_invoice_new_client";
-    biz.sessionData = { docType };  // ✅ Keep docType
-    biz.markModified("sessionData");
-    await biz.save();
-    return sendText(to, "No saved clients. Enter client name:");
-  }
+if (!clients.length) {
+  const docType = biz.sessionData?.docType || "invoice";
+  const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
+
+  biz.sessionState = "creating_invoice_new_client";
+  biz.sessionData = { docType, targetBranchId };
+  biz.markModified("sessionData");
+  await biz.save();
+
+  return sendText(to, "No saved clients. Enter client name:");
+}
 
   biz.sessionState = "creating_invoice_choose_client_index";
   biz.sessionData.recentClients = clients;

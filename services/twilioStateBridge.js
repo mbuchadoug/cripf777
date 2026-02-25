@@ -38,11 +38,21 @@ async function sendPromptWithMenu(to, promptText) {
  * - Owner → use sessionData.targetBranchId (set by branch picker) or null
  * - Clerk/Manager → use their assigned branchId
  */
+import mongoose from "mongoose"; // add at top if not already present
+
 function getEffectiveBranchId(caller, sessionData) {
-  if (caller?.role === "owner") {
-    return sessionData?.targetBranchId || null;
+  const role = String(caller?.role || "").toLowerCase(); // ✅ normalize role
+
+  if (role === "owner") {
+    const id = sessionData?.targetBranchId || null;
+    if (!id) return null;
+
+    // ✅ Ensure mongoose can cast it properly
+    return mongoose.Types.ObjectId.isValid(id) ? id.toString() : null;
   }
-  return caller?.branchId?.toString() || null;
+
+  const b = caller?.branchId || null;
+  return b ? b.toString() : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,8 +79,8 @@ export async function continueTwilioFlow({ from, text }) {
 
   const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
 
-  // Safety default
-  if (caller && !caller.role) caller.role = "clerk";
+// ✅ normalize for all comparisons
+if (caller) caller.role = String(caller.role || "clerk").toLowerCase();
 
   // Locked users are blocked
   if (caller?.locked) {
@@ -893,6 +903,14 @@ They must click it to join.`);
     // ✅ Use effective branchId for owner
     const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
 
+   // const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+
+console.log("INVOICE BRANCH DEBUG", {
+  phone,
+  callerRole: caller?.role,
+  targetBranchId: biz.sessionData?.targetBranchId,
+  effectiveBranchId
+});
     const invoiceDoc = await Invoice.create({
       businessId: biz._id, clientId: client._id, type: docType,
       branchId: effectiveBranchId,
