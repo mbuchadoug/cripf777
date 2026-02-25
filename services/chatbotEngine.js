@@ -12,7 +12,6 @@ import { PACKAGES } from "./packages.js";
 import mongoose from "mongoose";
 import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
-import { sendBusinessSetupFlow } from "./metaFlows.js";
 import { sendDocument } from "./metaSender.js";
 import {
   canUseFeature,
@@ -47,20 +46,7 @@ import {
   sendUsersMenu,
   sendBranchesMenu,
   sendProductsMenu,
-  sendSubscriptionMenu,
-  sendBranchSelectorInvoices,
-  sendBranchSelectorQuotes,
-  sendBranchSelectorReceipts,
-  sendBranchSelectorProducts,
-  sendBranchSelectorNewDoc,
-  sendBranchSelectorAddProduct,
-  sendBranchSelectorPaymentIn,
-  sendBranchSelectorExpense,
-  sendBranchSelectorBulkExpense,
-  sendBranchSelectorViewExpenses,
-  sendBranchSelectorPaymentHistory,
-  sendBranchSelectorAddClient,
-  sendBranchSelectorViewClients
+  sendSubscriptionMenu
 } from "./metaMenus.js";
 
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
@@ -68,7 +54,8 @@ import { sendText } from "./metaSender.js";
 import { importCsvFromMetaDocument } from "./csvImport.js";
 import axios from "axios";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
@@ -93,41 +80,64 @@ function normalizeEcocashNumber(input, fallbackWhatsApp) {
   const raw = (input || "").replace(/\D+/g, "");
   const fb = (fallbackWhatsApp || "").replace(/\D+/g, "");
   let phone = (input || "").trim().toLowerCase() === "same" ? fb : raw;
+
   if (phone.startsWith("263") && phone.length === 12) return "0" + phone.slice(3);
   if (phone.startsWith("0") && phone.length === 10) return phone;
   if (phone.length === 9 && phone.startsWith("7")) return "0" + phone;
   return null;
 }
 
-/**
- * Helper: get caller's effective branchId.
- * - Clerks/managers → their assigned branchId
- * - Owner → targetBranchId stored in sessionData (set by branch picker)
- */
-function getEffectiveBranchId(caller, sessionData) {
-  if (caller?.role === "owner") {
-    return sessionData?.targetBranchId || null;
-  }
-  return caller?.branchId || null;
-}
-
 async function startOnboarding(from, phone) {
-  const existingOwner = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
+  const existingOwner = await UserRole.findOne({
+    phone,
+    role: "owner",
+    pending: false
+  }).lean();
 
-  // If they already have a business, just open it
   if (existingOwner?.businessId) {
     const b = await Business.findById(existingOwner.businessId);
     if (b) {
-      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: b._id }, { upsert: true });
-      await sendText(from, "✅ Welcome back. Opening your menu...");
-      await sendMainMenu(from);
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { activeBusinessId: b._id },
+        { upsert: true }
+      );
+
+      if (!b.sessionState) {
+        b.sessionState = "awaiting_business_name";
+        b.sessionData = {};
+        await saveBizSafe(b);
+      }
+
+      await sendText(from, "👋 Welcome back! Send your business name:");
       return;
     }
   }
 
-  // ✅ New owner → send Flow form (multi-input UI)
-  await sendText(from, "👋 Welcome! Let’s set up your business.");
-  await sendBusinessSetupFlow(from);
+  const newBiz = await Business.create({
+    name: "",
+    currency: "USD",
+    package: "trial",
+    subscriptionStatus: "inactive",
+    sessionState: "awaiting_business_name",
+    sessionData: {},
+    ownerPhone: phone
+  });
+
+  await UserRole.create({
+    phone,
+    role: "owner",
+    pending: false,
+    businessId: newBiz._id
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { activeBusinessId: newBiz._id },
+    { upsert: true }
+  );
+
+  await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
 }
 
 async function showSalesDocs(from, type, ownerBranchId = undefined) {
@@ -135,17 +145,26 @@ async function showSalesDocs(from, type, ownerBranchId = undefined) {
   if (!biz) return sendMainMenu(from);
 
   const phone = from.replace(/\D+/g, "");
-  const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
 
   const query = { businessId: biz._id, type };
 
   if (caller?.role === "owner" && ownerBranchId !== undefined) {
-    if (ownerBranchId !== null) query.branchId = ownerBranchId;
+    if (ownerBranchId !== null) {
+      query.branchId = ownerBranchId;
+    }
   } else if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
     query.branchId = caller.branchId;
   }
 
-  const docs = await Invoice.find(query).sort({ createdAt: -1 }).limit(10).lean();
+  const docs = await Invoice.find(query)
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
 
   if (!docs.length) {
     await sendText(from, `No ${type}s found.`);
@@ -153,27 +172,40 @@ async function showSalesDocs(from, type, ownerBranchId = undefined) {
   }
 
   let header = `📄 Select ${type}`;
+
   if (ownerBranchId && caller?.role === "owner") {
     const branch = await Branch.findById(ownerBranchId);
-    if (branch) header = `📄 ${type}s — ${branch.name}`;
+    if (branch) header = `📄 ${type}s - ${branch.name}`;
   } else if (caller?.role === "owner" && ownerBranchId === null) {
-    header = `📄 ${type}s — All Branches`;
+    header = `📄 ${type}s - All Branches`;
   }
 
-  return sendList(from, header,
-    docs.map(d => ({ id: `doc_${d._id}`, title: `${d.number} — ${d.total} ${d.currency}` }))
+  return sendList(
+    from,
+    header,
+    docs.map(d => ({
+      id: `doc_${d._id}`,
+      title: `${d.number} - ${d.total} ${d.currency}`
+    }))
   );
 }
 
-// ─── Client list helper ───────────────────────────────────────────────────────
-
+// ─── Client select list helper (includes "Add New Client" option) ─────────────
 async function sendClientSelectList(from, biz) {
   const clients = await (await import("../models/client.js")).default
     .find({ businessId: biz._id })
-    .sort({ updatedAt: -1 }).limit(9).lean();
+    .sort({ updatedAt: -1 })
+    .limit(9) // leave room for the "Add new" row
+    .lean();
 
-  const rows = clients.map(c => ({ id: `client_${c._id}`, title: c.name || c.phone }));
+  const rows = clients.map(c => ({
+    id: `client_${c._id}`,
+    title: c.name || c.phone
+  }));
+
+  // ✅ Always add "New client" at the bottom
   rows.push({ id: "inv_new_client", title: "➕ Add new client" });
+
   return sendList(from, "👤 Select client", rows);
 }
 
@@ -189,88 +221,6 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   const text = typeof action === "string" ? action.trim() : "";
-    // =========================
-  // ✅ FLOW SUBMISSION (BUSINESS SETUP)
-  // =========================
-  if (action && typeof action === "object" && action.type === "flow" && action.name === "business_setup") {
-    const payload = action.data || {};
-
-    // Your flow fields (support multiple key names safely)
-    const bizName = (payload.bizName || payload.business_name || payload.name || "").trim();
-    const address = (payload.address || payload.bizAddress || payload.business_address || "").trim();
-    const currencyRaw = (payload.currency || payload.bizCurrency || "USD").toUpperCase().trim();
-
-    if (!bizName || bizName.length < 2) {
-      await sendText(from, "❌ Business name is required. Please complete setup again.");
-      await sendBusinessSetupFlow(from);
-      return;
-    }
-
-    if (!["USD", "ZWL", "ZAR"].includes(currencyRaw)) {
-      await sendText(from, "❌ Invalid currency selected. Please complete setup again.");
-      await sendBusinessSetupFlow(from);
-      return;
-    }
-
-    // If this number already has a business in session, update it (re-run setup)
-    let biz = await getBizForPhone(from);
-
-    // If no business yet, create a brand new one
-    if (!biz) {
-      const newBiz = await Business.create({
-        name: bizName,
-        address,
-        currency: currencyRaw,
-        package: "trial",
-        subscriptionStatus: "inactive",
-        sessionState: "ready",
-        sessionData: {},
-        ownerPhone: phone
-      });
-
-      await UserRole.create({
-        phone,
-        role: "owner",
-        pending: false,
-        businessId: newBiz._id
-      });
-
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { activeBusinessId: newBiz._id },
-        { upsert: true }
-      );
-
-      // ✅ Create main branch immediately
-      const mainBranch = await Branch.create({
-        businessId: newBiz._id,
-        name: "Main Branch",
-        isDefault: true
-      });
-
-      // ✅ Assign owner to main branch
-      await UserRole.findOneAndUpdate(
-        { businessId: newBiz._id, phone, role: "owner" },
-        { branchId: mainBranch._id }
-      );
-
-      await sendText(from, `✅ Setup complete!\n\n🏢 *${bizName}*\n📍 ${address || "No address"}\n💱 Currency: *${currencyRaw}*`);
-      await sendMainMenu(from);
-      return;
-    }
-
-    // Existing business found → update it
-    biz.name = bizName;
-    biz.address = address;
-    biz.currency = currencyRaw;
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    await sendText(from, `✅ Business updated!\n\n🏢 *${bizName}*\n📍 ${address || "No address"}\n💱 Currency: *${currencyRaw}*`);
-    await sendMainMenu(from);
-    return;
-  }
   const al = text.toLowerCase();
   const a = typeof action === "string" ? action.trim().toLowerCase() : "";
 
@@ -279,24 +229,15 @@ export async function handleIncomingMessage({ from, action }) {
     (
       Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
       a.startsWith("report_branch_") ||
-      a.startsWith("branch_") ||
-      a.startsWith("new_doc_branch_") ||
-      a.startsWith("add_product_branch_") ||
-      a.startsWith("add_client_branch_") ||
-      a.startsWith("payment_in_branch_") ||
-      a.startsWith("expense_branch_") ||
-      a.startsWith("bulk_expense_branch_") ||
-      a.startsWith("view_expense_receipts_branch_") ||
-      a.startsWith("view_payment_history_branch_") ||
-      a.startsWith("view_clients_branch_") ||
-      a.startsWith("cashbal_branch_")
+      a.startsWith("branch_")
     );
 
   // =========================
   // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
   // =========================
   if (al === "join") {
-    const invite = await UserRole.findOne({ phone, pending: true }).populate("businessId branchId");
+    const invite = await UserRole.findOne({ phone, pending: true })
+      .populate("businessId branchId");
 
     if (!invite) {
       await sendText(from, "❌ No pending invitation found for this number.");
@@ -307,17 +248,21 @@ export async function handleIncomingMessage({ from, action }) {
     await invite.save();
 
     await UserSession.findOneAndUpdate(
-      { phone }, { activeBusinessId: invite.businessId._id }, { upsert: true }
+      { phone },
+      { activeBusinessId: invite.businessId._id },
+      { upsert: true }
     );
 
-    await sendText(from,
+    await sendText(
+      from,
 `✅ Invitation accepted!
 
 🏢 Business: ${invite.businessId.name}
 📍 Branch: ${invite.branchId?.name || "Main"}
 🔑 Role: ${invite.role}
 
-Reply *menu* to start.`);
+Reply *menu* to start.`
+    );
 
     await sendMainMenu(from);
     return;
@@ -325,39 +270,25 @@ Reply *menu* to start.`);
 
   console.log("META INCOMING:", { from, action });
 
-  //const biz = await getBizForPhone(from);
-const biz = await getBizForPhone(from);
-
-// ✅ If old onboarding states exist (from previous version), force Flow setup instead
-const deprecatedOnboardingStates = new Set([
-  "awaiting_business_name",
-  "awaiting_address",
-  "awaiting_address_input",
-  "awaiting_currency",
-  "awaiting_logo",
-  "awaiting_logo_upload"
-]);
-
-if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(from, "⚠️ Setup has been upgraded. Please complete the new business setup form.");
-  await sendBusinessSetupFlow(from);
-  return;
-}
-  
+  const biz = await getBizForPhone(from);
 
   // =========================
   // 🟢 ONBOARDING GATE
   // =========================
-  const ownerRole = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
+  const ownerRole = await UserRole.findOne({
+    phone,
+    role: "owner",
+    pending: false
+  }).lean();
 
   if (!biz && ownerRole?.businessId) {
     const existingBiz = await Business.findById(ownerRole.businessId);
     if (existingBiz) {
-      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: existingBiz._id }, { upsert: true });
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { activeBusinessId: existingBiz._id },
+        { upsert: true }
+      );
       await sendText(from, "✅ Welcome back. Opening your menu...");
       await sendMainMenu(from);
       return;
@@ -365,24 +296,22 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
   }
 
   // =========================
-  // 🔑 ROLE CHECK
+  // 🔑 ROLE CHECK (for subscription/upgrade visibility)
   // =========================
   let callerRole = null;
-  let caller = null;
   if (biz) {
-    caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
-    callerRole = caller?.role || null;
-  }
-
-  // ✅ LOCKED USER CHECK — block bot access for locked users
-  if (caller?.locked) {
-    await sendText(from, "🔒 Your account has been suspended. Please contact the business owner.");
-    return;
+    const callerRecord = await UserRole.findOne({
+      businessId: biz._id,
+      phone,
+      pending: false
+    });
+    callerRole = callerRecord?.role || null;
   }
 
   // ─── META BUTTON / LIST ACTIONS ──────────────────────────────────────────
 
   if (al === "inv_use_client") {
+    // Use patched sendClientSelectList instead of raw handleChooseSavedClient
     if (!biz) return sendMainMenu(from);
     return sendClientSelectList(from, biz);
   }
@@ -395,6 +324,7 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
   if (a.startsWith("payinv_")) {
     const invoiceId = a.replace("payinv_", "");
     if (!biz) return sendMainMenu(from);
+
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) return sendText(from, "Invoice not found.");
 
@@ -403,7 +333,14 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
     await saveBizSafe(biz);
 
     await sendButtons(from, {
-      text: `💳 *Invoice ${invoice.number}*\n\nTotal: *${invoice.total} ${invoice.currency}*\nPaid: ${invoice.amountPaid} ${invoice.currency}\nBalance: *${invoice.balance} ${invoice.currency}*\n\nEnter amount paid:`,
+      text:
+`💳 *Invoice ${invoice.number}*
+
+Total: *${invoice.total} ${invoice.currency}*
+Paid: ${invoice.amountPaid} ${invoice.currency}
+Balance: *${invoice.balance} ${invoice.currency}*
+
+Enter amount paid:`,
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
     return;
@@ -414,7 +351,8 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
   if (a === "inv_generate_pdf") {
     if (!biz) return sendMainMenu(from);
     const summary = biz.sessionData.items
-      .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+      .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
+      .join("\n");
     await sendText(from, `📄 Generating PDF...\n\n${summary}`);
     await continueTwilioFlow({ from, text: "2" });
     return;
@@ -424,7 +362,10 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "creating_invoice_set_discount";
     await saveBizSafe(biz);
-    await sendButtons(from, { text: "💸 Enter discount percent (0-100):", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    await sendButtons(from, {
+      text: "💸 Enter discount percent (0-100):",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
     return;
   }
 
@@ -432,17 +373,21 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "creating_invoice_set_vat";
     await saveBizSafe(biz);
-    await sendButtons(from, { text: "🧾 Enter VAT percent (0-100):", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    await sendButtons(from, {
+      text: "🧾 Enter VAT percent (0-100):",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
     return;
   }
 
   if (a === "inv_item_catalogue") {
     if (!biz) return sendMainMenu(from);
+
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
     const query = { businessId: biz._id, isActive: true };
+
     if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
       query.branchId = caller.branchId;
-    } else if (caller?.role === "owner" && biz.sessionData?.targetBranchId) {
-      query.branchId = biz.sessionData.targetBranchId;
     }
 
     const products = await Product.find(query).limit(20);
@@ -451,6 +396,7 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
       biz.sessionState = "creating_invoice_add_items";
       biz.sessionData.itemMode = "choose_catalogue_or_custom";
       await saveBizSafe(biz);
+
       return sendButtons(from, {
         text: "📦 No items in catalogue yet.\n\nWhat would you like to do?",
         buttons: [
@@ -467,6 +413,7 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
       id: `prod_${p._id}`,
       title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
     }));
+
     productList.push(
       { id: "inv_add_new_product", title: "➕ Add new product" },
       { id: "inv_item_custom", title: "✍️ Enter custom item" }
@@ -478,8 +425,9 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
   if (a === "add_another_expense") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-    biz.sessionData = { targetBranchId: biz.sessionData?.targetBranchId };
+    biz.sessionData = {};
     await saveBizSafe(biz);
+
     return sendList(from, "📂 Select Expense Category", [
       { id: "exp_cat_rent", title: "🏢 Rent" },
       { id: "exp_cat_utilities", title: "💡 Utilities" },
@@ -492,26 +440,41 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
   if (a === "inv_add_new_product") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "invoice_quick_add_product_name";
-    biz.sessionData = { ...biz.sessionData, itemMode: "catalogue", quickAddProduct: {} };
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.itemMode = "catalogue";
+    biz.sessionData.quickAddProduct = {};
     await saveBizSafe(biz);
-    return sendButtons(from, { text: "📦 *Enter product/service name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+    return sendButtons(from, {
+      text: "📦 *Enter product/service name:*",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
   }
 
   if (a === "add_another_product") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "product_add_name";
-    biz.sessionData = { targetBranchId: biz.sessionData?.targetBranchId };
+    biz.sessionData = {};
     await saveBizSafe(biz);
-    return sendButtons(from, { text: "📦 *Enter product name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+    return sendButtons(from, {
+      text: "📦 *Enter product name:*",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
   }
 
   if (a === "inv_item_custom") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.itemMode = "custom";
     await saveBizSafe(biz);
-    return sendButtons(from, { text: "✍️ *Send item description:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+    return sendButtons(from, {
+      text: "✍️ *Send item description:*",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
   }
 
+  // Handle phone buttons from client creation
   if (a === "inv_client_phone_same" || a === "inv_client_phone_skip") {
     if (!biz) return sendMainMenu(from);
     await continueTwilioFlow({ from, text: a });
@@ -533,182 +496,69 @@ if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
     if (!biz) return sendMainMenu(from);
     const products = await Product.find({ businessId: biz._id, isActive: true }).lean();
     if (!products.length) return sendText(from, "📦 No products found.");
+
     let msg = "📦 *Product catalogue:*\n\n";
-    products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+    products.forEach((p, i) => {
+      msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`;
+    });
+
     return sendText(from, msg);
   }
 
   // ── Client statement ───────────────────────────────────────────────────────
   if (a === ACTIONS.CLIENT_STATEMENT) {
     if (!biz) return sendMainMenu(from);
+
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
     const Client = (await import("../models/client.js")).default;
     let clients;
 
     if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
-      const branchInvoices = await Invoice.find({ businessId: biz._id, branchId: caller.branchId }).distinct("clientId");
-      clients = await Client.find({ businessId: biz._id, _id: { $in: branchInvoices } }).lean();
+      const branchInvoices = await Invoice.find({
+        businessId: biz._id,
+        branchId: caller.branchId
+      }).distinct("clientId");
+
+      clients = await Client.find({
+        businessId: biz._id,
+        _id: { $in: branchInvoices }
+      }).lean();
     } else {
       clients = await Client.find({ businessId: biz._id }).lean();
     }
 
-    if (!clients.length) { await sendText(from, "No clients found."); return sendMainMenu(from); }
+    if (!clients.length) {
+      await sendText(from, "No clients found.");
+      return sendMainMenu(from);
+    }
 
     biz.sessionState = "client_statement_choose_client";
     biz.sessionData = {};
     await saveBizSafe(biz);
 
-    return sendList(from, "📄 Select client for statement",
-      clients.map(c => ({ id: `stmt_client_${c._id}`, title: c.name || c.phone }))
+    return sendList(
+      from,
+      "📄 Select client for statement",
+      clients.map(c => ({
+        id: `stmt_client_${c._id}`,
+        title: c.name || c.phone
+      }))
     );
   }
 
   if (a === ACTIONS.ADD_PRODUCT) {
     if (!biz) return sendMainMenu(from);
-    // Owner: pick a branch first
-    if (caller?.role === "owner") return sendBranchSelectorAddProduct(from);
-    // Clerk/manager: use their branch
     biz.sessionState = "product_add_name";
     biz.sessionData = {};
     await saveBizSafe(biz);
-    return sendButtons(from, { text: "📦 *Enter product name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
-  }
 
-  // ── Owner picks branch for Add Product ───────────────────────────────────
-  if (a.startsWith("add_product_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("add_product_branch_", "");
-    biz.sessionState = "product_add_name";
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-    const branch = await Branch.findById(branchId);
     return sendButtons(from, {
-      text: `📦 *Add Product — ${branch?.name || "Branch"}*\n\nEnter product name:`,
+      text: "📦 *Enter product name:*",
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
 
-  // ── Owner picks branch for Add Client ────────────────────────────────────
-  if (a.startsWith("add_client_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("add_client_branch_", "");
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-    // Now start the client flow with the branch set
-    biz.sessionState = "adding_client_name";
-    await saveBizSafe(biz);
-    const branch = await Branch.findById(branchId);
-    return sendButtons(from, {
-      text: `👥 *Add Client — ${branch?.name || "Branch"}*\n\nEnter client full name:`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
-  }
-
-  // ── Owner picks branch for Payment IN ────────────────────────────────────
-  if (a.startsWith("payment_in_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("payment_in_branch_", "");
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-    // Show unpaid invoices for this branch
-    await showUnpaidInvoices(from, branchId);
-    return;
-  }
-
-  // ── Owner picks branch for Expense (OUT) ─────────────────────────────────
-  if (a.startsWith("expense_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("expense_branch_", "");
-    biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-    return sendList(from, "📂 Select Expense Category", [
-      { id: "exp_cat_rent", title: "🏢 Rent" },
-      { id: "exp_cat_utilities", title: "💡 Utilities" },
-      { id: "exp_cat_transport", title: "🚗 Transport" },
-      { id: "exp_cat_supplies", title: "📦 Supplies" },
-      { id: "exp_cat_other", title: "📝 Other" }
-    ]);
-  }
-
-  // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
-  if (a.startsWith("bulk_expense_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("bulk_expense_branch_", "");
-    biz.sessionState = "bulk_expense_input";
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-    const branch = await Branch.findById(branchId);
-    return sendText(from,
-`📋 *Bulk Add Expenses — ${branch?.name || "Branch"}*
-
-✅ Format: Description, Amount, Category
-
-Example:
-Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
-
-Categories: Rent, Utilities, Transport, Supplies, Other
-(Category optional — defaults to Other)
-
-Use *|* or new lines to separate.
-
-Paste now, or reply *done* to finish.`);
-  }
-
-  // ── Owner picks branch for View Expense Receipts ──────────────────────────
-  if (a.startsWith("view_expense_receipts_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("view_expense_receipts_branch_", "");
-    return showExpenseReceipts(from, biz, branchId === "all" ? null : branchId);
-  }
-
-  // ── Owner picks branch for View Payment History ───────────────────────────
-  if (a.startsWith("view_payment_history_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("view_payment_history_branch_", "");
-    return showPaymentHistory(from, biz, branchId === "all" ? null : branchId);
-  }
-
-  // ── Owner picks branch for View Clients ──────────────────────────────────
-  if (a.startsWith("view_clients_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    const branchId = a.replace("view_clients_branch_", "");
-    return showClientsList(from, biz, branchId === "all" ? null : branchId);
-  }
-
-  // ── Owner picks branch for New Invoice/Quote/Receipt ─────────────────────
-  if (a.startsWith("new_doc_branch_")) {
-    if (!biz) return sendMainMenu(from);
-    // Format: new_doc_branch_{docType}_{branchId}
-    const rest = a.replace("new_doc_branch_", "");
-    const parts = rest.split("_");
-    // branchId is the last ObjectId segment (24 hex chars), docType is before it
-    const branchId = parts[parts.length - 1];
-    const docType = parts.slice(0, -1).join("_"); // handles "invoice", "quote", "receipt"
-
-    // Validate branchId
-    if (!mongoose.Types.ObjectId.isValid(branchId)) {
-      await sendText(from, "⚠️ Invalid branch selected.");
-      return sendSalesMenu(from);
-    }
-
-    // Store the target branch so the flow uses it
-    biz.sessionData = { targetBranchId: branchId };
-    await saveBizSafe(biz);
-
-    if (docType === "invoice") return startInvoiceFlow(from);
-    if (docType === "quote") {
-      if (biz.package === "trial") return promptUpgrade({ biz, from, feature: "Quotes" });
-      return startQuoteFlow(from);
-    }
-    if (docType === "receipt") {
-      if (biz.package === "trial") return promptUpgrade({ biz, from, feature: "Receipts" });
-      return startReceiptFlow(from);
-    }
-
-    return sendSalesMenu(from);
-  }
-
-  // ── Invoice client picker ──────────────────────────────────────────────────
+  // ⚠️ Invoice client picker ONLY
   if (al.startsWith("client_") && al !== ACTIONS.CLIENT_STATEMENT) {
     await handleClientPicked(from, al.replace("client_", ""));
     return;
@@ -722,6 +572,7 @@ Paste now, or reply *done* to finish.`);
     biz.sessionData.expectingQty = false;
     biz.sessionData.lastItemSource = null;
     await saveBizSafe(biz);
+
     return sendButtons(from, {
       text: "How would you like to add an item?",
       buttons: [
@@ -736,6 +587,7 @@ Paste now, or reply *done* to finish.`);
     biz.sessionState = "creating_invoice_enter_prices";
     biz.sessionData.priceIndex = 0;
     await saveBizSafe(biz);
+
     const item = biz.sessionData.items[0];
     return sendButtons(from, {
       text: `💰 *Enter price for:*\n${item.item} x${item.qty}`,
@@ -756,11 +608,10 @@ Paste now, or reply *done* to finish.`);
 
   if (a === ACTIONS.RECORD_EXPENSE) {
     if (!biz) return sendMainMenu(from);
-    // Owner: pick branch first
-    if (caller?.role === "owner") return sendBranchSelectorExpense(from);
     biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
     biz.sessionData = {};
     await saveBizSafe(biz);
+
     return sendList(from, "📂 Select Expense Category", [
       { id: "exp_cat_rent", title: "🏢 Rent" },
       { id: "exp_cat_utilities", title: "💡 Utilities" },
@@ -809,39 +660,49 @@ Paste now, or reply *done* to finish.`);
   if (biz?.sessionState === "product_add_name") {
     const name = text?.trim();
     if (!name || name.length < 2) {
-      await sendButtons(from, { text: "❌ Enter a valid product name:", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+      await sendButtons(from, {
+        text: "❌ Enter a valid product name:",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
       return;
     }
+
     biz.sessionData.productName = name;
     biz.sessionState = "product_add_price";
     await saveBizSafe(biz);
-    return sendButtons(from, { text: `📦 *${name}*\n\n💰 *Enter product price:*`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+    return sendButtons(from, {
+      text: `📦 *${name}*\n\n💰 *Enter product price:*`,
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
   }
 
   if (biz?.sessionState === "product_add_price") {
     const price = Number(text);
     if (isNaN(price) || price <= 0) {
-      await sendButtons(from, { text: "❌ Enter a valid price (e.g. 50):", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+      await sendButtons(from, {
+        text: "❌ Enter a valid price (e.g. 50):",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
       return;
     }
 
-    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
 
     await Product.create({
       businessId: biz._id,
-      branchId: effectiveBranchId,
+      branchId: caller?.branchId || null,
       name: biz.sessionData.productName,
       unitPrice: price,
-      isActive: true,
-      createdBy: phone
+      isActive: true
     });
 
-    const savedName = biz.sessionData.productName;
     biz.sessionState = "product_add_name_or_menu";
-    biz.sessionData = { targetBranchId: biz.sessionData.targetBranchId }; // preserve for next product
+    biz.sessionData = {};
     await saveBizSafe(biz);
 
-    await sendText(from, `✅ *${savedName}* saved at *${formatMoney(price, biz.currency)}*`);
+    await sendText(from, `✅ *${biz.sessionData?.productName || "Product"}* saved at *${formatMoney(price, biz.currency)}*`);
+
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
@@ -857,21 +718,24 @@ Paste now, or reply *done* to finish.`);
     const msg = (text || "").trim();
 
     if (msg.toLowerCase() === "cancel") {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "❌ Bulk upload cancelled.");
       return sendProductsMenu(from);
     }
 
     if (msg.toLowerCase() === "done") {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "✅ Bulk upload finished.");
       return sendProductsMenu(from);
     }
 
     const lines = msg.split("\n").map(l => l.trim()).filter(Boolean);
-    const parsed = [], failed = [];
+    const parsed = [];
+    const failed = [];
 
     for (const line of lines) {
       const m = line.match(/^(.+?)\s*[-|:]\s*(\d+(\.\d+)?)\s*$/);
@@ -883,14 +747,23 @@ Paste now, or reply *done* to finish.`);
     }
 
     if (!parsed.length) {
-      await sendText(from, `❌ Couldn't read any valid lines.\n\nUse:\nMilk 1L - 1.50\nMath Lesson | 10\n\nInvalid:\n${failed.slice(0, 5).join("\n") || "(none)"}`);
+      await sendText(
+        from,
+        `❌ Couldn't read any valid lines.\n\nUse:\nMilk 1L - 1.50\nMath Lesson | 10\n\nInvalid:\n${failed.slice(0, 5).join("\n") || "(none)"}`
+      );
       return;
     }
 
-    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
 
     await Product.insertMany(
-      parsed.map(p => ({ businessId: biz._id, branchId: effectiveBranchId, name: p.name, unitPrice: p.unitPrice, isActive: true })),
+      parsed.map(p => ({
+        businessId: biz._id,
+        branchId: caller?.branchId || null,
+        name: p.name,
+        unitPrice: p.unitPrice,
+        isActive: true
+      })),
       { ordered: false }
     ).catch(() => {});
 
@@ -901,6 +774,7 @@ Paste now, or reply *done* to finish.`);
   }
 
   // ── Bulk expense input ─────────────────────────────────────────────────────
+  // ✅ FIXED: more flexible CSV parser (handles spaces around commas, case-insensitive categories)
 
   if (biz && biz.sessionState === "bulk_expense_input" && !isMetaAction) {
     const textRaw = (text || "").trim();
@@ -911,50 +785,86 @@ Paste now, or reply *done* to finish.`);
     }
 
     if (textRaw.toLowerCase() === "done") {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "✅ Bulk expense entry complete.");
       return sendPaymentsMenu(from);
     }
 
-    const items = textRaw.split(/[|\n]/).map(i => i.trim()).filter(Boolean);
-    const Expense = (await import("../models/expense.js")).default;
-    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+    // Split by pipe OR newline
+    const items = textRaw
+      .split(/[|\n]/)
+      .map(i => i.trim())
+      .filter(Boolean);
 
-    let created = 0, skipped = 0;
+    const Expense = (await import("../models/expense.js")).default;
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+
+    let created = 0;
+    let skipped = 0;
     const skippedLines = [];
 
+    // Case-insensitive category matching
     const categoryAliases = {
-      rent: "Rent", utilities: "Utilities", utility: "Utilities",
-      transport: "Transport", transportation: "Transport",
-      supplies: "Supplies", supply: "Supplies", other: "Other"
+      rent: "Rent",
+      utilities: "Utilities",
+      utility: "Utilities",
+      transport: "Transport",
+      transportation: "Transport",
+      supplies: "Supplies",
+      supply: "Supplies",
+      other: "Other"
     };
 
     for (const item of items) {
+      // Accept: "Description, Amount, Category" OR "Description, Amount" (defaults to Other)
       const parts = item.split(",").map(p => p.trim());
-      if (parts.length < 2) { skipped++; skippedLines.push(item); continue; }
+
+      if (parts.length < 2) {
+        skipped++;
+        skippedLines.push(item);
+        continue;
+      }
+
       const description = parts[0];
       const amount = Number(parts[1]);
       const rawCategory = (parts[2] || "other").toLowerCase().trim();
       const category = categoryAliases[rawCategory] || "Other";
-      if (!description || !amount || amount <= 0) { skipped++; skippedLines.push(item); continue; }
+
+      if (!description || !amount || amount <= 0) {
+        skipped++;
+        skippedLines.push(item);
+        continue;
+      }
 
       await Expense.create({
         businessId: biz._id,
-        branchId: effectiveBranchId,
-        description, amount, category,
+        branchId: caller?.branchId || null,
+        description,
+        amount,
+        category,
         method: "Cash",
-        createdBy: phone
+        createdBy: from
       });
+
       created++;
     }
+
+    const totalAmount = items.reduce((sum, item) => {
+      const parts = item.split(",");
+      const amt = Number((parts[1] || "").trim());
+      return sum + (isNaN(amt) ? 0 : amt);
+    }, 0);
 
     let reply = `✅ Recorded *${created}* expenses`;
     if (skipped > 0) {
       reply += `\n⚠️ Skipped *${skipped}* (invalid format)`;
       if (skippedLines.length) reply += `\n\nSkipped lines:\n${skippedLines.slice(0, 3).join("\n")}`;
     }
+    reply += `\n\n💰 Total: *${totalAmount} ${biz.currency}*`;
     reply += `\n\nType more or reply *done* to finish.`;
+
     return sendText(from, reply);
   }
 
@@ -963,17 +873,21 @@ Paste now, or reply *done* to finish.`);
   if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
     const textRaw = (text || "").trim();
 
-    if (!textRaw) { await sendText(from, "❌ Paste at least one product or type *done* to finish."); return; }
+    if (!textRaw) {
+      await sendText(from, "❌ Paste at least one product or type *done* to finish.");
+      return;
+    }
 
     if (textRaw.toLowerCase() === "done") {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "✅ Bulk paste complete.");
       return sendProductsMenu(from);
     }
 
     const items = textRaw.split(/[|\n]/).map(i => i.trim()).filter(Boolean);
-    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
     let created = 0, skipped = 0;
 
     for (const item of items) {
@@ -983,28 +897,43 @@ Paste now, or reply *done* to finish.`);
       const unitPrice = Number(parts[1]);
       if (!name || name.length < 2 || Number.isNaN(unitPrice) || unitPrice <= 0) { skipped++; continue; }
 
-      await Product.create({ businessId: biz._id, branchId: effectiveBranchId, name, unitPrice, isActive: true });
+      await Product.create({
+        businessId: biz._id,
+        branchId: caller?.branchId || null,
+        name,
+        unitPrice,
+        isActive: true
+      });
       created++;
     }
 
     let reply = `✅ Imported *${created}* products`;
     if (skipped > 0) reply += `\n⚠️ Skipped *${skipped}* (invalid format)`;
-    reply += `\n\nType more or reply *done* to finish.`;
+    if (created > 0) reply += `\n\nProducts added to your catalogue!`;
+    reply += `\n\nType more products or reply *done* to finish.`;
     return sendText(from, reply);
   }
 
   // =========================
-  // 🏢 ONBOARDING
+  // 🏢 ONBOARDING: BUSINESS NAME
   // =========================
   if (biz && biz.sessionState === "awaiting_business_name") {
     const name = text;
-    if (!name || name.length < 2) { await sendText(from, "❌ Please enter a valid business name:"); return; }
+    if (!name || name.length < 2) {
+      await sendText(from, "❌ Please enter a valid business name:");
+      return;
+    }
+
     biz.name = name;
     biz.sessionState = "awaiting_address";
     await saveBizSafe(biz);
+
     await sendButtons(from, {
       text: "📍 Would you like to add your business address?\n(It will appear on invoices & receipts)",
-      buttons: [{ id: "onb_address_yes", title: "Add address" }, { id: "onb_address_skip", title: "Skip" }]
+      buttons: [
+        { id: "onb_address_yes", title: "Add address" },
+        { id: "onb_address_skip", title: "Skip" }
+      ]
     });
     return;
   }
@@ -1012,8 +941,13 @@ Paste now, or reply *done* to finish.`);
   // ── Settings text states ───────────────────────────────────────────────────
 
   const settingsStates = [
-    "settings_currency", "settings_terms", "settings_inv_prefix",
-    "settings_qt_prefix", "settings_rcpt_prefix", "settings_address", "bulk_upload_products"
+    "settings_currency",
+    "settings_terms",
+    "settings_inv_prefix",
+    "settings_qt_prefix",
+    "settings_rcpt_prefix",
+    "settings_address",
+    "bulk_upload_products"
   ];
 
   // =========================
@@ -1036,7 +970,8 @@ Paste now, or reply *done* to finish.`);
     const plan = selected ? SUBSCRIPTION_PLANS[selected] : null;
 
     if (!plan) {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "❌ Package info missing. Please select a package again.");
       return sendMainMenu(from);
@@ -1051,13 +986,21 @@ Paste now, or reply *done* to finish.`);
     const response = await paynow.sendMobile(payment, ecocashPhone, "ecocash");
 
     await SubscriptionPayment.create({
-      businessId: biz._id, packageKey: selected, amount: chargeAmount,
-      currency: plan.currency, reference, pollUrl: response.pollUrl,
-      ecocashPhone, status: "pending"
+      businessId: biz._id,
+      packageKey: selected,
+      amount: chargeAmount,
+      currency: plan.currency,
+      reference,
+      pollUrl: response.pollUrl,
+      ecocashPhone,
+      status: "pending"
     });
 
+    console.log("PAYNOW RESPONSE:", response);
+
     if (!response.success) {
-      biz.sessionState = "ready"; biz.sessionData = {};
+      biz.sessionState = "ready";
+      biz.sessionData = {};
       await saveBizSafe(biz);
       await sendText(from, "❌ Failed to start EcoCash payment. Try again.");
       return sendMainMenu(from);
@@ -1074,12 +1017,18 @@ Paste now, or reply *done* to finish.`);
       attempts++;
       try {
         const status = await paynow.pollTransaction(pollUrl);
+        console.log("PAYNOW POLL STATUS:", status);
 
         if (status.status && status.status.toLowerCase() === "paid") {
           clearInterval(pollInterval);
+
           const freshBiz = await Business.findById(biz._id);
 
-          if (freshBiz?.sessionState === "subscription_payment_pending" && freshBiz.sessionData?.targetPackage) {
+          if (
+            freshBiz &&
+            freshBiz.sessionState === "subscription_payment_pending" &&
+            freshBiz.sessionData?.targetPackage
+          ) {
             const now = new Date();
             const target = freshBiz.sessionData?.targetPackage;
             const plan = target ? SUBSCRIPTION_PLANS[target] : null;
@@ -1096,43 +1045,75 @@ Paste now, or reply *done* to finish.`);
             freshBiz.package = target;
             freshBiz.subscriptionStatus = "active";
 
-            const payRec = await SubscriptionPayment.findOne({ businessId: freshBiz._id, reference }).sort({ createdAt: -1 });
+            const payRec = await SubscriptionPayment.findOne({
+              businessId: freshBiz._id,
+              reference
+            }).sort({ createdAt: -1 });
+
             const receiptNumber = `SUB-${reference.slice(-8).toUpperCase()}`;
 
             const { filename } = await generatePDF({
-              type: "receipt", number: receiptNumber, date: now,
+              type: "receipt",
+              number: receiptNumber,
+              date: now,
               billingTo: `${freshBiz.name} (Subscription)`,
-              items: [{ item: `${plan.name} Package`, qty: 1, unit: payRec?.amount || plan.price, total: payRec?.amount || plan.price }],
-              bizMeta: { name: "Zimqoute", logoUrl: "", address: "Zimqoute", _id: freshBiz._id.toString(), status: "paid" }
+              items: [{
+                item: `${plan.name} Package`,
+                qty: 1,
+                unit: payRec?.amount || plan.price,
+                total: payRec?.amount || plan.price
+              }],
+              bizMeta: {
+                name: "Zimqoute",
+                logoUrl: "",
+                address: "Zimqoute",
+                _id: freshBiz._id.toString(),
+                status: "paid"
+              }
             });
 
             const site = (process.env.SITE_URL || "").replace(/\/$/, "");
             const receiptUrl = `${site}/docs/generated/receipts/${filename}`;
 
             if (payRec) {
-              payRec.status = "paid"; payRec.paidAt = now;
-              payRec.receiptFilename = filename; payRec.receiptUrl = receiptUrl;
+              payRec.status = "paid";
+              payRec.paidAt = now;
+              payRec.receiptFilename = filename;
+              payRec.receiptUrl = receiptUrl;
               await payRec.save();
             }
 
-            freshBiz.sessionState = "ready"; freshBiz.sessionData = {};
+            freshBiz.sessionState = "ready";
+            freshBiz.sessionData = {};
             await freshBiz.save();
 
             await sendDocument(from, { link: receiptUrl, filename });
-            await sendText(from,
+
+            await sendText(
+              from,
 `✅ Payment successful!
 
 Package: *${freshBiz.package.toUpperCase()}*
-Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDateString() : "N/A"}*`);
+Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDateString() : "N/A"}*`
+            );
+
             await sendMainMenu(from);
           }
         }
 
-        if (attempts >= MAX_ATTEMPTS) clearInterval(pollInterval);
-      } catch (err) { console.error("Paynow polling failed:", err); }
+        if (attempts >= MAX_ATTEMPTS) {
+          clearInterval(pollInterval);
+          console.warn("⏰ Paynow polling timed out");
+        }
+      } catch (err) {
+        console.error("Paynow polling failed:", err);
+      }
     }, 10000);
 
-    await sendText(from, `💳 ${plan.name} Package (${chargeAmount} ${plan.currency})\nEcoCash number: ${ecocashPhone}\n\nPlease confirm the payment on your phone.`);
+    await sendText(
+      from,
+      `💳 ${plan.name} Package (${chargeAmount} ${plan.currency})\nEcoCash number: ${ecocashPhone}\n\nPlease confirm the payment on your phone.`
+    );
     return;
   }
 
@@ -1140,14 +1121,21 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   const escapeWords = ["menu", "hi", "hello", "start"];
 
-  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
+  if (
+    !isMetaAction &&
+    biz &&
+    biz.sessionState &&
+    !escapeWords.includes(al) &&
+    !settingsStates.includes(biz.sessionState)
+  ) {
     const handled = await continueTwilioFlow({ from, text });
     if (handled) return;
   }
 
   if (escapeWords.includes(al)) {
     if (!biz) return startOnboarding(from, phone);
-    biz.sessionState = "ready"; biz.sessionData = {};
+    biz.sessionState = "ready";
+    biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
   }
@@ -1157,55 +1145,89 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
   // =========================
   if (biz && biz.sessionState === "awaiting_address") {
     if (a === "onb_address_yes") {
-      biz.sessionState = "awaiting_address_input"; await saveBizSafe(biz);
+      biz.sessionState = "awaiting_address_input";
+      await saveBizSafe(biz);
       return sendText(from, "Please enter your business address:");
     }
+
     if (a === "onb_address_skip") {
-      biz.address = ""; biz.sessionState = "awaiting_currency"; await saveBizSafe(biz);
+      biz.address = "";
+      biz.sessionState = "awaiting_currency";
+      await saveBizSafe(biz);
       return sendButtons(from, {
         text: "💱 Select your business currency",
-        buttons: [{ id: "onb_currency_USD", title: "USD ($)" }, { id: "onb_currency_ZWL", title: "ZWL (Z$)" }, { id: "onb_currency_ZAR", title: "ZAR (R)" }]
+        buttons: [
+          { id: "onb_currency_USD", title: "USD ($)" },
+          { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
+          { id: "onb_currency_ZAR", title: "ZAR (R)" }
+        ]
       });
     }
   }
 
   if (biz && biz.sessionState === "awaiting_address_input" && !isMetaAction) {
     if (!text || text.length < 3) return sendText(from, "Please enter a valid address:");
-    biz.address = text; biz.sessionState = "awaiting_currency"; await saveBizSafe(biz);
+    biz.address = text;
+    biz.sessionState = "awaiting_currency";
+    await saveBizSafe(biz);
     return sendButtons(from, {
       text: "💱 Select your business currency",
-      buttons: [{ id: "onb_currency_USD", title: "USD ($)" }, { id: "onb_currency_ZWL", title: "ZWL (Z$)" }, { id: "onb_currency_ZAR", title: "ZAR (R)" }]
+      buttons: [
+        { id: "onb_currency_USD", title: "USD ($)" },
+        { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
+        { id: "onb_currency_ZAR", title: "ZAR (R)" }
+      ]
     });
   }
 
   if (biz && biz.sessionState === "awaiting_currency" && a.startsWith("onb_currency_")) {
     const currency = a.replace("onb_currency_", "").toUpperCase();
-    if (!["USD", "ZWL", "ZAR"].includes(currency)) { await sendText(from, "❌ Invalid currency selection."); return; }
-    biz.currency = currency; biz.sessionState = "awaiting_logo"; await saveBizSafe(biz);
+    if (!["USD", "ZWL", "ZAR"].includes(currency)) {
+      await sendText(from, "❌ Invalid currency selection.");
+      return;
+    }
+    biz.currency = currency;
+    biz.sessionState = "awaiting_logo";
+    await saveBizSafe(biz);
     await sendButtons(from, {
       text: "🖼 Would you like to add your business logo now?",
-      buttons: [{ id: "onb_logo_yes", title: "📷 Upload Logo" }, { id: "onb_logo_skip", title: "Skip for now" }]
+      buttons: [
+        { id: "onb_logo_yes", title: "📷 Upload Logo" },
+        { id: "onb_logo_skip", title: "Skip for now" }
+      ]
     });
     return;
   }
 
   if (biz && biz.sessionState === "awaiting_logo") {
-    if (a === "onb_logo_yes") { biz.sessionState = "awaiting_logo_upload"; await saveBizSafe(biz); await sendText(from, "📷 Please send your logo image (PNG or JPG).\nYou can also type *skip* to continue without a logo."); return; }
-    if (a === "onb_logo_skip") { biz.sessionState = "ready"; await saveBizSafe(biz); await sendText(from, "✅ Setup complete!\n\nYour business is ready to use 🚀"); return sendMainMenu(from); }
+    if (a === "onb_logo_yes") {
+      biz.sessionState = "awaiting_logo_upload";
+      await saveBizSafe(biz);
+      await sendText(from, "📷 Please send your logo image (PNG or JPG).\nYou can also type *skip* to continue without a logo.");
+      return;
+    }
+    if (a === "onb_logo_skip") {
+      biz.sessionState = "ready";
+      await saveBizSafe(biz);
+      await sendText(from, "✅ Setup complete!\n\nYour business is ready to use 🚀");
+      return sendMainMenu(from);
+    }
   }
 
   if (biz && biz.sessionState === "awaiting_logo_upload") {
     if (text && text.toLowerCase() === "skip") {
       const mainBranch = await Branch.create({ businessId: biz._id, name: "Main Branch", isDefault: true });
       await UserRole.findOneAndUpdate({ businessId: biz._id, phone, role: "owner" }, { branchId: mainBranch._id });
-      biz.sessionState = "ready"; await saveBizSafe(biz);
+      biz.sessionState = "ready";
+      await saveBizSafe(biz);
       await sendText(from, "✅ Setup complete!\n\n🏢 Main Branch created and assigned to you.");
       return sendMainMenu(from);
     }
     if (biz.logoUrl) {
       const mainBranch = await Branch.create({ businessId: biz._id, name: "Main Branch", isDefault: true });
       await UserRole.findOneAndUpdate({ businessId: biz._id, phone, role: "owner" }, { branchId: mainBranch._id });
-      biz.sessionState = "ready"; await saveBizSafe(biz);
+      biz.sessionState = "ready";
+      await saveBizSafe(biz);
       await sendText(from, "✅ Setup complete!\n\n🏢 Main Branch created and assigned to you.");
       return sendMainMenu(from);
     }
@@ -1215,8 +1237,13 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
   if (a.startsWith("invite_branch_")) {
     const branchId = a.replace("invite_branch_", "");
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "invite_user_phone"; biz.sessionData.branchId = branchId; await saveBizSafe(biz);
-    return sendButtons(from, { text: "📱 *Enter WhatsApp number of the user to invite:*\n\nFormat: 0772123456", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    biz.sessionState = "invite_user_phone";
+    biz.sessionData.branchId = branchId;
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "📱 *Enter WhatsApp number of the user to invite:*\n\nFormat: 0772123456",
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
   }
 
   if (a.startsWith("assign_user_")) {
@@ -1224,17 +1251,22 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
     if (!biz) return sendMainMenu(from);
     const branches = await Branch.find({ businessId: biz._id }).lean();
     if (!branches.length) { await sendText(from, "No branches found."); return sendMainMenu(from); }
-    biz.sessionData.userId = userId; biz.sessionState = "assign_branch_pick_branch"; await saveBizSafe(biz);
+    biz.sessionData.userId = userId;
+    biz.sessionState = "assign_branch_pick_branch";
+    await saveBizSafe(biz);
     return sendList(from, "Select branch", branches.map(b => ({ id: `assign_branch_${b._id}`, title: b.name })));
   }
 
   if (a.startsWith("assign_branch_")) {
-    if (!biz || biz.sessionState !== "assign_branch_pick_branch") return;
+    if (!biz) return sendMainMenu(from);
+    if (biz.sessionState !== "assign_branch_pick_branch") return;
     const branchId = a.replace("assign_branch_", "");
     const userId = biz.sessionData.userId;
     if (!userId) { await sendText(from, "⚠️ No user selected."); return sendMainMenu(from); }
     await UserRole.findByIdAndUpdate(userId, { branchId });
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     await sendText(from, "✅ User successfully assigned to branch.");
     return sendMainMenu(from);
   }
@@ -1243,39 +1275,52 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   if (a === ACTIONS.SETTINGS_INV_PREFIX) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_inv_prefix"; await saveBizSafe(biz);
+    biz.sessionState = "settings_inv_prefix";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current invoice prefix: *${biz.invoicePrefix || "INV"}*\n\nReply with new prefix:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
+
   if (a === ACTIONS.SETTINGS_QT_PREFIX) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_qt_prefix"; await saveBizSafe(biz);
+    biz.sessionState = "settings_qt_prefix";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current quote prefix: *${biz.quotePrefix || "QT"}*\n\nReply with new prefix:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
+
   if (a === ACTIONS.SETTINGS_RCPT_PREFIX) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_rcpt_prefix"; await saveBizSafe(biz);
+    biz.sessionState = "settings_rcpt_prefix";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current receipt prefix: *${biz.receiptPrefix || "RCPT"}*\n\nReply with new prefix:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
+
   if (a === ACTIONS.SETTINGS_CURRENCY) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_currency"; await saveBizSafe(biz);
+    biz.sessionState = "settings_currency";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current currency: *${biz.currency}*\n\nReply with new currency (USD, ZWL, ZAR):`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
+
   if (a === ACTIONS.SETTINGS_TERMS) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_terms"; await saveBizSafe(biz);
+    biz.sessionState = "settings_terms";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current payment terms: *${biz.paymentTermsDays || 0} days*\n\nReply with number of days:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
+
   if (a === ACTIONS.SETTINGS_ADDRESS) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "settings_address"; await saveBizSafe(biz);
+    biz.sessionState = "settings_address";
+    await saveBizSafe(biz);
     return sendButtons(from, { text: `Current address:\n${biz.address || "Not set"}\n\nReply with new address:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
 
   if (biz?.sessionState === "settings_address" && !isMetaAction) {
     const addr = (text || "").trim();
     if (!addr || addr.length < 3) { await sendText(from, "❌ Please enter a valid address:"); return; }
-    biz.address = addr; biz.sessionState = "ready"; biz.sessionData = {};
+    biz.address = addr;
+    biz.sessionState = "ready";
+    biz.sessionData = {};
     await saveBizSafe(biz);
     await sendText(from, "✅ Address updated successfully.");
     return sendSettingsMenu(from);
@@ -1283,7 +1328,8 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   if (a === ACTIONS.SETTINGS_LOGO) {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "awaiting_logo_upload"; await saveBizSafe(biz);
+    biz.sessionState = "awaiting_logo_upload";
+    await saveBizSafe(biz);
     return sendText(from, "📷 Please send your business logo image (PNG or JPG).\nReply 0 to cancel.");
   }
 
@@ -1308,7 +1354,8 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
   if (a.startsWith("stmt_client_")) {
     const clientId = a.replace("stmt_client_", "");
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = "client_statement_generate"; biz.sessionData = { clientId };
+    biz.sessionState = "client_statement_generate";
+    biz.sessionData = { clientId };
     await saveBizSafe(biz);
     return continueTwilioFlow({ from, text: "generate" });
   }
@@ -1344,7 +1391,8 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
     const endsAt = biz.subscriptionEndsAt ? new Date(biz.subscriptionEndsAt) : null;
     const hasActiveCycle = endsAt && endsAt.getTime() > now.getTime();
 
-    let chargeAmount = plan.price, note = "";
+    let chargeAmount = plan.price;
+    let note = "";
 
     if (hasActiveCycle && plan.price > currentPrice) {
       const remainingDays = clamp(msDays(endsAt.getTime() - now.getTime()), 0, 30);
@@ -1357,19 +1405,27 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
     }
 
     biz.sessionState = "subscription_enter_ecocash";
-    biz.sessionData = { targetPackage: selected, amount: chargeAmount, prorationNote: note || null, previousPackage: currentKey, cycleEndsAt: endsAt ? endsAt.toISOString() : null };
+    biz.sessionData = {
+      targetPackage: selected,
+      amount: chargeAmount,
+      prorationNote: note || null,
+      previousPackage: currentKey,
+      cycleEndsAt: endsAt ? endsAt.toISOString() : null
+    };
     await saveBizSafe(biz);
 
     const pkg = PACKAGES[selected];
     const MAP = {
       invoice: "Invoices", quote: "Quotations", receipt: "Receipts",
       clients: "Clients", payments: "Payments",
-      reports_daily: "Daily reports", reports_weekly: "Weekly reports", reports_monthly: "Monthly reports",
-      branches: "Branches management", users: "User management"
+      reports_daily: "Daily reports", reports_weekly: "Weekly reports",
+      reports_monthly: "Monthly reports", branches: "Branches management",
+      users: "User management"
     };
     const featureLines = (pkg?.features || []).map(f => `• ${MAP[f] || f}`);
 
-    return sendText(from,
+    return sendText(
+      from,
 `✅ Selected: *${plan.name}* (${chargeAmount} ${plan.currency})
 
 📦 Package limits:
@@ -1385,7 +1441,8 @@ ${featureLines.join("\n")}
 Please enter the EcoCash number you want to pay with:
 Example: 0772123456
 
-Or type *same* to use this WhatsApp number.`);
+Or type *same* to use this WhatsApp number.`
+    );
   }
 
   // ── Sales document actions ─────────────────────────────────────────────────
@@ -1396,7 +1453,9 @@ Or type *same* to use this WhatsApp number.`);
     const doc = await Invoice.findById(docId);
     if (!doc) { await sendText(from, "Document not found."); return sendSalesMenu(from); }
 
-    biz.sessionState = "sales_doc_action"; biz.sessionData = { docId };
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+    biz.sessionState = "sales_doc_action";
+    biz.sessionData = { docId };
     await saveBizSafe(biz);
 
     const buttons = [{ id: ACTIONS.VIEW_DOC, title: "📄 View PDF" }];
@@ -1406,7 +1465,10 @@ Or type *same* to use this WhatsApp number.`);
     buttons.push({ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" });
     buttons.push({ id: ACTIONS.BACK, title: "⬅ Back to List" });
 
-    return sendButtons(from, { text: `📄 ${doc.number}\nStatus: ${doc.status}`, buttons });
+    return sendButtons(from, {
+      text: `📄 ${doc.number}\nStatus: ${doc.status}`,
+      buttons
+    });
   }
 
   if (a === ACTIONS.VIEW_DOC) {
@@ -1418,27 +1480,43 @@ Or type *same* to use this WhatsApp number.`);
     if (!client) { await sendText(from, "❌ Client not found."); return sendSalesMenu(from); }
 
     const { filename } = await generatePDF({
-      type: doc.type, number: doc.number, date: doc.createdAt || new Date(),
-      billingTo: client.name || client.phone, items: doc.items,
-      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", discountPercent: doc.discountPercent || 0, vatPercent: doc.vatPercent || 0, applyVat: doc.type === "receipt" ? false : true, _id: biz._id.toString(), status: doc.status }
+      type: doc.type,
+      number: doc.number,
+      date: doc.createdAt || new Date(),
+      billingTo: client.name || client.phone,
+      items: doc.items,
+      bizMeta: {
+        name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "",
+        discountPercent: doc.discountPercent || 0, vatPercent: doc.vatPercent || 0,
+        applyVat: doc.type === "receipt" ? false : true,
+        _id: biz._id.toString(), status: doc.status
+      }
     });
 
     const site = (process.env.SITE_URL || "").replace(/\/$/, "");
     const folder = doc.type === "invoice" ? "invoices" : doc.type === "quote" ? "quotes" : "receipts";
     const url = `${site}/docs/generated/${folder}/${filename}`;
     await sendDocument(from, { link: url, filename });
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     return;
   }
 
   if (a === ACTIONS.DELETE_DOC) {
     if (!biz?.sessionData?.docId) { await sendText(from, "❌ No document selected."); return sendSalesMenu(from); }
-    if (!caller || !["owner", "manager"].includes(caller.role)) { await sendText(from, "🔒 Only managers and owners can delete documents."); return sendSalesMenu(from); }
+    const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+    if (!caller || !["owner", "manager"].includes(caller.role)) {
+      await sendText(from, "🔒 Only managers and owners can delete documents.");
+      return sendSalesMenu(from);
+    }
     const doc = await Invoice.findById(biz.sessionData.docId);
     if (!doc) { await sendText(from, "❌ Document not found."); return sendSalesMenu(from); }
     if (doc.status === "paid") { await sendText(from, "❌ Paid documents cannot be deleted."); return sendSalesMenu(from); }
     await Invoice.deleteOne({ _id: doc._id });
-    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
     await sendText(from, "🗑 Document deleted successfully.");
     return sendSalesMenu(from);
   }
@@ -1457,22 +1535,34 @@ Or type *same* to use this WhatsApp number.`);
   if (a.startsWith("cashbal_branch_")) {
     if (!biz) return sendMainMenu(from);
     const targetBranchId = a.replace("cashbal_branch_", "");
-    const cashAction = biz.sessionData?.cashBalAction;
-    if (!cashAction) return sendMainMenu(from);
+    const action = biz.sessionData?.cashBalAction;
+
+    if (!action) return sendMainMenu(from);
 
     biz.sessionData.targetBranchId = targetBranchId;
 
-    if (cashAction === "set_opening") {
-      biz.sessionState = "cash_set_opening_balance"; await saveBizSafe(biz);
-      return sendButtons(from, { text: "📝 *Set Opening Balance*\n\nEnter the opening cash amount:", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    if (action === "set_opening") {
+      biz.sessionState = "cash_set_opening_balance";
+      await saveBizSafe(biz);
+      return sendButtons(from, {
+        text: "📝 *Set Opening Balance*\n\nEnter the opening cash amount:",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
     }
-    if (cashAction === "payout") {
-      biz.sessionState = "cash_payout_amount"; await saveBizSafe(biz);
-      return sendButtons(from, { text: "💸 *Record Payout*\n\nEnter payout amount:", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+    if (action === "payout") {
+      biz.sessionState = "cash_payout_amount";
+      await saveBizSafe(biz);
+      return sendButtons(from, {
+        text: "💸 *Record Payout*\n\nEnter payout amount:",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
     }
-    if (cashAction === "view") {
+
+    if (action === "view") {
       return showBranchCashBalance(from, biz, targetBranchId);
     }
+
     return sendMainMenu(from);
   }
 
@@ -1497,37 +1587,66 @@ Or type *same* to use this WhatsApp number.`);
     // ─── VIEW CASH BALANCE ──────────────────────────────────────────────────
     case ACTIONS.VIEW_CASH_BALANCE: {
       if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+
+      // OWNER: show branch selector
       if (caller?.role === "owner") {
         const branches = await Branch.find({ businessId: biz._id }).lean();
-        if (!branches.length) { await sendText(from, "❌ No branches found."); return sendMainMenu(from); }
+        if (!branches.length) {
+          await sendText(from, "❌ No branches found.");
+          return sendMainMenu(from);
+        }
         biz.sessionData = { ...(biz.sessionData || {}), cashBalAction: "view" };
         await saveBizSafe(biz);
         return sendList(from, "🏬 Select branch to view balance:", [
-          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: `🏬 ${b.name}` })),
+          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: b.name })),
           { id: "cashbal_branch_all", title: "📊 All Branches" }
         ]);
       }
-      if (!caller?.branchId) { await sendText(from, "❌ No branch assigned. Contact your manager."); return sendMainMenu(from); }
+
+      // Clerk/Manager: their own branch
+      if (!caller?.branchId) {
+        await sendText(from, "❌ No branch assigned. Contact your manager.");
+        return sendMainMenu(from);
+      }
       return showBranchCashBalance(from, biz, caller.branchId.toString());
     }
 
     // ─── SET OPENING BALANCE ────────────────────────────────────────────────
     case ACTIONS.SET_OPENING_BALANCE: {
       if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+
+      // OWNER: choose which branch to set
       if (caller?.role === "owner") {
         const branches = await Branch.find({ businessId: biz._id }).lean();
-        if (!branches.length) { await sendText(from, "❌ No branches found."); return sendMainMenu(from); }
+        if (!branches.length) {
+          await sendText(from, "❌ No branches found.");
+          return sendMainMenu(from);
+        }
         biz.sessionData = { ...(biz.sessionData || {}), cashBalAction: "set_opening" };
         await saveBizSafe(biz);
         return sendList(from, "🏬 Select branch to set opening balance:", [
-          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: `🏬 ${b.name}` }))
+          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: b.name }))
         ]);
       }
-      if (!caller?.branchId) { await sendText(from, "❌ No branch assigned. Contact your manager."); return sendMainMenu(from); }
 
+      // Clerk/Manager: own branch only
+      if (!caller?.branchId) {
+        await sendText(from, "❌ No branch assigned. Contact your manager.");
+        return sendMainMenu(from);
+      }
+
+      // Check if already set
       const CashBalance = (await import("../models/cashBalance.js")).default;
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const existing = await CashBalance.findOne({ businessId: biz._id, branchId: caller.branchId, date: today }).lean();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const existing = await CashBalance.findOne({
+        businessId: biz._id,
+        branchId: caller.branchId,
+        date: today
+      }).lean();
 
       if (existing && existing.openingBalance > 0) {
         await sendText(from, `⚠️ Opening balance already set for today: *${existing.openingBalance} ${biz.currency}*\n\nContact your manager to change it.`);
@@ -1538,32 +1657,53 @@ Or type *same* to use this WhatsApp number.`);
       biz.sessionState = "cash_set_opening_balance";
       biz.sessionData = { targetBranchId: caller.branchId.toString() };
       await saveBizSafe(biz);
-      return sendButtons(from, { text: `📝 *Set Opening Balance*\n\nEnter the amount of cash in the till at the start of today:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+      return sendButtons(from, {
+        text: `📝 *Set Opening Balance*\n\nEnter the amount of cash in the till at the start of today:`,
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
     }
 
     // ─── RECORD PAYOUT ──────────────────────────────────────────────────────
     case ACTIONS.RECORD_PAYOUT: {
       if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+
+      // OWNER: choose which branch
       if (caller?.role === "owner") {
         const branches = await Branch.find({ businessId: biz._id }).lean();
-        if (!branches.length) { await sendText(from, "❌ No branches found."); return sendMainMenu(from); }
+        if (!branches.length) {
+          await sendText(from, "❌ No branches found.");
+          return sendMainMenu(from);
+        }
         biz.sessionData = { ...(biz.sessionData || {}), cashBalAction: "payout" };
         await saveBizSafe(biz);
         return sendList(from, "🏬 Select branch to record payout:", [
-          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: `🏬 ${b.name}` }))
+          ...branches.map(b => ({ id: `cashbal_branch_${b._id}`, title: b.name }))
         ]);
       }
-      if (!caller?.branchId) { await sendText(from, "❌ No branch assigned. Contact your manager."); return sendMainMenu(from); }
+
+      if (!caller?.branchId) {
+        await sendText(from, "❌ No branch assigned. Contact your manager.");
+        return sendMainMenu(from);
+      }
+
       biz.sessionState = "cash_payout_amount";
       biz.sessionData = { targetBranchId: caller.branchId.toString() };
       await saveBizSafe(biz);
-      return sendButtons(from, { text: `💸 *Record Payout/Drawing*\n\nEnter the amount taken out of the till:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+
+      return sendButtons(from, {
+        text: `💸 *Record Payout/Drawing*\n\nEnter the amount taken out of the till:`,
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
     }
 
     case ACTIONS.REPORTS_MENU: {
       if (!biz) return sendMainMenu(from);
       if (!canUseFeature(biz, "reports_daily")) return promptUpgrade({ biz, from, feature: "Reports" });
-      biz.sessionState = "reports_menu"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "reports_menu";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       const isGold = biz.package === "gold";
       return sendReportsMenu(from, isGold);
     }
@@ -1582,17 +1722,25 @@ Or type *same* to use this WhatsApp number.`);
 
     case "branch_daily": {
       if (!biz) return sendMainMenu(from);
-      biz.sessionState = "report_choose_branch"; biz.sessionData = { reportType: "daily" }; await saveBizSafe(biz);
+      biz.sessionState = "report_choose_branch";
+      biz.sessionData = { reportType: "daily" };
+      await saveBizSafe(biz);
       return continueTwilioFlow({ from, text: "auto" });
     }
+
     case "branch_weekly": {
       if (!biz) return sendMainMenu(from);
-      biz.sessionState = "report_choose_branch"; biz.sessionData = { reportType: "weekly" }; await saveBizSafe(biz);
+      biz.sessionState = "report_choose_branch";
+      biz.sessionData = { reportType: "weekly" };
+      await saveBizSafe(biz);
       return continueTwilioFlow({ from, text: "auto" });
     }
+
     case "branch_monthly": {
       if (!biz) return sendMainMenu(from);
-      biz.sessionState = "report_choose_branch"; biz.sessionData = { reportType: "monthly" }; await saveBizSafe(biz);
+      biz.sessionState = "report_choose_branch";
+      biz.sessionData = { reportType: "monthly" };
+      await saveBizSafe(biz);
       return continueTwilioFlow({ from, text: "auto" });
     }
 
@@ -1607,12 +1755,16 @@ Or type *same* to use this WhatsApp number.`);
 
     case ACTIONS.INVITE_USER: {
       if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone: phone, pending: false });
       if (!caller || caller.role !== "owner") return sendText(from, "🔒 Only the business owner can invite users.");
+      const { PACKAGES } = await import("./packages.js");
       const pkg = PACKAGES[biz.package] || PACKAGES.trial;
       if (!pkg.features.includes("users")) return promptUpgrade({ biz, from, feature: "User management" });
       const activeUsers = await UserRole.countDocuments({ businessId: biz._id, pending: false });
       if (activeUsers >= pkg.users) return sendText(from, `🚫 User limit reached (${pkg.users}).\n\nUpgrade your package to add more users.`);
-      biz.sessionState = "invite_user_choose_branch"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "invite_user_choose_branch";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       const branches = await Branch.find({ businessId: biz._id }).lean();
       if (!branches.length) { await sendText(from, "No branches found. Please add a branch first."); return sendBranchesMenu(from); }
       return sendList(from, "Select branch for new user", branches.map(b => ({ id: `invite_branch_${b._id}`, title: b.name })));
@@ -1621,6 +1773,7 @@ Or type *same* to use this WhatsApp number.`);
     case ACTIONS.BRANCHES_MENU: {
       if (!biz) return sendMainMenu(from);
       const { canAccessSection } = await import("./roleGuard.js");
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
       if (!caller || !canAccessSection(caller.role, "branches")) return sendText(from, "🔒 You do not have permission to access branches.");
       return sendBranchesMenu(from);
     }
@@ -1631,7 +1784,8 @@ Or type *same* to use this WhatsApp number.`);
       const count = await Branch.countDocuments({ businessId: biz._id });
       const { branches } = (await import("./packages.js")).PACKAGES[biz.package];
       if (count >= branches) return sendText(from, `🚫 Branch limit reached (${branches}).\nUpgrade your package to add more branches.`);
-      biz.sessionState = "branch_add_name"; await saveBizSafe(biz);
+      biz.sessionState = "branch_add_name";
+      await saveBizSafe(biz);
       return sendButtons(from, { text: "🏬 *Enter new branch name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
     }
 
@@ -1649,7 +1803,9 @@ Or type *same* to use this WhatsApp number.`);
       if (!biz) return sendMainMenu(from);
       const users = await UserRole.find({ businessId: biz._id, pending: false }).lean();
       if (!users.length) { await sendText(from, "No active users found."); return sendMainMenu(from); }
-      biz.sessionState = "assign_branch_pick_user"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "assign_branch_pick_user";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendList(from, "Select user", users.map(u => ({ id: `assign_user_${u._id}`, title: u.phone })));
     }
 
@@ -1667,23 +1823,19 @@ Or type *same* to use this WhatsApp number.`);
       const users = await UserRole.find({ businessId: biz._id, pending: false }).populate("branchId");
       if (!users.length) return sendText(from, "No active users found.");
       let msg = "👥 *Active Users:*\n";
-      users.forEach((u, i) => { msg += `${i + 1}) ${u.phone} | ${u.role} | ${u.branchId?.name || "N/A"}${u.locked ? " 🔒" : ""}\n`; });
+      users.forEach((u, i) => { msg += `${i + 1}) ${u.phone} | ${u.role} | ${u.branchId?.name || "N/A"}\n`; });
       return sendText(from, msg);
     }
 
-    case ACTIONS.PAYMENT_IN: {
-      if (!biz) return sendMainMenu(from);
-      // Owner: pick a branch to show unpaid invoices from
-      if (caller?.role === "owner") return sendBranchSelectorPaymentIn(from);
+    case ACTIONS.PAYMENT_IN:
       await showUnpaidInvoices(from);
       return;
-    }
 
     case ACTIONS.PAYMENT_OUT: {
       if (!biz) return sendMainMenu(from);
-      // Owner: pick branch first
-      if (caller?.role === "owner") return sendBranchSelectorExpense(from);
-      biz.sessionState = ACTIONS.EXPENSE_CATEGORY; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendList(from, "📂 Select Expense Category", [
         { id: "exp_cat_rent", title: "🏢 Rent" },
         { id: "exp_cat_utilities", title: "💡 Utilities" },
@@ -1696,14 +1848,16 @@ Or type *same* to use this WhatsApp number.`);
     case ACTIONS.BUSINESS_MENU: {
       if (!biz) return sendMainMenu(from);
       const { canAccessSection } = await import("./roleGuard.js");
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
       if (!caller || !canAccessSection(caller.role, "users")) return sendText(from, "🔒 You do not have permission to access Business & Users.");
       return sendBusinessMenu(from);
     }
 
-    // ✅ OWNER ONLY — subscription menu
+    // ✅ HIDE SUBSCRIPTION MENU FROM CLERKS & MANAGERS
     case ACTIONS.SUBSCRIPTION_MENU: {
       if (!biz) return sendMainMenu(from);
-      if (!caller || caller.role !== "owner") {
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      if (caller && !["owner"].includes(caller.role)) {
         return sendText(from, "🔒 Only the business owner can manage subscriptions.");
       }
       return sendSubscriptionMenu(from);
@@ -1712,94 +1866,110 @@ Or type *same* to use this WhatsApp number.`);
     case ACTIONS.SETTINGS_MENU: {
       if (!biz) return sendMainMenu(from);
       const { canAccessSection } = await import("./roleGuard.js");
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
       if (!caller || !canAccessSection(caller.role, "settings")) return sendText(from, "🔒 You do not have permission to access Settings.");
-      biz.sessionState = "settings_menu"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "settings_menu";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendSettingsMenu(from);
     }
 
-    // ✅ OWNER ONLY — upgrade package
+    // ✅ HIDE UPGRADE FROM CLERKS & MANAGERS
     case ACTIONS.UPGRADE_PACKAGE: {
       if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
       if (!caller || caller.role !== "owner") return sendText(from, "🔒 Only the business owner can change the package.");
-      biz.sessionState = "choose_package"; await saveBizSafe(biz);
+      biz.sessionState = "choose_package";
+      await saveBizSafe(biz);
       return sendPackagesMenu(from, biz.package);
     }
 
     case ACTIONS.BACK:
       return sendMainMenu(from);
 
-    // ─── NEW INVOICE / QUOTE / RECEIPT ────────────────────────────────────
     case ACTIONS.NEW_INVOICE: {
       if (!biz) return sendMainMenu(from);
-      // Owner picks which branch the invoice goes to
-      if (caller?.role === "owner") return sendBranchSelectorNewDoc(from, "invoice");
       return startInvoiceFlow(from);
     }
 
     case ACTIONS.NEW_QUOTE: {
       if (!biz) return sendMainMenu(from);
       if (biz.package === "trial") return promptUpgrade({ biz, from, feature: "Quotes" });
-      if (caller?.role === "owner") return sendBranchSelectorNewDoc(from, "quote");
       return startQuoteFlow(from);
     }
 
     case ACTIONS.NEW_RECEIPT: {
       if (!biz) return sendMainMenu(from);
       if (biz.package === "trial") return promptUpgrade({ biz, from, feature: "Receipts" });
-      if (caller?.role === "owner") return sendBranchSelectorNewDoc(from, "receipt");
       return startReceiptFlow(from);
     }
 
     case ACTIONS.VIEW_INVOICES: {
       if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorInvoices(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      if (caller?.role === "owner") {
+        const { sendBranchSelectorInvoices } = await import("./metaMenus.js");
+        return sendBranchSelectorInvoices(from);
+      }
       return showSalesDocs(from, "invoice");
     }
 
     case ACTIONS.VIEW_QUOTES: {
       if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorQuotes(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      if (caller?.role === "owner") {
+        const { sendBranchSelectorQuotes } = await import("./metaMenus.js");
+        return sendBranchSelectorQuotes(from);
+      }
       return showSalesDocs(from, "quote");
     }
 
     case ACTIONS.VIEW_RECEIPTS: {
       if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorReceipts(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      if (caller?.role === "owner") {
+        const { sendBranchSelectorReceipts } = await import("./metaMenus.js");
+        return sendBranchSelectorReceipts(from);
+      }
       return showSalesDocs(from, "receipt");
     }
 
-    case ACTIONS.ADD_CLIENT: {
-      if (!biz) return sendMainMenu(from);
-      // Owner picks branch first
-      if (caller?.role === "owner") return sendBranchSelectorAddClient(from);
+    case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
-    }
 
     case ACTIONS.PRODUCTS_MENU:
       return sendProductsMenu(from);
 
+    case ACTIONS.ADD_PRODUCT: {
+      if (!biz) return sendMainMenu(from);
+      biz.sessionState = "product_add_name";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      return sendButtons(from, { text: "📦 *Enter product name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    }
+
     case ACTIONS.VIEW_PRODUCTS: {
       if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorProducts(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      if (caller?.role === "owner") {
+        const { sendBranchSelectorProducts } = await import("./metaMenus.js");
+        return sendBranchSelectorProducts(from);
+      }
       const query = { businessId: biz._id, isActive: true };
       if (caller?.branchId) query.branchId = caller.branchId;
       const products = await Product.find(query).lean();
       if (!products.length) { await sendText(from, "📦 No products found for your branch."); return sendMainMenu(from); }
       let msg = "📦 *Products (Your Branch):*\n\n";
-      products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+      products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
       await sendText(from, msg);
       return sendMainMenu(from);
     }
 
-    case ACTIONS.VIEW_CLIENTS: {
-      if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorViewClients(from);
-      return showClientsList(from, biz, caller?.branchId || null);
-    }
-
     case ACTIONS.BULK_UPLOAD_PRODUCTS: {
       if (!biz) return sendMainMenu(from);
-      biz.sessionState = "bulk_upload_products"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "bulk_upload_products";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendText(from,
 `📥 *Bulk upload (Products & Services)*
 
@@ -1815,34 +1985,43 @@ Example:
 Milk 1L - 1.50
 Math Lesson | 10
 
-Reply *done* when finished, or *cancel* to exit.`);
+Reply *done* when finished, or *cancel* to exit.`
+      );
     }
 
     case ACTIONS.BULK_UPLOAD_MENU:
       return sendButtons(from, {
         text: "📋 *Bulk Paste (Products & Services)*\n\nPaste items (one per line).",
-        buttons: [{ id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" }, { id: ACTIONS.BACK, title: "⬅ Back" }]
+        buttons: [
+          { id: ACTIONS.BULK_PASTE_MODE, title: "📋 Paste list" },
+          { id: ACTIONS.BACK, title: "⬅ Back" }
+        ]
       });
 
     case ACTIONS.BULK_PASTE_MODE: {
       if (!biz) return sendMainMenu(from);
-      biz.sessionState = "bulk_paste_input"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "bulk_paste_input";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendText(from,
 `📋 *Bulk Add Products*
 
-✅ Format: Name, Price | Name, Price
+✅ Format: Name, Price | Name, Price | Name, Price
 
 Example:
 Milk 1L, 1.50 | Bread, 2 | Math Lesson, 10
 
-Paste now, or reply *done* to finish.`);
+⚠️ Use *|* to separate products, comma between name and price.
+
+Paste now, or reply *done* to finish.`
+      );
     }
 
     case ACTIONS.BULK_EXPENSE_MODE: {
       if (!biz) return sendMainMenu(from);
-      // Owner picks branch first
-      if (caller?.role === "owner") return sendBranchSelectorBulkExpense(from);
-      biz.sessionState = "bulk_expense_input"; biz.sessionData = {}; await saveBizSafe(biz);
+      biz.sessionState = "bulk_expense_input";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
       return sendText(from,
 `📋 *Bulk Add Expenses*
 
@@ -1852,35 +2031,88 @@ Example:
 Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
 
 Categories: Rent, Utilities, Transport, Supplies, Other
-(Category optional — defaults to Other)
+(Category is optional — defaults to Other)
 
-Paste now, or reply *done* to finish.`);
+Use *|* or new lines to separate expenses.
+
+Paste now, or reply *done* to finish.`
+      );
     }
 
     case ACTIONS.SUBSCRIPTION_PAYMENTS: {
       if (!biz) return sendMainMenu(from);
+      // Only owners
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
       if (caller && caller.role !== "owner") return sendText(from, "🔒 Only the business owner can view subscription payments.");
       const rows = await SubscriptionPayment.find({ businessId: biz._id }).sort({ createdAt: -1 }).limit(10).lean();
       if (!rows.length) { await sendText(from, "No subscription payments yet."); return sendSubscriptionMenu(from); }
       return sendList(from, "🧾 Subscription payments", rows.map(r => ({
         id: `subpay_${r._id}`,
-        title: `${(r.packageKey || "").toUpperCase()} — ${r.amount} ${r.currency}`,
+        title: `${(r.packageKey || "").toUpperCase()} - ${r.amount} ${r.currency}`,
         description: `${r.status}${r.paidAt ? ` • ${new Date(r.paidAt).toDateString()}` : ""}`
       })));
     }
 
     case ACTIONS.VIEW_EXPENSE_RECEIPTS: {
       if (!biz) return sendMainMenu(from);
-      // Owner: pick branch first
-      if (caller?.role === "owner") return sendBranchSelectorViewExpenses(from);
-      return showExpenseReceipts(from, biz, caller?.branchId || null);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      const query = { businessId: biz._id };
+      if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) query.branchId = caller.branchId;
+      const Expense = (await import("../models/expense.js")).default;
+      const expenses = await Expense.find(query).sort({ createdAt: -1 }).limit(10).lean();
+      if (!expenses.length) { await sendText(from, "📋 No expense receipts found."); return sendPaymentsMenu(from); }
+      let msg = "🧾 *Recent Expense Receipts:*\n\n";
+      expenses.forEach((e, i) => {
+        const date = new Date(e.createdAt).toLocaleDateString();
+        msg += `${i + 1}. *${e.category || "Other"}* - ${e.amount} ${biz.currency}\n`;
+        msg += `   ${e.description || "No description"}\n`;
+        msg += `   ${date} (${e.method || "Unknown method"})\n\n`;
+      });
+      await sendText(from, msg);
+      return sendPaymentsMenu(from);
     }
 
     case ACTIONS.VIEW_PAYMENT_HISTORY: {
       if (!biz) return sendMainMenu(from);
-      // Owner: pick branch first
-      if (caller?.role === "owner") return sendBranchSelectorPaymentHistory(from);
-      return showPaymentHistory(from, biz, caller?.branchId || null);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      const query = { businessId: biz._id };
+      if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) query.branchId = caller.branchId;
+      const InvoicePayment = (await import("../models/invoicePayment.js")).default;
+      const payments = await InvoicePayment.find(query).sort({ createdAt: -1 }).limit(10).lean();
+      if (!payments.length) { await sendText(from, "📋 No payment history found."); return sendPaymentsMenu(from); }
+      let msg = "💵 *Recent Payments:*\n\n";
+      for (const p of payments) {
+        const invoice = await Invoice.findById(p.invoiceId).lean();
+        const date = new Date(p.createdAt).toLocaleDateString();
+        msg += `• *${p.amount} ${biz.currency}* (${p.method})\n`;
+        msg += `  Invoice: ${invoice?.number || "Unknown"}\n`;
+        msg += `  Date: ${date}\n\n`;
+      }
+      await sendText(from, msg);
+      return sendPaymentsMenu(from);
+    }
+
+    case ACTIONS.VIEW_CLIENTS: {
+      if (!biz) return sendMainMenu(from);
+      const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+      const Client = (await import("../models/client.js")).default;
+      let clients;
+      if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
+        const branchInvoices = await Invoice.find({ businessId: biz._id, branchId: caller.branchId }).distinct("clientId");
+        clients = await Client.find({ businessId: biz._id, _id: { $in: branchInvoices } }).lean();
+      } else {
+        clients = await Client.find({ businessId: biz._id }).lean();
+      }
+      if (!clients.length) { await sendText(from, "📋 No clients found."); return sendClientsMenu(from); }
+      let msg = "👥 *Your Clients:*\n\n";
+      clients.forEach((c, i) => {
+        msg += `${i + 1}. *${c.name || "No name"}*\n`;
+        if (c.phone) msg += `   📞 ${c.phone}\n`;
+        if (c.email) msg += `   📧 ${c.email}\n`;
+        msg += "\n";
+      });
+      await sendText(from, msg);
+      return sendClientsMenu(from);
     }
 
     case ACTIONS.MAIN_MENU:
@@ -1901,7 +2133,7 @@ Paste now, or reply *done* to finish.`);
         const products = await Product.find({ businessId: biz._id, isActive: true }).lean();
         if (!products.length) { await sendText(from, "📦 No products found."); return sendProductsMenu(from); }
         let msg = "📦 *All Products (All Branches):*\n\n";
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         return sendProductsMenu(from);
       }
@@ -1913,12 +2145,12 @@ Paste now, or reply *done* to finish.`);
         const products = await Product.find({ businessId: biz._id, branchId, isActive: true }).lean();
         if (!products.length) { await sendText(from, `📦 No products found for ${branch?.name || "this branch"}.`); return sendProductsMenu(from); }
         let msg = `📦 *Products (${branch?.name || "Branch"}):*\n\n`;
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         return sendProductsMenu(from);
       }
 
-      // "cashbal_branch_all"
+      // "cashbal_branch_all" — show all branches summary
       if (a === "cashbal_branch_all") {
         if (!biz) return sendMainMenu(from);
         return showAllBranchesCashBalance(from, biz);
@@ -1966,192 +2198,176 @@ Paste now, or reply *done* to finish.`);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED DISPLAY HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function showClientsList(from, biz, branchId) {
-  const Client = (await import("../models/client.js")).default;
-  let clients;
-
-  if (branchId) {
-    const branchInvoices = await Invoice.find({ businessId: biz._id, branchId }).distinct("clientId");
-    clients = await Client.find({ businessId: biz._id, _id: { $in: branchInvoices } }).lean();
-  } else {
-    clients = await Client.find({ businessId: biz._id }).lean();
-  }
-
-  if (!clients.length) {
-    const branch = branchId ? await Branch.findById(branchId) : null;
-    await sendText(from, branch ? `📋 No clients found for *${branch.name}*.` : "📋 No clients found.");
-    return sendClientsMenu(from);
-  }
-
-  const branch = branchId ? await Branch.findById(branchId) : null;
-  let msg = branch ? `👥 *Clients — ${branch.name}:*\n\n` : "👥 *All Clients:*\n\n";
-  clients.forEach((c, i) => {
-    msg += `${i + 1}. *${c.name || "No name"}*\n`;
-    if (c.phone) msg += `   📞 ${c.phone}\n`;
-    if (c.email) msg += `   📧 ${c.email}\n`;
-    msg += "\n";
-  });
-
-  await sendText(from, msg);
-  return sendClientsMenu(from);
-}
-
-async function showExpenseReceipts(from, biz, branchId) {
-  const Expense = (await import("../models/expense.js")).default;
-  const query = { businessId: biz._id };
-  if (branchId) query.branchId = branchId;
-
-  const expenses = await Expense.find(query).sort({ createdAt: -1 }).limit(10).lean();
-
-  if (!expenses.length) {
-    const branch = branchId ? await Branch.findById(branchId) : null;
-    await sendText(from, branch ? `📋 No expense receipts found for *${branch.name}*.` : "📋 No expense receipts found.");
-    return sendPaymentsMenu(from);
-  }
-
-  const branch = branchId ? await Branch.findById(branchId) : null;
-  let msg = branch
-    ? `🧾 *Recent Expense Receipts — ${branch.name}:*\n\n`
-    : "🧾 *Recent Expense Receipts (All Branches):*\n\n";
-
-  expenses.forEach((e, i) => {
-    const date = new Date(e.createdAt).toLocaleDateString();
-    msg += `${i + 1}. *${e.category || "Other"}* — ${e.amount} ${biz.currency}\n`;
-    msg += `   ${e.description || "No description"}\n`;
-    msg += `   ${date} (${e.method || "Unknown method"})\n\n`;
-  });
-
-  await sendText(from, msg);
-  return sendPaymentsMenu(from);
-}
-
-async function showPaymentHistory(from, biz, branchId) {
-  const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-  const query = { businessId: biz._id };
-  if (branchId) query.branchId = branchId;
-
-  const payments = await InvoicePayment.find(query).sort({ createdAt: -1 }).limit(10).lean();
-
-  if (!payments.length) {
-    const branch = branchId ? await Branch.findById(branchId) : null;
-    await sendText(from, branch ? `📋 No payment history found for *${branch.name}*.` : "📋 No payment history found.");
-    return sendPaymentsMenu(from);
-  }
-
-  const branch = branchId ? await Branch.findById(branchId) : null;
-  let msg = branch
-    ? `💵 *Recent Payments — ${branch.name}:*\n\n`
-    : "💵 *Recent Payments (All Branches):*\n\n";
-
-  for (const p of payments) {
-    const invoice = await Invoice.findById(p.invoiceId).lean();
-    const date = new Date(p.createdAt).toLocaleDateString();
-    msg += `• *${p.amount} ${biz.currency}* (${p.method})\n`;
-    msg += `  Invoice: ${invoice?.number || "Unknown"}\n`;
-    msg += `  Date: ${date}\n\n`;
-  }
-
-  await sendText(from, msg);
-  return sendPaymentsMenu(from);
-}
-
 // ─── Cash balance display helpers ─────────────────────────────────────────────
 
 async function showBranchCashBalance(from, biz, branchId) {
   const CashBalance = (await import("../models/cashBalance.js")).default;
   const CashPayout = (await import("../models/cashPayout.js")).default;
   const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-  const BranchModel = (await import("../models/branch.js")).default;
-  const InvoiceModel = (await import("../models/invoice.js")).default;
+  const Branch = (await import("../models/branch.js")).default;
+  const Invoice = (await import("../models/invoice.js")).default;
   const Expense = (await import("../models/expense.js")).default;
 
-  const branch = await BranchModel.findById(branchId).lean();
+  const branch = await Branch.findById(branchId).lean();
   const branchName = branch?.name || "Branch";
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const balance = await CashBalance.findOne({ businessId: biz._id, branchId, date: today }).lean();
+  const balance = await CashBalance.findOne({
+    businessId: biz._id,
+    branchId,
+    date: today
+  }).lean();
 
-  const cashPayments = await InvoicePayment.find({ businessId: biz._id, branchId, createdAt: { $gte: today, $lt: tomorrow } }).lean();
-  const cashReceipts = await InvoiceModel.find({ businessId: biz._id, branchId, type: "receipt", createdAt: { $gte: today, $lt: tomorrow } }).lean();
-  const expenses = await Expense.find({ businessId: biz._id, branchId, createdAt: { $gte: today, $lt: tomorrow } }).lean();
+  // ── Fetch today's transactions ──────────────────────────────────────────
+  // Cash receipts (invoice payments) recorded today
+  const cashPayments = await InvoicePayment.find({
+    businessId: biz._id,
+    branchId,
+    createdAt: { $gte: today, $lt: tomorrow }
+  }).lean();
 
+  // Receipt-type invoices (instant cash sales) created today
+  const cashReceipts = await Invoice.find({
+    businessId: biz._id,
+    branchId,
+    type: "receipt",
+    createdAt: { $gte: today, $lt: tomorrow }
+  }).lean();
+
+  // Expenses today
+  const expenses = await Expense.find({
+    businessId: biz._id,
+    branchId,
+    createdAt: { $gte: today, $lt: tomorrow }
+  }).lean();
+
+  // Payouts today
   let payouts = [];
   try {
-    payouts = await CashPayout.find({ businessId: biz._id, branchId, date: today }).lean();
-  } catch (_) {}
+    payouts = await CashPayout.find({
+      businessId: biz._id,
+      branchId,
+      date: today
+    }).lean();
+  } catch (_) {
+    // CashPayout model may not exist yet — silently ignore
+  }
 
   const cur = biz.currency;
   const opening = balance?.openingBalance ?? 0;
-  const cashIn = cashPayments.reduce((s, p) => s + p.amount, 0) + cashReceipts.reduce((s, r) => s + r.total, 0);
+
+  // Total cash in = invoice payments + receipt sales
+  const cashIn = cashPayments.reduce((s, p) => s + p.amount, 0)
+    + cashReceipts.reduce((s, r) => s + r.total, 0);
+
+  // Total cash out = expenses + payouts
   const cashOutExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const cashOutPayouts = payouts.reduce((s, p) => s + p.amount, 0);
   const cashOut = cashOutExpenses + cashOutPayouts;
+
   const closing = opening + cashIn - cashOut;
 
+  // ── Build message ───────────────────────────────────────────────────────
   let msg = `💰 *Cash Balance — ${branchName}*\n📅 ${today.toDateString()}\n\n`;
   msg += `━━━━━━━━━━━━━━\n`;
   msg += `📂 *Opening Balance:* ${opening} ${cur}\n\n`;
+
   msg += `📈 *Cash In:* +${cashIn} ${cur}\n`;
-  if (cashPayments.length > 0) msg += `   • Invoice payments: ${cashPayments.reduce((s, p) => s + p.amount, 0)} ${cur} (${cashPayments.length})\n`;
-  if (cashReceipts.length > 0) msg += `   • Receipt sales: ${cashReceipts.reduce((s, r) => s + r.total, 0)} ${cur} (${cashReceipts.length})\n`;
+  if (cashPayments.length > 0) {
+    msg += `   • Invoice payments: ${cashPayments.reduce((s, p) => s + p.amount, 0)} ${cur} (${cashPayments.length})\n`;
+  }
+  if (cashReceipts.length > 0) {
+    msg += `   • Receipt sales: ${cashReceipts.reduce((s, r) => s + r.total, 0)} ${cur} (${cashReceipts.length})\n`;
+  }
+
   msg += `\n📉 *Cash Out:* -${cashOut} ${cur}\n`;
   if (cashOutExpenses > 0) {
     msg += `   • Expenses: ${cashOutExpenses} ${cur} (${expenses.length})\n`;
+    // Show expense breakdown
     const expByCategory = {};
-    expenses.forEach(e => { expByCategory[e.category || "Other"] = (expByCategory[e.category || "Other"] || 0) + e.amount; });
-    Object.entries(expByCategory).forEach(([cat, amt]) => { msg += `     – ${cat}: ${amt} ${cur}\n`; });
+    expenses.forEach(e => {
+      expByCategory[e.category || "Other"] = (expByCategory[e.category || "Other"] || 0) + e.amount;
+    });
+    Object.entries(expByCategory).forEach(([cat, amt]) => {
+      msg += `     – ${cat}: ${amt} ${cur}\n`;
+    });
   }
   if (cashOutPayouts > 0) {
     msg += `   • Payouts/Drawings: ${cashOutPayouts} ${cur} (${payouts.length})\n`;
-    payouts.forEach(p => { msg += `     – ${p.reason || "No reason"}: ${p.amount} ${cur}\n`; });
+    payouts.forEach(p => {
+      msg += `     – ${p.reason || "No reason"}: ${p.amount} ${cur}\n`;
+    });
   }
+
   msg += `\n━━━━━━━━━━━━━━\n`;
   msg += `${closing >= opening ? "📈" : "📉"} *Closing Balance: ${closing} ${cur}*\n`;
   msg += `━━━━━━━━━━━━━━\n`;
-  if (opening === 0 && cashIn === 0) msg += `\n⚠️ No opening balance set for today.`;
+
+  if (opening === 0 && cashIn === 0) {
+    msg += `\n⚠️ No opening balance set for today.`;
+  }
 
   await sendText(from, msg);
+
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
 }
 
 async function showAllBranchesCashBalance(from, biz) {
   const CashBalance = (await import("../models/cashBalance.js")).default;
-  const BranchModel = (await import("../models/branch.js")).default;
+  const Branch = (await import("../models/branch.js")).default;
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const branches = await BranchModel.find({ businessId: biz._id }).lean();
-  if (!branches.length) { await sendText(from, "❌ No branches found."); return sendMainMenu(from); }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+  if (!branches.length) {
+    await sendText(from, "❌ No branches found.");
+    return sendMainMenu(from);
+  }
 
   const cur = biz.currency;
   let msg = `💰 *Cash Balance Summary — All Branches*\n📅 ${today.toDateString()}\n\n`;
+
   let totalOpening = 0, totalIn = 0, totalOut = 0;
 
   for (const branch of branches) {
-    const balance = await CashBalance.findOne({ businessId: biz._id, branchId: branch._id, date: today }).lean();
+    const balance = await CashBalance.findOne({
+      businessId: biz._id,
+      branchId: branch._id,
+      date: today
+    }).lean();
+
     const opening = balance?.openingBalance ?? 0;
     const cashIn = balance?.cashIn ?? 0;
     const cashOut = balance?.cashOut ?? 0;
     const closing = opening + cashIn - cashOut;
-    totalOpening += opening; totalIn += cashIn; totalOut += cashOut;
+
+    totalOpening += opening;
+    totalIn += cashIn;
+    totalOut += cashOut;
+
+    const trend = closing >= opening ? "📈" : "📉";
     msg += `🏬 *${branch.name}*\n`;
     msg += `   Opening: ${opening} ${cur}\n`;
     msg += `   Cash In: +${cashIn} ${cur}\n`;
     msg += `   Cash Out: -${cashOut} ${cur}\n`;
-    msg += `   ${closing >= opening ? "📈" : "📉"} Closing: *${closing} ${cur}*\n\n`;
+    msg += `   ${trend} Closing: *${closing} ${cur}*\n\n`;
   }
 
-  msg += `━━━━━━━━━━━━━━\n📊 *TOTAL*\n`;
-  msg += `   Opening: ${totalOpening} ${cur}\n   Cash In: +${totalIn} ${cur}\n   Cash Out: -${totalOut} ${cur}\n`;
+  msg += `━━━━━━━━━━━━━━\n`;
+  msg += `📊 *TOTAL*\n`;
+  msg += `   Opening: ${totalOpening} ${cur}\n`;
+  msg += `   Cash In: +${totalIn} ${cur}\n`;
+  msg += `   Cash Out: -${totalOut} ${cur}\n`;
   msg += `   Closing: *${totalOpening + totalIn - totalOut} ${cur}*\n`;
 
   await sendText(from, msg);
+
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
 }
