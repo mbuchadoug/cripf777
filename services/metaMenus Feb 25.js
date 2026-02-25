@@ -46,10 +46,13 @@ export async function sendBranchPickerMenu(to, {
     return sendMainMenu(to);
   }
 
- const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
-// no more "Add a branch first" hard-fail
+  if (!branches.length) {
+    await sendText(to, "❌ No branches found. Add a branch first.");
+    const { sendMainMenu } = await import("./metaMenus.js");
+    return sendMainMenu(to);
+  }
 
   const items = branches.map(b => ({
     id: `${actionPrefix}${b._id}`,
@@ -361,8 +364,7 @@ export async function sendReportBranchPicker(to) {
   const biz = await getBizForPhone(to);
   if (!biz) { await sendText(to, "❌ No business found."); return sendMainMenu(to); }
 
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   const items = [
     { id: "report_branch_all", title: "🌍 All branches" },
@@ -393,8 +395,7 @@ async function _salesDocBranchSelector(to, type, label) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
   const prefix = type === "invoice" ? "view_invoices_branch_"
     : type === "quote" ? "view_quotes_branch_"
     : "view_receipts_branch_";
@@ -414,8 +415,7 @@ export async function sendBranchSelectorProducts(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "📦 View Products - Select Branch", [
     { id: "view_all_products", title: "🌍 All Branches" },
@@ -432,8 +432,7 @@ export async function sendBranchSelectorAddProduct(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
- const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "📦 Add Product - Select Branch", [
     ...branches.map(b => ({ id: `add_product_branch_${b._id}`, title: `🏬 ${b.name}` })),
@@ -449,8 +448,7 @@ export async function sendBranchSelectorNewDoc(to, docType) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
- const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   const label = docType === "invoice" ? "📄 New Invoice"
     : docType === "quote" ? "📋 New Quotation"
@@ -458,7 +456,6 @@ const { branches } = await ensureDefaultBranch(biz._id);
 
   return sendList(to, `${label} - Select Branch`, [
     ...branches.map(b => ({ id: `new_doc_branch_${docType}_${b._id}`, title: `🏬 ${b.name}` })),
-    { id: "branch_add_inline", title: "➕ Add Branch" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
@@ -471,8 +468,7 @@ export async function sendBranchSelectorPaymentIn(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "💵 Record Payment - Select Branch", [
     ...branches.map(b => ({ id: `payment_in_branch_${b._id}`, title: `🏬 ${b.name}` })),
@@ -488,8 +484,7 @@ export async function sendBranchSelectorExpense(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
- const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "💸 Record Expense - Select Branch", [
     ...branches.map(b => ({ id: `expense_branch_${b._id}`, title: `🏬 ${b.name}` })),
@@ -505,8 +500,7 @@ export async function sendBranchSelectorBulkExpense(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "📋 Bulk Expenses - Select Branch", [
     ...branches.map(b => ({ id: `bulk_expense_branch_${b._id}`, title: `🏬 ${b.name}` })),
@@ -522,8 +516,7 @@ export async function sendBranchSelectorViewExpenses(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "🧾 Expense Receipts - Select Branch", [
     { id: "view_expense_receipts_branch_all", title: "🌍 All Branches" },
@@ -540,8 +533,7 @@ export async function sendBranchSelectorPaymentHistory(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "📜 Payment History - Select Branch", [
     { id: "view_payment_history_branch_all", title: "🌍 All Branches" },
@@ -558,8 +550,7 @@ export async function sendBranchSelectorAddClient(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "👥 Add Client - Select Branch", [
     ...branches.map(b => ({ id: `add_client_branch_${b._id}`, title: `🏬 ${b.name}` })),
@@ -575,8 +566,7 @@ export async function sendBranchSelectorViewClients(to) {
   const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-const { branches } = await ensureDefaultBranch(biz._id);
+  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
 
   return sendList(to, "📋 View Clients - Select Branch", [
     { id: "view_clients_branch_all", title: "🌍 All Branches" },

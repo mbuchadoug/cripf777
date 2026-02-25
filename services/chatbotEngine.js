@@ -1673,13 +1673,18 @@ Or type *same* to use this WhatsApp number.`);
       return showSalesDocs(from, "receipt");
     }
 
-    case ACTIONS.ADD_CLIENT: {
-      if (!biz) return sendMainMenu(from);
-      // Owner picks branch first
-      if (caller?.role === "owner") return sendBranchSelectorAddClient(from);
-      return startClientFlow(from);
-    }
+ case ACTIONS.ADD_CLIENT: {
+  const maybeRedirect = await ensureBranchContextOrAsk({
+    biz, saveBiz, req, res, sendTwimlText,
+    purpose: { kind: "add_client" }
+  });
+  if (maybeRedirect?.ok !== true) return maybeRedirect;
 
+  biz.sessionState = "adding_client_name";
+  biz.sessionData = { ...(biz.sessionData || {}) };
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter client name:");
+}
     case ACTIONS.PRODUCTS_MENU:
       return sendProductsMenu(from);
 

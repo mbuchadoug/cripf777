@@ -84,6 +84,11 @@ ADD_BRANCH: "add_branch",
 VIEW_BRANCHES: "view_branches",
 ASSIGN_BRANCH_USERS: "assign_branch_users",
 
+// ✅ BRANCH FLOW (GLOBAL)
+BRANCH_PICKED: "branch_picked",          // optional if you want a generic handler
+BRANCH_ADD_INLINE: "branch_add_inline",  // button inside branch picker
+BRANCH_ADD_CANCEL: "branch_add_cancel",   // cancel adding branch and go back to picker
+
 // SETTINGS
 SETTINGS_CURRENCY: "settings_currency",
 SETTINGS_TERMS: "settings_terms",

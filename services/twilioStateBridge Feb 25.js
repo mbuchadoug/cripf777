@@ -248,24 +248,6 @@ export async function continueTwilioFlow({ from, text }) {
     return true;
   }
 
-
-  if (state === "select_branch") {
-  const Branch = (await import("../models/branch.js")).default;
-  const branches = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
-
-  // Safety: if somehow none, create default then re-fetch
-  if (!branches.length) {
-    const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-    await ensureDefaultBranch(biz._id);
-    const refetch = await Branch.find({ businessId: biz._id }).sort({ name: 1 }).lean();
-    branches.splice(0, branches.length, ...refetch);
-  }
-
-  // Twilio: show numbered list
-  const lines = branches.map((b, idx) => `${idx + 1}) ${b.name}`).join("\n");
-  await sendText(from, `Select branch:\n${lines}\n\nReply with number.`);
-  return true;
-}
   /* ===========================
      INVITE USER: ENTER PHONE
   =========================== */
@@ -317,56 +299,18 @@ They must click it to join.`);
   /* ===========================
      BRANCH: ADD BRANCH
   =========================== */
- if (state === "branch_add_name") {
-  const name = trimmed;
-  if (!name) { await sendPromptWithMenu(from, "🏬 Branch name cannot be empty. Enter branch name:"); return true; }
+  if (state === "branch_add_name") {
+    const name = trimmed;
+    if (!name) { await sendPromptWithMenu(from, "🏬 Branch name cannot be empty. Enter branch name:"); return true; }
 
-  const Branch = (await import("../models/branch.js")).default;
+    const Branch = (await import("../models/branch.js")).default;
+    await Branch.create({ businessId: biz._id, name, isDefault: false });
 
-  // If this is the first ever branch, mark it default
-  const count = await Branch.countDocuments({ businessId: biz._id });
-  const isDefault = count === 0;
-
-  const created = await Branch.create({ businessId: biz._id, name, isDefault });
-
-  await sendText(from, `✅ Branch *"${name}"* added.`);
-
-  // ✅ RESUME: if we came from a branch picker, continue that flow
-  const ret = biz.sessionData?.branchReturn;
-
-  biz.sessionState = "ready";
-  biz.sessionData = biz.sessionData || {};
-  // auto-select the new branch for owner flows
-  biz.sessionData.targetBranchId = created._id.toString();
-
-  // clear branchReturn after reading it
-  delete biz.sessionData.branchReturn;
-
-  await saveBizSafe(biz);
-
-  // Resume behavior:
-  // (1) New Doc: continue directly
-  if (ret?.kind === "new_doc") {
-    biz.sessionState = "creating_invoice_choose_client"; // <- use your real start state
-    biz.sessionData.docType = ret.docType;
-    await saveBizSafe(biz);
-    // call your “start doc flow” function or send the first prompt
-    await sendText(from, `✅ Starting ${ret.docType} for *${name}*...`);
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await sendText(from, `✅ Branch *"${name}"* added.`);
+    await sendMainMenu(from);
     return true;
   }
-
-  // (2) View lists: send the same selector menu again (now includes the new branch)
-  if (ret?.kind === "view_docs") {
-    const { sendBranchSelectorInvoices, sendBranchSelectorQuotes, sendBranchSelectorReceipts } = await import("./metaMenus.js");
-    if (ret.type === "invoice") return sendBranchSelectorInvoices(from);
-    if (ret.type === "quote") return sendBranchSelectorQuotes(from);
-    if (ret.type === "receipt") return sendBranchSelectorReceipts(from);
-  }
-
-  // fallback
-  await sendMainMenu(from);
-  return true;
-}
 
   /* ===========================
      EXPENSE: CATEGORY
