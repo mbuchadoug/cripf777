@@ -12,7 +12,6 @@ import { PACKAGES } from "./packages.js";
 import mongoose from "mongoose";
 import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
-import { sendBusinessSetupFlow } from "./metaFlows.js";
 import { sendDocument } from "./metaSender.js";
 import {
   canUseFeature,
@@ -114,20 +113,30 @@ function getEffectiveBranchId(caller, sessionData) {
 async function startOnboarding(from, phone) {
   const existingOwner = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
 
-  // If they already have a business, just open it
   if (existingOwner?.businessId) {
     const b = await Business.findById(existingOwner.businessId);
     if (b) {
       await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: b._id }, { upsert: true });
-      await sendText(from, "✅ Welcome back. Opening your menu...");
-      await sendMainMenu(from);
+      if (!b.sessionState) {
+        b.sessionState = "awaiting_business_name";
+        b.sessionData = {};
+        await saveBizSafe(b);
+      }
+      await sendText(from, "👋 Welcome back! Send your business name:");
       return;
     }
   }
 
-  // ✅ New owner → send Flow form (multi-input UI)
-  await sendText(from, "👋 Welcome! Let’s set up your business.");
-  await sendBusinessSetupFlow(from);
+  const newBiz = await Business.create({
+    name: "", currency: "USD", package: "trial",
+    subscriptionStatus: "inactive",
+    sessionState: "awaiting_business_name",
+    sessionData: {}, ownerPhone: phone
+  });
+
+  await UserRole.create({ phone, role: "owner", pending: false, businessId: newBiz._id });
+  await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: newBiz._id }, { upsert: true });
+  await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
 }
 
 async function showSalesDocs(from, type, ownerBranchId = undefined) {
@@ -189,88 +198,6 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   const text = typeof action === "string" ? action.trim() : "";
-    // =========================
-  // ✅ FLOW SUBMISSION (BUSINESS SETUP)
-  // =========================
-  if (action && typeof action === "object" && action.type === "flow" && action.name === "business_setup") {
-    const payload = action.data || {};
-
-    // Your flow fields (support multiple key names safely)
-    const bizName = (payload.bizName || payload.business_name || payload.name || "").trim();
-    const address = (payload.address || payload.bizAddress || payload.business_address || "").trim();
-    const currencyRaw = (payload.currency || payload.bizCurrency || "USD").toUpperCase().trim();
-
-    if (!bizName || bizName.length < 2) {
-      await sendText(from, "❌ Business name is required. Please complete setup again.");
-      await sendBusinessSetupFlow(from);
-      return;
-    }
-
-    if (!["USD", "ZWL", "ZAR"].includes(currencyRaw)) {
-      await sendText(from, "❌ Invalid currency selected. Please complete setup again.");
-      await sendBusinessSetupFlow(from);
-      return;
-    }
-
-    // If this number already has a business in session, update it (re-run setup)
-    let biz = await getBizForPhone(from);
-
-    // If no business yet, create a brand new one
-    if (!biz) {
-      const newBiz = await Business.create({
-        name: bizName,
-        address,
-        currency: currencyRaw,
-        package: "trial",
-        subscriptionStatus: "inactive",
-        sessionState: "ready",
-        sessionData: {},
-        ownerPhone: phone
-      });
-
-      await UserRole.create({
-        phone,
-        role: "owner",
-        pending: false,
-        businessId: newBiz._id
-      });
-
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { activeBusinessId: newBiz._id },
-        { upsert: true }
-      );
-
-      // ✅ Create main branch immediately
-      const mainBranch = await Branch.create({
-        businessId: newBiz._id,
-        name: "Main Branch",
-        isDefault: true
-      });
-
-      // ✅ Assign owner to main branch
-      await UserRole.findOneAndUpdate(
-        { businessId: newBiz._id, phone, role: "owner" },
-        { branchId: mainBranch._id }
-      );
-
-      await sendText(from, `✅ Setup complete!\n\n🏢 *${bizName}*\n📍 ${address || "No address"}\n💱 Currency: *${currencyRaw}*`);
-      await sendMainMenu(from);
-      return;
-    }
-
-    // Existing business found → update it
-    biz.name = bizName;
-    biz.address = address;
-    biz.currency = currencyRaw;
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    await sendText(from, `✅ Business updated!\n\n🏢 *${bizName}*\n📍 ${address || "No address"}\n💱 Currency: *${currencyRaw}*`);
-    await sendMainMenu(from);
-    return;
-  }
   const al = text.toLowerCase();
   const a = typeof action === "string" ? action.trim().toLowerCase() : "";
 
@@ -325,29 +252,7 @@ Reply *menu* to start.`);
 
   console.log("META INCOMING:", { from, action });
 
-  //const biz = await getBizForPhone(from);
-const biz = await getBizForPhone(from);
-
-// ✅ If old onboarding states exist (from previous version), force Flow setup instead
-const deprecatedOnboardingStates = new Set([
-  "awaiting_business_name",
-  "awaiting_address",
-  "awaiting_address_input",
-  "awaiting_currency",
-  "awaiting_logo",
-  "awaiting_logo_upload"
-]);
-
-if (biz && deprecatedOnboardingStates.has(biz.sessionState)) {
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(from, "⚠️ Setup has been upgraded. Please complete the new business setup form.");
-  await sendBusinessSetupFlow(from);
-  return;
-}
-  
+  const biz = await getBizForPhone(from);
 
   // =========================
   // 🟢 ONBOARDING GATE
