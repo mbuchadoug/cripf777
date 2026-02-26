@@ -215,6 +215,11 @@ json: (context) => {
     if (!Number.isFinite(x) || !Number.isFinite(y) || y === 0) return null;
     return (x / y).toFixed(3);
   },
+  divideCents: (cents) => {
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return "0.00";
+  return (n / 100).toFixed(2);
+},
    // Helper to check current page
   currentPage: (req, page) => {
     return req.path.includes(page) ? 'active' : '';
