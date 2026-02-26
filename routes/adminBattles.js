@@ -123,6 +123,11 @@ if (!allowedDifficulty.has(difficultyLabel)) errors.push("Difficulty must be eas
     if (locksAt <= now && endsAt > now) status = "locked";
     if (endsAt <= now) status = "ended";
 
+console.log("[adminBattles] difficultyLabel:", difficultyLabel);
+console.log("[adminBattles] difficulty (mapped):", difficulty, "type:", typeof difficulty);
+console.log("[adminBattles] payload quiz:", { subject, grade, difficulty, topics });
+
+
     const battle = await Battle.create({
       status,
       mode: "arena_blitz",
