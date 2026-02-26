@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Admin Battles</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:1100px;margin:34px auto;padding:0 18px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px;margin-top:16px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:10px;border-bottom:1px solid #222;text-align:left;font-size:14px}
+    th{color:#9aa3ad;font-weight:800}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+    .btn{display:inline-block;background:#FFB800;color:#000;padding:10px 14px;border-radius:12px;font-weight:900}
+    .muted{color:#9aa3ad}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/lms">← Back to LMS</a>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Battle Admin</h2>
+          <div class="muted">Create and manage Arena battles</div>
+        </div>
+        <a class="btn" href="/admin/battles/new">+ Create Battle</a>
+      </div>
+
+      {{#if battles.length}}
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Category</th>
+            <th>Entry</th>
+            <th>Opens</th>
+            <th>Locks</th>
+            <th>Ends</th>
+            <th>Entries</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each battles}}
+          <tr>
+            <td><strong>{{this.title}}</strong></td>
+            <td><span class="pill">{{this.status}}</span></td>
+            <td>{{this.category}}</td>
+            <td>${{divideCents this.entryFeeCents}}</td>
+            <td>{{this.opensAt}}</td>
+            <td>{{this.locksAt}}</td>
+            <td>{{this.endsAt}}</td>
+            <td>{{this.entryCount}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+      {{else}}
+        <div class="muted" style="margin-top:12px;">No battles yet.</div>
+      {{/if}}
+    </div>
+  </div>
+</body>
+</html>

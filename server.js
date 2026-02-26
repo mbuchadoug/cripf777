@@ -21,8 +21,8 @@ import creatorCampaignRoutes from "./routes/creatorCampaigns.js";
 import parentRoutes from "./routes/parent.js";
 import parentAttemptsRoutes from "./routes/parent_attempts.js";
 import adminFinanceRoutes from "./routes/admin_finance.js";
-
-
+import adminBattlesRouter from "./routes/adminBattles.js";
+import { startBattleScheduler } from "./services/battleScheduler.js";
 
 import twilioBizRoutes from "./routes/twilio_biz.js";
 
@@ -384,6 +384,8 @@ app.use(orgManagementRoutes);
 //app.use("/stripe/webhook", stripeWebhookRoutes);
 app.use("/billing", billingRoutes);
 app.use("/payments", paymentsRouter);
+
+app.use(adminBattlesRouter);
 app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use("/twilio_biz", twilioBizRoutes);
@@ -733,6 +735,11 @@ app.get("/api/search-quota", (req, res) => {
 // -------------------------------
 // 🟢 SERVER START
 // -------------------------------
+startBattleScheduler({
+  enabled: process.env.BATTLE_SCHEDULER_ENABLED === "true",
+  intervalMs: 30000,
+  lockTtlMs: 25000
+});
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 

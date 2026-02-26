@@ -74,7 +74,7 @@ router.post("/battles/create", ensureAuth, async (req, res) => {
     // 🔒 Minimal restriction: only teachers/admins create
     if (!["private_teacher", "employee"].includes(req.user.role)) {
       return res.status(403).json({ error: "Not allowed" });
-    }
+    } 
 
     const {
       title,
