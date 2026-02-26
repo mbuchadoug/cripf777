@@ -240,4 +240,36 @@ router.post("/battles/:battleId/record-result", ensureAuth, async (req, res) => 
   }
 });
 
+/**
+ * GET /battles/arena-feed
+ * Returns: { openBattle, nextBattle }
+ * - openBattle: battle currently joinable
+ * - nextBattle: next scheduled battle (soonest opensAt in the future)
+ */
+router.get("/battles/arena-feed", ensureAuth, async (req, res) => {
+  const now = new Date();
+
+  // 1) Open battle (joinable)
+  const openBattle = await Battle.findOne({
+    status: "open",
+    opensAt: { $lte: now },
+    locksAt: { $gt: now }
+  })
+    .sort({ locksAt: 1 })
+    .lean();
+
+  // 2) Next battle (scheduled / draft) that hasn’t ended
+  const nextBattle = openBattle
+    ? null
+    : await Battle.findOne({
+        status: { $in: ["scheduled", "draft"] },
+        endsAt: { $gt: now },
+        opensAt: { $gt: now }
+      })
+        .sort({ opensAt: 1 })
+        .lean();
+
+  res.json({ success: true, openBattle, nextBattle, now });
+});
+
 export default router;

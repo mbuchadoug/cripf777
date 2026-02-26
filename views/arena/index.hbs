@@ -72,12 +72,12 @@
     } catch(e){ return String(d); }
   }
 
-  async function loadOpenBattles(){
-    const res = await fetch('/battles/open');
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to load battles');
-    return data.battles || [];
-  }
+async function loadArenaFeed(){
+  const res = await fetch('/battles/arena-feed');
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Failed to load battles');
+  return data;
+}
 
   async function enterBattle(battleId){
     const res = await fetch(`/battles/${battleId}/enter`, {
@@ -89,23 +89,19 @@
     return data.redirectUrl;
   }
 
-  (async function init(){
-    try{
-      const battles = await loadOpenBattles();
+(async function init(){
+  try{
+    const feed = await loadArenaFeed();
+    loading.style.display = 'none';
 
-      loading.style.display = 'none';
-
-      if (!battles.length){
-        empty.style.display = 'block';
-        return;
-      }
-
-      // Pick the battle that locks soonest (already sorted by locksAt in backend)
-      const b = battles[0];
+    // 1) If there’s an open battle → show join UI
+    if (feed.openBattle){
+      const b = feed.openBattle;
 
       battleCard.style.display = 'block';
-      bTitle.textContent = b.title;
+      empty.style.display = 'none';
 
+      bTitle.textContent = b.title;
       bMeta.innerHTML = `
         Category: <strong>${b.category}</strong> •
         Entry: <strong>${fmtMoney(b.entryFeeCents)}</strong> •
@@ -113,6 +109,9 @@
         Questions: <strong>${b.questionCount}</strong><br/>
         Opens: ${fmtDate(b.opensAt)} • Locks: ${fmtDate(b.locksAt)} • Ends: ${fmtDate(b.endsAt)}
       `;
+
+      enterBtn.disabled = false;
+      enterBtn.textContent = 'Enter & Start';
 
       enterBtn.onclick = async () => {
         errBox.style.display = 'none';
@@ -130,12 +129,59 @@
         }
       };
 
-    }catch(e){
-      loading.style.display = 'none';
-      empty.style.display = 'block';
-      empty.querySelector('.muted').textContent = (e.message || 'Failed to load battles');
+      return;
     }
-  })();
+
+    // 2) No open battle, but next scheduled battle exists → show it with countdown
+    if (feed.nextBattle){
+      const b = feed.nextBattle;
+
+      battleCard.style.display = 'block';
+      empty.style.display = 'none';
+
+      bTitle.textContent = b.title;
+
+      function renderCountdown(){
+        const now = new Date();
+        const opens = new Date(b.opensAt);
+        const diff = Math.max(0, opens - now);
+
+        const totalSec = Math.floor(diff / 1000);
+        const mm = String(Math.floor(totalSec / 60)).padStart(2,'0');
+        const ss = String(totalSec % 60).padStart(2,'0');
+
+        bMeta.innerHTML = `
+          <div class="pill">Next Battle</div><br/><br/>
+          Category: <strong>${b.category}</strong> •
+          Entry: <strong>${fmtMoney(b.entryFeeCents)}</strong> •
+          Duration: <strong>${b.durationMinutes} min</strong> •
+          Questions: <strong>${b.questionCount}</strong><br/>
+          Opens: ${fmtDate(b.opensAt)} • Locks: ${fmtDate(b.locksAt)} • Ends: ${fmtDate(b.endsAt)}<br/>
+          <br/>
+          <strong>Starts in: ${mm}:${ss}</strong>
+        `;
+
+        enterBtn.disabled = true;
+        enterBtn.textContent = 'Not open yet';
+
+        // When countdown hits zero, reload to pick it up as open
+        if (diff <= 0) window.location.reload();
+      }
+
+      renderCountdown();
+      setInterval(renderCountdown, 1000);
+      return;
+    }
+
+    // 3) Nothing open and nothing scheduled
+    empty.style.display = 'block';
+
+  }catch(e){
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.querySelector('.muted').textContent = (e.message || 'Failed to load battles');
+  }
+})();
 </script>
 </body>
 </html>
