@@ -119,7 +119,8 @@ router.post("/admin/scoi/reports/:id/generate-pdf", ensureAuth, async (req, res)
 
     // Generate PDF
     console.log(`[PDF Generation] Generating PDF for audit: ${audit._id}`);
-    const pdf = await generateScoiPdf(audit);
+    //const pdf = await generateScoiPdf(audit);
+    const pdf = await generateScoiPdf({ audit, req });
 
     // Update audit with PDF URL
     audit.pdfUrl = pdf.url;
@@ -181,7 +182,8 @@ router.post("/admin/scoi/reports/generate-all-pdfs", ensureAuth, async (req, res
     // Generate PDFs sequentially to avoid overwhelming the system
     for (const audit of allAudits) {
       try {
-        const pdf = await generateScoiPdf(audit);
+        //const pdf = await generateScoiPdf(audit);
+        const pdf = await generateScoiPdf({ audit, req });
         audit.pdfUrl = pdf.url;
         await audit.save();
         generated++;
@@ -229,7 +231,8 @@ router.get("/scoi/audits/:id/download", async (req, res) => {
     // Generate PDF if it doesn't exist
     if (!audit.pdfUrl) {
       console.log(`[Download] Generating PDF on-demand for: ${audit._id}`);
-      const pdf = await generateScoiPdf(audit);
+      //const pdf = await generateScoiPdf(audit);
+      const pdf = await generateScoiPdf({ audit, req });
       audit.pdfUrl = pdf.url;
       await audit.save();
     }

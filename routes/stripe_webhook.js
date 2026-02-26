@@ -92,7 +92,8 @@ router.post("/", async (req, res) => {
           console.log(`[PDF Auto-Gen] Generating PDF for audit: ${auditId}`);
           
           const { generateScoiPdf } = await import("../utils/generateScoiPdf.js");
-          const pdf = await generateScoiPdf(audit);
+         // const pdf = await generateScoiPdf(audit);
+         const pdf = await generateScoiPdf({ audit, req });
           
           audit.pdfUrl = pdf.url;
           audit.isPaid = true;
