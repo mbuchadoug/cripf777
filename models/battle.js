@@ -9,8 +9,8 @@ const BattleSchema = new mongoose.Schema(
   {
     status: {
       type: String,
-      enum: ["draft", "open", "locked", "settling", "ended"],
-      default: "draft",
+    enum: ["draft", "scheduled", "open", "locked", "settling", "ended"],
+default: "scheduled",
       index: true
     },
 
