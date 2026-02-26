@@ -290,12 +290,21 @@ if (!mongoUri) {
   console.error("❌ MONGODB_URI missing in .env - sessions will not be persisted to MongoDB.");
 } else {
   mongoose.set("strictQuery", true);
-  mongoose
-    .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => {
-      console.error("❌ MongoDB connection failed:", err.message || err);
+mongoose
+  .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+
+    // ✅ START SCHEDULER ONLY AFTER DB IS READY
+    startBattleScheduler({
+      enabled: process.env.BATTLE_SCHEDULER_ENABLED === "true",
+      intervalMs: 30000,
+      lockTtlMs: 25000
     });
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB connection failed:", err.message || err);
+  });
 }
 
 // ---------- SESSIONS ----------
@@ -735,11 +744,7 @@ app.get("/api/search-quota", (req, res) => {
 // -------------------------------
 // 🟢 SERVER START
 // -------------------------------
-startBattleScheduler({
-  enabled: process.env.BATTLE_SCHEDULER_ENABLED === "true",
-  intervalMs: 30000,
-  lockTtlMs: 25000
-});
+
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 

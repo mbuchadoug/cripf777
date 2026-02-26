@@ -21,22 +21,32 @@ async function acquireLock({ key, ttlMs }) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ttlMs);
 
-  // Acquire if:
-  // - lock doesn't exist OR
-  // - lock expired
-  const lock = await SchedulerLock.findOneAndUpdate(
-    {
-      key,
-      $or: [{ expiresAt: { $lte: now } }, { expiresAt: { $exists: false } }]
-    },
-    {
-      $set: { ownerId: INSTANCE_ID, expiresAt }
-    },
-    { upsert: true, new: true }
-  ).lean();
+  try {
+    // Only acquire if lock is expired OR already owned by this instance
+    await SchedulerLock.updateOne(
+      {
+        key,
+        $or: [
+          { expiresAt: { $lte: now } },
+          { ownerId: INSTANCE_ID } // allow refresh if we already hold it
+        ]
+      },
+      {
+        $set: { ownerId: INSTANCE_ID, expiresAt }
+      },
+      { upsert: true }
+    );
+  } catch (e) {
+    // ✅ Multi-instance race on first insert → treat as "someone else got it"
+    if (e && (e.code === 11000 || String(e.message || "").includes("E11000"))) {
+      return false;
+    }
+    throw e;
+  }
 
-  // If we acquired it, ownerId must be us AND expiresAt should be future.
-  return lock && lock.ownerId === INSTANCE_ID && lock.expiresAt > now;
+  // Confirm ownership
+  const lock = await SchedulerLock.findOne({ key }).lean();
+  return !!lock && lock.ownerId === INSTANCE_ID && lock.expiresAt > now;
 }
 
 /**
