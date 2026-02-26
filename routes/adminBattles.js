@@ -89,7 +89,10 @@ router.post("/admin/battles", ensureAuth, ensureBattleAdmin, async (req, res) =>
     // Quiz filters
     const subject = normalizeSubject(body.subject || "general");
     const grade = clamp(toInt(body.grade, 0), 0, 13);
-    const difficulty = String(body.difficulty || "medium").trim().toLowerCase();
+   const difficultyLabel = String(body.difficulty || "medium").trim().toLowerCase();
+
+const difficultyMap = { easy: 1, medium: 3, hard: 5 };
+const difficulty = difficultyMap[difficultyLabel] ?? 3;
     const topics = String(body.topics || "")
       .split(",")
       .map(s => s.trim().toLowerCase())
@@ -103,9 +106,8 @@ router.post("/admin/battles", ensureAuth, ensureBattleAdmin, async (req, res) =>
     if (opensAt && locksAt && opensAt >= locksAt) errors.push("opensAt must be before locksAt");
     if (locksAt && endsAt && locksAt >= endsAt) errors.push("locksAt must be before endsAt");
 
-    const allowedDifficulty = new Set(["easy", "medium", "hard"]);
-    if (!allowedDifficulty.has(difficulty)) errors.push("Difficulty must be easy, medium, or hard");
-
+const allowedDifficulty = new Set(["easy", "medium", "hard"]);
+if (!allowedDifficulty.has(difficultyLabel)) errors.push("Difficulty must be easy, medium, or hard");
     if (errors.length) {
       return res.status(400).render("admin/battles/new", {
         user: req.user,
