@@ -44,4 +44,11 @@ router.get("/quiz", ensureAuth, (req, res) => {
   }
 });
 
+
+// ==============================
+// 🏆 ARENA LANDING PAGE
+// ==============================
+router.get("/arena", ensureAuth, (req, res) => {
+  return res.render("arena/index", { user: req.user || null });
+});
 export default router;

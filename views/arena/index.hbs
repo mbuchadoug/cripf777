@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Arena | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:900px;margin:40px auto;padding:0 18px}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px;margin-top:16px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    .muted{color:#9aa3ad}
+    .btn{display:inline-block;background:#FFB800;color:#000;padding:12px 18px;border-radius:12px;font-weight:900;border:none;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+    .danger{color:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/lms">← Back to LMS Home</a>
+
+    <h1 style="margin:14px 0 6px;">🏆 Arena</h1>
+    <div class="muted">Welcome {{user.firstName}}. Join today’s challenge and get matched automatically.</div>
+
+    <div id="loading" class="card">
+      <div class="muted">Loading open battles...</div>
+    </div>
+
+    <div id="empty" class="card" style="display:none;">
+      <h3 style="margin:0 0 6px;">No battle open right now</h3>
+      <div class="muted">Check back later — battles open at scheduled times.</div>
+    </div>
+
+    <div id="battleCard" class="card" style="display:none;">
+      <div class="pill">Daily Challenge</div>
+      <h2 id="bTitle" style="margin:10px 0 6px;"></h2>
+      <div class="muted" id="bMeta"></div>
+
+      <div class="row">
+        <button id="enterBtn" class="btn">Enter & Start</button>
+        <a class="btn" style="background:#222;color:#FFB800;" href="/lms/quiz">Try Demo Quiz</a>
+      </div>
+
+      <div id="err" class="muted danger" style="margin-top:10px; display:none;"></div>
+    </div>
+  </div>
+
+<script>
+  const loading = document.getElementById('loading');
+  const empty = document.getElementById('empty');
+  const battleCard = document.getElementById('battleCard');
+
+  const bTitle = document.getElementById('bTitle');
+  const bMeta  = document.getElementById('bMeta');
+  const enterBtn = document.getElementById('enterBtn');
+  const errBox = document.getElementById('err');
+
+  function fmtMoney(cents){
+    const usd = (Number(cents || 0) / 100).toFixed(2);
+    return '$' + usd;
+  }
+
+  function fmtDate(d){
+    try {
+      return new Date(d).toLocaleString('en-ZW', {
+        timeZone: 'Africa/Harare',
+        month:'short', day:'2-digit',
+        hour:'2-digit', minute:'2-digit'
+      });
+    } catch(e){ return String(d); }
+  }
+
+  async function loadOpenBattles(){
+    const res = await fetch('/battles/open');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to load battles');
+    return data.battles || [];
+  }
+
+  async function enterBattle(battleId){
+    const res = await fetch(`/battles/${battleId}/enter`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'}
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to enter battle');
+    return data.redirectUrl;
+  }
+
+  (async function init(){
+    try{
+      const battles = await loadOpenBattles();
+
+      loading.style.display = 'none';
+
+      if (!battles.length){
+        empty.style.display = 'block';
+        return;
+      }
+
+      // Pick the battle that locks soonest (already sorted by locksAt in backend)
+      const b = battles[0];
+
+      battleCard.style.display = 'block';
+      bTitle.textContent = b.title;
+
+      bMeta.innerHTML = `
+        Category: <strong>${b.category}</strong> •
+        Entry: <strong>${fmtMoney(b.entryFeeCents)}</strong> •
+        Duration: <strong>${b.durationMinutes} min</strong> •
+        Questions: <strong>${b.questionCount}</strong><br/>
+        Opens: ${fmtDate(b.opensAt)} • Locks: ${fmtDate(b.locksAt)} • Ends: ${fmtDate(b.endsAt)}
+      `;
+
+      enterBtn.onclick = async () => {
+        errBox.style.display = 'none';
+        enterBtn.disabled = true;
+        enterBtn.textContent = 'Joining...';
+
+        try{
+          const url = await enterBattle(b._id);
+          window.location.href = url;
+        }catch(e){
+          errBox.textContent = e.message || 'Something went wrong';
+          errBox.style.display = 'block';
+          enterBtn.disabled = false;
+          enterBtn.textContent = 'Enter & Start';
+        }
+      };
+
+    }catch(e){
+      loading.style.display = 'none';
+      empty.style.display = 'block';
+      empty.querySelector('.muted').textContent = (e.message || 'Failed to load battles');
+    }
+  })();
+</script>
+</body>
+</html>

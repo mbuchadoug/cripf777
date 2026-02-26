@@ -504,4 +504,26 @@ router.post("/admin/create-parent", ensureAuth, async (req, res) => {
   });
 });
 
+
+
+/* ================================================================== */
+/*  ✅ ARENA / BATTLE SIGNUP ROUTE                                    */
+/*  Purpose: public competition users sign in with Google and return   */
+/*  to /arena without touching parent/teacher dashboards               */
+/* ================================================================== */
+router.get("/arena", async (req, res) => {
+  // Already logged in → go straight to Arena
+  if (req.user) {
+    return res.redirect("/arena");
+  }
+
+  // Not logged in → reuse Google OAuth
+  // SAFEST MVP: treat as consumer-enabled user (same as parent flow)
+  req.session.signupSource = "parent"; // keeps existing logic stable
+  req.session.returnTo = "/arena";
+
+  req.session.save(() => {
+    return res.redirect("/auth/google?returnTo=%2Farena");
+  });
+});
 export default router;

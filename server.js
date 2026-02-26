@@ -37,6 +37,8 @@ import webProductsRoutes from "./routes/web_products.js";
 import webClientsRoutes from "./routes/web_clients.js";
 import webReportsRoutes from "./routes/web_reports.js";
 import webFilesRoutes from "./routes/web_files.js";
+import battleRoutes from "./routes/battles.js";
+
 //-------------------------------------------------------
 
 import {
@@ -70,7 +72,7 @@ import scoiMarketplaceRoutes from "./routes/scoi_marketplace.js";
 import scoiCheckoutRoutes from "./routes/scoi_checkout.js";
 
 import paymentsRouter from "./routes/payments.js";
-
+import arenaRoutes from "./routes/arena.js";
 
 // Add these imports
 import adminScoiReports from "./routes/admin_scoi_reports.js";
@@ -385,8 +387,10 @@ app.use("/payments", paymentsRouter);
 app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use("/twilio_biz", twilioBizRoutes);
+app.use(arenaRoutes);
 // ... after other route registrations
 app.use("/teacher", privateTeacherRoutes);
+app.use(battleRoutes);
 app.use(adminFinanceRoutes);
 app.use(publicCreatorQuizRoutes);
 

@@ -9,7 +9,8 @@ import ExamInstance from "../models/examInstance.js";
 import Attempt from "../models/attempt.js";
 import Certificate from "../models/certificate.js";
 import { updateTopicMasteryFromAttempt } from "../services/topicMasteryTracker.js";
-
+import BattleEntry from "../models/battleEntry.js";
+import Battle from "../models/battle.js";
 const router = Router();
 
 // fallback file loader
@@ -42,6 +43,38 @@ function fetchRandomQuestionsFromFile(count = 5) {
   }
 }
 
+
+
+async function recordBattleResultFromExam({ exam, userId, examId, percentage, score, maxScore, timeTakenSec }) {
+  try {
+  const battleIdRaw = exam?.meta?.battleId;
+const battleId = mongoose.isValidObjectId(battleIdRaw)
+  ? new mongoose.Types.ObjectId(battleIdRaw)
+  : null;
+    const isBattle = !!exam?.meta?.isBattle;
+
+    if (!isBattle || !battleId || !userId || !examId) return;
+
+    // Update entry (idempotent-ish)
+   await BattleEntry.updateOne(
+  { battleId, userId, examId },
+  {
+    $set: {
+      status: "finished",
+      scorePct: Number(percentage),
+      correctCount: score != null ? Number(score) : null,
+      maxScore: maxScore != null ? Number(maxScore) : null,
+      timeTakenSec: timeTakenSec != null ? Number(timeTakenSec) : null
+    }
+  }
+);
+
+    // Optional: mark user "completed" without changing battle status.
+    // (You can compute leaderboard from BattleEntry later.)
+  } catch (e) {
+    console.error("[battle] failed to record result:", e && (e.stack || e.message || e));
+  }
+}
 /**
  * GET /api/lms/quiz?count=5&module=responsibility&org=muono
  * create small ExamInstance that contains questionIds and (optionally) choicesOrder
@@ -1083,6 +1116,25 @@ if (exam?.meta?.isAIGenerated && exam?.meta?.aiQuizId) {
       savedAttempt = await Attempt.findById(newA._id).lean().exec();
     }
 
+
+    // 🏆 BATTLE RESULT RECORD (AI submit branch)
+if (exam?.meta?.isBattle && exam?.meta?.battleId) {
+  const timeTakenSec = duration?.totalSeconds ?? null;
+
+  recordBattleResultFromExam({
+    exam,
+    userId: attemptUserId,
+    examId: finalExamId,
+    percentage: aiPercentage,
+    score: aiScore,
+    maxScore: aiTotal,
+    timeTakenSec
+  });
+}
+
+
+
+
     // Save certificate if passed
     let savedCertificate = null;
     if (aiPassed) {
@@ -1661,6 +1713,20 @@ quizTitle: resolvedQuizTitle || "Quiz",
         console.error("[quiz/submit] attempt create failed:", e && (e.stack || e));
       }
     }
+
+    if (exam?.meta?.isBattle && exam?.meta?.battleId) {
+  const timeTakenSec = duration?.totalSeconds ?? null;
+
+  recordBattleResultFromExam({
+    exam,
+    userId: attemptUserId,
+    examId: finalExamId,
+    percentage,
+    score,
+    maxScore,
+    timeTakenSec
+  });
+}
 
 
 
