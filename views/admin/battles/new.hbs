@@ -91,31 +91,24 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:14px;">
-          <h3 style="margin:0 0 10px;">Quiz Filters</h3>
-
-          <div class="row">
+    
+    
+    
+              <div class="row" style="margin-top:12px;">
             <div>
-              <label>Subject</label>
-              <input name="subject" value="{{form.subject}}" placeholder="general / math / english" />
-            </div>
-            <div>
-              <label>Grade (0 = any)</label>
-              <input type="number" name="grade" value="{{form.grade}}" min="0" max="13" />
-            </div>
-          </div>
-
-          <div class="row" style="margin-top:12px;">
-            <div>
-              <label>Difficulty</label>
-              <select name="difficulty">
-                <option value="easy">easy</option>
-                <option value="medium" selected>medium</option>
-                <option value="hard">hard</option>
+              <label>Question Source</label>
+              <select name="quizSource">
+                <option value="mixed" selected>mixed (bank + AI fallback)</option>
+                <option value="bank">bank only</option>
+                <option value="ai">AI quizzes only</option>
               </select>
             </div>
-            <div>
-              <label>Topics (comma separated)</label>
+            <div class="muted" style="align-self:end;">
+              bank = Question collection • ai = AIQuiz collection
+            </div>
+          </div>
+    
+            <label>Topics (comma separated)</label>
               <input name="topics" value="{{form.topics}}" placeholder="fractions, algebra" />
             </div>
           </div>
@@ -129,14 +122,23 @@
   </div>
 
 <script>
-  // Fix difficulty selection after validation error
   (function(){
-    const desired = "{{form.difficulty}}";
-    if (!desired) return;
-    const sel = document.querySelector('select[name="difficulty"]');
-    if (!sel) return;
-    for (const opt of sel.options) {
-      if (opt.value === desired) opt.selected = true;
+    // Fix difficulty selection after validation error
+    const desiredDiff = "{{form.difficulty}}";
+    if (desiredDiff) {
+      const sel = document.querySelector('select[name="difficulty"]');
+      if (sel) {
+        for (const opt of sel.options) opt.selected = (opt.value === desiredDiff);
+      }
+    }
+
+    // Fix source selection after validation error
+    const desiredSource = "{{form.quizSource}}";
+    if (desiredSource) {
+      const sel2 = document.querySelector('select[name="quizSource"]');
+      if (sel2) {
+        for (const opt of sel2.options) opt.selected = (opt.value === desiredSource);
+      }
     }
   })();
 </script>

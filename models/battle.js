@@ -46,12 +46,17 @@ default: "scheduled",
 
     // Where questions come from (MVP: use Question bank by subject/topic)
     // Keep it flexible without breaking current LMS
-    quiz: {
-      subject: { type: String, default: "general", lowercase: true },
-      grade: { type: Number, default: 0 }, // 0 = mixed/adult/public
-      difficulty: { type: Number, default: 2, min: 1, max: 5 },
-      topics: { type: [String], default: [] }
-    },
+quiz: {
+  subject: { type: String, default: "general", lowercase: true },
+  grade: { type: Number, default: 0 }, // 0 = mixed
+  difficulty: { type: Number, default: 2, min: 1, max: 5 }, // numeric 1–5
+  topics: { type: [String], default: [] },
+
+  // "bank" = Question collection only
+  // "ai"   = AIQuiz collection only
+  // "mixed"= try bank first then AI fallback
+  source: { type: String, enum: ["bank", "ai", "mixed"], default: "mixed" }
+},
 
     // Selected question ids locked for fairness (everyone gets same set)
     lockedQuestionIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },

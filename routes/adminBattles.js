@@ -108,6 +108,12 @@ const difficulty = difficultyMap[difficultyLabel] ?? 3;
       .map(s => s.trim().toLowerCase())
       .filter(Boolean);
 
+
+      // Question source: bank | ai | mixed
+const quizSource = String(body.quizSource || "mixed").trim().toLowerCase();
+const allowedSources = new Set(["bank", "ai", "mixed"]);
+const finalSource = allowedSources.has(quizSource) ? quizSource : "mixed";
+
     // Validation
     const errors = [];
     if (!title) errors.push("Title is required");
@@ -118,6 +124,8 @@ const difficulty = difficultyMap[difficultyLabel] ?? 3;
 
 const allowedDifficulty = new Set(["easy", "medium", "hard"]);
 if (!allowedDifficulty.has(difficultyLabel)) errors.push("Difficulty must be easy, medium, or hard");
+const allowedQuizSources = new Set(["bank", "ai", "mixed"]);
+if (!allowedQuizSources.has(finalSource)) errors.push("Quiz source must be bank, ai, or mixed");
     if (errors.length) {
       return res.status(400).render("admin/battles/new", {
         user: req.user,
@@ -151,7 +159,7 @@ console.log("[adminBattles] payload quiz:", { subject, grade, difficulty, topics
       endsAt,
       durationMinutes,
       questionCount,
-      quiz: { subject, grade, difficulty, topics },
+     quiz: { subject, grade, difficulty, topics, source: finalSource },
       createdBy: req.user._id
     });
 

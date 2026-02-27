@@ -234,6 +234,42 @@ try {
         if (!exam) return res.status(404).json({ error: "exam instance not found" });
 
         const rawList = normalizeIds(exam.questionIds || []);
+        // ✅ AI TOKEN SUPPORT: ai:<aiQuizId>:<idx>
+const aiTokens = rawList.filter(t => typeof t === "string" && t.startsWith("ai:"));
+const aiGroups = {}; // aiQuizId -> Set(indices)
+for (const tok of aiTokens) {
+  const parts = String(tok).split(":"); // ["ai", quizId, idx]
+  const quizId = parts[1];
+  const idx = Number(parts[2]);
+  if (!quizId || !Number.isFinite(idx)) continue;
+  if (!aiGroups[quizId]) aiGroups[quizId] = new Set();
+  aiGroups[quizId].add(idx);
+}
+
+const aiQuizMap = {}; // quizId -> AIQuiz doc
+if (Object.keys(aiGroups).length) {
+  try {
+    const AIQuiz = (await import("../models/aiQuiz.js")).default;
+    const validIds = Object.keys(aiGroups).filter(id => mongoose.isValidObjectId(id));
+    if (validIds.length) {
+      const docs = await AIQuiz.find({ _id: { $in: validIds } })
+        .select("_id questions difficulty subject topic grade")
+        .lean();
+      for (const d of docs) aiQuizMap[String(d._id)] = d;
+    }
+  } catch (e) {
+    console.warn("[/api/lms/quiz] AIQuiz preload failed:", e?.message);
+  }
+}
+
+function normalizeAIChoices(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(c => {
+    if (typeof c === "string") return { text: c };
+    if (c && typeof c === "object") return { text: String(c.text ?? c.label ?? "") };
+    return { text: String(c ?? "") };
+  });
+}
         // We'll collect DB ids to fetch (parents + children + normal q ids)
         const dbIdSet = new Set();
         const parentTokens = []; // keep list of parent ids encountered in order
@@ -244,6 +280,11 @@ try {
           if (String(token).startsWith("parent:")) {
             const pid = String(token).split(":")[1] || "";
             parentTokens.push(pid);
+
+
+
+
+
             if (mongoose.isValidObjectId(pid)) dbIdSet.add(pid);
           } else if (mongoose.isValidObjectId(token)) {
             dbIdSet.add(token);
@@ -423,6 +464,47 @@ try {
 
             continue;
           }
+
+
+// ✅ AI token -> expand embedded AIQuiz question into MCQ
+if (String(token).startsWith("ai:")) {
+  const [_, quizId, idxStr] = String(token).split(":");
+  const idx = Number(idxStr);
+
+  const aq = aiQuizMap[String(quizId)];
+  const q = aq?.questions?.[idx];
+  if (!aq || !q) continue;
+
+  const originalChoices = normalizeAIChoices(q.choices);
+
+  // find q position in exam.questionIds to pick mapping
+  let qPos = null;
+  if (Array.isArray(exam.questionIds)) {
+    for (let ii = 0; ii < exam.questionIds.length; ii++) {
+      if (String(exam.questionIds[ii]) === String(token)) { qPos = ii; break; }
+    }
+  }
+
+  const mapping =
+    (Array.isArray(exam.choicesOrder) && qPos !== null)
+      ? exam.choicesOrder[qPos]
+      : null;
+
+  const { displayedChoices, choicesOrder } =
+    applyChoicesOrder(originalChoices, mapping || null);
+
+  series.push({
+    id: String(token), // keep token id
+    text: String(q.text || ""),
+    choices: displayedChoices,
+    choicesOrder: Array.isArray(choicesOrder) ? choicesOrder : null,
+    tags: ["ai", ...(aq.topic ? [String(aq.topic)] : [])],
+    difficulty: aq.difficulty || "medium"
+  });
+
+  continue;
+}
+
 
           // Normal question token (DB id or file id)
           // If token corresponds to a child that was already emitted as part of a parent, skip it
@@ -1310,6 +1392,47 @@ else {
       console.error("[quiz/submit] file fallback error:", e && (e.stack || e));
     }
 
+
+    // ✅ AI ANSWER KEY for ai:<quizId>:<idx> (battle + mixed exams)
+const aiAnswerKey = {}; // token -> { correctIndex, choices }
+try {
+  const aiTokens = qIds.filter(id => String(id).startsWith("ai:"));
+  const groups = {}; // quizId -> Set(indices)
+
+  for (const tok of aiTokens) {
+    const parts = String(tok).split(":");
+    const quizId = parts[1];
+    const idx = Number(parts[2]);
+    if (!quizId || !Number.isFinite(idx)) continue;
+    if (!groups[quizId]) groups[quizId] = new Set();
+    groups[quizId].add(idx);
+  }
+
+  const quizIds = Object.keys(groups).filter(id => mongoose.isValidObjectId(id));
+  if (quizIds.length) {
+    const AIQuiz = (await import("../models/aiQuiz.js")).default;
+    const quizzes = await AIQuiz.find({ _id: { $in: quizIds } })
+      .select("_id questions")
+      .lean();
+
+    for (const aq of quizzes) {
+      const set = groups[String(aq._id)];
+      if (!set) continue;
+
+      for (const idx of Array.from(set)) {
+        const q = aq?.questions?.[idx];
+        if (!q) continue;
+
+        aiAnswerKey[`ai:${aq._id}:${idx}`] = {
+          correctIndex: (typeof q.correctIndex === "number") ? q.correctIndex : null,
+          choices: Array.isArray(q.choices) ? q.choices : []
+        };
+      }
+    }
+  }
+} catch (e) {
+  console.warn("[quiz/submit] aiAnswerKey build failed:", e?.message);
+}
     // Build a quick lookup for exam question order & choicesOrder if exam exists
     const examIndexMap = {}; // questionId -> index in exam.questionIds
     const examChoicesOrder = Array.isArray(exam && exam.choicesOrder) ? exam.choicesOrder : [];
@@ -1406,21 +1529,26 @@ for (const a of answers) {
     }
   }
 
-  let correctIndex = null;
-  if (qdoc) {
-    if (typeof qdoc.correctIndex === "number") correctIndex = qdoc.correctIndex;
-    else if (typeof qdoc.answerIndex === "number") correctIndex = qdoc.answerIndex;
-    else if (typeof qdoc.correct === "number") correctIndex = qdoc.correct;
-  }
+ let correctIndex = null;
+
+if (qdoc) {
+  if (typeof qdoc.correctIndex === "number") correctIndex = qdoc.correctIndex;
+  else if (typeof qdoc.answerIndex === "number") correctIndex = qdoc.answerIndex;
+  else if (typeof qdoc.correct === "number") correctIndex = qdoc.correct;
+} else if (aiAnswerKey[qid]) {
+  correctIndex = aiAnswerKey[qid].correctIndex;
+}
 
   let selectedText = "";
-  if (qdoc) {
-    const choices = qdoc.choices || [];
-    const c = choices[canonicalIndex];
-    selectedText =
-      typeof c === "string" ? c : (c?.text || "");
-  }
-
+if (qdoc) {
+  const choices = qdoc.choices || [];
+  const c = choices[canonicalIndex];
+  selectedText = typeof c === "string" ? c : (c?.text || "");
+} else if (aiAnswerKey[qid]) {
+  const choices = aiAnswerKey[qid].choices || [];
+  const c = choices[canonicalIndex];
+  selectedText = typeof c === "string" ? c : (c?.text || "");
+}
   const correct =
     correctIndex !== null &&
     canonicalIndex !== null &&
