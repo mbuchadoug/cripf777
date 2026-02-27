@@ -231,11 +231,11 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
     }
 
     // Ensure there is an entry doc (one per user per battle)
-    let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
-if (entry.status !== "paid" && entry.status !== "started" && entry.status !== "finished") {
-  return res.status(403).json({ error: "Payment required to start this battle" });
-}
-   if (!entry) {
+   // Ensure there is an entry doc (one per user per battle)
+let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
+
+// ✅ create first, THEN check status
+if (!entry) {
   entry = await BattleEntry.create({
     battleId,
     userId: req.user._id,
@@ -243,32 +243,26 @@ if (entry.status !== "paid" && entry.status !== "started" && entry.status !== "f
   });
 }
 
-// If already paid/started -> proceed
-if (["paid", "started", "finished"].includes(entry.status)) {
-  return res.json({
-    success: true,
-    entered: true,
+// ✅ status gate
+if (!["paid", "started", "finished"].includes(entry.status)) {
+  return res.status(403).json({
+    success: false,
+    paymentRequired: true,
+    error: "Payment required to start this battle",
     battleId: String(battleId),
-    redirectUrl: `/arena/lobby?battleId=${battleId}`
+    redirectUrl: `/arena/pay?battleId=${battleId}`
   });
 }
 
-// If still pending -> return paymentUrl (placeholder for now)
+// ✅ already eligible -> lobby
 return res.json({
   success: true,
-  paymentRequired: true,
+  entered: true,
   battleId: String(battleId),
-  // for now: redirect to a payment page you will build next
-  redirectUrl: `/arena/pay?battleId=${battleId}`
+  redirectUrl: `/arena/lobby?battleId=${battleId}`
 });
 
-    // ✅ Entered, but quiz not started yet → go to lobby
-    return res.json({
-      success: true,
-      entered: true,
-      battleId: String(battleId),
-      redirectUrl: `/arena/lobby?battleId=${battleId}`
-    });
+ 
   } catch (err) {
     console.error("[Battle Enter Error]", err);
     res.status(500).json({ error: "Failed to enter battle" });
