@@ -12,4 +12,14 @@ router.get("/arena", ensureAuth, (req, res) => {
   return res.render("arena/index", { user: req.user || null });
 });
 
+router.get("/arena/lobby", ensureAuth, async (req, res) => {
+  const battleId = String(req.query.battleId || "").trim();
+  if (!battleId) return res.redirect("/arena");
+
+  res.render("arena/lobby", {
+    user: req.user,
+    battleId
+  });
+});
+
 export default router;

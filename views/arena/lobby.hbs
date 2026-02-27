@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Battle Lobby | CRIPFCnt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:900px;margin:40px auto;padding:0 18px}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px;margin-top:16px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    .muted{color:#9aa3ad}
+    .btn{display:inline-block;background:#FFB800;color:#000;padding:12px 18px;border-radius:12px;font-weight:900;border:none;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+    .danger{color:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/arena">← Back to Arena</a>
+
+    <div class="card">
+      <div class="pill">Lobby</div>
+      <h2 id="title" style="margin:10px 0 6px;">Loading...</h2>
+      <div class="muted" id="meta"></div>
+
+      <div style="margin-top:14px;">
+        <button id="startBtn" class="btn" disabled>Waiting...</button>
+      </div>
+
+      <div id="err" class="muted danger" style="margin-top:10px; display:none;"></div>
+    </div>
+  </div>
+
+<script>
+  const battleId = "{{battleId}}";
+
+  const titleEl = document.getElementById("title");
+  const metaEl = document.getElementById("meta");
+  const startBtn = document.getElementById("startBtn");
+  const errEl = document.getElementById("err");
+
+  function fmtDate(d){
+    try {
+      return new Date(d).toLocaleString('en-ZW', {
+        timeZone: 'Africa/Harare',
+        month:'short', day:'2-digit',
+        hour:'2-digit', minute:'2-digit'
+      });
+    } catch(e){ return String(d); }
+  }
+
+  function mmss(ms){
+    const s = Math.max(0, Math.floor(ms/1000));
+    const m = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    return m+":"+ss;
+  }
+
+  async function fetchLobby(){
+    const res = await fetch(`/battles/${battleId}/lobby`);
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || "Failed to load lobby");
+    return data;
+  }
+
+  async function startBattle(){
+    const res = await fetch(`/battles/${battleId}/start`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" }
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || "Failed to start");
+    window.location.href = data.redirectUrl;
+  }
+
+  async function tick(){
+    try{
+      const data = await fetchLobby();
+      const b = data.battle;
+
+      titleEl.textContent = b.title;
+
+      const now = new Date(data.now);
+      const locksAt = new Date(b.locksAt);
+
+      const timeToStart = locksAt - now;
+
+      metaEl.innerHTML = `
+        Category: <strong>${b.category}</strong><br/>
+        Opens: ${fmtDate(b.opensAt)} • Locks/Starts: ${fmtDate(b.locksAt)} • Ends: ${fmtDate(b.endsAt)}<br/>
+        <br/>
+        <strong>Starts in: ${mmss(timeToStart)}</strong>
+      `;
+
+      // Enable when startable
+      if (data.startable){
+        startBtn.disabled = false;
+        startBtn.textContent = "Start Now";
+        startBtn.onclick = () => startBattle();
+      } else {
+        startBtn.disabled = true;
+        startBtn.textContent = "Waiting...";
+      }
+
+    }catch(e){
+      errEl.textContent = e.message || "Error";
+      errEl.style.display = "block";
+    }
+  }
+
+  tick();
+  setInterval(tick, 2000);
+</script>
+</body>
+</html>

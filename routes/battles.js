@@ -9,6 +9,15 @@ import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
 
+
+function nowJoinable(battle, now = new Date()) {
+  return battle.opensAt <= now && battle.locksAt > now;
+}
+
+function nowStartable(battle, now = new Date()) {
+  // after locksAt, before endsAt
+  return battle.locksAt <= now && battle.endsAt > now;
+}
 /**
  * Helper: pick questions and lock them
  * MVP: pick from Question bank by subject + (optional) topics
@@ -127,12 +136,105 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
     const { battleId } = req.params;
     const now = new Date();
 
+    const battle = await Battle.findById(battleId).lean();
+    if (!battle) return res.status(404).json({ error: "Battle not found" });
+
+    // Joinable window: opensAt <= now < locksAt
+    if (!nowJoinable(battle, now)) {
+      return res.status(400).json({ error: "Battle entry not open" });
+    }
+
+    // Ensure there is an entry doc (one per user per battle)
+    let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
+
+    if (!entry) {
+      // ✅ MVP: treat payment as instant "paid" for now (EcoCash later)
+      entry = await BattleEntry.create({
+        battleId,
+        userId: req.user._id,
+        status: "paid"
+      });
+
+      // increment entryCount safely
+      await Battle.updateOne({ _id: battleId }, { $inc: { entryCount: 1 } });
+    }
+
+    // If they already have an examId, they previously started → send them back
+    if (entry.examId) {
+      return res.json({
+        success: true,
+        alreadyStarted: true,
+        examId: entry.examId,
+        redirectUrl: `/lms/quiz?examId=${entry.examId}`
+      });
+    }
+
+    // ✅ Entered, but quiz not started yet → go to lobby
+    return res.json({
+      success: true,
+      entered: true,
+      battleId: String(battleId),
+      redirectUrl: `/arena/lobby?battleId=${battleId}`
+    });
+  } catch (err) {
+    console.error("[Battle Enter Error]", err);
+    res.status(500).json({ error: "Failed to enter battle" });
+  }
+});
+
+
+router.get("/battles/:battleId/lobby", ensureAuth, async (req, res) => {
+  const { battleId } = req.params;
+  const now = new Date();
+
+  const battle = await Battle.findById(battleId).lean();
+  if (!battle) return res.status(404).json({ error: "Battle not found" });
+
+  const entry = await BattleEntry.findOne({
+    battleId,
+    userId: req.user._id
+  }).lean();
+
+  res.json({
+    success: true,
+    now,
+    battle,
+    entry,
+    joinable: nowJoinable(battle, now),
+    startable: nowStartable(battle, now)
+  });
+});
+
+
+router.post("/battles/:battleId/start", ensureAuth, async (req, res) => {
+  try {
+    const { battleId } = req.params;
+    const now = new Date();
+
     const battle = await Battle.findById(battleId);
     if (!battle) return res.status(404).json({ error: "Battle not found" });
 
-    if (battle.status !== "open") return res.status(400).json({ error: "Battle not open" });
-    if (!(battle.opensAt <= now && battle.locksAt > now)) {
-      return res.status(400).json({ error: "Battle entry closed" });
+    // Only allow start AFTER locksAt and BEFORE endsAt
+    if (!nowStartable(battle, now)) {
+      return res.status(400).json({ error: "Battle not started yet" });
+    }
+
+    // Must be entered
+    const entry = await BattleEntry.findOne({
+      battleId: battle._id,
+      userId: req.user._id
+    });
+
+    if (!entry) return res.status(403).json({ error: "You have not entered this battle" });
+
+    // If already started, return existing
+    if (entry.examId) {
+      return res.json({
+        success: true,
+        alreadyStarted: true,
+        examId: entry.examId,
+        redirectUrl: `/lms/quiz?examId=${entry.examId}`
+      });
     }
 
     // Ensure battle has locked questions (fairness)
@@ -142,41 +244,18 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
       await battle.save();
     }
 
-    // One entry per user per battle
-    let entry = await BattleEntry.findOne({ battleId: battle._id, userId: req.user._id });
-    if (entry?.examId) {
-      // already entered → send them back to quiz (if battle still running)
-      return res.json({
-        success: true,
-        alreadyEntered: true,
-        examId: entry.examId,
-        redirectUrl: `/lms/quiz?examId=${entry.examId}`
-      });
-    }
-
-    // ✅ MVP: treat as instantly paid
-    entry = await BattleEntry.create({
-      battleId: battle._id,
-      userId: req.user._id,
-      status: "paid"
-    });
-
-    // Create ExamInstance that reuses your quiz runner
     const examId = crypto.randomUUID();
     const assignmentId = crypto.randomUUID();
 
     const questionIds = battle.lockedQuestionIds;
-
-    const choicesOrder = questionIds.map(() => []); 
-    // NOTE: Your quiz runner already supports choicesOrder for MCQ shuffling.
-    // For now, keep empty arrays; if you want random choice order later, we can fill this.
+    const choicesOrder = questionIds.map(() => []);
 
     await ExamInstance.create({
       examId,
       assignmentId,
       userId: req.user._id,
-      org: null, // public user, no org
-      targetRole: "student", // or "public_player" later; keep neutral for now
+      org: null,
+      targetRole: "student",
       module: battle.category,
       title: `Battle: ${battle.title}`,
       quizTitle: `Battle: ${battle.title}`,
@@ -196,9 +275,6 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
     entry.status = "started";
     await entry.save();
 
-    // increment entryCount safely
-    await Battle.updateOne({ _id: battle._id }, { $inc: { entryCount: 1 } });
-
     return res.json({
       success: true,
       battleId: String(battle._id),
@@ -206,8 +282,8 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
       redirectUrl: `/lms/quiz?examId=${examId}`
     });
   } catch (err) {
-    console.error("[Battle Enter Error]", err);
-    res.status(500).json({ error: "Failed to enter battle" });
+    console.error("[Battle Start Error]", err);
+    res.status(500).json({ error: "Failed to start battle" });
   }
 });
 
@@ -249,27 +325,42 @@ router.post("/battles/:battleId/record-result", ensureAuth, async (req, res) => 
 router.get("/battles/arena-feed", ensureAuth, async (req, res) => {
   const now = new Date();
 
-  // 1) Open battle (joinable)
+  // ✅ OPEN/JOINABLE battle by TIME WINDOW (don’t rely only on status)
   const openBattle = await Battle.findOne({
-    status: "open",
     opensAt: { $lte: now },
-    locksAt: { $gt: now }
+    locksAt: { $gt: now },
+    endsAt: { $gt: now },
+    status: { $in: ["open", "scheduled"] } // scheduler may not have flipped yet
   })
     .sort({ locksAt: 1 })
     .lean();
 
-  // 2) Next battle (scheduled / draft) that hasn’t ended
+  // ✅ Next battle in the future
   const nextBattle = openBattle
     ? null
     : await Battle.findOne({
-        status: { $in: ["scheduled", "draft"] },
+        opensAt: { $gt: now },
         endsAt: { $gt: now },
-        opensAt: { $gt: now }
+        status: { $in: ["scheduled", "draft", "open"] } // open but not joinable shouldn’t happen, but safe
       })
         .sort({ opensAt: 1 })
         .lean();
 
-  res.json({ success: true, openBattle, nextBattle, now });
+  // User’s entry state (so UI can show "Continue" if already entered)
+  let entry = null;
+  if (openBattle?._id) {
+    entry = await BattleEntry.findOne({
+      battleId: openBattle._id,
+      userId: req.user._id
+    }).lean();
+  } else if (nextBattle?._id) {
+    entry = await BattleEntry.findOne({
+      battleId: nextBattle._id,
+      userId: req.user._id
+    }).lean();
+  }
+
+  res.json({ success: true, openBattle, nextBattle, now, entry });
 });
 
 export default router;
