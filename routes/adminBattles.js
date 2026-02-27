@@ -32,10 +32,20 @@ function normalizeSubject(v) {
 }
 
 function parseDate(v) {
-  const d = new Date(v);
+  if (!v) return null;
+
+  const s = String(v).trim();
+
+  // HTML <input type="datetime-local"> sends: "YYYY-MM-DDTHH:mm"
+  // It has NO timezone, so we must interpret it as Africa/Harare (+02:00)
+  const isDateTimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s);
+
+  const d = isDateTimeLocal
+    ? new Date(`${s}:00+02:00`) // force Harare offset
+    : new Date(s);
+
   return isNaN(d.getTime()) ? null : d;
 }
-
 /**
  * GET /admin/battles
  * List battles (latest first)

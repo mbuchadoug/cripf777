@@ -51,9 +51,9 @@
             <td><span class="pill">{{this.status}}</span></td>
             <td>{{this.category}}</td>
             <td>${{divideCents this.entryFeeCents}}</td>
-            <td>{{this.opensAt}}</td>
-            <td>{{this.locksAt}}</td>
-            <td>{{this.endsAt}}</td>
+          <td>{{formatDate this.opensAt}}</td>
+<td>{{formatDate this.locksAt}}</td>
+<td>{{formatDate this.endsAt}}</td>
             <td>{{this.entryCount}}</td>
           </tr>
           {{/each}}
