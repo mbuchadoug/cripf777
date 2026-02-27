@@ -59,7 +59,8 @@ quiz: {
 },
 
     // Selected question ids locked for fairness (everyone gets same set)
-    lockedQuestionIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    //lockedQuestionIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    lockedQuestionIds: [{ type: String }],
 
     // Stats
     entryCount: { type: Number, default: 0 },
