@@ -8,6 +8,8 @@ import QuizRule from "../models/quizRule.js";
 import { assignQuizFromRule } from "../services/quizAssignment.js";
 import Organization from "../models/organization.js";
 
+import BattleEntry from "../models/battleEntry.js";
+
 const router = Router();
 
 // ==============================
@@ -130,12 +132,25 @@ router.post("/paynow/result", async (req, res) => {
     if (String(status.status).toLowerCase() === "paid") {
 
       // 1️⃣ Mark payment as paid
-      payment.status = "paid";
-      payment.paidAt = new Date();
-      await payment.save();
+   // 1️⃣ Mark payment as paid
+payment.status = "paid";
+payment.paidAt = new Date();
+await payment.save();
 
-      // 2️⃣ Determine plan from payment record
-      const planKey = payment.plan || "silver"; // fallback for legacy
+// ✅ BATTLE ENTRY PAYMENTS (stop here, don't run subscription logic)
+if (payment.type === "battle_entry" && payment.battleId) {
+  await BattleEntry.updateOne(
+    { battleId: payment.battleId, userId: payment.userId },
+    { $set: { status: "paid", paidAt: new Date() } }
+  );
+
+  console.log("[paynow] battle entry paid:", String(payment.battleId), "user:", String(payment.userId));
+  return res.sendStatus(200);
+}
+
+// 2️⃣ Determine plan from payment record (SUBSCRIPTIONS ONLY)
+const planKey = payment.plan || "silver"; // fallback for legacy
+//const planConfig = PLANS[planKey] || PLANS.silver;
       const planConfig = PLANS[planKey] || PLANS.silver;
 
       // 3️⃣ Calculate expiry (30 days from now, or extend if already active)

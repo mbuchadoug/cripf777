@@ -20,19 +20,26 @@ const PaymentSchema = new mongoose.Schema({
     required: true
   },
 
-  /*plan: {
-    type: String,
-    enum: ["silver", "gold"],
-    default: "silver",
-    index: true
-  },*/
-
-  plan: {
+ type: {
   type: String,
-  enum: ["silver", "gold", "teacher_starter", "teacher_professional"],
-  default: "silver",
+  enum: ["subscription", "battle_entry"],
+  default: "subscription",
   index: true
 },
+
+battleId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Battle",
+  default: null,
+  index: true
+},
+
+  plan: {
+    type: String,
+    enum: ["silver", "gold", "teacher_starter", "teacher_professional"],
+    default: "silver",
+    index: true
+  },
 
   pollUrl: {
     type: String,

@@ -8,6 +8,9 @@ import ExamInstance from "../models/examInstance.js";
 import { ensureAuth } from "../middleware/authGuard.js";
 import AIQuiz from "../models/aiQuiz.js";
 
+import paynow from "../services/paynow.js";
+import Payment from "../models/payment.js";
+
 const router = Router();
 
 
@@ -564,6 +567,75 @@ router.get("/battles/:battleId/leaderboard", ensureAuth, async (req, res) => {
   } catch (err) {
     console.error("[Leaderboard Error]", err);
     res.status(500).json({ error: "Failed to load leaderboard" });
+  }
+});
+
+router.get("/arena/pay", ensureAuth, async (req, res) => {
+  const battleId = String(req.query.battleId || "").trim();
+  if (!battleId) return res.status(400).send("Missing battleId");
+
+  const battle = await Battle.findById(battleId).lean();
+  if (!battle) return res.status(404).send("Battle not found");
+
+  const entryUsd = ((Number(battle.entryFeeCents || 0)) / 100).toFixed(2);
+
+  return res.render("arena/pay", {
+    battle,
+    entryUsd
+  });
+});
+
+router.post("/battles/:battleId/paynow/init", ensureAuth, async (req, res) => {
+  try {
+    const { battleId } = req.params;
+
+    const battle = await Battle.findById(battleId).lean();
+    if (!battle) return res.status(404).send("Battle not found");
+
+    // ensure entry exists
+    let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
+    if (!entry) {
+      entry = await BattleEntry.create({
+        battleId,
+        userId: req.user._id,
+        status: "pending_payment"
+      });
+    }
+
+    // if already paid, go lobby
+    if (["paid", "started", "finished"].includes(entry.status)) {
+      return res.redirect(`/arena/lobby?battleId=${battleId}`);
+    }
+
+    const amountUsd = (Number(battle.entryFeeCents || 0) / 100);
+    const reference = `BATTLE-${battleId}-${crypto.randomUUID()}`;
+
+    const paymentRequest = paynow.createPayment(
+      reference,
+      req.user.email || "player@payment.local"
+    );
+
+    paymentRequest.add(`Battle Entry: ${battle.title}`, amountUsd);
+
+    const response = await paynow.send(paymentRequest);
+    if (!response.success) {
+      return res.status(400).send("Failed to initiate payment");
+    }
+
+ await Payment.create({
+  userId: req.user._id,
+  reference,
+  amount: amountUsd,
+  type: "battle_entry",
+  battleId: battle._id,
+  pollUrl: response.pollUrl,
+  status: "pending"
+});
+
+    return res.redirect(response.redirectUrl);
+  } catch (err) {
+    console.error("[battle paynow init] error:", err);
+    return res.status(500).send("Payment error");
   }
 });
 

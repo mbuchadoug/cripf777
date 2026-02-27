@@ -85,8 +85,16 @@ async function loadArenaFeed(){
       headers:{'Content-Type':'application/json'}
     });
     const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to enter battle');
-    return data.redirectUrl;
+ // If backend says payment required, still redirect to payment page
+if (data && data.paymentRequired && data.redirectUrl) {
+  return data.redirectUrl;
+}
+
+if (!res.ok || !data.success) {
+  throw new Error((data && (data.error || data.message)) || 'Failed to enter battle');
+}
+
+return data.redirectUrl;
   }
 
 (async function init(){
