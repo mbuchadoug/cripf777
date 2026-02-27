@@ -13,6 +13,26 @@ const BattleEntrySchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    codeName: {
+  type: String,
+  default: null,
+  index: true
+},
+
+payoutEcoCashPhone: {
+  type: String,
+  default: null
+},
+
+payoutName: {
+  type: String,
+  default: null
+},
+
+paidAt: {
+  type: Date,
+  default: null
+},
 
     userId: {
       type: mongoose.Schema.Types.ObjectId,

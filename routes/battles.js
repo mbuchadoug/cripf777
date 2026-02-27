@@ -13,6 +13,15 @@ import Payment from "../models/payment.js";
 
 const router = Router();
 
+function makeCodeName() {
+  // short and readable, not tied to their real name
+  // example: "ZEBRA-4K7Q"
+  const animals = ["ZEBRA","LION","EAGLE","CHEETAH","HIPPO","FALCON","PANTHER","SHARK","WOLF","RHINO"];
+  const a = animals[Math.floor(Math.random() * animals.length)];
+  const s = crypto.randomBytes(2).toString("hex").toUpperCase(); // 4 chars
+  const n = Math.floor(100 + Math.random() * 900); // 3 digits
+  return `${a}-${n}${s}`;
+}
 
 function nowJoinable(battle, now = new Date()) {
   return battle.opensAt <= now && battle.locksAt > now;
@@ -242,7 +251,8 @@ if (!entry) {
   entry = await BattleEntry.create({
     battleId,
     userId: req.user._id,
-    status: "pending_payment"
+    status: "pending_payment",
+    codeName: makeCodeName()
   });
 }
 
@@ -511,11 +521,11 @@ router.get("/battles/:battleId/leaderboard", ensureAuth, async (req, res) => {
     if (!battle) return res.status(404).json({ error: "Battle not found" });
 
     // Only finished entries are rankable
-    const finished = await BattleEntry.find({ battleId, status: "finished" })
-      .sort({ scorePct: -1, timeTakenSec: 1, updatedAt: 1 })
-      .limit(50)
-      .populate("userId", "firstName lastName displayName")
-      .lean();
+const finished = await BattleEntry.find({ battleId, status: "finished" })
+  .sort({ scorePct: -1, timeTakenSec: 1, updatedAt: 1 })
+  .limit(50)
+  .select("codeName scorePct timeTakenSec updatedAt userId") // keep userId for my-rank calc only
+  .lean();
 
     const myEntry = await BattleEntry.findOne({ battleId, userId: req.user._id })
       .lean();
@@ -530,18 +540,41 @@ router.get("/battles/:battleId/leaderboard", ensureAuth, async (req, res) => {
         .select("userId")
         .lean();
 
+
       const idx = allFinishedIds.findIndex(x => String(x.userId) === String(req.user._id));
       myRank = idx >= 0 ? idx + 1 : null;
     }
+    const finishedCount = await BattleEntry.countDocuments({ battleId, status: "finished" });
+const eligible = finishedCount >= Number(battle.minEntries || 0);
 
-    const top = finished.map((e, i) => ({
-      rank: i + 1,
-      user: e.userId?.displayName
-        || `${e.userId?.firstName || ""} ${e.userId?.lastName || ""}`.trim()
-        || "Player",
-      scorePct: e.scorePct,
-      timeTakenSec: e.timeTakenSec
-    }));
+const battleEnded = String(battle.status) === "ended" || (battle.endsAt && new Date(battle.endsAt) <= new Date());
+
+
+let resultMessage = null;
+
+if (!myEntry) {
+  resultMessage = "You have not entered this battle.";
+} else if (myEntry.status !== "finished") {
+  resultMessage = "Finish the quiz to appear on the leaderboard.";
+} else if (!eligible) {
+  resultMessage = `Not enough players finished yet (${finishedCount}/${battle.minEntries}). Results are not final.`;
+} else if (!battleEnded) {
+  // eligible but still running
+  if (myRank === 1) resultMessage = "You are currently #1 🎉 (battle still running)";
+  else resultMessage = `Battle still running. Your current rank is #${myRank}.`;
+} else {
+  // battle ended + eligible
+  if (myRank === 1) resultMessage = "You won! 🏆 We’ll process your payout soon.";
+  else resultMessage = `You didn’t win this time. You finished #${myRank}.`;
+}
+
+
+   const top = finished.map((e, i) => ({
+  rank: i + 1,
+  user: e.codeName || "PLAYER",
+  scorePct: e.scorePct,
+  timeTakenSec: e.timeTakenSec
+}));
 
     res.json({
       success: true,
@@ -562,7 +595,10 @@ router.get("/battles/:battleId/leaderboard", ensureAuth, async (req, res) => {
         timeTakenSec: myEntry.timeTakenSec,
         examId: myEntry.examId
       } : null,
-      myRank
+      myRank,
+       resultMessage,
+  finishedCount,
+  eligible
     });
   } catch (err) {
     console.error("[Leaderboard Error]", err);
@@ -594,13 +630,14 @@ router.post("/battles/:battleId/paynow/init", ensureAuth, async (req, res) => {
 
     // ensure entry exists
     let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
-    if (!entry) {
-      entry = await BattleEntry.create({
-        battleId,
-        userId: req.user._id,
-        status: "pending_payment"
-      });
-    }
+  if (!entry) {
+  entry = await BattleEntry.create({
+    battleId,
+    userId: req.user._id,
+    status: "pending_payment",
+    codeName: makeCodeName()
+  });
+}
 
     // if already paid, go lobby
     if (["paid", "started", "finished"].includes(entry.status)) {
@@ -637,6 +674,50 @@ router.post("/battles/:battleId/paynow/init", ensureAuth, async (req, res) => {
     console.error("[battle paynow init] error:", err);
     return res.status(500).send("Payment error");
   }
+});
+
+
+
+
+// Show payout details form (only if entered battle)
+router.get("/arena/payout", ensureAuth, async (req, res) => {
+  const battleId = String(req.query.battleId || "").trim();
+  if (!battleId) return res.status(400).send("Missing battleId");
+
+  const battle = await Battle.findById(battleId).lean();
+  if (!battle) return res.status(404).send("Battle not found");
+
+  const entry = await BattleEntry.findOne({ battleId, userId: req.user._id }).lean();
+  if (!entry) return res.status(403).send("You have not entered this battle");
+
+  return res.render("arena/payout", {
+    user: req.user,
+    battle,
+    entry
+  });
+});
+
+router.post("/arena/payout", ensureAuth, async (req, res) => {
+  const battleId = String(req.body.battleId || "").trim();
+  const payoutEcoCashPhone = String(req.body.payoutEcoCashPhone || "").trim();
+  const payoutName = String(req.body.payoutName || "").trim();
+
+  if (!battleId) return res.status(400).send("Missing battleId");
+  if (!payoutEcoCashPhone) return res.status(400).send("EcoCash phone is required");
+
+  // very light validation (ZW numbers can vary; keep it permissive)
+  if (payoutEcoCashPhone.length < 9 || payoutEcoCashPhone.length > 20) {
+    return res.status(400).send("Invalid phone length");
+  }
+
+  const entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
+  if (!entry) return res.status(403).send("You have not entered this battle");
+
+  entry.payoutEcoCashPhone = payoutEcoCashPhone;
+  entry.payoutName = payoutName || entry.payoutName;
+  await entry.save();
+
+  return res.redirect(`/arena/results?battleId=${encodeURIComponent(battleId)}&payoutSaved=1`);
 });
 
 export default router;

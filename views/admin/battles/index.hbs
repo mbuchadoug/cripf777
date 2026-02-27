@@ -42,6 +42,7 @@
             <th>Locks</th>
             <th>Ends</th>
             <th>Entries</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -55,6 +56,11 @@
 <td>{{formatDate this.locksAt}}</td>
 <td>{{formatDate this.endsAt}}</td>
             <td>{{this.entryCount}}</td>
+            <td>
+  <a class="btn" style="background:#222;color:#FFB800;" href="/admin/battles/{{this._id}}/leaderboard">
+    View Leaderboard
+  </a>
+</td>
           </tr>
           {{/each}}
         </tbody>

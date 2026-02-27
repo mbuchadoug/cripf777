@@ -2,6 +2,8 @@
 import { Router } from "express";
 import Battle from "../models/battle.js";
 import { ensureAuth } from "../middleware/authGuard.js";
+import BattleEntry from "../models/battleEntry.js";
+import User from "../models/user.js"; // only if you want to show real user info
 
 const router = Router();
 
@@ -168,6 +170,29 @@ console.log("[adminBattles] payload quiz:", { subject, grade, difficulty, topics
     console.error("[admin battles create]", err);
     return res.status(500).send("Failed to create battle");
   }
+});
+
+
+router.get("/admin/battles/:battleId/leaderboard", ensureAuth, ensureBattleAdmin, async (req, res) => {
+  const { battleId } = req.params;
+
+  const battle = await Battle.findById(battleId).lean();
+  if (!battle) return res.status(404).send("Battle not found");
+
+  const entries = await BattleEntry.find({ battleId })
+    .sort({ scorePct: -1, timeTakenSec: 1, updatedAt: 1 })
+    .populate("userId", "firstName lastName email") // admin-only
+    .lean();
+
+  // Count finished
+  const finishedCount = entries.filter(e => e.status === "finished").length;
+
+  res.render("admin/battles/leaderboard", {
+    user: req.user,
+    battle,
+    finishedCount,
+    entries
+  });
 });
 
 export default router;

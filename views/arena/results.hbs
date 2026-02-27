@@ -38,6 +38,15 @@
         <div><strong>Your Time:</strong> <span id="meTime">—</span></div>
       </div>
 
+<div style="margin-top:12px" class="muted">
+  <strong>Message:</strong> <span id="resultMsg">—</span>
+</div>
+
+
+<div style="margin-top:12px;">
+  <a class="pill" id="payoutLink" href="#">Add/Update payout details</a>
+</div>
+
       <div id="continueBox" style="margin-top:14px; display:none;">
         <a id="continueLink" class="pill" href="#">Continue Quiz</a>
       </div>
@@ -72,6 +81,8 @@
   const board = document.getElementById("board");
   const err = document.getElementById("err");
   const errText = document.getElementById("errText");
+  const resultMsg = document.getElementById("resultMsg");
+  const payoutLink = document.getElementById("payoutLink");
 
   const battleStatus = document.getElementById("battleStatus");
   const battleTitle = document.getElementById("battleTitle");
@@ -122,9 +133,19 @@
         Opens: ${fmtDate(data.battle.opensAt)} • Locks: ${fmtDate(data.battle.locksAt)} • Ends: ${fmtDate(data.battle.endsAt)}
       `;
 
+      // C3: payout details link
+if (payoutLink) {
+  payoutLink.href = `/arena/payout?battleId=${encodeURIComponent(battleId)}`;
+}
+
       if (data.me) {
         meStatus.textContent = data.me.status || "—";
         meRank.textContent = data.myRank != null ? ("#" + data.myRank) : "—";
+
+        if (resultMsg) {
+  resultMsg.textContent = data.resultMessage || "—";
+}
+
         meScore.textContent = data.me.scorePct != null ? (data.me.scorePct + "%") : "—";
         meTime.textContent = fmtTime(data.me.timeTakenSec);
 

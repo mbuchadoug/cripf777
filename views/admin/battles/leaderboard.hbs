@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Battle Leaderboard (Admin)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:1100px;margin:34px auto;padding:0 18px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px;margin-top:16px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:10px;border-bottom:1px solid #222;text-align:left;font-size:14px}
+    th{color:#9aa3ad;font-weight:800}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+    .muted{color:#9aa3ad}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/admin/battles">← Back to Battles</a>
+
+    <div class="card">
+      <h2 style="margin:0 0 6px;">Admin Leaderboard</h2>
+      <div class="muted">
+        Battle: <strong>{{battle.title}}</strong> • Status: <span class="pill">{{battle.status}}</span><br/>
+        Finished: <strong>{{finishedCount}}</strong> • Min entries: <strong>{{battle.minEntries}}</strong>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Code Name</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Time</th>
+            <th>User (admin)</th>
+            <th>EcoCash (admin)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each entries}}
+          <tr>
+            <td>#{{inc @index}}</td>
+            <td><strong>{{this.codeName}}</strong></td>
+            <td><span class="pill">{{this.status}}</span></td>
+            <td>{{this.scorePct}}%</td>
+            <td>{{this.timeTakenSec}}</td>
+            <td>{{this.userId.firstName}} {{this.userId.lastName}} ({{this.userId.email}})</td>
+            <td>{{this.payoutEcoCashPhone}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

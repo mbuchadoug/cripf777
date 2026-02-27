@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Payout Details</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:720px;margin:40px auto;padding:0 18px}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    label{display:block;margin-top:12px;color:#9aa3ad;font-weight:800}
+    input{width:100%;padding:12px;border-radius:12px;border:1px solid #222;background:#0f0f0f;color:#fff}
+    .btn{margin-top:14px;display:inline-block;background:#FFB800;color:#000;padding:12px 18px;border-radius:12px;font-weight:900;border:none;cursor:pointer}
+    .muted{color:#9aa3ad}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/arena">← Back to Arena</a>
+
+    <div class="card" style="margin-top:14px;">
+      <h2 style="margin:0 0 8px;">Payout Details</h2>
+      <div class="muted">
+        Battle: <strong>{{battle.title}}</strong><br/>
+        Your code name: <strong>{{entry.codeName}}</strong>
+      </div>
+
+      <form method="POST" action="/arena/payout">
+        <input type="hidden" name="battleId" value="{{battle._id}}" />
+
+        <label>EcoCash Phone Number</label>
+        <input name="payoutEcoCashPhone" placeholder="e.g. 0771234567" value="{{entry.payoutEcoCashPhone}}" />
+
+        <label>Name for payout (optional)</label>
+        <input name="payoutName" placeholder="e.g. Tinashe M." value="{{entry.payoutName}}" />
+
+        <button class="btn" type="submit">Save Details</button>
+      </form>
+
+      <div class="muted" style="margin-top:12px;">
+        We only use this if you win and need to pay you.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
