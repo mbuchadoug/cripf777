@@ -111,7 +111,9 @@ async function loadArenaFeed(){
       `;
 
       enterBtn.disabled = false;
-      enterBtn.textContent = 'Enter & Start';
+      //enterBtn.textContent = 'Enter & Start';
+
+      enterBtn.textContent = 'Enter (wait for start)';
 
       enterBtn.onclick = async () => {
         errBox.style.display = 'none';
@@ -125,7 +127,8 @@ async function loadArenaFeed(){
           errBox.textContent = e.message || 'Something went wrong';
           errBox.style.display = 'block';
           enterBtn.disabled = false;
-          enterBtn.textContent = 'Enter & Start';
+          //enterBtn.textContent = 'Enter & Start';
+          enterBtn.textContent = 'Enter (wait for start)';
         }
       };
 
