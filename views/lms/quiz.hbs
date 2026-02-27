@@ -483,10 +483,17 @@ for (const s of series) {
           return;
         }
 
-        const out = await res.json();
-        console.log('Quiz submit success:', out);
-        showResult(out);
-        status.textContent = '';
+       const out = await res.json();
+console.log('Quiz submit success:', out);
+
+// ✅ If battle quiz -> redirect to battle results page
+if (out?.battle?.resultsUrl) {
+  window.location.href = out.battle.resultsUrl;
+  return;
+}
+
+showResult(out);
+status.textContent = '';
       } catch (err) {
         console.error('submit error:', err);
         status.textContent = '';

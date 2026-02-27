@@ -22,4 +22,11 @@ router.get("/arena/lobby", ensureAuth, async (req, res) => {
   });
 });
 
+
+router.get("/arena/results", ensureAuth, async (req, res) => {
+  const battleId = String(req.query.battleId || "");
+  if (!battleId) return res.redirect("/arena");
+  return res.render("arena/results", { user: req.user, battleId });
+});
+
 export default router;

@@ -47,30 +47,36 @@ function fetchRandomQuestionsFromFile(count = 5) {
 
 async function recordBattleResultFromExam({ exam, userId, examId, percentage, score, maxScore, timeTakenSec }) {
   try {
-  const battleIdRaw = exam?.meta?.battleId;
-const battleId = mongoose.isValidObjectId(battleIdRaw)
-  ? new mongoose.Types.ObjectId(battleIdRaw)
-  : null;
+    const battleIdRaw = exam?.meta?.battleId;
+    const battleId = mongoose.isValidObjectId(battleIdRaw)
+      ? new mongoose.Types.ObjectId(battleIdRaw)
+      : null;
+
     const isBattle = !!exam?.meta?.isBattle;
+    if (!isBattle || !battleId || !userId) return;
 
-    if (!isBattle || !battleId || !userId || !examId) return;
+    const safePct = Number.isFinite(Number(percentage)) ? Number(percentage) : 0;
+    const safeTime = Number.isFinite(Number(timeTakenSec)) ? Number(timeTakenSec) : 999999;
+    const safeScore = score != null ? Number(score) : null;
+    const safeMax = maxScore != null ? Number(maxScore) : null;
 
-    // Update entry (idempotent-ish)
-   await BattleEntry.updateOne(
-  { battleId, userId, examId },
-  {
-    $set: {
-      status: "finished",
-      scorePct: Number(percentage),
-      correctCount: score != null ? Number(score) : null,
-      maxScore: maxScore != null ? Number(maxScore) : null,
-      timeTakenSec: timeTakenSec != null ? Number(timeTakenSec) : null
-    }
-  }
+    // ✅ Find entry by battleId+userId (unique index already exists)
+    // ✅ Always set examId if provided (so "Continue" works)
+   const setDoc = {
+  status: "finished",
+  scorePct: safePct,
+  correctCount: safeScore,
+  maxScore: safeMax,
+  timeTakenSec: safeTime
+};
+
+if (examId) setDoc.examId = String(examId);
+
+await BattleEntry.updateOne(
+ { battleId, userId, status: { $ne: "void" } },
+  { $set: setDoc }
 );
 
-    // Optional: mark user "completed" without changing battle status.
-    // (You can compute leaderboard from BattleEntry later.)
   } catch (e) {
     console.error("[battle] failed to record result:", e && (e.stack || e.message || e));
   }
@@ -165,6 +171,7 @@ if (examIdParam && req.user) {
     if (examIdParam) {
       try {
         const exam = await ExamInstance.findOne({ examId: examIdParam }).lean();
+        const canonicalExamId = exam?.examId || examIdParam;
 
         // ✅ STEP 13: CHECK IF THIS IS AN AI-GENERATED QUIZ
 let questions = []; // Will hold the final question list
@@ -1203,7 +1210,7 @@ if (exam?.meta?.isAIGenerated && exam?.meta?.aiQuizId) {
 if (exam?.meta?.isBattle && exam?.meta?.battleId) {
   const timeTakenSec = duration?.totalSeconds ?? null;
 
-  recordBattleResultFromExam({
+  await recordBattleResultFromExam({
     exam,
     userId: attemptUserId,
     examId: finalExamId,
@@ -1301,22 +1308,31 @@ if (savedAttempt && savedAttempt._id) {
     });
 }
     // Return AI quiz results
-    return res.json({
-      examId: finalExamId,
-      total: aiTotal,
-      score: aiScore,
-      percentage: aiPercentage,
-      passThreshold,
-      passed: aiPassed,
-      details: aiDetails,
-      certificateUrl,
-      isAIGenerated: true,
-      debug: {
-        examFound: !!exam,
-        attemptSaved: !!savedAttempt,
-        aiQuizId: exam.meta.aiQuizId
+  const battlePayload =
+  (exam?.meta?.isBattle && exam?.meta?.battleId)
+    ? {
+        battleId: String(exam.meta.battleId),
+        resultsUrl: `/arena/results?battleId=${encodeURIComponent(String(exam.meta.battleId))}`
       }
-    });
+    : null;
+
+return res.json({
+  examId: finalExamId,
+  total: aiTotal,
+  score: aiScore,
+  percentage: aiPercentage,
+  passThreshold,
+  passed: aiPassed,
+  details: aiDetails,
+  certificateUrl,
+  isAIGenerated: true,
+  battle: battlePayload,
+  debug: {
+    examFound: !!exam,
+    attemptSaved: !!savedAttempt,
+    aiQuizId: exam.meta.aiQuizId
+  }
+});
 
   } catch (aiError) {
     console.error("[AI Quiz Submit] Error:", aiError);
@@ -1649,7 +1665,9 @@ if (passed) {
 
 
 savedCertificate = await Certificate.create({
-  userId: exam?.userId || attempt?.userId,
+  //userId: exam?.userId || attempt?.userId,
+  // ✅ always student / quiz taker
+userId: attemptUserId,
   orgId: exam?.org || null,
   examId: finalExamId,
 
@@ -1688,10 +1706,8 @@ if (!attemptUserId) {
 
 let attemptFilter = {
   examId: finalExamId,
-  userId: attemptUserId,
-  organization: exam?.org || undefined
+  userId: attemptUserId
 };
-
 Object.keys(attemptFilter).forEach(
   k => attemptFilter[k] === undefined && delete attemptFilter[k]
 );
@@ -1845,7 +1861,7 @@ quizTitle: resolvedQuizTitle || "Quiz",
     if (exam?.meta?.isBattle && exam?.meta?.battleId) {
   const timeTakenSec = duration?.totalSeconds ?? null;
 
-  recordBattleResultFromExam({
+await recordBattleResultFromExam({
     exam,
     userId: attemptUserId,
     examId: finalExamId,
@@ -1905,6 +1921,8 @@ if (exam) {
         attemptSaved: !!savedAttempt
       }
     };
+
+    // after grading + saving attempt...
 
     // If passed, attempt to generate certificate PDF and attach URL to response
     if (passed) {
@@ -2031,6 +2049,15 @@ const certResult = await generateCertificatePdf({
         // don't fail the whole request if certificate generation fails
       }
     }
+
+
+// ✅ Attach battle redirect payload for client
+if (exam?.meta?.isBattle && exam?.meta?.battleId) {
+  responseJson.battle = {
+    battleId: String(exam.meta.battleId),
+    resultsUrl: `/arena/results?battleId=${encodeURIComponent(String(exam.meta.battleId))}`
+  };
+}
 
     return res.json(responseJson);
   } catch (err) {

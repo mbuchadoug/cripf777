@@ -232,28 +232,35 @@ router.post("/battles/:battleId/enter", ensureAuth, async (req, res) => {
 
     // Ensure there is an entry doc (one per user per battle)
     let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
+if (entry.status !== "paid" && entry.status !== "started" && entry.status !== "finished") {
+  return res.status(403).json({ error: "Payment required to start this battle" });
+}
+   if (!entry) {
+  entry = await BattleEntry.create({
+    battleId,
+    userId: req.user._id,
+    status: "pending_payment"
+  });
+}
 
-    if (!entry) {
-      // ✅ MVP: treat payment as instant "paid" for now (EcoCash later)
-      entry = await BattleEntry.create({
-        battleId,
-        userId: req.user._id,
-        status: "paid"
-      });
+// If already paid/started -> proceed
+if (["paid", "started", "finished"].includes(entry.status)) {
+  return res.json({
+    success: true,
+    entered: true,
+    battleId: String(battleId),
+    redirectUrl: `/arena/lobby?battleId=${battleId}`
+  });
+}
 
-      // increment entryCount safely
-      await Battle.updateOne({ _id: battleId }, { $inc: { entryCount: 1 } });
-    }
-
-    // If they already have an examId, they previously started → send them back
-    if (entry.examId) {
-      return res.json({
-        success: true,
-        alreadyStarted: true,
-        examId: entry.examId,
-        redirectUrl: `/lms/quiz?examId=${entry.examId}`
-      });
-    }
+// If still pending -> return paymentUrl (placeholder for now)
+return res.json({
+  success: true,
+  paymentRequired: true,
+  battleId: String(battleId),
+  // for now: redirect to a payment page you will build next
+  redirectUrl: `/arena/pay?battleId=${battleId}`
+});
 
     // ✅ Entered, but quiz not started yet → go to lobby
     return res.json({
@@ -491,6 +498,79 @@ router.get("/battles/arena-feed", ensureAuth, async (req, res) => {
   }
 
   res.json({ success: true, openBattle, nextBattle, now, entry });
+});
+
+
+
+/**
+ * GET /battles/:battleId/leaderboard
+ * Returns top leaderboard + current user's entry (rank included if finished)
+ */
+router.get("/battles/:battleId/leaderboard", ensureAuth, async (req, res) => {
+  try {
+    const { battleId } = req.params;
+
+    const battle = await Battle.findById(battleId).lean();
+    if (!battle) return res.status(404).json({ error: "Battle not found" });
+
+    // Only finished entries are rankable
+    const finished = await BattleEntry.find({ battleId, status: "finished" })
+      .sort({ scorePct: -1, timeTakenSec: 1, updatedAt: 1 })
+      .limit(50)
+      .populate("userId", "firstName lastName displayName")
+      .lean();
+
+    const myEntry = await BattleEntry.findOne({ battleId, userId: req.user._id })
+      .lean();
+
+    // Compute my rank (MVP method: compute from sorted finished list)
+    // If not finished -> rank null
+    let myRank = null;
+    if (myEntry?.status === "finished") {
+      // For correctness, compute against all finished (not only top 50)
+      const allFinishedIds = await BattleEntry.find({ battleId, status: "finished" })
+        .sort({ scorePct: -1, timeTakenSec: 1, updatedAt: 1 })
+        .select("userId")
+        .lean();
+
+      const idx = allFinishedIds.findIndex(x => String(x.userId) === String(req.user._id));
+      myRank = idx >= 0 ? idx + 1 : null;
+    }
+
+    const top = finished.map((e, i) => ({
+      rank: i + 1,
+      user: e.userId?.displayName
+        || `${e.userId?.firstName || ""} ${e.userId?.lastName || ""}`.trim()
+        || "Player",
+      scorePct: e.scorePct,
+      timeTakenSec: e.timeTakenSec
+    }));
+
+    res.json({
+      success: true,
+      battle: {
+        _id: String(battle._id),
+        title: battle.title,
+        category: battle.category,
+        entryFeeCents: battle.entryFeeCents,
+        opensAt: battle.opensAt,
+        locksAt: battle.locksAt,
+        endsAt: battle.endsAt,
+        status: battle.status
+      },
+      top,
+      me: myEntry ? {
+        status: myEntry.status,
+        scorePct: myEntry.scorePct,
+        timeTakenSec: myEntry.timeTakenSec,
+        examId: myEntry.examId
+      } : null,
+      myRank
+    });
+  } catch (err) {
+    console.error("[Leaderboard Error]", err);
+    res.status(500).json({ error: "Failed to load leaderboard" });
+  }
 });
 
 export default router;

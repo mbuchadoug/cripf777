@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Results | Arena</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:900px;margin:40px auto;padding:0 18px}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px;margin-top:16px}
+    a{color:#FFB800;text-decoration:none;font-weight:800}
+    .muted{color:#9aa3ad}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:10px;border-bottom:1px solid #222;text-align:left}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/arena">← Back to Arena</a>
+
+    <h1 style="margin:14px 0 6px;">🏁 Results</h1>
+    <div class="muted">Battle results and live leaderboard.</div>
+
+    <div id="loading" class="card">
+      <div class="muted">Loading results...</div>
+    </div>
+
+    <div id="summary" class="card" style="display:none;">
+      <div class="pill" id="battleStatus"></div>
+      <h2 id="battleTitle" style="margin:10px 0 6px;"></h2>
+      <div class="muted" id="battleMeta"></div>
+
+      <div style="margin-top:12px">
+        <div><strong>Your Status:</strong> <span id="meStatus"></span></div>
+        <div><strong>Your Rank:</strong> <span id="meRank">—</span></div>
+        <div><strong>Your Score:</strong> <span id="meScore">—</span></div>
+        <div><strong>Your Time:</strong> <span id="meTime">—</span></div>
+      </div>
+
+      <div id="continueBox" style="margin-top:14px; display:none;">
+        <a id="continueLink" class="pill" href="#">Continue Quiz</a>
+      </div>
+    </div>
+
+    <div id="board" class="card" style="display:none;">
+      <h3 style="margin:0 0 10px;">🏆 Top Leaderboard</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:80px;">Rank</th>
+            <th>Player</th>
+            <th style="width:120px;">Score</th>
+            <th style="width:140px;">Time</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="muted" style="margin-top:10px">Leaderboard updates when more players finish.</div>
+    </div>
+
+    <div id="err" class="card" style="display:none;">
+      <div class="muted" id="errText"></div>
+    </div>
+  </div>
+
+<script>
+  const battleId = "{{battleId}}";
+
+  const loading = document.getElementById("loading");
+  const summary = document.getElementById("summary");
+  const board = document.getElementById("board");
+  const err = document.getElementById("err");
+  const errText = document.getElementById("errText");
+
+  const battleStatus = document.getElementById("battleStatus");
+  const battleTitle = document.getElementById("battleTitle");
+  const battleMeta = document.getElementById("battleMeta");
+
+  const meStatus = document.getElementById("meStatus");
+  const meRank = document.getElementById("meRank");
+  const meScore = document.getElementById("meScore");
+  const meTime = document.getElementById("meTime");
+
+  const continueBox = document.getElementById("continueBox");
+  const continueLink = document.getElementById("continueLink");
+
+  const rows = document.getElementById("rows");
+
+  function fmtDate(d){
+    try {
+      return new Date(d).toLocaleString('en-ZW', {
+        timeZone: 'Africa/Harare',
+        month:'short', day:'2-digit',
+        hour:'2-digit', minute:'2-digit'
+      });
+    } catch(e){ return String(d); }
+  }
+
+  function fmtTime(sec){
+    if (sec == null) return "—";
+    const s = Math.max(0, Number(sec));
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(Math.floor(s%60)).padStart(2,'0');
+    return mm + ":" + ss;
+  }
+
+  async function load(){
+    try {
+      const res = await fetch(`/battles/${battleId}/leaderboard`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to load leaderboard");
+
+      loading.style.display = "none";
+      summary.style.display = "block";
+      board.style.display = "block";
+
+      battleStatus.textContent = String(data.battle.status || "status").toUpperCase();
+      battleTitle.textContent = data.battle.title || "Battle";
+      battleMeta.innerHTML = `
+        Category: <strong>${data.battle.category}</strong><br/>
+        Opens: ${fmtDate(data.battle.opensAt)} • Locks: ${fmtDate(data.battle.locksAt)} • Ends: ${fmtDate(data.battle.endsAt)}
+      `;
+
+      if (data.me) {
+        meStatus.textContent = data.me.status || "—";
+        meRank.textContent = data.myRank != null ? ("#" + data.myRank) : "—";
+        meScore.textContent = data.me.scorePct != null ? (data.me.scorePct + "%") : "—";
+        meTime.textContent = fmtTime(data.me.timeTakenSec);
+
+        // If user started but not finished -> show continue link
+        if (data.me.examId && data.me.status !== "finished") {
+          continueBox.style.display = "block";
+          continueLink.href = `/lms/quiz?examId=${encodeURIComponent(data.me.examId)}`;
+        }
+      }
+
+      rows.innerHTML = "";
+      (data.top || []).forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>#${r.rank}</td>
+          <td>${escapeHtml(r.user)}</td>
+          <td>${r.scorePct != null ? (r.scorePct + "%") : "—"}</td>
+          <td>${fmtTime(r.timeTakenSec)}</td>
+        `;
+        rows.appendChild(tr);
+      });
+
+    } catch(e) {
+      loading.style.display = "none";
+      err.style.display = "block";
+      errText.textContent = e.message || "Failed to load results";
+    }
+  }
+
+  function escapeHtml(s){
+    if (!s) return "";
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  load();
+  // optional auto-refresh every 5s while battle is active
+  setInterval(load, 5000);
+</script>
+</body>
+</html>
