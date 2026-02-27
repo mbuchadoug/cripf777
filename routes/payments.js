@@ -94,13 +94,34 @@ router.post("/paynow/init", ensureAuth, async (req, res) => {
    PAYNOW RETURN (Browser redirect)
 -------------------------------- */
 router.get("/paynow/return", ensureAuth, async (req, res) => {
-  const user = await User.findById(req.user._id).lean();
-  
-  if (user.role === "private_teacher") {
-    return res.redirect("/teacher/dashboard");
+  try {
+    // 1) If this user just paid for a battle entry, send them back to that battle
+    const lastBattlePayment = await Payment.findOne({
+      userId: req.user._id,
+      type: "battle_entry"
+    })
+      .sort({ createdAt: -1 })
+      .select("battleId status reference")
+      .lean();
+
+    if (lastBattlePayment?.battleId) {
+      // send them back to battle lobby (safe flow)
+      return res.redirect(`/arena/lobby?battleId=${lastBattlePayment.battleId}`);
+    }
+
+    // 2) Otherwise keep your normal subscription flow
+    const user = await User.findById(req.user._id).lean();
+
+    if (user.role === "private_teacher") {
+      return res.redirect("/teacher/dashboard");
+    }
+
+    return res.redirect("/parent/dashboard");
+  } catch (err) {
+    console.error("[paynow return] error:", err);
+    // fallback
+    return res.redirect("/arena");
   }
-  
-  return res.redirect("/parent/dashboard");
 });
 
 /* ------------------------------

@@ -20,7 +20,7 @@ const PaymentSchema = new mongoose.Schema({
     required: true
   },
 
- type: {
+type: {
   type: String,
   enum: ["subscription", "battle_entry"],
   default: "subscription",
