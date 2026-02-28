@@ -18,7 +18,7 @@ const router = Router();
 const PLANS = {
   silver: {
     name: "Silver",
-    amount: 0.05,
+    amount: 5,
     maxChildren: 2,
     durationDays: 30
   },
@@ -30,7 +30,7 @@ const PLANS = {
   },
   teacher_starter: {
     name: "Teacher Starter",
-    amount: 10,
+    amount: 0.05,
     maxChildren: 15,
     aiQuizCredits: 20,
     durationDays: 30
