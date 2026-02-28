@@ -30,14 +30,14 @@ const PLANS = {
   },
   teacher_starter: {
     name: "Teacher Starter",
-    amount: 5,
+    amount: 9,
     maxChildren: 15,
     aiQuizCredits: 20,
     durationDays: 30
   },
   teacher_professional: {
     name: "Teacher Professional",
-    amount: 20,
+    amount: 19,
     maxChildren: 40,
     aiQuizCredits: 50,
     durationDays: 30

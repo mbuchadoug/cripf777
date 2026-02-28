@@ -124,7 +124,7 @@
 
     <div class="hero">
       <div class="card heroLeft">
-        <h2>Turn your tutoring into a real system — not daily stress.</h2>
+        <h2>Turn your tutoring into a real system - not daily stress.</h2>
         <p class="sub">
           Private teaching is hard because you must do <b>everything</b>: create content, mark work, prove progress to parents,
           keep students motivated, and still find new clients. These plans remove the heavy lifting so you can teach more and earn more.
@@ -133,7 +133,7 @@
         <div class="painGrid">
           <div class="pain">
             <b>“I waste time creating quizzes”</b>
-            <span>Use AI + Quiz Library to generate and reuse quality quizzes instantly — no more late-night prep.</span>
+            <span>Use AI + Quiz Library to generate and reuse quality quizzes instantly - no more late-night prep.</span>
           </div>
           <div class="pain">
             <b>“Parents want proof of progress”</b>
@@ -276,7 +276,10 @@
           </div>
 
           <div class="ctaRow">
-            <a class="btn primary" href="/teacher/checkout?plan=starter">Upgrade to Starter</a>
+           <form method="POST" action="/payments/paynow/init" style="flex:1;">
+  <input type="hidden" name="plan" value="teacher_starter" />
+  <button class="btn primary" type="submit" style="width:100%;">Upgrade to Starter</button>
+</form>
             <a class="btn outline" href="/teacher/dashboard">Not now</a>
           </div>
 
@@ -327,7 +330,10 @@
           </div>
 
           <div class="ctaRow">
-            <a class="btn primary" href="/teacher/checkout?plan=professional">Upgrade to Professional</a>
+           <form method="POST" action="/payments/paynow/init" style="flex:1;">
+  <input type="hidden" name="plan" value="teacher_professional" />
+  <button class="btn primary" type="submit" style="width:100%;">Upgrade to Professional</button>
+</form>
             <a class="btn outline" href="/teacher/dashboard">Back</a>
           </div>
 
