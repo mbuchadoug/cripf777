@@ -1355,25 +1355,28 @@ if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
 }
 
 
+// 🔑 ALWAYS SAVE ATTEMPT AGAINST STUDENT (NOT PARENT)
+// ✅ SAFE EXAM ID RESOLUTION
+let finalExamId;
+if (exam?.examId) finalExamId = exam.examId;
+else if (examId) finalExamId = examId;
+else finalExamId = "exam-" + Date.now().toString(36);
 
+// ✅ Resolve student (quiz taker) ONCE, early
+const attemptUserId =
+  exam?.userId ||
+  exam?.learnerId ||
+  payload.userId ||
+  req.user?._id ||   // <-- optional fallback if your system allows direct quiz taking
+  null;
+
+if (!attemptUserId) {
+  throw new Error("Attempt userId (student) could not be resolved");
+}
 
     // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
 // ✅ SAFE EXAM ID RESOLUTION
-let finalExamId;
-
-// CASE 1: Quiz came from ExamInstance (parent/assigned flow)
-if (exam?.examId) {
-  finalExamId = exam.examId;
-}
-// CASE 2: Legacy / other schools (sampling, org quizzes, etc.)
-else if (examId) {
-  finalExamId = examId;
-}
-// CASE 3: Absolute fallback (keep old behavior)
-else {
-  finalExamId = "exam-" + Date.now().toString(36);
-}
-
+//let finalExamId;
 
 
   console.log("EXAM ALIGNMENT CHECK:", {
@@ -1691,19 +1694,6 @@ userId: attemptUserId,
   }
 }
 
-
-    // Find / update or create Attempt
-  // ✅ ALWAYS lookup attempt by finalExamId
-// 🔑 ALWAYS SAVE ATTEMPT AGAINST STUDENT (NOT PARENT)
-const attemptUserId =
-  exam?.userId ||               // assigned exam → student
-  exam?.learnerId ||            // future-proof
-  payload.userId ||             // explicit student id (if sent)
-  null;
-
-if (!attemptUserId) {
-  throw new Error("Attempt userId (student) could not be resolved");
-}
 
 let attemptFilter = {
   examId: finalExamId,
@@ -2025,7 +2015,14 @@ const certResult = await generateCertificatePdf({
   orgName,
 
   // ✅ USE SAVED CERTIFICATE TITLE
-  quizTitle: savedCertificate?.quizTitle || "Quiz",
+quizTitle:
+  savedCertificate?.quizTitle ||
+  resolvedQuizTitle ||
+  exam?.quizTitle ||
+  exam?.title ||
+  quizTitleFromClient ||
+  moduleNameForCert ||
+  "Quiz",
 
   moduleName: savedCertificate?.moduleName || null,
 
