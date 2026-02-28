@@ -1,139 +1,379 @@
+{{!-- views/teacher/pricing.hbs --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Teacher Plans | CRIPFCnt</title>
+  <title>Plans & Billing | CRIPFCnt Teacher</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body {
-      font-family:'Inter',sans-serif;
-      background:linear-gradient(135deg,#667eea,#764ba2);
-      min-height:100vh;
-      padding:40px 20px;
+    :root{
+      --ink:#0f172a; --inkSoft:#475569; --muted:#94a3b8;
+      --bg:#f8fafc; --card:#ffffff; --border:#e2e8f0;
+      --accent:#6366f1; --accent2:#818cf8; --accentBg:#eef2ff;
+      --green:#10b981; --greenBg:#ecfdf5;
+      --amber:#f59e0b; --amberBg:#fffbeb;
+      --red:#ef4444; --redBg:#fef2f2;
+      --shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);
+      --shadowLg:0 10px 30px rgba(2,6,23,0.12);
+      --r:14px;
     }
-    .container { max-width:1200px; margin:0 auto; }
-    .header { text-align:center; color:white; margin-bottom:48px; }
-    .header h1 { font-size:42px; margin-bottom:12px; }
-    .header p { font-size:18px; opacity:0.9; }
-    .pricing-grid {
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-      gap:24px;
-      margin-bottom:32px;
-    }
-    .plan-card {
-      background:white;
-      border-radius:16px;
-      padding:32px;
-      box-shadow:0 8px 24px rgba(0,0,0,0.2);
-      position:relative;
-      transition:all 0.3s;
-    }
-    .plan-card:hover { transform:translateY(-8px); }
-    .plan-card.featured { border:3px solid #fbbf24; }
-    .badge {
-      position:absolute;
-      top:-12px;
-      right:24px;
-      background:#fbbf24;
-      color:#78350f;
-      padding:4px 12px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-    }
-    .plan-name { font-size:24px; font-weight:800; margin-bottom:8px; color:#1f2937; }
-    .plan-price { font-size:48px; font-weight:800; color:#667eea; margin-bottom:8px; }
-    .plan-price span { font-size:18px; color:#6b7280; }
-    .plan-features { list-style:none; margin:24px 0; }
-    .plan-features li {
-      padding:12px 0;
-      border-bottom:1px solid #e5e7eb;
-      display:flex;
-      align-items:center;
-      gap:8px;
-      color:#1f2937;
-    }
-    .plan-features li::before {
-      content:'✓';
-      color:#10b981;
-      font-weight:800;
-      font-size:18px;
-    }
-    .btn {
-      width:100%;
-      padding:16px;
-      border-radius:8px;
-      font-weight:700;
-      font-size:16px;
-      border:none;
-      cursor:pointer;
-      background:#667eea;
-      color:white;
-      margin-top:16px;
-      transition:all 0.2s;
-    }
-    .btn:hover { background:#5568d3; transform:translateY(-2px); }
-    .back-link { text-align:center; margin-top:32px; }
-    .back-link a { color:white; text-decoration:underline; font-size:14px; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1100px;margin:0 auto;padding:32px 18px 60px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+    .brand{display:flex;flex-direction:column}
+    .brand h1{font-family:'Playfair Display',serif;font-weight:800;font-size:22px;letter-spacing:-0.3px}
+    .brand p{font-size:12px;color:var(--inkSoft);margin-top:2px}
+    .btn{border:none;border-radius:10px;padding:10px 14px;font-weight:800;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+    .btn.primary{background:var(--accent);color:#fff}
+    .btn.primary:hover{background:var(--accent2)}
+    .btn.outline{background:transparent;border:1px solid var(--border);color:var(--inkSoft)}
+    .btn.outline:hover{border-color:var(--accent);color:var(--accent)}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800}
+    .pill.ok{background:var(--greenBg);color:#065f46;border:1px solid #86efac}
+    .pill.trial{background:var(--amberBg);color:#92400e;border:1px solid #fcd34d}
+    .pill.bad{background:var(--redBg);color:#991b1b;border:1px solid #fca5a5}
+    .hero{display:grid;grid-template-columns:1.2fr 0.8fr;gap:18px;margin-top:10px}
+    @media(max-width:900px){.hero{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+    .heroLeft{padding:22px}
+    .heroLeft h2{font-family:'Playfair Display',serif;font-size:30px;letter-spacing:-0.6px}
+    .heroLeft .sub{margin-top:8px;color:var(--inkSoft);line-height:1.6;font-size:14px}
+    .painGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+    @media(max-width:700px){.painGrid{grid-template-columns:1fr}}
+    .pain{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
+    .pain b{display:block;font-size:13px;margin-bottom:4px}
+    .pain span{color:var(--inkSoft);font-size:12px;line-height:1.5}
+    .heroRight{padding:18px}
+    .heroRight .stat{display:flex;align-items:flex-start;gap:10px;padding:12px;border-radius:12px;background:linear-gradient(135deg,var(--accentBg),#fff);border:1px solid #c7d2fe;margin-bottom:10px}
+    .heroRight .stat .k{font-size:18px}
+    .heroRight .stat .t{font-weight:900}
+    .heroRight .stat .d{font-size:12px;color:var(--inkSoft);margin-top:2px;line-height:1.5}
+    .banner{margin-top:14px;border-radius:14px;padding:14px 16px;border:1px solid var(--border);background:#fff;display:flex;gap:10px;align-items:flex-start}
+    .banner .dot{width:10px;height:10px;border-radius:50%;margin-top:4px}
+    .banner.locked{border-color:#fcd34d;background:var(--amberBg)}
+    .banner.locked .dot{background:var(--amber)}
+    .banner .title{font-weight:900}
+    .banner .msg{color:var(--inkSoft);font-size:13px;margin-top:2px;line-height:1.5}
+    .plans{margin-top:22px}
+    .plansHead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .plansHead h3{font-size:16px;font-weight:900}
+    .plansHead p{color:var(--inkSoft);font-size:13px}
+    .planGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    @media(max-width:980px){.planGrid{grid-template-columns:1fr}}
+    .plan{padding:18px;position:relative;overflow:hidden}
+    .plan.featured{border:2px solid #a5b4fc;box-shadow:var(--shadowLg)}
+    .badgeTop{position:absolute;top:14px;right:14px;background:#111827;color:#fff;font-size:11px;font-weight:900;padding:6px 10px;border-radius:999px}
+    .plan h4{font-size:16px;font-weight:900}
+    .plan .who{color:var(--inkSoft);font-size:12px;margin-top:4px;line-height:1.5}
+    .price{margin-top:12px;display:flex;align-items:flex-end;gap:8px}
+    .price .n{font-size:28px;font-weight:900;letter-spacing:-0.6px}
+    .price .p{font-size:12px;color:var(--inkSoft);padding-bottom:6px}
+    .ul{margin-top:14px;display:grid;gap:8px}
+    .li{display:flex;gap:10px;align-items:flex-start}
+    .li .tick{width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900}
+    .li.good .tick{background:var(--greenBg);color:#065f46;border:1px solid #86efac}
+    .li.mid .tick{background:var(--accentBg);color:#3730a3;border:1px solid #c7d2fe}
+    .li.warn .tick{background:var(--amberBg);color:#92400e;border:1px solid #fcd34d}
+    .li div{font-size:13px;line-height:1.45}
+    .li small{display:block;color:var(--inkSoft);font-size:12px;margin-top:2px}
+    .ctaRow{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap}
+    .ctaRow .btn{flex:1;justify-content:center}
+    .note{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.5}
+    .faq{margin-top:22px}
+    .faq h3{font-size:16px;font-weight:900;margin-bottom:10px}
+    .faqGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:900px){.faqGrid{grid-template-columns:1fr}}
+    details{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+    summary{cursor:pointer;font-weight:900}
+    details p{margin-top:8px;color:var(--inkSoft);font-size:13px;line-height:1.6}
+    .footer{margin-top:26px;color:var(--muted);font-size:12px;text-align:center}
   </style>
 </head>
 
 <body>
-<div class="container">
-  
-  <div class="header">
-    <h1>👨‍🏫 Teacher Plans</h1>
-    <p>Choose the plan that fits your teaching needs</p>
-  </div>
-
-  <div class="pricing-grid">
-    
-    <div class="plan-card">
-      <div class="plan-name">Starter</div>
-      <div class="plan-price">$20<span>/month</span></div>
-      <ul class="plan-features">
-        <li>15 students max</li>
-        <li>30 quiz generation credits/month</li>
-        <li>Progress tracking</li>
-        <li>Knowledge maps</li>
-        <li>Certificate generation</li>
-        <li>Student management</li>
-      </ul>
-      <form action="/payments/paynow/init" method="POST">
-        <input type="hidden" name="plan" value="teacher_starter">
-        <button type="submit" class="btn">Choose Starter</button>
-      </form>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <h1>CRIPFCnt - Plans & Billing</h1>
+        <p>Built for private teachers who want faster prep, better results, and more paying students.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        {{#if isPaid}}
+          <span class="pill ok">✅ Active · {{daysRemaining}} days left</span>
+        {{else if isExpired}}
+          <span class="pill bad">⚠️ Expired</span>
+        {{else}}
+          <span class="pill trial">🟡 Trial</span>
+        {{/if}}
+        <a class="btn outline" href="/teacher/dashboard">← Back to Dashboard</a>
+      </div>
     </div>
 
-    <div class="plan-card featured">
-      <div class="badge">⭐ POPULAR</div>
-      <div class="plan-name">Professional</div>
-      <div class="plan-price">$40<span>/month</span></div>
-      <ul class="plan-features">
-        <li>40 students max</li>
-        <li>50 quiz generation credits/month</li>
-        <li>Progress tracking</li>
-        <li>Knowledge maps</li>
-        <li>Certificate generation</li>
-        <li>Student management</li>
-        <li>Priority support</li>
-      </ul>
-      <form action="/payments/paynow/init" method="POST">
-        <input type="hidden" name="plan" value="teacher_professional">
-        <button type="submit" class="btn">Choose Professional</button>
-      </form>
+    {{#if lockedReason}}
+      <div class="banner locked">
+        <div class="dot"></div>
+        <div>
+          <div class="title">{{lockedReason.title}}</div>
+          <div class="msg">{{lockedReason.message}}</div>
+        </div>
+      </div>
+    {{/if}}
+
+    <div class="hero">
+      <div class="card heroLeft">
+        <h2>Turn your tutoring into a real system — not daily stress.</h2>
+        <p class="sub">
+          Private teaching is hard because you must do <b>everything</b>: create content, mark work, prove progress to parents,
+          keep students motivated, and still find new clients. These plans remove the heavy lifting so you can teach more and earn more.
+        </p>
+
+        <div class="painGrid">
+          <div class="pain">
+            <b>“I waste time creating quizzes”</b>
+            <span>Use AI + Quiz Library to generate and reuse quality quizzes instantly — no more late-night prep.</span>
+          </div>
+          <div class="pain">
+            <b>“Parents want proof of progress”</b>
+            <span>Generate professional reports showing strengths, weaknesses, trends and next steps.</span>
+          </div>
+          <div class="pain">
+            <b>“Students get bored quickly”</b>
+            <span>Short timed quizzes and challenges keep them engaged and competitive.</span>
+          </div>
+          <div class="pain">
+            <b>“Managing many students is chaos”</b>
+            <span>Assign work in bulk, track completions, and spot who needs attention instantly.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card heroRight">
+        <div class="stat">
+          <div class="k">⏱️</div>
+          <div>
+            <div class="t">Save time weekly</div>
+            <div class="d">Stop rebuilding quizzes from scratch. Reuse + assign in minutes.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="k">📈</div>
+          <div>
+            <div class="t">Show results to parents</div>
+            <div class="d">Reports help you justify your fees and keep parents paying month after month.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="k">💰</div>
+          <div>
+            <div class="t">Increase retention</div>
+            <div class="d">When parents see progress, they renew. When students feel improvement, they stay.</div>
+          </div>
+        </div>
+
+        <div class="note">
+          Current plan: <b>{{currentPlan}}</b> · Credits available: <b>{{currentCredits}}</b>
+        </div>
+      </div>
     </div>
 
-  </div>
+    <div class="plans">
+      <div class="plansHead">
+        <div>
+          <h3>Choose a plan that matches your teaching size</h3>
+          <p>Trial is for testing. Paid plans are for running your tutoring professionally.</p>
+        </div>
+      </div>
 
-  <div class="back-link">
-    <a href="/teacher/dashboard">← Back to Dashboard</a>
-  </div>
+      <div class="planGrid">
 
-</div>
+        {{!-- TRIAL --}}
+        <div class="card plan">
+          <h4>Trial</h4>
+          <div class="who">For testing the platform and seeing how your students respond.</div>
+
+          <div class="price">
+            <div class="n">$0</div>
+            <div class="p">/ limited</div>
+          </div>
+
+          <div class="ul">
+            <div class="li warn">
+              <div class="tick">!</div>
+              <div>
+                Limited access
+                <small>Some features are locked (Library preview, advanced reporting).</small>
+              </div>
+            </div>
+            <div class="li mid">
+              <div class="tick">✓</div>
+              <div>
+                Basic assignments
+                <small>Try assigning quizzes to see the student flow.</small>
+              </div>
+            </div>
+            <div class="li mid">
+              <div class="tick">✓</div>
+              <div>
+                Basic tracking
+                <small>Confirm your students can take quizzes smoothly.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctaRow">
+            <a class="btn outline" href="/teacher/dashboard">Continue Trial</a>
+            <a class="btn primary" href="#pro">Upgrade</a>
+          </div>
+
+          <div class="note">
+            Best for: testing onboarding + student experience before going full-time.
+          </div>
+        </div>
+
+        {{!-- STARTER --}}
+        <div class="card plan featured" id="starter">
+          <div class="badgeTop">Most Popular</div>
+          <h4>Starter</h4>
+          <div class="who">For private teachers with a growing class who want faster prep and better parent confidence.</div>
+
+          <div class="price">
+            <div class="n">$9</div>
+            <div class="p">/ month</div>
+          </div>
+
+          <div class="ul">
+            <div class="li good">
+              <div class="tick">✓</div>
+              <div>
+                Quiz Library preview + assign
+                <small>Instant access to ready-made quizzes (save hours).</small>
+              </div>
+            </div>
+            <div class="li good">
+              <div class="tick">✓</div>
+              <div>
+                AI Quiz credits every month
+                <small>Create quizzes on demand for any topic you teach.</small>
+              </div>
+            </div>
+            <div class="li mid">
+              <div class="tick">✓</div>
+              <div>
+                Bulk assign to students
+                <small>Assign work to many students in one action.</small>
+              </div>
+            </div>
+            <div class="li mid">
+              <div class="tick">✓</div>
+              <div>
+                Performance overview
+                <small>Top performers + students needing attention.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctaRow">
+            <a class="btn primary" href="/teacher/checkout?plan=starter">Upgrade to Starter</a>
+            <a class="btn outline" href="/teacher/dashboard">Not now</a>
+          </div>
+
+          <div class="note">
+            Best for: 10-20 students and teachers who want to look professional and retain parents.
+          </div>
+        </div>
+
+        {{!-- PROFESSIONAL --}}
+        <div class="card plan" id="pro">
+          <h4>Professional</h4>
+          <div class="who">For serious tutoring businesses that need reports, scale, and differentiation for many students.</div>
+
+          <div class="price">
+            <div class="n">$19</div>
+            <div class="p">/ month</div>
+          </div>
+
+          <div class="ul">
+            <div class="li good">
+              <div class="tick">✓</div>
+              <div>
+                Everything in Starter
+                <small>Library + AI + bulk assign + tracking.</small>
+              </div>
+            </div>
+            <div class="li good">
+              <div class="tick">✓</div>
+              <div>
+                Professional Reports (PDF)
+                <small>Parent-ready reports: strengths, weaknesses, trends, recommendations.</small>
+              </div>
+            </div>
+            <div class="li good">
+              <div class="tick">✓</div>
+              <div>
+                Higher AI quiz credits
+                <small>Generate more quizzes monthly for more classes.</small>
+              </div>
+            </div>
+            <div class="li mid">
+              <div class="tick">✓</div>
+              <div>
+                Scale with confidence
+                <small>Run multiple groups and track outcomes without chaos.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctaRow">
+            <a class="btn primary" href="/teacher/checkout?plan=professional">Upgrade to Professional</a>
+            <a class="btn outline" href="/teacher/dashboard">Back</a>
+          </div>
+
+          <div class="note">
+            Best for: teachers who want to justify premium fees and keep parents renewing consistently.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="faq">
+      <h3>Questions private teachers usually ask</h3>
+      <div class="faqGrid">
+        <details>
+          <summary>How does this help me get more paying students?</summary>
+          <p>
+            You look professional. Parents see proof of learning. When you can show progress clearly,
+            referrals increase and cancellations drop.
+          </p>
+        </details>
+        <details>
+          <summary>What if my students are at different levels?</summary>
+          <p>
+            Use Quiz Library + AI to generate quizzes per student level. Assign different quizzes to different students
+            and track who needs support.
+          </p>
+        </details>
+        <details>
+          <summary>Will parents actually care about reports?</summary>
+          <p>
+            Yes — parents pay for results. Reports reduce “What am I paying for?” conversations and increase renewals.
+          </p>
+        </details>
+        <details>
+          <summary>Can I cancel anytime?</summary>
+          <p>
+            Yes. Use it month-to-month. Upgrade when you’re ready to scale your tutoring like a business.
+          </p>
+        </details>
+      </div>
+    </div>
+
+    <div class="footer">
+      © CRIPFCnt Teacher Portal · Built to help private teachers save time and grow income.
+    </div>
+  </div>
 </body>
 </html>

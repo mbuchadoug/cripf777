@@ -918,6 +918,7 @@
           // Group system quizzes by subject for organized display
           (function() {
             const quizzes = {{{json systemQuizzes}}};
+            const isPaidTeacher = {{#if isPaid}}true{{else}}false{{/if}};
             const container = document.getElementById('libraryContent');
             if (!quizzes || !quizzes.length) return;
 
@@ -949,10 +950,16 @@
                 if (q.quizType) html += '<span class="tag">' + q.quizType + '</span>';
                 html += '</div>';
                html += '<div class="quiz-meta">' + (q.questionCount || '?') + ' questions · ' + (q.durationMinutes || 30) + ' min</div>';
-                html += '<div class="actions">';
-                html += '<a href="/teacher/library-quiz/' + q._id + '/preview" class="btn btn-outline">Preview</a>';
-                html += '<button class="btn btn-success" onclick="openAssignLibrary(\'' + q._id + '\', \'' + (q.quizTitle || '').replace(/'/g, "\\'") + '\')">Assign</button>';
-                html += '</div>';
+             html += '<div class="actions">';
+
+if (isPaidTeacher) {
+  html += '<a href="/teacher/library-quiz/' + q._id + '/preview" class="btn btn-outline">Preview</a>';
+} else {
+  html += '<a href="/teacher/pricing?locked=library_preview" class="btn btn-outline">🔒 Preview (Upgrade)</a>';
+}
+
+html += '<button class="btn btn-success" onclick="openAssignLibrary(\'' + q._id + '\', \'' + (q.quizTitle || '').replace(/'/g, "\\'") + '\')">Assign</button>';
+html += '</div>';
                 html += '</div>';
               });
               html += '</div></div>';

@@ -33,6 +33,33 @@ function ensurePrivateTeacher(req, res, next) {
 }
 
 
+// ✅ Middleware: Paid private teacher only (blocks trial/expired)
+async function ensureTeacherPaid(req, res, next) {
+  try {
+    const teacher = await User.findById(req.user._id)
+      .select("teacherSubscriptionStatus teacherSubscriptionExpiresAt teacherSubscriptionPlan")
+      .lean();
+
+    const now = new Date();
+    const expires = teacher?.teacherSubscriptionExpiresAt
+      ? new Date(teacher.teacherSubscriptionExpiresAt)
+      : null;
+
+    const isExpired = expires && now >= expires;
+    const isPaid = teacher?.teacherSubscriptionStatus === "paid" && !isExpired;
+
+    if (!isPaid) {
+      // 🔒 lock preview access
+      return res.redirect("/teacher/pricing?locked=library_preview");
+    }
+
+    next();
+  } catch (e) {
+    console.error("[ensureTeacherPaid]", e);
+    return res.redirect("/teacher/pricing?locked=library_preview");
+  }
+}
+
 function normalizeChoices(rawChoices) {
   if (!Array.isArray(rawChoices)) return [];
 
@@ -1507,6 +1534,7 @@ router.get(
   "/library-quiz/:ruleId/preview",
   ensureAuth,
   ensurePrivateTeacher,
+  ensureTeacherPaid, // ✅ ADD THIS
   async (req, res) => {
     try {
       const QuizRule = (await import("../models/quizRule.js")).default;

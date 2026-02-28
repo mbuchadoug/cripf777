@@ -284,10 +284,48 @@ router.get(
   ensurePrivateTeacher,
   async (req, res) => {
     const teacher = await User.findById(req.user._id);
+
+    const now = new Date();
+    const subExpires = teacher.teacherSubscriptionExpiresAt
+      ? new Date(teacher.teacherSubscriptionExpiresAt)
+      : null;
+
+    const isExpired = subExpires && now >= subExpires;
+    const isPaid = teacher.teacherSubscriptionStatus === "paid" && !isExpired;
+
+    const locked = String(req.query.locked || "");
+
+    // ✅ Map locked reasons to a friendly banner message
+    const lockedMap = {
+      library_preview: {
+        title: "Quiz Library Preview is locked",
+        message: "Upgrade to preview and assign ready-made quizzes instantly (save hours every week)."
+      },
+      library_assign: {
+        title: "Quiz Library Assign is locked",
+        message: "Upgrade to assign library quizzes to your students and track performance."
+      },
+      reports: {
+        title: "Reports are locked",
+        message: "Upgrade to generate professional assessment reports for parents."
+      }
+    };
+
+    const lockedReason = lockedMap[locked] || null;
+
     res.render("teacher/pricing", {
       user: teacher,
       currentPlan: teacher.teacherSubscriptionPlan || "trial",
-      currentCredits: teacher.aiQuizCredits || 0
+      currentCredits: teacher.aiQuizCredits || 0,
+
+      // ✅ add these
+      isPaid,
+      isExpired,
+      daysRemaining: subExpires && !isExpired
+        ? Math.ceil((subExpires - now) / (1000 * 60 * 60 * 24))
+        : 0,
+      expiresAt: subExpires ? subExpires.toISOString().slice(0, 10) : null,
+      lockedReason
     });
   }
 );

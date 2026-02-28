@@ -363,7 +363,7 @@
             class="btn" 
             style="float:right; font-size:12px; padding:6px 12px; margin-top:-2px;"
           >
-            ⚡ Generate Practice Quiz
+           // ⚡ Generate Practice Quiz
           </button>
         </div>
           <div class="subject-quizzes">
@@ -867,13 +867,13 @@
       } else {
         alert('Failed to generate quiz. Please try again.');
         btn.disabled = false;
-        btn.textContent = '⚡ Generate Practice Quiz';
+      //  btn.textContent = '⚡ Generate Practice Quiz';
       }
     } catch (error) {
       console.error('Error generating quiz:', error);
       alert('Error generating quiz. Please try again.');
       btn.disabled = false;
-      btn.textContent = '⚡ Generate Practice Quiz';
+      //btn.textContent = '⚡ Generate Practice Quiz';
     }
   }
 </script>
