@@ -1602,9 +1602,10 @@ const percentage = Math.round((score / Math.max(1, maxScore)) * 100);
 
     // 🔑 RESOLVE REAL QUIZ TITLE FROM PARENT QUESTION
 let resolvedQuizTitle =
-  exam?.quizTitle ||
-  exam?.title ||
-  null;
+  (typeof exam?.quizTitle === "string" && exam.quizTitle.trim()) ? exam.quizTitle.trim()
+  : (typeof exam?.title === "string" && exam.title.trim()) ? exam.title.trim()
+  : (typeof quizTitleFromClient === "string" && quizTitleFromClient.trim()) ? quizTitleFromClient.trim()
+  : null;
 
 try {
   const parentToken = (exam?.questionIds || []).find(
