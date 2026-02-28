@@ -22,9 +22,17 @@
         Entry Fee: <strong>${{entryUsd}}</strong>
       </div>
 
-      <form method="POST" action="/battles/{{battle._id}}/paynow/init">
-        <button class="btn" type="submit">Pay Now</button>
-      </form>
+   <form method="POST" action="/battles/{{battle._id}}/paynow/init">
+  <label class="muted" style="display:block;margin-bottom:6px;">EcoCash Number</label>
+  <input
+    name="ecocashPhone"
+    placeholder="077xxxxxxx"
+    required
+    style="width:100%;padding:12px;border-radius:12px;border:1px solid #222;background:#0b0b0b;color:#fff;margin-bottom:12px;"
+  />
+
+  <button class="btn" type="submit">Pay via EcoCash Prompt</button>
+</form>
 
       <div class="muted" style="margin-top:12px;">
         After payment, you’ll be returned to Arena and your entry will be unlocked.

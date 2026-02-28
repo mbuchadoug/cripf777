@@ -34,13 +34,17 @@ battleId: {
   index: true
 },
 
-  plan: {
-    type: String,
-    enum: ["silver", "gold", "teacher_starter", "teacher_professional"],
-    default: "silver",
-    index: true
-  },
+meta: {
+  type: Object,
+  default: {}
+},
 
+plan: {
+  type: String,
+  enum: ["silver", "gold", "teacher_starter", "teacher_professional", null],
+  default: null,
+  index: true
+},
   pollUrl: {
     type: String,
     default: null

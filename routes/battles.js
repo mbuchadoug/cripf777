@@ -628,25 +628,30 @@ router.post("/battles/:battleId/paynow/init", ensureAuth, async (req, res) => {
     const battle = await Battle.findById(battleId).lean();
     if (!battle) return res.status(404).send("Battle not found");
 
+    // ✅ phone from form
+    const ecocashPhone = String(req.body.ecocashPhone || "").trim();
+    if (!ecocashPhone) return res.status(400).send("EcoCash phone number is required");
+
     // ensure entry exists
     let entry = await BattleEntry.findOne({ battleId, userId: req.user._id });
-  if (!entry) {
-  entry = await BattleEntry.create({
-    battleId,
-    userId: req.user._id,
-    status: "pending_payment",
-    codeName: makeCodeName()
-  });
-}
+    if (!entry) {
+      entry = await BattleEntry.create({
+        battleId,
+        userId: req.user._id,
+        status: "pending_payment",
+        codeName: makeCodeName()
+      });
+    }
 
     // if already paid, go lobby
     if (["paid", "started", "finished"].includes(entry.status)) {
       return res.redirect(`/arena/lobby?battleId=${battleId}`);
     }
 
-    const amountUsd = (Number(battle.entryFeeCents || 0) / 100);
+    const amountUsd = Number(battle.entryFeeCents || 0) / 100;
     const reference = `BATTLE-${battleId}-${crypto.randomUUID()}`;
 
+    // ✅ MOBILE payment (EcoCash prompt)
     const paymentRequest = paynow.createPayment(
       reference,
       req.user.email || "player@payment.local"
@@ -654,22 +659,32 @@ router.post("/battles/:battleId/paynow/init", ensureAuth, async (req, res) => {
 
     paymentRequest.add(`Battle Entry: ${battle.title}`, amountUsd);
 
-    const response = await paynow.send(paymentRequest);
+    // ✅ THIS is the key change:
+    const response = await paynow.sendMobile(paymentRequest, ecocashPhone, "ecocash"); // :contentReference[oaicite:1]{index=1}
+
     if (!response.success) {
-      return res.status(400).send("Failed to initiate payment");
+      console.error("[battle sendMobile] failed:", response);
+      return res.status(400).send(response.error || "Failed to initiate EcoCash payment");
     }
 
- await Payment.create({
-  userId: req.user._id,
-  reference,
-  amount: amountUsd,
-  type: "battle_entry",
-  battleId: battle._id,
-  pollUrl: response.pollUrl,
-  status: "pending"
-});
+    // Save payment
+    const payDoc = await Payment.create({
+      userId: req.user._id,
+      reference,
+      amount: amountUsd,
+      type: "battle_entry",
+      battleId: battle._id,
+      pollUrl: response.pollUrl,
+      status: "pending",
+      meta: { ecocashPhone }
+    });
 
-    return res.redirect(response.redirectUrl);
+    // ✅ Show waiting page (polls until paid, then redirects)
+    return res.render("arena/waiting", {
+      battleId: String(battleId),
+      reference: payDoc.reference,
+      instructions: response.instructions || "Check your phone and confirm the EcoCash prompt."
+    });
   } catch (err) {
     console.error("[battle paynow init] error:", err);
     return res.status(500).send("Payment error");

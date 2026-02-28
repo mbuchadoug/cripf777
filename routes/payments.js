@@ -18,7 +18,7 @@ const router = Router();
 const PLANS = {
   silver: {
     name: "Silver",
-    amount: 5,
+    amount: 0.05,
     maxChildren: 2,
     durationDays: 30
   },

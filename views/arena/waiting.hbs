@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Waiting for EcoCash</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body{font-family:system-ui;background:#0b0b0b;color:#fff;margin:0}
+    .wrap{max-width:720px;margin:40px auto;padding:0 18px}
+    .card{background:#141414;border:1px solid #222;border-radius:14px;padding:18px}
+    .muted{color:#9aa3ad}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#1f1f1f;color:#9aa3ad;font-size:12px;font-weight:800}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/arena" style="color:#FFB800;text-decoration:none;font-weight:800;">← Back to Arena</a>
+
+    <div class="card" style="margin-top:14px;">
+      <div class="pill">EcoCash Prompt Sent</div>
+      <h2 style="margin:10px 0 6px;">Confirm payment on your phone</h2>
+      <div class="muted">{{instructions}}</div>
+
+      <div class="muted" style="margin-top:14px;">
+        Status: <strong id="st">WAITING...</strong>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const battleId = "{{battleId}}";
+  const reference = "{{reference}}";
+
+  async function poll(){
+    const res = await fetch(`/arena/paynow/poll?reference=${encodeURIComponent(reference)}`, { cache:"no-store" });
+    const data = await res.json();
+
+    document.getElementById("st").textContent = (data.status || "WAITING").toUpperCase();
+
+    if (data.status === "paid") {
+      window.location.href = `/arena/lobby?battleId=${encodeURIComponent(battleId)}`;
+      return;
+    }
+
+    if (data.status === "failed" || data.status === "cancelled") {
+      window.location.href = `/arena/pay?battleId=${encodeURIComponent(battleId)}&paymentFailed=1`;
+      return;
+    }
+  }
+
+  poll();
+  setInterval(poll, 3000);
+</script>
+</body>
+</html>
