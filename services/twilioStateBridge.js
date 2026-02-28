@@ -466,6 +466,9 @@ They must click it to join.`);
   /* ===========================
      EXPENSE: ENTER AMOUNT
   =========================== */
+ /* ===========================
+     EXPENSE: ENTER AMOUNT
+  =========================== */
   if (state === "expense_amount") {
     const amount = Number(trimmed);
     if (isNaN(amount) || amount <= 0) { await sendPromptWithMenu(from, "❌ Invalid amount. Enter a valid number:"); return true; }
@@ -474,15 +477,17 @@ They must click it to join.`);
     biz.sessionState = ACTIONS.EXPENSE_METHOD;
     await saveBizSafe(biz);
 
-    await sendButtons(from, {
-      text: "💳 Select payment method",
-      buttons: [
+    // ✅ FIXED: Use sendList instead of sendButtons (WhatsApp max 3 buttons)
+    await sendList(
+      from,
+      "💳 Select payment method",
+      [
         { id: "exp_method_cash", title: "💵 Cash" },
         { id: "exp_method_bank", title: "🏦 Bank" },
         { id: "exp_method_ecocash", title: "📱 EcoCash" },
         { id: "exp_method_other", title: "💳 Other" }
       ]
-    });
+    );
     return true;
   }
 

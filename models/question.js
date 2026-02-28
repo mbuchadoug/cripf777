@@ -39,7 +39,7 @@ const QuestionSchema = new mongoose.Schema({
   // Grade level (1-7)
   grade: {
     type: Number,
-    min: 1,
+    min: 0,
     max: 7,
     // NO INDEX HERE - created separately in MongoDB
     default: null
