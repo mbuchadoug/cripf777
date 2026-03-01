@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Grade Updated | Parent Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --green:#1db954;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+    }
+
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+      background:var(--bg);
+      color:#fff;
+    }
+
+    main{
+      max-width:600px;
+      margin:80px auto;
+      padding:0 20px;
+      text-align:center;
+    }
+
+    .success-icon{
+      font-size:80px;
+      margin-bottom:20px;
+      animation:bounce 0.6s ease;
+    }
+
+    @keyframes bounce{
+      0%, 100%{ transform:translateY(0); }
+      50%{ transform:translateY(-20px); }
+    }
+
+    h1{
+      font-size:32px;
+      margin-bottom:12px;
+      color:var(--green);
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:16px;
+      margin-bottom:32px;
+      line-height:1.6;
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:24px;
+      margin-bottom:20px;
+      text-align:left;
+    }
+
+    .info-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 0;
+      border-bottom:1px solid #1a1a1a;
+    }
+
+    .info-row:last-child{ border-bottom:none; }
+
+    .info-label{
+      font-size:14px;
+      color:var(--muted);
+    }
+
+    .info-value{
+      font-size:16px;
+      font-weight:700;
+      color:#fff;
+    }
+
+    .grade-change{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      justify-content:center;
+    }
+
+    .grade-old{
+      font-size:24px;
+      font-weight:800;
+      color:var(--muted);
+      text-decoration:line-through;
+    }
+
+    .grade-arrow{
+      font-size:20px;
+      color:var(--gold);
+    }
+
+    .grade-new{
+      font-size:28px;
+      font-weight:900;
+      color:var(--green);
+    }
+
+    .btn{
+      display:inline-block;
+      margin-top:24px;
+      padding:16px 32px;
+      background:var(--gold);
+      color:#000;
+      font-weight:800;
+      font-size:16px;
+      border-radius:12px;
+      text-decoration:none;
+      transition:opacity 0.2s;
+    }
+
+    .btn:hover{ opacity:0.9; }
+
+    .checklist{
+      background:#0e0e0e;
+      border-radius:10px;
+      padding:20px;
+      margin-top:20px;
+    }
+
+    .checklist-title{
+      font-size:16px;
+      font-weight:700;
+      margin-bottom:16px;
+      color:var(--gold);
+    }
+
+    .checklist-item{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      padding:10px 0;
+      font-size:14px;
+      color:#ddd;
+    }
+
+    .check-icon{
+      color:var(--green);
+      font-size:18px;
+      flex-shrink:0;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <div class="success-icon">🎓</div>
+  
+  <h1>Grade Successfully Updated!</h1>
+  
+  <p class="subtitle">
+    {{child.firstName}}'s account has been updated to the new grade level.
+    All quizzes have been refreshed.
+  </p>
+
+  <!-- GRADE CHANGE SUMMARY -->
+  <div class="panel">
+    <div class="info-row">
+      <span class="info-label">Student Name</span>
+      <span class="info-value">{{child.firstName}} {{child.lastName}}</span>
+    </div>
+    
+    <div class="info-row">
+      <span class="info-label">Grade Transition</span>
+      <div class="grade-change">
+        <span class="grade-old">Grade {{oldGrade}}</span>
+        <span class="grade-arrow">→</span>
+        <span class="grade-new">Grade {{newGrade}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT HAPPENED -->
+  <div class="panel">
+    <div class="checklist-title">✅ What We Did</div>
+    <div class="checklist">
+      
+      <div class="checklist-item">
+        <span class="check-icon">✓</span>
+        <span>Archived all Grade {{oldGrade}} quizzes (progress saved for records)</span>
+      </div>
+      
+      <div class="checklist-item">
+        <span class="check-icon">✓</span>
+        <span>Assigned new Grade {{newGrade}} trial quizzes (Maths + Responsibility)</span>
+      </div>
+      
+      <div class="checklist-item">
+        <span class="check-icon">✓</span>
+        <span>Loaded full Grade {{newGrade}} quiz library (all subjects)</span>
+      </div>
+      
+      <div class="checklist-item">
+        <span class="check-icon">✓</span>
+        <span>Updated progress tracking for the new curriculum</span>
+      </div>
+      
+    </div>
+  </div>
+
+  <a href="{{dashboardUrl}}" class="btn">
+    ← Back to Dashboard
+  </a>
+
+</main>
+
+</body>
+</html>

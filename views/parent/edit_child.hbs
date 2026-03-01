@@ -93,6 +93,7 @@
     }
 
     .btn:hover{ opacity:0.9; }
+    .btn:disabled{ opacity:0.5; cursor:not-allowed; }
 
     .note{
       margin-top:14px;
@@ -155,6 +156,100 @@
       color:var(--gold);
       font-family:monospace;
     }
+
+    /* ✅ GRADE CHANGE WARNING */
+    .grade-warning{
+      background:rgba(255, 193, 7, 0.1);
+      border:2px solid #ffc107;
+      border-radius:var(--radius);
+      padding:16px;
+      margin-top:12px;
+      display:none;
+    }
+
+    .grade-warning.active{
+      display:block;
+    }
+
+    .warning-title{
+      font-size:15px;
+      font-weight:800;
+      color:#ffc107;
+      margin-bottom:8px;
+    }
+
+    .warning-text{
+      font-size:13px;
+      color:rgba(255, 193, 7, 0.9);
+      line-height:1.5;
+    }
+
+    /* ✅ PROGRESS OVERLAY */
+    .progress-overlay{
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,0.85);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9999;
+    }
+
+    .progress-overlay.active{ display:flex; }
+
+    .progress-box{
+      background:var(--panel);
+      border:2px solid var(--gold);
+      border-radius:var(--radius);
+      padding:32px 40px;
+      text-align:center;
+      max-width:400px;
+    }
+
+    .progress-title{
+      font-size:20px;
+      font-weight:800;
+      margin-bottom:20px;
+    }
+
+    .progress-bar{
+      width:100%;
+      height:12px;
+      background:#0e0e0e;
+      border-radius:8px;
+      overflow:hidden;
+      margin-bottom:12px;
+    }
+
+    .progress-fill{
+      height:100%;
+      background:linear-gradient(90deg, var(--gold), #ffd700);
+      width:0%;
+      transition:width 0.3s ease;
+    }
+
+    .progress-text{
+      font-size:14px;
+      color:var(--muted);
+      margin-bottom:8px;
+    }
+
+    .progress-spinner{
+      width:40px;
+      height:40px;
+      border:4px solid #333;
+      border-top-color:var(--gold);
+      border-radius:50%;
+      animation:spin 0.8s linear infinite;
+      margin:20px auto 0;
+    }
+
+    @keyframes spin{
+      to{ transform:rotate(360deg); }
+    }
   </style>
 </head>
 
@@ -189,7 +284,7 @@
 
   <!-- EDIT FORM -->
   <div class="panel">
-    <form method="POST" action="/parent/children/{{child._id}}/edit">
+    <form method="POST" action="/parent/children/{{child._id}}/edit" id="editForm">
 
       <label>
         <span>First name *</span>
@@ -210,7 +305,7 @@
 
       <label>
         <span>Grade *</span>
-        <select name="grade" required>
+        <select name="grade" id="gradeSelect" required>
           <option value="0" {{#if (eq child.grade 0)}}selected{{/if}}>Grade 0</option>
           <option value="1" {{#if (eq child.grade 1)}}selected{{/if}}>Grade 1</option>
           <option value="2" {{#if (eq child.grade 2)}}selected{{/if}}>Grade 2</option>
@@ -221,6 +316,17 @@
           <option value="7" {{#if (eq child.grade 7)}}selected{{/if}}>Grade 7</option>
         </select>
       </label>
+
+      <!-- ✅ GRADE CHANGE WARNING -->
+      <div class="grade-warning" id="gradeWarning">
+        <div class="warning-title">⚠️ Grade Change Detected</div>
+        <div class="warning-text">
+          Changing {{child.firstName}}'s grade will:<br>
+          • Archive current quizzes (progress saved)<br>
+          • Assign new age-appropriate quizzes<br>
+          • This takes 10-15 seconds
+        </div>
+      </div>
 
       <label>
         <span>New PIN (leave blank to keep current)</span>
@@ -234,7 +340,7 @@
         <span class="note" style="margin-top:6px;">Enter 4-6 digit PIN. Only change if you've forgotten the current one.</span>
       </label>
 
-      <button type="submit" class="btn btn-primary">
+      <button type="submit" class="btn btn-primary" id="submitBtn">
         ✅ Save Changes
       </button>
 
@@ -256,6 +362,71 @@
   </div>
 
 </main>
+
+<!-- ✅ PROGRESS OVERLAY -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <div class="progress-title">Updating Grade...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText">Archiving old quizzes...</div>
+    <div class="progress-spinner"></div>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById('editForm');
+const gradeSelect = document.getElementById('gradeSelect');
+const gradeWarning = document.getElementById('gradeWarning');
+const overlay = document.getElementById('progressOverlay');
+const fill = document.getElementById('progressFill');
+const text = document.getElementById('progressText');
+const btn = document.getElementById('submitBtn');
+
+const originalGrade = {{child.grade}};
+
+// Show warning if grade changed
+gradeSelect.addEventListener('change', () => {
+  const newGrade = parseInt(gradeSelect.value);
+  if (newGrade !== originalGrade) {
+    gradeWarning.classList.add('active');
+  } else {
+    gradeWarning.classList.remove('active');
+  }
+});
+
+// Handle form submission
+form.addEventListener('submit', (e) => {
+  const newGrade = parseInt(gradeSelect.value);
+  
+  // Only show progress if grade changed
+  if (newGrade !== originalGrade) {
+    overlay.classList.add('active');
+    btn.disabled = true;
+
+    const steps = [
+      { pct: 25, msg: 'Archiving old quizzes...' },
+      { pct: 50, msg: 'Loading new curriculum...' },
+      { pct: 75, msg: 'Assigning grade-appropriate quizzes...' },
+      { pct: 95, msg: 'Finalizing changes...' }
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length) {
+        fill.style.width = steps[currentStep].pct + '%';
+        text.textContent = steps[currentStep].msg;
+        currentStep++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 3000); // 3s per step = 12s total
+  }
+  
+  // Let form submit naturally
+});
+</script>
 
 </body>
 </html>

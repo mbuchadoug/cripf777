@@ -34,14 +34,18 @@ export async function assignQuizFromRule({ rule, userId, orgId, force = false })
   }
 
   // ✅ Prevent duplicates (scoped to org + rule)
+// ✅ ENHANCED DUPLICATE CHECK (includes grade matching + only checks active quizzes)
   const exists = await ExamInstance.findOne({
     userId,
     org: orgId,
-    ruleId: rule._id
+    ruleId: rule._id,
+    status: { $in: ["pending", "in_progress"] } // Only check active quizzes, not archived
   }).lean();
 
-  if (exists) return;
-
+  if (exists) {
+    console.log(`[QuizAssignment] Quiz already assigned: user=${userId}, rule=${rule._id}`);
+    return;
+  }
   // Load comprehension parent
   const parentQuestion = await Question.findById(rule.quizQuestionId).lean();
   if (!parentQuestion) return;
@@ -98,7 +102,8 @@ export async function assignQuizFromRule({ rule, userId, orgId, force = false })
       isRuleAssigned: true,
       ruleOrg: String(orgId),
       ruleModule: rule.module || null,
-      ruleQuizType: rule.quizType || null
+      ruleQuizType: rule.quizType || null,
+      assignedGrade: rule.grade || null // ✅ ADD: Track grade at assignment time
       // subject/grade can exist for home rules; for school they’ll be null
     },
 

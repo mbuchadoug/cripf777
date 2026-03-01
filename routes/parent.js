@@ -555,6 +555,7 @@ router.get(
 // ----------------------------------
 // Update child details
 // ----------------------------------
+
 router.post(
   "/parent/children/:childId/edit",
   ensureAuth,
@@ -571,6 +572,9 @@ router.post(
 
     if (!child) return res.status(404).send("Child not found");
 
+    const oldGrade = child.grade;
+    const gradeChanged = grade && Number(grade) !== oldGrade;
+
     // Update basic info
     if (firstName) child.firstName = firstName;
     if (lastName) child.lastName = lastName;
@@ -582,6 +586,74 @@ router.post(
     }
 
     await child.save();
+
+    // ✅ GRADE TRANSITION LOGIC
+    if (gradeChanged && isSubscriptionActive(parent)) {
+      const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+      
+      if (org) {
+        // Archive old quizzes (mark as legacy, don't delete)
+        await ExamInstance.updateMany(
+          { 
+            userId: child._id, 
+            org: org._id,
+            status: "pending"
+          },
+          { 
+            $set: { 
+              status: "archived",
+              archivedReason: `Grade changed from ${oldGrade} to ${child.grade}`,
+              archivedAt: new Date()
+            }
+          }
+        );
+
+        // Assign trial quizzes for new grade
+        for (const subject of TRIAL_SUBJECTS) {
+          const rule = await QuizRule.findOne({
+            org: org._id,
+            grade: child.grade,
+            subject,
+            quizType: "trial",
+            enabled: true
+          }).lean();
+
+          if (rule) {
+            await assignQuizFromRule({
+              rule,
+              userId: child._id,
+              orgId: org._id
+            });
+          }
+        }
+
+        // Assign paid quizzes if parent is subscribed
+        const paidRules = await QuizRule.find({
+          org: org._id,
+          grade: child.grade,
+          quizType: "paid",
+          enabled: true
+        });
+
+        for (const rule of paidRules) {
+          await assignQuizFromRule({
+            rule,
+            userId: child._id,
+            orgId: org._id,
+            force: true
+          });
+        }
+
+        // Show transition confirmation page
+        return res.render("parent/grade_transition_success", {
+          user: parent,
+          child,
+          oldGrade,
+          newGrade: child.grade,
+          dashboardUrl: parent.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
+        });
+      }
+    }
 
     return res.redirect(`/parent/children/${child._id}/quizzes`);
   }
