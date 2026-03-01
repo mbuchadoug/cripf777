@@ -198,6 +198,11 @@ json: (context) => {
   return s.substring(from, from + (Number.isFinite(n) ? n : 0));
 },
 
+ // ✅ ADD THIS CAPITALIZE HELPER
+  capitalize: (str) => {
+    if (!str || typeof str !== "string") return "";
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  },
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
     const seq = "abcdefghijklmnopqrstuvwxyz";
