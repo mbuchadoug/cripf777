@@ -658,6 +658,132 @@
             color: rgba(255, 255, 255, 0.6);
             font-size: 0.9rem;
         }
+
+        /* =========================
+   NAV DROPDOWN (LMS)
+========================= */
+.nav-item.dropdown {
+  position: relative;
+}
+
+/* clickable trigger */
+.dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.caret {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* menu container */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  min-width: 320px;
+  background: var(--white);
+  border: 1px solid var(--medium-gray);
+  box-shadow: var(--shadow-md);
+  padding: 0.6rem;
+  border-radius: 10px;
+  display: none;
+  z-index: 2000;
+}
+
+/* show dropdown on desktop hover/focus */
+.nav-item.dropdown:hover .dropdown-menu,
+.nav-item.dropdown:focus-within .dropdown-menu {
+  display: block;
+}
+
+/* dropdown link styling */
+.dropdown-link {
+  display: block;
+  text-decoration: none;
+  padding: 0.85rem 0.9rem;
+  border-radius: 8px;
+  transition: background 0.2s, transform 0.2s;
+  color: var(--text-primary);
+}
+
+.dropdown-link:hover {
+  background: var(--light-gray);
+  transform: translateY(-1px);
+}
+
+.dd-title {
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.dd-sub {
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  color: #6b7280; /* soft gray */
+  line-height: 1.3;
+}
+
+/* prevent menu going off screen (simple) */
+.nav-item.dropdown .dropdown-menu {
+  max-width: min(420px, 90vw);
+}
+
+/* =========================
+   MOBILE: dropdown inside slide-in menu
+========================= */
+@media (max-width: 768px) {
+  /* make dropdown fill the menu width */
+  .nav-item.dropdown {
+    width: 100%;
+  }
+
+  /* make the LMS trigger full-width */
+  .dropdown-toggle {
+    width: 100%;
+    justify-content: space-between;
+    padding: 1.25rem 0;
+  }
+
+  /* override absolute positioning on mobile */
+  .dropdown-menu {
+    position: static;
+    display: none;       /* hidden by default */
+    width: 100%;
+    min-width: 0;
+    box-shadow: none;
+    border: none;
+    padding: 0.5rem 0 1rem;
+    margin-top: 0;
+  }
+
+  /* show dropdown when JS adds .open */
+  .nav-item.dropdown.open .dropdown-menu {
+    display: block;
+  }
+
+  .dropdown-link {
+    padding: 0.9rem 0;
+    border-radius: 0;
+  }
+
+  .dropdown-link:hover {
+    background: transparent;
+    transform: none;
+  }
+
+  .dd-title {
+    font-size: 1rem;
+  }
+
+  .dd-sub {
+    font-size: 0.85rem;
+  }
+}
         
         /* Responsive */
         @media (max-width: 1200px) {
@@ -754,15 +880,41 @@
                 <span></span>
             </button>
             
-            <ul class="nav-links" id="navLinks">
-                 <li><a href="/">Home</a></li>
-                <li><a href="/about">Framework</a></li>
-                <li><a href="/scoi">Audits</a></li>
-                <li><a href="/lms">LMS</a></li>
-                <li><a href="/auth/school">Student Portal</a></li>
-                <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color: #FFFFFF;">Get Started</a></li>
-              
-            </ul>
+          <ul class="nav-links" id="navLinks">
+  <li><a href="/">Home</a></li>
+  <li><a href="/about">Framework</a></li>
+  <li><a href="/scoi">Audits</a></li>
+
+  <!-- LMS dropdown -->
+  <li class="nav-item dropdown" id="lmsDropdown">
+  <a href="/lms" class="dropdown-toggle" id="lmsToggle" aria-haspopup="true" aria-expanded="false">
+  LMS <span class="caret">▾</span>
+</a>
+
+    <div class="dropdown-menu" role="menu" aria-label="LMS menu">
+      <a class="dropdown-link" href="/auth/parent">
+        <div class="dd-title">Parents & Guardians</div>
+        <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
+      </a>
+
+      <a class="dropdown-link" href="/auth/teacher">
+        <div class="dd-title">Private Teachers</div>
+        <div class="dd-sub">Up to 15/40 learners</div>
+      </a>
+
+      <a class="dropdown-link" href="/org/cripfcnt-school/dashboard">
+        <div class="dd-title">Professionals</div>
+        <div class="dd-sub">8 modules • audits • certification</div>
+      </a>
+    </div>
+  </li>
+
+  <!-- Arena as separate top link -->
+  <li><a href="/auth/arena">Arena</a></li>
+
+  <li><a href="/auth/school">Student Portal</a></li>
+  <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
+</ul>
         </div>
     </nav>
 
@@ -1072,5 +1224,52 @@
             }
         });
     </script>
+
+
+
+    <script>
+  const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+  const navLinks = document.getElementById('navLinks');
+
+  mobileMenuToggle.addEventListener('click', () => {
+    mobileMenuToggle.classList.toggle('active');
+    navLinks.classList.toggle('active');
+  });
+
+  // Close menu when clicking a link (but NOT the LMS toggle)
+  navLinks.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      if (link.id === 'lmsToggle') return; // keep menu open for dropdown toggle
+      mobileMenuToggle.classList.remove('active');
+      navLinks.classList.remove('active');
+    });
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!mobileMenuToggle.contains(e.target) && !navLinks.contains(e.target)) {
+      mobileMenuToggle.classList.remove('active');
+      navLinks.classList.remove('active');
+      document.getElementById('lmsDropdown')?.classList.remove('open');
+      document.getElementById('lmsToggle')?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  // MOBILE: LMS dropdown toggle
+  const lmsDropdown = document.getElementById('lmsDropdown');
+  const lmsToggle = document.getElementById('lmsToggle');
+
+  if (lmsToggle && lmsDropdown) {
+    lmsToggle.addEventListener('click', (e) => {
+      // only intercept on mobile widths
+      if (window.innerWidth <= 768) {
+        e.preventDefault();
+        lmsDropdown.classList.toggle('open');
+        const expanded = lmsDropdown.classList.contains('open');
+        lmsToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      }
+    });
+  }
+</script>
 </body>
 </html>
