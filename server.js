@@ -129,10 +129,16 @@ app.use("/stripe/webhook", stripeWebhookRoutes);
 
 
 // Basic middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Basic middleware — skip body parsing for multipart (multer handles those)
+app.use((req, res, next) => {
+  if (req.headers['content-type']?.startsWith('multipart/form-data')) return next();
+  express.json({ limit: '10mb' })(req, res, next);
+});
+app.use((req, res, next) => {
+  if (req.headers['content-type']?.startsWith('multipart/form-data')) return next();
+  express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+});
 app.use(express.static(path.join(__dirname, "public")));
-
 app.use(cookieParser());
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
 app.use((req, res, next) => {
