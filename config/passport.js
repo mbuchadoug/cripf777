@@ -170,7 +170,8 @@ if ((isParentSignup || isTeacherSignup) && homeOrg) {
 }
 
 // ✅ If they did NOT come via parent flow => ensure SCHOOL membership
-if (!isParentSignup && schoolOrg) {
+// ✅ If they did NOT come via parent/teacher flow => ensure SCHOOL membership
+if (!isParentSignup && !isTeacherSignup && schoolOrg) {
   const schoolMembership = await OrgMembership.findOne({
     org: schoolOrg._id,
     user: user._id
@@ -187,22 +188,21 @@ if (!isParentSignup && schoolOrg) {
 
     console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school as employee`);
 
-    // 🎓 Assign TRIAL quizzes using RULES (cripfcnt-school)
+    // 🎓 Assign TRIAL quizzes for first-time users
     try {
-      const { applyEmployeeQuizRules } = await import("../services/employeeRuleAssignment.js");
+      const { assignTrialQuizzesToUser } = await import("../services/trialQuizAssignment.js");
 
-      const result = await applyEmployeeQuizRules({
-        orgId: schoolOrg._id,
+      const result = await assignTrialQuizzesToUser({
         userId: user._id,
-        force: false
+        orgId: schoolOrg._id
       });
 
-      console.log(`[passport] ✅ Applied ${result.applied} employee trial rule quizzes to ${user.email}`);
+      console.log(`[passport] ✅ Assigned ${result.assigned} trial quizzes to ${user.email}`);
     } catch (err) {
-      console.error("[passport] Failed to apply employee quiz rules:", err.message);
+      console.error("[passport] Failed to assign trial quizzes:", err.message);
     }
 
-    // ✅ Mark employee trial fields ONLY (do NOT unset accountType)
+    // ✅ Mark employee trial fields
     await User.updateOne(
       { _id: user._id },
       {
@@ -216,6 +216,40 @@ if (!isParentSignup && schoolOrg) {
     if (req.session) req.session.isFirstLogin = true;
   } else {
     console.log(`[passport] ${user.email} already member of cripfcnt-school`);
+  }
+}
+
+// ✅ ALSO ASSIGN TRIAL QUIZZES WHEN PARENTS/TEACHERS SWITCH TO CRIPFCNT-SCHOOL
+if ((isParentSignup || isTeacherSignup) && schoolOrg) {
+  const schoolMembership = await OrgMembership.findOne({
+    org: schoolOrg._id,
+    user: user._id
+  });
+
+  // If they just joined cripfcnt-school, give them trial quizzes too
+  if (!schoolMembership) {
+    await OrgMembership.create({
+      org: schoolOrg._id,
+      user: user._id,
+      role: isTeacherSignup ? "private_teacher" : "parent",
+      joinedAt: new Date()
+    });
+
+    console.log(`[passport] ✅ Enrolled ${user.email} into cripfcnt-school`);
+
+    // 🎓 Assign trial quizzes
+    try {
+      const { assignTrialQuizzesToUser } = await import("../services/trialQuizAssignment.js");
+
+      const result = await assignTrialQuizzesToUser({
+        userId: user._id,
+        orgId: schoolOrg._id
+      });
+
+      console.log(`[passport] ✅ Assigned ${result.assigned} trial quizzes to ${user.email}`);
+    } catch (err) {
+      console.error("[passport] Failed to assign trial quizzes:", err.message);
+    }
   }
 }
 
