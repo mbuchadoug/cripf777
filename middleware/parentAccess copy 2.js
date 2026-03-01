@@ -8,63 +8,38 @@ const HOME_ORG_SLUG = "cripfcnt-home";
 /**
  * Allow users to act as parent IF:
  *  - They are logged in
- *  - They are one of: parent/guardian/private_teacher/employee/org_admin/admin/super_admin
+ *  - They are one of: parent/admin/employee/org_admin/super_admin
  * AND:
  *  - They are enrolled in cripfcnt-home
  *
- * ✅ If not enrolled, auto-enroll them on first visit.
- *
- * ✅ Student exception:
- * Students are NOT parents, but we allow them through ONLY when:
- *  - route has :childId
- *  - childId === req.user._id (self access only)
+ * ✅ If not enrolled, auto-enroll them on first visit (this is "if they wish").
  */
 export async function canActAsParent(req, res, next) {
   try {
     if (!req.user) return res.status(401).send("Not logged in");
 
-    // ✅ STRICT student pass-through (ONLY for self childId routes)
-    if (req.user.role === "student") {
-      const childId = req.params?.childId;
+    
 
-      // must be a route that includes :childId
-      if (!childId) return res.status(403).send("Parent access denied");
-
-      // student can only access their own childId
-      if (String(childId) !== String(req.user._id)) {
-        return res.status(403).send("Parent access denied");
-      }
-
-      return next();
-    }
-
-    // ✅ Parent/teacher/admin roles
-    const allowedRoles = [
-      "parent",
-      "guardian",
-      "private_teacher",
-      "employee",
-      "org_admin",
-      "admin",
-      "super_admin"
-    ];
-
+  //  const allowedRoles = ["parent", "admin", "employee", "org_admin", "super_admin"];
+  const allowedRoles = ["parent", "guardian", "private_teacher", "employee", "org_admin", "admin", "super_admin"];
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).send("Parent access denied");
     }
 
     const homeOrg = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
-    if (!homeOrg) return res.status(500).send("Home organization not found");
+    if (!homeOrg) {
+      return res.status(500).send("Home organization not found");
+    }
 
     const existing = await OrgMembership.findOne({
       org: homeOrg._id,
       user: req.user._id
     }).lean();
 
-    // ✅ already enrolled
+    // ✅ Already enrolled => ok
     if (existing) return next();
 
-    // ✅ auto-enroll
+    // ✅ Not enrolled => auto-enroll on demand
     await OrgMembership.create({
       org: homeOrg._id,
       user: req.user._id,
@@ -72,12 +47,13 @@ export async function canActAsParent(req, res, next) {
       joinedAt: new Date()
     });
 
-    // ✅ enable consumer mode (don't overwrite existing accountType)
+    // ✅ Enable consumer mode without changing system role
     await User.updateOne(
       { _id: req.user._id },
       {
         $set: {
           consumerEnabled: true,
+          // Only set accountType if empty (don’t overwrite)
           ...(req.user.accountType ? {} : { accountType: "parent" })
         }
       }
