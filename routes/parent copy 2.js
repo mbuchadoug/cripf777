@@ -683,28 +683,18 @@ router.get(
   canActAsParent,
   async (req, res) => {
     try {
-      const viewer = await User.findById(req.user._id).lean();
-      if (!viewer) return res.redirect("/parent/dashboard");
+      const parent = await User.findById(req.user._id).lean();
+      if (!parent) return res.redirect("/parent/dashboard");
 
-      let child = null;
-
-      // ✅ Student self-view path
-      if (viewer.role === "student") {
-        if (String(req.params.childId) !== String(viewer._id)) {
-          return res.status(403).send("Not allowed");
-        }
-        child = viewer; // student is the child
-      } else {
-        // ✅ Parent/teacher/admin path (existing logic)
-        child = await User.findOne({
-          _id: req.params.childId,
-          parentUserId: viewer._id,
-          role: "student"
-        }).lean();
-      }
+      const child = await User.findOne({
+        _id: req.params.childId,
+        parentUserId: parent._id,
+        role: "student"
+      }).lean();
 
       if (!child) return res.status(404).send("Child not found");
 
+      // Check if child is in cripfcnt-home
       const org = await Organization.findById(child.organization).lean();
       if (!org || org.slug !== HOME_ORG_SLUG) {
         return res.status(404).send("Knowledge map only available for home school students");
@@ -712,39 +702,38 @@ router.get(
 
       if (!child.grade) {
         return res.render("parent/knowledge_map", {
-          user: viewer,
+          user: parent,
           child,
-          error: viewer.role === "student"
-            ? "Grade not set. Please contact your teacher."
-            : "Child grade not set. Please update child profile.",
-          backUrl: viewer.role === "student"
-            ? "/student/dashboard"
-            : `/parent/children/${child._id}/quizzes`,
-          isStudentView: viewer.role === "student"
+          error: "Child grade not set. Please update child profile."
         });
       }
 
+      // Available subjects for cripfcnt-home
       const subjects = ["math", "english", "science", "responsibility"];
-
+      
+      // Get knowledge maps for all subjects
       const knowledgeMaps = {};
       for (const subject of subjects) {
         try {
-          const map = await getStudentKnowledgeMap(child._id, subject, child.grade);
-          if (map?.stats?.totalTopics > 0) knowledgeMaps[subject] = map;
+          const map = await getStudentKnowledgeMap(
+            child._id,
+            subject,
+            child.grade
+          );
+          if (map.stats.totalTopics > 0) {
+            knowledgeMaps[subject] = map;
+          }
         } catch (err) {
           console.error(`[KnowledgeMap] Error getting ${subject}:`, err);
         }
       }
 
       return res.render("parent/knowledge_map", {
-        user: viewer,
+        user: parent,
         child,
         knowledgeMaps,
         subjects,
-        backUrl: viewer.role === "student"
-          ? "/student/dashboard"
-          : `/parent/children/${child._id}/quizzes`,
-        isStudentView: viewer.role === "student"
+        backUrl: `/parent/children/${child._id}/quizzes`
       });
 
     } catch (error) {
