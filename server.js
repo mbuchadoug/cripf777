@@ -203,6 +203,26 @@ json: (context) => {
     if (!str || typeof str !== "string") return "";
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
+
+   // ✅ ADD SUM HELPER (for calculating averages)
+  sum: (array, property) => {
+    if (!Array.isArray(array)) return 0;
+    if (!property) return array.reduce((sum, val) => sum + (Number(val) || 0), 0);
+    return array.reduce((sum, obj) => sum + (Number(obj[property]) || 0), 0);
+  },
+
+  // ✅ ADD FORMATDATE HELPER (better formatting)
+  formatDate: (date) => {
+    if (!date) return "-";
+    return new Date(date).toLocaleString("en-ZW", {
+      timeZone: "Africa/Harare",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  },
   letters: (i) => {
     if (typeof i !== "number" || i < 0) return "";
     const seq = "abcdefghijklmnopqrstuvwxyz";
