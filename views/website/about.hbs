@@ -161,19 +161,16 @@
         
       .nav-cta {
             background: var(--navy);
-            color: var(--white) !important;
+            color: var(--white);
             padding: 0.75rem 1.75rem;
             border-radius: 4px;
             font-weight: 600;
             transition: all 0.3s;
-            white-space: nowrap;
         }
         
         .nav-cta:hover {
             background: var(--navy-dark);
-            color: var(--white) !important;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(30, 58, 95, 0.2);
+            color: var(--white);
         }
         
         /* Page Header */
@@ -691,18 +688,20 @@
             }
         }
         
-     @media (max-width: 768px) {
-            /* ✅ PREVENT HORIZONTAL SCROLL */
+  @media (max-width: 768px) {
+            /* ✅ PREVENT HORIZONTAL SCROLL ON BODY */
             html, body {
                 overflow-x: hidden;
                 width: 100%;
                 position: relative;
             }
 
+            /* Show hamburger menu */
             .mobile-menu-toggle {
                 display: flex;
             }
-            
+
+            /* Hide nav links by default on mobile */
             .nav-links {
                 position: fixed;
                 top: 0;
@@ -712,27 +711,40 @@
                 height: 100vh;
                 background: var(--white);
                 flex-direction: column;
-                gap: 0;
-                padding: 5rem 1.5rem 2rem;
-                box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-                transition: right 0.3s;
                 align-items: flex-start;
+                padding: 5rem 1.5rem 2rem;
+                gap: 0;
+                box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+                transition: right 0.3s ease;
                 overflow-y: auto;
                 overflow-x: hidden;
                 z-index: 1000;
                 box-sizing: border-box;
             }
-            
+
+            /* Show nav when active */
             .nav-links.active {
                 right: 0;
             }
-            
+
+            /* ✅ ADDED: Prevent body scroll when menu open */
+            body.menu-open {
+                overflow: hidden;
+                position: fixed;
+                width: 100%;
+            }
+
+            /* Stack nav items vertically */
             .nav-links li {
                 width: 100%;
                 border-bottom: 1px solid var(--medium-gray);
                 box-sizing: border-box;
             }
-            
+
+            .nav-links li:last-child {
+                border-bottom: none;
+            }
+
             .nav-links a {
                 display: block;
                 padding: 1.1rem 0;
@@ -740,13 +752,25 @@
                 font-size: 1rem;
                 box-sizing: border-box;
             }
-            
+
+            /* Mobile CTA button */
             .nav-cta {
                 width: 100%;
                 text-align: center;
                 margin-top: 1rem;
-                padding: 0.75rem 1rem !important;
+                padding: 1rem 1.5rem !important;
                 box-sizing: border-box;
+                background: var(--navy) !important;
+                color: var(--white) !important;
+                border-radius: 8px;
+                font-size: 1rem;
+                font-weight: 600;
+                display: block;
+            }
+            
+            .nav-cta:hover {
+                background: var(--navy-dark) !important;
+                transform: none;
             }
 
             /* ✅ MOBILE LMS STYLES */
@@ -827,42 +851,11 @@
                 opacity: 1;
                 visibility: visible;
             }
-
-            body.menu-open {
-                overflow: hidden;
-                position: fixed;
-                width: 100%;
-            }
             
             .footer-grid {
                 grid-template-columns: 1fr;
             }
         }
-            
-            .nav-links.active {
-                right: 0;
-            }
-            
-            .nav-links li {
-                width: 100%;
-                border-bottom: 1px solid var(--medium-gray);
-            }
-            
-            .nav-links a {
-                display: block;
-                padding: 1.25rem 0;
-                font-size: 1.1rem;
-            }
-            
-            .nav-cta {
-                width: 100%;
-                text-align: center;
-                margin-top: 1rem;
-            }
-            
-            .footer-grid {
-                grid-template-columns: 1fr;
-            }
         }
     </style>
 </head>
@@ -920,7 +913,7 @@
 
                 <li><a href="/auth/arena">Arena</a></li>
                 <li><a href="/auth/school">Student Portal</a></li>
-                 <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF; font:10px">Get Started</a></li>
+                 <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
             </ul>
         </div>
     </nav>
