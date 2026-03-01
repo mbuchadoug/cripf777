@@ -10,6 +10,8 @@ import mongoose from "mongoose";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import passport from "passport";
+import { createServer } from "http";
+import { initializeLiveClassSocket } from "./services/liveClassSocket.js";
 import Handlebars from "handlebars";
 import consumerRoutes from "./routes/consumer.js";
 import consumerQuizRoutes from "./routes/consumer_quiz.js";
@@ -774,8 +776,18 @@ app.get("/api/search-quota", (req, res) => {
 // -------------------------------
 // 🟢 SERVER START
 // -------------------------------
-
 const PORT = process.env.PORT || 9000;
 const HOST = process.env.HOST || "127.0.0.1";
 
-app.listen(PORT, HOST, () => console.log(`🚀 Server running on http://${HOST}:${PORT}`));
+// Create HTTP server
+const httpServer = createServer(app);
+
+// Initialize Socket.IO for live classes
+initializeLiveClassSocket(httpServer);
+
+// Start server
+httpServer.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  console.log(`✅ Socket.IO initialized for live classes`);
+  console.log(`✅ Video processing queue active`);
+});

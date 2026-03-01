@@ -948,6 +948,10 @@ router.post(
  * POST /teacher/upload-material
  * Upload learning material for students
  */
+/**
+ * POST /teacher/upload-material
+ * Upload learning material with file size validation
+ */
 router.post(
   "/upload-material",
   ensureAuth,
@@ -955,34 +959,87 @@ router.post(
   upload.single("materialFile"),
   async (req, res) => {
     try {
-      const { title, subject, grade, description, studentIds } = req.body;
+      const { title, subject, grade, description, studentIds, allowDownload, assignmentType } = req.body;
       
       if (!title || !subject || !grade) {
         return res.status(400).json({ error: "Title, subject, and grade required" });
       }
 
       const LearningMaterial = (await import("../models/learningMaterial.js")).default;
+      const { FILE_SIZE_LIMITS, ALLOWED_TYPES } = await import("../models/learningMaterial.js");
       
       let fileUrl = null;
       let fileType = null;
+      let fileName = null;
+      let fileSize = 0;
+      let isVideo = false;
 
       if (req.file) {
+        // ✅ VALIDATE FILE TYPE
+        if (!ALLOWED_TYPES.includes(req.file.mimetype)) {
+          return res.status(400).json({ 
+            error: `File type ${req.file.mimetype} not allowed. Supported: PDF, DOCX, PPT, MP3, MP4, Images` 
+          });
+        }
+
+        // ✅ VALIDATE FILE SIZE
+        const sizeLimit = FILE_SIZE_LIMITS[req.file.mimetype];
+        if (sizeLimit && req.file.size > sizeLimit) {
+          const sizeMB = (req.file.size / 1024 / 1024).toFixed(2);
+          const limitMB = (sizeLimit / 1024 / 1024);
+          return res.status(400).json({ 
+            error: `File size ${sizeMB}MB exceeds limit of ${limitMB}MB for this file type` 
+          });
+        }
+
         const fs = (await import("fs")).default;
         const path = (await import("path")).default;
         
         const uploadsDir = path.join(process.cwd(), "public", "uploads", "materials");
         await fs.promises.mkdir(uploadsDir, { recursive: true });
         
-        const filename = `material-${Date.now()}-${req.file.originalname}`;
-        const filepath = path.join(uploadsDir, filename);
+        // Generate unique filename
+        const ext = path.extname(req.file.originalname);
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(2, 8);
+        const safeFilename = `material-${timestamp}-${randomString}${ext}`;
+        
+        const filepath = path.join(uploadsDir, safeFilename);
         await fs.promises.writeFile(filepath, req.file.buffer);
         
-        fileUrl = `/uploads/materials/${filename}`;
+        fileUrl = `/uploads/materials/${safeFilename}`;
         fileType = req.file.mimetype;
+        fileName = req.file.originalname;
+        fileSize = req.file.size;
+        isVideo = fileType.startsWith('video/');
       }
 
       // Parse content from textarea if provided
       const content = req.body.content || null;
+
+      // ✅ HANDLE ASSIGNMENT TYPE
+      let assignedStudents = [];
+      const assignType = assignmentType || 'individual';
+
+      if (assignType === 'individual') {
+        // Individual students
+        assignedStudents = Array.isArray(studentIds) ? studentIds : (studentIds ? [studentIds] : []);
+      } else if (assignType === 'grade') {
+        // All students in this grade
+        const gradeStudents = await User.find({
+          parentUserId: req.user._id,
+          role: "student",
+          grade: Number(grade)
+        }).select("_id").lean();
+        assignedStudents = gradeStudents.map(s => s._id);
+      } else if (assignType === 'all') {
+        // All teacher's students
+        const allStudents = await User.find({
+          parentUserId: req.user._id,
+          role: "student"
+        }).select("_id").lean();
+        assignedStudents = allStudents.map(s => s._id);
+      }
 
       const material = await LearningMaterial.create({
         teacherId: req.user._id,
@@ -993,11 +1050,34 @@ router.post(
         content,
         fileUrl,
         fileType,
-        assignedTo: Array.isArray(studentIds) ? studentIds : (studentIds ? [studentIds] : []),
-        status: "active"
+        fileName,
+        fileSize,
+        isVideo,
+        videoProcessingStatus: isVideo ? 'pending' : null,
+        assignedTo: assignedStudents,
+        assignmentType: assignType,
+        status: isVideo ? "processing" : "active",
+        allowDownload: allowDownload === 'true' || allowDownload === true
       });
 
-      return res.json({ success: true, materialId: material._id });
+      // ✅ QUEUE VIDEO PROCESSING (if video)
+ 
+      if (isVideo && fileUrl) {
+        const { queueVideoProcessing } = await import("../services/videoQueue.js");
+        const path = (await import("path")).default;
+        const fullPath = path.join(process.cwd(), "public", fileUrl.replace(/^\//, ''));
+        
+        await queueVideoProcessing(material._id, fullPath);
+        
+        console.log(`[Video Upload] Queued for processing: ${material._id}`);
+      }
+
+      return res.json({ 
+        success: true, 
+        materialId: material._id,
+        isVideo: isVideo,
+        assigned: assignedStudents.length
+      });
 
     } catch (error) {
       console.error("[Upload Material Error]", error);
@@ -1010,6 +1090,10 @@ router.post(
  * GET /teacher/materials
  * List all learning materials
  */
+/**
+ * GET /teacher/materials
+ * List all learning materials with preview
+ */
 router.get(
   "/materials",
   ensureAuth,
@@ -1019,19 +1103,142 @@ router.get(
     
     const materials = await LearningMaterial.find({
       teacherId: req.user._id,
-      status: "active"
-    }).sort({ createdAt: -1 }).lean();
+      status: { $in: ["active", "processing"] }
+    })
+    .sort({ createdAt: -1 })
+    .lean();
 
+    // Get all students for assignment
     const students = await User.find({
       parentUserId: req.user._id,
       role: "student"
-    }).lean();
+    })
+    .select("firstName lastName grade")
+    .lean();
+
+    // Enrich materials with assignment counts
+    for (const mat of materials) {
+      mat.assignedCount = mat.assignedTo ? mat.assignedTo.length : 0;
+      mat.fileSizeMB = mat.fileSize ? (mat.fileSize / 1024 / 1024).toFixed(2) : 0;
+      
+      // Get file type icon
+      if (mat.fileType) {
+        if (mat.fileType.startsWith('video/')) mat.icon = '🎥';
+        else if (mat.fileType.startsWith('audio/')) mat.icon = '🎵';
+        else if (mat.fileType.startsWith('image/')) mat.icon = '🖼️';
+        else if (mat.fileType.includes('pdf')) mat.icon = '📄';
+        else if (mat.fileType.includes('word')) mat.icon = '📝';
+        else if (mat.fileType.includes('powerpoint') || mat.fileType.includes('presentation')) mat.icon = '📊';
+        else mat.icon = '📎';
+      } else {
+        mat.icon = '📝'; // Text content
+      }
+    }
 
     res.render("teacher/materials", {
       user: req.user,
       materials,
       students
     });
+  }
+);
+
+/**
+ * GET /teacher/material/:id/preview
+ * Preview a learning material
+ */
+router.get(
+  "/material/:id/preview",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const LearningMaterial = (await import("../models/learningMaterial.js")).default;
+    
+    const material = await LearningMaterial.findOne({
+      _id: req.params.id,
+      teacherId: req.user._id
+    }).lean();
+
+    if (!material) {
+      return res.status(404).send("Material not found");
+    }
+
+    // Increment view count
+    await LearningMaterial.updateOne(
+      { _id: material._id },
+      { 
+        $inc: { viewCount: 1 },
+        $set: { lastViewedAt: new Date() }
+      }
+    );
+
+    res.render("teacher/material_preview", {
+      user: req.user,
+      material
+    });
+  }
+);
+
+/**
+ * POST /teacher/material/:id/assign
+ * Assign material to students
+ */
+router.post(
+  "/material/:id/assign",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const LearningMaterial = (await import("../models/learningMaterial.js")).default;
+      const { studentIds, assignmentType } = req.body;
+      
+      const material = await LearningMaterial.findOne({
+        _id: req.params.id,
+        teacherId: req.user._id
+      });
+
+      if (!material) {
+        return res.status(404).json({ error: "Material not found" });
+      }
+
+      let assignedStudents = [];
+      const assignType = assignmentType || 'individual';
+
+      if (assignType === 'individual') {
+        assignedStudents = Array.isArray(studentIds) ? studentIds : (studentIds ? [studentIds] : []);
+      } else if (assignType === 'grade') {
+        const gradeStudents = await User.find({
+          parentUserId: req.user._id,
+          role: "student",
+          grade: material.grade
+        }).select("_id").lean();
+        assignedStudents = gradeStudents.map(s => s._id);
+      } else if (assignType === 'all') {
+        const allStudents = await User.find({
+          parentUserId: req.user._id,
+          role: "student"
+        }).select("_id").lean();
+        assignedStudents = allStudents.map(s => s._id);
+      }
+
+      // Merge with existing assignments (avoid duplicates)
+      const existingIds = new Set(material.assignedTo.map(id => String(id)));
+      const newIds = assignedStudents.filter(id => !existingIds.has(String(id)));
+
+      material.assignedTo = [...material.assignedTo, ...newIds];
+      material.assignmentType = assignType;
+      await material.save();
+
+      return res.json({ 
+        success: true, 
+        assigned: material.assignedTo.length,
+        newAssignments: newIds.length
+      });
+
+    } catch (error) {
+      console.error("[Assign Material Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 );
 
@@ -2037,6 +2244,209 @@ router.get(
       passage: payload.passage,
       review
     });
+  }
+);
+
+
+
+
+/**
+ * GET /teacher/live-classes
+ * Manage live classes
+ */
+router.get(
+  "/live-classes",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const LiveClass = (await import("../models/liveClass.js")).default;
+    
+    const now = new Date();
+    
+    // Upcoming classes
+    const upcoming = await LiveClass.find({
+      teacherId: req.user._id,
+      status: { $in: ['scheduled', 'live'] },
+      scheduledStart: { $gte: now }
+    })
+    .sort({ scheduledStart: 1 })
+    .populate("expectedStudents", "firstName lastName grade")
+    .lean();
+
+    // Past classes
+    const past = await LiveClass.find({
+      teacherId: req.user._id,
+      status: 'ended',
+      scheduledEnd: { $lt: now }
+    })
+    .sort({ scheduledStart: -1 })
+    .limit(10)
+    .lean();
+
+    // Currently live
+    const live = await LiveClass.find({
+      teacherId: req.user._id,
+      status: 'live'
+    })
+    .populate("attendees.studentId", "firstName lastName grade")
+    .lean();
+
+    res.render("teacher/live_classes", {
+      user: req.user,
+      upcoming,
+      past,
+      live
+    });
+  }
+);
+
+/**
+ * POST /teacher/live-classes
+ * Create a new live class
+ */
+router.post(
+  "/live-classes",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const { title, subject, grade, description, scheduledStart, scheduledEnd, studentIds } = req.body;
+      
+      if (!title || !subject || !grade || !scheduledStart || !scheduledEnd) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const LiveClass = (await import("../models/liveClass.js")).default;
+      
+      const liveClass = await LiveClass.create({
+        teacherId: req.user._id,
+        title,
+        subject: subject.toLowerCase(),
+        grade: Number(grade),
+        description: description || "",
+        scheduledStart: new Date(scheduledStart),
+        scheduledEnd: new Date(scheduledEnd),
+        expectedStudents: Array.isArray(studentIds) ? studentIds : [],
+        status: 'scheduled'
+      });
+
+      return res.json({
+        success: true,
+        classId: liveClass._id
+      });
+
+    } catch (error) {
+      console.error("[Create Live Class Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * GET /teacher/live-class/:id
+ * View live class room (teacher)
+ */
+router.get(
+  "/live-class/:id",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const LiveClass = (await import("../models/liveClass.js")).default;
+    
+    const liveClass = await LiveClass.findOne({
+      _id: req.params.id,
+      teacherId: req.user._id
+    })
+    .populate("expectedStudents", "firstName lastName grade")
+    .populate("attendees.studentId", "firstName lastName grade")
+    .lean();
+
+    if (!liveClass) {
+      return res.status(404).send("Live class not found");
+    }
+
+    return res.render("teacher/live_class_room", {
+      user: req.user,
+      liveClass
+    });
+  }
+);
+
+/**
+ * POST /teacher/live-class/:id/start
+ * Start a live class
+ */
+router.post(
+  "/live-class/:id/start",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const LiveClass = (await import("../models/liveClass.js")).default;
+      
+      const liveClass = await LiveClass.findOne({
+        _id: req.params.id,
+        teacherId: req.user._id
+      });
+
+      if (!liveClass) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      liveClass.status = 'live';
+      liveClass.actualStart = new Date();
+      await liveClass.save();
+
+      return res.json({ success: true });
+
+    } catch (error) {
+      console.error("[Start Live Class Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * POST /teacher/live-class/:id/end
+ * End a live class
+ */
+router.post(
+  "/live-class/:id/end",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const LiveClass = (await import("../models/liveClass.js")).default;
+      
+      const liveClass = await LiveClass.findOne({
+        _id: req.params.id,
+        teacherId: req.user._id
+      });
+
+      if (!liveClass) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      liveClass.status = 'ended';
+      liveClass.actualEnd = new Date();
+      
+      // Mark all still-present students as left
+      liveClass.attendees.forEach(a => {
+        if (a.isPresent) {
+          a.leftAt = new Date();
+          a.isPresent = false;
+          a.duration = Math.round((a.leftAt - a.joinedAt) / 1000);
+        }
+      });
+
+      await liveClass.save();
+
+      return res.json({ success: true });
+
+    } catch (error) {
+      console.error("[End Live Class Error]", error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 );
 export default router;

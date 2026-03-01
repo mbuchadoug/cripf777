@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{material.title}} | Learning Material</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <!-- HLS.js for video streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui, sans-serif;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+      padding:20px;
+    }
+
+    .back{
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      display:inline-block;
+      margin-bottom:16px;
+    }
+
+    .material-header{
+      margin-bottom:24px;
+    }
+
+    h1{
+      font-size:28px;
+      margin:0 0 8px;
+    }
+
+    .meta{
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    .video-container{
+      position:relative;
+      width:100%;
+      max-width:1000px;
+      margin:0 auto 32px;
+      background:#000;
+      border-radius:12px;
+      overflow:hidden;
+    }
+
+    video{
+      width:100%;
+      height:auto;
+      display:block;
+    }
+
+    .video-controls{
+      background:linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      position:absolute;
+      bottom:0;
+      left:0;
+      right:0;
+      padding:16px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      opacity:0;
+      transition:opacity 0.3s;
+    }
+
+    .video-container:hover .video-controls{
+      opacity:1;
+    }
+
+    .content-section{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:24px;
+      margin-bottom:20px;
+    }
+
+    .description{
+      line-height:1.6;
+      color:#ddd;
+    }
+
+    .file-download{
+      display:inline-block;
+      padding:12px 24px;
+      background:var(--gold);
+      color:#000;
+      text-decoration:none;
+      border-radius:8px;
+      font-weight:700;
+      margin-top:16px;
+    }
+
+    .no-download{
+      color:var(--muted);
+      font-size:14px;
+      margin-top:16px;
+    }
+
+    /* DRM Protection Overlay */
+    .protection-overlay{
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      bottom:0;
+      pointer-events:none;
+      user-select:none;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <a href="/student/materials" class="back">← Back to Materials</a>
+
+  <div class="material-header">
+    <h1>{{material.title}}</h1>
+    <div class="meta">
+      {{material.subject}} • Grade {{material.grade}} • 
+      By {{material.teacherId.firstName}} {{material.teacherId.lastName}}
+    </div>
+  </div>
+
+  {{#if material.isVideo}}
+    {{#if (eq material.videoProcessingStatus "ready")}}
+      <!-- HLS VIDEO PLAYER -->
+      <div class="video-container" id="videoContainer">
+        <video id="videoPlayer" controls controlsList="nodownload" disablePictureInPicture>
+          Your browser doesn't support HTML5 video.
+        </video>
+        
+        {{#unless material.allowDownload}}
+          <div class="protection-overlay"></div>
+        {{/unless}}
+      </div>
+
+      <script>
+        const video = document.getElementById('videoPlayer');
+        const videoSrc = '{{material.streamUrl}}';
+
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: true
+          });
+
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            console.log('HLS manifest loaded, ready to play');
+          });
+
+          hls.on(Hls.Events.ERROR, function(event, data) {
+            if (data.fatal) {
+              switch(data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.error('Network error, trying to recover...');
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.error('Media error, trying to recover...');
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  console.error('Fatal error, cannot recover');
+                  hls.destroy();
+                  break;
+              }
+            }
+          });
+
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native HLS support (Safari)
+          video.src = videoSrc;
+        }
+
+        // Disable right-click on video
+        {{#unless material.allowDownload}}
+          video.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+          });
+
+          // Prevent video download shortcuts
+          document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+              e.preventDefault();
+              return false;
+            }
+          });
+        {{/unless}}
+
+        // Track watch progress
+        let lastProgress = 0;
+        video.addEventListener('timeupdate', () => {
+          const progress = Math.floor(video.currentTime);
+          if (progress > lastProgress && progress % 30 === 0) {
+            lastProgress = progress;
+            // Send progress to server
+            fetch('/student/material/{{material._id}}/progress', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                progress: progress,
+                duration: video.duration 
+              })
+            });
+          }
+        });
+      </script>
+
+    {{else if (eq material.videoProcessingStatus "processing")}}
+      <div class="content-section" style="text-align:center; padding:60px 20px;">
+        <div style="font-size:48px; margin-bottom:16px;">⏳</div>
+        <h2>Video Processing...</h2>
+        <p style="color:var(--muted);">
+          Your teacher's video is being processed for streaming. 
+          Check back in a few minutes!
+        </p>
+      </div>
+
+    {{else}}
+      <div class="content-section" style="text-align:center; padding:60px 20px;">
+        <div style="font-size:48px; margin-bottom:16px;">❌</div>
+        <h2>Video Not Available</h2>
+        <p style="color:var(--muted);">
+          This video couldn't be processed. Please contact your teacher.
+        </p>
+      </div>
+    {{/if}}
+
+  {{else if material.fileUrl}}
+    <!-- NON-VIDEO FILE -->
+    <div class="content-section">
+      {{#if (includes material.fileType "image")}}
+        <img src="{{material.fileUrl}}" alt="{{material.title}}" style="max-width:100%; border-radius:8px;">
+      
+      {{else if (includes material.fileType "audio")}}
+        <audio controls style="width:100%;">
+          <source src="{{material.fileUrl}}" type="{{material.fileType}}">
+          Your browser doesn't support audio playback.
+        </audio>
+      
+      {{else if (includes material.fileType "pdf")}}
+        <embed src="{{material.fileUrl}}" type="application/pdf" width="100%" height="800px" />
+      
+      {{else}}
+        <p>File: {{material.fileName}}</p>
+      {{/if}}
+
+      {{#if material.allowDownload}}
+        <a href="{{material.fileUrl}}" download class="file-download">
+          📥 Download File
+        </a>
+      {{else}}
+        <div class="no-download">
+          🔒 Download not allowed by teacher
+        </div>
+      {{/if}}
+    </div>
+
+  {{/if}}
+
+  {{#if material.description}}
+    <div class="content-section">
+      <h3 style="margin:0 0 12px;">Description</h3>
+      <div class="description">{{material.description}}</div>
+    </div>
+  {{/if}}
+
+  {{#if material.content}}
+    <div class="content-section">
+      <h3 style="margin:0 0 12px;">Content</h3>
+      <div class="description">{{{material.content}}}</div>
+    </div>
+  {{/if}}
+
+</div>
+
+</body>
+</html>

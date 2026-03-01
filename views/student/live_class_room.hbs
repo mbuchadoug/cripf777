@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{liveClass.title}} | Live Class</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <script src="/socket.io/socket.io.js"></script>
+  
+  <style>
+    :root{
+      --accent:#6366f1;
+      --green:#10b981;
+      --red:#ef4444;
+      --surface:#f8fafc;
+    }
+
+    body{
+      margin:0;
+      font-family:system-ui, sans-serif;
+      background:var(--surface);
+    }
+
+    .container{
+      max-width:1400px;
+      margin:0 auto;
+      padding:20px;
+    }
+
+    .header{
+      background:white;
+      border-radius:12px;
+      padding:20px;
+      margin-bottom:20px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+
+    h1{
+      font-size:24px;
+      margin:0;
+    }
+
+    .status-badge{
+      padding:8px 16px;
+      border-radius:20px;
+      font-weight:700;
+      font-size:14px;
+    }
+
+    .status-live{
+      background:#ecfdf5;
+      color:#065f46;
+    }
+
+    .status-scheduled{
+      background:#fffbeb;
+      color:#92400e;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 380px;
+      gap:20px;
+    }
+
+    .main-panel{
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      min-height:600px;
+    }
+
+    .sidebar{
+      background:white;
+      border-radius:12px;
+      padding:20px;
+    }
+
+    .attendance-list{
+      max-height:500px;
+      overflow-y:auto;
+    }
+
+    .attendee{
+      padding:12px;
+      border-bottom:1px solid #f1f5f9;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .attendee-name{
+      font-weight:600;
+    }
+
+    .attendee-time{
+      font-size:12px;
+      color:#64748b;
+    }
+
+    .btn{
+      padding:12px 24px;
+      border-radius:8px;
+      font-weight:700;
+      border:none;
+      cursor:pointer;
+      font-size:14px;
+    }
+
+    .btn-success{
+      background:var(--green);
+      color:white;
+    }
+
+    .btn-danger{
+      background:var(--red);
+      color:white;
+    }
+
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(3, 1fr);
+      gap:12px;
+      margin-bottom:20px;
+    }
+
+    .stat-card{
+      background:#f8fafc;
+      padding:16px;
+      border-radius:8px;
+      text-align:center;
+    }
+
+    .stat-value{
+      font-size:32px;
+      font-weight:900;
+      color:var(--accent);
+    }
+
+    .stat-label{
+      font-size:12px;
+      color:#64748b;
+      margin-top:4px;
+    }
+
+    @media (max-width: 1024px){
+      .grid{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>{{liveClass.title}}</h1>
+      <div style="color:#64748b; font-size:14px; margin-top:4px;">
+        {{liveClass.subject}} • Grade {{liveClass.grade}}
+      </div>
+    </div>
+    
+    <div>
+      {{#if (eq liveClass.status "live")}}
+        <span class="status-badge status-live">🔴 LIVE</span>
+        <button class="btn btn-danger" id="endClassBtn" style="margin-left:12px;">
+          End Class
+        </button>
+      {{else}}
+        <span class="status-badge status-scheduled">Scheduled</span>
+        <button class="btn btn-success" id="startClassBtn" style="margin-left:12px;">
+          Start Class
+        </button>
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- MAIN PANEL -->
+    <div class="main-panel">
+      <h2>Class Content</h2>
+      <div style="color:#64748b;">
+        {{#if liveClass.description}}
+          {{liveClass.description}}
+        {{else}}
+          Share your screen or upload materials to begin the lesson.
+        {{/if}}
+      </div>
+
+      {{#if liveClass.meetingLink}}
+        <div style="margin-top:24px;">
+          <a href="{{liveClass.meetingLink}}" target="_blank" class="btn btn-success">
+            Join Meeting
+          </a>
+        </div>
+      {{/if}}
+    </div>
+
+    <!-- ATTENDANCE SIDEBAR -->
+    <div class="sidebar">
+      <h3 style="margin:0 0 16px;">Attendance</h3>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value" id="presentCount">0</div>
+          <div class="stat-label">Present</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="expectedCount">{{liveClass.expectedStudents.length}}</div>
+          <div class="stat-label">Expected</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="attendanceRate">0%</div>
+          <div class="stat-label">Rate</div>
+        </div>
+      </div>
+
+      <div id="attendanceList" class="attendance-list">
+        <!-- Populated via Socket.IO -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  const classId = '{{liveClass._id}}';
+  const userId = '{{user._id}}';
+
+  // Join class room
+  socket.emit('join-class', {
+    classId: classId,
+    userId: userId,
+    userRole: 'teacher'
+  });
+
+  // Request initial attendance
+  socket.emit('get-attendance', { classId });
+
+  // Listen for attendance updates
+  socket.on('attendance-update', (data) => {
+    updateAttendanceUI(data);
+  });
+
+  // Student joined
+  socket.on('student-joined', (data) => {
+    console.log('Student joined:', data.studentName);
+    socket.emit('get-attendance', { classId });
+    showNotification(`${data.studentName} joined`, 'success');
+  });
+
+  // Student left
+  socket.on('student-left', (data) => {
+    console.log('Student left:', data.studentName);
+    socket.emit('get-attendance', { classId });
+    showNotification(`${data.studentName} left`, 'info');
+  });
+
+  function updateAttendanceUI(data) {
+    const list = document.getElementById('attendanceList');
+    const presentCount = document.getElementById('presentCount');
+    const expectedCount = document.getElementById('expectedCount');
+    const attendanceRate = document.getElementById('attendanceRate');
+
+    presentCount.textContent = data.totalPresent;
+    expectedCount.textContent = data.totalExpected;
+    attendanceRate.textContent = data.totalExpected > 0 
+      ? Math.round((data.totalPresent / data.totalExpected) * 100) + '%'
+      : '0%';
+
+    list.innerHTML = '';
+    
+    data.attendees.forEach(attendee => {
+      if (attendee.isPresent) {
+        const div = document.createElement('div');
+        div.className = 'attendee';
+        
+        const joinTime = new Date(attendee.joinedAt).toLocaleTimeString();
+        
+        div.innerHTML = `
+          <div>
+            <div class="attendee-name">
+              ${attendee.studentId.firstName} ${attendee.studentId.lastName}
+            </div>
+            <div class="attendee-time">Joined ${joinTime}</div>
+          </div>
+          <span style="color:var(--green);">●</span>
+        `;
+        
+        list.appendChild(div);
+      }
+    });
+  }
+
+  // Start class
+  document.getElementById('startClassBtn')?.addEventListener('click', async () => {
+    const res = await fetch(`/teacher/live-class/${classId}/start`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    }
+  });
+
+  // End class
+  document.getElementById('endClassBtn')?.addEventListener('click', async () => {
+    if (confirm('Are you sure you want to end this class?')) {
+      const res = await fetch(`/teacher/live-class/${classId}/end`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Class ended successfully!');
+        location.href = '/teacher/live-classes';
+      }
+    }
+  });
+
+  function showNotification(message, type) {
+    // Simple notification (you can enhance this)
+    console.log(`[${type}] ${message}`);
+  }
+
+  // Leave class on page unload
+  window.addEventListener('beforeunload', () => {
+    socket.emit('leave-class', {
+      classId: classId,
+      userId: userId,
+      userRole: 'teacher'
+    });
+  });
+</script>
+
+</body>
+</html>

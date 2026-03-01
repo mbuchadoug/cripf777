@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Learning Materials | Student Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Similar styles to student dashboard */
+    :root{
+      --gold:#D4AF37;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family:system-ui, sans-serif;
+      padding:20px;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+    }
+
+    .back{
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      display:inline-block;
+      margin-bottom:16px;
+    }
+
+    h1{
+      font-size:28px;
+      margin:0 0 8px;
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:24px;
+    }
+
+    .subject-section{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-bottom:20px;
+    }
+
+    .subject-header{
+      font-size:20px;
+      font-weight:700;
+      color:var(--gold);
+      margin-bottom:16px;
+      text-transform:capitalize;
+    }
+
+    .materials-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+      gap:16px;
+    }
+
+    .material-card{
+      background:#111;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      transition:all 0.2s;
+    }
+
+    .material-card:hover{
+      border-color:var(--gold);
+    }
+
+    .material-icon{
+      font-size:32px;
+      margin-bottom:8px;
+    }
+
+    .material-title{
+      font-size:16px;
+      font-weight:700;
+      margin-bottom:8px;
+    }
+
+    .material-teacher{
+      font-size:13px;
+      color:var(--muted);
+      margin-bottom:12px;
+    }
+
+    .btn{
+      display:block;
+      width:100%;
+      padding:10px;
+      background:var(--gold);
+      color:#000;
+      text-align:center;
+      border-radius:8px;
+      font-weight:700;
+      text-decoration:none;
+      border:none;
+      cursor:pointer;
+    }
+
+    .btn:hover{
+      opacity:0.9;
+    }
+
+    .empty-state{
+      text-align:center;
+      padding:60px 20px;
+    }
+
+    .empty-icon{
+      font-size:64px;
+      margin-bottom:16px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <a href="/student/dashboard" class="back">← Back to Dashboard</a>
+
+  <h1>Learning Materials</h1>
+  <div class="subtitle">Study resources from your teachers</div>
+
+  {{#if materialsBySubject}}
+    {{#each materialsBySubject}}
+      <div class="subject-section">
+        <div class="subject-header">{{@key}}</div>
+        <div class="materials-grid">
+          {{#each this}}
+            <div class="material-card">
+              <div class="material-icon">{{icon}}</div>
+              <div class="material-title">{{title}}</div>
+              <div class="material-teacher">
+                By {{teacherId.firstName}} {{teacherId.lastName}}
+              </div>
+              <a href="/student/material/{{_id}}/view" class="btn">View Material</a>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/each}}
+  {{else}}
+    <div class="empty-state">
+      <div class="empty-icon">📚</div>
+      <h2>No Materials Yet</h2>
+      <p>Your teacher hasn't assigned any materials yet. Check back later!</p>
+    </div>
+  {{/if}}
+</div>
+
+</body>
+</html>
