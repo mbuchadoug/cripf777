@@ -662,6 +662,9 @@
         /* =========================
    NAV DROPDOWN (LMS)
 ========================= */
+/* =========================
+   NAV DROPDOWN (LMS)
+========================= */
 .nav-item.dropdown {
   position: relative;
 }
@@ -671,17 +674,24 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  cursor: pointer;
 }
 
 .caret {
   font-size: 0.75rem;
   opacity: 0.8;
+  transition: transform 0.2s;
+}
+
+/* rotate caret when open */
+.nav-item.dropdown.open .caret {
+  transform: rotate(180deg);
 }
 
 /* menu container */
 .dropdown-menu {
   position: absolute;
-  top: calc(100% + 12px);
+  top: calc(100% + 8px); /* ✅ REDUCED GAP */
   left: 0;
   min-width: 320px;
   background: var(--white);
@@ -689,14 +699,37 @@
   box-shadow: var(--shadow-md);
   padding: 0.6rem;
   border-radius: 10px;
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
   z-index: 2000;
+  pointer-events: none; /* ✅ PREVENT MOUSE INTERFERENCE WHEN HIDDEN */
 }
 
-/* show dropdown on desktop hover/focus */
+/* ✅ CRITICAL FIX: Add padding zone to bridge the gap */
+.nav-item.dropdown::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 12px; /* ✅ INVISIBLE BRIDGE */
+  display: none;
+}
+
+/* show dropdown on desktop hover */
+.nav-item.dropdown:hover::after,
+.nav-item.dropdown:focus-within::after {
+  display: block;
+}
+
 .nav-item.dropdown:hover .dropdown-menu,
 .nav-item.dropdown:focus-within .dropdown-menu {
-  display: block;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto; /* ✅ ENABLE CLICKING WHEN VISIBLE */
 }
 
 /* dropdown link styling */
@@ -724,11 +757,11 @@
 .dd-sub {
   margin-top: 0.25rem;
   font-size: 0.82rem;
-  color: #6b7280; /* soft gray */
+  color: #6b7280;
   line-height: 1.3;
 }
 
-/* prevent menu going off screen (simple) */
+/* prevent menu going off screen */
 .nav-item.dropdown .dropdown-menu {
   max-width: min(420px, 90vw);
 }
@@ -742,6 +775,11 @@
     width: 100%;
   }
 
+  /* ✅ REMOVE DESKTOP HOVER BRIDGE ON MOBILE */
+  .nav-item.dropdown::after {
+    display: none !important;
+  }
+
   /* make the LMS trigger full-width */
   .dropdown-toggle {
     width: 100%;
@@ -752,16 +790,20 @@
   /* override absolute positioning on mobile */
   .dropdown-menu {
     position: static;
-    display: none;       /* hidden by default */
+    opacity: 1; /* ✅ ALWAYS VISIBLE WHEN OPEN */
+    visibility: visible;
+    transform: none;
+    display: none; /* ✅ HIDDEN BY DEFAULT */
     width: 100%;
     min-width: 0;
     box-shadow: none;
     border: none;
     padding: 0.5rem 0 1rem;
     margin-top: 0;
+    pointer-events: auto; /* ✅ ALWAYS CLICKABLE */
   }
 
-  /* show dropdown when JS adds .open */
+  /* ✅ SHOW DROPDOWN WHEN JS ADDS .open */
   .nav-item.dropdown.open .dropdown-menu {
     display: block;
   }
@@ -784,85 +826,6 @@
     font-size: 0.85rem;
   }
 }
-        
-        /* Responsive */
-        @media (max-width: 1200px) {
-            .pillars-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .value-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .mobile-menu-toggle {
-                display: flex;
-            }
-            
-            .nav-links {
-                position: fixed;
-                top: 0;
-                right: -100%;
-                width: 80%;
-                max-width: 350px;
-                height: 100vh;
-                background: var(--white);
-                flex-direction: column;
-                gap: 0;
-                padding: 6rem 2rem 2rem;
-                box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-                transition: right 0.3s;
-                align-items: flex-start;
-            }
-            
-            .nav-links.active {
-                right: 0;
-            }
-            
-            .nav-links li {
-                width: 100%;
-                border-bottom: 1px solid var(--medium-gray);
-            }
-            
-            .nav-links a {
-                display: block;
-                padding: 1.25rem 0;
-                font-size: 1.1rem;
-            }
-            
-            .nav-cta {
-                width: 100%;
-                text-align: center;
-                margin-top: 1rem;
-            }
-            
-            .pillars-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .applications-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .footer-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .hero-stats {
-                gap: 2rem;
-            }
-            
-            .trust-logos {
-                gap: 1rem;
-            }
-            
-            .trust-logo {
-                padding: 0.75rem 1.5rem;
-                font-size: 0.85rem;
-            }
-        }
     </style>
 </head>
 <body>
