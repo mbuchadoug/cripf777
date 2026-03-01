@@ -516,10 +516,25 @@
             <li>Certificates</li>
             <li>Priority support</li>
           </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="gold">
-            <button class="btn" type="submit">💳 Get Gold</button>
-          </form>
+  {{#if (eq user.subscriptionPlan "gold")}}
+            <button class="btn" disabled style="opacity:0.6;cursor:not-allowed;width:100%;">
+              ✅ Current Plan
+            </button>
+          {{else if (eq user.subscriptionPlan "silver")}}
+            <form method="POST" action="/payments/paynow/init" style="width:100%;">
+              <input type="hidden" name="plan" value="gold">
+              <button class="btn" type="submit" style="width:100%;">
+                💎 Upgrade to Gold
+              </button>
+            </form>
+          {{else}}
+            <form method="POST" action="/payments/paynow/init" style="width:100%;">
+              <input type="hidden" name="plan" value="gold">
+              <button class="btn" type="submit" style="width:100%;">
+                💳 Get Gold
+              </button>
+            </form>
+          {{/if}}
         </div>
 
       </div>
@@ -533,23 +548,66 @@
   {{#if isPaid}}
 
     <!-- SUBSCRIPTION STATUS -->
-    {{#if isExpired}}
-      <div class="sub-bar sub-expired">
-        <span class="sub-label">⚠️ {{planLabel}} Plan - Expired</span>
-        <span class="sub-detail">Your subscription has expired. Renew to keep full access.</span>
-        <a href="#plans" class="payments-link">Renew →</a>
-      </div>
-    {{else}}
-      <div class="sub-bar sub-active">
-        <span class="sub-label">✅ {{planLabel}} Plan | Active</span>
-        <span class="sub-detail">
-          Up to {{childLimit}} children
-          {{#if user.subscriptionExpiresAt}}
-            · Next payment due: {{formatDate user.subscriptionExpiresAt}}
-          {{/if}}
-        </span>
-        <a href="/parent/payments" class="payments-link">Payment History →</a>
-      </div>
+   <!-- ✅ UPGRADE BANNER (Silver → Gold) -->
+    {{#if isPaid}}
+      {{#unless isExpired}}
+        {{#if (eq user.subscriptionPlan "silver")}}
+          <div style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border:2px solid #f59e0b;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <span style="font-size:24px;">⭐</span>
+              <h3 style="color:#92400e;margin:0;font-size:18px;font-weight:800;">Upgrade to Gold Plan</h3>
+            </div>
+            <p style="color:#78350f;font-size:14px;margin-bottom:14px;line-height:1.6;">
+              Add 3 more children (5 total), unlock priority support, and keep all your remaining Silver days as credit!
+            </p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div style="font-size:13px;color:#78350f;background:rgba(255,255,255,0.5);padding:8px 12px;border-radius:8px;">
+                Current: <strong>Silver ($5/mo)</strong>
+                {{#if daysRemaining}}
+                  · <strong>{{daysRemaining}} days</strong> remaining
+                {{/if}}
+              </div>
+              <form method="POST" action="/payments/paynow/init" style="margin-left:auto;">
+                <input type="hidden" name="plan" value="gold">
+                <button class="btn" type="submit" style="background:#f59e0b;color:#fff;font-weight:800;padding:10px 18px;border-radius:10px;border:none;cursor:pointer;font-size:14px;">
+                  💎 Upgrade to Gold ($10/mo)
+                </button>
+              </form>
+            </div>
+          </div>
+        {{/if}}
+      {{/unless}}
+    {{/if}}
+
+    <!-- ✅ UPGRADE BANNER (Silver → Gold) -->
+    {{#if isPaid}}
+      {{#unless isExpired}}
+        {{#if (eq user.subscriptionPlan "silver")}}
+          <div style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border:2px solid #f59e0b;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <span style="font-size:24px;">⭐</span>
+              <h3 style="color:#92400e;margin:0;font-size:18px;font-weight:800;">Upgrade to Gold Plan</h3>
+            </div>
+            <p style="color:#78350f;font-size:14px;margin-bottom:14px;line-height:1.6;">
+              Add 3 more children (5 total), unlock priority support, and keep all your remaining Silver days as credit!
+            </p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div style="font-size:13px;color:#78350f;background:rgba(255,255,255,0.5);padding:8px 12px;border-radius:8px;">
+                Current: <strong>Silver ($5/mo)</strong>
+                {{#if daysRemaining}}
+                  · <strong>{{daysRemaining}} days</strong> remaining
+                {{/if}}
+              </div>
+              <form method="POST" action="/payments/paynow/init" style="margin-left:auto;">
+                <input type="hidden" name="plan" value="gold">
+                <button class="btn" type="submit" style="background:#f59e0b;color:#fff;font-weight:800;padding:10px 18px;border-radius:10px;border:none;cursor:pointer;font-size:14px;">
+                  💎 Upgrade to Gold ($10/mo)
+                </button>
+              </form>
+            </div>
+          </div>
+        {{/if}}
+      {{/unless}}
     {{/if}}
 
     <!-- RENEW IF EXPIRED -->

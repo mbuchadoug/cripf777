@@ -148,6 +148,10 @@ router.get(
       new Date() > new Date(freshUser.subscriptionExpiresAt)
     );
 
+      const daysRemaining = freshUser.subscriptionExpiresAt && !isExpired
+      ? Math.ceil((new Date(freshUser.subscriptionExpiresAt) - new Date()) / (1000 * 60 * 60 * 24))
+      : 0;
+
     const hasTrialChild = children.length > 0;
 
     let demoData = null;
@@ -182,6 +186,7 @@ router.get(
       isPaid,
       childCount: children.length,
       demoData,
+      daysRemaining,  // ✅ ADD THIS
       hasTrialChild
     });
   }

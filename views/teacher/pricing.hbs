@@ -276,10 +276,22 @@
           </div>
 
           <div class="ctaRow">
-           <form method="POST" action="/payments/paynow/init" style="flex:1;">
-  <input type="hidden" name="plan" value="teacher_starter" />
-  <button class="btn primary" type="submit" style="width:100%;">Upgrade to Starter</button>
-</form>
+            {{#if (eq user.teacherSubscriptionPlan "starter")}}
+              <button class="btn primary" disabled style="width:100%;opacity:0.6;cursor:not-allowed;">
+                ✅ Current Plan
+              </button>
+            {{else if (eq user.teacherSubscriptionPlan "professional")}}
+              <button class="btn outline" disabled style="width:100%;opacity:0.6;cursor:not-allowed;">
+                ⬇️ Downgrade (Contact Support)
+              </button>
+            {{else}}
+              <form method="POST" action="/payments/paynow/init" style="flex:1;">
+                <input type="hidden" name="plan" value="teacher_starter" />
+                <button class="btn primary" type="submit" style="width:100%;">
+                  {{#if user.teacherSubscriptionStatus}}Upgrade{{else}}Subscribe{{/if}} to Starter
+                </button>
+              </form>
+            {{/if}}
             <a class="btn outline" href="/teacher/dashboard">Not now</a>
           </div>
 
@@ -329,11 +341,26 @@
             </div>
           </div>
 
-          <div class="ctaRow">
-           <form method="POST" action="/payments/paynow/init" style="flex:1;">
-  <input type="hidden" name="plan" value="teacher_professional" />
-  <button class="btn primary" type="submit" style="width:100%;">Upgrade to Professional</button>
-</form>
+       <div class="ctaRow">
+            {{#if (eq user.teacherSubscriptionPlan "professional")}}
+              <button class="btn primary" disabled style="width:100%;opacity:0.6;cursor:not-allowed;">
+                ✅ Current Plan
+              </button>
+            {{else if (eq user.teacherSubscriptionPlan "starter")}}
+              <form method="POST" action="/payments/paynow/init" style="flex:1;">
+                <input type="hidden" name="plan" value="teacher_professional" />
+                <button class="btn primary" type="submit" style="width:100%;">
+                  🚀 Upgrade to Professional
+                </button>
+              </form>
+            {{else}}
+              <form method="POST" action="/payments/paynow/init" style="flex:1;">
+                <input type="hidden" name="plan" value="teacher_professional" />
+                <button class="btn primary" type="submit" style="width:100%;">
+                  Subscribe to Professional
+                </button>
+              </form>
+            {{/if}}
             <a class="btn outline" href="/teacher/dashboard">Back</a>
           </div>
 

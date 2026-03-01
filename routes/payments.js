@@ -170,28 +170,54 @@ if (payment.type === "battle_entry" && payment.battleId) {
 }
 
 // 2️⃣ Determine plan from payment record (SUBSCRIPTIONS ONLY)
+// 2️⃣ Determine plan from payment record (SUBSCRIPTIONS ONLY)
 const planKey = payment.plan || "silver"; // fallback for legacy
-//const planConfig = PLANS[planKey] || PLANS.silver;
-      const planConfig = PLANS[planKey] || PLANS.silver;
+const planConfig = PLANS[planKey] || PLANS.silver;
 
-      // 3️⃣ Calculate expiry (30 days from now, or extend if already active)
-      const now = new Date();
-      const parent = await User.findById(payment.userId).lean();
-      let expiresAt;
+// 3️⃣ Calculate expiry with UPGRADE PRORATION
+const now = new Date();
+const parent = await User.findById(payment.userId).lean();
+let expiresAt;
+let daysToAdd = planConfig.durationDays;
 
-      if (
-        parent.subscriptionExpiresAt &&
-        new Date(parent.subscriptionExpiresAt) > now
-      ) {
-        // Extend from current expiry
-        expiresAt = new Date(parent.subscriptionExpiresAt);
-        expiresAt.setDate(expiresAt.getDate() + planConfig.durationDays);
-      } else {
-        // Start fresh
-        expiresAt = new Date(now);
-        expiresAt.setDate(expiresAt.getDate() + planConfig.durationDays);
-      }
+// ✅ UPGRADE LOGIC: Calculate prorated credit
+if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
+  // User has an active subscription - check if this is an UPGRADE
+  const currentPlan = planKey.startsWith("teacher_") 
+    ? parent.teacherSubscriptionPlan 
+    : parent.subscriptionPlan;
+  
+  const currentPlanKey = planKey.startsWith("teacher_")
+    ? `teacher_${currentPlan}`
+    : currentPlan;
+  
+  const currentPlanConfig = PLANS[currentPlanKey];
+  
+  if (currentPlanConfig && planConfig.amount > currentPlanConfig.amount) {
+    // This is an upgrade (new plan costs more)
+    const remainingDays = Math.ceil((new Date(parent.subscriptionExpiresAt) - now) / (1000 * 60 * 60 * 24));
+    const unusedValue = (currentPlanConfig.amount / currentPlanConfig.durationDays) * remainingDays;
+    const creditDays = Math.floor((unusedValue / planConfig.amount) * planConfig.durationDays);
+    
+    // Add credit days to new subscription
+    daysToAdd += creditDays;
+    
+    console.log(`[UPGRADE] ${currentPlanKey} → ${planKey}: ${creditDays} bonus days from unused ${currentPlan}`);
+  }
+}
 
+// Calculate new expiry date
+if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
+  // Extend from current expiry (for renewals)
+  expiresAt = new Date(parent.subscriptionExpiresAt);
+  expiresAt.setDate(expiresAt.getDate() + daysToAdd);
+} else {
+  // Start fresh (new subscription or expired)
+  expiresAt = new Date(now);
+  expiresAt.setDate(expiresAt.getDate() + daysToAdd);
+}
+
+// 4️⃣ Update user with plan details
       // 4️⃣ Update parent with plan details
 // 4️⃣ Update user with plan details
   // 4️⃣ Update user with plan details
