@@ -562,7 +562,110 @@
         .logo {
             z-index: 1001;
         }
-        
+        /* ============================================
+           DROPDOWN STYLES (DESKTOP)
+        ============================================ */
+        .nav-item.dropdown {
+            position: relative;
+        }
+
+        .dropdown-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            cursor: pointer;
+        }
+
+        .caret {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            transition: transform 0.2s;
+        }
+
+        .nav-item.dropdown:hover .caret {
+            transform: rotate(180deg);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            min-width: 320px;
+            background: var(--white);
+            border: 1px solid var(--medium-gray);
+            box-shadow: var(--shadow-md);
+            padding: 0.6rem;
+            border-radius: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s ease;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .nav-item.dropdown::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            height: 12px;
+            display: none;
+        }
+
+        .nav-item.dropdown:hover::after,
+        .nav-item.dropdown:focus-within::after {
+            display: block;
+        }
+
+        .nav-item.dropdown:hover .dropdown-menu,
+        .nav-item.dropdown:focus-within .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .dropdown-link {
+            display: block;
+            text-decoration: none;
+            padding: 0.85rem 0.9rem;
+            border-radius: 8px;
+            transition: background 0.2s, transform 0.2s;
+            color: var(--text-primary);
+        }
+
+        .dropdown-link:hover {
+            background: var(--light-gray);
+            transform: translateY(-1px);
+        }
+
+        .dd-title {
+            font-weight: 700;
+            color: var(--navy);
+            font-size: 0.95rem;
+            line-height: 1.25;
+        }
+
+        .dd-sub {
+            margin-top: 0.25rem;
+            font-size: 0.82rem;
+            color: #6b7280;
+            line-height: 1.3;
+        }
+
+        /* ============================================
+           MOBILE-SPECIFIC LMS STYLES
+        ============================================ */
+        .mobile-only {
+            display: none;
+        }
+
+        .desktop-only {
+            display: block;
+        }
+
         /* Responsive */
         @media (max-width: 1024px) {
             .founder-container {
@@ -579,7 +682,14 @@
             }
         }
         
-        @media (max-width: 768px) {
+     @media (max-width: 768px) {
+            /* ✅ PREVENT HORIZONTAL SCROLL */
+            html, body {
+                overflow-x: hidden;
+                width: 100%;
+                position: relative;
+            }
+
             .mobile-menu-toggle {
                 display: flex;
             }
@@ -587,19 +697,138 @@
             .nav-links {
                 position: fixed;
                 top: 0;
-                right: -100%;
-                width: 80%;
-                max-width: 350px;
+                right: -85%;
+                width: 85%;
+                max-width: 320px;
                 height: 100vh;
                 background: var(--white);
                 flex-direction: column;
                 gap: 0;
-                padding: 6rem 2rem 2rem;
+                padding: 5rem 1.5rem 2rem;
                 box-shadow: -5px 0 15px rgba(0,0,0,0.1);
                 transition: right 0.3s;
                 align-items: flex-start;
+                overflow-y: auto;
+                overflow-x: hidden;
                 z-index: 1000;
+                box-sizing: border-box;
             }
+            
+            .nav-links.active {
+                right: 0;
+            }
+            
+            .nav-links li {
+                width: 100%;
+                border-bottom: 1px solid var(--medium-gray);
+                box-sizing: border-box;
+            }
+            
+            .nav-links a {
+                display: block;
+                padding: 1.1rem 0;
+                width: 100%;
+                font-size: 1rem;
+                box-sizing: border-box;
+            }
+            
+            .nav-cta {
+                width: 100%;
+                text-align: center;
+                margin-top: 1rem;
+                padding: 0.75rem 1rem !important;
+                box-sizing: border-box;
+            }
+
+            /* ✅ MOBILE LMS STYLES */
+            .desktop-only {
+                display: none !important;
+            }
+            
+            .mobile-only {
+                display: block !important;
+            }
+            
+            .mobile-lms-section {
+                width: 100%;
+                padding: 0;
+                border: none;
+            }
+            
+            .mobile-section-header {
+                font-size: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                color: var(--dark-gray);
+                padding: 1.5rem 0 0.75rem;
+                border-top: 2px solid var(--medium-gray);
+                margin-top: 1rem;
+            }
+            
+            .mobile-lms-links {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links li {
+                border-bottom: none;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links a {
+                display: block;
+                padding: 0.9rem 0.75rem;
+                font-size: 0.9rem;
+                color: var(--text-primary);
+                background: var(--light-gray);
+                margin: 0.25rem 0;
+                border-radius: 8px;
+                transition: background 0.2s;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                box-sizing: border-box;
+            }
+            
+            .mobile-lms-links a:hover {
+                background: rgba(201, 169, 97, 0.15);
+            }
+
+            /* ✅ BACKDROP */
+            body::after {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                opacity: 0;
+                visibility: hidden;
+                transition: all 0.3s;
+                z-index: 999;
+            }
+
+            body.menu-open::after {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            body.menu-open {
+                overflow: hidden;
+                position: fixed;
+                width: 100%;
+            }
+            
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+        }
             
             .nav-links.active {
                 right: 0;
@@ -630,6 +859,7 @@
 </head>
 <body>
     <!-- Navigation -->
+<!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
             <a href="/" class="logo">
@@ -644,12 +874,44 @@
             </button>
             
             <ul class="nav-links" id="navLinks">
-                 <li><a href="/">Home</a></li>
+                <li><a href="/">Home</a></li>
                 <li><a href="/about">Framework</a></li>
                 <li><a href="/scoi">Audits</a></li>
-                <li><a href="/lms">LMS</a></li>
+
+                <!-- LMS DESKTOP: Dropdown -->
+                <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+                    <a href="/lms" class="dropdown-toggle">
+                        LMS <span class="caret">▾</span>
+                    </a>
+                    <div class="dropdown-menu">
+                        <a class="dropdown-link" href="/auth/parent">
+                            <div class="dd-title">Parents & Guardians</div>
+                            <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
+                        </a>
+                        <a class="dropdown-link" href="/auth/teacher">
+                            <div class="dd-title">Private Teachers</div>
+                            <div class="dd-sub">Up to 15/40 learners</div>
+                        </a>
+                        <a class="dropdown-link" href="/org/cripfcnt-school/dashboard">
+                            <div class="dd-title">Professionals</div>
+                            <div class="dd-sub">8 modules • audits • certification</div>
+                        </a>
+                    </div>
+                </li>
+
+                <!-- LMS MOBILE: Expanded Links -->
+                <li class="mobile-only mobile-lms-section">
+                    <div class="mobile-section-header">LMS Options</div>
+                    <ul class="mobile-lms-links">
+                        <li><a href="/auth/parent">👨‍👩‍👧 Parents & Guardians</a></li>
+                        <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+                        <li><a href="/org/cripfcnt-school/dashboard">🏛️ Professionals</a></li>
+                    </ul>
+                </li>
+
+                <li><a href="/auth/arena">Arena</a></li>
                 <li><a href="/auth/school">Student Portal</a></li>
-                <li><a href="mailto:info@cripfcnt.com" class="nav-cta">Get Started</a></li>
+                <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
             </ul>
         </div>
     </nav>
@@ -988,32 +1250,53 @@
     </footer>
 
     <!-- Mobile Menu Script -->
+ 
+<!-- Mobile Menu Script -->
     <script>
         const mobileMenuToggle = document.getElementById('mobileMenuToggle');
         const navLinks = document.getElementById('navLinks');
-        
-        if (mobileMenuToggle && navLinks) {
-            mobileMenuToggle.addEventListener('click', () => {
-                mobileMenuToggle.classList.toggle('active');
-                navLinks.classList.toggle('active');
+
+        // Toggle mobile menu
+        mobileMenuToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mobileMenuToggle.classList.toggle('active');
+            navLinks.classList.toggle('active');
+            document.body.classList.toggle('menu-open');
+        });
+
+        // Close menu when clicking any link
+        navLinks?.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenuToggle.classList.remove('active');
+                navLinks.classList.remove('active');
+                document.body.classList.remove('menu-open');
             });
-            
-            // Close menu when clicking a link
-            navLinks.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', () => {
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                const isClickInsideMenu = navLinks?.contains(e.target);
+                const isClickOnToggle = mobileMenuToggle?.contains(e.target);
+                
+                if (!isClickInsideMenu && !isClickOnToggle && navLinks?.classList.contains('active')) {
                     mobileMenuToggle.classList.remove('active');
                     navLinks.classList.remove('active');
-                });
-            });
-            
-            // Close menu when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!mobileMenuToggle.contains(e.target) && !navLinks.contains(e.target)) {
-                    mobileMenuToggle.classList.remove('active');
-                    navLinks.classList.remove('active');
+                    document.body.classList.remove('menu-open');
                 }
-            });
-        }
+            }
+        });
+
+        // Reset on resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                mobileMenuToggle?.classList.remove('active');
+                navLinks?.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            }
+        });
     </script>
+
+
 </body>
 </html>
