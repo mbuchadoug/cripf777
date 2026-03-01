@@ -1255,10 +1255,11 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
 </div>
 
 <!-- UPLOAD MATERIAL MODAL -->
+<!-- UPLOAD MATERIAL MODAL -->
 <div id="materialModal" class="modal-overlay">
   <div class="modal-box">
     <h2>Upload Learning Material</h2>
-    <form id="materialForm">
+    <form id="materialForm" enctype="multipart/form-data">
       <div class="form-group">
         <label>Title</label>
         <input type="text" name="title" required placeholder="e.g., Chapter 5 Notes">
@@ -1271,15 +1272,26 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
             <option value="math">Mathematics</option>
             <option value="english">English</option>
             <option value="science">Science</option>
+            <option value="social_studies">Social Studies</option>
           </select>
         </div>
         <div class="form-group">
           <label>Grade</label>
           <select name="grade" required>
             <option value="">Select...</option>
-            <option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option>
-            <option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option>
-            <option value="7">Grade 7</option>
+            {{#each schoolLevels}}
+              {{#if (eq this "junior")}}
+                <option value="1">Grade 1</option><option value="2">Grade 2</option>
+                <option value="3">Grade 3</option><option value="4">Grade 4</option>
+                <option value="5">Grade 5</option><option value="6">Grade 6</option>
+                <option value="7">Grade 7</option>
+              {{/if}}
+              {{#if (eq this "high")}}
+                <option value="8">Grade 8</option><option value="9">Grade 9</option>
+                <option value="10">Grade 10</option><option value="11">Grade 11</option>
+                <option value="12">Grade 12</option><option value="13">Grade 13</option>
+              {{/if}}
+            {{/each}}
           </select>
         </div>
       </div>
@@ -1288,15 +1300,22 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
         <textarea name="description" rows="3" placeholder="Brief description..."></textarea>
       </div>
       <div class="form-group">
-        <label>Upload File (PDF, DOC, etc.)</label>
-        <input type="file" name="materialFile">
+        <label>Upload File (PDF, DOCX, MP3, MP4, Images - Max 500MB)</label>
+        <input type="file" name="materialFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp3,.mp4,.jpg,.png,.gif">
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:4px;">
+          Supported: PDF (50MB), DOCX (25MB), MP4 (500MB), MP3 (50MB), Images (10MB)
+        </div>
       </div>
       <div class="form-group">
-        <label>Or Type Content</label>
-        <textarea name="content" rows="5" placeholder="Type or paste content here..."></textarea>
+        <label>Assignment Type</label>
+        <select name="assignmentType" id="assignmentType" onchange="toggleStudentList()">
+          <option value="individual">Individual Students</option>
+          <option value="grade">All Students in This Grade</option>
+          <option value="all">All My Students</option>
+        </select>
       </div>
-      <div class="form-group">
-        <label>Assign To Students</label>
+      <div class="form-group" id="studentListGroup">
+        <label>Select Students</label>
         <div class="checkbox-list">
           {{#each students}}
             <label class="checkbox-item">
@@ -1306,6 +1325,12 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
           {{/each}}
         </div>
       </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="allowDownload" value="true" checked>
+          <span>Allow students to download this file</span>
+        </label>
+      </div>
       <div style="display:flex;gap:10px;margin-top:20px;">
         <button type="submit" class="btn btn-primary" style="flex:1;">Upload Material</button>
         <button type="button" class="btn btn-outline" onclick="closeModal('materialModal')">Cancel</button>
@@ -1313,6 +1338,22 @@ EXPLANATION: 1/2 = 2/4, so 2/4 + 1/4 = 3/4
     </form>
   </div>
 </div>
+
+<script>
+function toggleStudentList() {
+  const assignType = document.getElementById('assignmentType').value;
+  const studentList = document.getElementById('studentListGroup');
+  
+  if (assignType === 'individual') {
+    studentList.style.display = 'block';
+  } else {
+    studentList.style.display = 'none';
+  }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', toggleStudentList);
+</script>
 
 <!-- ASSIGN SINGLE QUIZ MODAL -->
 <div id="assignSingleModal" class="modal-overlay">
@@ -1562,16 +1603,54 @@ document.getElementById('uploadTextForm').addEventListener('submit', async e => 
   // ==============================
   // UPLOAD MATERIAL
   // ==============================
+ // ==============================
+  // UPLOAD MATERIAL
+  // ==============================
   document.getElementById('materialForm').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Uploading...';
+    const origText = btn.textContent;
+    btn.disabled = true; 
+    btn.innerHTML = '<span class="spinner"></span> Uploading...';
+    
     try {
-      const r = await fetch('/teacher/upload-material', { method: 'POST', body: new FormData(e.target) });
+      const formData = new FormData(e.target);
+      
+      // Get selected student IDs (only for individual assignment)
+      const assignType = formData.get('assignmentType');
+      if (assignType === 'individual') {
+        const checkboxes = e.target.querySelectorAll('input[name="studentIds"]:checked');
+        formData.delete('studentIds'); // Clear existing
+        checkboxes.forEach(cb => formData.append('studentIds', cb.value));
+      }
+      
+      const r = await fetch('/teacher/upload-material', { 
+        method: 'POST', 
+        body: formData 
+      });
+      
       const result = await r.json();
-      if (result.success) { showToast('Material uploaded!'); closeModal('materialModal'); btn.disabled = false; btn.textContent = 'Upload Material'; }
-      else { showToast(result.error, 'error'); btn.disabled = false; btn.textContent = 'Upload Material'; }
-    } catch { showToast('Failed', 'error'); btn.disabled = false; btn.textContent = 'Upload Material'; }
+      
+      if (result.success) { 
+        if (result.isVideo) {
+          showToast('Video uploaded! Processing in background...'); 
+        } else {
+          showToast('Material uploaded successfully!'); 
+        }
+        closeModal('materialModal'); 
+        e.target.reset();
+        setTimeout(() => window.location.href = '/teacher/materials', 1000);
+      } else { 
+        showToast(result.error, 'error'); 
+        btn.disabled = false; 
+        btn.textContent = origText; 
+      }
+    } catch (err) { 
+      console.error('Upload error:', err);
+      showToast('Upload failed: ' + err.message, 'error'); 
+      btn.disabled = false; 
+      btn.textContent = origText; 
+    }
   });
 
   // ==============================
