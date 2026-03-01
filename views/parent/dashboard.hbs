@@ -609,34 +609,34 @@
     <h2>My Children</h2>
 
     {{#if children.length}}
-    <div class="grid">
-      {{#each children}}
-        <div class="child-card">
-          <div>
-            <div class="child-name">{{firstName}} {{lastName}}</div>
-            <div class="child-meta">Grade {{grade}}</div>
+<div class="grid">
+  {{#each children}}
+    <div class="child-card">
+      <div>
+        <div class="child-name">{{firstName}} {{lastName}}</div>
+        <div class="child-meta">Grade {{grade}} • ID: {{studentId}}</div>
 
-            <div class="stats">
-              <div class="stat">
-                <strong>{{pendingCount}}</strong>Pending
-              </div>
-              <div class="stat">
-                <strong>{{completedCount}}</strong>Completed
-              </div>
-              <div class="stat">
-                <strong>{{certificateCount}}</strong>Certificates
-              </div>
-            </div>
+        <div class="stats">
+          <div class="stat">
+            <strong>{{pendingCount}}</strong>Pending
           </div>
-
-          <div class="actions">
-            <a href="/parent/children/{{_id}}/quizzes">▶ Enter {{firstName}}'s Account</a>
-            <!--<a href="/parent/children/{{_id}}/certificates">🏆 Certificates</a>-->
+          <div class="stat">
+            <strong>{{completedCount}}</strong>Completed
+          </div>
+          <div class="stat">
+            <strong>{{certificateCount}}</strong>Certificates
           </div>
         </div>
-      {{/each}}
+      </div>
+
+      <div class="actions">
+        <a href="/parent/children/{{_id}}/quizzes">▶ Enter Account</a>
+        <a href="/parent/children/{{_id}}/edit">✏️ Edit Details</a>
+      </div>
     </div>
-    {{else}}
+  {{/each}}
+</div>
+{{else}}
       <div class="panel">
         <div class="empty">No children added yet.</div>
         <div class="note">Click "Add Child" above to register your learner and assign quizzes.</div>

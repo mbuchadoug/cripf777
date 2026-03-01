@@ -253,7 +253,47 @@ if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now
         updateFields,
         { new: true }
       );
-      // 5️⃣ Enable all existing children
+
+      // ✅ 4.5️⃣ UPGRADE TRIAL CHILDREN TO PAID
+      const trialChildren = await User.find({
+        parentUserId: payment.userId,
+        role: "student",
+        consumerEnabled: false
+      });
+
+      if (trialChildren.length > 0) {
+        console.log(`[UPGRADE] Converting ${trialChildren.length} trial children to paid accounts`);
+        
+        await User.updateMany(
+          { parentUserId: payment.userId, role: "student", consumerEnabled: false },
+          { $set: { consumerEnabled: true } }
+        );
+
+        // Assign paid quizzes to upgraded trial children
+        const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+        if (org) {
+          for (const child of trialChildren) {
+            const rules = await QuizRule.find({
+              org: org._id,
+              grade: child.grade,
+              quizType: "paid",
+              enabled: true
+            });
+
+            for (const rule of rules) {
+              await assignQuizFromRule({
+                rule,
+                userId: child._id,
+                orgId: org._id,
+                force: true
+              });
+            }
+          }
+        }
+      }
+
+      // 5️⃣ Enable all existing children (existing code continues...)
+      
       await User.updateMany(
         { parentUserId: updatedParent._id, role: "student" },
         { $set: { consumerEnabled: true } }

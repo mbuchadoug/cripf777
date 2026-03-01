@@ -527,7 +527,100 @@ router.get(
   }
 );
 
+// ----------------------------------
+// Edit child form
+// ----------------------------------
+router.get(
+  "/parent/children/:childId/edit",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const parent = await User.findById(req.user._id).lean();
+    const child = await User.findOne({
+      _id: req.params.childId,
+      parentUserId: parent._id,
+      role: "student"
+    }).lean();
 
+    if (!child) return res.status(404).send("Child not found");
+
+    res.render("parent/edit_child", {
+      user: parent,
+      child,
+      dashboardUrl: parent.role === "private_teacher" ? "/teacher/dashboard" : "/parent/dashboard"
+    });
+  }
+);
+
+// ----------------------------------
+// Update child details
+// ----------------------------------
+router.post(
+  "/parent/children/:childId/edit",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const { firstName, lastName, grade, newPin } = req.body;
+    const parent = await User.findById(req.user._id);
+    
+    const child = await User.findOne({
+      _id: req.params.childId,
+      parentUserId: parent._id,
+      role: "student"
+    });
+
+    if (!child) return res.status(404).send("Child not found");
+
+    // Update basic info
+    if (firstName) child.firstName = firstName;
+    if (lastName) child.lastName = lastName;
+    if (grade) child.grade = Number(grade);
+
+    // Update PIN if provided
+    if (newPin && newPin.length >= 4) {
+      await child.setPassword(newPin);
+    }
+
+    await child.save();
+
+    return res.redirect(`/parent/children/${child._id}/quizzes`);
+  }
+);
+
+// ----------------------------------
+// Delete child (with confirmation)
+// ----------------------------------
+router.post(
+  "/parent/children/:childId/delete",
+  ensureAuth,
+  canActAsParent,
+  async (req, res) => {
+    const parent = await User.findById(req.user._id).lean();
+    
+    const child = await User.findOne({
+      _id: req.params.childId,
+      parentUserId: parent._id,
+      role: "student"
+    });
+
+    if (!child) return res.status(404).send("Child not found");
+
+    // Delete child's data
+    await ExamInstance.deleteMany({ userId: child._id });
+    await Attempt.deleteMany({ userId: child._id });
+    await Certificate.deleteMany({ userId: child._id });
+    await OrgMembership.deleteMany({ user: child._id });
+    
+    // Delete child account
+    await User.findByIdAndDelete(child._id);
+
+    const dashboardUrl = parent.role === "private_teacher" 
+      ? "/teacher/dashboard" 
+      : "/parent/dashboard";
+
+    return res.redirect(dashboardUrl);
+  }
+);
 // ----------------------------------
 // Parent review attempt
 // ----------------------------------

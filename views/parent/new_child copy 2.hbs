@@ -84,7 +84,6 @@
     }
 
     button:hover{ opacity:0.9; }
-    button:disabled{ opacity:0.5; cursor:not-allowed; }
 
     .note{
       margin-top:14px;
@@ -113,73 +112,6 @@
     }
 
     .slots strong{ color:var(--gold); }
-
-    /* ✅ PROGRESS BAR */
-    .progress-overlay{
-      position:fixed;
-      top:0;
-      left:0;
-      width:100%;
-      height:100%;
-      background:rgba(0,0,0,0.85);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index:9999;
-    }
-
-    .progress-overlay.active{ display:flex; }
-
-    .progress-box{
-      background:var(--panel);
-      border:2px solid var(--gold);
-      border-radius:var(--radius);
-      padding:32px 40px;
-      text-align:center;
-      max-width:400px;
-    }
-
-    .progress-title{
-      font-size:20px;
-      font-weight:800;
-      margin-bottom:20px;
-    }
-
-    .progress-bar{
-      width:100%;
-      height:12px;
-      background:#0e0e0e;
-      border-radius:8px;
-      overflow:hidden;
-      margin-bottom:12px;
-    }
-
-    .progress-fill{
-      height:100%;
-      background:linear-gradient(90deg, var(--gold), #ffd700);
-      width:0%;
-      transition:width 0.3s ease;
-    }
-
-    .progress-text{
-      font-size:14px;
-      color:var(--muted);
-      margin-bottom:8px;
-    }
-
-    .progress-spinner{
-      width:40px;
-      height:40px;
-      border:4px solid #333;
-      border-top-color:var(--gold);
-      border-radius:50%;
-      animation:spin 0.8s linear infinite;
-      margin:20px auto 0;
-    }
-
-    @keyframes spin{
-      to{ transform:rotate(360deg); }
-    }
   </style>
 </head>
 
@@ -201,7 +133,7 @@
       Child slots: <strong>{{childCount}}</strong> / <strong>{{childLimit}}</strong> used
     </div>
 
-    <form method="POST" action="/parent/children" id="childForm">
+    <form method="POST" action="/parent/children">
 
       <label>
         <span>First name *</span>
@@ -224,7 +156,7 @@
         <span>Grade *</span>
         <select name="grade" required>
           <option value="">Select grade</option>
-          <option value="0">Grade 0</option>
+            <option value="0">Grade 0</option>
           <option value="1">Grade 1</option>
           <option value="2">Grade 2</option>
           <option value="3">Grade 3</option>
@@ -235,66 +167,19 @@
         </select>
       </label>
 
-      <button type="submit" id="submitBtn">
+      <button type="submit">
         ➕ Add Child
       </button>
 
     </form>
 
     <div class="note">
-      ⏱️ Account creation takes 10-15 seconds as we set up personalized quizzes for your child.
+      You'll be able to assign quizzes and view learning progress
+      immediately after adding your child.
     </div>
   </div>
 
 </main>
-
-<!-- ✅ PROGRESS OVERLAY -->
-<div class="progress-overlay" id="progressOverlay">
-  <div class="progress-box">
-    <div class="progress-title">Creating Child Account...</div>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill"></div>
-    </div>
-    <div class="progress-text" id="progressText">Setting up account...</div>
-    <div class="progress-spinner"></div>
-  </div>
-</div>
-
-<script>
-const form = document.getElementById('childForm');
-const overlay = document.getElementById('progressOverlay');
-const fill = document.getElementById('progressFill');
-const text = document.getElementById('progressText');
-const btn = document.getElementById('submitBtn');
-
-const steps = [
-  { pct: 20, msg: 'Creating student account...' },
-  { pct: 40, msg: 'Generating login credentials...' },
-  { pct: 60, msg: 'Assigning trial quizzes...' },
-  { pct: 80, msg: 'Loading paid quiz library...' },
-  { pct: 95, msg: 'Finalizing setup...' }
-];
-
-let currentStep = 0;
-
-form.addEventListener('submit', (e) => {
-  overlay.classList.add('active');
-  btn.disabled = true;
-
-  // Simulate progress (since backend is async)
-  const interval = setInterval(() => {
-    if (currentStep < steps.length) {
-      fill.style.width = steps[currentStep].pct + '%';
-      text.textContent = steps[currentStep].msg;
-      currentStep++;
-    } else {
-      clearInterval(interval);
-    }
-  }, 2500); // 2.5s per step = ~12.5s total
-
-  // Let form submit naturally
-});
-</script>
 
 </body>
 </html>

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Edit {{child.firstName}} | Parent Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    :root{
+      --gold:#D4AF37;
+      --red:#c0392b;
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --border:#222;
+      --muted:#9aa3ad;
+      --radius:14px;
+    }
+
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",Arial;
+      background:var(--bg);
+      color:#fff;
+    }
+
+    main{
+      max-width:600px;
+      margin:60px auto;
+      padding:0 20px;
+    }
+
+    h1{ font-size:28px; margin-bottom:8px; }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:15px;
+      margin-bottom:24px;
+      line-height:1.5;
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:22px;
+      margin-bottom:18px;
+    }
+
+    form{ display:grid; gap:18px; }
+
+    label{
+      display:flex;
+      flex-direction:column;
+      font-size:14px;
+      font-weight:600;
+    }
+
+    label span{
+      margin-bottom:6px;
+      color:#ddd;
+    }
+
+    input, select{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:12px;
+      font-size:15px;
+      color:#fff;
+      outline:none;
+    }
+
+    input::placeholder{ color:#666; }
+    input:focus, select:focus{ border-color:var(--gold); }
+
+    .btn{
+      padding:14px;
+      border-radius:12px;
+      border:none;
+      font-weight:800;
+      font-size:16px;
+      cursor:pointer;
+    }
+
+    .btn-primary{
+      background:var(--gold);
+      color:#000;
+    }
+
+    .btn-danger{
+      background:var(--red);
+      color:#fff;
+    }
+
+    .btn:hover{ opacity:0.9; }
+
+    .note{
+      margin-top:14px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+
+    .back{
+      display:inline-block;
+      margin-bottom:18px;
+      color:var(--gold);
+      text-decoration:none;
+      font-weight:700;
+      font-size:14px;
+    }
+
+    .danger-zone{
+      border:2px solid var(--red);
+      border-radius:var(--radius);
+      padding:20px;
+      margin-top:32px;
+    }
+
+    .danger-title{
+      font-size:18px;
+      font-weight:800;
+      color:var(--red);
+      margin-bottom:12px;
+    }
+
+    .credential-box{
+      background:#0e0e0e;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:16px;
+      margin-top:12px;
+    }
+
+    .credential-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:8px 0;
+      border-bottom:1px solid #1a1a1a;
+    }
+
+    .credential-row:last-child{ border-bottom:none; }
+
+    .credential-label{
+      font-size:13px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:1px;
+    }
+
+    .credential-value{
+      font-size:18px;
+      font-weight:800;
+      color:var(--gold);
+      font-family:monospace;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <a href="{{dashboardUrl}}" class="back">← Back to Dashboard</a>
+
+  <h1>Edit {{child.firstName}}'s Account</h1>
+  <p class="subtitle">
+    Update your child's details and manage their account settings.
+  </p>
+
+  <!-- CURRENT CREDENTIALS -->
+  <div class="panel">
+    <h3 style="margin:0 0 12px;font-size:16px;">📋 Current Login Credentials</h3>
+    <div class="credential-box">
+      <div class="credential-row">
+        <span class="credential-label">Student ID</span>
+        <span class="credential-value">{{child.studentId}}</span>
+      </div>
+      <div class="credential-row">
+        <span class="credential-label">Current PIN</span>
+        <span class="credential-value">****</span>
+      </div>
+    </div>
+    <div class="note">
+      💡 Your child uses their Student ID and PIN to log in. Update the PIN below if needed.
+    </div>
+  </div>
+
+  <!-- EDIT FORM -->
+  <div class="panel">
+    <form method="POST" action="/parent/children/{{child._id}}/edit">
+
+      <label>
+        <span>First name *</span>
+        <input
+          name="firstName"
+          value="{{child.firstName}}"
+          required
+        >
+      </label>
+
+      <label>
+        <span>Last name</span>
+        <input
+          name="lastName"
+          value="{{child.lastName}}"
+        >
+      </label>
+
+      <label>
+        <span>Grade *</span>
+        <select name="grade" required>
+          <option value="0" {{#if (eq child.grade 0)}}selected{{/if}}>Grade 0</option>
+          <option value="1" {{#if (eq child.grade 1)}}selected{{/if}}>Grade 1</option>
+          <option value="2" {{#if (eq child.grade 2)}}selected{{/if}}>Grade 2</option>
+          <option value="3" {{#if (eq child.grade 3)}}selected{{/if}}>Grade 3</option>
+          <option value="4" {{#if (eq child.grade 4)}}selected{{/if}}>Grade 4</option>
+          <option value="5" {{#if (eq child.grade 5)}}selected{{/if}}>Grade 5</option>
+          <option value="6" {{#if (eq child.grade 6)}}selected{{/if}}>Grade 6</option>
+          <option value="7" {{#if (eq child.grade 7)}}selected{{/if}}>Grade 7</option>
+        </select>
+      </label>
+
+      <label>
+        <span>New PIN (leave blank to keep current)</span>
+        <input
+          name="newPin"
+          type="text"
+          placeholder="e.g. 1234"
+          maxlength="6"
+          pattern="\d{4,6}"
+        >
+        <span class="note" style="margin-top:6px;">Enter 4-6 digit PIN. Only change if you've forgotten the current one.</span>
+      </label>
+
+      <button type="submit" class="btn btn-primary">
+        ✅ Save Changes
+      </button>
+
+    </form>
+  </div>
+
+  <!-- DANGER ZONE -->
+  <div class="danger-zone">
+    <div class="danger-title">⚠️ Danger Zone</div>
+    <div class="note" style="margin-bottom:16px;">
+      Deleting this account will permanently remove all quizzes, progress, and certificates.
+      This action cannot be undone.
+    </div>
+    <form method="POST" action="/parent/children/{{child._id}}/delete" onsubmit="return confirm('Are you absolutely sure you want to delete {{child.firstName}}\'s account? This cannot be undone!');">
+      <button type="submit" class="btn btn-danger">
+        🗑️ Delete {{child.firstName}}'s Account
+      </button>
+    </form>
+  </div>
+
+</main>
+
+</body>
+</html>

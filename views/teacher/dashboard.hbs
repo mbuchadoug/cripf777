@@ -537,31 +537,32 @@
 
     <!-- ✅ UPGRADE BANNER (Starter → Professional) -->
 <!-- ✅ UPGRADE BANNER (Compact & Professional) -->
-    {{#if isPaid}}
-      {{#unless isExpired}}
-        {{#if (eq user.teacherSubscriptionPlan "starter")}}
-          <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #f59e0b;border-left:4px solid #f59e0b;border-radius:var(--radius);padding:14px 18px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:300px;">
-              <span style="font-size:22px;">🚀</span>
-              <div>
-                <div style="font-weight:700;font-size:14px;color:#92400e;margin-bottom:2px;">
-                  Upgrade to Professional - 40 students, 50 AI credits, reports
-                </div>
-                <div style="font-size:12px;color:#78350f;">
-                  <strong>{{daysRemaining}} days</strong> of Starter credited to Professional
-                </div>
-              </div>
+   {{#if isPaid}}
+  {{#unless isExpired}}
+    {{#if (eq user.subscriptionPlan "silver")}}
+      <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #f59e0b;border-left:4px solid #f59e0b;border-radius:8px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:250px;">
+          <span style="font-size:24px;">💎</span>
+          <div>
+            <div style="font-weight:800;font-size:15px;color:#92400e;margin-bottom:3px;">
+              Upgrade to Gold - Add 3 More Children
             </div>
-            <form method="POST" action="/payments/paynow/init" style="flex-shrink:0;">
-              <input type="hidden" name="plan" value="teacher_professional">
-              <button class="btn btn-primary" type="submit" style="padding:9px 18px;font-size:13px;white-space:nowrap;">
-                Upgrade ($19/mo) →
-              </button>
-            </form>
+            <div style="font-size:12px;color:#78350f;line-height:1.4;">
+              ✅ Your <strong>{{daysRemaining}} days</strong> of Silver will be credited to Gold<br>
+              ✅ Pay <strong>$10/month</strong> moving forward • No loss of value
+            </div>
           </div>
-        {{/if}}
-      {{/unless}}
+        </div>
+        <form method="POST" action="/payments/paynow/init" style="flex-shrink:0;">
+          <input type="hidden" name="plan" value="gold">
+          <button class="btn" type="submit" style="background:#f59e0b;color:#fff;font-weight:700;padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:14px;white-space:nowrap;">
+            Upgrade Now →
+          </button>
+        </form>
+      </div>
     {{/if}}
+  {{/unless}}
+{{/if}}
 
          
     <!-- ============================== -->
