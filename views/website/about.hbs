@@ -159,12 +159,21 @@
             color: var(--navy);
         }
         
-        .nav-cta {
+      .nav-cta {
             background: var(--navy);
-            color: var(--white);
+            color: var(--white) !important;
             padding: 0.75rem 1.75rem;
             border-radius: 4px;
             font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        
+        .nav-cta:hover {
+            background: var(--navy-dark);
+            color: var(--white) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(30, 58, 95, 0.2);
         }
         
         /* Page Header */
@@ -911,7 +920,7 @@
 
                 <li><a href="/auth/arena">Arena</a></li>
                 <li><a href="/auth/school">Student Portal</a></li>
-                <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
+                 <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
             </ul>
         </div>
     </nav>
