@@ -975,6 +975,74 @@
 /* =========================
    MOBILE: dropdown inside slide-in menu
 ========================= */
+
+/* ============================================
+           MOBILE-SPECIFIC LMS STYLES
+        ============================================ */
+        
+        /* Hide desktop dropdown on mobile */
+        @media (max-width: 768px) {
+            .desktop-only {
+                display: none !important;
+            }
+            
+            .mobile-only {
+                display: block !important;
+            }
+            
+            .mobile-lms-section {
+                width: 100%;
+                padding: 0;
+                border: none;
+            }
+            
+            .mobile-section-header {
+                font-size: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                color: var(--dark-gray);
+                padding: 1.5rem 0 0.75rem;
+                border-top: 2px solid var(--medium-gray);
+                margin-top: 1rem;
+            }
+            
+            .mobile-lms-links {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .mobile-lms-links li {
+                border-bottom: 1px solid var(--border);
+            }
+            
+            .mobile-lms-links a {
+                display: block;
+                padding: 1rem 0 1rem 1rem;
+                font-size: 0.95rem;
+                color: var(--text-primary);
+                background: var(--light-gray);
+                margin: 0.25rem 0;
+                border-radius: 8px;
+                transition: background 0.2s;
+            }
+            
+            .mobile-lms-links a:hover {
+                background: rgba(201, 169, 97, 0.15);
+            }
+        }
+
+        /* Show desktop dropdown only on desktop */
+        @media (min-width: 769px) {
+            .mobile-only {
+                display: none !important;
+            }
+            
+            .desktop-only {
+                display: block !important;
+            }
+        }
 @media (max-width: 768px) {
   /* make dropdown fill the menu width */
   .nav-item.dropdown {
@@ -1066,6 +1134,7 @@
 </head>
 <body>
     <!-- Navigation -->
+   <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
             <a href="/" class="logo">
@@ -1079,41 +1148,46 @@
                 <span></span>
             </button>
             
-          <ul class="nav-links" id="navLinks">
-  <li><a href="/">Home</a></li>
-  <li><a href="/about">Framework</a></li>
-  <li><a href="/scoi">Audits</a></li>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">Framework</a></li>
+                <li><a href="/scoi">Audits</a></li>
 
-  <!-- LMS dropdown -->
-  <li class="nav-item dropdown" id="lmsDropdown">
-  <a href="/lms" class="dropdown-toggle" id="lmsToggle" aria-haspopup="true" aria-expanded="false">
-  LMS <span class="caret">▾</span>
-</a>
+                <!-- LMS DESKTOP: Dropdown -->
+                <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+                    <a href="/lms" class="dropdown-toggle">
+                        LMS <span class="caret">▾</span>
+                    </a>
+                    <div class="dropdown-menu">
+                        <a class="dropdown-link" href="/auth/parent">
+                            <div class="dd-title">Parents & Guardians</div>
+                            <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
+                        </a>
+                        <a class="dropdown-link" href="/auth/teacher">
+                            <div class="dd-title">Private Teachers</div>
+                            <div class="dd-sub">Up to 15/40 learners</div>
+                        </a>
+                        <a class="dropdown-link" href="/org/cripfcnt-school/dashboard">
+                            <div class="dd-title">Professionals</div>
+                            <div class="dd-sub">8 modules • audits • certification</div>
+                        </a>
+                    </div>
+                </li>
 
-    <div class="dropdown-menu" role="menu" aria-label="LMS menu">
-      <a class="dropdown-link" href="/auth/parent">
-        <div class="dd-title">Parents & Guardians</div>
-        <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
-      </a>
+                <!-- LMS MOBILE: Expanded Links -->
+                <li class="mobile-only mobile-lms-section">
+                    <div class="mobile-section-header">LMS Options</div>
+                    <ul class="mobile-lms-links">
+                        <li><a href="/auth/parent">👨‍👩‍👧 Parents & Guardians</a></li>
+                        <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+                        <li><a href="/org/cripfcnt-school/dashboard">🏛️ Professionals</a></li>
+                    </ul>
+                </li>
 
-      <a class="dropdown-link" href="/auth/teacher">
-        <div class="dd-title">Private Teachers</div>
-        <div class="dd-sub">Up to 15/40 learners</div>
-      </a>
-
-      <a class="dropdown-link" href="/org/cripfcnt-school/dashboard">
-        <div class="dd-title">Professionals</div>
-        <div class="dd-sub">8 modules • audits • certification</div>
-      </a>
-    </div>
-  </li>
-
-  <!-- Arena as separate top link -->
-  <li><a href="/auth/arena">Arena</a></li>
-
-  <li><a href="/auth/school">Student Portal</a></li>
-  <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
-</ul>
+                <li><a href="/auth/arena">Arena</a></li>
+                <li><a href="/auth/school">Student Portal</a></li>
+                <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
+            </ul>
         </div>
     </nav>
 
@@ -1399,133 +1473,52 @@
 
     <!-- Mobile Menu Script -->
    <!-- Mobile Menu & Dropdown Script -->
+  <!-- Mobile Menu Script (Simplified) -->
     <script>
-  // ============================================
-  // MOBILE MENU TOGGLE
-  // ============================================
-  const mobileMenuToggle = document.getElementById('mobileMenuToggle');
-  const navLinks = document.getElementById('navLinks');
-  const lmsDropdown = document.getElementById('lmsDropdown');
-  const lmsToggle = document.getElementById('lmsToggle');
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const navLinks = document.getElementById('navLinks');
 
-  if (!mobileMenuToggle || !navLinks) {
-    console.error('Mobile menu elements not found');
-  }
+        // Toggle mobile menu
+        mobileMenuToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mobileMenuToggle.classList.toggle('active');
+            navLinks.classList.toggle('active');
+            document.body.classList.toggle('menu-open');
+        });
 
-  // Toggle mobile menu
-  if (mobileMenuToggle) {
-    mobileMenuToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      mobileMenuToggle.classList.toggle('active');
-      navLinks.classList.toggle('active');
-      document.body.classList.toggle('menu-open');
-      console.log('Mobile menu toggled:', navLinks.classList.contains('active'));
-    });
-  }
+        // Close menu when clicking any link
+        navLinks?.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenuToggle.classList.remove('active');
+                navLinks.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            });
+        });
 
-  // ============================================
-  // LMS DROPDOWN TOGGLE (MOBILE ONLY)
-  // ============================================
-  if (lmsToggle && lmsDropdown) {
-    lmsToggle.addEventListener('click', (e) => {
-      console.log('LMS toggle clicked, window width:', window.innerWidth);
-      
-      // Only prevent default and toggle dropdown on mobile
-      if (window.innerWidth <= 768) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        lmsDropdown.classList.toggle('open');
-        const expanded = lmsDropdown.classList.contains('open');
-        lmsToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        
-        console.log('LMS dropdown toggled:', expanded);
-      }
-      // On desktop, let the link work normally (goes to /lms)
-    });
-  }
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                const isClickInsideMenu = navLinks?.contains(e.target);
+                const isClickOnToggle = mobileMenuToggle?.contains(e.target);
+                
+                if (!isClickInsideMenu && !isClickOnToggle && navLinks?.classList.contains('active')) {
+                    mobileMenuToggle.classList.remove('active');
+                    navLinks.classList.remove('active');
+                    document.body.classList.remove('menu-open');
+                }
+            }
+        });
 
-  // ============================================
-  // CLOSE MENU WHEN CLICKING REGULAR LINKS
-  // ============================================
-  if (navLinks) {
-    const allLinks = navLinks.querySelectorAll('a:not(#lmsToggle)');
-    allLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        // Only close menu for non-dropdown links
-        if (!link.closest('.dropdown-menu')) {
-          mobileMenuToggle.classList.remove('active');
-          navLinks.classList.remove('active');
-          document.body.classList.remove('menu-open');
-          console.log('Regular link clicked, closing menu');
-        }
-      });
-    });
-  }
+        // Reset on resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                mobileMenuToggle?.classList.remove('active');
+                navLinks?.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            }
+        });
+    </script>
 
-  // ============================================
-  // CLOSE DROPDOWN WHEN CLICKING DROPDOWN LINKS
-  // ============================================
-  if (lmsDropdown) {
-    const dropdownLinks = lmsDropdown.querySelectorAll('.dropdown-link');
-    dropdownLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        console.log('Dropdown link clicked');
-        if (window.innerWidth <= 768) {
-          // Close both dropdown and menu
-          lmsDropdown.classList.remove('open');
-          lmsToggle?.setAttribute('aria-expanded', 'false');
-          mobileMenuToggle.classList.remove('active');
-          navLinks.classList.remove('active');
-          document.body.classList.remove('menu-open');
-        }
-      });
-    });
-  }
-
-  // ============================================
-  // CLOSE MENU WHEN CLICKING BACKDROP
-  // ============================================
-  document.addEventListener('click', (e) => {
-    if (window.innerWidth <= 768) {
-      const isClickInsideMenu = navLinks?.contains(e.target);
-      const isClickOnToggle = mobileMenuToggle?.contains(e.target);
-      
-      if (!isClickInsideMenu && !isClickOnToggle && navLinks?.classList.contains('active')) {
-        mobileMenuToggle.classList.remove('active');
-        navLinks.classList.remove('active');
-        document.body.classList.remove('menu-open');
-        lmsDropdown?.classList.remove('open');
-        lmsToggle?.setAttribute('aria-expanded', 'false');
-        console.log('Clicked outside, closing menu');
-      }
-    }
-  });
-
-  // ============================================
-  // RESET ON WINDOW RESIZE
-  // ============================================
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 768) {
-      // Reset mobile menu state on desktop
-      mobileMenuToggle?.classList.remove('active');
-      navLinks?.classList.remove('active');
-      document.body.classList.remove('menu-open');
-      lmsDropdown?.classList.remove('open');
-      lmsToggle?.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  // ============================================
-  // DEBUG: Log initial state
-  // ============================================
-  console.log('Menu script loaded:', {
-    mobileMenuToggle: !!mobileMenuToggle,
-    navLinks: !!navLinks,
-    lmsDropdown: !!lmsDropdown,
-    lmsToggle: !!lmsToggle
-  });
-</script>
 </body>
 </html>
 
