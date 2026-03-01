@@ -1009,6 +1009,36 @@
     pointer-events: auto; /* ✅ ALWAYS CLICKABLE */
   }
 
+  /* Mobile dropdown menu styling */
+.dropdown-menu {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    display: none; /* Hidden by default */
+    width: 100%;
+    min-width: 0;
+    box-shadow: none;
+    border: none;
+    padding: 0.5rem 0 1rem;
+    margin-top: 0;
+    pointer-events: auto;
+    background: var(--light-gray);
+    border-radius: 0;
+}
+
+/* ✅ CRITICAL: Override any conflicting styles */
+.nav-item.dropdown.open .dropdown-menu {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* ✅ Ensure dropdown toggle stays visible */
+.nav-item.dropdown .dropdown-toggle {
+    display: flex !important;
+}
+
   /* ✅ SHOW DROPDOWN WHEN JS ADDS .open */
   .nav-item.dropdown.open .dropdown-menu {
     display: block;
