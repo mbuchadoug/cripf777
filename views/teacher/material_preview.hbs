@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>{{material.title}} | Preview</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 0; }
+    .topbar { background: #0f172a; color: white; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    .topbar a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; }
+    .topbar a:hover { color: white; }
+    .topbar h1 { font-size: 16px; font-weight: 700; margin: 0; flex: 1; }
+    .container { max-width: 900px; margin: 32px auto; padding: 0 24px; }
+    .meta-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 24px; display: flex; gap: 20px; align-items: flex-start; }
+    .file-icon { font-size: 48px; flex-shrink: 0; }
+    .meta-info h2 { font-size: 22px; font-weight: 800; margin: 0 0 8px; }
+    .meta-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .meta-desc { color: #475569; font-size: 14px; line-height: 1.6; }
+    .preview-area { background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+    .preview-area video { width: 100%; max-height: 500px; background: #000; display: block; }
+    .preview-area audio { width: 100%; padding: 20px; display: block; }
+    .preview-area iframe { width: 100%; height: 600px; border: none; display: block; }
+    .preview-area img { width: 100%; max-height: 600px; object-fit: contain; display: block; }
+    .text-content { padding: 24px; white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #334155; }
+    .processing-banner { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; }
+    .processing-banner .icon { font-size: 24px; }
+    .processing-banner p { margin: 0; font-size: 14px; color: #92400e; font-weight: 600; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn { padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-outline { background: transparent; border: 1px solid #e2e8f0; color: #475569; }
+    .btn-outline:hover { border-color: #6366f1; color: #6366f1; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/teacher/materials">← Materials</a>
+  <h1>{{material.title}}</h1>
+</div>
+
+<div class="container">
+
+  <!-- Meta Card -->
+  <div class="meta-card">
+    <div class="file-icon">
+      {{#if material.isVideo}}🎥
+      {{else if (includes material.fileType "audio")}}🎵
+      {{else if (includes material.fileType "pdf")}}📄
+      {{else if (includes material.fileType "word")}}📝
+      {{else if (includes material.fileType "image")}}🖼️
+      {{else}}📎{{/if}}
+    </div>
+    <div class="meta-info">
+      <h2>{{material.title}}</h2>
+      <div class="meta-tags">
+        <span class="tag">{{material.subject}}</span>
+        <span class="tag">Grade {{material.grade}}</span>
+        {{#if material.fileName}}<span class="tag">{{material.fileName}}</span>{{/if}}
+        {{#if material.fileSizeMB}}<span class="tag">{{material.fileSizeMB}}MB</span>{{/if}}
+      </div>
+      {{#if material.description}}
+        <div class="meta-desc">{{material.description}}</div>
+      {{/if}}
+    </div>
+  </div>
+
+  <!-- Processing Banner for videos -->
+  {{#if (eq material.videoProcessingStatus "pending")}}
+    <div class="processing-banner">
+      <div class="icon">⏳</div>
+      <p>This video is still processing. It will be available to students once complete.</p>
+    </div>
+  {{/if}}
+
+  <!-- Preview Area -->
+  {{#if material.fileUrl}}
+    <div class="preview-area">
+      {{#if material.isVideo}}
+        <video controls preload="metadata">
+          <source src="{{material.fileUrl}}" type="{{material.fileType}}">
+          Your browser does not support video playback.
+        </video>
+      {{else if (includes material.fileType "audio")}}
+        <audio controls>
+          <source src="{{material.fileUrl}}" type="{{material.fileType}}">
+        </audio>
+      {{else if (includes material.fileType "pdf")}}
+        <iframe src="{{material.fileUrl}}" title="{{material.title}}"></iframe>
+      {{else if (includes material.fileType "image")}}
+        <img src="{{material.fileUrl}}" alt="{{material.title}}">
+      {{else}}
+        <div class="text-content">
+          <p style="color:#64748b;font-size:13px;">Preview not available for this file type.</p>
+          {{#if material.allowDownload}}
+            <a href="{{material.fileUrl}}" download class="btn btn-primary" style="margin-top:12px;">⬇️ Download File</a>
+          {{/if}}
+        </div>
+      {{/if}}
+    </div>
+  {{else if material.content}}
+    <div class="preview-area">
+      <div class="text-content">{{material.content}}</div>
+    </div>
+  {{/if}}
+
+  <!-- Actions -->
+  <div class="actions">
+    {{#if material.allowDownload}}
+      {{#if material.fileUrl}}
+        <a href="{{material.fileUrl}}" download class="btn btn-primary">⬇️ Download</a>
+      {{/if}}
+    {{/if}}
+    <a href="/teacher/materials" class="btn btn-outline">← Back to Materials</a>
+  </div>
+
+</div>
+</body>
+</html>

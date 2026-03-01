@@ -1131,22 +1131,20 @@ router.post(
       console.log('✅ [Database] Material created:', material._id);
 
       // ✅ QUEUE VIDEO PROCESSING (if video)
+    // ✅ QUEUE VIDEO PROCESSING (if video) — fire and forget, don't await
       if (isVideo && fileUrl) {
         console.log('🎥 [Video] Queuing for processing...');
-        try {
-          const { queueVideoProcessing } = await import("../services/videoQueue.js");
-          const path = (await import("path")).default;
-          const fullPath = path.join(process.cwd(), "public", fileUrl.replace(/^\//, ''));
-          
-          console.log('🎥 [Video] Full path:', fullPath);
-          await queueVideoProcessing(material._id, fullPath);
-          console.log('✅ [Video] Queued successfully');
-        } catch (queueErr) {
-          console.error('❌ [Video Queue Error]', queueErr);
-          // Don't fail the upload, just log the error
-        }
+        const videoPath = fileUrl;
+        import("../services/videoQueue.js").then(({ queueVideoProcessing }) => {
+          import("path").then(({ default: pathMod }) => {
+            const fullPath = pathMod.join(process.cwd(), "public", videoPath.replace(/^\//, ''));
+            console.log('🎥 [Video] Full path:', fullPath);
+            return queueVideoProcessing(material._id, fullPath);
+          })
+          .then(() => console.log('✅ [Video] Queued successfully'))
+          .catch(err => console.error('❌ [Video Queue Error]', err));
+        }).catch(err => console.error('❌ [Video Queue Import Error]', err));
       }
-
       console.log('✅ [Success] Material upload complete');
       return res.json({ 
         success: true, 
