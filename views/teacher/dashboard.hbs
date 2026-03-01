@@ -1520,12 +1520,23 @@ function switchUploadTab(which) {
   // ==============================
   // TOAST
   // ==============================
-  function showToast(msg, type = 'success') {
+ function showToast(msg, type = 'success') {
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.className = 'toast ' + type + ' show';
-    setTimeout(() => t.classList.remove('show'), 3000);
+    
+    // ✅ EXTEND TIMEOUT FOR ERROR MESSAGES
+    const timeout = type === 'error' ? 8000 : 3000;
+    setTimeout(() => t.classList.remove('show'), timeout);
+    
+    // ✅ ALSO LOG TO CONSOLE
+    if (type === 'error') {
+      console.error('🚨 Toast Error:', msg);
+    } else {
+      console.log('✅ Toast:', msg);
+    }
   }
+
 
   // ==============================
   // GENERATE AI QUIZ
@@ -1604,7 +1615,7 @@ document.getElementById('uploadTextForm').addEventListener('submit', async e => 
   // UPLOAD MATERIAL
   // ==============================
  // ==============================
-  // UPLOAD MATERIAL
+  // UPLOAD MATERIAL (WITH ENHANCED LOGGING)
   // ==============================
   document.getElementById('materialForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -1616,22 +1627,53 @@ document.getElementById('uploadTextForm').addEventListener('submit', async e => 
     try {
       const formData = new FormData(e.target);
       
+      // ✅ LOG FILE INFO
+      const fileInput = e.target.querySelector('input[name="materialFile"]');
+      if (fileInput && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        console.log('📤 Uploading file:', {
+          name: file.name,
+          size: (file.size / 1024 / 1024).toFixed(2) + 'MB',
+          type: file.type
+        });
+      }
+      
       // Get selected student IDs (only for individual assignment)
       const assignType = formData.get('assignmentType');
+      console.log('📋 Assignment type:', assignType);
+      
       if (assignType === 'individual') {
         const checkboxes = e.target.querySelectorAll('input[name="studentIds"]:checked');
         formData.delete('studentIds'); // Clear existing
         checkboxes.forEach(cb => formData.append('studentIds', cb.value));
+        console.log('👥 Selected students:', checkboxes.length);
       }
       
+      console.log('🚀 Starting upload...');
       const r = await fetch('/teacher/upload-material', { 
         method: 'POST', 
         body: formData 
       });
       
-      const result = await r.json();
+      console.log('📡 Response status:', r.status, r.statusText);
+      
+      // ✅ CHECK IF RESPONSE IS JSON
+      const contentType = r.headers.get('content-type');
+      console.log('📄 Content-Type:', contentType);
+      
+      let result;
+      try {
+        result = await r.json();
+        console.log('✅ Parsed JSON response:', result);
+      } catch (parseErr) {
+        console.error('❌ Failed to parse JSON response:', parseErr);
+        const textResponse = await r.text();
+        console.error('📄 Raw response:', textResponse.substring(0, 500));
+        throw new Error('Server returned invalid JSON. Check console for details.');
+      }
       
       if (result.success) { 
+        console.log('✅ Upload successful!', result);
         if (result.isVideo) {
           showToast('Video uploaded! Processing in background...'); 
         } else {
@@ -1641,12 +1683,14 @@ document.getElementById('uploadTextForm').addEventListener('submit', async e => 
         e.target.reset();
         setTimeout(() => window.location.href = '/teacher/materials', 1000);
       } else { 
-        showToast(result.error, 'error'); 
+        console.error('❌ Upload failed:', result.error);
+        showToast(result.error || 'Upload failed', 'error'); 
         btn.disabled = false; 
         btn.textContent = origText; 
       }
     } catch (err) { 
-      console.error('Upload error:', err);
+      console.error('❌ Upload exception:', err);
+      console.error('Stack trace:', err.stack);
       showToast('Upload failed: ' + err.message, 'error'); 
       btn.disabled = false; 
       btn.textContent = origText; 

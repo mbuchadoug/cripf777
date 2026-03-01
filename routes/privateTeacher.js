@@ -961,8 +961,12 @@ router.post(
   ensureAuth,
   ensurePrivateTeacher,
   (req, res, next) => {
+    console.log('📥 [Upload Material] Request received');
+    console.log('📥 [Upload Material] User:', req.user._id, req.user.firstName);
+    
     upload.single("materialFile")(req, res, (err) => {
       if (err instanceof multer.MulterError) {
+        console.error('❌ [Multer Error]', err.code, err.message);
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({ 
             error: `File too large. Maximum size is 600MB.` 
@@ -970,16 +974,38 @@ router.post(
         }
         return res.status(400).json({ error: err.message });
       } else if (err) {
+        console.error('❌ [Upload Error]', err);
         return res.status(500).json({ error: err.message });
       }
+      
+      // ✅ LOG FILE INFO
+      if (req.file) {
+        console.log('✅ [File Received]', {
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: (req.file.size / 1024 / 1024).toFixed(2) + 'MB',
+          bufferLength: req.file.buffer ? req.file.buffer.length : 0
+        });
+      } else {
+        console.log('⚠️ [No File] No file attached to request');
+      }
+      
       next();
     });
   },
   async (req, res) => {
     try {
+      console.log('📋 [Upload Material] Body:', {
+        title: req.body.title,
+        subject: req.body.subject,
+        grade: req.body.grade,
+        assignmentType: req.body.assignmentType
+      });
+      
       const { title, subject, grade, description, studentIds, allowDownload, assignmentType } = req.body;
       
       if (!title || !subject || !grade) {
+        console.error('❌ [Validation] Missing required fields');
         return res.status(400).json({ error: "Title, subject, and grade required" });
       }
 
@@ -993,27 +1019,36 @@ router.post(
       let isVideo = false;
 
       if (req.file) {
+        console.log('🔍 [File Validation] Checking file type and size...');
+        
         // ✅ VALIDATE FILE TYPE
         if (!ALLOWED_TYPES.includes(req.file.mimetype)) {
+          console.error('❌ [File Type] Not allowed:', req.file.mimetype);
           return res.status(400).json({ 
             error: `File type ${req.file.mimetype} not allowed. Supported: PDF, DOCX, PPT, MP3, MP4, Images` 
           });
         }
+        console.log('✅ [File Type] Allowed:', req.file.mimetype);
 
         // ✅ VALIDATE FILE SIZE
         const sizeLimit = FILE_SIZE_LIMITS[req.file.mimetype];
+        console.log('📏 [Size Limit] For type:', req.file.mimetype, 'Limit:', (sizeLimit / 1024 / 1024) + 'MB');
+        
         if (sizeLimit && req.file.size > sizeLimit) {
           const sizeMB = (req.file.size / 1024 / 1024).toFixed(2);
           const limitMB = (sizeLimit / 1024 / 1024);
+          console.error('❌ [File Size] Too large:', sizeMB + 'MB >', limitMB + 'MB');
           return res.status(400).json({ 
             error: `File size ${sizeMB}MB exceeds limit of ${limitMB}MB for this file type` 
           });
         }
+        console.log('✅ [File Size] Within limit');
 
         const fs = (await import("fs")).default;
         const path = (await import("path")).default;
         
         const uploadsDir = path.join(process.cwd(), "public", "uploads", "materials");
+        console.log('📁 [Create Dir]', uploadsDir);
         await fs.promises.mkdir(uploadsDir, { recursive: true });
         
         // Generate unique filename
@@ -1023,13 +1058,18 @@ router.post(
         const safeFilename = `material-${timestamp}-${randomString}${ext}`;
         
         const filepath = path.join(uploadsDir, safeFilename);
+        console.log('💾 [Saving File]', filepath);
+        
         await fs.promises.writeFile(filepath, req.file.buffer);
+        console.log('✅ [File Saved] Successfully');
         
         fileUrl = `/uploads/materials/${safeFilename}`;
         fileType = req.file.mimetype;
         fileName = req.file.originalname;
         fileSize = req.file.size;
         isVideo = fileType.startsWith('video/');
+        
+        console.log('📝 [File Info]', { fileUrl, fileType, fileName, fileSize, isVideo });
       }
 
       // Parse content from textarea if provided
@@ -1039,11 +1079,11 @@ router.post(
       let assignedStudents = [];
       const assignType = assignmentType || 'individual';
 
+      console.log('👥 [Assignment] Type:', assignType);
+
       if (assignType === 'individual') {
-        // Individual students
         assignedStudents = Array.isArray(studentIds) ? studentIds : (studentIds ? [studentIds] : []);
       } else if (assignType === 'grade') {
-        // All students in this grade
         const gradeStudents = await User.find({
           parentUserId: req.user._id,
           role: "student",
@@ -1051,14 +1091,16 @@ router.post(
         }).select("_id").lean();
         assignedStudents = gradeStudents.map(s => s._id);
       } else if (assignType === 'all') {
-        // All teacher's students
         const allStudents = await User.find({
           parentUserId: req.user._id,
           role: "student"
         }).select("_id").lean();
         assignedStudents = allStudents.map(s => s._id);
       }
+      
+      console.log('👥 [Students] Assigned count:', assignedStudents.length);
 
+      console.log('💾 [Database] Creating material record...');
       const material = await LearningMaterial.create({
         teacherId: req.user._id,
         title,
@@ -1077,19 +1119,26 @@ router.post(
         status: isVideo ? "processing" : "active",
         allowDownload: allowDownload === 'true' || allowDownload === true
       });
+      console.log('✅ [Database] Material created:', material._id);
 
       // ✅ QUEUE VIDEO PROCESSING (if video)
- 
       if (isVideo && fileUrl) {
-        const { queueVideoProcessing } = await import("../services/videoQueue.js");
-        const path = (await import("path")).default;
-        const fullPath = path.join(process.cwd(), "public", fileUrl.replace(/^\//, ''));
-        
-        await queueVideoProcessing(material._id, fullPath);
-        
-        console.log(`[Video Upload] Queued for processing: ${material._id}`);
+        console.log('🎥 [Video] Queuing for processing...');
+        try {
+          const { queueVideoProcessing } = await import("../services/videoQueue.js");
+          const path = (await import("path")).default;
+          const fullPath = path.join(process.cwd(), "public", fileUrl.replace(/^\//, ''));
+          
+          console.log('🎥 [Video] Full path:', fullPath);
+          await queueVideoProcessing(material._id, fullPath);
+          console.log('✅ [Video] Queued successfully');
+        } catch (queueErr) {
+          console.error('❌ [Video Queue Error]', queueErr);
+          // Don't fail the upload, just log the error
+        }
       }
 
+      console.log('✅ [Success] Material upload complete');
       return res.json({ 
         success: true, 
         materialId: material._id,
@@ -1098,7 +1147,8 @@ router.post(
       });
 
     } catch (error) {
-      console.error("[Upload Material Error]", error);
+      console.error('❌ [Upload Material Error]', error);
+      console.error('Stack:', error.stack);
       return res.status(500).json({ error: error.message });
     }
   }
