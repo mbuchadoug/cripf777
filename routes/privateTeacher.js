@@ -174,6 +174,9 @@ router.post("/upload-material-test", (req, res) => {
   res.json({ ok: true, contentType: req.headers['content-type'] });
 });
 
+router.post("/upload-material-debug", ensureAuth, ensurePrivateTeacher, (req, res) => {
+  res.json({ ok: true, user: req.user._id, role: req.user.role });
+});
 
 
 router.get(
