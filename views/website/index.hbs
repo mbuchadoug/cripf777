@@ -1368,6 +1368,7 @@
     </footer>
 
     <!-- Mobile Menu Script -->
+   <!-- Mobile Menu & Dropdown Script -->
     <script>
   // ============================================
   // MOBILE MENU TOGGLE
@@ -1377,51 +1378,29 @@
   const lmsDropdown = document.getElementById('lmsDropdown');
   const lmsToggle = document.getElementById('lmsToggle');
 
+  if (!mobileMenuToggle || !navLinks) {
+    console.error('Mobile menu elements not found');
+  }
+
   // Toggle mobile menu
-  mobileMenuToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    mobileMenuToggle.classList.toggle('active');
-    navLinks.classList.toggle('active');
-    document.body.classList.toggle('menu-open');
-  });
-
-  // Close menu when clicking regular links (NOT the LMS toggle)
-  navLinks.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', (e) => {
-      // Don't close menu if clicking LMS toggle on mobile
-      if (link.id === 'lmsToggle' && window.innerWidth <= 768) {
-        return;
-      }
-      
-      // Close menu for other links
-      mobileMenuToggle.classList.remove('active');
-      navLinks.classList.remove('active');
-      document.body.classList.remove('menu-open');
+  if (mobileMenuToggle) {
+    mobileMenuToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mobileMenuToggle.classList.toggle('active');
+      navLinks.classList.toggle('active');
+      document.body.classList.toggle('menu-open');
+      console.log('Mobile menu toggled:', navLinks.classList.contains('active'));
     });
-  });
-
-  // Close menu when clicking backdrop (outside menu area)
-  document.addEventListener('click', (e) => {
-    if (window.innerWidth <= 768) {
-      const isClickInsideMenu = navLinks.contains(e.target);
-      const isClickOnToggle = mobileMenuToggle.contains(e.target);
-      
-      if (!isClickInsideMenu && !isClickOnToggle && navLinks.classList.contains('active')) {
-        mobileMenuToggle.classList.remove('active');
-        navLinks.classList.remove('active');
-        document.body.classList.remove('menu-open');
-        lmsDropdown?.classList.remove('open');
-        lmsToggle?.setAttribute('aria-expanded', 'false');
-      }
-    }
-  });
+  }
 
   // ============================================
   // LMS DROPDOWN TOGGLE (MOBILE ONLY)
   // ============================================
   if (lmsToggle && lmsDropdown) {
     lmsToggle.addEventListener('click', (e) => {
-      // Only prevent default link behavior on mobile
+      console.log('LMS toggle clicked, window width:', window.innerWidth);
+      
+      // Only prevent default and toggle dropdown on mobile
       if (window.innerWidth <= 768) {
         e.preventDefault();
         e.stopPropagation();
@@ -1429,8 +1408,28 @@
         lmsDropdown.classList.toggle('open');
         const expanded = lmsDropdown.classList.contains('open');
         lmsToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        
+        console.log('LMS dropdown toggled:', expanded);
       }
       // On desktop, let the link work normally (goes to /lms)
+    });
+  }
+
+  // ============================================
+  // CLOSE MENU WHEN CLICKING REGULAR LINKS
+  // ============================================
+  if (navLinks) {
+    const allLinks = navLinks.querySelectorAll('a:not(#lmsToggle)');
+    allLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        // Only close menu for non-dropdown links
+        if (!link.closest('.dropdown-menu')) {
+          mobileMenuToggle.classList.remove('active');
+          navLinks.classList.remove('active');
+          document.body.classList.remove('menu-open');
+          console.log('Regular link clicked, closing menu');
+        }
+      });
     });
   }
 
@@ -1440,7 +1439,8 @@
   if (lmsDropdown) {
     const dropdownLinks = lmsDropdown.querySelectorAll('.dropdown-link');
     dropdownLinks.forEach(link => {
-      link.addEventListener('click', () => {
+      link.addEventListener('click', (e) => {
+        console.log('Dropdown link clicked');
         if (window.innerWidth <= 768) {
           // Close both dropdown and menu
           lmsDropdown.classList.remove('open');
@@ -1454,63 +1454,48 @@
   }
 
   // ============================================
+  // CLOSE MENU WHEN CLICKING BACKDROP
+  // ============================================
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+      const isClickInsideMenu = navLinks?.contains(e.target);
+      const isClickOnToggle = mobileMenuToggle?.contains(e.target);
+      
+      if (!isClickInsideMenu && !isClickOnToggle && navLinks?.classList.contains('active')) {
+        mobileMenuToggle.classList.remove('active');
+        navLinks.classList.remove('active');
+        document.body.classList.remove('menu-open');
+        lmsDropdown?.classList.remove('open');
+        lmsToggle?.setAttribute('aria-expanded', 'false');
+        console.log('Clicked outside, closing menu');
+      }
+    }
+  });
+
+  // ============================================
   // RESET ON WINDOW RESIZE
   // ============================================
   window.addEventListener('resize', () => {
     if (window.innerWidth > 768) {
       // Reset mobile menu state on desktop
-      mobileMenuToggle.classList.remove('active');
-      navLinks.classList.remove('active');
+      mobileMenuToggle?.classList.remove('active');
+      navLinks?.classList.remove('active');
       document.body.classList.remove('menu-open');
       lmsDropdown?.classList.remove('open');
       lmsToggle?.setAttribute('aria-expanded', 'false');
     }
   });
-</script>
 
-    <script>
-  const mobileMenuToggle = document.getElementById('mobileMenuToggle');
-  const navLinks = document.getElementById('navLinks');
-
-  mobileMenuToggle.addEventListener('click', () => {
-    mobileMenuToggle.classList.toggle('active');
-    navLinks.classList.toggle('active');
+  // ============================================
+  // DEBUG: Log initial state
+  // ============================================
+  console.log('Menu script loaded:', {
+    mobileMenuToggle: !!mobileMenuToggle,
+    navLinks: !!navLinks,
+    lmsDropdown: !!lmsDropdown,
+    lmsToggle: !!lmsToggle
   });
-
-  // Close menu when clicking a link (but NOT the LMS toggle)
-  navLinks.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', (e) => {
-      if (link.id === 'lmsToggle') return; // keep menu open for dropdown toggle
-      mobileMenuToggle.classList.remove('active');
-      navLinks.classList.remove('active');
-    });
-  });
-
-  // Close menu when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!mobileMenuToggle.contains(e.target) && !navLinks.contains(e.target)) {
-      mobileMenuToggle.classList.remove('active');
-      navLinks.classList.remove('active');
-      document.getElementById('lmsDropdown')?.classList.remove('open');
-      document.getElementById('lmsToggle')?.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  // MOBILE: LMS dropdown toggle
-  const lmsDropdown = document.getElementById('lmsDropdown');
-  const lmsToggle = document.getElementById('lmsToggle');
-
-  if (lmsToggle && lmsDropdown) {
-    lmsToggle.addEventListener('click', (e) => {
-      // only intercept on mobile widths
-      if (window.innerWidth <= 768) {
-        e.preventDefault();
-        lmsDropdown.classList.toggle('open');
-        const expanded = lmsDropdown.classList.contains('open');
-        lmsToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      }
-    });
-  }
 </script>
 </body>
 </html>
+
