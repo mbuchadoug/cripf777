@@ -732,7 +732,8 @@ router.get(
         user: parent,
         child,
         knowledgeMaps,
-        subjects
+        subjects,
+        backUrl: `/parent/children/${child._id}/quizzes`
       });
 
     } catch (error) {

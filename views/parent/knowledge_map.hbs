@@ -256,7 +256,9 @@
 
 <body>
   <div class="container">
-    <a href="/parent/children/{{child._id}}/quizzes" class="back-link">← Back to Quizzes</a>
+    <a href="{{#if backUrl}}{{backUrl}}{{else}}/parent/children/{{child._id}}/quizzes{{/if}}" class="back-link">
+  ← Back
+</a>
 
     <div class="header">
       <h1>📊 {{child.firstName}}'s Knowledge Map</h1>

@@ -545,10 +545,10 @@
 
     <div style="text-align:center; margin:30px 0;">
 
-      <a href="/student/knowledge-map" class="btn" style="font-size:16px; padding:14px 28px;">
-
-        📊 View Full Knowledge Map
-      </a>
+     <a href="{{#if isStudentView}}/student/knowledge-map{{else}}/parent/children/{{child._id}}/knowledge-map{{/if}}"
+   class="btn" style="font-size:16px; padding:14px 28px;">
+  📊 View Full Knowledge Map
+</a>
     </div>
 
     <div class="empty" style="margin-top:20px;">
