@@ -170,6 +170,12 @@ async function getCampaignQuizPayload(campaign) {
  * GET /teacher/dashboard
  * Main dashboard for private teachers
  */
+router.post("/upload-material-test", (req, res) => {
+  res.json({ ok: true, contentType: req.headers['content-type'] });
+});
+
+
+
 router.get(
   "/dashboard",
   ensureAuth,
