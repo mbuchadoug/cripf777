@@ -16,8 +16,12 @@ import { buildAttemptReview } from "../services/attemptReview.js";
 
 
 
-const upload = multer({ storage: multer.memoryStorage() });
-
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 600 * 1024 * 1024 // 600MB max (covers all video uploads)
+  }
+});
 
 
 
@@ -956,7 +960,21 @@ router.post(
   "/upload-material",
   ensureAuth,
   ensurePrivateTeacher,
-  upload.single("materialFile"),
+  (req, res, next) => {
+    upload.single("materialFile")(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ 
+            error: `File too large. Maximum size is 600MB.` 
+          });
+        }
+        return res.status(400).json({ error: err.message });
+      } else if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      next();
+    });
+  },
   async (req, res) => {
     try {
       const { title, subject, grade, description, studentIds, allowDownload, assignmentType } = req.body;

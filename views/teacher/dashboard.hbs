@@ -473,23 +473,23 @@
         </button>
       </div>
 
-      <div class="nav-section">
-        <div class="nav-section-label">Teaching</div>
-        <button class="nav-item" data-tab="students" onclick="showTab('students', this)">
-          <span class="icon">👥</span> Students
-          <span class="badge">{{students.length}}</span>
-        </button>
-        <button class="nav-item" data-tab="quizzes" onclick="showTab('quizzes', this)">
-          <span class="icon">📝</span> My Quizzes
-          <span class="badge">{{aiQuizzes.length}}</span>
-        </button>
-        <button class="nav-item" data-tab="library" onclick="showTab('library', this)">
-          <span class="icon">📖</span> Quiz Library
-          <span class="badge">{{systemQuizzes.length}}</span>
-        </button>
-        <button class="nav-item" data-tab="materials" onclick="showTab('materials', this)">
-          <span class="icon">📚</span> Materials
-        </button>
+    <div class="nav-section">
+  <div class="nav-section-label">Teaching</div>
+  <button class="nav-item" data-tab="students" onclick="showTab('students', this)">
+    <span class="icon">👥</span> Students
+    <span class="badge">{{students.length}}</span>
+  </button>
+  <button class="nav-item" data-tab="quizzes" onclick="showTab('quizzes', this)">
+    <span class="icon">📝</span> My Quizzes
+    <span class="badge">{{aiQuizzes.length}}</span>
+  </button>
+  <button class="nav-item" data-tab="library" onclick="showTab('library', this)">
+    <span class="icon">📖</span> Quiz Library
+    <span class="badge">{{systemQuizzes.length}}</span>
+  </button>
+  <a class="nav-item" href="/teacher/materials">
+    <span class="icon">📚</span> Materials
+  </a>
         <button class="nav-item" data-tab="assignments" onclick="showTab('assignments', this)">
           <span class="icon">📋</span> Assign Work
         </button>
@@ -600,18 +600,19 @@
       <!-- Quick Actions -->
       <div class="section-card">
         <div class="section-header"><h3>Quick Actions</h3></div>
-        <div class="section-body" style="display:flex;gap:10px;flex-wrap:wrap;">
-          {{#if canAddStudent}}
-            <a href="/parent/children/new" class="btn btn-primary">+ Add Student</a>
-          {{/if}}
-          {{#if canGenerateAI}}
-            <button class="btn btn-primary" onclick="openModal('generateModal')">⚡ Generate Auto Quiz</button>
-          {{/if}}
-          <button class="btn btn-outline" onclick="openModal('uploadModal')">📤 Upload Quiz</button>
-          <button class="btn btn-outline" onclick="showTab('library')">📖 Browse Library</button>
-          <button class="btn btn-outline" onclick="openModal('materialModal')">📚 Upload Material</button>
-          <button class="btn btn-outline" onclick="showTab('reports')">📈 Generate Report</button>
-        </div>
+       <div class="section-body" style="display:flex;gap:10px;flex-wrap:wrap;">
+  {{#if canAddStudent}}
+    <a href="/parent/children/new" class="btn btn-primary">+ Add Student</a>
+  {{/if}}
+  {{#if canGenerateAI}}
+    <button class="btn btn-primary" onclick="openModal('generateModal')">⚡ Generate Auto Quiz</button>
+  {{/if}}
+  <button class="btn btn-outline" onclick="openModal('uploadModal')">📤 Upload Quiz</button>
+  <button class="btn btn-outline" onclick="showTab('library')">📖 Browse Library</button>
+  <a href="/teacher/materials" class="btn btn-outline">📚 View Materials</a>
+  <button class="btn btn-outline" onclick="openModal('materialModal')">📤 Upload Material</button>
+  <button class="btn btn-outline" onclick="showTab('reports')">📈 Generate Report</button>
+</div>
       </div>
 
       <!-- Student Performance -->
@@ -980,23 +981,7 @@ html += '</div>';
     <!-- ============================== -->
     <!-- TAB: MATERIALS                 -->
     <!-- ============================== -->
-    <div id="tab-materials" class="tab-panel">
-      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2>Learning Materials</h2>
-          <p>Upload and share resources with your students</p>
-        </div>
-        <button class="btn btn-primary" onclick="openModal('materialModal')">📚 Upload Material</button>
-      </div>
-      <div class="section-card">
-        <div class="empty-state">
-          <div class="empty-icon">📚</div>
-          <p>Upload study materials, worksheets, and resources for your students.</p>
-          <button class="btn btn-primary" style="margin-top:16px;" onclick="openModal('materialModal')">Upload First Material</button>
-        </div>
-      </div>
-    </div>
-
+   
     <!-- ============================== -->
     <!-- TAB: ASSIGNMENTS               -->
     <!-- ============================== -->

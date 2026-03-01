@@ -161,6 +161,11 @@ const hbsHelpers = {
   gte: (a, b) => a >= b,
   and: (a, b) => a && b,
   or: (a, b) => a || b,
+  // ✅ ADD THIS NEW HELPER:
+  includes: (str, substr) => {
+    if (!str || !substr) return false;
+    return String(str).includes(String(substr));
+  },
   not: (v) => !v,
   isNull: (v) => v === null || v === undefined,
   isNumber: (v) => typeof v === "number",
