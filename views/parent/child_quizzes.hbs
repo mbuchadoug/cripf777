@@ -849,8 +849,11 @@
     <button class="tab" data-tab="knowledge">
       🗺️ Knowledge Map
     </button>
-    <button class="tab" data-tab="certificates">
+   <button class="tab" data-tab="certificates">
       🏆 Certificates
+    </button>
+    <button class="tab" data-tab="materials">
+      📚 Materials
     </button>
   </div>
 
@@ -1126,6 +1129,29 @@
       </a>
     </div>
   </div>
+<!-- ================= MATERIALS ================= -->
+  <div id="materials" class="tab-content">
+    {{#if isStudentView}}
+      <div class="knowledge-map-cta">
+        <div class="icon">📚</div>
+        <h3>Learning Materials</h3>
+        <p>Study resources and videos shared by your teacher</p>
+        <a href="/student/materials" class="quiz-btn primary" style="max-width:300px;margin:0 auto;">
+          📂 View All Materials
+        </a>
+      </div>
+    {{else}}
+      <div class="knowledge-map-cta">
+        <div class="icon">📚</div>
+        <h3>Learning Materials</h3>
+        <p>Materials assigned to {{child.firstName}} by their teacher</p>
+        <a href="/teacher/materials" class="quiz-btn primary" style="max-width:300px;margin:0 auto;">
+          📂 View Materials
+        </a>
+      </div>
+    {{/if}}
+  </div>
+
 
   <!-- ================= CERTIFICATES ================= -->
   <div id="certificates" class="tab-content">
