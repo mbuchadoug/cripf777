@@ -5,13 +5,20 @@ import { ensureAuth } from "../middleware/authGuard.js";
 const router = Router();
 
 // LMS home
-router.get("/", (req, res) => {
+/*router.get("/", (req, res) => {
   try {
     return res.render("lms/index", { user: req.user || null, courses: [] });
   } catch (err) {
     console.error("[lms/] render error:", err && (err.stack || err));
     return res.status(500).send("LMS render error");
   }
+});*/
+router.get("/", (req, res) => {
+  res.render("website/index", {
+    user: req.user || null,
+    siteUrl: process.env.SITE_URL,
+    canonicalPath: req.path
+  });
 });
 
 // QUIZ UI (demo OR org, same page)

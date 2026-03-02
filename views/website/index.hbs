@@ -400,6 +400,46 @@
                 box-sizing: border-box; /* ✅ CRITICAL */
             }
 
+            /* ✅ Logged-in user pill */
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--medium-gray);
+  background: var(--light-gray);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  max-width: 320px;
+}
+
+.user-pill .user-email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-pill .user-photo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--medium-gray);
+}
+
+.nav-signout {
+  background: transparent;
+  border: 1px solid var(--medium-gray);
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.nav-signout:hover {
+  background: var(--light-gray);
+}
+
             /* Overlay backdrop when menu is open */
             body::after {
                 content: '';
@@ -1220,6 +1260,21 @@
     font-size: 0.85rem;
   }
 }
+
+@media (max-width: 768px) {
+  .user-pill {
+    width: 100%;
+    max-width: 100%;
+    margin: 0.75rem 0;
+  }
+
+  .nav-signout {
+    width: 100%;
+    text-align: center;
+    margin-top: 0.5rem;
+    display: block;
+  }
+}
     </style>
 </head>
 <body>
@@ -1239,7 +1294,29 @@
             </button>
             
             <ul class="nav-links" id="navLinks">
-                <li><a href="/">Home</a></li>
+              <li><a href="/auth/school">Student Portal</a></li>
+
+{{#if user}}
+  <li>
+    <div class="user-pill" title="{{user.email}}">
+      {{#if user.photo}}
+        <img class="user-photo" src="{{user.photo}}" alt="Profile" />
+      {{/if}}
+      <span class="user-email">
+        {{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}
+      </span>
+    </div>
+  </li>
+
+  <li>
+    <a href="/auth/logout" class="nav-signout">Sign out</a>
+  </li>
+{{else}}
+  <!-- Not logged in -->
+  <li>
+    <a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a>
+  </li>
+{{/if}}
                 <li><a href="/about">Framework</a></li>
                 <li><a href="/scoi">Audits</a></li>
 
