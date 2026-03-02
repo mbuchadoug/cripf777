@@ -32,6 +32,7 @@ export default function configurePassport() {
         try {
           const isParentSignup = req.session?.signupSource === "parent";
           const isTeacherSignup = req.session?.signupSource === "private_teacher";  // ✅ ADD
+          const isArenaSignup = req.session?.signupSource === "arena";             // ✅ ADD
 
           // Extract common fields
           const googleId = profile.id;
@@ -75,7 +76,8 @@ if (isParentSignup) {
   updateDoc.$setOnInsert.role = "parent";
 } else if (isTeacherSignup) {
   updateDoc.$set.consumerEnabled = true;
-  updateDoc.$set.accountType = "parent";
+  //updateDoc.$set.accountType = "parent";
+  updateDoc.$set.accountType = "private_teacher";
   updateDoc.$setOnInsert.role = "private_teacher";
 } else if (isArenaSignup) {
   // ✅ Arena: allow login without forcing parent/teacher dashboards
