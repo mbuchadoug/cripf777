@@ -101,27 +101,53 @@ async function processSuccessfulPayment(paymentId) {
   }
 
   let updateFields;
-  if (planKey.startsWith("teacher_")) {
-    updateFields = {
-      teacherSubscriptionStatus: "paid",
-      teacherSubscriptionPlan: planKey === "teacher_starter" ? "starter" : "professional",
-      teacherSubscriptionExpiresAt: expiresAt,
-      teacherPaidAt: now,
-      aiQuizCredits: planConfig.aiQuizCredits,
-      aiQuizCreditsResetAt: now,
-      maxChildren: planConfig.maxChildren,
-      consumerEnabled: true
-    };
-  } else {
-    updateFields = {
-      subscriptionStatus: "paid",
-      subscriptionPlan: planKey,
-      maxChildren: planConfig.maxChildren,
-      subscriptionExpiresAt: expiresAt,
-      paidAt: now,
-      consumerEnabled: true
-    };
-  }
+if (planKey.startsWith("teacher_")) {
+  const currentTeacherPlanKey = parent.teacherSubscriptionPlan
+    ? `teacher_${parent.teacherSubscriptionPlan}`
+    : null;
+
+  const isTeacherUpgrade =
+    currentTeacherPlanKey &&
+    currentTeacherPlanKey !== planKey &&
+    PLANS[currentTeacherPlanKey] &&
+    planConfig.amount > PLANS[currentTeacherPlanKey].amount;
+
+  const newTeacherMaxChildren = isTeacherUpgrade
+    ? (parent.maxChildren || 0) + planConfig.maxChildren
+    : planConfig.maxChildren;
+
+  updateFields = {
+    teacherSubscriptionStatus: "paid",
+    teacherSubscriptionPlan: planKey === "teacher_starter" ? "starter" : "professional",
+    teacherSubscriptionExpiresAt: expiresAt,
+    teacherPaidAt: now,
+    aiQuizCredits: planConfig.aiQuizCredits,
+    aiQuizCreditsResetAt: now,
+    maxChildren: newTeacherMaxChildren,    // ← FIXED
+    consumerEnabled: true
+  };
+} else {
+  // On upgrade, add the new plan's slots on top of what the user currently has.
+  // On a fresh subscription (no prior plan), just use the plan's base slots.
+  const isUpgrade =
+    parent.subscriptionPlan &&
+    parent.subscriptionPlan !== planKey &&
+    PLANS[parent.subscriptionPlan] &&
+    planConfig.amount > PLANS[parent.subscriptionPlan].amount;
+
+  const newMaxChildren = isUpgrade
+    ? (parent.maxChildren || 0) + planConfig.maxChildren
+    : planConfig.maxChildren;
+
+  updateFields = {
+    subscriptionStatus: "paid",
+    subscriptionPlan: planKey,
+    maxChildren: newMaxChildren,           // ← FIXED
+    subscriptionExpiresAt: expiresAt,
+    paidAt: now,
+    consumerEnabled: true
+  };
+}
 
   const updatedUser = await User.findByIdAndUpdate(payment.userId, updateFields, { new: true });
 
