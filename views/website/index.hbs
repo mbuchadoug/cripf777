@@ -243,6 +243,64 @@
             transform: rotate(-45deg) translate(7px, -7px);
         }
 
+
+
+
+
+
+
+
+
+/* ✅ Logged-in user pill (DESKTOP + MOBILE base) */
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--medium-gray);
+  background: var(--light-gray);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  max-width: 320px;
+  line-height: 1;
+}
+
+.user-pill .user-email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-pill .user-photo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--medium-gray);
+  flex: 0 0 auto;
+}
+
+.nav-signout {
+  background: transparent;
+  border: 1px solid var(--medium-gray);
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-signout:hover {
+  background: var(--light-gray);
+}
+
+/* ✅ Right-side auth cluster */
+.nav-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
         /* ============================================
            MOBILE BREAKPOINT (@media 768px)
         ============================================ */
@@ -401,44 +459,6 @@
             }
 
             /* ✅ Logged-in user pill */
-.user-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--medium-gray);
-  background: var(--light-gray);
-  border-radius: 999px;
-  font-size: 0.9rem;
-  max-width: 320px;
-}
-
-.user-pill .user-email {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-pill .user-photo {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--medium-gray);
-}
-
-.nav-signout {
-  background: transparent;
-  border: 1px solid var(--medium-gray);
-  padding: 0.55rem 0.9rem;
-  border-radius: 6px;
-  font-weight: 600;
-}
-
-.nav-signout:hover {
-  background: var(--light-gray);
-}
 
             /* Overlay backdrop when menu is open */
             body::after {
@@ -1293,68 +1313,62 @@
                 <span></span>
             </button>
             
-            <ul class="nav-links" id="navLinks">
-              <li><a href="/auth/school">Student Portal</a></li>
+          <ul class="nav-links" id="navLinks">
+  <li><a href="/">Home</a></li>
+  <li><a href="/about">Framework</a></li>
+  <li><a href="/scoi">Audits</a></li>
 
-{{#if user}}
-  <li>
-    <div class="user-pill" title="{{user.email}}">
-      {{#if user.photo}}
-        <img class="user-photo" src="{{user.photo}}" alt="Profile" />
-      {{/if}}
-      <span class="user-email">
-        {{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}
-      </span>
+  <!-- LMS DESKTOP: Dropdown -->
+  <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+    <a href="/lms" class="dropdown-toggle">
+      LMS <span class="caret">▾</span>
+    </a>
+    <div class="dropdown-menu">
+      <a class="dropdown-link" href="/auth/parent">
+        <div class="dd-title">Parents & Guardians</div>
+        <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
+      </a>
+      <a class="dropdown-link" href="/auth/teacher">
+        <div class="dd-title">Private Teachers</div>
+        <div class="dd-sub">Up to 15/40 learners</div>
+      </a>
+      <a class="dropdown-link" href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">
+        <div class="dd-title">Professionals</div>
+        <div class="dd-sub">8 modules • audits • certification</div>
+      </a>
     </div>
   </li>
 
-  <li>
-    <a href="/auth/logout" class="nav-signout">Sign out</a>
+  <!-- LMS MOBILE: Expanded Links -->
+  <li class="mobile-only mobile-lms-section">
+    <div class="mobile-section-header">LMS Options</div>
+    <ul class="mobile-lms-links">
+      <li><a href="/auth/parent">👨‍👩‍👧 Parents & Guardians</a></li>
+      <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+      <li><a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">🏛️ Professionals</a></li>
+    </ul>
   </li>
-{{else}}
-  <!-- Not logged in -->
-  <li>
-    <a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a>
+
+  <li><a href="/auth/school">Student Portal</a></li>
+
+  <!-- ✅ AUTH / CTA area (single place, no duplicates) -->
+  <li class="nav-auth">
+    {{#if user}}
+      <div class="user-pill" title="{{user.email}}">
+        {{#if user.photo}}
+          <img class="user-photo" src="{{user.photo}}" alt="Profile" />
+        {{/if}}
+        <span class="user-email">
+          {{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}
+        </span>
+      </div>
+
+      <a href="/auth/logout" class="nav-signout">Sign out</a>
+    {{else}}
+      <a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a>
+    {{/if}}
   </li>
-{{/if}}
-                <li><a href="/about">Framework</a></li>
-                <li><a href="/scoi">Audits</a></li>
-
-                <!-- LMS DESKTOP: Dropdown -->
-                <li class="nav-item dropdown desktop-only" id="lmsDropdown">
-                    <a href="/lms" class="dropdown-toggle">
-                        LMS <span class="caret">▾</span>
-                    </a>
-                    <div class="dropdown-menu">
-                        <a class="dropdown-link" href="/auth/parent">
-                            <div class="dd-title">Parents & Guardians</div>
-                            <div class="dd-sub">Manage kids • Grades 1–7 + High School</div>
-                        </a>
-                        <a class="dropdown-link" href="/auth/teacher">
-                            <div class="dd-title">Private Teachers</div>
-                            <div class="dd-sub">Up to 15/40 learners</div>
-                        </a>
-                   <a class="dropdown-link" href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">
-  <div class="dd-title">Professionals</div>
-  <div class="dd-sub">8 modules • audits • certification</div>
-</a>
-                    </div>
-                </li>
-
-                <!-- LMS MOBILE: Expanded Links -->
-                <li class="mobile-only mobile-lms-section">
-                    <div class="mobile-section-header">LMS Options</div>
-                    <ul class="mobile-lms-links">
-                        <li><a href="/auth/parent">👨‍👩‍👧 Parents & Guardians</a></li>
-                        <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
-                       <li><a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">🏛️ Professionals</a></li>
-                    </ul>
-                </li>
-
-                <!--<li><a href="/auth/arena">Arena</a></li>-->
-                <li><a href="/auth/school">Student Portal</a></li>
-                <li><a href="mailto:info@cripfcnt.com" class="nav-cta" style="color:#FFFFFF;">Get Started</a></li>
-            </ul>
+</ul>
         </div>
     </nav>
 
