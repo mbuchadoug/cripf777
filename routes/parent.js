@@ -26,8 +26,8 @@ const HOME_ORG_SLUG = "cripfcnt-home";
 // ==============================
 const PLAN_LIMITS = {
   none:   { maxChildren: 0, label: "Free Trial" },
-  silver: { maxChildren: 2, label: "Silver" },
-  gold:   { maxChildren: 5, label: "Gold" },
+  silver: { maxChildren: 5, label: "Silver" },
+  gold:   { maxChildren: 10, label: "Gold" },
    starter: { maxChildren: 10, label: "Teacher Starter" },  // ✅ ADD
   professional: { maxChildren: 30, label: "Teacher Professional" }  // ✅ ADD
 };

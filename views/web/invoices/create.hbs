@@ -1,415 +1,446 @@
-{{!-- views/web/invoices/create.hbs --}}
-<style>
-  .pg-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
-  .pg-head h1 { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; letter-spacing:-0.5px; color:var(--white); margin-bottom:4px; }
-  .pg-head p { font-size:13px; color:var(--muted); }
-
-  .create-layout { display:grid; grid-template-columns:1fr 280px; gap:20px; align-items:start; }
-
-  /* Section cards */
-  .sec { background:var(--navy-2); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:16px; }
-  .sec:last-child { margin-bottom:0; }
-  .sec-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
-  .sec-head h3 { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--white); display:flex; align-items:center; gap:8px; }
-  .sec-head h3 svg { width:14px; height:14px; color:var(--amber); flex-shrink:0; }
-  .sec-head-action { font-size:12px; color:var(--amber); background:none; border:none; cursor:pointer; font-family:'Instrument Sans',sans-serif; font-weight:600; display:flex; align-items:center; gap:5px; transition:opacity 0.15s; }
-  .sec-head-action:hover { opacity:0.8; }
-  .sec-head-action svg { width:12px; height:12px; }
-  .sec-body { padding:18px 20px; }
-  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .full-col { grid-column:1/-1; }
-
-  /* Item rows */
-  .item-row { background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; position:relative; transition:border-color 0.15s; }
-  .item-row:hover { border-color:rgba(255,255,255,0.1); }
-  .item-row:last-child { margin-bottom:0; }
-  .item-row-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-  .item-row-num { font-family:'DM Mono',monospace; font-size:11px; font-weight:500; color:var(--amber); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.15); padding:2px 8px; border-radius:20px; }
-  .item-delete { width:26px; height:26px; border:1px solid rgba(248,81,73,0.2); border-radius:6px; background:transparent; color:#f85149; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.12s; }
-  .item-delete:hover { background:rgba(248,81,73,0.08); border-color:rgba(248,81,73,0.35); }
-  .item-delete svg { width:12px; height:12px; }
-  .item-line-total { display:flex; align-items:center; justify-content:space-between; padding-top:10px; margin-top:10px; border-top:1px solid var(--border); font-size:12px; }
-  .item-line-total span:first-child { color:var(--muted-2); }
-  .item-line-val { font-family:'DM Mono',monospace; font-weight:500; color:var(--white); }
-
-  /* Mode toggle */
-  .mode-toggle { display:flex; background:rgba(255,255,255,0.04); border-radius:8px; padding:3px; gap:3px; margin-bottom:12px; border:1px solid var(--border); }
-  .mode-btn { flex:1; padding:7px 12px; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; font-family:'Instrument Sans',sans-serif; }
-  .mode-btn.active { background:var(--amber); color:#0d1117; }
-
-  .empty-items { text-align:center; padding:32px 20px; border:2px dashed rgba(255,255,255,0.07); border-radius:10px; }
-  .empty-items svg { width:32px; height:32px; opacity:0.12; display:block; margin:0 auto 12px; }
-  .empty-items p { font-size:13px; color:var(--muted-2); margin-bottom:14px; }
-
-  /* Summary card */
-  .sum-card { background:var(--navy-2); border:1px solid var(--border); border-radius:12px; overflow:hidden; position:sticky; top:72px; }
-  .sum-head { padding:14px 18px; border-bottom:1px solid var(--border); }
-  .sum-head h3 { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--white); }
-  .sum-body { padding:16px 18px; }
-  .sum-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; font-size:13px; }
-  .sum-lbl { color:var(--muted-2); }
-  .sum-val { font-family:'DM Mono',monospace; color:var(--white); }
-  .sum-val.green { color:var(--green); }
-  .sum-val.blue { color:#58a6ff; }
-  .sum-total { border-top:1px solid var(--border); margin-top:10px; padding-top:12px; }
-  .sum-total .sum-lbl { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; color:var(--white); }
-  .sum-total .sum-val { font-size:18px; color:var(--amber); font-weight:700; }
-  .sum-actions { padding:14px 18px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; }
-  .submit-btn { width:100%; padding:13px; background:var(--amber); color:#0d1117; border:none; border-radius:9px; font-family:'Syne',sans-serif; font-size:14px; font-weight:800; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center; gap:8px; }
-  .submit-btn:hover { background:#d97706; transform:translateY(-1px); box-shadow:0 6px 20px rgba(245,158,11,0.3); }
-  .submit-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; box-shadow:none; }
-  .submit-btn svg { width:15px; height:15px; }
-  .cancel-btn { display:block; width:100%; padding:11px; background:transparent; border:1px solid var(--border); border-radius:9px; color:var(--muted); font-family:'Instrument Sans',sans-serif; font-size:13px; font-weight:500; text-align:center; text-decoration:none; transition:all 0.15s; }
-  .cancel-btn:hover { border-color:rgba(255,255,255,0.14); color:var(--white); }
-
-  /* Spinner */
-  .spin { width:15px; height:15px; border:2px solid rgba(13,17,23,0.3); border-top-color:#0d1117; border-radius:50%; animation:spin 0.6s linear infinite; }
-  @keyframes spin { to{transform:rotate(360deg)} }
-
-  @media(max-width:960px) { .create-layout{grid-template-columns:1fr;} .sum-card{position:static;} }
-  @media(max-width:600px) { .two-col{grid-template-columns:1fr;} .full-col{grid-column:1;} }
-</style>
-
-<div class="pg-head">
-  <div>
-    <h1>New {{#if (eq docType 'quote')}}Quote{{else if (eq docType 'receipt')}}Receipt{{else}}Invoice{{/if}}</h1>
-    <p>Fill in the details below to create a professional document</p>
-  </div>
-  <a href="/web/invoices" class="btn btn-outline">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-    Cancel
-  </a>
+<!-- Page Header -->
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-800 mb-2">Create Invoice</h1>
+  <p class="text-sm text-gray-600">Fill in the details below to generate a new invoice</p>
 </div>
 
-<div class="create-layout">
-  <div>
-
-    <!-- Client -->
-    <div class="sec">
-      <div class="sec-head">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Client
-        </h3>
-        <button class="sec-head-action" onclick="openAddClient()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New client
-        </button>
-      </div>
-      <div class="sec-body">
-        <label class="field-label">Select Client *</label>
-        <select id="clientSelect" class="field-input" required>
-          <option value="">Choose a client...</option>
-          {{#each clients}}
-          <option value="{{this._id}}">{{#if this.name}}{{this.name}} — {{/if}}{{this.phone}}</option>
-          {{/each}}
-        </select>
-      </div>
-    </div>
-
-    <!-- Items -->
-    <div class="sec">
-      <div class="sec-head">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          Line Items
-        </h3>
-        <button class="sec-head-action" type="button" onclick="addItem()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add item
-        </button>
-      </div>
-      <div class="sec-body">
-        <div id="itemsList"></div>
-        <div id="emptyItems" class="empty-items">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
-          <p>No items yet</p>
-          <button type="button" onclick="addItem()" class="btn btn-amber">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add first item
+<form id="invoiceForm">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    
+    <!-- Left Column: Invoice Details -->
+    <div class="lg:col-span-2 space-y-6">
+      
+      <!-- Client Selection -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-user text-blue-600 mr-2"></i>
+          Client Information
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Select Client *
+            </label>
+            <select id="clientSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+              <option value="">Choose a client...</option>
+              {{#each clients}}
+                <option value="{{this._id}}">{{#if this.name}}{{this.name}}{{else}}{{this.phone}}{{/if}}</option>
+              {{/each}}
+            </select>
+          </div>
+          
+          <!-- Quick Add Client -->
+          <button type="button" onclick="showAddClientModal()" class="sm:col-span-2 text-sm text-blue-600 hover:text-blue-700 text-left">
+            <i class="fas fa-plus-circle mr-1"></i> Add New Client
           </button>
         </div>
       </div>
-    </div>
-
-    <!-- Adjustments -->
-    <div class="sec">
-      <div class="sec-head">
-        <h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      
+      <!-- Items -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-800">
+            <i class="fas fa-list text-blue-600 mr-2"></i>
+            Invoice Items
+          </h2>
+          <button type="button" onclick="addItem()" class="text-sm text-blue-600 hover:text-blue-700">
+            <i class="fas fa-plus mr-1"></i> Add Item
+          </button>
+        </div>
+        
+        <!-- Items List -->
+        <div id="itemsList" class="space-y-4">
+          <!-- Items will be added here dynamically -->
+        </div>
+        
+        <!-- Add First Item Button -->
+        <div id="emptyState" class="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+          <i class="fas fa-shopping-cart text-4xl text-gray-300 mb-4"></i>
+          <p class="text-gray-500 mb-4">No items added yet</p>
+          <button type="button" onclick="addItem()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <i class="fas fa-plus mr-2"></i> Add First Item
+          </button>
+        </div>
+      </div>
+      
+      <!-- Discount & VAT -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-percentage text-blue-600 mr-2"></i>
           Adjustments
-        </h3>
-      </div>
-      <div class="sec-body">
-        <div class="two-col">
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="field-label">Discount %</label>
-            <input type="number" id="discountPct" class="field-input" min="0" max="100" step="0.1" value="0" oninput="calcTotals()">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Discount %</label>
+            <input 
+              type="number" 
+              id="discountPercent" 
+              min="0" 
+              max="100" 
+              step="0.1" 
+              value="0"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onchange="calculateTotals()"
+            >
           </div>
+          
           <div>
-            <label class="field-label">VAT %</label>
-            <input type="number" id="vatPct" class="field-input" min="0" max="100" step="0.1" value="0" oninput="calcTotals()">
+            <label class="block text-sm font-medium text-gray-700 mb-2">VAT %</label>
+            <input 
+              type="number" 
+              id="vatPercent" 
+              min="0" 
+              max="100" 
+              step="0.1" 
+              value="0"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onchange="calculateTotals()"
+            >
           </div>
         </div>
-        {{#if isOwner}}
-        <div style="margin-top:14px;">
-          <label class="field-label">Branch</label>
-          <select id="branchSelect" class="field-input">
-            <option value="">Default branch</option>
-            {{#each branches}}
-            <option value="{{this._id}}">{{this.name}}</option>
-            {{/each}}
-          </select>
+      </div>
+      
+    </div>
+    
+    <!-- Right Column: Preview & Summary -->
+    <div class="space-y-6">
+      
+      <!-- Invoice Summary -->
+      <div class="bg-white rounded-xl shadow-sm p-6 sticky top-20">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Summary</h2>
+        
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">Subtotal</span>
+            <span id="subtotalDisplay" class="font-medium">{{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="flex justify-between text-green-600">
+            <span>Discount</span>
+            <span id="discountDisplay">- {{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="flex justify-between text-blue-600">
+            <span>VAT</span>
+            <span id="vatDisplay">+ {{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="border-t pt-3 flex justify-between text-lg font-bold">
+            <span>Total</span>
+            <span id="totalDisplay">{{business.currency}} 0.00</span>
+          </div>
         </div>
-        {{/if}}
+        
+        <!-- Actions -->
+        <div class="mt-6 space-y-3">
+          <button 
+            type="submit" 
+            id="submitBtn"
+            class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+          >
+            <i class="fas fa-check mr-2"></i> Create Invoice
+          </button>
+          
+          <a href="/web/invoices" class="block w-full text-center py-3 border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+          </a>
+        </div>
       </div>
+      
     </div>
-
+    
   </div>
-
-  <!-- Summary sidebar -->
-  <div>
-    <div class="sum-card">
-      <div class="sum-head"><h3>Summary</h3></div>
-      <div class="sum-body">
-        <div class="sum-row"><span class="sum-lbl">Subtotal</span><span class="sum-val" id="displaySub">{{user.currency}} 0.00</span></div>
-        <div class="sum-row"><span class="sum-lbl">Discount</span><span class="sum-val green" id="displayDisc">− {{user.currency}} 0.00</span></div>
-        <div class="sum-row"><span class="sum-lbl">VAT</span><span class="sum-val blue" id="displayVat">+ {{user.currency}} 0.00</span></div>
-        <div class="sum-row sum-total"><span class="sum-lbl">Total</span><span class="sum-val" id="displayTotal">{{user.currency}} 0.00</span></div>
-      </div>
-      <div class="sum-actions">
-        <button class="submit-btn" id="submitBtn" onclick="submitInvoice()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span id="submitTxt">Create {{#if (eq docType 'quote')}}Quote{{else if (eq docType 'receipt')}}Receipt{{else}}Invoice{{/if}}</span>
-          <div class="spin" id="submitSpin" style="display:none;"></div>
-        </button>
-        <a href="/web/invoices" class="cancel-btn">Cancel</a>
-      </div>
-    </div>
-  </div>
-
-</div>
+</form>
 
 <!-- Add Client Modal -->
-<div class="modal-overlay" id="addClientModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>Add New Client</h3>
-      <button class="modal-close" onclick="closeModal('addClientModal')">✕</button>
+<div id="addClientModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-gray-800">Add New Client</h3>
+      <button onclick="hideAddClientModal()" class="text-gray-400 hover:text-gray-600">
+        <i class="fas fa-times"></i>
+      </button>
     </div>
-    <div class="modal-body">
-      <div style="margin-bottom:14px;">
-        <label class="field-label">Client Name</label>
-        <input type="text" id="newClientName" class="field-input" placeholder="e.g. Acme Corp">
-      </div>
+    
+    <form id="addClientForm" class="space-y-4">
       <div>
-        <label class="field-label">Phone Number</label>
-        <input type="tel" id="newClientPhone" class="field-input" placeholder="077 123 4567">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Client Name</label>
+        <input type="text" id="newClientName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
       </div>
-      <div id="addClientErr" class="alert alert-error" style="display:none;margin-top:12px;"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('addClientModal')">Cancel</button>
-      <button class="btn btn-amber" onclick="submitAddClient()" id="addClientBtn">Add Client</button>
-    </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+        <input type="tel" id="newClientPhone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+      </div>
+      
+      <div class="flex space-x-3">
+        <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+          Add Client
+        </button>
+        <button type="button" onclick="hideAddClientModal()" class="flex-1 border border-gray-300 py-2 rounded-lg hover:bg-gray-50">
+          Cancel
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
 <script>
-  const _products = {{{json products}}};
-  const _currency = '{{user.currency}}';
-  const _docType  = '{{docType}}' || 'invoice';
-  let _itemCount  = 0;
-
+  const products = {{{json products}}};
+  const currency = '{{business.currency}}';
+  let itemCounter = 0;
+  
+  // Add item row
   function addItem() {
-    _itemCount++;
-    document.getElementById('emptyItems').style.display = 'none';
-
-    const prods = _products.map(p =>
-      `<option value="${p._id}" data-price="${p.unitPrice}">${p.name} (${_currency} ${Number(p.unitPrice).toFixed(2)})</option>`
-    ).join('');
-
-    const html = `
-    <div class="item-row" id="item-${_itemCount}">
-      <div class="item-row-head">
-        <span class="item-row-num">Item ${_itemCount}</span>
-        <button type="button" class="item-delete" onclick="removeItem(${_itemCount})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        </button>
-      </div>
-      <div class="mode-toggle">
-        <button type="button" class="mode-btn" id="mb-cat-${_itemCount}" data-mode="catalogue" onclick="setMode(${_itemCount},'catalogue')">From Catalogue</button>
-        <button type="button" class="mode-btn" id="mb-cust-${_itemCount}" data-mode="custom" onclick="setMode(${_itemCount},'custom')">Custom Item</button>
-      </div>
-      <div id="ip-cat-${_itemCount}" style="display:none;margin-bottom:10px;">
-        <label class="field-label">Product</label>
-        <select class="field-input item-prod" onchange="pickProduct(${_itemCount},this)">
-          <option value="">Choose product...</option>
-          ${prods}
-        </select>
-      </div>
-      <div id="ip-cust-${_itemCount}" style="display:none;margin-bottom:10px;">
-        <label class="field-label">Description</label>
-        <input type="text" class="field-input item-desc" placeholder="Item description">
-      </div>
-      <div class="two-col">
-        <div>
-          <label class="field-label">Quantity</label>
-          <input type="number" class="field-input item-qty" min="1" value="1" oninput="calcTotals()">
+    itemCounter++;
+    document.getElementById('emptyState').style.display = 'none';
+    
+    const itemHtml = `
+      <div class="item-row border border-gray-200 rounded-lg p-4" id="item-${itemCounter}">
+        <div class="flex items-start justify-between mb-3">
+          <h4 class="font-medium text-gray-800">Item ${itemCounter}</h4>
+          <button type="button" onclick="removeItem(${itemCounter})" class="text-red-600 hover:text-red-700">
+            <i class="fas fa-trash"></i>
+          </button>
         </div>
-        <div>
-          <label class="field-label">Unit Price</label>
-          <input type="number" class="field-input item-price" min="0" step="0.01" value="0" oninput="calcTotals()">
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Product/Custom Toggle -->
+          <div class="sm:col-span-2">
+            <div class="flex space-x-2 mb-2">
+              <button type="button" onclick="setItemMode(${itemCounter}, 'product')" class="item-mode-btn-${itemCounter} flex-1 py-2 text-sm border rounded-lg hover:bg-gray-50" data-mode="product">
+                From Catalogue
+              </button>
+              <button type="button" onclick="setItemMode(${itemCounter}, 'custom')" class="item-mode-btn-${itemCounter} flex-1 py-2 text-sm border rounded-lg hover:bg-gray-50" data-mode="custom">
+                Custom Item
+              </button>
+            </div>
+          </div>
+          
+          <!-- Product Select (hidden by default) -->
+          <div class="sm:col-span-2 item-product-${itemCounter} hidden">
+            <select class="item-product-select w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" onchange="selectProduct(${itemCounter}, this.value)">
+              <option value="">Choose product...</option>
+              ${products.map(p => `<option value="${p._id}" data-price="${p.unitPrice}">${p.name} (${currency} ${p.unitPrice})</option>`).join('')}
+            </select>
+          </div>
+          
+          <!-- Custom Item Input (hidden by default) -->
+          <div class="sm:col-span-2 item-custom-${itemCounter} hidden">
+            <input type="text" class="item-description w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Item description">
+          </div>
+          
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Quantity</label>
+            <input type="number" class="item-qty w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" min="1" value="1" onchange="calculateTotals()">
+          </div>
+          
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Unit Price</label>
+            <input type="number" class="item-price w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" min="0" step="0.01" value="0" onchange="calculateTotals()">
+          </div>
+          
+          <div class="sm:col-span-2">
+            <div class="flex justify-between items-center pt-2 border-t">
+              <span class="text-xs text-gray-600">Line Total</span>
+              <span class="item-total font-semibold">${currency} 0.00</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="item-line-total">
-        <span>Line total</span>
-        <span class="item-line-val" id="lt-${_itemCount}">${_currency} 0.00</span>
-      </div>
-    </div>`;
-
-    document.getElementById('itemsList').insertAdjacentHTML('beforeend', html);
-    setMode(_itemCount, 'custom');
+    `;
+    
+    document.getElementById('itemsList').insertAdjacentHTML('beforeend', itemHtml);
   }
-
-  function setMode(id, mode) {
-    const catBtn  = document.getElementById(`mb-cat-${id}`);
-    const custBtn = document.getElementById(`mb-cust-${id}`);
-    const catDiv  = document.getElementById(`ip-cat-${id}`);
-    const custDiv = document.getElementById(`ip-cust-${id}`);
-    if (mode === 'catalogue') {
-      catBtn.classList.add('active'); custBtn.classList.remove('active');
-      catDiv.style.display = 'block'; custDiv.style.display = 'none';
-    } else {
-      custBtn.classList.add('active'); catBtn.classList.remove('active');
-      custDiv.style.display = 'block'; catDiv.style.display = 'none';
-    }
-  }
-
-  function pickProduct(id, sel) {
-    const opt = sel.options[sel.selectedIndex];
-    const row = document.getElementById(`item-${id}`);
-    if (opt.dataset.price) {
-      row.querySelector('.item-price').value = parseFloat(opt.dataset.price).toFixed(2);
-      calcTotals();
-    }
-  }
-
-  function removeItem(id) {
-    document.getElementById(`item-${id}`).remove();
-    if (!document.querySelectorAll('.item-row').length)
-      document.getElementById('emptyItems').style.display = 'block';
-    calcTotals();
-  }
-
-  function calcTotals() {
-    let sub = 0;
-    document.querySelectorAll('.item-row').forEach(row => {
-      const qty   = parseFloat(row.querySelector('.item-qty')?.value)   || 0;
-      const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
-      const lt    = qty * price;
-      const id    = row.id.split('-')[1];
-      const ltEl  = document.getElementById(`lt-${id}`);
-      if (ltEl) ltEl.textContent = `${_currency} ${lt.toFixed(2)}`;
-      sub += lt;
+  
+  // Set item mode (product or custom)
+  function setItemMode(itemId, mode) {
+    const productDiv = document.querySelector(`.item-product-${itemId}`);
+    const customDiv = document.querySelector(`.item-custom-${itemId}`);
+    const buttons = document.querySelectorAll(`.item-mode-btn-${itemId}`);
+    
+    buttons.forEach(btn => {
+      if (btn.dataset.mode === mode) {
+        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+      }
     });
-    const disc  = sub   * ((parseFloat(document.getElementById('discountPct').value) || 0) / 100);
-    const vat   = (sub - disc) * ((parseFloat(document.getElementById('vatPct').value) || 0) / 100);
-    const total = sub - disc + vat;
-    document.getElementById('displaySub').textContent   = `${_currency} ${sub.toFixed(2)}`;
-    document.getElementById('displayDisc').textContent  = `− ${_currency} ${disc.toFixed(2)}`;
-    document.getElementById('displayVat').textContent   = `+ ${_currency} ${vat.toFixed(2)}`;
-    document.getElementById('displayTotal').textContent = `${_currency} ${total.toFixed(2)}`;
+    
+    if (mode === 'product') {
+      productDiv.classList.remove('hidden');
+      customDiv.classList.add('hidden');
+    } else {
+      productDiv.classList.add('hidden');
+      customDiv.classList.remove('hidden');
+    }
   }
-
-  async function submitInvoice() {
+  
+  // Select product and fill price
+  function selectProduct(itemId, productId) {
+    const row = document.getElementById(`item-${itemId}`);
+    const select = row.querySelector('.item-product-select');
+    const option = select.options[select.selectedIndex];
+    const price = option.dataset.price || 0;
+    
+    row.querySelector('.item-price').value = price;
+    calculateTotals();
+  }
+  
+  // Remove item
+  function removeItem(itemId) {
+    document.getElementById(`item-${itemId}`).remove();
+    
+    const remainingItems = document.querySelectorAll('.item-row').length;
+    if (remainingItems === 0) {
+      document.getElementById('emptyState').style.display = 'block';
+    }
+    
+    calculateTotals();
+  }
+  
+  // Calculate totals
+  function calculateTotals() {
+    let subtotal = 0;
+    
+    document.querySelectorAll('.item-row').forEach(row => {
+      const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+      const price = parseFloat(row.querySelector('.item-price').value) || 0;
+      const lineTotal = qty * price;
+      
+      row.querySelector('.item-total').textContent = `${currency} ${lineTotal.toFixed(2)}`;
+      subtotal += lineTotal;
+    });
+    
+    const discountPercent = parseFloat(document.getElementById('discountPercent').value) || 0;
+    const vatPercent = parseFloat(document.getElementById('vatPercent').value) || 0;
+    
+    const discountAmount = subtotal * (discountPercent / 100);
+    const vatAmount = (subtotal - discountAmount) * (vatPercent / 100);
+    const total = subtotal - discountAmount + vatAmount;
+    
+    document.getElementById('subtotalDisplay').textContent = `${currency} ${subtotal.toFixed(2)}`;
+    document.getElementById('discountDisplay').textContent = `- ${currency} ${discountAmount.toFixed(2)}`;
+    document.getElementById('vatDisplay').textContent = `+ ${currency} ${vatAmount.toFixed(2)}`;
+    document.getElementById('totalDisplay').textContent = `${currency} ${total.toFixed(2)}`;
+  }
+  
+  // Submit form
+  document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
     const clientId = document.getElementById('clientSelect').value;
-    if (!clientId) { showToast('Please select a client', 'error'); return; }
-
+    if (!clientId) {
+      alert('Please select a client');
+      return;
+    }
+    
     const items = [];
     document.querySelectorAll('.item-row').forEach(row => {
-      const catSel = row.querySelector('.item-prod');
-      const custIn = row.querySelector('.item-desc');
-      const catActive = catSel && catSel.closest('div').style.display !== 'none';
-      const desc = catActive
-        ? (catSel.options[catSel.selectedIndex]?.text?.split(' (')[0] || '')
-        : (custIn?.value || '');
-      const qty   = parseFloat(row.querySelector('.item-qty')?.value)   || 0;
-      const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
-      if (desc && qty > 0) items.push({ item:desc, qty, unit:price });
+      const description = row.querySelector('.item-description')?.value || 
+                         row.querySelector('.item-product-select option:checked')?.text || '';
+      const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+      const price = parseFloat(row.querySelector('.item-price').value) || 0;
+      
+      if (description && qty > 0 && price >= 0) {
+        items.push({
+          item: description,
+          qty,
+          unit: price
+        });
+      }
     });
-
-    if (!items.length) { showToast('Please add at least one item', 'error'); return; }
-
-    document.getElementById('submitBtn').disabled = true;
-    document.getElementById('submitTxt').style.display = 'none';
-    document.getElementById('submitSpin').style.display = 'block';
-
+    
+    if (items.length === 0) {
+      alert('Please add at least one item');
+      return;
+    }
+    
+    const data = {
+      clientId,
+      items,
+      discountPercent: parseFloat(document.getElementById('discountPercent').value) || 0,
+      vatPercent: parseFloat(document.getElementById('vatPercent').value) || 0,
+      applyVat: true
+    };
+    
     try {
-      const r = await fetch('/web/invoices/create', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          clientId,
-          items,
-          type: _docType,
-          discountPercent: parseFloat(document.getElementById('discountPct').value) || 0,
-          vatPercent:      parseFloat(document.getElementById('vatPct').value)      || 0,
-          branchId: document.getElementById('branchSelect')?.value || null
-        })
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating...';
+      
+      const response = await fetch('/web/invoices/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
       });
-      const d = await r.json();
-      if (r.ok) window.location.href = d.redirectUrl || '/web/invoices';
-      else { showToast(d.error || 'Failed to create', 'error'); resetBtn(); }
-    } catch { showToast('Network error', 'error'); resetBtn(); }
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        window.location.href = result.redirectUrl;
+      } else {
+        alert(result.error || 'Failed to create invoice');
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-check mr-2"></i> Create Invoice';
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to create invoice');
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('submitBtn').innerHTML = '<i class="fas fa-check mr-2"></i> Create Invoice';
+    }
+  });
+  
+  // Add Client Modal
+  function showAddClientModal() {
+    document.getElementById('addClientModal').classList.remove('hidden');
+    document.getElementById('addClientModal').classList.add('flex');
   }
-
-  function resetBtn() {
-    document.getElementById('submitBtn').disabled = false;
-    document.getElementById('submitTxt').style.display = 'inline';
-    document.getElementById('submitSpin').style.display = 'none';
+  
+  function hideAddClientModal() {
+    document.getElementById('addClientModal').classList.add('hidden');
+    document.getElementById('addClientModal').classList.remove('flex');
+    document.getElementById('addClientForm').reset();
   }
-
-  // Add client
-  function openAddClient() { openModal('addClientModal'); }
-
-  async function submitAddClient() {
-    const name  = document.getElementById('newClientName').value.trim();
-    const phone = document.getElementById('newClientPhone').value.trim();
-    const errEl = document.getElementById('addClientErr');
-    errEl.style.display = 'none';
-
-    if (!name && !phone) { errEl.textContent = 'Name or phone required'; errEl.style.display='flex'; return; }
-
-    const btn = document.getElementById('addClientBtn');
-    btn.disabled = true; btn.textContent = 'Adding...';
-
+  
+  document.getElementById('addClientForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const name = document.getElementById('newClientName').value;
+    const phone = document.getElementById('newClientPhone').value;
+    
     try {
-      const r = await fetch('/web/clients/create', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+      const response = await fetch('/web/clients/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, phone })
       });
-      const d = await r.json();
-      if (r.ok) {
-        const sel = document.getElementById('clientSelect');
-        const opt = document.createElement('option');
-        opt.value = d.client._id;
-        opt.textContent = (d.client.name || '') + (d.client.name && d.client.phone ? ' — ' : '') + (d.client.phone || '');
-        sel.appendChild(opt);
-        sel.value = d.client._id;
-        closeModal('addClientModal');
-        document.getElementById('newClientName').value = '';
-        document.getElementById('newClientPhone').value = '';
-        showToast('Client added');
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        // Add to select
+        const select = document.getElementById('clientSelect');
+        const option = document.createElement('option');
+        option.value = data.client._id;
+        option.textContent = data.client.name || data.client.phone;
+        select.appendChild(option);
+        select.value = data.client._id;
+        
+        hideAddClientModal();
+        showToast('Client added successfully', 'success');
       } else {
-        errEl.textContent = d.error || 'Failed to add client';
-        errEl.style.display = 'flex';
+        alert(data.error || 'Failed to add client');
       }
-    } catch {
-      errEl.textContent = 'Network error'; errEl.style.display = 'flex';
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to add client');
     }
-    btn.disabled = false; btn.textContent = 'Add Client';
-  }
-
+  });
+  
+  // Add first item on load
   addItem();
 </script>
