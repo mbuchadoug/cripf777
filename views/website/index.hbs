@@ -337,7 +337,28 @@
                 z-index: 1000;
                 box-sizing: border-box; /* ✅ ADDED: Ensure padding included in width */
             }
+/* ✅ FIX: Auth area must stack on mobile sidebar (prevents overlap) */
+.nav-links li.nav-auth {
+  width: 100%;
+  display: flex;            /* ensure the li behaves as a block container */
+  flex-direction: column;   /* stack pill + signout */
+  align-items: stretch;
+  gap: 0.6rem;
+  border-bottom: none;      /* optional: remove divider line here */
+}
 
+/* make pill full-width in sidebar */
+.nav-links li.nav-auth .user-pill {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* make signout full-width button in sidebar */
+.nav-links li.nav-auth .nav-signout {
+  width: 100%;
+  display: block;
+  text-align: center;
+}
             /* Show nav when active */
             .nav-links.active {
                 right: 0;
@@ -1281,20 +1302,7 @@
   }
 }
 
-@media (max-width: 768px) {
-  .user-pill {
-    width: 100%;
-    max-width: 100%;
-    margin: 0.75rem 0;
-  }
 
-  .nav-signout {
-    width: 100%;
-    text-align: center;
-    margin-top: 0.5rem;
-    display: block;
-  }
-}
     </style>
 </head>
 <body>
