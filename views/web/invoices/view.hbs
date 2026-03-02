@@ -1,259 +1,260 @@
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-800 mb-2">Invoice {{invoice.number}}</h1>
-    <p class="text-sm text-gray-600">Created on {{formatDate invoice.createdAt}}</p>
+{{!-- views/web/invoices/view.hbs --}}
+<style>
+  .inv-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+  .inv-header-left h1 { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; letter-spacing:-0.5px; color:var(--white); margin-bottom:4px; }
+  .inv-header-left p { font-size:13px; color:var(--muted); }
+  .hdr-actions { display:flex; gap:10px; flex-wrap:wrap; }
+
+  .inv-layout { display:grid; grid-template-columns:1fr 268px; gap:20px; align-items:start; }
+
+  .doc-card { background:var(--navy-2); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .doc-top { padding:28px 28px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap; }
+  .doc-biz-name { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--white); letter-spacing:-0.4px; margin-bottom:3px; }
+  .doc-biz-sub { font-size:12px; color:var(--muted-2); }
+  .doc-type { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; letter-spacing:-1px; color:var(--amber); text-transform:uppercase; line-height:1; }
+  .doc-num-label { font-family:'DM Mono',monospace; font-size:12px; color:var(--muted-2); margin-top:5px; text-align:right; }
+
+  .doc-meta { display:grid; grid-template-columns:1fr 1fr; }
+  .meta-cell { padding:16px 28px; border-bottom:1px solid var(--border); }
+  .meta-cell:nth-child(odd) { border-right:1px solid var(--border); }
+  .meta-lbl { font-size:10px; font-weight:700; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:5px; }
+  .meta-val { font-size:13px; color:var(--white); font-weight:500; }
+  .meta-sub { font-size:11px; color:var(--muted-2); margin-top:2px; font-family:'DM Mono',monospace; }
+
+  .items-table { width:100%; border-collapse:collapse; }
+  .items-table thead tr { background:rgba(255,255,255,0.02); }
+  .items-table th { padding:11px 20px; text-align:left; font-size:10px; font-weight:700; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.8px; border-bottom:1px solid var(--border); }
+  .items-table th:last-child,.items-table td:last-child { text-align:right; padding-right:28px; }
+  .items-table td { padding:13px 20px; font-size:13px; color:var(--white); border-bottom:1px solid rgba(255,255,255,0.03); }
+  .items-table tbody tr:last-child td { border-bottom:none; }
+  .item-num { font-family:'DM Mono',monospace; color:var(--muted-2); font-size:12px; }
+  .item-name { font-weight:500; }
+  .item-mono { font-family:'DM Mono',monospace; color:var(--muted); }
+  .item-total { font-family:'DM Mono',monospace; color:var(--white); font-weight:500; }
+
+  .totals-row-wrap { padding:20px 28px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; }
+  .totals-block { width:220px; }
+  .t-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; font-size:13px; }
+  .t-lbl { color:var(--muted-2); }
+  .t-val { font-family:'DM Mono',monospace; }
+  .t-row.final { border-top:1px solid var(--border); margin-top:8px; padding-top:12px; }
+  .t-row.final .t-lbl { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; color:var(--white); }
+  .t-row.final .t-val { font-size:17px; color:var(--amber); font-weight:700; }
+  .t-val.green { color:var(--green); }
+  .t-val.blue { color:#58a6ff; }
+  .t-val.red { color:var(--red); }
+
+  /* Side panel */
+  .side-col { display:flex; flex-direction:column; gap:14px; }
+  .sc { background:var(--navy-2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .sc-head { padding:14px 18px; border-bottom:1px solid var(--border); }
+  .sc-head h3 { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--white); }
+  .sc-body { padding:14px 18px; }
+  .side-btn { display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; text-decoration:none; margin-bottom:8px; font-family:'Instrument Sans',sans-serif; text-align:left; }
+  .side-btn:last-child { margin-bottom:0; }
+  .side-btn:hover { border-color:rgba(255,255,255,0.14); color:var(--white); background:rgba(255,255,255,0.02); }
+  .side-btn.sb-amber { background:var(--amber); border-color:var(--amber); color:#0d1117; font-weight:700; }
+  .side-btn.sb-amber:hover { background:#d97706; border-color:#d97706; }
+  .side-btn.sb-danger { border-color:rgba(248,81,73,0.2); color:#f85149; }
+  .side-btn.sb-danger:hover { background:rgba(248,81,73,0.06); border-color:rgba(248,81,73,0.3); }
+  .side-btn svg { width:14px; height:14px; flex-shrink:0; }
+
+  .status-area { padding:16px 18px; }
+  .s-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; margin-bottom:10px; }
+  .s-icon svg { width:16px; height:16px; }
+  .s-title { font-size:13px; font-weight:700; color:var(--white); margin-bottom:4px; }
+  .s-desc { font-size:12px; color:var(--muted-2); line-height:1.5; }
+  .s-paid .s-icon { background:rgba(63,185,80,0.1); color:#3fb950; }
+  .s-partial .s-icon { background:rgba(245,158,11,0.1); color:#f59e0b; }
+  .s-unpaid .s-icon { background:rgba(248,81,73,0.08); color:#f85149; }
+
+  @media (max-width:900px) {
+    .inv-layout { grid-template-columns:1fr; }
+    .side-col { flex-direction:row; flex-wrap:wrap; }
+    .side-col .sc { flex:1; min-width:240px; }
+    .doc-meta { grid-template-columns:1fr; }
+    .meta-cell:nth-child(odd) { border-right:none; }
+  }
+  @media print {
+    .side-col,.hdr-actions { display:none!important; }
+    .inv-layout { grid-template-columns:1fr; }
+    .doc-card { border:none; box-shadow:none; }
+    body { background:#fff; color:#000; }
+    .doc-biz-name,.meta-val,.item-name,.t-row.final .t-lbl { color:#000; }
+    .doc-type,.t-row.final .t-val { color:#000; font-weight:900; }
+    .items-table th,.meta-lbl,.t-lbl,.item-mono,.item-num,.doc-num-label { color:#555; }
+    .items-table td { color:#111; border-bottom:1px solid #eee; }
+    .items-table thead tr { background:#f5f5f5; }
+  }
+</style>
+
+<div class="inv-header">
+  <div class="inv-header-left">
+    <h1>{{invoice.number}}</h1>
+    <p>Created {{formatDate invoice.createdAt}}</p>
   </div>
-  <div class="mt-4 sm:mt-0 flex items-center space-x-3">
-    <button onclick="downloadPDF()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:scale-95">
-      <i class="fas fa-download mr-2"></i> Download PDF
+  <div class="hdr-actions no-print">
+    <a href="/web/invoices" class="btn btn-outline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span>Back</span>
+    </a>
+    <button onclick="window.print()" class="btn btn-outline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <span>Print</span>
     </button>
-    <button onclick="window.print()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 no-print">
-      <i class="fas fa-print mr-2"></i> Print
+    <button onclick="downloadPDF()" class="btn btn-amber">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download PDF
     </button>
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-  
-  <!-- Main Invoice -->
-  <div class="lg:col-span-2">
-    <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8">
-      
-      <!-- Header -->
-      <div class="flex items-start justify-between mb-8 pb-6 border-b">
-        <div>
-          {{#if user.logoUrl}}
-            <img src="{{user.logoUrl}}" alt="Logo" class="h-16 mb-3">
-          {{/if}}
-          <h2 class="text-2xl font-bold text-gray-800">{{user.businessName}}</h2>
-          {{#if user.address}}
-            <p class="text-sm text-gray-600 mt-1">{{user.address}}</p>
-          {{/if}}
-        </div>
-        
-        <div class="text-right">
-          <h3 class="text-3xl font-bold text-blue-600">INVOICE</h3>
-          <p class="text-lg font-semibold text-gray-800 mt-1">{{invoice.number}}</p>
-        </div>
+<div class="inv-layout">
+
+  <!-- Document -->
+  <div class="doc-card">
+    <div class="doc-top">
+      <div>
+        {{#if user.logoUrl}}<img src="{{user.logoUrl}}" alt="Logo" style="height:38px;margin-bottom:10px;border-radius:6px;display:block;">{{/if}}
+        <div class="doc-biz-name">{{user.businessName}}</div>
+        {{#if user.address}}<div class="doc-biz-sub">{{user.address}}</div>{{/if}}
       </div>
-      
-      <!-- Client & Date Info -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        <div>
-          <h4 class="text-sm font-semibold text-gray-600 mb-2">BILL TO</h4>
-          <p class="font-semibold text-gray-800">{{invoice.clientName}}</p>
-          {{#if invoice.clientId.phone}}
-            <p class="text-sm text-gray-600">{{invoice.clientId.phone}}</p>
-          {{/if}}
-        </div>
-        
-        <div class="sm:text-right">
-          <div class="mb-3">
-            <span class="text-sm text-gray-600">Invoice Date:</span>
-            <span class="ml-2 font-medium">{{formatDate invoice.createdAt}}</span>
-          </div>
-          <div>
-            <span class="text-sm text-gray-600">Status:</span>
-            <span class="ml-2 inline-block px-3 py-1 text-xs font-medium rounded-full {{#if (eq invoice.status 'paid')}}bg-green-100 text-green-800{{else if (eq invoice.status 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
-              {{invoice.status}}
-            </span>
-          </div>
-        </div>
+      <div style="text-align:right;">
+        <div class="doc-type">{{invoice.type}}</div>
+        <div class="doc-num-label">{{invoice.number}}</div>
       </div>
-      
-      <!-- Items Table -->
-      <div class="mb-8 overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b-2 border-gray-200">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Item</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Qty</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Unit Price</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y">
-            {{#each invoice.items}}
-              <tr>
-                <td class="px-4 py-3 text-sm text-gray-600">{{inc @index}}</td>
-                <td class="px-4 py-3 text-sm text-gray-800">{{this.item}}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 text-right">{{this.qty}}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 text-right">{{../invoice.currency}} {{this.unit}}</td>
-                <td class="px-4 py-3 text-sm font-medium text-gray-800 text-right">{{../invoice.currency}} {{this.total}}</td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      </div>
-      
-      <!-- Totals -->
-      <div class="flex justify-end">
-        <div class="w-full sm:w-64 space-y-2">
-          <div class="flex justify-between text-sm">
-            <span class="text-gray-600">Subtotal</span>
-            <span class="font-medium">{{invoice.currency}} {{invoice.subtotal}}</span>
-          </div>
-          
-          {{#if (gt invoice.discountAmount 0)}}
-            <div class="flex justify-between text-sm text-green-600">
-              <span>Discount ({{invoice.discountPercent}}%)</span>
-              <span>- {{invoice.currency}} {{invoice.discountAmount}}</span>
-            </div>
-          {{/if}}
-          
-          {{#if (gt invoice.vatAmount 0)}}
-            <div class="flex justify-between text-sm text-blue-600">
-              <span>VAT ({{invoice.vatPercent}}%)</span>
-              <span>+ {{invoice.currency}} {{invoice.vatAmount}}</span>
-            </div>
-          {{/if}}
-          
-          <div class="flex justify-between pt-3 border-t-2 text-lg font-bold">
-            <span>Total</span>
-            <span>{{invoice.currency}} {{invoice.total}}</span>
-          </div>
-          
-          {{#if (gt invoice.amountPaid 0)}}
-            <div class="flex justify-between text-sm text-green-600">
-              <span>Amount Paid</span>
-              <span>{{invoice.currency}} {{invoice.amountPaid}}</span>
-            </div>
-            
-            <div class="flex justify-between text-sm font-semibold text-red-600">
-              <span>Balance Due</span>
-              <span>{{invoice.currency}} {{invoice.balance}}</span>
-            </div>
-          {{/if}}
-        </div>
-      </div>
-      
     </div>
-  </div>
-  
-  <!-- Sidebar: Actions & Info -->
-  <div class="space-y-6">
-    
-    <!-- Quick Actions -->
-    <div class="bg-white rounded-xl shadow-sm p-6">
-      <h3 class="font-semibold text-gray-800 mb-4">Actions</h3>
-      
-      <div class="space-y-3">
-        <button onclick="downloadPDF()" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-left">
-          <i class="fas fa-download mr-2"></i> Download PDF
-        </button>
-        
-        <button onclick="window.print()" class="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-left no-print">
-          <i class="fas fa-print mr-2"></i> Print Invoice
-        </button>
-        
-        <button onclick="shareInvoice()" class="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-left no-print">
-          <i class="fas fa-share-alt mr-2"></i> Share
-        </button>
-        
-        {{#if (or (eq user.role 'owner') (eq user.role 'manager'))}}
-          {{#if (ne invoice.status 'paid')}}
-            <button onclick="deleteInvoice()" class="w-full px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-left no-print">
-              <i class="fas fa-trash mr-2"></i> Delete Invoice
-            </button>
-          {{/if}}
+
+    <div class="doc-meta">
+      <div class="meta-cell">
+        <div class="meta-lbl">Bill To</div>
+        <div class="meta-val">{{invoice.clientName}}</div>
+        {{#if invoice.clientPhone}}<div class="meta-sub">{{invoice.clientPhone}}</div>{{/if}}
+      </div>
+      <div class="meta-cell">
+        <div class="meta-lbl">Issue Date</div>
+        <div class="meta-val">{{formatDate invoice.createdAt}}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-lbl">Status</div>
+        <div style="margin-top:4px;">
+          <span class="pill {{#if (eq invoice.status 'paid')}}pill-paid{{else if (eq invoice.status 'partial')}}pill-partial{{else}}pill-unpaid{{/if}}">{{invoice.status}}</span>
+        </div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-lbl">Branch</div>
+        <div class="meta-val">{{invoice.branchName}}</div>
+      </div>
+    </div>
+
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th>Qty</th>
+          <th>Unit Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each invoice.items}}
+        <tr>
+          <td class="item-num">{{inc @index}}</td>
+          <td class="item-name">{{this.item}}</td>
+          <td class="item-mono">{{this.qty}}</td>
+          <td class="item-mono">{{../invoice.currency}} {{this.unit}}</td>
+          <td class="item-total">{{../invoice.currency}} {{this.total}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+
+    <div class="totals-row-wrap">
+      <div class="totals-block">
+        <div class="t-row"><span class="t-lbl">Subtotal</span><span class="t-val">{{invoice.currency}} {{invoice.subtotal}}</span></div>
+        {{#if (gt invoice.discountAmount 0)}}
+        <div class="t-row"><span class="t-lbl">Discount ({{invoice.discountPercent}}%)</span><span class="t-val green">−{{invoice.currency}} {{invoice.discountAmount}}</span></div>
+        {{/if}}
+        {{#if (gt invoice.vatAmount 0)}}
+        <div class="t-row"><span class="t-lbl">VAT ({{invoice.vatPercent}}%)</span><span class="t-val blue">+{{invoice.currency}} {{invoice.vatAmount}}</span></div>
+        {{/if}}
+        <div class="t-row final"><span class="t-lbl">Total</span><span class="t-val">{{invoice.currency}} {{invoice.total}}</span></div>
+        {{#if (gt invoice.amountPaid 0)}}
+        <div class="t-row" style="margin-top:10px;"><span class="t-lbl">Paid</span><span class="t-val green">{{invoice.currency}} {{invoice.amountPaid}}</span></div>
+        <div class="t-row"><span class="t-lbl">Balance Due</span><span class="t-val red">{{invoice.currency}} {{invoice.balance}}</span></div>
         {{/if}}
       </div>
     </div>
-    
-    <!-- Payment Status -->
-    {{#if (eq invoice.status 'unpaid')}}
-      <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
-          <h4 class="font-semibold text-yellow-800">Payment Pending</h4>
-        </div>
-        <p class="text-sm text-yellow-700">This invoice has not been paid yet.</p>
-      </div>
-    {{else if (eq invoice.status 'partial')}}
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-info-circle text-blue-600 mr-2"></i>
-          <h4 class="font-semibold text-blue-800">Partially Paid</h4>
-        </div>
-        <p class="text-sm text-blue-700 mb-3">
-          Paid: {{invoice.currency}} {{invoice.amountPaid}}<br>
-          Balance: {{invoice.currency}} {{invoice.balance}}
-        </p>
-      </div>
-    {{else}}
-      <div class="bg-green-50 border border-green-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-check-circle text-green-600 mr-2"></i>
-          <h4 class="font-semibold text-green-800">Paid in Full</h4>
-        </div>
-        <p class="text-sm text-green-700">This invoice has been fully paid.</p>
-      </div>
-    {{/if}}
-    
-    <!-- Back to List -->
-    <a href="/web/invoices" class="block w-full px-4 py-2 text-center border border-gray-300 rounded-lg hover:bg-gray-50 no-print">
-      <i class="fas fa-arrow-left mr-2"></i> Back to Invoices
-    </a>
-    
   </div>
-  
+
+  <!-- Side panel -->
+  <div class="side-col no-print">
+
+    <div class="sc">
+      <div class="status-area {{#if (eq invoice.status 'paid')}}s-paid{{else if (eq invoice.status 'partial')}}s-partial{{else}}s-unpaid{{/if}}">
+        <div class="s-icon">
+          {{#if (eq invoice.status 'paid')}}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {{else if (eq invoice.status 'partial')}}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {{else}}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          {{/if}}
+        </div>
+        <div class="s-title">{{#if (eq invoice.status 'paid')}}Paid in Full{{else if (eq invoice.status 'partial')}}Partially Paid{{else}}Awaiting Payment{{/if}}</div>
+        <div class="s-desc">{{#if (eq invoice.status 'paid')}}This invoice has been fully settled.{{else if (eq invoice.status 'partial')}}{{invoice.currency}} {{invoice.amountPaid}} received · {{invoice.currency}} {{invoice.balance}} due.{{else}}{{invoice.currency}} {{invoice.total}} is outstanding.{{/if}}</div>
+      </div>
+    </div>
+
+    <div class="sc">
+      <div class="sc-head"><h3>Actions</h3></div>
+      <div class="sc-body">
+        <button onclick="downloadPDF()" class="side-btn sb-amber">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download PDF
+        </button>
+        <button onclick="shareInvoice()" class="side-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share Link
+        </button>
+        <button onclick="window.print()" class="side-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print
+        </button>
+        {{#if (or (eq user.role 'owner') (eq user.role 'manager'))}}
+        {{#if (ne invoice.status 'paid')}}
+        <button onclick="deleteInvoice()" class="side-btn sb-danger" style="border-top:1px solid var(--border);margin-top:8px;padding-top:18px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete Invoice
+        </button>
+        {{/if}}
+        {{/if}}
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <script>
   async function downloadPDF() {
     try {
-      const response = await fetch('/web/invoices/{{invoice._id}}/pdf');
-      const data = await response.json();
-      
-      if (data.url) {
-        window.open(data.url, '_blank');
-      } else {
-        alert('Failed to generate PDF');
-      }
-    } catch (error) {
-      console.error('Download error:', error);
-      alert('Failed to download PDF');
-    }
+      const r = await fetch('/web/invoices/{{invoice._id}}/pdf');
+      const d = await r.json();
+      if (d.url) window.open(d.url, '_blank');
+      else showToast('Failed to generate PDF', 'error');
+    } catch { showToast('Download failed', 'error'); }
   }
-  
   async function deleteInvoice() {
-    if (!confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
-      return;
-    }
-    
+    if (!confirm('Delete this invoice? This cannot be undone.')) return;
     try {
-      const response = await fetch('/web/invoices/{{invoice._id}}', {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        window.location.href = '/web/invoices';
-      } else {
-        const data = await response.json();
-        alert(data.error || 'Failed to delete invoice');
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-      alert('Failed to delete invoice');
-    }
+      const r = await fetch('/web/invoices/{{invoice._id}}', { method:'DELETE' });
+      if (r.ok) { showToast('Invoice deleted'); setTimeout(() => window.location.href='/web/invoices', 900); }
+      else { const d = await r.json(); showToast(d.error || 'Delete failed', 'error'); }
+    } catch { showToast('Delete failed', 'error'); }
   }
-  
   function shareInvoice() {
-    const url = window.location.href;
-    
-    if (navigator.share) {
-      navigator.share({
-        title: 'Invoice {{invoice.number}}',
-        text: 'View invoice {{invoice.number}} for {{invoice.clientName}}',
-        url: url
-      });
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(url).then(() => {
-        alert('Link copied to clipboard!');
-      });
-    }
+    if (navigator.share) navigator.share({ title:'Invoice {{invoice.number}}', url:location.href });
+    else navigator.clipboard.writeText(location.href).then(() => showToast('Link copied'));
   }
 </script>

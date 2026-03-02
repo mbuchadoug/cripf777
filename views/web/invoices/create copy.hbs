@@ -1,0 +1,446 @@
+<!-- Page Header -->
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-800 mb-2">Create Invoice</h1>
+  <p class="text-sm text-gray-600">Fill in the details below to generate a new invoice</p>
+</div>
+
+<form id="invoiceForm">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    
+    <!-- Left Column: Invoice Details -->
+    <div class="lg:col-span-2 space-y-6">
+      
+      <!-- Client Selection -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-user text-blue-600 mr-2"></i>
+          Client Information
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Select Client *
+            </label>
+            <select id="clientSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+              <option value="">Choose a client...</option>
+              {{#each clients}}
+                <option value="{{this._id}}">{{#if this.name}}{{this.name}}{{else}}{{this.phone}}{{/if}}</option>
+              {{/each}}
+            </select>
+          </div>
+          
+          <!-- Quick Add Client -->
+          <button type="button" onclick="showAddClientModal()" class="sm:col-span-2 text-sm text-blue-600 hover:text-blue-700 text-left">
+            <i class="fas fa-plus-circle mr-1"></i> Add New Client
+          </button>
+        </div>
+      </div>
+      
+      <!-- Items -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-800">
+            <i class="fas fa-list text-blue-600 mr-2"></i>
+            Invoice Items
+          </h2>
+          <button type="button" onclick="addItem()" class="text-sm text-blue-600 hover:text-blue-700">
+            <i class="fas fa-plus mr-1"></i> Add Item
+          </button>
+        </div>
+        
+        <!-- Items List -->
+        <div id="itemsList" class="space-y-4">
+          <!-- Items will be added here dynamically -->
+        </div>
+        
+        <!-- Add First Item Button -->
+        <div id="emptyState" class="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+          <i class="fas fa-shopping-cart text-4xl text-gray-300 mb-4"></i>
+          <p class="text-gray-500 mb-4">No items added yet</p>
+          <button type="button" onclick="addItem()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <i class="fas fa-plus mr-2"></i> Add First Item
+          </button>
+        </div>
+      </div>
+      
+      <!-- Discount & VAT -->
+      <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+          <i class="fas fa-percentage text-blue-600 mr-2"></i>
+          Adjustments
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Discount %</label>
+            <input 
+              type="number" 
+              id="discountPercent" 
+              min="0" 
+              max="100" 
+              step="0.1" 
+              value="0"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onchange="calculateTotals()"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">VAT %</label>
+            <input 
+              type="number" 
+              id="vatPercent" 
+              min="0" 
+              max="100" 
+              step="0.1" 
+              value="0"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onchange="calculateTotals()"
+            >
+          </div>
+        </div>
+      </div>
+      
+    </div>
+    
+    <!-- Right Column: Preview & Summary -->
+    <div class="space-y-6">
+      
+      <!-- Invoice Summary -->
+      <div class="bg-white rounded-xl shadow-sm p-6 sticky top-20">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Summary</h2>
+        
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">Subtotal</span>
+            <span id="subtotalDisplay" class="font-medium">{{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="flex justify-between text-green-600">
+            <span>Discount</span>
+            <span id="discountDisplay">- {{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="flex justify-between text-blue-600">
+            <span>VAT</span>
+            <span id="vatDisplay">+ {{business.currency}} 0.00</span>
+          </div>
+          
+          <div class="border-t pt-3 flex justify-between text-lg font-bold">
+            <span>Total</span>
+            <span id="totalDisplay">{{business.currency}} 0.00</span>
+          </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="mt-6 space-y-3">
+          <button 
+            type="submit" 
+            id="submitBtn"
+            class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+          >
+            <i class="fas fa-check mr-2"></i> Create Invoice
+          </button>
+          
+          <a href="/web/invoices" class="block w-full text-center py-3 border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+          </a>
+        </div>
+      </div>
+      
+    </div>
+    
+  </div>
+</form>
+
+<!-- Add Client Modal -->
+<div id="addClientModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-gray-800">Add New Client</h3>
+      <button onclick="hideAddClientModal()" class="text-gray-400 hover:text-gray-600">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="addClientForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Client Name</label>
+        <input type="text" id="newClientName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+        <input type="tel" id="newClientPhone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+      </div>
+      
+      <div class="flex space-x-3">
+        <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+          Add Client
+        </button>
+        <button type="button" onclick="hideAddClientModal()" class="flex-1 border border-gray-300 py-2 rounded-lg hover:bg-gray-50">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const products = {{{json products}}};
+  const currency = '{{business.currency}}';
+  let itemCounter = 0;
+  
+  // Add item row
+  function addItem() {
+    itemCounter++;
+    document.getElementById('emptyState').style.display = 'none';
+    
+    const itemHtml = `
+      <div class="item-row border border-gray-200 rounded-lg p-4" id="item-${itemCounter}">
+        <div class="flex items-start justify-between mb-3">
+          <h4 class="font-medium text-gray-800">Item ${itemCounter}</h4>
+          <button type="button" onclick="removeItem(${itemCounter})" class="text-red-600 hover:text-red-700">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Product/Custom Toggle -->
+          <div class="sm:col-span-2">
+            <div class="flex space-x-2 mb-2">
+              <button type="button" onclick="setItemMode(${itemCounter}, 'product')" class="item-mode-btn-${itemCounter} flex-1 py-2 text-sm border rounded-lg hover:bg-gray-50" data-mode="product">
+                From Catalogue
+              </button>
+              <button type="button" onclick="setItemMode(${itemCounter}, 'custom')" class="item-mode-btn-${itemCounter} flex-1 py-2 text-sm border rounded-lg hover:bg-gray-50" data-mode="custom">
+                Custom Item
+              </button>
+            </div>
+          </div>
+          
+          <!-- Product Select (hidden by default) -->
+          <div class="sm:col-span-2 item-product-${itemCounter} hidden">
+            <select class="item-product-select w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" onchange="selectProduct(${itemCounter}, this.value)">
+              <option value="">Choose product...</option>
+              ${products.map(p => `<option value="${p._id}" data-price="${p.unitPrice}">${p.name} (${currency} ${p.unitPrice})</option>`).join('')}
+            </select>
+          </div>
+          
+          <!-- Custom Item Input (hidden by default) -->
+          <div class="sm:col-span-2 item-custom-${itemCounter} hidden">
+            <input type="text" class="item-description w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Item description">
+          </div>
+          
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Quantity</label>
+            <input type="number" class="item-qty w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" min="1" value="1" onchange="calculateTotals()">
+          </div>
+          
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">Unit Price</label>
+            <input type="number" class="item-price w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" min="0" step="0.01" value="0" onchange="calculateTotals()">
+          </div>
+          
+          <div class="sm:col-span-2">
+            <div class="flex justify-between items-center pt-2 border-t">
+              <span class="text-xs text-gray-600">Line Total</span>
+              <span class="item-total font-semibold">${currency} 0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('itemsList').insertAdjacentHTML('beforeend', itemHtml);
+  }
+  
+  // Set item mode (product or custom)
+  function setItemMode(itemId, mode) {
+    const productDiv = document.querySelector(`.item-product-${itemId}`);
+    const customDiv = document.querySelector(`.item-custom-${itemId}`);
+    const buttons = document.querySelectorAll(`.item-mode-btn-${itemId}`);
+    
+    buttons.forEach(btn => {
+      if (btn.dataset.mode === mode) {
+        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+      }
+    });
+    
+    if (mode === 'product') {
+      productDiv.classList.remove('hidden');
+      customDiv.classList.add('hidden');
+    } else {
+      productDiv.classList.add('hidden');
+      customDiv.classList.remove('hidden');
+    }
+  }
+  
+  // Select product and fill price
+  function selectProduct(itemId, productId) {
+    const row = document.getElementById(`item-${itemId}`);
+    const select = row.querySelector('.item-product-select');
+    const option = select.options[select.selectedIndex];
+    const price = option.dataset.price || 0;
+    
+    row.querySelector('.item-price').value = price;
+    calculateTotals();
+  }
+  
+  // Remove item
+  function removeItem(itemId) {
+    document.getElementById(`item-${itemId}`).remove();
+    
+    const remainingItems = document.querySelectorAll('.item-row').length;
+    if (remainingItems === 0) {
+      document.getElementById('emptyState').style.display = 'block';
+    }
+    
+    calculateTotals();
+  }
+  
+  // Calculate totals
+  function calculateTotals() {
+    let subtotal = 0;
+    
+    document.querySelectorAll('.item-row').forEach(row => {
+      const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+      const price = parseFloat(row.querySelector('.item-price').value) || 0;
+      const lineTotal = qty * price;
+      
+      row.querySelector('.item-total').textContent = `${currency} ${lineTotal.toFixed(2)}`;
+      subtotal += lineTotal;
+    });
+    
+    const discountPercent = parseFloat(document.getElementById('discountPercent').value) || 0;
+    const vatPercent = parseFloat(document.getElementById('vatPercent').value) || 0;
+    
+    const discountAmount = subtotal * (discountPercent / 100);
+    const vatAmount = (subtotal - discountAmount) * (vatPercent / 100);
+    const total = subtotal - discountAmount + vatAmount;
+    
+    document.getElementById('subtotalDisplay').textContent = `${currency} ${subtotal.toFixed(2)}`;
+    document.getElementById('discountDisplay').textContent = `- ${currency} ${discountAmount.toFixed(2)}`;
+    document.getElementById('vatDisplay').textContent = `+ ${currency} ${vatAmount.toFixed(2)}`;
+    document.getElementById('totalDisplay').textContent = `${currency} ${total.toFixed(2)}`;
+  }
+  
+  // Submit form
+  document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const clientId = document.getElementById('clientSelect').value;
+    if (!clientId) {
+      alert('Please select a client');
+      return;
+    }
+    
+    const items = [];
+    document.querySelectorAll('.item-row').forEach(row => {
+      const description = row.querySelector('.item-description')?.value || 
+                         row.querySelector('.item-product-select option:checked')?.text || '';
+      const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+      const price = parseFloat(row.querySelector('.item-price').value) || 0;
+      
+      if (description && qty > 0 && price >= 0) {
+        items.push({
+          item: description,
+          qty,
+          unit: price
+        });
+      }
+    });
+    
+    if (items.length === 0) {
+      alert('Please add at least one item');
+      return;
+    }
+    
+    const data = {
+      clientId,
+      items,
+      discountPercent: parseFloat(document.getElementById('discountPercent').value) || 0,
+      vatPercent: parseFloat(document.getElementById('vatPercent').value) || 0,
+      applyVat: true
+    };
+    
+    try {
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating...';
+      
+      const response = await fetch('/web/invoices/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        window.location.href = result.redirectUrl;
+      } else {
+        alert(result.error || 'Failed to create invoice');
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-check mr-2"></i> Create Invoice';
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to create invoice');
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('submitBtn').innerHTML = '<i class="fas fa-check mr-2"></i> Create Invoice';
+    }
+  });
+  
+  // Add Client Modal
+  function showAddClientModal() {
+    document.getElementById('addClientModal').classList.remove('hidden');
+    document.getElementById('addClientModal').classList.add('flex');
+  }
+  
+  function hideAddClientModal() {
+    document.getElementById('addClientModal').classList.add('hidden');
+    document.getElementById('addClientModal').classList.remove('flex');
+    document.getElementById('addClientForm').reset();
+  }
+  
+  document.getElementById('addClientForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const name = document.getElementById('newClientName').value;
+    const phone = document.getElementById('newClientPhone').value;
+    
+    try {
+      const response = await fetch('/web/clients/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        // Add to select
+        const select = document.getElementById('clientSelect');
+        const option = document.createElement('option');
+        option.value = data.client._id;
+        option.textContent = data.client.name || data.client.phone;
+        select.appendChild(option);
+        select.value = data.client._id;
+        
+        hideAddClientModal();
+        showToast('Client added successfully', 'success');
+      } else {
+        alert(data.error || 'Failed to add client');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to add client');
+    }
+  });
+  
+  // Add first item on load
+  addItem();
+</script>
