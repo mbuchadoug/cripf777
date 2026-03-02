@@ -124,7 +124,7 @@ router.get("/branches/:id", ownerOnly, async (req, res) => {
 
     // Date range
     const now = new Date();
-    let since = new Date(now.getFullYear(), now.getMonth(), 1);
+    let since = new Date(now.getFullYear(), now.getMonth(), 1); // default: this month
     if (period === "week") { since = new Date(); since.setDate(since.getDate() - 7); }
     if (period === "year") { since = new Date(now.getFullYear(), 0, 1); }
 

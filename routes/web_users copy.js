@@ -74,7 +74,7 @@ router.get("/users", ownerOnly, async (req, res) => {
 
 /**
  * POST /web/users/invite
- * Invite a new user via WhatsApp — creates a pending UserRole.
+ * Invite a new user via WhatsApp — creates a pending UserRole
  * The user must respond on WhatsApp to complete onboarding,
  * but the owner pre-assigns role and branch here.
  */
@@ -106,14 +106,11 @@ router.post("/users/invite", ownerOnly, async (req, res) => {
       phone,
       role,
       branchId: branchId || null,
-      pending: true,           // they must confirm on WhatsApp
+      pending: true,           // ← they must confirm on WhatsApp
       invitedBy: ownerPhone
     });
 
-    res.json({
-      success: true,
-      message: `Invite created. Ask ${phone} to message your WhatsApp bot with JOIN to activate.`
-    });
+    res.json({ success: true, message: `Invite created. Ask ${phone} to message your WhatsApp bot with JOIN to activate.` });
 
   } catch (error) {
     console.error("Invite user error:", error);
@@ -159,16 +156,17 @@ router.put("/users/:id/role", ownerOnly, async (req, res) => {
 
 /**
  * PUT /web/users/:id/lock
- * Lock or unlock a user
+ * Lock or unlock a user — locked users cannot log in or use the WhatsApp bot
  */
 router.put("/users/:id/lock", ownerOnly, async (req, res) => {
   try {
     const { businessId } = req.webUser;
-    const { locked } = req.body;
+    const { locked } = req.body; // boolean
 
     const user = await UserRole.findOne({ _id: req.params.id, businessId });
     if (!user) return res.status(404).json({ error: "User not found" });
 
+    // Cannot lock yourself
     if (user.phone === req.webUser.phone) {
       return res.status(400).json({ error: "You cannot lock your own account" });
     }
