@@ -2524,4 +2524,208 @@ router.post(
     }
   }
 );
+
+
+
+// ============================================================
+// TEACHER STUDENT MANAGEMENT — Edit & Delete
+// ============================================================
+
+/**
+ * GET /teacher/student/:studentId/edit
+ * Show edit form for a specific student
+ */
+router.get(
+  "/student/:studentId/edit",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    const student = await User.findOne({
+      _id: req.params.studentId,
+      parentUserId: req.user._id,
+      role: "student"
+    }).lean();
+
+    if (!student) return res.status(404).send("Student not found");
+
+    // Build grade options based on teacher's school levels
+    const teacher = await User.findById(req.user._id).lean();
+    const levels = teacher.schoolLevelsEnabled || [];
+    let grades = [];
+    if (levels.includes("junior")) grades.push(...[0,1,2,3,4,5,6,7]);
+    if (levels.includes("high"))   grades.push(...[8,9,10,11,12,13]);
+    if (!grades.length) grades = [0,1,2,3,4,5,6,7,8,9,10,11,12,13]; // fallback
+
+    res.render("teacher/edit_student", {
+      user: req.user,
+      student,
+      grades
+    });
+  }
+);
+
+/**
+ * POST /teacher/student/:studentId/edit
+ * Process edit form — update name, grade, PIN
+ */
+router.post(
+  "/student/:studentId/edit",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const { firstName, lastName, grade, newPin } = req.body;
+
+      const teacher = await User.findById(req.user._id);
+
+      const student = await User.findOne({
+        _id: req.params.studentId,
+        parentUserId: req.user._id,
+        role: "student"
+      });
+
+      if (!student) return res.status(404).send("Student not found");
+
+      const oldGrade = student.grade;
+      const gradeChanged = grade && Number(grade) !== oldGrade;
+
+      // Update basic fields
+      if (firstName) student.firstName = firstName.trim();
+      if (lastName !== undefined) student.lastName = lastName.trim();
+      if (grade) student.grade = Number(grade);
+
+      // Update PIN if provided
+      if (newPin && newPin.trim().length >= 4) {
+        await student.setPassword(newPin.trim());
+      }
+
+      await student.save();
+
+      // ✅ GRADE TRANSITION — same logic as parent route
+      if (gradeChanged) {
+        const { default: Organization } = await import("../models/organization.js");
+        const { default: ExamInstance } = await import("../models/examInstance.js");
+        const { default: QuizRule } = await import("../models/quizRule.js");
+        const { assignQuizFromRule } = await import("../services/quizAssignment.js");
+
+        const TRIAL_SUBJECTS = ["math", "responsibility"];
+        const HOME_ORG_SLUG = "cripfcnt-home";
+
+        const org = await Organization.findOne({ slug: HOME_ORG_SLUG }).lean();
+
+        if (org) {
+          // Archive pending quizzes from old grade
+          await ExamInstance.updateMany(
+            {
+              userId: student._id,
+              org: org._id,
+              status: "pending"
+            },
+            {
+              $set: {
+                status: "archived",
+                archivedReason: `Grade changed from ${oldGrade} to ${student.grade} by teacher`,
+                archivedAt: new Date()
+              }
+            }
+          );
+
+          // Assign trial quizzes for new grade
+          for (const subject of TRIAL_SUBJECTS) {
+            const rule = await QuizRule.findOne({
+              org: org._id,
+              grade: student.grade,
+              subject,
+              quizType: "trial",
+              enabled: true
+            }).lean();
+
+            if (rule) {
+              await assignQuizFromRule({
+                rule,
+                userId: student._id,
+                orgId: org._id
+              });
+            }
+          }
+
+          // Assign paid quizzes (teacher is paying for the subscription)
+          const paidRules = await QuizRule.find({
+            org: org._id,
+            grade: student.grade,
+            quizType: "paid",
+            enabled: true
+          });
+
+          for (const rule of paidRules) {
+            await assignQuizFromRule({
+              rule,
+              userId: student._id,
+              orgId: org._id,
+              force: true
+            });
+          }
+
+          // Show teacher-specific grade transition success page
+          return res.render("teacher/grade_transition_success", {
+            user: teacher,
+            student,
+            oldGrade,
+            newGrade: student.grade
+          });
+        }
+      }
+
+      // No grade change — redirect back to teacher dashboard
+      return res.redirect("/teacher/dashboard");
+
+    } catch (error) {
+      console.error("[Teacher Edit Student Error]", error);
+      return res.status(500).send("Failed to update student: " + error.message);
+    }
+  }
+);
+
+/**
+ * POST /teacher/student/:studentId/delete
+ * Permanently delete a student and all their data
+ */
+router.post(
+  "/student/:studentId/delete",
+  ensureAuth,
+  ensurePrivateTeacher,
+  async (req, res) => {
+    try {
+      const student = await User.findOne({
+        _id: req.params.studentId,
+        parentUserId: req.user._id,
+        role: "student"
+      });
+
+      if (!student) return res.status(404).send("Student not found");
+
+      const { default: ExamInstance } = await import("../models/examInstance.js");
+      const { default: Attempt } = await import("../models/attempt.js");
+      const { default: Certificate } = await import("../models/certificate.js");
+      const { default: OrgMembership } = await import("../models/orgMembership.js");
+
+      // Delete all student data
+      await ExamInstance.deleteMany({ userId: student._id });
+      await Attempt.deleteMany({ userId: student._id });
+      await Certificate.deleteMany({ userId: student._id });
+      await OrgMembership.deleteMany({ user: student._id });
+
+      // Delete the student account itself
+      await User.findByIdAndDelete(student._id);
+
+      console.log(`[Teacher] Deleted student ${student._id} (${student.firstName}) by teacher ${req.user._id}`);
+
+      return res.redirect("/teacher/dashboard");
+
+    } catch (error) {
+      console.error("[Teacher Delete Student Error]", error);
+      return res.status(500).send("Failed to delete student: " + error.message);
+    }
+  }
+);
 export default router;

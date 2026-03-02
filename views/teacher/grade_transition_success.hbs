@@ -1,0 +1,266 @@
+{{!-- views/teacher/grade_transition_success.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Grade Updated | Teacher Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --primary:#6366F1;
+      --success:#10B981;
+      --warning:#F59E0B;
+      --bg:#0F172A;
+      --surface:#1E293B;
+      --border:#334155;
+      --text:#F1F5F9;
+      --text-muted:#94A3B8;
+      --radius:12px;
+      --radius-lg:16px;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+
+    main {
+      max-width:560px;
+      width:100%;
+      text-align:center;
+    }
+
+    .success-icon {
+      font-size:80px;
+      margin-bottom:20px;
+      animation:bounce 0.8s ease;
+      display:block;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform:translateY(0); }
+      40% { transform:translateY(-24px); }
+      60% { transform:translateY(-12px); }
+    }
+
+    h1 {
+      font-size:32px;
+      font-weight:800;
+      color:var(--success);
+      margin-bottom:12px;
+    }
+
+    .subtitle {
+      color:var(--text-muted);
+      font-size:16px;
+      margin-bottom:32px;
+      line-height:1.6;
+    }
+
+    .card {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:24px;
+      margin-bottom:20px;
+      text-align:left;
+    }
+
+    .info-row {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 0;
+      border-bottom:1px solid #1E3A5F;
+    }
+
+    .info-row:last-child { border-bottom:none; }
+
+    .info-label { font-size:14px; color:var(--text-muted); }
+
+    .grade-change {
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+
+    .grade-old {
+      font-size:22px;
+      font-weight:800;
+      color:var(--text-muted);
+      text-decoration:line-through;
+    }
+
+    .grade-arrow {
+      font-size:20px;
+      color:var(--primary);
+    }
+
+    .grade-new {
+      font-size:28px;
+      font-weight:900;
+      color:var(--success);
+    }
+
+    .checklist-title {
+      font-size:15px;
+      font-weight:700;
+      color:var(--warning);
+      margin-bottom:16px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .checklist-item {
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      padding:10px 0;
+      font-size:14px;
+      color:#CBD5E1;
+      border-bottom:1px solid rgba(51,65,85,0.5);
+    }
+
+    .checklist-item:last-child { border-bottom:none; }
+
+    .check-mark {
+      width:22px;
+      height:22px;
+      background:rgba(16,185,129,0.15);
+      border:1px solid var(--success);
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:13px;
+      color:var(--success);
+      flex-shrink:0;
+      margin-top:1px;
+    }
+
+    .btn {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:24px;
+      padding:16px 32px;
+      background:linear-gradient(135deg,var(--primary),#8B5CF6);
+      color:white;
+      font-weight:800;
+      font-size:16px;
+      border-radius:var(--radius);
+      text-decoration:none;
+      transition:all 0.2s;
+      box-shadow:0 4px 14px rgba(99,102,241,0.3);
+    }
+
+    .btn:hover {
+      transform:translateY(-2px);
+      box-shadow:0 6px 20px rgba(99,102,241,0.4);
+    }
+
+    .btn-secondary {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:12px;
+      padding:12px 24px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      color:var(--text-muted);
+      font-weight:600;
+      font-size:14px;
+      border-radius:var(--radius);
+      text-decoration:none;
+      transition:all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background:#334155;
+      color:var(--text);
+    }
+
+    .btn-group {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+
+  <span class="success-icon">🎓</span>
+
+  <h1>Grade Updated!</h1>
+
+  <p class="subtitle">
+    {{student.firstName}}'s account has been moved to Grade {{newGrade}}.
+    New quizzes have been assigned automatically.
+  </p>
+
+  <!-- SUMMARY CARD -->
+  <div class="card">
+    <div class="info-row">
+      <span class="info-label">Student</span>
+      <strong>{{student.firstName}} {{student.lastName}}</strong>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Student ID</span>
+      <span style="font-family:monospace;color:var(--warning);font-weight:700;">{{student.studentId}}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Grade Transition</span>
+      <div class="grade-change">
+        <span class="grade-old">Grade {{oldGrade}}</span>
+        <span class="grade-arrow">→</span>
+        <span class="grade-new">Grade {{newGrade}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT HAPPENED -->
+  <div class="card">
+    <div class="checklist-title">✅ What Was Done</div>
+
+    <div class="checklist-item">
+      <div class="check-mark">✓</div>
+      <span>Grade {{oldGrade}} pending quizzes archived (progress data preserved)</span>
+    </div>
+    <div class="checklist-item">
+      <div class="check-mark">✓</div>
+      <span>Grade {{newGrade}} trial quizzes assigned (Maths + Responsibility)</span>
+    </div>
+    <div class="checklist-item">
+      <div class="check-mark">✓</div>
+      <span>Full Grade {{newGrade}} quiz library loaded for all subjects</span>
+    </div>
+    <div class="checklist-item">
+      <div class="check-mark">✓</div>
+      <span>Progress tracking updated for the new curriculum level</span>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <a href="/teacher/dashboard" class="btn">
+      ← Back to Teacher Dashboard
+    </a>
+    <a href="/parent/children/{{student._id}}/quizzes" class="btn-secondary">
+      📊 View Student Progress
+    </a>
+  </div>
+
+</main>
+</body>
+</html>

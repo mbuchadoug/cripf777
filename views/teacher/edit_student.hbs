@@ -1,0 +1,539 @@
+{{!-- views/teacher/edit_student.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Edit {{student.firstName}} | Teacher Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --primary:#6366F1;
+      --primary-dark:#4F46E5;
+      --success:#10B981;
+      --danger:#EF4444;
+      --warning:#F59E0B;
+      --bg:#0F172A;
+      --surface:#1E293B;
+      --surface-light:#334155;
+      --border:#334155;
+      --text:#F1F5F9;
+      --text-muted:#94A3B8;
+      --radius:12px;
+      --radius-lg:16px;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+    }
+
+    .header {
+      background:rgba(30,41,59,0.95);
+      backdrop-filter:blur(16px);
+      border-bottom:1px solid var(--border);
+      padding:16px 24px;
+      position:sticky;
+      top:0;
+      z-index:100;
+    }
+
+    .header-inner {
+      max-width:700px;
+      margin:0 auto;
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+
+    .back-btn {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:8px 16px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      color:var(--text-muted);
+      text-decoration:none;
+      font-weight:600;
+      font-size:14px;
+      transition:all 0.2s;
+    }
+
+    .back-btn:hover {
+      background:var(--surface-light);
+      color:var(--text);
+    }
+
+    .header-title {
+      font-size:20px;
+      font-weight:800;
+    }
+
+    main {
+      max-width:700px;
+      margin:40px auto;
+      padding:0 24px 60px;
+    }
+
+    .page-subtitle {
+      color:var(--text-muted);
+      font-size:15px;
+      margin-bottom:32px;
+    }
+
+    /* CREDENTIAL BOX */
+    .card {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      padding:24px;
+      margin-bottom:20px;
+    }
+
+    .card-title {
+      font-size:16px;
+      font-weight:700;
+      margin-bottom:16px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .credential-grid {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .credential-item {
+      background:#0F172A;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:14px 16px;
+    }
+
+    .credential-label {
+      font-size:11px;
+      font-weight:700;
+      color:var(--text-muted);
+      text-transform:uppercase;
+      letter-spacing:1px;
+      margin-bottom:6px;
+    }
+
+    .credential-value {
+      font-size:20px;
+      font-weight:800;
+      color:var(--warning);
+      font-family:monospace;
+    }
+
+    .credential-note {
+      font-size:13px;
+      color:var(--text-muted);
+      margin-top:14px;
+      padding:10px 14px;
+      background:rgba(99,102,241,0.08);
+      border-radius:8px;
+      border-left:3px solid var(--primary);
+    }
+
+    /* FORM */
+    form { display:grid; gap:20px; }
+
+    .form-group {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    label {
+      font-size:14px;
+      font-weight:600;
+      color:var(--text);
+    }
+
+    .label-note {
+      font-size:12px;
+      font-weight:400;
+      color:var(--text-muted);
+    }
+
+    input, select {
+      background:#0F172A;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:12px 16px;
+      font-size:15px;
+      color:var(--text);
+      outline:none;
+      transition:border-color 0.2s;
+      font-family:inherit;
+    }
+
+    input:focus, select:focus {
+      border-color:var(--primary);
+      box-shadow:0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    input::placeholder { color:#475569; }
+
+    select option { background:#1E293B; }
+
+    /* GRADE WARNING */
+    .grade-warning {
+      background:rgba(245,158,11,0.08);
+      border:1px solid rgba(245,158,11,0.4);
+      border-radius:var(--radius);
+      padding:14px 16px;
+      display:none;
+      margin-top:8px;
+    }
+
+    .grade-warning.active { display:block; }
+
+    .grade-warning-title {
+      font-size:14px;
+      font-weight:700;
+      color:var(--warning);
+      margin-bottom:6px;
+    }
+
+    .grade-warning-text {
+      font-size:13px;
+      color:rgba(245,158,11,0.85);
+      line-height:1.5;
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding:14px 24px;
+      border-radius:var(--radius);
+      border:none;
+      font-weight:700;
+      font-size:15px;
+      cursor:pointer;
+      transition:all 0.2s;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      text-decoration:none;
+    }
+
+    .btn-primary {
+      background:linear-gradient(135deg,var(--primary),#8B5CF6);
+      color:white;
+      box-shadow:0 4px 14px rgba(99,102,241,0.3);
+    }
+
+    .btn-primary:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(99,102,241,0.4); }
+    .btn-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+    .btn-danger {
+      background:var(--danger);
+      color:white;
+      width:100%;
+    }
+
+    .btn-danger:hover { background:#DC2626; transform:translateY(-2px); }
+
+    /* DANGER ZONE */
+    .danger-zone {
+      border:2px solid rgba(239,68,68,0.4);
+      border-radius:var(--radius-lg);
+      padding:24px;
+      margin-top:32px;
+    }
+
+    .danger-title {
+      font-size:18px;
+      font-weight:800;
+      color:var(--danger);
+      margin-bottom:10px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .danger-desc {
+      font-size:14px;
+      color:var(--text-muted);
+      margin-bottom:18px;
+      line-height:1.6;
+    }
+
+    .danger-checklist {
+      background:rgba(239,68,68,0.05);
+      border-radius:var(--radius);
+      padding:14px;
+      margin-bottom:18px;
+    }
+
+    .danger-item {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size:13px;
+      color:#FDA4A4;
+      padding:5px 0;
+    }
+
+    /* PROGRESS OVERLAY */
+    .progress-overlay {
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.88);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9999;
+    }
+
+    .progress-overlay.active { display:flex; }
+
+    .progress-box {
+      background:var(--surface);
+      border:2px solid var(--primary);
+      border-radius:var(--radius-lg);
+      padding:40px;
+      text-align:center;
+      max-width:380px;
+      width:90%;
+    }
+
+    .progress-icon { font-size:48px; margin-bottom:16px; }
+    .progress-title { font-size:20px; font-weight:800; margin-bottom:20px; }
+
+    .progress-bar {
+      width:100%;
+      height:10px;
+      background:#0F172A;
+      border-radius:8px;
+      overflow:hidden;
+      margin-bottom:14px;
+    }
+
+    .progress-fill {
+      height:100%;
+      background:linear-gradient(90deg,var(--primary),#8B5CF6);
+      width:0%;
+      transition:width 0.4s ease;
+      border-radius:8px;
+    }
+
+    .progress-text {
+      font-size:14px;
+      color:var(--text-muted);
+    }
+
+    .spinner {
+      width:36px;
+      height:36px;
+      border:3px solid var(--border);
+      border-top-color:var(--primary);
+      border-radius:50%;
+      animation:spin 0.8s linear infinite;
+      margin:20px auto 0;
+    }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    @media(max-width:640px){
+      .credential-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <a href="/teacher/dashboard" class="back-btn">← Dashboard</a>
+    <h1 class="header-title">Edit {{student.firstName}}'s Account</h1>
+  </div>
+</header>
+
+<main>
+  <p class="page-subtitle">
+    Update student details below. Student ID and login credentials are shown for reference.
+  </p>
+
+  <!-- CURRENT CREDENTIALS -->
+  <div class="card">
+    <div class="card-title">📋 Login Credentials</div>
+    <div class="credential-grid">
+      <div class="credential-item">
+        <div class="credential-label">Student ID</div>
+        <div class="credential-value">{{student.studentId}}</div>
+      </div>
+      <div class="credential-item">
+        <div class="credential-label">Current PIN</div>
+        <div class="credential-value">••••</div>
+      </div>
+    </div>
+    <div class="credential-note">
+      💡 Students log in using their Student ID and PIN. You can reset the PIN below if needed.
+    </div>
+  </div>
+
+  <!-- EDIT FORM -->
+  <div class="card">
+    <div class="card-title">✏️ Edit Details</div>
+    <form method="POST" action="/teacher/student/{{student._id}}/edit" id="editForm">
+
+      <div class="form-group">
+        <label for="firstName">First Name <span style="color:var(--danger)">*</span></label>
+        <input
+          id="firstName"
+          name="firstName"
+          value="{{student.firstName}}"
+          required
+          placeholder="Enter first name"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="lastName">Last Name</label>
+        <input
+          id="lastName"
+          name="lastName"
+          value="{{student.lastName}}"
+          placeholder="Enter last name"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="gradeSelect">Grade <span style="color:var(--danger)">*</span></label>
+        <select name="grade" id="gradeSelect" required>
+          {{#each grades}}
+            <option value="{{this}}" {{#if (eq ../student.grade this)}}selected{{/if}}>Grade {{this}}</option>
+          {{/each}}
+        </select>
+
+        <!-- Grade change warning -->
+        <div class="grade-warning" id="gradeWarning">
+          <div class="grade-warning-title">⚠️ Grade Change Detected</div>
+          <div class="grade-warning-text">
+            Changing {{student.firstName}}'s grade will:<br>
+            • Archive current pending quizzes (progress saved)<br>
+            • Assign new grade-appropriate quizzes<br>
+            • This may take 10–20 seconds to complete
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="newPin">
+          New PIN
+          <span class="label-note">(leave blank to keep current)</span>
+        </label>
+        <input
+          id="newPin"
+          name="newPin"
+          type="text"
+          placeholder="e.g. 1234"
+          maxlength="6"
+          pattern="\d{4,6}"
+          inputmode="numeric"
+        >
+        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;">4–6 digit numeric PIN only.</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submitBtn">
+        ✅ Save Changes
+      </button>
+
+    </form>
+  </div>
+
+  <!-- DANGER ZONE -->
+  <div class="danger-zone">
+    <div class="danger-title">⚠️ Danger Zone</div>
+    <div class="danger-desc">
+      Permanently delete this student account. This action <strong>cannot be undone</strong> and will remove all associated data.
+    </div>
+    <div class="danger-checklist">
+      <div class="danger-item">🗑️ All assigned quizzes deleted</div>
+      <div class="danger-item">🗑️ All attempt history deleted</div>
+      <div class="danger-item">🗑️ All certificates deleted</div>
+      <div class="danger-item">🗑️ Student account permanently removed</div>
+    </div>
+    <form
+      method="POST"
+      action="/teacher/student/{{student._id}}/delete"
+      onsubmit="return confirm('Are you absolutely sure you want to delete {{student.firstName}}\'s account? All data will be permanently lost and this cannot be undone!');"
+    >
+      <button type="submit" class="btn btn-danger">
+        🗑️ Permanently Delete {{student.firstName}}'s Account
+      </button>
+    </form>
+  </div>
+</main>
+
+<!-- PROGRESS OVERLAY (shown during grade transition) -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <div class="progress-icon">🎓</div>
+    <div class="progress-title">Updating Grade...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText">Archiving old quizzes...</div>
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById('editForm');
+  const gradeSelect = document.getElementById('gradeSelect');
+  const gradeWarning = document.getElementById('gradeWarning');
+  const overlay = document.getElementById('progressOverlay');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const submitBtn = document.getElementById('submitBtn');
+
+  const originalGrade = {{student.grade}};
+
+  // Show warning when grade changes
+  gradeSelect.addEventListener('change', () => {
+    const changed = parseInt(gradeSelect.value) !== originalGrade;
+    gradeWarning.classList.toggle('active', changed);
+  });
+
+  // Show progress overlay on grade change submit
+  form.addEventListener('submit', () => {
+    const newGrade = parseInt(gradeSelect.value);
+    if (newGrade !== originalGrade) {
+      overlay.classList.add('active');
+      submitBtn.disabled = true;
+
+      const steps = [
+        { pct: 20, msg: 'Archiving old quizzes...' },
+        { pct: 45, msg: 'Loading new curriculum...' },
+        { pct: 70, msg: 'Assigning grade-appropriate quizzes...' },
+        { pct: 90, msg: 'Finalizing changes...' }
+      ];
+
+      let i = 0;
+      const interval = setInterval(() => {
+        if (i < steps.length) {
+          fill.style.width = steps[i].pct + '%';
+          text.textContent = steps[i].msg;
+          i++;
+        } else {
+          clearInterval(interval);
+        }
+      }, 3000);
+    }
+  });
+</script>
+
+</body>
+</html>
