@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - ZimQuote</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen flex items-center justify-center p-4">
+  
+  <div class="w-full max-w-md">
+    
+    <!-- Logo & Title -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
+        <i class="fas fa-file-invoice text-white text-2xl"></i>
+      </div>
+      <h1 class="text-3xl font-bold text-gray-800">ZimQuote</h1>
+      <p class="text-gray-600 mt-2">Professional invoicing made simple</p>
+    </div>
+    
+    <!-- Login Card -->
+    <div class="bg-white rounded-2xl shadow-xl p-8">
+      
+      <h2 class="text-2xl font-bold text-gray-800 mb-6">Welcome Back</h2>
+      
+      {{#if error}}
+        <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div class="flex items-center">
+            <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
+            <p class="text-sm text-red-700">
+              {{#if (eq error 'auth_required')}}
+                Please login to continue
+              {{else if (eq error 'session_expired')}}
+                Your session expired. Please login again
+              {{else if (eq error 'account_not_found')}}
+                Account not found
+              {{else}}
+                An error occurred. Please try again
+              {{/if}}
+            </p>
+          </div>
+        </div>
+      {{/if}}
+      
+      <form id="loginForm">
+        
+        <!-- Phone Number -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            <i class="fas fa-phone mr-1"></i> WhatsApp Number
+          </label>
+          <input 
+            type="tel" 
+            id="phone" 
+            name="phone" 
+            placeholder="0772 123 456"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            required
+            autofocus
+          >
+          <p class="mt-1 text-xs text-gray-500">Enter your Zimbabwe mobile number</p>
+        </div>
+        
+        <!-- Submit Button -->
+        <button 
+          type="submit" 
+          id="submitBtn"
+          class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span id="btnText">
+            <i class="fas fa-paper-plane mr-2"></i> Send OTP
+          </span>
+          <span id="btnLoader" class="hidden">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Sending...
+          </span>
+        </button>
+        
+      </form>
+      
+      <!-- Info -->
+      <div class="mt-6 p-4 bg-blue-50 rounded-lg">
+        <p class="text-sm text-blue-800">
+          <i class="fas fa-info-circle mr-1"></i>
+          We'll send a 6-digit code to your WhatsApp
+        </p>
+      </div>
+      
+      <!-- Help -->
+      <div class="mt-6 text-center">
+        <p class="text-sm text-gray-600">
+          Don't have an account? 
+          <a href="https://wa.me/{{whatsappNumber}}?text=menu" class="text-blue-600 hover:underline">
+            Sign up via WhatsApp
+          </a>
+        </p>
+      </div>
+      
+    </div>
+    
+    <!-- Footer -->
+    <p class="text-center text-sm text-gray-500 mt-6">
+      &copy; 2025 ZimQuote. All rights reserved.
+    </p>
+    
+  </div>
+  
+  <script>
+    const form = document.getElementById('loginForm');
+    const phoneInput = document.getElementById('phone');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const btnLoader = document.getElementById('btnLoader');
+    
+    // Format phone as user types
+    phoneInput.addEventListener('input', (e) => {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value.length > 10) value = value.slice(0, 10);
+      
+      // Format: 0772 123 456
+      if (value.length >= 4) {
+        value = value.slice(0, 4) + ' ' + value.slice(4);
+      }
+      if (value.length >= 8) {
+        value = value.slice(0, 8) + ' ' + value.slice(8);
+      }
+      
+      e.target.value = value;
+    });
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const phone = phoneInput.value.replace(/\s/g, '');
+      
+      if (!phone || phone.length < 10) {
+        alert('Please enter a valid phone number');
+        return;
+      }
+      
+      // Show loading
+      submitBtn.disabled = true;
+      btnText.classList.add('hidden');
+      btnLoader.classList.remove('hidden');
+      
+      try {
+        const response = await fetch('/web/auth/request-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Redirect to OTP page
+          window.location.href = `/web/verify-otp?phone=${encodeURIComponent(phone)}`;
+        } else {
+          alert(data.error || 'Failed to send OTP');
+          submitBtn.disabled = false;
+          btnText.classList.remove('hidden');
+          btnLoader.classList.add('hidden');
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Network error. Please try again.');
+        submitBtn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

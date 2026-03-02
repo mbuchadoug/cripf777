@@ -1,281 +1,1145 @@
 {{!-- views/web/dashboard.hbs --}}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
 
-{{!-- Page header --}}
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-    <p class="text-sm text-gray-500 mt-1">Welcome back · {{user.phone}}</p>
+  :root {
+    --navy: #0d1117;
+    --navy-2: #161b22;
+    --navy-3: #1f2937;
+    --amber: #f59e0b;
+    --amber-dim: #d97706;
+    --amber-glow: rgba(245,158,11,0.1);
+    --white: #f8fafc;
+    --muted: #8b949e;
+    --muted-2: #6e7681;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.12);
+    --red: #f85149;
+    --red-bg: rgba(248,81,73,0.08);
+    --green: #3fb950;
+    --green-bg: rgba(63,185,80,0.08);
+    --blue: #58a6ff;
+    --blue-bg: rgba(88,166,255,0.08);
+    --purple: #bc8cff;
+    --purple-bg: rgba(188,140,255,0.08);
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; }
+  body { font-family: 'Instrument Sans', sans-serif; background: var(--navy); color: var(--white); }
+
+  /* ── PAGE HEADER ────────────────────────── */
+  .dash-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .dash-header-left {}
+  .dash-header-left .greeting {
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--amber);
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .dash-header-left h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(22px, 2.5vw, 30px);
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: var(--white);
+    margin-bottom: 4px;
+  }
+  .dash-header-left p {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .dash-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  /* ── BUTTONS ────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border-radius: 9px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.18s;
+    border: none;
+    white-space: nowrap;
+  }
+
+  .btn-amber {
+    background: var(--amber);
+    color: #0d1117;
+  }
+  .btn-amber:hover {
+    background: var(--amber-dim);
+    box-shadow: 0 4px 16px rgba(245,158,11,0.25);
+    transform: translateY(-1px);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover {
+    border-color: var(--border-hover);
+    color: var(--white);
+    background: rgba(255,255,255,0.03);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    padding: 8px 12px;
+  }
+  .btn-ghost:hover { color: var(--white); }
+
+  .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  /* ── KPI GRID ───────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .kpi-card {
+    background: var(--navy-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .kpi-card:hover { border-color: var(--border-hover); }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 80px; height: 80px;
+    border-radius: 0 0 0 80px;
+    opacity: 0.06;
+  }
+  .kpi-card.c-amber::before { background: var(--amber); }
+  .kpi-card.c-green::before { background: var(--green); }
+  .kpi-card.c-blue::before { background: var(--blue); }
+  .kpi-card.c-purple::before { background: var(--purple); }
+
+  .kpi-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .kpi-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .kpi-icon svg { width: 16px; height: 16px; }
+  .kpi-icon.bg-amber { background: var(--amber-glow); color: var(--amber); }
+  .kpi-icon.bg-green { background: var(--green-bg); color: var(--green); }
+  .kpi-icon.bg-blue { background: var(--blue-bg); color: var(--blue); }
+  .kpi-icon.bg-purple { background: var(--purple-bg); color: var(--purple); }
+
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: var(--white);
+    margin-bottom: 4px;
+    line-height: 1;
+  }
+
+  .kpi-sub {
+    font-size: 12px;
+    color: var(--muted-2);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .delta-up { color: var(--green); }
+  .delta-dn { color: var(--red); }
+
+  /* ── MAIN GRID ──────────────────────────── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+
+  /* ── SECTION CARD ───────────────────────── */
+  .section-card {
+    background: var(--navy-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .section-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-card-header h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: -0.2px;
+  }
+
+  .section-card-body {
+    padding: 20px 22px;
+  }
+
+  /* ── CHART AREA ─────────────────────────── */
+  .chart-wrap {
+    height: 240px;
+    position: relative;
+    padding: 0 22px 20px;
+  }
+
+  /* ── INVOICES TABLE ─────────────────────── */
+  .inv-table { width: 100%; border-collapse: collapse; }
+  .inv-table thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+  .inv-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted-2);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+  }
+  .inv-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .inv-table tbody tr:last-child td { border-bottom: none; }
+  .inv-table tbody tr {
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+  .inv-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  .inv-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--amber);
+  }
+  .inv-client { font-weight: 500; color: var(--white); }
+  .inv-amount { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--white); }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .status-pill::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .s-paid { background: var(--green-bg); color: var(--green); }
+  .s-partial { background: rgba(245,158,11,0.1); color: var(--amber); }
+  .s-unpaid { background: var(--red-bg); color: var(--red); }
+
+  /* ── QUICK ACTIONS ──────────────────────── */
+  .quick-list { display: grid; gap: 8px; }
+  .quick-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: transparent;
+    text-decoration: none;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .quick-item:hover {
+    border-color: var(--border-hover);
+    background: rgba(255,255,255,0.02);
+    transform: translateX(2px);
+  }
+  .quick-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .quick-icon svg { width: 16px; height: 16px; }
+  .quick-text {}
+  .quick-title { font-size: 13px; font-weight: 600; color: var(--white); }
+  .quick-sub { font-size: 11px; color: var(--muted-2); margin-top: 1px; }
+  .quick-arrow { margin-left: auto; color: var(--muted-2); font-size: 14px; }
+
+  /* ── BRANCH TABLE ───────────────────────── */
+  .branch-grid {
+    display: grid;
+    gap: 10px;
+    padding: 18px 22px;
+  }
+
+  .branch-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto auto;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .branch-row:hover { border-color: var(--border-hover); background: rgba(255,255,255,0.015); }
+
+  .branch-name-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .branch-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
+  .branch-name { font-size: 14px; font-weight: 600; color: var(--white); truncate: ellipsis; }
+
+  .branch-stat { text-align: right; }
+  .branch-stat-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--white);
+  }
+  .branch-stat-lbl {
+    font-size: 10px;
+    color: var(--muted-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .branch-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .branch-badge.ok { background: var(--green-bg); color: var(--green); }
+  .branch-badge.warn { background: rgba(245,158,11,0.1); color: var(--amber); }
+  .branch-badge.bad { background: var(--red-bg); color: var(--red); }
+
+  /* ── MODAL ──────────────────────────────── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    background: var(--navy-2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 480px;
+    overflow: hidden;
+    transform: translateY(16px);
+    transition: transform 0.25s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: -0.3px;
+  }
+  .modal-close {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.05); color: var(--white); }
+
+  .modal-body { padding: 24px; }
+
+  .form-group { margin-bottom: 18px; }
+  .form-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 7px;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 14px;
+    font-size: 14px;
+    font-family: 'Instrument Sans', sans-serif;
+    color: var(--white);
+    outline: none;
+    transition: all 0.2s;
+  }
+  .form-input:focus {
+    border-color: var(--amber);
+    background: rgba(245,158,11,0.04);
+    box-shadow: 0 0 0 3px var(--amber-glow);
+  }
+  .form-input::placeholder { color: var(--muted-2); }
+  .form-input option { background: #1f2937; }
+
+  .form-select { appearance: none; cursor: pointer; }
+
+  .form-hint { font-size: 11px; color: var(--muted-2); margin-top: 5px; line-height: 1.5; }
+
+  .role-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .role-option {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .role-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .role-option.selected {
+    border-color: var(--amber);
+    background: var(--amber-glow);
+  }
+  .role-title { font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 3px; }
+  .role-desc { font-size: 11px; color: var(--muted-2); line-height: 1.4; }
+
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,0.01);
+  }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+
+  .alert-modal {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+    line-height: 1.5;
+  }
+  .alert-modal.error { background: var(--red-bg); border: 1px solid rgba(248,81,73,0.2); color: #fca5a5; }
+  .alert-modal.success { background: var(--green-bg); border: 1px solid rgba(63,185,80,0.2); color: #7ee787; }
+
+  /* ── EMPTY STATE ────────────────────────── */
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted-2);
+  }
+  .empty svg { width: 36px; height: 36px; margin: 0 auto 12px; opacity: 0.3; }
+  .empty p { font-size: 13px; }
+
+  /* ── RESPONSIVE ─────────────────────────── */
+  @media (max-width: 1200px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 700px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .branch-row { grid-template-columns: 1fr auto auto; }
+    .branch-stat:nth-child(3), .branch-stat:nth-child(4) { display: none; }
+  }
+
+  @media (max-width: 480px) {
+    .dash-header { flex-direction: column; }
+    .kpi-grid { gap: 10px; }
+    .kpi-card { padding: 16px 14px; }
+    .kpi-value { font-size: 22px; }
+  }
+
+  /* ── CHART FILTER BAR ───────────────────── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: 'Instrument Sans', sans-serif;
+  }
+  .filter-chip:hover { border-color: var(--border-hover); color: var(--white); }
+  .filter-chip.active { background: var(--amber); color: var(--navy); border-color: var(--amber); }
+
+  /* ── SPINNER ────────────────────────────── */
+  .spin {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(13,17,23,0.3);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spinr 0.6s linear infinite;
+    display: none;
+  }
+  @keyframes spinr { to { transform: rotate(360deg); } }
+
+  /* ── TOAST ──────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--navy-3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--white);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    z-index: 2000;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+    max-width: 360px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.t-success .toast-dot { background: var(--green); }
+  .toast.t-error .toast-dot { background: var(--red); }
+  .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<!-- ─── PAGE HEADER ─────────────────────────── -->
+<div class="dash-header">
+  <div class="dash-header-left">
+    <div class="greeting">
+      {{#if isOwner}}Owner Portal{{else}}Staff Dashboard{{/if}} · {{user.phone}}
+    </div>
+    <h1>Good {{greeting}}, {{user.displayName}}</h1>
+    <p>Here's what's happening across your business today.</p>
   </div>
-  <div class="mt-4 sm:mt-0 flex items-center gap-3">
-    <a href="/web/invoices/create?type=invoice"
-       class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-      <i class="fas fa-plus"></i> New Invoice
-    </a>
+  <div class="dash-header-actions">
     {{#if isOwner}}
-    <a href="/web/branches"
-       class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-      <i class="fas fa-code-branch"></i> Branches
-    </a>
+    <button class="btn btn-outline" onclick="openModal('inviteModal')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+      Invite User
+    </button>
     {{/if}}
+    <a href="/web/invoices/create?type=invoice" class="btn btn-amber">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Invoice
+    </a>
   </div>
 </div>
 
-{{!-- KPI Cards --}}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+<!-- ─── KPI STRIP ──────────────────────────── -->
+<div class="kpi-grid">
 
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Today</span>
-      <div class="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-        <i class="fas fa-calendar-day text-blue-600 text-sm"></i>
+  <div class="kpi-card c-amber">
+    <div class="kpi-top">
+      <span class="kpi-label">Today's Revenue</span>
+      <div class="kpi-icon bg-amber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       </div>
     </div>
-    <p class="text-2xl font-bold text-gray-900">{{user.currency}} {{stats.todayRevenue}}</p>
-    <p class="text-xs text-gray-500 mt-1">Revenue today</p>
+    <div class="kpi-value">{{user.currency}} {{stats.todayRevenue}}</div>
+    <div class="kpi-sub">From invoices created today</div>
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">This Month</span>
-      <div class="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
-        <i class="fas fa-chart-line text-green-600 text-sm"></i>
+  <div class="kpi-card c-green">
+    <div class="kpi-top">
+      <span class="kpi-label">This Month</span>
+      <div class="kpi-icon bg-green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       </div>
     </div>
-    <p class="text-2xl font-bold text-gray-900">{{user.currency}} {{stats.monthRevenue}}</p>
-    <p class="text-xs mt-1 {{#if (gt stats.growth 0)}}text-green-600{{else}}text-red-500{{/if}}">
-      <i class="fas fa-arrow-{{#if (gt stats.growth 0)}}up{{else}}down{{/if}} mr-1"></i>{{stats.growth}}% vs last month
-    </p>
+    <div class="kpi-value">{{user.currency}} {{stats.monthRevenue}}</div>
+    <div class="kpi-sub {{#if (gt stats.growth 0)}}delta-up{{else}}delta-dn{{/if}}">
+      {{#if (gt stats.growth 0)}}↑{{else}}↓{{/if}} {{stats.growth}}% vs last month
+    </div>
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Outstanding</span>
-      <div class="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center">
-        <i class="fas fa-file-invoice-dollar text-amber-600 text-sm"></i>
+  <div class="kpi-card c-blue">
+    <div class="kpi-top">
+      <span class="kpi-label">Outstanding</span>
+      <div class="kpi-icon bg-blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       </div>
     </div>
-    <p class="text-2xl font-bold text-gray-900">{{stats.unpaidInvoices}}</p>
-    <p class="text-xs text-gray-500 mt-1">{{stats.paidInvoices}} paid this month</p>
+    <div class="kpi-value">{{stats.unpaidInvoices}}</div>
+    <div class="kpi-sub">{{stats.paidInvoices}} invoices paid this month</div>
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Clients</span>
-      <div class="w-9 h-9 bg-purple-50 rounded-lg flex items-center justify-center">
-        <i class="fas fa-users text-purple-600 text-sm"></i>
+  <div class="kpi-card c-purple">
+    <div class="kpi-top">
+      <span class="kpi-label">Clients</span>
+      <div class="kpi-icon bg-purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </div>
     </div>
-    <p class="text-2xl font-bold text-gray-900">{{stats.totalClients}}</p>
-    <p class="text-xs text-gray-500 mt-1">{{stats.totalProducts}} active products</p>
+    <div class="kpi-value">{{stats.totalClients}}</div>
+    <div class="kpi-sub">{{stats.totalProducts}} active products</div>
   </div>
 
 </div>
 
-{{!-- Revenue Chart + Recent Invoices --}}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+<!-- ─── MAIN CONTENT GRID ──────────────────── -->
+<div class="main-grid">
 
-  <div class="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-    <div class="flex items-center justify-between mb-5">
-      <h2 class="font-semibold text-gray-800">Revenue - Last 30 Days</h2>
-      {{#if isOwner}}
-      <select id="chartBranchFilter" onchange="loadChart(this.value)"
-              class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <option value="">All Branches</option>
-        {{#each branchPerformance}}
-          <option value="{{this._id}}">{{this.name}}</option>
-        {{/each}}
-      </select>
+  <!-- LEFT: CHART + INVOICES -->
+  <div style="display:grid;gap:18px;">
+
+    <!-- Revenue Chart -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Revenue Trend — 30 Days</h3>
+        <div class="filter-bar">
+          {{#if isOwner}}
+          <select id="chartBranch" onchange="loadChart()" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:7px;padding:5px 10px;color:var(--muted);font-size:12px;font-family:'Instrument Sans',sans-serif;outline:none;cursor:pointer;">
+            <option value="">All branches</option>
+            {{#each branchPerformance}}
+            <option value="{{this._id}}">{{this.name}}</option>
+            {{/each}}
+          </select>
+          {{/if}}
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="revenueChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Recent Invoices -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Recent Invoices</h3>
+        <a href="/web/invoices" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;">View all →</a>
+      </div>
+      {{#if recentInvoices.length}}
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Client</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each recentInvoices}}
+          <tr onclick="window.location='/web/invoices/{{this._id}}'">
+            <td><span class="inv-num">{{this.number}}</span></td>
+            <td class="inv-client">{{this.clientName}}</td>
+            <td class="inv-amount">{{../user.currency}} {{this.total}}</td>
+            <td>
+              <span class="status-pill
+                {{#if (eq this.status 'paid')}}s-paid
+                {{else if (eq this.status 'partial')}}s-partial
+                {{else}}s-unpaid{{/if}}">
+                {{this.status}}
+              </span>
+            </td>
+            <td style="color:var(--muted-2);font-size:11px;">
+              {{#if this.createdAt}}{{formatDate this.createdAt}}{{/if}}
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+      {{else}}
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p>No invoices yet</p>
+      </div>
       {{/if}}
     </div>
-    <div style="height:280px; position:relative;">
-      <canvas id="revenueChart"></canvas>
-    </div>
+
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-    <div class="flex items-center justify-between mb-5">
-      <h2 class="font-semibold text-gray-800">Recent Invoices</h2>
-      <a href="/web/invoices" class="text-xs text-blue-600 hover:underline">View all</a>
-    </div>
-    <div class="space-y-3">
-      {{#each recentInvoices}}
-        <a href="/web/invoices/{{this._id}}"
-           class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-800 truncate">{{this.number}}</p>
-            <p class="text-xs text-gray-500 truncate">{{this.clientName}}</p>
-          </div>
-          <div class="text-right ml-3 flex-shrink-0">
-            <p class="text-sm font-semibold text-gray-900">{{this.total}}</p>
-            <span class="inline-block px-2 py-0.5 text-xs rounded-full font-medium
-              {{#if (eq this.status 'paid')}}bg-green-100 text-green-700
-              {{else if (eq this.status 'partial')}}bg-amber-100 text-amber-700
-              {{else}}bg-red-100 text-red-700{{/if}}">
-              {{this.status}}
-            </span>
-          </div>
-        </a>
-      {{else}}
-        <div class="text-center py-10 text-gray-400">
-          <i class="fas fa-file-invoice text-3xl mb-3"></i>
-          <p class="text-sm">No invoices yet</p>
+  <!-- RIGHT: QUICK ACTIONS + MINI STATS -->
+  <div style="display:grid;gap:18px;align-content:start;">
+
+    <!-- Quick Actions -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Quick Actions</h3>
+      </div>
+      <div class="section-card-body" style="padding:14px 18px;">
+        <div class="quick-list">
+          <a href="/web/invoices/create?type=invoice" class="quick-item">
+            <div class="quick-icon bg-amber" style="background:var(--amber-glow);color:var(--amber);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            </div>
+            <div class="quick-text">
+              <div class="quick-title">New Invoice</div>
+              <div class="quick-sub">Create and send instantly</div>
+            </div>
+            <span class="quick-arrow">›</span>
+          </a>
+
+          <a href="/web/invoices/create?type=quote" class="quick-item">
+            <div class="quick-icon" style="background:var(--blue-bg);color:var(--blue);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <div class="quick-text">
+              <div class="quick-title">New Quote</div>
+              <div class="quick-sub">Send a proposal to client</div>
+            </div>
+            <span class="quick-arrow">›</span>
+          </a>
+
+          <a href="/web/clients" class="quick-item">
+            <div class="quick-icon" style="background:var(--purple-bg);color:var(--purple);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="quick-text">
+              <div class="quick-title">Manage Clients</div>
+              <div class="quick-sub">{{stats.totalClients}} clients on record</div>
+            </div>
+            <span class="quick-arrow">›</span>
+          </a>
+
+          <a href="/web/reports" class="quick-item">
+            <div class="quick-icon" style="background:var(--green-bg);color:var(--green);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
+            <div class="quick-text">
+              <div class="quick-title">Reports</div>
+              <div class="quick-sub">Revenue, expenses & trends</div>
+            </div>
+            <span class="quick-arrow">›</span>
+          </a>
+
+          {{#if isOwner}}
+          <a href="/web/users" class="quick-item">
+            <div class="quick-icon" style="background:rgba(255,255,255,0.05);color:var(--muted);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+            </div>
+            <div class="quick-text">
+              <div class="quick-title">Invite Team Member</div>
+              <div class="quick-sub">Add manager or clerk</div>
+            </div>
+            <span class="quick-arrow">›</span>
+          </a>
+          {{/if}}
         </div>
-      {{/each}}
+      </div>
     </div>
-  </div>
 
+    <!-- Files -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Document Centre</h3>
+        <a href="/web/files" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;">Browse →</a>
+      </div>
+      <div class="section-card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <a href="/web/invoices?type=invoice" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;padding:16px 12px;border:1px solid var(--border);border-radius:9px;transition:all 0.15s;gap:8px;" onmouseover="this.style.borderColor='rgba(255,255,255,0.12)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.07)'">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span style="font-size:12px;font-weight:600;color:var(--white);">Invoices</span>
+          </a>
+          <a href="/web/invoices?type=quote" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;padding:16px 12px;border:1px solid var(--border);border-radius:9px;transition:all 0.15s;gap:8px;" onmouseover="this.style.borderColor='rgba(255,255,255,0.12)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.07)'">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            <span style="font-size:12px;font-weight:600;color:var(--white);">Quotes</span>
+          </a>
+          <a href="/web/invoices?type=receipt" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;padding:16px 12px;border:1px solid var(--border);border-radius:9px;transition:all 0.15s;gap:8px;" onmouseover="this.style.borderColor='rgba(255,255,255,0.12)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.07)'">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/></svg>
+            <span style="font-size:12px;font-weight:600;color:var(--white);">Receipts</span>
+          </a>
+          <a href="/web/files" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;padding:16px 12px;border:1px solid var(--border);border-radius:9px;transition:all 0.15s;gap:8px;" onmouseover="this.style.borderColor='rgba(255,255,255,0.12)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.07)'">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span style="font-size:12px;font-weight:600;color:var(--white);">All Files</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
-{{!-- Branch Performance (owners only) --}}
+<!-- ─── BRANCH PERFORMANCE (OWNERS ONLY) ── -->
 {{#if isOwner}}
 {{#if branchPerformance.length}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-8">
-  <div class="flex items-center justify-between mb-5">
-    <h2 class="font-semibold text-gray-800">Branch Performance — This Month</h2>
-    <a href="/web/branches" class="text-xs text-blue-600 hover:underline">Full details</a>
+<div class="section-card" style="margin-bottom:20px;">
+  <div class="section-card-header">
+    <h3>Branch Performance — This Month</h3>
+    <a href="/web/branches" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;">Full report →</a>
   </div>
 
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-gray-100">
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Branch</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Revenue</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Collected</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Expenses</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Unpaid</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Staff</th>
-          <th class="pb-3"></th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-50">
-        {{#each branchPerformance}}
-        <tr class="hover:bg-gray-50 transition-colors">
-          <td class="py-3 font-medium text-gray-800">
-            <div class="flex items-center gap-2">
-              <div class="w-2 h-2 rounded-full bg-blue-400"></div>
-              {{this.name}}
-            </div>
-          </td>
-          <td class="py-3 text-right text-gray-700">{{../user.currency}} {{this.revenue}}</td>
-          <td class="py-3 text-right text-green-600 font-medium">{{../user.currency}} {{this.collected}}</td>
-          <td class="py-3 text-right text-red-500">{{../user.currency}} {{this.expenses}}</td>
-          <td class="py-3 text-right">
-            {{#if this.unpaidCount}}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                {{this.unpaidCount}}
-              </span>
-            {{else}}
-              <span class="text-gray-400">0</span>
-            {{/if}}
-          </td>
-          <td class="py-3 text-right text-gray-500">{{this.userCount}}</td>
-          <td class="py-3 text-right">
-            <a href="/web/branches/{{this._id}}"
-               class="text-xs text-blue-600 hover:underline">View</a>
-          </td>
-        </tr>
-        {{/each}}
-      </tbody>
-    </table>
+  <div class="branch-grid">
+    {{#each branchPerformance}}
+    <a href="/web/branches/{{this._id}}" class="branch-row">
+      <div class="branch-name-wrap">
+        <div class="branch-dot"></div>
+        <span class="branch-name">{{this.name}}</span>
+      </div>
+      <div class="branch-stat">
+        <div class="branch-stat-val">{{../user.currency}} {{this.revenue}}</div>
+        <div class="branch-stat-lbl">Revenue</div>
+      </div>
+      <div class="branch-stat">
+        <div class="branch-stat-val" style="color:var(--green);">{{../user.currency}} {{this.collected}}</div>
+        <div class="branch-stat-lbl">Collected</div>
+      </div>
+      <div class="branch-stat">
+        <div class="branch-stat-val" style="color:var(--red);">{{../user.currency}} {{this.expenses}}</div>
+        <div class="branch-stat-lbl">Expenses</div>
+      </div>
+      <div class="branch-stat">
+        <span class="branch-badge {{#if (eq this.unpaidCount 0)}}ok{{else if (lt this.unpaidCount 5)}}warn{{else}}bad{{/if}}">
+          {{this.unpaidCount}} unpaid
+        </span>
+      </div>
+      <div class="branch-stat" style="color:var(--muted-2);">
+        <div class="branch-stat-val" style="color:var(--muted-2);font-size:12px;">{{this.userCount}}</div>
+        <div class="branch-stat-lbl">Staff</div>
+      </div>
+    </a>
+    {{/each}}
   </div>
 </div>
 {{/if}}
 {{/if}}
 
-{{!-- Quick Actions --}}
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-  <a href="/web/invoices/create?type=invoice"
-     class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow text-center group">
-    <div class="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-blue-100 transition-colors">
-      <i class="fas fa-file-invoice text-blue-600"></i>
+<!-- ─── INVITE USER MODAL ──────────────────── -->
+{{#if isOwner}}
+<div class="modal-overlay" id="inviteModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Invite Team Member</h3>
+      <button class="modal-close" onclick="closeModal('inviteModal')">✕</button>
     </div>
-    <p class="text-sm font-medium text-gray-700">New Invoice</p>
-  </a>
-  <a href="/web/clients"
-     class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow text-center group">
-    <div class="w-11 h-11 bg-purple-50 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-purple-100 transition-colors">
-      <i class="fas fa-users text-purple-600"></i>
+    <div class="modal-body">
+      <div class="alert-modal" id="inviteAlert"></div>
+
+      <div class="form-group">
+        <label class="form-label">WhatsApp Number</label>
+        <input type="tel" class="form-input" id="invitePhone" placeholder="077 123 4567" inputmode="numeric">
+        <div class="form-hint">The user must message your WhatsApp bot with <strong>JOIN</strong> to complete registration.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <div class="role-grid">
+          <div class="role-option selected" id="role-manager" onclick="selectRole('manager')">
+            <input type="radio" name="invRole" value="manager" checked>
+            <div class="role-title">Manager</div>
+            <div class="role-desc">Create, edit invoices; view reports; manage products</div>
+          </div>
+          <div class="role-option" id="role-clerk" onclick="selectRole('clerk')">
+            <input type="radio" name="invRole" value="clerk">
+            <div class="role-title">Clerk</div>
+            <div class="role-desc">Create invoices only; limited access</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Assign Branch</label>
+        <select class="form-input form-select" id="inviteBranch">
+          <option value="">No specific branch (all access)</option>
+          {{#each branchPerformance}}
+          <option value="{{this._id}}">{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
     </div>
-    <p class="text-sm font-medium text-gray-700">Clients</p>
-  </a>
-  <a href="/web/reports"
-     class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow text-center group">
-    <div class="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-amber-100 transition-colors">
-      <i class="fas fa-chart-bar text-amber-600"></i>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('inviteModal')">Cancel</button>
+      <button class="btn btn-amber" id="inviteSubmitBtn" onclick="submitInvite()">
+        <span id="inviteBtnText">Send Invite</span>
+        <div class="spin" id="inviteSpinner" style="border-top-color:var(--navy);"></div>
+      </button>
     </div>
-    <p class="text-sm font-medium text-gray-700">Reports</p>
-  </a>
-  {{#if isOwner}}
-  <a href="/web/users"
-     class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow text-center group">
-    <div class="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-emerald-100 transition-colors">
-      <i class="fas fa-user-plus text-emerald-600"></i>
-    </div>
-    <p class="text-sm font-medium text-gray-700">Team</p>
-  </a>
-  {{else}}
-  <a href="/web/files"
-     class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow text-center group">
-    <div class="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-emerald-100 transition-colors">
-      <i class="fas fa-folder-open text-emerald-600"></i>
-    </div>
-    <p class="text-sm font-medium text-gray-700">Files</p>
-  </a>
-  {{/if}}
+  </div>
+</div>
+{{/if}}
+
+<!-- ─── TOAST ──────────────────────────────── -->
+<div class="toast" id="dashToast">
+  <div class="toast-dot"></div>
+  <span id="dashToastMsg"></span>
 </div>
 
 <script>
-const currency = '{{user.currency}}';
+  /* ── GREETING ─────────────────────────────── */
+  const hr = new Date().getHours();
+  document.querySelectorAll('.greeting').forEach(el => {
+    const greet = hr < 12 ? 'morning' : hr < 17 ? 'afternoon' : 'evening';
+    el.innerHTML = el.innerHTML.replace('{{greeting}}', greet);
+  });
+  // Inject greeting into header
+  const h1 = document.querySelector('.dash-header-left h1');
+  if (h1) {
+    const greet = hr < 12 ? 'morning' : hr < 17 ? 'afternoon' : 'evening';
+    h1.textContent = `Good ${greet}`;
+  }
 
-function loadChart(branchId) {
-  const url = branchId
-    ? `/web/api/revenue-chart?branchId=${branchId}`
-    : '/web/api/revenue-chart';
+  const currency = '{{user.currency}}';
 
-  fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      if (window._chart) window._chart.destroy();
-      const ctx = document.getElementById('revenueChart').getContext('2d');
-      window._chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: data.map(d => {
-            const dt = new Date(d.date);
-            return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-          }),
-          datasets: [{
-            label: 'Revenue',
-            data: data.map(d => d.revenue),
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59,130,246,0.07)',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: {
-            callbacks: { label: ctx => `${currency} ${ctx.parsed.y.toLocaleString()}` }
-          }},
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.04)' },
-              ticks: { callback: v => `${currency} ${v.toLocaleString()}`, font: { size: 11 } }
+  /* ── CHART ────────────────────────────────── */
+  function loadChart(branch) {
+    const b = branch || (document.getElementById('chartBranch') ? document.getElementById('chartBranch').value : '');
+    const url = b ? `/web/api/revenue-chart?branchId=${b}` : '/web/api/revenue-chart';
+
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (window._chart) window._chart.destroy();
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+
+        const grad = ctx.createLinearGradient(0, 0, 0, 240);
+        grad.addColorStop(0, 'rgba(245,158,11,0.15)');
+        grad.addColorStop(1, 'rgba(245,158,11,0)');
+
+        window._chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.map(d => {
+              const dt = new Date(d.date);
+              return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            }),
+            datasets: [{
+              label: 'Revenue',
+              data: data.map(d => d.revenue),
+              borderColor: '#f59e0b',
+              backgroundColor: grad,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHoverBackgroundColor: '#f59e0b',
+              pointHoverBorderColor: '#0d1117',
+              pointHoverBorderWidth: 2,
+              tension: 0.4,
+              fill: true
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: '#1f2937',
+                borderColor: 'rgba(255,255,255,0.08)',
+                borderWidth: 1,
+                titleColor: '#8b949e',
+                bodyColor: '#f8fafc',
+                titleFont: { family: 'DM Mono', size: 11 },
+                bodyFont: { family: 'DM Mono', size: 13, weight: '500' },
+                padding: 12,
+                callbacks: {
+                  label: ctx => `  ${currency} ${ctx.parsed.y.toLocaleString()}`
+                }
+              }
             },
-            x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                border: { display: false },
+                ticks: {
+                  color: '#6e7681',
+                  font: { family: 'DM Mono', size: 11 },
+                  callback: v => `${currency} ${v.toLocaleString()}`
+                }
+              },
+              x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { color: '#6e7681', font: { family: 'DM Mono', size: 11 }, maxRotation: 0 }
+              }
+            }
           }
-        }
-      });
-    })
-    .catch(err => console.error('Chart error:', err));
-}
+        });
+      })
+      .catch(err => console.error('Chart error:', err));
+  }
 
-loadChart('');
+  loadChart('');
+
+  /* ── MODAL ────────────────────────────────── */
+  function openModal(id) {
+    document.getElementById(id).classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', function(e) {
+      if (e.target === this) closeModal(this.id);
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
+    }
+  });
+
+  /* ── ROLE SELECT ──────────────────────────── */
+  let _selectedRole = 'manager';
+  function selectRole(role) {
+    _selectedRole = role;
+    document.querySelectorAll('.role-option').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`role-${role}`).classList.add('selected');
+  }
+
+  /* ── INVITE SUBMIT ────────────────────────── */
+  async function submitInvite() {
+    const phone = document.getElementById('invitePhone').value.trim();
+    const branchId = document.getElementById('inviteBranch').value;
+
+    if (!phone) { showInviteAlert('Please enter a phone number.', 'error'); return; }
+
+    const btn = document.getElementById('inviteSubmitBtn');
+    const spinner = document.getElementById('inviteSpinner');
+    const btnText = document.getElementById('inviteBtnText');
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    btnText.style.display = 'none';
+
+    try {
+      const res = await fetch('/web/users/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, role: _selectedRole, branchId: branchId || undefined })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        closeModal('inviteModal');
+        showToast('✓ Invite created. Ask them to message JOIN on WhatsApp.', 'success');
+        document.getElementById('invitePhone').value = '';
+      } else {
+        showInviteAlert(data.error || 'Failed to create invite.', 'error');
+      }
+    } catch {
+      showInviteAlert('Network error. Please try again.', 'error');
+    }
+
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    btnText.style.display = 'inline';
+  }
+
+  function showInviteAlert(msg, type) {
+    const el = document.getElementById('inviteAlert');
+    el.textContent = msg;
+    el.className = `alert-modal ${type}`;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+  }
+
+  /* ── TOAST ────────────────────────────────── */
+  let _toastTimer = null;
+  function showToast(msg, type = 'success') {
+    const toast = document.getElementById('dashToast');
+    document.getElementById('dashToastMsg').textContent = msg;
+    toast.className = `toast t-${type} show`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 4000);
+  }
 </script>

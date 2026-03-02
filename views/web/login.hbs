@@ -3,174 +3,975 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - ZimQuote</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>Sign In - ZimQuote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #0d1117;
+      --navy-2: #161b22;
+      --navy-3: #1f2937;
+      --amber: #f59e0b;
+      --amber-dim: #d97706;
+      --amber-glow: rgba(245,158,11,0.12);
+      --white: #f8fafc;
+      --muted: #8b949e;
+      --muted-2: #6e7681;
+      --border: rgba(255,255,255,0.07);
+      --border-2: rgba(255,255,255,0.04);
+      --red: #f85149;
+      --green: #3fb950;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--navy);
+      color: var(--white);
+      font-family: 'Instrument Sans', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LAYOUT ───────────────────────────────────── */
+    .shell {
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      min-height: 100vh;
+    }
+
+    /* ── LEFT PANEL ───────────────────────────────── */
+    .left {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 56px;
+      background: var(--navy-2);
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .left::before {
+      content: '';
+      position: absolute;
+      top: -120px; left: -120px;
+      width: 480px; height: 480px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .left::after {
+      content: '';
+      position: absolute;
+      bottom: -80px; right: -80px;
+      width: 360px; height: 360px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-icon {
+      width: 40px; height: 40px;
+      background: var(--amber);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .brand-icon svg { width: 20px; height: 20px; color: var(--navy); }
+
+    .brand-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: var(--white);
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--amber-glow);
+      border: 1px solid rgba(245,158,11,0.25);
+      color: var(--amber);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+
+    .hero-tag::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--amber);
+      border-radius: 50%;
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .hero-title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(32px, 3.5vw, 48px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      color: var(--white);
+      margin-bottom: 20px;
+    }
+
+    .hero-title span {
+      color: var(--amber);
+    }
+
+    .hero-desc {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 420px;
+      margin-bottom: 40px;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 32px;
+    }
+
+    .stat-item {}
+    .stat-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--white);
+      letter-spacing: -0.5px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--muted-2);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .left-footer {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .left-footer a {
+      font-size: 12px;
+      color: var(--muted-2);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .left-footer a:hover { color: var(--muted); }
+
+    /* decorative grid lines */
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border-2) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-2) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── RIGHT PANEL ──────────────────────────────── */
+    .right {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 48px;
+      background: var(--navy);
+      position: relative;
+    }
+
+    .form-header {
+      margin-bottom: 40px;
+    }
+
+    .form-header h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      color: var(--white);
+      margin-bottom: 8px;
+    }
+
+    .form-header p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* STEP INDICATORS */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 36px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .step-dot {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'DM Mono', monospace;
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .step.active .step-dot {
+      background: var(--amber);
+      color: var(--navy);
+    }
+
+    .step.inactive .step-dot {
+      background: var(--navy-3);
+      color: var(--muted-2);
+      border: 1px solid var(--border);
+    }
+
+    .step.done .step-dot {
+      background: var(--green);
+      color: var(--navy);
+    }
+
+    .step-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted-2);
+      white-space: nowrap;
+    }
+
+    .step.active .step-label { color: var(--white); }
+
+    .step-line {
+      height: 1px;
+      background: var(--border);
+      flex: 1;
+      margin: 0 12px;
+    }
+
+    /* ERROR ALERT */
+    .alert-error {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(248,81,73,0.08);
+      border: 1px solid rgba(248,81,73,0.2);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #fca5a5;
+      line-height: 1.5;
+      animation: slide-in 0.3s ease;
+    }
+
+    .alert-error::before {
+      content: '⚠';
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* FORM */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-prefix {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--amber);
+      font-weight: 500;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px 14px 52px;
+      font-size: 15px;
+      font-family: 'DM Mono', monospace;
+      font-weight: 500;
+      color: var(--white);
+      outline: none;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input::placeholder { color: var(--muted-2); letter-spacing: 0; }
+
+    .form-input:focus {
+      border-color: var(--amber);
+      background: var(--navy-3);
+      box-shadow: 0 0 0 3px var(--amber-glow);
+    }
+
+    .form-input.no-prefix {
+      padding-left: 16px;
+      font-family: 'DM Mono', monospace;
+      font-size: 20px;
+      letter-spacing: 8px;
+      text-align: center;
+    }
+
+    .form-hint {
+      font-size: 12px;
+      color: var(--muted-2);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    /* SUBMIT BUTTON */
+    .btn-primary {
+      width: 100%;
+      padding: 15px 24px;
+      background: var(--amber);
+      color: var(--navy);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Syne', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+    }
+
+    .btn-primary:hover {
+      background: var(--amber-dim);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(245,158,11,0.3);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-ghost {
+      width: 100%;
+      padding: 14px 24px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.15); color: var(--white); }
+
+    /* SPINNER */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(13,17,23,0.3);
+      border-top-color: var(--navy);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* OTP BOXES */
+    .otp-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .otp-box {
+      aspect-ratio: 1;
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--white);
+      text-align: center;
+      outline: none;
+      transition: all 0.2s;
+      caret-color: var(--amber);
+    }
+
+    .otp-box:focus {
+      border-color: var(--amber);
+      background: var(--navy-3);
+      box-shadow: 0 0 0 3px var(--amber-glow);
+    }
+
+    .otp-box.filled {
+      border-color: rgba(245,158,11,0.4);
+      color: var(--amber);
+    }
+
+    /* PHONE DISPLAY */
+    .phone-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+    }
+
+    .phone-display .num {
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--white);
+      letter-spacing: 1px;
+    }
+
+    .phone-display button {
+      background: none;
+      border: none;
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Instrument Sans', sans-serif;
+    }
+    .phone-display button:hover { text-decoration: underline; }
+
+    /* TIMER */
+    .resend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+    }
+
+    .timer-label {
+      font-size: 12px;
+      color: var(--muted-2);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .resend-btn {
+      background: none;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Instrument Sans', sans-serif;
+      color: var(--muted-2);
+      transition: color 0.2s;
+    }
+    .resend-btn.active { color: var(--amber); }
+    .resend-btn.active:hover { text-decoration: underline; }
+
+    /* DIVIDER */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .divider span {
+      font-size: 11px;
+      color: var(--muted-2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    /* FOOTER LINK */
+    .form-footer {
+      margin-top: 28px;
+      text-align: center;
+    }
+
+    .form-footer p {
+      font-size: 13px;
+      color: var(--muted-2);
+    }
+
+    .form-footer a {
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .form-footer a:hover { text-decoration: underline; }
+
+    /* PANELS */
+    #panelPhone { display: block; }
+    #panelOtp   { display: none; }
+
+    /* SUCCESS BADGE */
+    .success-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(63,185,80,0.08);
+      border: 1px solid rgba(63,185,80,0.2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #7ee787;
+      margin-bottom: 20px;
+      animation: slide-in 0.3s ease;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .left { display: none; }
+      .right { padding: 40px 28px; }
+    }
+
+    @media (max-width: 480px) {
+      .right { padding: 32px 20px; }
+      .otp-grid { gap: 6px; }
+    }
+  </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen flex items-center justify-center p-4">
-  
-  <div class="w-full max-w-md">
-    
-    <!-- Logo & Title -->
-    <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-        <i class="fas fa-file-invoice text-white text-2xl"></i>
+<body>
+
+<div class="shell">
+
+  <!-- LEFT: BRAND PANEL -->
+  <div class="left">
+    <div class="grid-lines"></div>
+
+    <div class="brand-mark">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
       </div>
-      <h1 class="text-3xl font-bold text-gray-800">ZimQuote</h1>
-      <p class="text-gray-600 mt-2">Professional invoicing made simple</p>
+      <span class="brand-name">ZimQuote</span>
     </div>
-    
-    <!-- Login Card -->
-    <div class="bg-white rounded-2xl shadow-xl p-8">
-      
-      <h2 class="text-2xl font-bold text-gray-800 mb-6">Welcome Back</h2>
-      
-      {{#if error}}
-        <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div class="flex items-center">
-            <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
-            <p class="text-sm text-red-700">
-              {{#if (eq error 'auth_required')}}
-                Please login to continue
-              {{else if (eq error 'session_expired')}}
-                Your session expired. Please login again
-              {{else if (eq error 'account_not_found')}}
-                Account not found
-              {{else}}
-                An error occurred. Please try again
-              {{/if}}
-            </p>
-          </div>
+
+    <div class="hero-content">
+      <div class="hero-tag">Business Management Platform</div>
+      <h1 class="hero-title">
+        Run your business<br>
+        <span>with precision.</span>
+      </h1>
+      <p class="hero-desc">
+        Create invoices, track payments, manage branches, and generate professional reports — all from one unified platform built for Zimbabwean businesses.
+      </p>
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-num">3.2k+</div>
+          <div class="stat-label">Invoices Sent</div>
         </div>
-      {{/if}}
-      
-      <form id="loginForm">
-        
-        <!-- Phone Number -->
-        <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            <i class="fas fa-phone mr-1"></i> WhatsApp Number
-          </label>
-          <input 
-            type="tel" 
-            id="phone" 
-            name="phone" 
-            placeholder="0772 123 456"
-            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            required
-            autofocus
-          >
-          <p class="mt-1 text-xs text-gray-500">Enter your Zimbabwe mobile number</p>
+        <div class="stat-item">
+          <div class="stat-num">$1.4M</div>
+          <div class="stat-label">Revenue Tracked</div>
         </div>
-        
-        <!-- Submit Button -->
-        <button 
-          type="submit" 
-          id="submitBtn"
-          class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span id="btnText">
-            <i class="fas fa-paper-plane mr-2"></i> Send OTP
-          </span>
-          <span id="btnLoader" class="hidden">
-            <i class="fas fa-spinner fa-spin mr-2"></i> Sending...
-          </span>
-        </button>
-        
-      </form>
-      
-      <!-- Info -->
-      <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-        <p class="text-sm text-blue-800">
-          <i class="fas fa-info-circle mr-1"></i>
-          We'll send a 6-digit code to your WhatsApp
-        </p>
+        <div class="stat-item">
+          <div class="stat-num">99.9%</div>
+          <div class="stat-label">Uptime SLA</div>
+        </div>
       </div>
-      
-      <!-- Help -->
-      <div class="mt-6 text-center">
-        <p class="text-sm text-gray-600">
-          Don't have an account? 
-          <a href="https://wa.me/{{whatsappNumber}}?text=menu" class="text-blue-600 hover:underline">
-            Sign up via WhatsApp
-          </a>
-        </p>
-      </div>
-      
     </div>
-    
-    <!-- Footer -->
-    <p class="text-center text-sm text-gray-500 mt-6">
-      &copy; 2025 ZimQuote. All rights reserved.
-    </p>
-    
+
+    <div class="left-footer">
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <a href="#">Support</a>
+    </div>
   </div>
-  
-  <script>
-    const form = document.getElementById('loginForm');
-    const phoneInput = document.getElementById('phone');
-    const submitBtn = document.getElementById('submitBtn');
-    const btnText = document.getElementById('btnText');
-    const btnLoader = document.getElementById('btnLoader');
-    
-    // Format phone as user types
-    phoneInput.addEventListener('input', (e) => {
-      let value = e.target.value.replace(/\D/g, '');
-      if (value.length > 10) value = value.slice(0, 10);
-      
-      // Format: 0772 123 456
-      if (value.length >= 4) {
-        value = value.slice(0, 4) + ' ' + value.slice(4);
+
+  <!-- RIGHT: AUTH PANEL -->
+  <div class="right">
+
+    <div class="form-header">
+      <h2>Welcome back</h2>
+      <p>Sign in with your registered WhatsApp number to continue.</p>
+    </div>
+
+    <!-- STEPS -->
+    <div class="steps">
+      <div class="step active" id="step1">
+        <div class="step-dot">01</div>
+        <span class="step-label">Phone</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step inactive" id="step2">
+        <div class="step-dot">02</div>
+        <span class="step-label">Verify</span>
+      </div>
+    </div>
+
+    {{#if error}}
+    <div class="alert-error">
+      {{#if (eq error 'auth_required')}}Please sign in to continue.
+      {{else if (eq error 'session_expired')}}Your session expired. Please sign in again.
+      {{else if (eq error 'account_not_found')}}No account found for this number.
+      {{else}}Something went wrong. Please try again.
+      {{/if}}
+    </div>
+    {{/if}}
+
+    <div id="errorAlert" class="alert-error" style="display:none;"></div>
+
+    <!-- PANEL 1: PHONE -->
+    <div id="panelPhone">
+      <div class="form-group">
+        <label class="form-label">WhatsApp Number</label>
+        <div class="input-wrap">
+          <span class="input-prefix">+263</span>
+          <input
+            type="tel"
+            id="phoneInput"
+            class="form-input"
+            placeholder="77 123 4567"
+            maxlength="13"
+            inputmode="numeric"
+            autocomplete="tel"
+          >
+        </div>
+        <div class="form-hint">Enter the number registered on your WhatsApp account.</div>
+      </div>
+
+      <button class="btn-primary" id="sendOtpBtn" onclick="sendOtp()">
+        <span id="sendBtnText">Send Verification Code</span>
+        <div class="spinner" id="sendSpinner" style="display:none;"></div>
+      </button>
+
+      <div class="divider"><span>New to ZimQuote?</span></div>
+
+      <div style="text-align:center;">
+        <p style="font-size:13px;color:var(--muted-2);line-height:1.6;">
+          Register via WhatsApp by messaging <strong style="color:var(--white);">JOIN</strong> to our business number.
+        </p>
+      </div>
+    </div>
+
+    <!-- PANEL 2: OTP -->
+    <div id="panelOtp">
+      <div class="success-badge" id="otpSentBadge" style="display:none;">
+        ✓ Code sent — check your WhatsApp messages
+      </div>
+
+      <div class="phone-display">
+        <span class="num" id="displayPhone">+263 —</span>
+        <button onclick="goBack()">Change</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">6-Digit Verification Code</label>
+        <div class="otp-grid" id="otpGrid">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+        </div>
+        <div class="resend-row">
+          <span class="timer-label" id="timerLabel">Resend in 00:60</span>
+          <button class="resend-btn" id="resendBtn" onclick="resendOtp()" disabled>Resend code</button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="verifyBtn" onclick="verifyOtp()">
+        <span id="verifyBtnText">Verify & Sign In</span>
+        <div class="spinner" id="verifySpinner" style="display:none;"></div>
+      </button>
+
+      <button class="btn-ghost" onclick="goBack()">← Back to phone number</button>
+    </div>
+
+    <div class="form-footer">
+      <p>Having trouble? <a href="mailto:support@zimquote.co.zw">Contact support</a></p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let _phone = '';
+  let _timerInterval = null;
+  let _timerSecs = 60;
+
+  /* ── UTILITIES ────────────────────────────── */
+  function showError(msg) {
+    const el = document.getElementById('errorAlert');
+    el.textContent = msg;
+    el.style.display = 'flex';
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
+  }
+
+  function setLoading(btnId, spinnerId, textId, loading) {
+    document.getElementById(btnId).disabled = loading;
+    document.getElementById(spinnerId).style.display = loading ? 'block' : 'none';
+    document.getElementById(textId).style.display = loading ? 'none' : 'inline';
+  }
+
+  function formatDisplayPhone(raw) {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.startsWith('263')) {
+      const local = digits.slice(3);
+      return '+263 ' + local.slice(0, 2) + ' ' + local.slice(2, 5) + ' ' + local.slice(5);
+    }
+    return '+263 ' + raw;
+  }
+
+  /* ── PHONE INPUT FORMATTING ───────────────── */
+  document.getElementById('phoneInput').addEventListener('input', function(e) {
+    let v = e.target.value.replace(/\D/g, '').slice(0, 10);
+    let fmt = v;
+    if (v.length > 2) fmt = v.slice(0,2) + ' ' + v.slice(2);
+    if (v.length > 5) fmt = v.slice(0,2) + ' ' + v.slice(2,5) + ' ' + v.slice(5);
+    e.target.value = fmt;
+  });
+
+  document.getElementById('phoneInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') sendOtp();
+  });
+
+  /* ── SEND OTP ─────────────────────────────── */
+  async function sendOtp() {
+    const raw = document.getElementById('phoneInput').value.replace(/\s/g, '');
+    if (!raw || raw.length < 9) { showError('Please enter a valid Zimbabwean mobile number.'); return; }
+
+    let phone = raw;
+    if (phone.startsWith('0')) phone = '263' + phone.slice(1);
+
+    _phone = phone;
+    setLoading('sendOtpBtn', 'sendSpinner', 'sendBtnText', true);
+
+    try {
+      const res = await fetch('/web/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        switchToOtp();
+      } else {
+        showError(data.error || 'Failed to send code. Please try again.');
       }
-      if (value.length >= 8) {
-        value = value.slice(0, 8) + ' ' + value.slice(8);
-      }
-      
-      e.target.value = value;
+    } catch {
+      showError('Network error. Check your connection and try again.');
+    }
+
+    setLoading('sendOtpBtn', 'sendSpinner', 'sendBtnText', false);
+  }
+
+  /* ── OTP PANEL ────────────────────────────── */
+  function switchToOtp() {
+    document.getElementById('panelPhone').style.display = 'none';
+    document.getElementById('panelOtp').style.display = 'block';
+    document.getElementById('displayPhone').textContent = formatDisplayPhone(_phone);
+    document.getElementById('otpSentBadge').style.display = 'flex';
+    document.getElementById('step1').className = 'step done';
+    document.getElementById('step2').className = 'step active';
+
+    // Clear boxes
+    document.querySelectorAll('.otp-box').forEach(b => { b.value = ''; b.classList.remove('filled'); });
+    document.querySelectorAll('.otp-box')[0].focus();
+
+    startTimer();
+  }
+
+  function goBack() {
+    document.getElementById('panelPhone').style.display = 'block';
+    document.getElementById('panelOtp').style.display = 'none';
+    document.getElementById('step1').className = 'step active';
+    document.getElementById('step2').className = 'step inactive';
+    clearInterval(_timerInterval);
+  }
+
+  /* ── OTP BOXES ────────────────────────────── */
+  const boxes = document.querySelectorAll('.otp-box');
+
+  boxes.forEach((box, idx) => {
+    box.addEventListener('input', function() {
+      this.value = this.value.replace(/\D/g, '').slice(-1);
+      this.classList.toggle('filled', this.value !== '');
+      if (this.value && idx < boxes.length - 1) boxes[idx + 1].focus();
+      if (Array.from(boxes).every(b => b.value)) verifyOtp();
     });
-    
-    form.addEventListener('submit', async (e) => {
+
+    box.addEventListener('keydown', function(e) {
+      if (e.key === 'Backspace' && !this.value && idx > 0) {
+        boxes[idx - 1].focus();
+        boxes[idx - 1].value = '';
+        boxes[idx - 1].classList.remove('filled');
+      }
+      if (e.key === 'ArrowLeft' && idx > 0) boxes[idx - 1].focus();
+      if (e.key === 'ArrowRight' && idx < boxes.length - 1) boxes[idx + 1].focus();
+    });
+
+    box.addEventListener('paste', function(e) {
       e.preventDefault();
-      
-      const phone = phoneInput.value.replace(/\s/g, '');
-      
-      if (!phone || phone.length < 10) {
-        alert('Please enter a valid phone number');
-        return;
-      }
-      
-      // Show loading
-      submitBtn.disabled = true;
-      btnText.classList.add('hidden');
-      btnLoader.classList.remove('hidden');
-      
-      try {
-        const response = await fetch('/web/auth/request-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-          // Redirect to OTP page
-          window.location.href = `/web/verify-otp?phone=${encodeURIComponent(phone)}`;
-        } else {
-          alert(data.error || 'Failed to send OTP');
-          submitBtn.disabled = false;
-          btnText.classList.remove('hidden');
-          btnLoader.classList.add('hidden');
-        }
-        
-      } catch (error) {
-        console.error('Error:', error);
-        alert('Network error. Please try again.');
-        submitBtn.disabled = false;
-        btnText.classList.remove('hidden');
-        btnLoader.classList.add('hidden');
-      }
+      const paste = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+      paste.split('').forEach((ch, i) => {
+        if (boxes[i]) { boxes[i].value = ch; boxes[i].classList.add('filled'); }
+      });
+      if (paste.length > 0) boxes[Math.min(paste.length, boxes.length - 1)].focus();
+      if (paste.length === 6) verifyOtp();
     });
-  </script>
+  });
+
+  /* ── VERIFY OTP ───────────────────────────── */
+  async function verifyOtp() {
+    const code = Array.from(boxes).map(b => b.value).join('');
+    if (code.length !== 6) { showError('Please enter the complete 6-digit code.'); return; }
+
+    setLoading('verifyBtn', 'verifySpinner', 'verifyBtnText', true);
+
+    try {
+      const res = await fetch('/web/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: _phone, code })
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        window.location.href = data.redirectUrl || '/web/dashboard';
+      } else {
+        showError(data.error || 'Invalid code. Please try again.');
+        boxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+        boxes[0].focus();
+      }
+    } catch {
+      showError('Network error. Please try again.');
+    }
+
+    setLoading('verifyBtn', 'verifySpinner', 'verifyBtnText', false);
+  }
+
+  /* ── TIMER ────────────────────────────────── */
+  function startTimer() {
+    _timerSecs = 60;
+    const resend = document.getElementById('resendBtn');
+    resend.disabled = true;
+    resend.classList.remove('active');
+    clearInterval(_timerInterval);
+
+    _timerInterval = setInterval(() => {
+      _timerSecs--;
+      const m = String(Math.floor(_timerSecs / 60)).padStart(2, '0');
+      const s = String(_timerSecs % 60).padStart(2, '0');
+      document.getElementById('timerLabel').textContent = `Resend in ${m}:${s}`;
+
+      if (_timerSecs <= 0) {
+        clearInterval(_timerInterval);
+        document.getElementById('timerLabel').textContent = '';
+        resend.disabled = false;
+        resend.classList.add('active');
+      }
+    }, 1000);
+  }
+
+  async function resendOtp() {
+    document.getElementById('resendBtn').disabled = true;
+    document.getElementById('resendBtn').classList.remove('active');
+    try {
+      await fetch('/web/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: _phone })
+      });
+      document.getElementById('otpSentBadge').style.display = 'flex';
+      startTimer();
+    } catch {
+      showError('Failed to resend. Please try again.');
+    }
+  }
+</script>
 </body>
 </html>
