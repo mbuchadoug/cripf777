@@ -519,13 +519,10 @@
             <button class="btn" disabled style="opacity:0.6;cursor:not-allowed;width:100%;">
               ✅ Current Plan
             </button>
-          {{else if (eq user.subscriptionPlan "silver")}}
-            <form method="POST" action="/payments/paynow/init" style="width:100%;">
-              <input type="hidden" name="plan" value="gold">
-              <button class="btn" type="submit" style="width:100%;">
-                💎 Upgrade to Gold
-              </button>
-            </form>
+        {{else if (eq user.subscriptionPlan "silver")}}
+  <button class="btn" style="width:100%;" onclick="openPayModal('gold', 'Gold Plan', 10)">
+    💎 Upgrade to Gold
+  </button>
           {{else}}
         <button class="btn" style="width:100%;" onclick="openPayModal('gold', 'Gold Plan', 10)">
   📱 Get Gold
@@ -562,12 +559,13 @@
                 </div>
               </div>
             </div>
-            <form method="POST" action="/payments/paynow/init" style="flex-shrink:0;">
-              <input type="hidden" name="plan" value="gold">
-              <button class="btn" type="submit" style="background:#f59e0b;color:#fff;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;white-space:nowrap;">
-                Upgrade ($10/mo) →
-              </button>
-            </form>
+         <div style="flex-shrink:0;">
+  <button 
+    onclick="openPayModal('gold', 'Gold Plan', 10)"
+    style="background:#f59e0b;color:#fff;font-weight:700;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;white-space:nowrap;">
+    Upgrade ($10/mo) →
+  </button>
+</div>
           </div>
         {{/if}}
       {{/unless}}
