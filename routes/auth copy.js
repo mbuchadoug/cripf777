@@ -122,30 +122,24 @@ router.get("/google", (req, res, next) => {
       if (typeof req.session.save === "function") {
         req.session.save(() => {
           const state = encodeState(safe);
-       const force = req.query?.force === "1"; // ✅ add
-return passport.authenticate("google", {
-  scope: ["profile", "email"],
-  state,
-  ...(force ? { prompt: "select_account" } : {}) // ✅ add
-})(req, res, next);
+          return passport.authenticate("google", {
+            scope: ["profile", "email"],
+            state
+          })(req, res, next);
         });
         return;
       }
     }
 
     const state = encodeState(safe);
-const force = req.query?.force === "1"; // ✅ add
-return passport.authenticate("google", {
-  scope: ["profile", "email"],
-  state,
-  ...(force ? { prompt: "select_account" } : {}) // ✅ add
-})(req, res, next);
+    return passport.authenticate("google", {
+      scope: ["profile", "email"],
+      state
+    })(req, res, next);
   } catch {
-   const force = req.query?.force === "1";
-return passport.authenticate("google", {
-  scope: ["profile", "email"],
-  ...(force ? { prompt: "select_account" } : {})
-})(req, res, next);
+    return passport.authenticate("google", {
+      scope: ["profile", "email"]
+    })(req, res, next);
   }
 });
 
@@ -518,17 +512,18 @@ router.post("/admin/create-parent", ensureAuth, async (req, res) => {
 /*  to /arena without touching parent/teacher dashboards               */
 /* ================================================================== */
 router.get("/arena", async (req, res) => {
+  // Already logged in → go straight to Arena
   if (req.user) {
     return res.redirect("/arena");
   }
 
-  // ✅ DO NOT treat Arena as parent
-  req.session.signupSource = "arena";
+  // Not logged in → reuse Google OAuth
+  // SAFEST MVP: treat as consumer-enabled user (same as parent flow)
+  req.session.signupSource = "parent"; // keeps existing logic stable
   req.session.returnTo = "/arena";
 
   req.session.save(() => {
-    // ✅ force chooser for arena (people complain here most)
-    return res.redirect("/auth/google?returnTo=%2Farena&force=1");
+    return res.redirect("/auth/google?returnTo=%2Farena");
   });
 });
 export default router;

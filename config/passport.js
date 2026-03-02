@@ -72,25 +72,45 @@ export default function configurePassport() {
 if (isParentSignup) {
   updateDoc.$set.consumerEnabled = true;
   updateDoc.$set.accountType = "parent";
-
-  // only set role if new user
   updateDoc.$setOnInsert.role = "parent";
-} else if (isTeacherSignup) {  // ✅ ADD THIS BLOCK
+} else if (isTeacherSignup) {
   updateDoc.$set.consumerEnabled = true;
-  updateDoc.$set.accountType = "parent"; // Teachers use parent features
+  updateDoc.$set.accountType = "parent";
   updateDoc.$setOnInsert.role = "private_teacher";
-}
-else {
-  // only set role if new user
+} else if (isArenaSignup) {
+  // ✅ Arena: allow login without forcing parent/teacher dashboards
+  // make them consumerEnabled if you want arena to use consumer stuff, but DO NOT set accountType unless needed
+  updateDoc.$set.consumerEnabled = true;
+
+  // keep default employee role only if new user (or you can set a dedicated "arena" role if you want later)
+  updateDoc.$setOnInsert.role = "employee";
+} else {
   updateDoc.$setOnInsert.role = "employee";
 }
+     // 1) try by googleId first
+let user = await User.findOne({ googleId });
 
+// 2) if not found, try by email (prevents duplicates when same email exists)
+if (!user && email) {
+  user = await User.findOne({ email });
+  if (user) {
+    // attach googleId to existing email account
+    user.googleId = googleId;
+    // apply updates
+    Object.assign(user, update);
+    user.lastLogin = new Date();
+    await user.save();
+  }
+}
 
-          const user = await User.findOneAndUpdate(
-            { googleId },
-            updateDoc,
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-          );
+// 3) if still not found, create/upsert by googleId (new user)
+if (!user) {
+  user = await User.findOneAndUpdate(
+    { googleId },
+    updateDoc,
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
 
           // ✅ Ensure accountType is never null (prevents enum validation error)
 // IMPORTANT: do NOT overwrite valid parent accounts.
