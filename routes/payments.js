@@ -45,17 +45,205 @@ const PLANS = {
 };
 
 /* ------------------------------
-   INITIATE PAYMENT
+   SHARED: Process a successful payment
+   Called by webhook AND manual poll
+-------------------------------- */
+async function processSuccessfulPayment(paymentId) {
+  const payment = await Payment.findById(paymentId);
+  if (!payment || payment.status === "paid") return; // idempotent
+
+  payment.status = "paid";
+  payment.paidAt = new Date();
+  await payment.save();
+
+  // Battle entry — stop here
+  if (payment.type === "battle_entry" && payment.battleId) {
+    const BattleEntry = (await import("../models/battleEntry.js")).default;
+    await BattleEntry.updateOne(
+      { battleId: payment.battleId, userId: payment.userId },
+      { $set: { status: "paid", paidAt: new Date() } }
+    );
+    return;
+  }
+
+  // Subscription payment
+  const planKey = payment.plan || "silver";
+  const planConfig = PLANS[planKey] || PLANS.silver;
+  const now = new Date();
+
+  const parent = await User.findById(payment.userId).lean();
+  let daysToAdd = planConfig.durationDays;
+
+  // Proration on upgrade
+  if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
+    const currentPlanKey = planKey.startsWith("teacher_")
+      ? `teacher_${parent.teacherSubscriptionPlan}`
+      : parent.subscriptionPlan;
+
+    const currentPlanConfig = PLANS[currentPlanKey];
+    if (currentPlanConfig && planConfig.amount > currentPlanConfig.amount) {
+      const remainingDays = Math.ceil(
+        (new Date(parent.subscriptionExpiresAt) - now) / (1000 * 60 * 60 * 24)
+      );
+      const unusedValue = (currentPlanConfig.amount / currentPlanConfig.durationDays) * remainingDays;
+      const creditDays = Math.floor((unusedValue / planConfig.amount) * planConfig.durationDays);
+      daysToAdd += creditDays;
+    }
+  }
+
+  let expiresAt;
+  if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
+    expiresAt = new Date(parent.subscriptionExpiresAt);
+    expiresAt.setDate(expiresAt.getDate() + daysToAdd);
+  } else {
+    expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + daysToAdd);
+  }
+
+  let updateFields;
+  if (planKey.startsWith("teacher_")) {
+    updateFields = {
+      teacherSubscriptionStatus: "paid",
+      teacherSubscriptionPlan: planKey === "teacher_starter" ? "starter" : "professional",
+      teacherSubscriptionExpiresAt: expiresAt,
+      teacherPaidAt: now,
+      aiQuizCredits: planConfig.aiQuizCredits,
+      aiQuizCreditsResetAt: now,
+      maxChildren: planConfig.maxChildren,
+      consumerEnabled: true
+    };
+  } else {
+    updateFields = {
+      subscriptionStatus: "paid",
+      subscriptionPlan: planKey,
+      maxChildren: planConfig.maxChildren,
+      subscriptionExpiresAt: expiresAt,
+      paidAt: now,
+      consumerEnabled: true
+    };
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(payment.userId, updateFields, { new: true });
+
+  // Upgrade trial children
+  const trialChildren = await User.find({
+    parentUserId: payment.userId,
+    role: "student",
+    consumerEnabled: false
+  });
+
+  if (trialChildren.length > 0) {
+    await User.updateMany(
+      { parentUserId: payment.userId, role: "student", consumerEnabled: false },
+      { $set: { consumerEnabled: true } }
+    );
+
+    const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+    if (org) {
+      for (const child of trialChildren) {
+        const rules = await QuizRule.find({
+          org: org._id,
+          grade: child.grade,
+          quizType: "paid",
+          enabled: true
+        });
+        for (const rule of rules) {
+          await assignQuizFromRule({ rule, userId: child._id, orgId: org._id, force: true });
+        }
+      }
+    }
+  }
+
+  await User.updateMany(
+    { parentUserId: updatedUser._id, role: "student" },
+    { $set: { consumerEnabled: true } }
+  );
+
+  const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
+  if (!org) return;
+
+  const children = await User.find({ parentUserId: updatedUser._id, role: "student" });
+  for (const child of children) {
+    const rules = await QuizRule.find({ org: org._id, grade: child.grade, quizType: "paid", enabled: true });
+    for (const rule of rules) {
+      await assignQuizFromRule({ rule, userId: child._id, orgId: org._id, force: true });
+    }
+  }
+
+  console.log(`[paynow] ${planConfig.name} activated for ${payment.userId}, expires: ${expiresAt.toISOString()}`);
+}
+/* ------------------------------
+   INITIATE MOBILE (EcoCash) PAYMENT
+   Returns JSON — frontend polls for status
 -------------------------------- */
 router.post("/paynow/init", ensureAuth, async (req, res) => {
   try {
-    const { plan } = req.body;
+    const { plan, phone } = req.body;
 
     // Validate plan
     if (!plan || !PLANS[plan]) {
-      return res.status(400).send("Invalid plan. Choose silver or gold.");
+      return res.status(400).json({ error: "Invalid plan selected." });
     }
 
+    // ── MOBILE FLOW: phone number provided ──────────────────────────
+    if (phone) {
+      // Normalize phone: strip spaces/dashes, ensure starts with 07
+      const normalizedPhone = String(phone)
+        .replace(/\s|-/g, "")
+        .replace(/^\+263/, "0")
+        .replace(/^263/, "0");
+
+      if (!/^07[7-8]\d{7}$/.test(normalizedPhone)) {
+        return res.status(400).json({
+          error: "Enter a valid EcoCash number (e.g. 0771234567)"
+        });
+      }
+
+      const selectedPlan = PLANS[plan];
+      const reference = `PN-${crypto.randomUUID()}`;
+
+      const paymentRequest = paynow.createPayment(
+        reference,
+        req.user.email || `${normalizedPhone}@ecocash.local`
+      );
+      paymentRequest.add(`${selectedPlan.name} Plan - Monthly`, selectedPlan.amount);
+
+      // sendMobile triggers USSD push to phone
+      const response = await paynow.sendMobile(
+        paymentRequest,
+        normalizedPhone,
+        "ecocash"
+      );
+
+      console.log("[paynow mobile] response:", response);
+
+      if (!response.success) {
+        return res.status(400).json({
+          error: response.error || "Failed to send EcoCash prompt. Check your number."
+        });
+      }
+
+      // Save payment record
+      await Payment.create({
+        userId: req.user._id,
+        reference,
+        amount: selectedPlan.amount,
+        plan,
+        pollUrl: response.pollUrl,
+        status: "pending",
+        meta: { phone: normalizedPhone, method: "ecocash_mobile" }
+      });
+
+      // Return pollUrl to frontend for polling
+      return res.json({
+        success: true,
+        reference,
+        pollUrl: response.pollUrl,
+        message: `Check your phone (${normalizedPhone}) and approve the EcoCash prompt.`
+      });
+    }
+
+    // ── WEB FALLBACK: no phone, use redirect checkout ────────────────
     const selectedPlan = PLANS[plan];
     const reference = `PN-${crypto.randomUUID()}`;
 
@@ -63,14 +251,13 @@ router.post("/paynow/init", ensureAuth, async (req, res) => {
       reference,
       req.user.email || "parent@payment.local"
     );
-
     paymentRequest.add(`${selectedPlan.name} Plan - Monthly`, selectedPlan.amount);
 
     const response = await paynow.send(paymentRequest);
 
     if (!response.success) {
-      console.error("[paynow init] failed", response);
-      return res.status(400).send("Failed to initiate payment");
+      console.error("[paynow init] web fallback failed", response);
+      return res.status(400).json({ error: "Failed to initiate payment" });
     }
 
     await Payment.create({
@@ -79,17 +266,69 @@ router.post("/paynow/init", ensureAuth, async (req, res) => {
       amount: selectedPlan.amount,
       plan,
       pollUrl: response.pollUrl,
-      status: "pending"
+      status: "pending",
+      meta: { method: "web_redirect" }
     });
 
-    return res.redirect(response.redirectUrl);
+    // For web fallback, return the redirect URL as JSON
+    return res.json({
+      success: true,
+      redirectUrl: response.redirectUrl
+    });
 
   } catch (err) {
     console.error("[paynow init] error:", err);
-    return res.status(500).send("Payment error");
+    return res.status(500).json({ error: "Payment error. Please try again." });
   }
 });
 
+/* ------------------------------
+   POLL PAYMENT STATUS
+   Frontend calls this to check if payment completed
+-------------------------------- */
+router.get("/paynow/poll/:reference", ensureAuth, async (req, res) => {
+  try {
+    const payment = await Payment.findOne({
+      reference: req.params.reference,
+      userId: req.user._id
+    }).lean();
+
+    if (!payment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    // Already confirmed by webhook
+    if (payment.status === "paid") {
+      return res.json({ status: "paid" });
+    }
+    if (payment.status === "failed" || payment.status === "cancelled") {
+      return res.json({ status: payment.status });
+    }
+
+    // Still pending — manually poll Paynow
+    if (payment.pollUrl) {
+      const pollResult = await paynow.pollTransaction(payment.pollUrl);
+      const statusStr = String(pollResult.status || "").toLowerCase();
+
+      if (statusStr === "paid") {
+        // Webhook may not have fired yet — trigger processing inline
+        await processSuccessfulPayment(payment._id);
+        return res.json({ status: "paid" });
+      }
+
+      if (statusStr === "failed" || statusStr === "cancelled") {
+        await Payment.updateOne({ _id: payment._id }, { $set: { status: statusStr } });
+        return res.json({ status: statusStr });
+      }
+    }
+
+    return res.json({ status: "pending" });
+
+  } catch (err) {
+    console.error("[paynow poll]", err);
+    return res.json({ status: "pending" });
+  }
+});
 /* ------------------------------
    PAYNOW RETURN (Browser redirect)
 -------------------------------- */
@@ -132,211 +371,20 @@ router.post("/paynow/result", async (req, res) => {
     console.log("[paynow result] CALLBACK RECEIVED", req.body);
 
     const { reference } = req.body;
-
-    if (!reference) {
-      console.error("[paynow result] missing reference", req.body);
-      return res.sendStatus(200);
-    }
+    if (!reference) return res.sendStatus(200);
 
     const payment = await Payment.findOne({ reference });
-    if (!payment) {
-      console.error("[paynow result] payment not found:", reference);
-      return res.sendStatus(200);
-    }
+    if (!payment) return res.sendStatus(200);
 
-    const pollUrl = payment.pollUrl;
+    const pollResult = await paynow.pollTransaction(payment.pollUrl);
+    console.log("[paynow poll] RESULT:", pollResult);
 
-    // 🔎 Poll Paynow
-    const status = await paynow.pollTransaction(pollUrl);
-    console.log("[paynow poll] RESULT:", status);
+    const statusStr = String(pollResult.status || "").toLowerCase();
 
-    if (String(status.status).toLowerCase() === "paid") {
-
-      // 1️⃣ Mark payment as paid
-   // 1️⃣ Mark payment as paid
-payment.status = "paid";
-payment.paidAt = new Date();
-await payment.save();
-
-// ✅ BATTLE ENTRY PAYMENTS (stop here, don't run subscription logic)
-if (payment.type === "battle_entry" && payment.battleId) {
-  await BattleEntry.updateOne(
-    { battleId: payment.battleId, userId: payment.userId },
-    { $set: { status: "paid", paidAt: new Date() } }
-  );
-
-  console.log("[paynow] battle entry paid:", String(payment.battleId), "user:", String(payment.userId));
-  return res.sendStatus(200);
-}
-
-// 2️⃣ Determine plan from payment record (SUBSCRIPTIONS ONLY)
-// 2️⃣ Determine plan from payment record (SUBSCRIPTIONS ONLY)
-const planKey = payment.plan || "silver"; // fallback for legacy
-const planConfig = PLANS[planKey] || PLANS.silver;
-
-// 3️⃣ Calculate expiry with UPGRADE PRORATION
-const now = new Date();
-const parent = await User.findById(payment.userId).lean();
-let expiresAt;
-let daysToAdd = planConfig.durationDays;
-
-// ✅ UPGRADE LOGIC: Calculate prorated credit
-if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
-  // User has an active subscription - check if this is an UPGRADE
-  const currentPlan = planKey.startsWith("teacher_") 
-    ? parent.teacherSubscriptionPlan 
-    : parent.subscriptionPlan;
-  
-  const currentPlanKey = planKey.startsWith("teacher_")
-    ? `teacher_${currentPlan}`
-    : currentPlan;
-  
-  const currentPlanConfig = PLANS[currentPlanKey];
-  
-  if (currentPlanConfig && planConfig.amount > currentPlanConfig.amount) {
-    // This is an upgrade (new plan costs more)
-    const remainingDays = Math.ceil((new Date(parent.subscriptionExpiresAt) - now) / (1000 * 60 * 60 * 24));
-    const unusedValue = (currentPlanConfig.amount / currentPlanConfig.durationDays) * remainingDays;
-    const creditDays = Math.floor((unusedValue / planConfig.amount) * planConfig.durationDays);
-    
-    // Add credit days to new subscription
-    daysToAdd += creditDays;
-    
-    console.log(`[UPGRADE] ${currentPlanKey} → ${planKey}: ${creditDays} bonus days from unused ${currentPlan}`);
-  }
-}
-
-// Calculate new expiry date
-if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
-  // Extend from current expiry (for renewals)
-  expiresAt = new Date(parent.subscriptionExpiresAt);
-  expiresAt.setDate(expiresAt.getDate() + daysToAdd);
-} else {
-  // Start fresh (new subscription or expired)
-  expiresAt = new Date(now);
-  expiresAt.setDate(expiresAt.getDate() + daysToAdd);
-}
-
-// 4️⃣ Update user with plan details
-      // 4️⃣ Update parent with plan details
-// 4️⃣ Update user with plan details
-  // 4️⃣ Update user with plan details
-      let updateFields;
-
-      // ✅ TEACHER PLANS (teacher_starter, teacher_professional)
-      if (planKey.startsWith("teacher_")) {
-        updateFields = {
-          teacherSubscriptionStatus: "paid",
-          teacherSubscriptionPlan: planKey === "teacher_starter" ? "starter" : "professional",
-          teacherSubscriptionExpiresAt: expiresAt,
-          teacherPaidAt: now,
-          aiQuizCredits: planConfig.aiQuizCredits,
-          aiQuizCreditsResetAt: now,
-          maxChildren: planConfig.maxChildren,
-          consumerEnabled: true
-        };
-      }
-      // ✅ PARENT PLANS (silver, gold)
-      else {
-        updateFields = {
-          subscriptionStatus: "paid",
-          subscriptionPlan: planKey,
-          maxChildren: planConfig.maxChildren,
-          subscriptionExpiresAt: expiresAt,
-          paidAt: now,
-          consumerEnabled: true
-        };
-      }
-
-      const updatedParent = await User.findByIdAndUpdate(
-        payment.userId,
-        updateFields,
-        { new: true }
-      );
-
-      // ✅ 4.5️⃣ UPGRADE TRIAL CHILDREN TO PAID
-      const trialChildren = await User.find({
-        parentUserId: payment.userId,
-        role: "student",
-        consumerEnabled: false
-      });
-
-      if (trialChildren.length > 0) {
-        console.log(`[UPGRADE] Converting ${trialChildren.length} trial children to paid accounts`);
-        
-        await User.updateMany(
-          { parentUserId: payment.userId, role: "student", consumerEnabled: false },
-          { $set: { consumerEnabled: true } }
-        );
-
-        // Assign paid quizzes to upgraded trial children
-        const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
-        if (org) {
-          for (const child of trialChildren) {
-            const rules = await QuizRule.find({
-              org: org._id,
-              grade: child.grade,
-              quizType: "paid",
-              enabled: true
-            });
-
-            for (const rule of rules) {
-              await assignQuizFromRule({
-                rule,
-                userId: child._id,
-                orgId: org._id,
-                force: true
-              });
-            }
-          }
-        }
-      }
-
-      // 5️⃣ Enable all existing children (existing code continues...)
-      
-      await User.updateMany(
-        { parentUserId: updatedParent._id, role: "student" },
-        { $set: { consumerEnabled: true } }
-      );
-
-      // 6️⃣ Load HOME org
-      const org = await Organization.findOne({ slug: "cripfcnt-home" }).lean();
-      if (!org) return res.sendStatus(200);
-
-      // 7️⃣ Load children
-      const children = await User.find({
-        parentUserId: updatedParent._id,
-        role: "student"
-      });
-
-      // 8️⃣ Assign paid quizzes to all children
-      for (const child of children) {
-        const rules = await QuizRule.find({
-          org: org._id,
-          grade: child.grade,
-          quizType: "paid",
-          enabled: true
-        });
-
-        for (const rule of rules) {
-          await assignQuizFromRule({
-            rule,
-            userId: child._id,
-            orgId: org._id,
-            force: true
-          });
-        }
-      }
-
-      console.log(
-        `[paynow] ${planConfig.name} plan activated for parent:`,
-        updatedParent._id,
-        `expires: ${expiresAt.toISOString()}`
-      );
-    }
-
-    if (String(status.status).toLowerCase() === "failed") {
-      payment.status = "failed";
+    if (statusStr === "paid") {
+      await processSuccessfulPayment(payment._id);
+    } else if (statusStr === "failed" || statusStr === "cancelled") {
+      payment.status = statusStr;
       await payment.save();
     }
 

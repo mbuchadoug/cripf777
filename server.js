@@ -312,6 +312,7 @@ app.engine(
     defaultLayout: "main",
     handlebars: allowInsecurePrototypeAccess(Handlebars),
     helpers: hbsHelpers,
+    partialsDir: path.join(__dirname, "views/partials"),
   })
 );
 

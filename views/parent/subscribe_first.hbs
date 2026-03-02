@@ -112,10 +112,9 @@
         <div class="plan-price">$5</div>
         <div class="plan-period">per month</div>
         <div class="plan-detail">Up to 2 children</div>
-        <form method="POST" action="/payments/paynow/init">
-          <input type="hidden" name="plan" value="silver">
-          <button class="btn btn-silver" type="submit">💳 Get Silver</button>
-        </form>
+     <button class="btn btn-silver" onclick="openPayModal('silver', 'Silver Plan', 5)">
+  📱 Get Silver
+</button>
       </div>
 
       <div class="plan-card gold-border">
@@ -123,14 +122,14 @@
         <div class="plan-price">$10</div>
         <div class="plan-period">per month</div>
         <div class="plan-detail">Up to 5 children</div>
-        <form method="POST" action="/payments/paynow/init">
-          <input type="hidden" name="plan" value="gold">
-          <button class="btn" type="submit">💳 Get Gold</button>
-        </form>
+       <button class="btn" onclick="openPayModal('gold', 'Gold Plan', 10)">
+  📱 Get Gold
+</button>
       </div>
     </div>
 
     <a href="/parent/dashboard" class="back">← Back to Dashboard</a>
   </main>
+   {{> ecocash_modal}}
 </body>
 </html>

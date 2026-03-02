@@ -1,0 +1,300 @@
+{{!-- views/partials/ecocash_modal.hbs --}}
+{{!-- Include once in any page that needs payment. Call openPayModal(plan, planLabel, amount) --}}
+
+<div id="payModal" style="
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.85); z-index:9999;
+  align-items:center; justify-content:center;
+">
+  <div style="
+    background:#141414; border:1px solid #333;
+    border-radius:16px; padding:32px 28px;
+    max-width:420px; width:92%; text-align:center;
+    font-family:system-ui,sans-serif; color:#fff;
+  ">
+    <!-- STEP 1: ENTER PHONE -->
+    <div id="payStep1">
+      <div style="font-size:48px; margin-bottom:12px;">📱</div>
+      <h2 style="font-size:22px; margin-bottom:6px;" id="payModalTitle">Subscribe</h2>
+      <p style="color:#9aa3ad; font-size:14px; margin-bottom:24px;" id="payModalDesc">
+        Enter your EcoCash number to receive a payment prompt on your phone.
+      </p>
+
+      <div style="text-align:left; margin-bottom:16px;">
+        <label style="font-size:13px; color:#9aa3ad; display:block; margin-bottom:6px;">
+          EcoCash Number
+        </label>
+        <input
+          id="payPhoneInput"
+          type="tel"
+          inputmode="numeric"
+          placeholder="0771234567"
+          maxlength="10"
+          style="
+            width:100%; padding:14px; font-size:18px; font-weight:700;
+            background:#0e0e0e; border:2px solid #333; border-radius:10px;
+            color:#fff; outline:none; text-align:center; letter-spacing:2px;
+            box-sizing:border-box;
+          "
+        >
+        <div id="payPhoneError" style="color:#ef4444; font-size:13px; margin-top:6px; display:none;"></div>
+      </div>
+
+      <button
+        id="paySubmitBtn"
+        onclick="submitEcoCashPayment()"
+        style="
+          width:100%; padding:14px; border:none; border-radius:10px;
+          background:#D4AF37; color:#000; font-size:16px; font-weight:800;
+          cursor:pointer; margin-bottom:10px;
+        "
+      >
+        💳 Pay $<span id="payAmountDisplay">0</span> via EcoCash
+      </button>
+
+      <button
+        onclick="closePayModal()"
+        style="
+          width:100%; padding:10px; border:1px solid #333; border-radius:10px;
+          background:transparent; color:#9aa3ad; font-size:14px; cursor:pointer;
+        "
+      >
+        Cancel
+      </button>
+
+      <p style="color:#555; font-size:12px; margin-top:14px; line-height:1.5;">
+        🔒 Secure EcoCash mobile payment · You will receive a USSD prompt
+      </p>
+    </div>
+
+    <!-- STEP 2: WAITING FOR APPROVAL -->
+    <div id="payStep2" style="display:none;">
+      <div style="font-size:56px; margin-bottom:16px; animation:pulse 1.5s infinite;">📲</div>
+      <h2 style="font-size:20px; margin-bottom:10px;">Check Your Phone!</h2>
+      <p style="color:#9aa3ad; font-size:14px; margin-bottom:20px;" id="payStep2Phone">
+        A prompt has been sent to your EcoCash number.
+      </p>
+
+      <div style="
+        background:#0e0e0e; border:1px solid #222;
+        border-radius:10px; padding:16px; margin-bottom:20px;
+      ">
+        <div style="color:#D4AF37; font-size:14px; font-weight:700; margin-bottom:8px;">
+          What to do:
+        </div>
+        <div style="font-size:13px; color:#ccc; line-height:1.8; text-align:left;">
+          1. Open your EcoCash menu or wait for USSD pop-up<br>
+          2. Enter your EcoCash PIN to confirm<br>
+          3. This page will update automatically
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:center; gap:10px; color:#9aa3ad; font-size:13px;">
+        <div id="paySpinner" style="
+          width:18px; height:18px; border:2px solid #444;
+          border-top-color:#D4AF37; border-radius:50%;
+          animation:spin 0.8s linear infinite;
+        "></div>
+        <span id="payStatusText">Waiting for payment confirmation...</span>
+      </div>
+
+      <button
+        onclick="closePayModal()"
+        style="
+          margin-top:20px; width:100%; padding:10px; border:1px solid #333;
+          border-radius:10px; background:transparent; color:#9aa3ad;
+          font-size:13px; cursor:pointer;
+        "
+      >
+        Close (payment will still complete)
+      </button>
+    </div>
+
+    <!-- STEP 3: SUCCESS -->
+    <div id="payStep3" style="display:none;">
+      <div style="font-size:64px; margin-bottom:16px;">✅</div>
+      <h2 style="font-size:22px; color:#1db954; margin-bottom:10px;">Payment Confirmed!</h2>
+      <p style="color:#9aa3ad; font-size:15px; margin-bottom:20px;">
+        Your subscription is now active. Redirecting you...
+      </p>
+      <div style="
+        width:100%; height:6px; background:#111;
+        border-radius:4px; overflow:hidden;
+      ">
+        <div id="paySuccessBar" style="
+          height:100%; background:#1db954; width:0%;
+          transition:width 2.5s linear; border-radius:4px;
+        "></div>
+      </div>
+    </div>
+
+    <!-- STEP 4: FAILED -->
+    <div id="payStep4" style="display:none;">
+      <div style="font-size:56px; margin-bottom:16px;">❌</div>
+      <h2 style="font-size:20px; color:#ef4444; margin-bottom:10px;">Payment Failed</h2>
+      <p id="payFailMsg" style="color:#9aa3ad; font-size:14px; margin-bottom:20px;">
+        The payment was not completed. Please try again.
+      </p>
+      <button
+        onclick="backToStep1()"
+        style="
+          width:100%; padding:14px; border:none; border-radius:10px;
+          background:#D4AF37; color:#000; font-size:15px; font-weight:800;
+          cursor:pointer; margin-bottom:10px;
+        "
+      >
+        Try Again
+      </button>
+      <button
+        onclick="closePayModal()"
+        style="
+          width:100%; padding:10px; border:1px solid #333; border-radius:10px;
+          background:transparent; color:#9aa3ad; font-size:13px; cursor:pointer;
+        "
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+</style>
+
+<script>
+  let _payPlan = null;
+  let _payPollRef = null;
+  let _payPollInterval = null;
+  let _payPollAttempts = 0;
+  const PAY_MAX_POLLS = 40; // 40 × 5s = 200s (3m20s timeout)
+
+  function openPayModal(plan, label, amount) {
+    _payPlan = plan;
+    document.getElementById('payModalTitle').textContent = label || 'Subscribe';
+    document.getElementById('payAmountDisplay').textContent = amount || '?';
+    document.getElementById('payPhoneInput').value = '';
+    document.getElementById('payPhoneError').style.display = 'none';
+    showPayStep(1);
+    document.getElementById('payModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('payPhoneInput').focus(), 100);
+  }
+
+  function closePayModal() {
+    document.getElementById('payModal').style.display = 'none';
+    clearPayPolling();
+  }
+
+  function showPayStep(n) {
+    [1,2,3,4].forEach(i => {
+      document.getElementById('payStep' + i).style.display = i === n ? 'block' : 'none';
+    });
+  }
+
+  function backToStep1() {
+    clearPayPolling();
+    showPayStep(1);
+  }
+
+  function clearPayPolling() {
+    if (_payPollInterval) { clearInterval(_payPollInterval); _payPollInterval = null; }
+    _payPollAttempts = 0;
+    _payPollRef = null;
+  }
+
+  async function submitEcoCashPayment() {
+    const phone = document.getElementById('payPhoneInput').value.trim();
+    const errEl = document.getElementById('payPhoneError');
+
+    // Basic client-side validation
+    const clean = phone.replace(/\s|-/g, '');
+    if (!/^07[7-8]\d{7}$/.test(clean)) {
+      errEl.textContent = 'Enter a valid EcoCash number (e.g. 0771234567 or 0781234567)';
+      errEl.style.display = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
+
+    const btn = document.getElementById('paySubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending prompt...';
+
+    try {
+      const res = await fetch('/payments/paynow/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: _payPlan, phone: clean })
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.reference) {
+        _payPollRef = data.reference;
+        document.getElementById('payStep2Phone').textContent =
+          `A prompt has been sent to ${clean}. Enter your EcoCash PIN to confirm.`;
+        showPayStep(2);
+        startPolling();
+      } else {
+        errEl.textContent = data.error || 'Failed to send prompt. Try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '💳 Pay $<span id="payAmountDisplay">' + document.getElementById('payAmountDisplay').textContent + '</span> via EcoCash';
+      }
+    } catch (e) {
+      errEl.textContent = 'Network error. Please try again.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+    }
+  }
+
+  function startPolling() {
+    _payPollAttempts = 0;
+    _payPollInterval = setInterval(async () => {
+      _payPollAttempts++;
+
+      if (_payPollAttempts > PAY_MAX_POLLS) {
+        clearPayPolling();
+        document.getElementById('payFailMsg').textContent =
+          'Payment timed out. If you approved on your phone, it may still complete — check your dashboard in a few minutes.';
+        showPayStep(4);
+        return;
+      }
+
+      try {
+        const res = await fetch('/payments/paynow/poll/' + _payPollRef);
+        const data = await res.json();
+
+        if (data.status === 'paid') {
+          clearPayPolling();
+          showPayStep(3);
+          // Animate success bar then redirect
+          setTimeout(() => {
+            document.getElementById('paySuccessBar').style.width = '100%';
+          }, 100);
+          setTimeout(() => {
+            window.location.reload();
+          }, 2800);
+        } else if (data.status === 'failed' || data.status === 'cancelled') {
+          clearPayPolling();
+          document.getElementById('payFailMsg').textContent =
+            'Payment was ' + data.status + '. Please try again.';
+          showPayStep(4);
+        }
+        // pending → keep polling
+      } catch (e) {
+        console.warn('[poll error]', e);
+      }
+    }, 5000); // poll every 5 seconds
+  }
+
+  // Allow clicking outside modal to close
+  document.getElementById('payModal').addEventListener('click', function(e) {
+    if (e.target === this) closePayModal();
+  });
+
+  // Enter key on phone input
+  document.getElementById('payPhoneInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitEcoCashPayment();
+  });
+</script>

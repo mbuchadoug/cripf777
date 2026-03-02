@@ -497,10 +497,9 @@
             <li>Progress tracking & reports</li>
             <li>Certificates</li>
           </ul>
-          <form method="POST" action="/payments/paynow/init">
-            <input type="hidden" name="plan" value="silver">
-            <button class="btn btn-silver" type="submit">💳 Get Silver</button>
-          </form>
+        <button class="btn btn-silver" onclick="openPayModal('silver', 'Silver Plan', 5)">
+  📱 Get Silver
+</button>
         </div>
 
         <!-- GOLD -->
@@ -528,12 +527,9 @@
               </button>
             </form>
           {{else}}
-            <form method="POST" action="/payments/paynow/init" style="width:100%;">
-              <input type="hidden" name="plan" value="gold">
-              <button class="btn" type="submit" style="width:100%;">
-                💳 Get Gold
-              </button>
-            </form>
+        <button class="btn" style="width:100%;" onclick="openPayModal('gold', 'Gold Plan', 10)">
+  📱 Get Gold
+</button>
           {{/if}}
         </div>
 
@@ -654,6 +650,6 @@
   </div>
 
 </main>
-
+  {{> ecocash_modal}}
 </body>
 </html>

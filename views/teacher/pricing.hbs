@@ -285,12 +285,9 @@
                 ⬇️ Downgrade (Contact Support)
               </button>
             {{else}}
-              <form method="POST" action="/payments/paynow/init" style="flex:1;">
-                <input type="hidden" name="plan" value="teacher_starter" />
-                <button class="btn primary" type="submit" style="width:100%;">
-                  {{#if user.teacherSubscriptionStatus}}Upgrade{{else}}Subscribe{{/if}} to Starter
-                </button>
-              </form>
+             <button class="btn primary" style="width:100%;" onclick="openPayModal('teacher_starter', 'Teacher Starter', 9)">
+  📱 {{#if user.teacherSubscriptionStatus}}Upgrade{{else}}Subscribe{{/if}} to Starter
+</button>
             {{/if}}
             <a class="btn outline" href="/teacher/dashboard">Not now</a>
           </div>
@@ -347,20 +344,14 @@
                 ✅ Current Plan
               </button>
             {{else if (eq user.teacherSubscriptionPlan "starter")}}
-              <form method="POST" action="/payments/paynow/init" style="flex:1;">
-                <input type="hidden" name="plan" value="teacher_professional" />
-                <button class="btn primary" type="submit" style="width:100%;">
-                  🚀 Upgrade to Professional
-                </button>
-              </form>
-            {{else}}
-              <form method="POST" action="/payments/paynow/init" style="flex:1;">
-                <input type="hidden" name="plan" value="teacher_professional" />
-                <button class="btn primary" type="submit" style="width:100%;">
-                  Subscribe to Professional
-                </button>
-              </form>
-            {{/if}}
+            <button class="btn primary" style="width:100%;" onclick="openPayModal('teacher_professional', 'Teacher Professional', 19)">
+  📱 Upgrade to Professional
+</button>
+           {{else}}
+  <button class="btn primary" style="width:100%;" onclick="openPayModal('teacher_professional', 'Teacher Professional', 19)">
+    📱 Subscribe to Professional
+  </button>
+{{/if}}
             <a class="btn outline" href="/teacher/dashboard">Back</a>
           </div>
 
@@ -408,5 +399,6 @@
       © CRIPFCnt Teacher Portal · Built to help private teachers save time and grow income.
     </div>
   </div>
+    {{> ecocash_modal}}
 </body>
 </html>
