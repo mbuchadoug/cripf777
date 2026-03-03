@@ -167,24 +167,25 @@ router.get("/reports", async (req, res) => {
       branches = await Branch.find({ businessId }).lean();
     }
 
-    res.render("web/reports/sales", {
-      layout: "web",
-      title: "Reports - ZimQuote",
-      user: req.webUser,
-      salesData,
-      expenseData,
-      paymentData,
-      branchBreakdown,
-      activityLog: activityLog.map(inv => ({
-        ...inv,
-        clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown",
-        branchName: inv.branchId?.name || "—"
-      })),
-      summary: { totalRevenue, totalCollected, totalExpenses, netProfit },
-      filters: { period, startDate, endDate, branchFilter },
-      branches,
-      isOwner: role === "owner"
-    });
+res.render("web/reports/sales", {
+  layout: "web",
+  pageTitle: "Reports",
+  pageKey: "reports",
+  user: req.webUser,
+  salesData,
+  expenseData,
+  paymentData,
+  branchBreakdown,
+  activityLog: activityLog.map(inv => ({
+    ...inv,
+    clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown",
+    branchName: inv.branchId?.name || "—"
+  })),
+  summary: { totalRevenue, totalCollected, totalExpenses, netProfit },
+  filters: { period, startDate, endDate, branchFilter },
+  branches,
+  isOwner: role === "owner"
+});
 
   } catch (error) {
     console.error("Reports error:", error);

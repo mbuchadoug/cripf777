@@ -1,249 +1,263 @@
-{{!-- views/web/reports/sales.hbs --}}
-
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+<div class="page-header">
   <div>
-    <h1 class="text-2xl font-bold text-gray-900">Reports</h1>
-    <p class="text-sm text-gray-500 mt-1">Business performance overview</p>
+    <div class="page-title">Reports</div>
+    <div class="page-subtitle">Sales, expenses and collections overview</div>
   </div>
-  <div class="mt-4 sm:mt-0 flex gap-2">
-    <button onclick="exportCSV()"
-      class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
-      <i class="fas fa-download"></i> Export CSV
-    </button>
-    <button onclick="window.print()"
-      class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 no-print">
-      <i class="fas fa-print"></i> Print
-    </button>
+  <div class="page-actions">
+    <button class="btn btn-ghost" onclick="exportReport()"><i class="fas fa-download"></i> Export</button>
   </div>
 </div>
 
-{{!-- Filter Bar --}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6 no-print">
-  <form method="GET" class="flex flex-wrap items-end gap-4">
-
-    {{!-- Period presets --}}
-    <div>
-      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Period</label>
-      <div class="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-        {{#each (array 'today' 'week' 'month' 'lastmonth' 'year')}}
-          <a href="?period={{this}}{{#if ../filters.branchFilter}}&branchFilter={{../filters.branchFilter}}{{/if}}"
-             class="px-3 py-2 {{#if (eq ../filters.period this)}}bg-blue-600 text-white{{else}}bg-white text-gray-600 hover:bg-gray-50{{/if}} border-r border-gray-200 last:border-r-0 capitalize">
-            {{this}}
-          </a>
-        {{/each}}
-      </div>
-    </div>
-
-    {{!-- Custom range --}}
-    <div class="flex items-end gap-2">
-      <div>
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">From</label>
-        <input type="date" name="startDate" value="{{filters.startDate}}"
-          class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">To</label>
-        <input type="date" name="endDate" value="{{filters.endDate}}"
-          class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-      </div>
-    </div>
-
-    {{!-- Branch filter (owners only) --}}
-    {{#if isOwner}}
-    <div>
-      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Branch</label>
-      <select name="branchFilter"
-        class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        <option value="">All Branches</option>
-        {{#each branches}}
-          <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>
-            {{this.name}}
-          </option>
-        {{/each}}
+<!-- Filters -->
+<div class="filters-bar no-print">
+  <form method="GET" style="display:contents">
+    <div class="filter-group" style="min-width:160px">
+      <label class="filter-label">Period</label>
+      <select name="period" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+        <option value="today"     {{#if (eq filters.period 'today')}}selected{{/if}}>Today</option>
+        <option value="week"      {{#if (eq filters.period 'week')}}selected{{/if}}>Last 7 days</option>
+        <option value="month"     {{#if (eq filters.period 'month')}}selected{{/if}}>This month</option>
+        <option value="lastmonth" {{#if (eq filters.period 'lastmonth')}}selected{{/if}}>Last month</option>
+        <option value="year"      {{#if (eq filters.period 'year')}}selected{{/if}}>This year</option>
       </select>
     </div>
+
+    <div class="filter-group">
+      <label class="filter-label">From</label>
+      <input type="date" name="startDate" class="form-input" value="{{filters.startDate}}" style="padding:9px 12px;font-size:13px;">
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label">To</label>
+      <input type="date" name="endDate" class="form-input" value="{{filters.endDate}}" style="padding:9px 12px;font-size:13px;">
+    </div>
+
+    {{#if isOwner}}
+      <div class="filter-group">
+        <label class="filter-label">Branch</label>
+        <select name="branchFilter" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+          <option value="">All Branches</option>
+          {{#each branches}}
+            <option value="{{this._id}}" {{#if (eq ../filters.branchFilter this._id)}}selected{{/if}}>{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
     {{/if}}
 
-    <div class="flex gap-2">
-      <button type="submit"
-        class="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-        Apply
-      </button>
-      <a href="/web/reports"
-        class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-        Reset
-      </a>
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Apply</button>
+      <a href="/web/reports" class="btn btn-ghost btn-sm"><i class="fas fa-redo"></i> Reset</a>
     </div>
   </form>
 </div>
 
-{{!-- Summary KPIs --}}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Total Invoiced</p>
-    <p class="text-2xl font-bold text-gray-900">{{user.currency}} {{summary.totalRevenue}}</p>
+<!-- Summary -->
+<div class="grid-4" style="margin-bottom:18px;">
+  <div class="stat-card amber">
+    <div class="stat-icon amber"><i class="fas fa-file-invoice-dollar"></i></div>
+    <div class="stat-value">{{user.currency}} {{summary.totalRevenue}}</div>
+    <div class="stat-label">Invoiced</div>
   </div>
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Collected</p>
-    <p class="text-2xl font-bold text-green-600">{{user.currency}} {{summary.totalCollected}}</p>
+
+  <div class="stat-card green">
+    <div class="stat-icon green"><i class="fas fa-hand-holding-dollar"></i></div>
+    <div class="stat-value">{{user.currency}} {{summary.totalCollected}}</div>
+    <div class="stat-label">Collected</div>
   </div>
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Expenses</p>
-    <p class="text-2xl font-bold text-red-500">{{user.currency}} {{summary.totalExpenses}}</p>
+
+  <div class="stat-card red">
+    <div class="stat-icon red"><i class="fas fa-arrow-trend-down"></i></div>
+    <div class="stat-value">{{user.currency}} {{summary.totalExpenses}}</div>
+    <div class="stat-label">Expenses</div>
   </div>
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Net Profit</p>
-    <p class="text-2xl font-bold {{#if (gt summary.netProfit 0)}}text-emerald-600{{else}}text-red-600{{/if}}">
-      {{user.currency}} {{summary.netProfit}}
-    </p>
+
+  <div class="stat-card blue">
+    <div class="stat-icon blue"><i class="fas fa-chart-line"></i></div>
+    <div class="stat-value">{{user.currency}} {{summary.netProfit}}</div>
+    <div class="stat-label">Net (Collected - Expenses)</div>
   </div>
 </div>
 
-{{!-- Invoice Status Breakdown --}}
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-  {{#each salesData}}
-  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-sm font-semibold text-gray-700 capitalize">{{this._id}}</span>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-        {{#if (eq this._id 'paid')}}bg-green-100 text-green-700
-        {{else if (eq this._id 'partial')}}bg-amber-100 text-amber-700
-        {{else}}bg-red-100 text-red-700{{/if}}">
-        {{this.count}} invoices
-      </span>
+<div class="grid-2" style="margin-bottom:18px;">
+  <!-- Sales breakdown -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-file-invoice"></i> Invoice Status</div>
     </div>
-    <p class="text-xl font-bold text-gray-900 mb-3">{{../user.currency}} {{this.total}}</p>
-    <div class="space-y-1 text-xs text-gray-500">
-      <div class="flex justify-between">
-        <span>Paid</span>
-        <span class="text-green-600 font-medium">{{../user.currency}} {{this.paid}}</span>
-      </div>
-      {{#if (gt this.balance 0)}}
-      <div class="flex justify-between">
-        <span>Outstanding</span>
-        <span class="text-red-500 font-medium">{{../user.currency}} {{this.balance}}</span>
-      </div>
-      {{/if}}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th style="text-align:right">Count</th>
+            <th style="text-align:right">Total</th>
+            <th style="text-align:right">Paid</th>
+            <th style="text-align:right">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each salesData}}
+            <tr style="cursor:default">
+              <td>
+                {{#if (eq this._id 'paid')}}<span class="badge badge-green">Paid</span>{{/if}}
+                {{#if (eq this._id 'partial')}}<span class="badge badge-amber">Partial</span>{{/if}}
+                {{#if (eq this._id 'unpaid')}}<span class="badge badge-red">Unpaid</span>{{/if}}
+              </td>
+              <td style="text-align:right"><span class="td-mono">{{this.count}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.paid}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.balance}}</span></td>
+            </tr>
+          {{else}}
+            <tr><td colspan="5"><div class="empty-state" style="padding:26px 10px"><p>No invoice data for this period.</p></div></td></tr>
+          {{/each}}
+        </tbody>
+      </table>
     </div>
   </div>
-  {{/each}}
+
+  <!-- Payments breakdown -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-money-bill-wave"></i> Payments by Method</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th style="text-align:right">Count</th>
+            <th style="text-align:right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each paymentData}}
+            <tr style="cursor:default">
+              <td><span class="td-primary">{{this._id}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{this.count}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
+            </tr>
+          {{else}}
+            <tr><td colspan="3"><div class="empty-state" style="padding:26px 10px"><p>No payments recorded.</p></div></td></tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
-{{!-- Branch Breakdown (owners, no branch filter) --}}
-{{#if branchBreakdown.length}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
-  <h2 class="font-semibold text-gray-800 mb-4">Branch Comparison</h2>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
+<!-- Expenses breakdown -->
+<div class="card" style="margin-bottom:18px;">
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-arrow-trend-down"></i> Expenses by Category</div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="data-table">
       <thead>
-        <tr class="border-b border-gray-100">
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Branch</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Revenue</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Collected</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Expenses</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Profit</th>
+        <tr>
+          <th>Category</th>
+          <th style="text-align:right">Count</th>
+          <th style="text-align:right">Total</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-50">
-        {{#each branchBreakdown}}
-        <tr>
-          <td class="py-3 font-medium text-gray-800">{{this.name}}</td>
-          <td class="py-3 text-right text-gray-700">{{../user.currency}} {{this.revenue}}</td>
-          <td class="py-3 text-right text-green-600">{{../user.currency}} {{this.collected}}</td>
-          <td class="py-3 text-right text-red-500">{{../user.currency}} {{this.expenses}}</td>
-          <td class="py-3 text-right font-semibold {{#if (gt this.profit 0)}}text-emerald-600{{else}}text-red-600{{/if}}">
-            {{../user.currency}} {{this.profit}}
-          </td>
-        </tr>
+      <tbody>
+        {{#each expenseData}}
+          <tr style="cursor:default">
+            <td><span class="td-primary">{{#if this._id}}{{this._id}}{{else}}Uncategorized{{/if}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{this.count}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
+          </tr>
+        {{else}}
+          <tr><td colspan="3"><div class="empty-state" style="padding:26px 10px"><p>No expenses in this period.</p></div></td></tr>
         {{/each}}
       </tbody>
     </table>
   </div>
 </div>
-{{/if}}
 
-{{!-- Expenses by Category --}}
-{{#if expenseData.length}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
-  <h2 class="font-semibold text-gray-800 mb-4">Expenses by Category</h2>
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-    {{#each expenseData}}
-    <div class="border border-gray-100 rounded-lg p-4">
-      <p class="text-sm font-medium text-gray-700 mb-1">{{this._id}}</p>
-      <p class="text-xs text-gray-400 mb-2">{{this.count}} entries</p>
-      <p class="text-lg font-bold text-red-500">{{../user.currency}} {{this.total}}</p>
+<!-- Branch breakdown (owner only + no branchFilter) -->
+{{#if (and isOwner (not filters.branchFilter))}}
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-code-branch"></i> Branch Performance</div>
     </div>
-    {{/each}}
-  </div>
-</div>
-{{/if}}
-
-{{!-- Payment Methods --}}
-{{#if paymentData.length}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
-  <h2 class="font-semibold text-gray-800 mb-4">Payments by Method</h2>
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-    {{#each paymentData}}
-    <div class="border border-gray-100 rounded-xl p-4 text-center">
-      <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-2">
-        <i class="fas {{#if (eq this._id 'Cash')}}fa-money-bill-wave text-green-600
-          {{else if (eq this._id 'EcoCash')}}fa-mobile-alt text-red-500
-          {{else if (eq this._id 'Bank')}}fa-university text-blue-600
-          {{else}}fa-credit-card text-purple-600{{/if}}"></i>
-      </div>
-      <p class="text-sm font-medium text-gray-700">{{this._id}}</p>
-      <p class="text-xs text-gray-400 mb-1">{{this.count}} transactions</p>
-      <p class="text-base font-bold text-gray-900">{{../user.currency}} {{this.total}}</p>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th style="text-align:right">Revenue</th>
+            <th style="text-align:right">Collected</th>
+            <th style="text-align:right">Expenses</th>
+            <th style="text-align:right">Profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each branchBreakdown}}
+            <tr style="cursor:default">
+              <td><span class="td-primary">{{this.name}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.revenue}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.collected}}</span></td>
+              <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.expenses}}</span></td>
+              <td style="text-align:right"><span class="td-primary td-mono">{{../user.currency}} {{this.profit}}</span></td>
+            </tr>
+          {{else}}
+            <tr><td colspan="5"><div class="empty-state" style="padding:26px 10px"><p>No branch data.</p></div></td></tr>
+          {{/each}}
+        </tbody>
+      </table>
     </div>
-    {{/each}}
   </div>
-</div>
 {{/if}}
 
-{{!-- Activity Log: who entered what --}}
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="font-semibold text-gray-800">Activity Log <span class="text-xs text-gray-400 ml-2">— who entered what</span></h2>
+<!-- Activity log -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-list"></i> Activity Log</div>
   </div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm" id="activityTable">
+
+  <div style="overflow-x:auto">
+    <table class="data-table">
       <thead>
-        <tr class="border-b border-gray-100">
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Doc #</th>
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Branch</th>
-          <th class="text-right pb-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Created By</th>
-          <th class="text-left pb-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+        <tr>
+          <th>Date</th>
+          <th>Invoice</th>
+          <th>Client</th>
+          <th>Status</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Paid</th>
+          <th style="text-align:right">Balance</th>
+          <th>Created By</th>
+          {{#if isOwner}}<th>Branch</th>{{/if}}
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-50">
+      <tbody>
         {{#each activityLog}}
-        <tr class="hover:bg-gray-50 transition-colors">
-          <td class="py-3">
-            <a href="/web/invoices/{{this._id}}" class="text-blue-600 hover:underline font-mono text-xs">
-              {{this.number}}
-            </a>
-          </td>
-          <td class="py-3 text-gray-700">{{this.clientName}}</td>
-          <td class="py-3 text-gray-500 text-xs">{{this.branchName}}</td>
-          <td class="py-3 text-right font-medium text-gray-900">{{../user.currency}} {{this.total}}</td>
-          <td class="py-3">
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-              {{#if (eq this.status 'paid')}}bg-green-100 text-green-700
-              {{else if (eq this.status 'partial')}}bg-amber-100 text-amber-700
-              {{else}}bg-red-100 text-red-700{{/if}}">
-              {{this.status}}
-            </span>
-          </td>
-          <td class="py-3 text-xs font-mono text-gray-500">{{this.createdBy}}</td>
-          <td class="py-3 text-xs text-gray-400">{{formatDate this.createdAt}}</td>
-        </tr>
+          <tr onclick="window.location.href='/web/invoices/{{this._id}}'">
+            <td><span class="td-mono" style="font-size:12px">{{formatDate this.createdAt}}</span></td>
+            <td><span class="td-primary td-mono">{{this.number}}</span></td>
+            <td>{{this.clientName}}</td>
+            <td>
+              {{#if (eq this.status 'paid')}}<span class="badge badge-green">Paid</span>{{/if}}
+              {{#if (eq this.status 'partial')}}<span class="badge badge-amber">Partial</span>{{/if}}
+              {{#if (eq this.status 'unpaid')}}<span class="badge badge-red">Unpaid</span>{{/if}}
+            </td>
+            <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.amountPaid}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.balance}}</span></td>
+            <td><span class="td-mono">{{#if this.createdBy}}{{this.createdBy}}{{else}}—{{/if}}</span></td>
+            {{#if ../isOwner}}<td>{{this.branchName}}</td>{{/if}}
+          </tr>
         {{else}}
-        <tr>
-          <td colspan="7" class="py-10 text-center text-gray-400 text-sm">No records in this period</td>
-        </tr>
+          <tr>
+            <td colspan="{{#if isOwner}}9{{else}}8{{/if}}">
+              <div class="empty-state">
+                <i class="fas fa-list"></i>
+                <h3>No activity</h3>
+                <p>No invoices recorded for the selected period.</p>
+              </div>
+            </td>
+          </tr>
         {{/each}}
       </tbody>
     </table>
@@ -251,38 +265,26 @@
 </div>
 
 <script>
-// ── CSV Export ──────────────────────────────────────────────────────────────
-function exportCSV() {
-  const period = '{{filters.period}}' || 'month';
-  const start  = '{{filters.startDate}}';
-  const end    = '{{filters.endDate}}';
-  const branch = '{{filters.branchFilter}}';
+  async function exportReport() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const r = await fetch('/web/reports/export?' + params.toString());
+      const d = await r.json();
+      if (!r.ok) return showToast(d.error || 'Export failed', 'error');
 
-  let url = `/web/reports/export?period=${period}`;
-  if (start) url += `&startDate=${start}`;
-  if (end)   url += `&endDate=${end}`;
-  if (branch) url += `&branchFilter=${branch}`;
-
-  fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      if (!data.rows || !data.rows.length) {
-        alert('No data to export for this period.');
-        return;
-      }
-      const headers = Object.keys(data.rows[0]);
-      const csvRows = [
-        headers.join(','),
-        ...data.rows.map(row =>
-          headers.map(h => JSON.stringify(row[h] ?? '')).join(',')
-        )
-      ];
-      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      // Simple JSON download (you can do CSV client-side if you want)
+      const blob = new Blob([JSON.stringify(d.rows || [], null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `report-${period}-${Date.now()}.csv`;
+      a.href = url;
+      a.download = 'reports-export.json';
+      document.body.appendChild(a);
       a.click();
-    })
-    .catch(() => alert('Export failed. Try again.'));
-}
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Exported', 'success');
+    } catch {
+      showToast('Export failed', 'error');
+    }
+  }
 </script>
