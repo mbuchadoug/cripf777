@@ -1,0 +1,136 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Expenses</div>
+    <div class="page-subtitle">Track all business spending by category and branch</div>
+  </div>
+  <div class="page-actions">
+    <a href="/web/expenses/create" class="btn btn-primary">
+      <i class="fas fa-plus"></i> Record Expense
+    </a>
+  </div>
+</div>
+
+<div class="filters-bar no-print">
+  <form method="GET" style="display:contents">
+    {{#if isOwner}}
+      <div class="filter-group">
+        <label class="filter-label">Branch</label>
+        <select name="branchFilter" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+          <option value="">All Branches</option>
+          {{#each branches}}
+            <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
+    {{/if}}
+
+    <div class="filter-group">
+      <label class="filter-label">Category</label>
+      <input type="text" name="category" placeholder="e.g. Rent, Fuel…" class="form-input" style="padding:9px 12px;font-size:13px;" value="{{filters.category}}">
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" placeholder="Description / method…" class="form-input" style="padding:9px 12px;font-size:13px;" value="{{filters.search}}">
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Filter</button>
+      <a href="/web/expenses" class="btn btn-ghost btn-sm"><i class="fas fa-redo"></i> Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="display:none;" id="desktopTable">
+  <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Description</th>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Branch</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each expenses}}
+          <tr style="cursor:default">
+            <td><span class="td-primary">{{this.category}}</span></td>
+            <td><span class="td-sub">{{this.description}}</span></td>
+            <td><span class="td-mono" style="font-size:12px">{{formatDate this.createdAt}}</span></td>
+            <td><span class="badge badge-muted">{{this.method}}</span></td>
+            <td><span class="td-sub">{{this.branchName}}</span></td>
+            <td style="text-align:right"><span class="td-primary td-mono">{{../user.currency}} {{this.amount}}</span></td>
+          </tr>
+        {{else}}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i class="fas fa-wallet"></i>
+                <h3>No expenses yet</h3>
+                <p>Record your first expense to track spending.</p>
+                <a href="/web/expenses/create" class="btn btn-primary"><i class="fas fa-plus"></i> Record Expense</a>
+              </div>
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="mobileCards" style="display:none">
+  {{#each expenses}}
+    <div class="card" style="margin-bottom:12px;padding:16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div class="td-primary">{{this.category}}</div>
+          <div class="td-sub" style="margin-top:4px">{{this.description}}</div>
+          <div class="td-sub" style="margin-top:6px"><i class="fas fa-map-marker-alt" style="font-size:10px"></i> {{this.branchName}}</div>
+        </div>
+        <div class="td-primary td-mono">{{../user.currency}} {{this.amount}}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span class="td-mono" style="font-size:12px;color:var(--muted-2)">{{formatDate this.createdAt}}</span>
+        <span class="badge badge-muted">{{this.method}}</span>
+      </div>
+    </div>
+  {{else}}
+    <div class="card">
+      <div class="empty-state">
+        <i class="fas fa-wallet"></i>
+        <h3>No expenses yet</h3>
+        <p>Record your first expense to track spending.</p>
+        <a href="/web/expenses/create" class="btn btn-primary"><i class="fas fa-plus"></i> Record Expense</a>
+      </div>
+    </div>
+  {{/each}}
+</div>
+
+{{#if (gt pagination.totalPages 1)}}
+  <div class="pagination">
+    {{#if pagination.hasPrev}}
+      <a href="?page={{math pagination.currentPage '-' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.category}}&category={{filters.category}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+    {{/if}}
+    <span class="page-info">{{pagination.currentPage}} / {{pagination.totalPages}}</span>
+    {{#if pagination.hasNext}}
+      <a href="?page={{math pagination.currentPage '+' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.category}}&category={{filters.category}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-right"></i>
+      </a>
+    {{/if}}
+  </div>
+{{/if}}
+
+<script>
+  function layoutToggle() {
+    const isMobile = window.innerWidth < 768;
+    document.getElementById('desktopTable').style.display = isMobile ? 'none' : 'block';
+    document.getElementById('mobileCards').style.display = isMobile ? 'block' : 'none';
+  }
+  layoutToggle();
+  window.addEventListener('resize', layoutToggle);
+</script>

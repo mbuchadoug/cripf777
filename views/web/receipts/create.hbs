@@ -1,0 +1,160 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Create Receipt</div>
+    <div class="page-subtitle">Record a paid sale and issue a receipt instantly</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Client</label>
+        <select id="clientId" class="form-select">
+          <option value="">Select client…</option>
+          {{#each clients}}
+            <option value="{{this._id}}">{{this.name}} {{#if this.phone}}({{this.phone}}){{/if}}</option>
+          {{/each}}
+        </select>
+        <div class="form-hint">If client isn’t listed, add them in Clients first.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Currency</label>
+        <input class="form-input" value="{{business.currency}}" disabled />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="card" style="border-radius:12px">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-list"></i> Items</div>
+        <button class="btn btn-ghost btn-sm" onclick="addRow()"><i class="fas fa-plus"></i> Add Item</button>
+      </div>
+      <div class="card-body" style="padding:14px 16px">
+        <div id="rows"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Discount % (optional)</label>
+        <input id="discountPercent" class="form-input" type="number" min="0" max="100" value="0" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Total</label>
+        <input id="totalPreview" class="form-input" value="0" disabled />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <a href="/web/receipts" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Cancel</a>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveReceipt()"><i class="fas fa-check"></i> Create Receipt</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const products = {{json products}};
+  const currency = "{{business.currency}}";
+
+  function rowTemplate() {
+    const opts = products.map(p => `<option value="${p.name}" data-price="${p.unitPrice||0}">${p.name}</option>`).join("");
+    return `
+      <div class="grid-3" style="gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Product</label>
+          <select class="form-select item" onchange="onProductChange(this)">
+            <option value="">Select product…</option>
+            ${opts}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Qty</label>
+          <input class="form-input qty" type="number" min="1" value="1" oninput="calc()" />
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Unit Price</label>
+          <input class="form-input unit" type="number" min="0" value="0" oninput="calc()" />
+        </div>
+      </div>
+    `;
+  }
+
+  function addRow() {
+    document.getElementById("rows").insertAdjacentHTML("beforeend", rowTemplate());
+    calc();
+  }
+
+  function onProductChange(sel) {
+    const opt = sel.selectedOptions[0];
+    if (!opt) return;
+    const price = Number(opt.getAttribute("data-price") || 0);
+    const wrap = sel.closest(".grid-3");
+    wrap.querySelector(".unit").value = price;
+    calc();
+  }
+
+  function calc() {
+    const discount = Number(document.getElementById("discountPercent").value || 0);
+    const rows = Array.from(document.querySelectorAll("#rows .grid-3"));
+    const items = rows.map(r => ({
+      item: r.querySelector(".item").value,
+      qty: Number(r.querySelector(".qty").value || 0),
+      unit: Number(r.querySelector(".unit").value || 0)
+    })).filter(i => i.item && i.qty > 0);
+
+    const subtotal = items.reduce((s,i)=> s + (i.qty*i.unit), 0);
+    const total = subtotal - (subtotal*(discount/100));
+    document.getElementById("totalPreview").value = `${currency} ${total.toFixed(2)}`;
+  }
+
+  async function saveReceipt() {
+    const btn = document.getElementById("saveBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+    const clientId = document.getElementById("clientId").value;
+    const discountPercent = Number(document.getElementById("discountPercent").value || 0);
+
+    const rows = Array.from(document.querySelectorAll("#rows .grid-3"));
+    const items = rows.map(r => ({
+      item: r.querySelector(".item").value,
+      qty: Number(r.querySelector(".qty").value || 0),
+      unit: Number(r.querySelector(".unit").value || 0)
+    })).filter(i => i.item && i.qty > 0);
+
+    if (!clientId || items.length === 0) {
+      showToast("Client and at least 1 item required", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+      return;
+    }
+
+    try {
+      const r = await fetch("/web/receipts/create", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ clientId, items, discountPercent })
+      });
+      const d = await r.json();
+      if (r.ok && d.redirectUrl) {
+        showToast("Receipt created", "success");
+        setTimeout(()=>window.location.href=d.redirectUrl, 450);
+      } else {
+        showToast(d.error || "Failed to create receipt", "error");
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+      }
+    } catch {
+      showToast("Failed to create receipt", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+    }
+  }
+
+  addRow();
+</script>

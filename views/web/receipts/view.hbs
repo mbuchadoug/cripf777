@@ -1,0 +1,76 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">{{receipt.number}}</div>
+    <div class="page-subtitle">Receipt • {{receipt.clientName}} • {{formatDate receipt.createdAt}}</div>
+  </div>
+  <div class="page-actions no-print">
+    <a href="/web/receipts" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Back</a>
+    <button class="btn btn-primary" onclick="downloadPDF('{{receipt._id}}')"><i class="fas fa-download"></i> PDF</button>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-user"></i> Client</div>
+    </div>
+    <div class="card-body">
+      <div class="td-primary">{{receipt.clientName}}</div>
+      <div class="td-sub">Branch: {{receipt.branchName}}</div>
+      <div class="td-sub">Status: <span class="badge badge-green">Paid</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="fas fa-coins"></i> Amount</div>
+    </div>
+    <div class="card-body">
+      <div class="stat-value">{{receipt.currency}} {{receipt.total}}</div>
+      {{#if (gt receipt.discountAmount 0)}}
+        <div class="td-sub">Discount: {{receipt.currency}} {{receipt.discountAmount}}</div>
+      {{/if}}
+    </div>
+  </div>
+</div>
+
+<div style="height:16px"></div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-list"></i> Items</div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Unit</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each receipt.items}}
+          <tr style="cursor:default">
+            <td><span class="td-primary">{{this.item}}</span></td>
+            <td><span class="td-mono">{{this.qty}}</span></td>
+            <td><span class="td-mono">{{../receipt.currency}} {{this.unit}}</span></td>
+            <td><span class="td-primary td-mono">{{../receipt.currency}} {{this.total}}</span></td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  async function downloadPDF(id) {
+    try {
+      const r = await fetch(`/web/receipts/${id}/pdf`);
+      const d = await r.json();
+      if (d.url) window.open(d.url, "_blank");
+      else showToast("Failed to generate PDF", "error");
+    } catch { showToast("Failed to download PDF", "error"); }
+  }
+</script>

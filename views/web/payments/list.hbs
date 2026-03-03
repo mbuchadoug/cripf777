@@ -1,0 +1,131 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Payments</div>
+    <div class="page-subtitle">All invoice payments recorded in the system</div>
+  </div>
+  <div class="page-actions">
+    <a href="/web/payments/create" class="btn btn-primary">
+      <i class="fas fa-plus"></i> Record Payment
+    </a>
+  </div>
+</div>
+
+<div class="filters-bar no-print">
+  <form method="GET" style="display:contents">
+    {{#if isOwner}}
+      <div class="filter-group">
+        <label class="filter-label">Branch</label>
+        <select name="branchFilter" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+          <option value="">All Branches</option>
+          {{#each branches}}
+            <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
+    {{/if}}
+
+    <div class="filter-group">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" placeholder="Receipt # / method…" class="form-input" style="padding:9px 12px;font-size:13px;" value="{{filters.search}}">
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Search</button>
+      <a href="/web/payments" class="btn btn-ghost btn-sm"><i class="fas fa-redo"></i> Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="display:none;" id="desktopTable">
+  <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Receipt #</th>
+          <th>Invoice</th>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Branch</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each payments}}
+          <tr style="cursor:default">
+            <td><span class="td-primary td-mono">{{this.receiptNumber}}</span></td>
+            <td><span class="td-sub td-mono">{{this.invoiceNumber}}</span></td>
+            <td><span class="td-mono" style="font-size:12px">{{formatDate this.createdAt}}</span></td>
+            <td><span class="badge badge-blue">{{this.method}}</span></td>
+            <td><span class="td-sub">{{this.branchName}}</span></td>
+            <td style="text-align:right"><span class="td-primary td-mono">{{../user.currency}} {{this.amount}}</span></td>
+          </tr>
+        {{else}}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i class="fas fa-money-bill-wave"></i>
+                <h3>No payments yet</h3>
+                <p>Record invoice payments to keep balances accurate.</p>
+                <a href="/web/payments/create" class="btn btn-primary"><i class="fas fa-plus"></i> Record Payment</a>
+              </div>
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="mobileCards" style="display:none">
+  {{#each payments}}
+    <div class="card" style="margin-bottom:12px;padding:16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div class="td-primary td-mono">{{this.receiptNumber}}</div>
+          <div class="td-sub td-mono" style="margin-top:4px">{{this.invoiceNumber}}</div>
+          <div class="td-sub" style="margin-top:6px">{{this.branchName}}</div>
+        </div>
+        <div class="td-primary td-mono">{{../user.currency}} {{this.amount}}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span class="td-mono" style="font-size:12px;color:var(--muted-2)">{{formatDate this.createdAt}}</span>
+        <span class="badge badge-blue">{{this.method}}</span>
+      </div>
+    </div>
+  {{else}}
+    <div class="card">
+      <div class="empty-state">
+        <i class="fas fa-money-bill-wave"></i>
+        <h3>No payments yet</h3>
+        <p>Record invoice payments to keep balances accurate.</p>
+        <a href="/web/payments/create" class="btn btn-primary"><i class="fas fa-plus"></i> Record Payment</a>
+      </div>
+    </div>
+  {{/each}}
+</div>
+
+{{#if (gt pagination.totalPages 1)}}
+  <div class="pagination">
+    {{#if pagination.hasPrev}}
+      <a href="?page={{math pagination.currentPage '-' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+    {{/if}}
+    <span class="page-info">{{pagination.currentPage}} / {{pagination.totalPages}}</span>
+    {{#if pagination.hasNext}}
+      <a href="?page={{math pagination.currentPage '+' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-right"></i>
+      </a>
+    {{/if}}
+  </div>
+{{/if}}
+
+<script>
+  function layoutToggle() {
+    const isMobile = window.innerWidth < 768;
+    document.getElementById('desktopTable').style.display = isMobile ? 'none' : 'block';
+    document.getElementById('mobileCards').style.display = isMobile ? 'block' : 'none';
+  }
+  layoutToggle();
+  window.addEventListener('resize', layoutToggle);
+</script>

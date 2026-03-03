@@ -1,0 +1,178 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Record Payment</div>
+    <div class="page-subtitle">Choose an unpaid invoice and record a payment</div>
+  </div>
+</div>
+
+<div class="filters-bar no-print">
+  <form method="GET" style="display:contents">
+    {{#if isOwner}}
+      <div class="filter-group">
+        <label class="filter-label">Branch</label>
+        <select name="branchFilter" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+          <option value="">All Branches</option>
+          {{#each branches}}
+            <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
+    {{/if}}
+    <div class="filter-group">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" placeholder="Invoice # or client…" class="form-input" style="padding:9px 12px;font-size:13px;" value="{{filters.search}}">
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Search</button>
+      <a href="/web/payments/create" class="btn btn-ghost btn-sm"><i class="fas fa-redo"></i> Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Invoice #</th>
+          <th>Client</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Branch</th>
+          <th style="text-align:right">Balance</th>
+          <th style="text-align:right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each invoices}}
+          <tr style="cursor:default">
+            <td><span class="td-primary td-mono">{{this.number}}</span></td>
+            <td><span class="td-primary">{{this.clientName}}</span></td>
+            <td><span class="td-mono" style="font-size:12px">{{formatDate this.createdAt}}</span></td>
+            <td>
+              {{#if (eq this.status 'partial')}}<span class="badge badge-amber">Partial</span>{{/if}}
+              {{#if (eq this.status 'unpaid')}}<span class="badge badge-red">Unpaid</span>{{/if}}
+            </td>
+            <td><span class="td-sub">{{this.branchName}}</span></td>
+            <td style="text-align:right"><span class="td-primary td-mono">{{this.currency}} {{this.balance}}</span></td>
+            <td style="text-align:right">
+              <button class="btn btn-primary btn-sm" onclick="openPay('{{this._id}}','{{this.number}}','{{this.currency}}',{{this.balance}})">
+                <i class="fas fa-money-bill-wave"></i> Pay
+              </button>
+            </td>
+          </tr>
+        {{else}}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <i class="fas fa-check-circle"></i>
+                <h3>No unpaid invoices found</h3>
+                <p>Everything looks settled.</p>
+                <a href="/web/invoices" class="btn btn-ghost"><i class="fas fa-file-invoice"></i> View Invoices</a>
+              </div>
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal-backdrop" id="payModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-money-bill-wave"></i> Record Payment</div>
+      <button class="modal-close" onclick="closeModal('payModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="td-sub">Invoice</div>
+      <div class="td-primary td-mono" id="mInvNo" style="margin-bottom:14px"></div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Amount</label>
+          <input id="mAmount" class="form-input" type="number" min="0" />
+          <div class="form-hint" id="mHint"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Method</label>
+          <select id="mMethod" class="form-select">
+            <option>Cash</option>
+            <option>EcoCash</option>
+            <option>Bank Transfer</option>
+            <option>Card</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('payModal')">Cancel</button>
+      <button class="btn btn-primary" id="mSaveBtn" onclick="savePay()"><i class="fas fa-check"></i> Save Payment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let _invoiceId = null;
+  let _balance = 0;
+  let _currency = "";
+
+  function openPay(id, number, currency, balance) {
+    _invoiceId = id;
+    _balance = Number(balance || 0);
+    _currency = currency || "";
+
+    document.getElementById("mInvNo").innerText = number;
+    document.getElementById("mAmount").value = _balance;
+    document.getElementById("mHint").innerText = `Max: ${_currency} ${_balance}`;
+    openModal("payModal");
+  }
+
+  async function savePay() {
+    const btn = document.getElementById("mSaveBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+    const amount = Number(document.getElementById("mAmount").value || 0);
+    const method = document.getElementById("mMethod").value;
+
+    if (!_invoiceId) { showToast("Missing invoice", "error"); return; }
+    if (!amount || amount <= 0) {
+      showToast("Enter a valid amount", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Save Payment';
+      return;
+    }
+    if (amount > _balance) {
+      showToast("Amount exceeds balance", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Save Payment';
+      return;
+    }
+
+    try {
+      const r = await fetch("/web/payments/create", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ invoiceId: _invoiceId, amount, method })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        showToast("Payment saved", "success");
+        closeModal("payModal");
+        if (d.receiptUrl) window.open(d.receiptUrl, "_blank");
+        setTimeout(()=>window.location.href=d.redirectUrl || "/web/invoices", 500);
+      } else {
+        showToast(d.error || "Failed to save payment", "error");
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Save Payment';
+      }
+    } catch {
+      showToast("Failed to save payment", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Save Payment';
+    }
+  }
+</script>

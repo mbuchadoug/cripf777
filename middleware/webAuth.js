@@ -74,12 +74,13 @@ export function requireWebRole(...allowedRoles) {
     }
     
     if (!allowedRoles.includes(req.webUser.role)) {
-      return res.status(403).render("web/error", {
-        layout: "web",
-        title: "Access Denied",
-        message: "You don't have permission to access this page.",
-        user: req.webUser
-      });
+  return res.status(403).render("web/error", {
+  layout: "web",
+  pageTitle: "Access Denied",
+  pageKey: "",
+  message: "You don't have permission to access this page.",
+  user: req.webUser
+});
     }
     
     next();

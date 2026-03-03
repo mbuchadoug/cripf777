@@ -40,6 +40,7 @@ import webClientsRoutes from "./routes/web_clients.js";
 import webReportsRoutes from "./routes/web_reports.js";
 import webFilesRoutes from "./routes/web_files.js";
 import battleRoutes from "./routes/battles.js";
+import webExpenses from "./routes/web_expenses.js";
 
 //-------------------------------------------------------
 
@@ -79,6 +80,9 @@ import arenaRoutes from "./routes/arena.js";
 // Add these imports
 import adminScoiReports from "./routes/admin_scoi_reports.js";
 
+import webPayments from "./routes/web_payments.js";
+
+
 
 
 
@@ -103,6 +107,8 @@ import placementAuditRoutes from "./routes/admin_placement_audits.js";
 import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
 import { ensureAuth } from "./middleware/authGuard.js";
+import webReceipts from "./routes/web_receipts.js";
+
 
 dotenv.config();
 
@@ -422,6 +428,8 @@ app.use("/web", webProductsRoutes);
 app.use("/web", webClientsRoutes);
 app.use("/web", webReportsRoutes);
 app.use("/web", webFilesRoutes);
+app.use("/web", webExpenses);
+app.use("/web", webPayments);
 // Add this route registration
 app.use(adminScoiReports);
 app.use(adminQuizRules);
@@ -442,6 +450,7 @@ app.use(adminBattlesRouter);
 app.use(employeeUpgradeRoutes);
 app.use("/api/org", apiOrgQuizRoutes);
 app.use("/twilio_biz", twilioBizRoutes);
+app.use("/web", webReceipts);
 app.use(arenaRoutes);
 // ... after other route registrations
 app.use("/teacher", privateTeacherRoutes);

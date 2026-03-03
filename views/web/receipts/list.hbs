@@ -1,0 +1,155 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Receipts</div>
+    <div class="page-subtitle">All paid receipts issued by your business</div>
+  </div>
+  <div class="page-actions">
+    <a href="/web/receipts/create" class="btn btn-primary">
+      <i class="fas fa-plus"></i> New Receipt
+    </a>
+  </div>
+</div>
+
+<div class="filters-bar no-print">
+  <form method="GET" style="display:contents">
+    {{#if isOwner}}
+      <div class="filter-group">
+        <label class="filter-label">Branch</label>
+        <select name="branchFilter" class="form-select" onchange="this.form.submit()" style="padding:9px 12px;font-size:13px;">
+          <option value="">All Branches</option>
+          {{#each branches}}
+            <option value="{{this._id}}" {{#if (eq ../filters.branchFilter (toString this._id))}}selected{{/if}}>{{this.name}}</option>
+          {{/each}}
+        </select>
+      </div>
+    {{/if}}
+
+    <div class="filter-group">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" placeholder="Receipt # or client…" class="form-input" style="padding:9px 12px;font-size:13px;" value="{{filters.search}}">
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+      <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Search</button>
+      <a href="/web/receipts" class="btn btn-ghost btn-sm"><i class="fas fa-redo"></i> Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="display:none;" id="desktopTable">
+  <div style="overflow-x:auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Receipt #</th>
+          <th>Client</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Branch</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each receipts}}
+          <tr onclick="window.location.href='/web/receipts/{{this._id}}'">
+            <td><span class="td-primary td-mono">{{this.number}}</span></td>
+            <td><span class="td-primary">{{this.clientName}}</span></td>
+            <td><span class="td-mono" style="font-size:12px">{{formatDate this.createdAt}}</span></td>
+            <td><span class="td-primary td-mono">{{this.currency}} {{this.total}}</span></td>
+            <td><span class="td-sub">{{this.branchName}}</span></td>
+            <td style="text-align:right" onclick="event.stopPropagation()">
+              <div class="td-actions" style="justify-content:flex-end">
+                <a href="/web/receipts/{{this._id}}" class="btn btn-ghost btn-icon btn-sm" title="View">
+                  <i class="fas fa-eye"></i>
+                </a>
+                <button onclick="downloadPDF('{{this._id}}')" class="btn btn-ghost btn-icon btn-sm" title="Download PDF">
+                  <i class="fas fa-download" style="color:var(--green)"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        {{else}}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i class="fas fa-receipt"></i>
+                <h3>No receipts yet</h3>
+                <p>Issue your first receipt to start tracking paid sales.</p>
+                <a href="/web/receipts/create" class="btn btn-primary"><i class="fas fa-plus"></i> Create Receipt</a>
+              </div>
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="mobileCards" style="display:none">
+  {{#each receipts}}
+    <div class="card" style="margin-bottom:12px;padding:16px;cursor:pointer" onclick="window.location.href='/web/receipts/{{this._id}}'">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="td-primary td-mono" style="font-size:14px">{{this.number}}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:3px">{{this.clientName}}</div>
+          <div style="font-size:12px;color:var(--muted-2);margin-top:3px">{{this.branchName}}</div>
+        </div>
+        <span class="badge badge-green">Paid</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span class="td-mono" style="font-size:12px;color:var(--muted-2)">{{formatDate this.createdAt}}</span>
+        <span class="td-primary td-mono">{{this.currency}} {{this.total}}</span>
+      </div>
+
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <a href="/web/receipts/{{this._id}}" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center"><i class="fas fa-eye"></i> View</a>
+        <button onclick="downloadPDF('{{this._id}}')" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;color:var(--green)"><i class="fas fa-download"></i> PDF</button>
+      </div>
+    </div>
+  {{else}}
+    <div class="card">
+      <div class="empty-state">
+        <i class="fas fa-receipt"></i>
+        <h3>No receipts yet</h3>
+        <p>Issue your first receipt to start tracking paid sales.</p>
+        <a href="/web/receipts/create" class="btn btn-primary"><i class="fas fa-plus"></i> Create Receipt</a>
+      </div>
+    </div>
+  {{/each}}
+</div>
+
+{{#if (gt pagination.totalPages 1)}}
+  <div class="pagination">
+    {{#if pagination.hasPrev}}
+      <a href="?page={{math pagination.currentPage '-' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+    {{/if}}
+    <span class="page-info">{{pagination.currentPage}} / {{pagination.totalPages}}</span>
+    {{#if pagination.hasNext}}
+      <a href="?page={{math pagination.currentPage '+' 1}}{{#if filters.search}}&search={{filters.search}}{{/if}}{{#if filters.branchFilter}}&branchFilter={{filters.branchFilter}}{{/if}}">
+        <i class="fas fa-chevron-right"></i>
+      </a>
+    {{/if}}
+  </div>
+{{/if}}
+
+<script>
+  function layoutToggle() {
+    const isMobile = window.innerWidth < 768;
+    document.getElementById('desktopTable').style.display = isMobile ? 'none' : 'block';
+    document.getElementById('mobileCards').style.display = isMobile ? 'block' : 'none';
+  }
+  layoutToggle();
+  window.addEventListener('resize', layoutToggle);
+
+  async function downloadPDF(id) {
+    try {
+      const r = await fetch(`/web/receipts/${id}/pdf`);
+      const d = await r.json();
+      if (d.url) window.open(d.url, '_blank');
+      else showToast('Failed to generate PDF', 'error');
+    } catch { showToast('Failed to download PDF', 'error'); }
+  }
+</script>
