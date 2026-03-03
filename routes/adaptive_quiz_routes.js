@@ -208,6 +208,7 @@ router.get(
         { value: "math", label: "Mathematics", icon: "📐" },
         { value: "english", label: "English", icon: "📚" },
         { value: "science", label: "Science", icon: "🔬" },
+        { value: "computerstudies", label: "Computer Studies", icon: "🔬" },
         { value: "responsibility", label: "Responsibility", icon: "🎯" }
       ];
 
