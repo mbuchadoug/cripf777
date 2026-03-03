@@ -1,7 +1,7 @@
 // routes/web_expenses.js
 import express from "express";
 import { requireWebAuth } from "../middleware/webAuth.js";
-import Expense from "../models/expenses.js";
+import Expense from "../models/expense.js";
 
 const router = express.Router();
 router.use(requireWebAuth);
