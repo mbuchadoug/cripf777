@@ -14,7 +14,7 @@ const router = Router();
   }
 });*/
 router.get("/", (req, res) => {
-  res.render("website/index", {
+  res.render("lms/index", {
     user: req.user || null,
     siteUrl: process.env.SITE_URL,
     canonicalPath: req.path
