@@ -76,9 +76,13 @@ if (isParentSignup) {
   updateDoc.$setOnInsert.role = "parent";
 } else if (isTeacherSignup) {
   updateDoc.$set.consumerEnabled = true;
-  //updateDoc.$set.accountType = "parent";
-  updateDoc.$set.accountType = "private_teacher";
+
+  // ✅ accountType is NOT for teachers (only parent/guardian/student_self)
+  // leave it unset OR make it "parent" if you want teachers to also be parents
+  updateDoc.$set.accountType = "parent"; // ✅ safest for consumer access
+
   updateDoc.$setOnInsert.role = "private_teacher";
+  updateDoc.$setOnInsert.needsProfileSetup = true; // ✅ optional but useful
 } else if (isArenaSignup) {
   // ✅ Arena: allow login without forcing parent/teacher dashboards
   // make them consumerEnabled if you want arena to use consumer stuff, but DO NOT set accountType unless needed
