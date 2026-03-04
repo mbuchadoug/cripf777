@@ -63,16 +63,10 @@ router.get("/parent", async (req, res) => {
     return res.redirect("/parent/dashboard");
   }
   // Not logged in — go through Google OAuth
-// Not logged in — go through Google OAuth
-req.session.signupSource = "parent";
-
-// ✅ force a deterministic landing page for FIRST-TIME signup/login
-req.session.returnTo = "/parent/dashboard";
-
-req.session.save(() => {
-  // optional: force account chooser if you want
-  res.redirect("/auth/google");
-});
+  req.session.signupSource = "parent";
+  req.session.save(() => {
+    res.redirect("/auth/google");
+  });
 });
 
 
@@ -97,15 +91,10 @@ router.get("/teacher", async (req, res) => {
     return res.redirect("/teacher/dashboard");
   }
   // Not logged in — go through Google OAuth
-// Not logged in — go through Google OAuth
-req.session.signupSource = "private_teacher";
-
-// ✅ force a deterministic landing page for FIRST-TIME signup/login
-req.session.returnTo = "/teacher/setup";
-
-req.session.save(() => {
-  res.redirect("/auth/google");
-});
+  req.session.signupSource = "private_teacher";
+  req.session.save(() => {
+    res.redirect("/auth/google");
+  });
 });
 /**
  * GET /auth/google
