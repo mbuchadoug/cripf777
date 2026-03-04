@@ -364,7 +364,7 @@
             class="btn" 
             style="float:right; font-size:12px; padding:6px 12px; margin-top:-2px;"
           >
-           // ⚡ Generate Practice Quiz
+           
           </button>-->
         </div>
           <div class="subject-quizzes">
@@ -848,35 +848,6 @@
 
 
 <!-- PRACTICE QUIZ GENERATION -->
-<script>
-  async function generatePracticeQuiz(subject, childId) {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = '⏳ Generating...';
 
-    try {
-      const response = await fetch(`/parent/children/${childId}/generate-practice-quiz`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: subject.toLowerCase() })
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.quizId) {
-        window.location.href = data.redirectUrl;
-      } else {
-        alert('Failed to generate quiz. Please try again.');
-        btn.disabled = false;
-      //  btn.textContent = '⚡ Generate Practice Quiz';
-      }
-    } catch (error) {
-      console.error('Error generating quiz:', error);
-      alert('Error generating quiz. Please try again.');
-      btn.disabled = false;
-      //btn.textContent = '⚡ Generate Practice Quiz';
-    }
-  }
-</script>
 </body>
 </html>
