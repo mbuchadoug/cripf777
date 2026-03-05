@@ -104,9 +104,12 @@ const UserSchema = new mongoose.Schema({
   },
 
   trialCounters: {
-    maths: { type: Number, default: 0 },
+   maths: { type: Number, default: 0 },
     english: { type: Number, default: 0 },
-    science: { type: Number, default: 0 }
+    science: { type: Number, default: 0 },
+    geography: { type: Number, default: 0 },
+    history: { type: Number, default: 0 },
+    generalknowledge: { type: Number, default: 0 },
   },
 
   consumerEnabled: {

@@ -40,7 +40,7 @@ ${JSON.stringify(questionsForAI, null, 2)}
 Respond ONLY with a JSON array (no markdown, no explanation) in this exact format:
 [
   { "id": 0, "topic": "fractions", "difficulty": 2, "subject": "math" },
-  { "id": 1, "topic": "verb-tenses", "difficulty": 3, "subject": "english" }
+  { "id": 1, "topic": "verb-tenses", "difficulty": 3, "subject": "english" },
 ]`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {

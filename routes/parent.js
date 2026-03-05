@@ -894,7 +894,7 @@ router.get(
         });
       }
 
-      const subjects = ["math", "english","computerstudies", "science", "responsibility"];
+      const subjects = ["math", "english","computerstudies",'history','geography', "science", "responsibility"];
 
       const knowledgeMaps = {};
       for (const subject of subjects) {

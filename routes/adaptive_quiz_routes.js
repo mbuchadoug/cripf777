@@ -209,7 +209,9 @@ router.get(
         { value: "english", label: "English", icon: "📚" },
         { value: "science", label: "Science", icon: "🔬" },
         { value: "computerstudies", label: "Computer Studies", icon: "🔬" },
-        { value: "responsibility", label: "Responsibility", icon: "🎯" }
+        { value: "responsibility", label: "Responsibility", icon: "🎯" },
+        { value: "geography", label: "Geography", icon: "🔬" },
+        { value: "history", label: "History", icon: "🔬" },
       ];
 
       return res.json({

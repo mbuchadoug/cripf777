@@ -28,7 +28,7 @@ const LearnerProfileSchema = new mongoose.Schema({
 
   subjects: [{
     type: String,
-    enum: ["maths", "english", "science"]
+    enum: ["maths", "english", "science", 'geenralknowledge','geography', 'history']
   }],
 
   subscriptionStatus: {
@@ -41,7 +41,10 @@ const LearnerProfileSchema = new mongoose.Schema({
   trialCounters: {
     maths: { type: Number, default: 0 },
     english: { type: Number, default: 0 },
-    science: { type: Number, default: 0 }
+    science: { type: Number, default: 0 },
+    geography: { type: Number, default: 0 },
+    history: { type: Number, default: 0 },
+    generalknowledge: { type: Number, default: 0 },
   },
 
   createdAt: {
