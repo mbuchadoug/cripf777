@@ -40,6 +40,139 @@ async function sendPromptWithMenu(to, promptText) {
  */
 import mongoose from "mongoose"; // add at top if not already present
 
+// services/twilioStateBridge.js
+
+/**
+ * ✅ ENHANCED BULK EXPENSE STATE MANAGEMENT
+ */
+
+// Current state structure (enhance this)
+const userStates = new Map();
+
+/**
+ * Get or initialize user state
+ */
+export function getOrCreateState(phone) {
+  if (!userStates.has(phone)) {
+    userStates.set(phone, {
+      currentState: "idle",
+      businessId: null,
+      branchId: null,
+      role: null,
+      tempData: {},
+      bulkExpenses: [], // ✅ NEW: Store expenses during bulk entry
+      lastActivity: Date.now()
+    });
+  }
+  return userStates.get(phone);
+}
+
+/**
+ * ✅ NEW: Initialize bulk expense session
+ */
+export function startBulkExpenseSession(phone, businessId, branchId, createdBy) {
+  const state = getOrCreateState(phone);
+  state.currentState = "bulk_expense_entry";
+  state.businessId = businessId;
+  state.branchId = branchId;
+  state.bulkExpenses = [];
+  state.tempData = {
+    createdBy,
+    sessionStart: Date.now()
+  };
+  state.lastActivity = Date.now();
+  return state;
+}
+
+/**
+ * ✅ NEW: Add expense to bulk session
+ */
+export function addExpenseToBulkSession(phone, expenseData) {
+  const state = getOrCreateState(phone);
+  if (state.currentState !== "bulk_expense_entry") {
+    throw new Error("Not in bulk expense mode");
+  }
+  
+  state.bulkExpenses.push({
+    amount: expenseData.amount,
+    description: expenseData.description,
+    category: expenseData.category,
+    method: expenseData.method || "Unknown",
+    addedAt: Date.now()
+  });
+  
+  state.lastActivity = Date.now();
+  return state.bulkExpenses.length;
+}
+
+/**
+ * ✅ NEW: Get bulk expenses summary
+ */
+export function getBulkExpenseSummary(phone) {
+  const state = getOrCreateState(phone);
+  if (!state.bulkExpenses.length) return null;
+  
+  const total = state.bulkExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  
+  // Group by category
+  const byCategory = {};
+  state.bulkExpenses.forEach(exp => {
+    const cat = exp.category || "Other";
+    byCategory[cat] = (byCategory[cat] || 0) + exp.amount;
+  });
+  
+  return {
+    count: state.bulkExpenses.length,
+    total,
+    byCategory,
+    expenses: state.bulkExpenses
+  };
+}
+
+/**
+ * ✅ NEW: Cancel bulk expense session
+ */
+export function cancelBulkExpenseSession(phone) {
+  const state = getOrCreateState(phone);
+  const count = state.bulkExpenses.length;
+  state.currentState = "idle";
+  state.bulkExpenses = [];
+  state.tempData = {};
+  return count;
+}
+
+/**
+ * ✅ NEW: Clear specific expense from bulk session
+ */
+export function removeExpenseFromBulk(phone, index) {
+  const state = getOrCreateState(phone);
+  if (state.currentState !== "bulk_expense_entry") return false;
+  if (index < 1 || index > state.bulkExpenses.length) return false;
+  
+  const removed = state.bulkExpenses.splice(index - 1, 1)[0];
+  state.lastActivity = Date.now();
+  return removed;
+}
+
+/**
+ * Session timeout (clear after 10 minutes of inactivity)
+ */
+setInterval(() => {
+  const now = Date.now();
+  const TIMEOUT = 10 * 60 * 1000; // 10 minutes
+  
+  for (const [phone, state] of userStates.entries()) {
+    if (now - state.lastActivity > TIMEOUT) {
+      if (state.currentState === "bulk_expense_entry" && state.bulkExpenses.length > 0) {
+        // Don't clear bulk expenses on timeout, just warn
+        console.log(`⚠️ Bulk expense session timed out for ${phone} (${state.bulkExpenses.length} unsaved)`);
+      } else {
+        userStates.delete(phone);
+      }
+    }
+  }
+}, 60000); // Check every minute
+
 function getEffectiveBranchId(caller, sessionData) {
   const role = String(caller?.role || "").toLowerCase(); // ✅ normalize role
 

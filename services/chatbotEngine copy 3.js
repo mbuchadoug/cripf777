@@ -536,30 +536,27 @@ Reply *menu* to start.`);
   }
 
   // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
-  // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
   if (a.startsWith("bulk_expense_branch_")) {
     if (!biz) return sendMainMenu(from);
     const branchId = a.replace("bulk_expense_branch_", "");
     biz.sessionState = "bulk_expense_input";
-    biz.sessionData = { targetBranchId: branchId, bulkExpenses: [] };
+    biz.sessionData = { targetBranchId: branchId };
     await saveBizSafe(biz);
     const branch = await Branch.findById(branchId);
     return sendText(from,
-`💰 *Bulk Expense Mode — ${branch?.name || "Branch"}*
+`📋 *Bulk Add Expenses — ${branch?.name || "Branch"}*
 
-Just type your expenses naturally! Examples:
-- "50 for lunch"
-- "30 transport to town"
-- "25 pens and paper"
+✅ Format: Description, Amount, Category
 
-*Commands:*
-- Type expenses one by one
-- 'list' - Show all expenses
-- 'remove 2' - Delete expense #2
-- 'done' - Finish and save
-- 'cancel' - Discard all
+Example:
+Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
 
-Ready! Add your first expense:`);
+Categories: Rent, Utilities, Transport, Supplies, Other
+(Category optional — defaults to Other)
+
+Use *|* or new lines to separate.
+
+Paste now, or reply *done* to finish.`);
   }
 
   // ── Owner picks branch for View Expense Receipts ──────────────────────────
@@ -810,226 +807,62 @@ Ready! Add your first expense:`);
 
   // ── Bulk expense input ─────────────────────────────────────────────────────
 
-  // ── Bulk expense input (ENHANCED WITH NATURAL LANGUAGE) ───────────────────
-
   if (biz && biz.sessionState === "bulk_expense_input" && !isMetaAction) {
     const textRaw = (text || "").trim();
-    const textLower = textRaw.toLowerCase();
 
-    // ✅ Handle empty input
     if (!textRaw) {
-      await sendText(from, "❌ Please type an expense or 'done' to finish.\n\nExample: 50 for lunch");
+      await sendText(from, "❌ Paste at least one expense or type *done* to finish.");
       return;
     }
 
-    // ✅ Handle 'done' command
-    if (textLower === "done" || textLower === "finish") {
-      // Check if there are any expenses in session
-      const expenseCount = biz.sessionData?.bulkExpenses?.length || 0;
-      
-      if (expenseCount === 0) {
-        biz.sessionState = "ready"; 
-        biz.sessionData = {};
-        await saveBizSafe(biz);
-        await sendText(from, "❌ No expenses to save. Type 'bulk expense' to start again.");
-        return sendPaymentsMenu(from);
-      }
-
-      // Move to confirmation
-      biz.sessionState = "bulk_expense_confirm";
+    if (textRaw.toLowerCase() === "done") {
+      biz.sessionState = "ready"; biz.sessionData = {};
       await saveBizSafe(biz);
-
-      const { formatBulkSummary } = await import("./expenseParser.js");
-      const summary = formatBulkSummary(biz.sessionData.bulkExpenses, currencySymbol(biz.currency));
-      
-      await sendText(from, `${summary}\n*Confirm?*\nReply 'yes' to save or 'no' to cancel.`);
-      return;
-    }
-
-    // ✅ Handle 'cancel' command
-    if (textLower === "cancel" || textLower === "stop") {
-      const count = biz.sessionData?.bulkExpenses?.length || 0;
-      biz.sessionState = "ready"; 
-      biz.sessionData = {};
-      await saveBizSafe(biz);
-      await sendText(from, count > 0 
-        ? `❌ Cancelled. Discarded ${count} unsaved expense(s).`
-        : "❌ Cancelled bulk expense entry.");
+      await sendText(from, "✅ Bulk expense entry complete.");
       return sendPaymentsMenu(from);
     }
 
-    // ✅ Handle 'list' command
-    if (textLower === "list" || textLower === "show") {
-      const expenses = biz.sessionData?.bulkExpenses || [];
-      
-      if (expenses.length === 0) {
-        await sendText(from, "📝 No expenses added yet. Start typing!\n\nExample: 50 for lunch");
-        return;
-      }
+    const items = textRaw.split(/[|\n]/).map(i => i.trim()).filter(Boolean);
+    const Expense = (await import("../models/expense.js")).default;
+    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
 
-      const { formatExpense } = await import("./expenseParser.js");
-      const cur = currencySymbol(biz.currency);
-      
-      let list = `📝 *Current Expenses (${expenses.length})*\n\n`;
-      expenses.forEach((exp, idx) => {
-        list += formatExpense(exp, idx + 1).replace('$', cur) + '\n';
+    let created = 0, skipped = 0;
+    const skippedLines = [];
+
+    const categoryAliases = {
+      rent: "Rent", utilities: "Utilities", utility: "Utilities",
+      transport: "Transport", transportation: "Transport",
+      supplies: "Supplies", supply: "Supplies", other: "Other"
+    };
+
+    for (const item of items) {
+      const parts = item.split(",").map(p => p.trim());
+      if (parts.length < 2) { skipped++; skippedLines.push(item); continue; }
+      const description = parts[0];
+      const amount = Number(parts[1]);
+      const rawCategory = (parts[2] || "other").toLowerCase().trim();
+      const category = categoryAliases[rawCategory] || "Other";
+      if (!description || !amount || amount <= 0) { skipped++; skippedLines.push(item); continue; }
+
+      await Expense.create({
+        businessId: biz._id,
+        branchId: effectiveBranchId,
+        description, amount, category,
+        method: "Cash",
+        createdBy: phone
       });
-      
-      const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-      list += `\n*Total: ${cur}${total.toFixed(2)}*\n\nType 'done' when finished.`;
-      
-      await sendText(from, list);
-      return;
+      created++;
     }
 
-    // ✅ Handle 'remove N' command
-    const removeMatch = textLower.match(/^(?:remove|delete)\s+(\d+)$/);
-    if (removeMatch) {
-      const index = parseInt(removeMatch[1]);
-      const expenses = biz.sessionData?.bulkExpenses || [];
-      
-      if (index < 1 || index > expenses.length) {
-        await sendText(from, `❌ Invalid number. You have ${expenses.length} expense(s).\n\nType 'list' to see all.`);
-        return;
-      }
-      
-      const removed = expenses.splice(index - 1, 1)[0];
-      await saveBizSafe(biz);
-      
-      const { formatExpense } = await import("./expenseParser.js");
-      const cur = currencySymbol(biz.currency);
-      
-      await sendText(from, `✅ Removed: ${formatExpense(removed).replace('$', cur)}\n\n${expenses.length} expense(s) remaining.\nContinue adding or type 'done'.`);
-      return;
+    let reply = `✅ Recorded *${created}* expenses`;
+    if (skipped > 0) {
+      reply += `\n⚠️ Skipped *${skipped}* (invalid format)`;
+      if (skippedLines.length) reply += `\n\nSkipped lines:\n${skippedLines.slice(0, 3).join("\n")}`;
     }
-
-    // ✅ Handle 'help' command
-    if (textLower === "help" || textLower === "?") {
-      await sendText(from,
-`💡 *Bulk Expense Help*
-
-*Adding expenses:*
-Just type naturally! Examples:
-- "50 for lunch"
-- "30 taxi to work"
-- "100 office supplies"
-
-*Commands:*
-- 'list' - Show current expenses
-- 'remove 3' - Delete expense #3
-- 'done' - Save all expenses
-- 'cancel' - Discard everything
-
-Continue typing expenses!`);
-      return;
-    }
-
-    // ✅ PARSE NATURAL LANGUAGE EXPENSE
-    const { parseExpenseText, formatExpense, validateExpense } = await import("./expenseParser.js");
-    
-    const parsed = parseExpenseText(textRaw);
-    
-    if (parsed.error) {
-      await sendText(from, `❌ ${parsed.error}\n\nExample: "50 for lunch"\nType 'help' for more examples or 'cancel' to stop.`);
-      return;
-    }
-    
-    // Validate
-    const validation = validateExpense(parsed);
-    if (!validation.valid) {
-      await sendText(from, `❌ ${validation.error}`);
-      return;
-    }
-    
-    // Initialize expenses array if needed
-    if (!biz.sessionData.bulkExpenses) {
-      biz.sessionData.bulkExpenses = [];
-    }
-    
-    // Add to session
-    biz.sessionData.bulkExpenses.push({
-      amount: parsed.amount,
-      description: parsed.description,
-      category: parsed.category,
-      method: "Cash"
-    });
-    
-    await saveBizSafe(biz);
-    
-    const count = biz.sessionData.bulkExpenses.length;
-    const total = biz.sessionData.bulkExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const cur = currencySymbol(biz.currency);
-    
-    await sendText(from, `✅ ${formatExpense(parsed, count).replace('$', cur)}\n\n*Running total: ${cur}${total.toFixed(2)}* (${count} items)\n\nContinue adding or type 'done' to finish.`);
-    return;
+    reply += `\n\nType more or reply *done* to finish.`;
+    return sendText(from, reply);
   }
 
-  // ✅ NEW STATE: Bulk expense confirmation
-  if (biz && biz.sessionState === "bulk_expense_confirm" && !isMetaAction) {
-    const textLower = text.toLowerCase().trim();
-    
-    if (textLower === "yes" || textLower === "y" || textLower === "confirm") {
-      const expenses = biz.sessionData?.bulkExpenses || [];
-      
-      if (expenses.length === 0) {
-        biz.sessionState = "ready"; 
-        biz.sessionData = {};
-        await saveBizSafe(biz);
-        await sendText(from, "❌ No expenses to save.");
-        return sendPaymentsMenu(from);
-      }
-      
-      try {
-        const Expense = (await import("../models/expense.js")).default;
-        const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-        
-        // Save all expenses to database
-        const expenseDocs = expenses.map(exp => ({
-          businessId: biz._id,
-          branchId: effectiveBranchId,
-          amount: exp.amount,
-          description: exp.description,
-          category: exp.category,
-          method: exp.method || "Cash",
-          createdBy: phone
-        }));
-        
-        await Expense.insertMany(expenseDocs);
-        
-        // Clear session
-        const count = expenses.length;
-        const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-        const cur = currencySymbol(biz.currency);
-        
-        biz.sessionState = "ready"; 
-        biz.sessionData = {};
-        await saveBizSafe(biz);
-        
-        const { formatBulkSummary } = await import("./expenseParser.js");
-        const summary = formatBulkSummary(expenses, cur);
-        
-        await sendText(from, `✅ *Success!*\n\nSaved ${count} expenses totaling ${cur}${total.toFixed(2)} to the system.\n\n${summary}\nType 'bulk expense' to add more.`);
-        return sendPaymentsMenu(from);
-        
-      } catch (error) {
-        console.error('[Bulk Expense Save Error]', error);
-        await sendText(from, `❌ Error saving expenses: ${error.message}\n\nYour data is still here. Type 'yes' to retry or 'no' to cancel.`);
-        return;
-      }
-    }
-    
-    if (textLower === "no" || textLower === "n" || textLower === "cancel") {
-      const count = biz.sessionData?.bulkExpenses?.length || 0;
-      biz.sessionState = "ready"; 
-      biz.sessionData = {};
-      await saveBizSafe(biz);
-      await sendText(from, `❌ Cancelled. Discarded ${count} expense(s).`);
-      return sendPaymentsMenu(from);
-    }
-    
-    await sendText(from, `Please reply 'yes' to save or 'no' to cancel.`);
-    return;
-  }
   // ── Bulk paste products ────────────────────────────────────────────────────
 
   if (biz && biz.sessionState === "bulk_paste_input" && !isMetaAction) {
@@ -1915,31 +1748,24 @@ Milk 1L, 1.50 | Bread, 2 | Math Lesson, 10
 Paste now, or reply *done* to finish.`);
     }
 
- case ACTIONS.BULK_EXPENSE_MODE: {
+    case ACTIONS.BULK_EXPENSE_MODE: {
       if (!biz) return sendMainMenu(from);
       // Owner picks branch first
       if (caller?.role === "owner") return sendBranchSelectorBulkExpense(from);
-      biz.sessionState = "bulk_expense_input"; 
-      biz.sessionData = { bulkExpenses: [] }; 
-      await saveBizSafe(biz);
+      biz.sessionState = "bulk_expense_input"; biz.sessionData = {}; await saveBizSafe(biz);
       return sendText(from,
-`💰 *Bulk Expense Mode Activated*
+`📋 *Bulk Add Expenses*
 
-Just type your expenses naturally! Examples:
-- "50 for lunch"
-- "30 transport to town"
-- "25 pens and paper"
+✅ Format: Description, Amount, Category | Description, Amount, Category
 
-*Commands:*
-- Type expenses one by one
-- 'list' - Show all expenses
-- 'remove 2' - Delete expense #2
-- 'done' - Finish and save
-- 'cancel' - Discard all
+Example:
+Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
 
-Ready! Add your first expense:`);
+Categories: Rent, Utilities, Transport, Supplies, Other
+(Category optional — defaults to Other)
+
+Paste now, or reply *done* to finish.`);
     }
-
 
     case ACTIONS.SUBSCRIPTION_PAYMENTS: {
       if (!biz) return sendMainMenu(from);
