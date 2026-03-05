@@ -1,51 +1,24 @@
 // services/expenseParser.js
 /**
  * Natural Language Expense Parser
- * Converts casual text into structured expense data
+ * Converts comma-separated text into structured expense data
  */
 
 /**
  * Predefined expense categories with keywords
  */
 const CATEGORY_KEYWORDS = {
-  Food: ['lunch', 'dinner', 'breakfast', 'food', 'meal', 'snack', 'drinks', 'tea', 'coffee', 'cake'],
+  Food: ['lunch', 'dinner', 'breakfast', 'food', 'meal', 'snack', 'drinks', 'tea', 'coffee', 'cake', 'rice', 'bread'],
   Travel: ['transport', 'fuel', 'petrol', 'diesel', 'taxi', 'bus', 'kombi', 'travel', 'trip'],
   Office: ['stationery', 'paper', 'pens', 'pencils', 'folders', 'files', 'printing', 'copies'],
   Utilities: ['electricity', 'water', 'internet', 'wifi', 'airtime', 'data', 'phone'],
   Maintenance: ['repairs', 'fixing', 'maintenance', 'cleaning', 'paint'],
-  Supplies: ['stock', 'supplies', 'materials', 'goods', 'inventory'],
+  Supplies: ['stock', 'supplies', 'materials', 'goods', 'inventory', 'cables', 'ram', 'equipment'],
   Salaries: ['salary', 'wages', 'pay', 'payment', 'staff'],
   Rent: ['rent', 'rental', 'lease'],
   Marketing: ['advertising', 'ads', 'marketing', 'promo', 'flyers'],
   Other: []
 };
-
-/**
- * Extract amount from text
- * Handles: "50", "$50", "50.00", "50 dollars", "fifty dollars"
- */
-function extractAmount(text) {
-  // Remove currency symbols and normalize
-  const cleaned = text.replace(/[$€£ZWL\s]/gi, '');
-  
-  // Try to find number patterns
-  const patterns = [
-    /(\d+(?:\.\d{1,2})?)/,  // 50 or 50.00
-    /(\d+)\s*(?:dollars?|zwl|usd)/i  // 50 dollars
-  ];
-  
-  for (const pattern of patterns) {
-    const match = cleaned.match(pattern);
-    if (match) {
-      const amount = parseFloat(match[1]);
-      if (!isNaN(amount) && amount > 0) {
-        return amount;
-      }
-    }
-  }
-  
-  return null;
-}
 
 /**
  * Detect category from description
@@ -67,38 +40,13 @@ function detectCategory(description) {
 }
 
 /**
- * Extract description from text (removes amount and connectors)
+ * Capitalize first letter of string
  */
-function extractDescription(text, amount) {
-  let desc = text;
-  
-  // Remove the amount
-  if (amount) {
-    desc = desc.replace(new RegExp(`\\$?${amount}(?:\\.00)?`), '');
-  }
-  
-  // Remove common connectors
-  desc = desc.replace(/\b(for|to|on|at|spent|bought|paid)\b/gi, '');
-  
-  // Clean up
-  desc = desc.trim().replace(/\s+/g, ' ');
-  
-  // Capitalize first letter
-  if (desc.length > 0) {
-    desc = desc.charAt(0).toUpperCase() + desc.slice(1);
-  }
-  
-  return desc || 'Expense';
+function capitalizeFirst(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/**
- * Main parser: converts natural text to expense object
- * 
- * Examples:
- * "50 for lunch" → {amount: 50, description: "Lunch", category: "Food"}
- * "30 transport" → {amount: 30, description: "Transport", category: "Travel"}
- * "25 stationery items" → {amount: 25, description: "Stationery items", category: "Office"}
- */
 /**
  * Parse single expense from format: "description amount"
  * Examples: "lunch 10", "fuel 50", "office supplies 25"
@@ -198,26 +146,9 @@ export function parseBulkExpenseText(text) {
 }
 
 /**
- * Capitalize first letter of string
- */
-function capitalizeFirst(str) {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-/**
- * Format expense for display
- */
-export function formatExpense(expense, index = null) {
-  const prefix = index ? `[${index}] ` : '';
-  const emoji = getCategoryEmoji(expense.category);
-  return `${prefix}${emoji} $${expense.amount.toFixed(2)} - ${expense.description} (${expense.category})`;
-}
-
-/**
  * Get emoji for category
  */
-function getCategoryEmoji(category) {
+export function getCategoryEmoji(category) {
   const emojis = {
     Food: '🍽️',
     Travel: '🚗',
@@ -234,9 +165,18 @@ function getCategoryEmoji(category) {
 }
 
 /**
+ * Format expense for display
+ */
+export function formatExpense(expense, index = null) {
+  const prefix = index ? `[${index}] ` : '';
+  const emoji = getCategoryEmoji(expense.category);
+  return `${prefix}${emoji} $${expense.amount.toFixed(2)} - ${expense.description} (${expense.category})`;
+}
+
+/**
  * Format bulk expense summary
  */
-export function formatBulkSummary(expenses) {
+export function formatBulkSummary(expenses, currency = '$') {
   const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   
   // Group by category
@@ -246,12 +186,12 @@ export function formatBulkSummary(expenses) {
     byCategory[cat] = (byCategory[cat] || 0) + exp.amount;
   });
   
-  let summary = `📊 *Summary - ${expenses.length} expenses totaling $${total.toFixed(2)}*\n\n`;
+  let summary = `📊 *Summary - ${expenses.length} expenses totaling ${currency}${total.toFixed(2)}*\n\n`;
   
   // Show breakdown by category
   for (const [cat, amount] of Object.entries(byCategory)) {
     const emoji = getCategoryEmoji(cat);
-    summary += `${emoji} ${cat}: $${amount.toFixed(2)}\n`;
+    summary += `${emoji} ${cat}: ${currency}${amount.toFixed(2)}\n`;
   }
   
   return summary;
@@ -270,4 +210,17 @@ export function validateExpense(expense) {
   }
   
   return { valid: true };
+}
+
+/**
+ * Format multiple expenses for display
+ */
+export function formatExpenseList(expenses, startIndex = 1, currency = '$') {
+  let output = '';
+  expenses.forEach((exp, idx) => {
+    const emoji = getCategoryEmoji(exp.category);
+    const num = startIndex + idx;
+    output += `[${num}] ${emoji} ${currency}${exp.amount.toFixed(2)} - ${exp.description} (${exp.category})\n`;
+  });
+  return output;
 }

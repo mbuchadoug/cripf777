@@ -89,16 +89,7 @@ function formatMoney(amount, currency) {
 }
 
 
-function getCategoryEmoji(category) {
-  const emojis = {
-    Rent: '🏠',
-    Utilities: '💡',
-    Transport: '🚗',
-    Supplies: '📦',
-    Other: '💵'
-  };
-  return emojis[category] || '💵';
-}
+
 
 function normalizeEcocashNumber(input, fallbackWhatsApp) {
   const raw = (input || "").replace(/\D+/g, "");
@@ -871,6 +862,7 @@ Categories auto-detected ✨
     }
 
     // ✅ Handle 'list' command
+   // ✅ Handle 'list' command
     if (textLower === "list" || textLower === "show") {
       const expenses = biz.sessionData?.bulkExpenses || [];
       
@@ -879,12 +871,11 @@ Categories auto-detected ✨
         return;
       }
 
-      const { formatExpenseList } = await import("./expenseParser.js");
+      const expenseParser = await import("./expenseParser.js");
       const cur = currencySymbol(biz.currency);
       
       let list = `📝 *Current Expenses (${expenses.length})*\n\n`;
-      list += formatExpenseList(expenses, 1, cur);
-      
+      list += expenseParser.formatExpenseList(expenses, 1, cur);
       const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
       list += `\n*Total: ${cur}${total.toFixed(2)}*\n\nType 'done' to save.`;
       
@@ -893,6 +884,7 @@ Categories auto-detected ✨
     }
 
     // ✅ Handle 'remove N' command
+   // ✅ Handle 'remove N' command
     const removeMatch = textLower.match(/^(?:remove|delete|clear)\s+(\d+)$/);
     if (removeMatch) {
       const index = parseInt(removeMatch[1]);
@@ -906,13 +898,13 @@ Categories auto-detected ✨
       const removed = expenses.splice(index - 1, 1)[0];
       await saveBizSafe(biz);
       
+      const expenseParser = await import("./expenseParser.js");
       const cur = currencySymbol(biz.currency);
-      const emoji = getCategoryEmoji(removed.category);
+      const emoji = expenseParser.getCategoryEmoji(removed.category);
       
       await sendText(from, `✅ Removed: ${emoji} ${cur}${removed.amount.toFixed(2)} - ${removed.description}\n\n${expenses.length} expense(s) remaining.`);
       return;
     }
-    
     // ✅ Handle 'clear' or 'clear all' command
     if (textLower === "clear" || textLower === "clear all" || textLower === "reset") {
       const count = biz.sessionData?.bulkExpenses?.length || 0;
@@ -947,7 +939,9 @@ Categories auto-detected ✨`);
     }
 
     // ✅ PARSE COMMA-SEPARATED EXPENSES
-    const { parseBulkExpenseText, formatExpenseList } = await import("./expenseParser.js");
+   // ✅ PARSE COMMA-SEPARATED EXPENSES
+    const expenseParser = await import("./expenseParser.js");
+    const { parseBulkExpenseText, formatExpenseList, getCategoryEmoji: getExpenseCategoryEmoji } = expenseParser;
     
     const result = parseBulkExpenseText(textRaw);
     
