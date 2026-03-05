@@ -91,17 +91,35 @@ router.get("/receipts", async (req, res) => {
 /**
  * GET /web/receipts/create
  */
+
 router.get("/receipts/create", async (req, res) => {
   try {
     const { businessId, branchId, role } = req.webUser;
 
     const clients = await Client.find({ businessId }).sort({ name: 1 }).lean();
 
+    // ✅ Products visibility:
+    // staff: see their branch + global
+    // owner: see all (we'll filter in UI based on chosen branch)
     const productQuery = { businessId, isActive: true };
-    if (role !== "owner" && branchId) productQuery.branchId = branchId;
+
+    if (role !== "owner") {
+      productQuery.$or = [
+        { branchId: branchId || null },
+        { branchId: null }
+      ];
+    }
+
     const products = await Product.find(productQuery).sort({ name: 1 }).lean();
 
     const business = await Business.findById(businessId).lean();
+
+    // ✅ Owner branch list for dropdown
+    let branches = [];
+    if (role === "owner") {
+      const BranchModel = (await import("../models/branch.js")).default;
+      branches = await BranchModel.find({ businessId }).sort({ name: 1 }).lean();
+    }
 
     res.render("web/receipts/create", {
       layout: "web",
@@ -110,6 +128,8 @@ router.get("/receipts/create", async (req, res) => {
       user: req.webUser,
       clients,
       products,
+      branches,
+      isOwner: role === "owner",
       business: { currency: business.currency }
     });
   } catch (error) {
@@ -123,14 +143,13 @@ router.get("/receipts/create", async (req, res) => {
     });
   }
 });
-
 /**
  * POST /web/receipts/create
  */
 router.post("/receipts/create", async (req, res) => {
   try {
-    const { businessId, branchId, phone } = req.webUser;
-    const { clientId, items, discountPercent = 0 } = req.body;
+    const { businessId, branchId: userBranchId, phone, role } = req.webUser;
+    const { clientId, items, discountPercent = 0, branchId } = req.body;
 
     if (!clientId || !items || items.length === 0) {
       return res.status(400).json({ error: "Client and items required" });
@@ -149,25 +168,40 @@ router.post("/receipts/create", async (req, res) => {
     const number = `${prefix}-${String(business.counters.receipt).padStart(6, "0")}`;
     await business.save();
 
-    const receipt = await Invoice.create({
-      businessId,
-      branchId: branchId || null,
-      clientId,
-      number,
-      type: "receipt",
-      currency: business.currency,
-      status: "paid",
-      items: items.map(i => ({ item: i.item, qty: i.qty, unit: i.unit, total: i.qty * i.unit })),
-      subtotal,
-      discountPercent: Number(discountPercent),
-      discountAmount,
-      vatPercent: 0,
-      vatAmount: 0,
-      total,
-      amountPaid: total,
-      balance: 0,
-      createdBy: phone
-    });
+   const receipt = await Invoice.create({
+  businessId,
+  branchId: finalBranchId,
+  clientId,
+  number,
+  type: "receipt",
+  currency: business.currency,
+  status: "paid",
+  items: items.map(i => ({ item: i.item, qty: i.qty, unit: i.unit, total: i.qty * i.unit })),
+  subtotal,
+  discountPercent: Number(discountPercent),
+  discountAmount,
+  vatPercent: 0,
+  vatAmount: 0,
+  total,
+  amountPaid: total,
+  balance: 0,
+  createdBy: phone
+});
+
+    // ✅ Decide branch for the receipt
+let finalBranchId = userBranchId || null;
+
+// Owner/admin can choose branch (or global)
+if (role === "owner") {
+  finalBranchId = branchId ? String(branchId) : null;
+
+  // Validate chosen branch belongs to this business (if provided)
+  if (finalBranchId) {
+    const BranchModel = (await import("../models/branch.js")).default;
+    const exists = await BranchModel.findOne({ _id: finalBranchId, businessId }).lean();
+    if (!exists) return res.status(400).json({ error: "Invalid branch selected" });
+  }
+}
 
     res.json({ success: true, redirectUrl: `/web/receipts/${receipt._id}` });
   } catch (error) {

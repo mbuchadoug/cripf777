@@ -7,24 +7,38 @@
 
 <div class="card">
   <div class="card-body">
-    <div class="grid-2">
-      <div class="form-group">
-        <label class="form-label">Client</label>
-        <select id="clientId" class="form-select">
-          <option value="">Select client…</option>
-          {{#each clients}}
-            <option value="{{this._id}}">{{this.name}} {{#if this.phone}}({{this.phone}}){{/if}}</option>
-          {{/each}}
-        </select>
-        <div class="form-hint">If client isn’t listed, add them in Clients first.</div>
-      </div>
+  <div class="grid-3">
+  <div class="form-group">
+    <label class="form-label">Client</label>
+    <select id="clientId" class="form-select">
+      <option value="">Select client…</option>
+      {{#each clients}}
+        <option value="{{this._id}}">{{this.name}} {{#if this.phone}}({{this.phone}}){{/if}}</option>
+      {{/each}}
+    </select>
+    <div class="form-hint">If client isn’t listed, add them in Clients first.</div>
+  </div>
 
-      <div class="form-group">
-        <label class="form-label">Currency</label>
-        <input class="form-input" value="{{business.currency}}" disabled />
-      </div>
+  {{#if isOwner}}
+    <div class="form-group">
+      <label class="form-label">Branch</label>
+      <select id="branchId" class="form-select" onchange="onBranchChange()">
+        <option value="">Global (No Branch)</option>
+        {{#each branches}}
+          <option value="{{this._id}}">{{this.name}}</option>
+        {{/each}}
+      </select>
+      <div class="form-hint">Pick the branch where this sale happened.</div>
     </div>
+  {{else}}
+    <input type="hidden" id="branchId" value="" />
+  {{/if}}
 
+  <div class="form-group">
+    <label class="form-label">Currency</label>
+    <input class="form-input" value="{{business.currency}}" disabled />
+  </div>
+</div>
     <div class="divider"></div>
 
     <div class="card" style="border-radius:12px">
@@ -58,11 +72,57 @@
 </div>
 
 <script>
-  const products = {{json products}};
-  const currency = "{{business.currency}}";
+  const allProducts = {{json products}};
+const currency = "{{business.currency}}";
 
+
+function getSelectedBranchId() {
+  const el = document.getElementById("branchId");
+  return el ? (el.value || "") : "";
+}
+
+// For owner: show products where product.branchId === selectedBranch OR product.branchId is null (global)
+// For staff: server already filtered list to branch + global
+function getVisibleProducts() {
+  const selectedBranch = getSelectedBranchId();
+
+  // if no selector exists (staff), just return allProducts
+const branchSelect = document.querySelector("#branchId.form-select");
+if (!branchSelect) return allProducts; // staff mode (hidden input)
+
+  return allProducts.filter(p => {
+    const pBranch = p.branchId ? String(p.branchId) : "";
+    if (!selectedBranch) {
+      // global receipt => only global products make sense (optional)
+      // If you want global receipts to also allow branch products, change this.
+      return !pBranch;
+    }
+    // branch receipt: branch products + global products
+    return !pBranch || pBranch === selectedBranch;
+  });
+}
+
+function buildProductOptions() {
+  const products = getVisibleProducts();
+  return products
+    .map(p => `<option value="${p.name}" data-price="${p.unitPrice || 0}">${p.name}</option>`)
+    .join("");
+}
+
+// ✅ PASTE onBranchChange RIGHT HERE
+  function onBranchChange() {
+    document.querySelectorAll("#rows select.item").forEach(sel => {
+      const current = sel.value;
+      sel.innerHTML = `<option value="">Select product…</option>${buildProductOptions()}`;
+
+      const stillExists = Array.from(sel.options).some(o => o.value === current);
+      sel.value = stillExists ? current : "";
+    });
+
+    calc();
+  }
   function rowTemplate() {
-    const opts = products.map(p => `<option value="${p.name}" data-price="${p.unitPrice||0}">${p.name}</option>`).join("");
+const opts = buildProductOptions();
     return `
       <div class="grid-3" style="gap:10px;margin-bottom:10px">
         <div class="form-group" style="margin-bottom:0">
@@ -112,49 +172,56 @@
     document.getElementById("totalPreview").value = `${currency} ${total.toFixed(2)}`;
   }
 
-  async function saveReceipt() {
-    const btn = document.getElementById("saveBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Saving…';
+async function saveReceipt() {
+  const btn = document.getElementById("saveBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
 
-    const clientId = document.getElementById("clientId").value;
-    const discountPercent = Number(document.getElementById("discountPercent").value || 0);
+  const clientId = document.getElementById("clientId").value;
+  const discountPercent = Number(document.getElementById("discountPercent").value || 0);
 
-    const rows = Array.from(document.querySelectorAll("#rows .grid-3"));
-    const items = rows.map(r => ({
-      item: r.querySelector(".item").value,
-      qty: Number(r.querySelector(".qty").value || 0),
-      unit: Number(r.querySelector(".unit").value || 0)
-    })).filter(i => i.item && i.qty > 0);
+  const rows = Array.from(document.querySelectorAll("#rows .grid-3"));
+  const items = rows.map(r => ({
+    item: r.querySelector(".item").value,
+    qty: Number(r.querySelector(".qty").value || 0),
+    unit: Number(r.querySelector(".unit").value || 0)
+  })).filter(i => i.item && i.qty > 0);
 
-    if (!clientId || items.length === 0) {
-      showToast("Client and at least 1 item required", "error");
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
-      return;
-    }
-
-    try {
-      const r = await fetch("/web/receipts/create", {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ clientId, items, discountPercent })
-      });
-      const d = await r.json();
-      if (r.ok && d.redirectUrl) {
-        showToast("Receipt created", "success");
-        setTimeout(()=>window.location.href=d.redirectUrl, 450);
-      } else {
-        showToast(d.error || "Failed to create receipt", "error");
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
-      }
-    } catch {
-      showToast("Failed to create receipt", "error");
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
-    }
+  if (!clientId || items.length === 0) {
+    showToast("Client and at least 1 item required", "error");
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+    return;
   }
 
-  addRow();
+  try {
+    const branchId = document.getElementById("branchId")?.value || "";
+
+    const r = await fetch("/web/receipts/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, items, discountPercent, branchId })
+    });
+
+    const d = await r.json();
+
+    if (r.ok && d.redirectUrl) {
+      showToast("Receipt created", "success");
+      setTimeout(() => window.location.href = d.redirectUrl, 450);
+    } else {
+      showToast(d.error || "Failed to create receipt", "error");
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+    }
+  } catch (e) {
+    console.error(e);
+    showToast("Failed to create receipt", "error");
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check"></i> Create Receipt';
+  }
+}
+ 
+
+ addRow();
+onBranchChange(); // optional: ensures dropdown options match branch immediately
 </script>
