@@ -99,31 +99,110 @@ function extractDescription(text, amount) {
  * "30 transport" → {amount: 30, description: "Transport", category: "Travel"}
  * "25 stationery items" → {amount: 25, description: "Stationery items", category: "Office"}
  */
-export function parseExpenseText(text) {
+/**
+ * Parse single expense from format: "description amount"
+ * Examples: "lunch 10", "fuel 50", "office supplies 25"
+ */
+export function parseSingleExpense(text) {
   if (!text || typeof text !== 'string') {
-    return { error: "Invalid input" };
+    return null;
+  }
+  
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  
+  // Match pattern: "description number" or "number description"
+  // Examples: "lunch 10", "10 lunch", "office supplies 25"
+  
+  // Try: description followed by number
+  let match = trimmed.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
+  
+  if (match) {
+    const description = match[1].trim();
+    const amount = parseFloat(match[2]);
+    
+    if (description && amount > 0) {
+      const category = detectCategory(description);
+      return {
+        amount,
+        description: capitalizeFirst(description),
+        category,
+        success: true
+      };
+    }
+  }
+  
+  // Try: number followed by description
+  match = trimmed.match(/^(\d+(?:\.\d{1,2})?)\s+(.+)$/);
+  
+  if (match) {
+    const amount = parseFloat(match[1]);
+    const description = match[2].trim();
+    
+    if (description && amount > 0) {
+      const category = detectCategory(description);
+      return {
+        amount,
+        description: capitalizeFirst(description),
+        category,
+        success: true
+      };
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Parse multiple expenses from comma-separated format
+ * Example: "lunch 10, cables 5, transport 20"
+ */
+export function parseBulkExpenseText(text) {
+  if (!text || typeof text !== 'string') {
+    return { error: "Invalid input", expenses: [] };
   }
   
   const trimmed = text.trim();
   
-  // Extract amount
-  const amount = extractAmount(trimmed);
-  if (!amount) {
-    return { error: "Couldn't find an amount. Example: '50 for lunch'" };
+  // Split by comma
+  const items = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+  
+  if (items.length === 0) {
+    return { error: "No expenses found", expenses: [] };
   }
   
-  // Extract description
-  const description = extractDescription(trimmed, amount);
+  const expenses = [];
+  const failed = [];
   
-  // Detect category
-  const category = detectCategory(description);
+  for (const item of items) {
+    const parsed = parseSingleExpense(item);
+    if (parsed) {
+      expenses.push(parsed);
+    } else {
+      failed.push(item);
+    }
+  }
+  
+  if (expenses.length === 0) {
+    return { 
+      error: "Couldn't parse any expenses. Use format: lunch 10, fuel 20", 
+      expenses: [] 
+    };
+  }
   
   return {
-    amount,
-    description,
-    category,
+    expenses,
+    failed: failed.length > 0 ? failed : null,
     success: true
   };
+}
+
+/**
+ * Capitalize first letter of string
+ */
+function capitalizeFirst(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 /**
