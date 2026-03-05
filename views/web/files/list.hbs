@@ -1,100 +1,269 @@
-<!-- Page Header -->
-<div class="mb-6">
-  <h1 class="text-2xl font-bold text-gray-800 mb-2">File Download Center</h1>
-  <p class="text-sm text-gray-600">Download all your invoices, quotes, and receipts</p>
-</div>
-
-<!-- Document Type Tabs -->
-<div class="bg-white rounded-xl shadow-sm p-4 mb-6">
-  <div class="flex flex-wrap gap-2">
-    <button onclick="filterDocs('all')" class="doc-filter-btn px-4 py-2 rounded-lg bg-blue-600 text-white" data-type="all">
-      All Documents
-    </button>
-    <button onclick="filterDocs('invoice')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="invoice">
-      Invoices
-    </button>
-    <button onclick="filterDocs('quote')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="quote">
-      Quotes
-    </button>
-    <button onclick="filterDocs('receipt')" class="doc-filter-btn px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50" data-type="receipt">
-      Receipts
+<div class="page-header">
+  <div>
+    <div class="page-title">Document Center</div>
+    <div class="page-subtitle">Download and manage all your invoices, quotes, and receipts</div>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-ghost" onclick="downloadAll()">
+      <i class="fas fa-download"></i> Download All
     </button>
   </div>
 </div>
 
+<!-- Filter Tabs -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-body" style="padding:16px 20px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="filterDocs('all')" class="doc-filter-btn btn btn-primary" data-type="all">
+        <i class="fas fa-folder"></i> All Documents
+      </button>
+      <button onclick="filterDocs('invoice')" class="doc-filter-btn btn btn-ghost" data-type="invoice">
+        <i class="fas fa-file-invoice"></i> Invoices
+      </button>
+      <button onclick="filterDocs('quote')" class="doc-filter-btn btn btn-ghost" data-type="quote">
+        <i class="fas fa-file-contract"></i> Quotes
+      </button>
+      <button onclick="filterDocs('receipt')" class="doc-filter-btn btn btn-ghost" data-type="receipt">
+        <i class="fas fa-receipt"></i> Receipts
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Documents Grid -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px" id="docsGrid">
+  
   {{#each documents}}
-    <div class="doc-card bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow" data-type="{{this.type}}">
-      <div class="flex items-start justify-between mb-4">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center space-x-2 mb-2">
-            <i class="fas {{#if (eq this.type 'invoice')}}fa-file-invoice{{else if (eq this.type 'quote')}}fa-file-contract{{else}}fa-receipt{{/if}} text-blue-600"></i>
-            <span class="text-xs font-medium uppercase px-2 py-1 rounded {{#if (eq this.type 'invoice')}}bg-blue-100 text-blue-800{{else if (eq this.type 'quote')}}bg-purple-100 text-purple-800{{else}}bg-green-100 text-green-800{{/if}}">
-              {{this.type}}
-            </span>
+    <div class="card doc-card" data-type="{{this.type}}" style="transition:all 0.2s ease">
+      
+      <!-- Card Header -->
+      <div style="padding:20px 22px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <div style="flex:1;min-width:0">
+            {{#if (eq this.type 'invoice')}}
+              <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--amber-g);border:1px solid var(--amber-b);border-radius:6px;margin-bottom:8px">
+                <i class="fas fa-file-invoice" style="color:var(--amber);font-size:11px"></i>
+                <span style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:0.5px">Invoice</span>
+              </div>
+            {{else if (eq this.type 'quote')}}
+              <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--blue-g);border:1px solid var(--blue-b);border-radius:6px;margin-bottom:8px">
+                <i class="fas fa-file-contract" style="color:var(--blue);font-size:11px"></i>
+                <span style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px">Quote</span>
+              </div>
+            {{else}}
+              <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--green-g);border:1px solid var(--green-b);border-radius:6px;margin-bottom:8px">
+                <i class="fas fa-receipt" style="color:var(--green);font-size:11px"></i>
+                <span style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.5px">Receipt</span>
+              </div>
+            {{/if}}
+            
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--white);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{this.number}}
+            </div>
+            <div style="font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{this.clientName}}
+            </div>
           </div>
-          <h3 class="font-semibold text-gray-800 truncate">{{this.number}}</h3>
-          <p class="text-sm text-gray-500 truncate">{{this.clientName}}</p>
         </div>
       </div>
       
-      <div class="flex items-center justify-between mb-4">
-        <span class="text-sm text-gray-600">{{formatDate this.createdAt}}</span>
-        <span class="font-semibold text-gray-800">{{this.currency}} {{this.total}}</span>
+      <!-- Card Body -->
+      <div style="padding:20px 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-2)">
+            <i class="fas fa-calendar"></i>
+            <span>{{formatDate this.createdAt}}</span>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:600;color:var(--amber)">
+            {{this.currency}} {{this.total}}
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:8px">
+          <button onclick="downloadDoc('{{this._id}}', '{{this.folder}}')" class="btn btn-primary" style="flex:1;justify-content:center;font-size:13px">
+            <i class="fas fa-download"></i> Download
+          </button>
+          <button onclick="viewDoc('{{this._id}}')" class="btn btn-ghost" style="width:40px;justify-content:center;padding:0">
+            <i class="fas fa-eye"></i>
+          </button>
+        </div>
       </div>
       
-      <button onclick="downloadDoc('{{this._id}}', '{{this.folder}}')" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 active:scale-95">
-        <i class="fas fa-download mr-2"></i> Download PDF
-      </button>
     </div>
   {{else}}
-    <div class="col-span-full bg-white rounded-xl shadow-sm p-12 text-center">
-      <i class="fas fa-folder-open text-4xl text-gray-300 mb-4"></i>
-      <p class="text-gray-500">No documents found</p>
+    <div style="grid-column:1/-1">
+      <div class="card">
+        <div class="empty-state">
+          <i class="fas fa-folder-open"></i>
+          <h3>No Documents Found</h3>
+          <p>You haven't created any invoices, quotes, or receipts yet.</p>
+          <a href="/web/invoices/create" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create Invoice
+          </a>
+        </div>
+      </div>
     </div>
   {{/each}}
+  
 </div>
 
+<!-- Loading Overlay -->
+<div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="text-align:center">
+    <div class="spinner" style="width:48px;height:48px;border-width:4px;margin:0 auto 16px"></div>
+    <div style="font-size:15px;color:var(--white)">Generating PDF...</div>
+  </div>
+</div>
+
+<style>
+  .doc-card {
+    cursor: default;
+  }
+  
+  .doc-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  
+  .doc-filter-btn {
+    transition: all 0.2s ease;
+  }
+  
+  @media (max-width: 768px) {
+    #docsGrid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
+
 <script>
+  let currentFilter = 'all';
+  
   function filterDocs(type) {
+    currentFilter = type;
     const cards = document.querySelectorAll('.doc-card');
     const buttons = document.querySelectorAll('.doc-filter-btn');
     
     // Update button styles
     buttons.forEach(btn => {
       if (btn.dataset.type === type) {
-        btn.classList.add('bg-blue-600', 'text-white');
-        btn.classList.remove('border', 'border-gray-300', 'hover:bg-gray-50');
+        btn.className = 'doc-filter-btn btn btn-primary';
       } else {
-        btn.classList.remove('bg-blue-600', 'text-white');
-        btn.classList.add('border', 'border-gray-300', 'hover:bg-gray-50');
+        btn.className = 'doc-filter-btn btn btn-ghost';
       }
     });
     
-    // Filter cards
-    cards.forEach(card => {
+    // Filter cards with animation
+    cards.forEach((card, index) => {
       if (type === 'all' || card.dataset.type === type) {
         card.style.display = 'block';
+        setTimeout(() => {
+          card.style.opacity = '1';
+          card.style.transform = 'translateY(0)';
+        }, index * 50);
       } else {
-        card.style.display = 'none';
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(10px)';
+        setTimeout(() => {
+          card.style.display = 'none';
+        }, 200);
       }
     });
+    
+    // Update count
+    updateCount();
+  }
+  
+  function updateCount() {
+    const cards = document.querySelectorAll('.doc-card');
+    const visibleCards = Array.from(cards).filter(card => {
+      return currentFilter === 'all' || card.dataset.type === currentFilter;
+    });
+    
+    // You can display count somewhere if needed
+    console.log(`Showing ${visibleCards.length} documents`);
   }
   
   async function downloadDoc(docId, folder) {
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.style.display = 'flex';
+    
     try {
       const response = await fetch(`/web/invoices/${docId}/pdf`);
       const data = await response.json();
       
       if (data.url) {
         window.open(data.url, '_blank');
+        showToast('PDF downloaded successfully', 'success');
       } else {
-        alert('Failed to generate PDF');
+        showToast('Failed to generate PDF', 'error');
       }
     } catch (error) {
       console.error('Download error:', error);
-      alert('Failed to download PDF');
+      showToast('Failed to download PDF', 'error');
+    } finally {
+      overlay.style.display = 'none';
     }
   }
+  
+  function viewDoc(docId) {
+    window.location.href = `/web/invoices/${docId}`;
+  }
+  
+  async function downloadAll() {
+    const cards = document.querySelectorAll('.doc-card');
+    const visibleCards = Array.from(cards).filter(card => {
+      return currentFilter === 'all' || card.dataset.type === currentFilter;
+    });
+    
+    if (visibleCards.length === 0) {
+      showToast('No documents to download', 'info');
+      return;
+    }
+    
+    if (!confirm(`Download ${visibleCards.length} document(s)?`)) {
+      return;
+    }
+    
+    showToast(`Starting download of ${visibleCards.length} documents...`, 'info');
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (let i = 0; i < visibleCards.length; i++) {
+      const card = visibleCards[i];
+      const button = card.querySelector('button[onclick*="downloadDoc"]');
+      const onclick = button.getAttribute('onclick');
+      const match = onclick.match(/downloadDoc\('([^']+)',\s*'([^']+)'\)/);
+      
+      if (match) {
+        const [, docId, folder] = match;
+        try {
+          const response = await fetch(`/web/invoices/${docId}/pdf`);
+          const data = await response.json();
+          
+          if (data.url) {
+            // Open in new tab with slight delay to avoid popup blocking
+            await new Promise(resolve => setTimeout(resolve, 300));
+            window.open(data.url, '_blank');
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error('Download error:', error);
+          failCount++;
+        }
+      }
+    }
+    
+    if (failCount === 0) {
+      showToast(`Successfully downloaded ${successCount} document(s)`, 'success');
+    } else {
+      showToast(`Downloaded ${successCount}, failed ${failCount}`, 'warning');
+    }
+  }
+  
+  // Initialize
+  updateCount();
 </script>
