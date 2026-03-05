@@ -84,11 +84,46 @@
     .spinner { width:16px; height:16px; border:2px solid rgba(13,17,23,.3); border-top-color:var(--navy); border-radius:50%; animation:spin .6s linear infinite; }
     @keyframes spin { to{transform:rotate(360deg)} }
 
-    /* OTP BOXES - fixed compact height, no aspect-ratio */
-    .otp-grid { display:flex; gap:8px; margin-bottom:8px; }
-    .otp-box { flex:1; min-width:0; height:50px; background:var(--navy-2); border:1px solid var(--border); border-radius:9px; font-family:"DM Mono",monospace; font-size:18px; font-weight:500; color:var(--white); text-align:center; outline:none; transition:all .2s; caret-color:var(--amber); padding:0; }
-    .otp-box:focus { border-color:var(--amber); background:var(--navy-3); box-shadow:0 0 0 3px var(--amber-g); }
-    .otp-box.filled { border-color:rgba(245,158,11,.35); color:var(--amber); }
+    /* OTP BOXES - FIXED for mobile */
+    .otp-grid { 
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+      width: 100%;
+      max-width: 100%;
+    }
+    
+    .otp-box { 
+      width: 100%;
+      height: 52px;
+      background: var(--navy-2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-family: "DM Mono", monospace;
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--white);
+      text-align: center;
+      outline: none;
+      transition: all .2s;
+      caret-color: var(--amber);
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .otp-box:focus { 
+      border-color: var(--amber);
+      background: var(--navy-3);
+      box-shadow: 0 0 0 3px var(--amber-g);
+    }
+    
+    .otp-box.filled { 
+      border-color: rgba(245,158,11,.35);
+      color: var(--amber);
+    }
 
     /* PHONE DISPLAY */
     .phone-display { display:flex; align-items:center; justify-content:space-between; background:var(--navy-2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; margin-bottom:20px; }
@@ -111,8 +146,39 @@
     #panelPhone { display:block; }
     #panelOtp   { display:none; }
 
-    @media (max-width:900px) { .shell{grid-template-columns:1fr} .left{display:none} .right{padding:36px 28px} }
-    @media (max-width:480px) { .right{padding:28px 18px} .otp-grid{gap:6px} .otp-box{height:44px;font-size:16px} }
+    /* RESPONSIVE */
+    @media (max-width:900px) { 
+      .shell { grid-template-columns: 1fr; }
+      .left { display: none; }
+      .right { padding: 36px 28px; }
+    }
+    
+    @media (max-width:600px) {
+      .right { padding: 32px 22px; }
+      .otp-grid { gap: 6px; }
+      .otp-box { height: 48px; font-size: 18px; }
+      .form-header h2 { font-size: 22px; }
+    }
+    
+    @media (max-width:480px) {
+      .right { padding: 28px 18px; }
+      .otp-grid { gap: 5px; }
+      .otp-box { height: 46px; font-size: 17px; }
+    }
+    
+    @media (max-width:400px) {
+      .right { padding: 24px 16px; }
+      .otp-grid { gap: 4px; }
+      .otp-box { height: 44px; font-size: 16px; border-radius: 7px; }
+      .step-dot { width: 24px; height: 24px; font-size: 9px; }
+      .step-label { font-size: 10px; }
+      .step-line { margin: 0 8px; }
+    }
+    
+    @media (max-width:360px) {
+      .otp-grid { gap: 3px; }
+      .otp-box { height: 42px; font-size: 15px; }
+    }
   </style>
 </head>
 <body>
@@ -177,20 +243,20 @@
     </div>
 
     <div id="panelOtp">
-      <div class="success-badge" id="otpSentBadge" style="display:none;">&#10003; Code sent — check your WhatsApp messages</div>
+      <div class="success-badge" id="otpSentBadge" style="display:none;">&#10003; Code sent - check your messages</div>
       <div class="phone-display">
-        <span class="num" id="displayPhone">+263 —</span>
+        <span class="num" id="displayPhone">+263 -</span>
         <button onclick="goBack()">Change</button>
       </div>
       <div class="form-group">
         <label class="form-label">6-Digit Verification Code</label>
         <div class="otp-grid" id="otpGrid">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
-          <input class="otp-box" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
         </div>
         <div class="resend-row">
           <span class="timer-label" id="timerLabel">Resend in 01:00</span>
