@@ -4,10 +4,207 @@ import Invoice from "../models/invoice.js";
 import Expense from "../models/expense.js";
 import InvoicePayment from "../models/invoicePayment.js";
 import Branch from "../models/branch.js";
+import Product from "../models/product.js";
 
 const router = express.Router();
 
 router.use(requireWebAuth);
+
+//import Product from "../models/product.js";
+
+// -----------------------------
+// PRODUCTS CRUD + LIST
+// Mounted under /web in server.js
+// So routes must start with /products
+// -----------------------------
+
+/**
+ * GET /web/products
+ * Render products list page + search + pagination
+ */
+router.get("/products", async (req, res) => {
+  try {
+    const { businessId, branchId: userBranchId, role } = req.webUser;
+    const { search = "", page = 1 } = req.query;
+
+    const limit = 18;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const skip = (pageNum - 1) * limit;
+
+    const query = { businessId };
+
+    // ✅ Branch visibility logic:
+    // staff: see their branch + global (branchId null)
+    // owner: see everything
+    if (role !== "owner") {
+      query.$or = [{ branchId: userBranchId || null }, { branchId: null }];
+    }
+
+    // ✅ Search
+    if (search.trim()) {
+      const s = search.trim();
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { name: { $regex: s, $options: "i" } },
+          { description: { $regex: s, $options: "i" } }
+        ]
+      });
+    }
+
+    const [products, total] = await Promise.all([
+      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Product.countDocuments(query)
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return res.render("web/products/list", {
+      layout: "web",
+      pageTitle: "Products",
+      pageKey: "products",
+      user: req.webUser,
+      products,
+      isOwner: role === "owner",
+      branches: role === "owner" ? await Branch.find({ businessId }).lean() : [],
+      search,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        hasPrev: pageNum > 1,
+        hasNext: pageNum < totalPages
+      }
+    });
+  } catch (err) {
+    console.error("Products list error:", err);
+    return res.status(500).render("web/error", {
+      layout: "web",
+      title: "Error",
+      message: "Failed to load products",
+      user: req.webUser
+    });
+  }
+});
+
+/**
+ * POST /web/products/create
+ * Body: { name, description, unitPrice }
+ */
+router.post("/products/create", async (req, res) => {
+  try {
+    const { businessId, branchId: userBranchId, role } = req.webUser;
+    const { name, description = "", unitPrice } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "Product name is required" });
+    }
+
+    const priceNum = Number(unitPrice);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ error: "Unit price must be a valid number" });
+    }
+
+    // ✅ Branch rules:
+    // staff: forced to their branchId
+    // owner: allow global product (null) for now (or you can add a UI branch picker later)
+    const finalBranchId = role === "owner" ? null : (userBranchId || null);
+
+    const product = await Product.create({
+      businessId,
+      branchId: finalBranchId,
+      name: String(name).trim(),
+      description: String(description || "").trim(),
+      unitPrice: priceNum,
+      isActive: true
+    });
+
+    return res.json({ ok: true, product });
+  } catch (err) {
+    console.error("Create product error:", err);
+    return res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+/**
+ * PUT /web/products/:id
+ * Body: { name, description, unitPrice }
+ */
+router.put("/products/:id", async (req, res) => {
+  try {
+    const { businessId, branchId: userBranchId, role } = req.webUser;
+    const { id } = req.params;
+    const { name, description, unitPrice } = req.body || {};
+
+    const existing = await Product.findOne({ _id: id, businessId }).lean();
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    // ✅ Staff can only edit:
+    // - their branch products
+    // - OR global products
+    if (role !== "owner") {
+      const allowed =
+        String(existing.branchId || "") === String(userBranchId || "") ||
+        existing.branchId === null;
+      if (!allowed) return res.status(403).json({ error: "Not allowed" });
+    }
+
+    const updates = {};
+
+    if (name !== undefined) {
+      if (!String(name).trim()) return res.status(400).json({ error: "Name required" });
+      updates.name = String(name).trim();
+    }
+
+    if (description !== undefined) {
+      updates.description = String(description || "").trim();
+    }
+
+    if (unitPrice !== undefined) {
+      const priceNum = Number(unitPrice);
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        return res.status(400).json({ error: "Unit price must be valid" });
+      }
+      updates.unitPrice = priceNum;
+    }
+
+    const updated = await Product.findOneAndUpdate(
+      { _id: id, businessId },
+      { $set: updates },
+      { new: true }
+    ).lean();
+
+    return res.json({ ok: true, product: updated });
+  } catch (err) {
+    console.error("Update product error:", err);
+    return res.status(500).json({ error: "Failed to update product" });
+  }
+});
+
+/**
+ * DELETE /web/products/:id
+ */
+router.delete("/products/:id", async (req, res) => {
+  try {
+    const { businessId, branchId: userBranchId, role } = req.webUser;
+    const { id } = req.params;
+
+    const existing = await Product.findOne({ _id: id, businessId }).lean();
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    if (role !== "owner") {
+      const allowed =
+        String(existing.branchId || "") === String(userBranchId || "") ||
+        existing.branchId === null;
+      if (!allowed) return res.status(403).json({ error: "Not allowed" });
+    }
+
+    await Product.deleteOne({ _id: id, businessId });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("Delete product error:", err);
+    return res.status(500).json({ error: "Failed to delete product" });
+  }
+});
 
 /**
  * Helper: build date range from period or custom dates
