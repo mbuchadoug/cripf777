@@ -3,11 +3,31 @@
     <div class="page-title">Create Invoice</div>
     <div class="page-subtitle">Fill in the details below to generate a new invoice</div>
   </div>
-  <a href="/web/invoices" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Back</a>
+<a href="/web/invoices" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Back</a>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start" id="invoiceGrid">
+{{#if isOwner}}
+<div class="card" style="margin-bottom:18px">
+  <div class="card-body">
+    <div class="form-group" style="margin:0">
+      <label class="form-label">
+        <i class="fas fa-building"></i> Assign to Branch
+      </label>
+      <select id="branchSelect" class="form-select">
+        <option value="">No Branch (General)</option>
+        {{#each branches}}
+          <option value="{{this._id}}">{{this.name}}</option>
+        {{/each}}
+      </select>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px">
+        Select which branch this invoice belongs to, or leave as "General" for company-wide invoices.
+      </p>
+    </div>
+  </div>
+</div>
+{{/if}}
 
+<div style="display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start" id="invoiceGrid">
   <!-- ── LEFT COLUMN ─────────────────────────── -->
   <div style="display:flex;flex-direction:column;gap:18px">
 
@@ -269,7 +289,7 @@
     document.getElementById('totalDisplay').textContent    = `${currency} ${total.toFixed(2)}`;
   }
 
-  async function submitInvoice() {
+async function submitInvoice() {
     const clientId = document.getElementById('clientSelect').value;
     if (!clientId) { showToast('Please select a client', 'error'); return; }
 
@@ -290,6 +310,9 @@
     btn.disabled = true; txt.style.display='none'; spin.style.display='inline-block';
 
     try {
+      const branchSelect = document.getElementById('branchSelect');
+      const selectedBranchId = branchSelect ? branchSelect.value : null;
+      
       const r = await fetch('/web/invoices/create', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -297,21 +320,10 @@
           clientId, items,
           discountPercent: parseFloat(document.getElementById('discountPercent').value)||0,
           vatPercent: parseFloat(document.getElementById('vatPercent').value)||0,
-          applyVat: true
+          applyVat: true,
+          selectedBranchId: selectedBranchId || null
         })
       });
-      const d = await r.json();
-      if (r.ok) window.location.href = d.redirectUrl;
-      else {
-        showToast(d.error||'Failed to create invoice','error');
-        btn.disabled=false; txt.style.display='inline'; spin.style.display='none';
-      }
-    } catch {
-      showToast('Network error. Try again.','error');
-      btn.disabled=false; txt.style.display='inline'; spin.style.display='none';
-    }
-  }
-
   async function saveNewClient() {
     const name  = document.getElementById('newClientName').value.trim();
     const phone = document.getElementById('newClientPhone').value.trim();

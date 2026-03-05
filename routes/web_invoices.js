@@ -5,6 +5,7 @@ import Client from "../models/client.js";
 import Product from "../models/product.js";
 import Business from "../models/business.js";
 import { generatePDF } from "./twilio_biz.js";
+import Branch from "../models/branch.js";
 
 const router = express.Router();
 
@@ -19,15 +20,14 @@ router.get("/invoices", async (req, res) => {
     const { businessId, branchId, role } = req.webUser;
     const { page = 1, status, search, branchFilter, type = "invoice" } = req.query;
 
-    const query = { businessId, type };
+ const query = { businessId, type };
 
     // Branch scoping
-    if (role !== "owner" && branchId) {
-      query.branchId = branchId;
-    } else if (role === "owner" && branchFilter) {
+    if (role === "owner" && branchFilter && branchFilter !== "all") {
       query.branchId = branchFilter;
+    } else if (role !== "owner" && branchId) {
+      query.branchId = branchId;
     }
-
     if (status) query.status = status;
 
     // Search by invoice number or client name
@@ -61,10 +61,10 @@ router.get("/invoices", async (req, res) => {
     ]);
 
     // Load branches for owner filter
+  // Load branches for owner filter
     let branches = [];
     if (role === "owner") {
-      const Branch = (await import("../models/branch.js")).default;
-      branches = await Branch.find({ businessId }).lean();
+      branches = await Branch.find({ businessId }).sort({ name: 1 }).lean();
     }
 
     res.render("web/invoices/list", {
@@ -115,7 +115,12 @@ router.get("/invoices/create", async (req, res) => {
 
     const business = await Business.findById(businessId).lean();
 
-    res.render("web/invoices/create", {
+    let branches = [];
+    if (role === "owner") {
+      branches = await Branch.find({ businessId }).sort({ name: 1 }).lean();
+    }
+
+   res.render("web/invoices/create", {
       layout: "web",
       title: `Create ${type.charAt(0).toUpperCase() + type.slice(1)} - ZimQuote`,
       user: req.webUser,
@@ -127,7 +132,9 @@ router.get("/invoices/create", async (req, res) => {
         invoicePrefix: business.invoicePrefix || "INV",
         quotePrefix: business.quotePrefix || "QT",
         receiptPrefix: business.receiptPrefix || "RCPT"
-      }
+      },
+      branches,
+      isOwner: role === "owner"
     });
 
   } catch (error) {
@@ -146,10 +153,11 @@ router.get("/invoices/create", async (req, res) => {
  */
 router.post("/invoices/create", async (req, res) => {
   try {
-    const { businessId, branchId, phone } = req.webUser;
+    const { businessId, branchId, phone, role } = req.webUser;
     const {
       clientId, items, type = "invoice",
-      discountPercent = 0, vatPercent = 0, applyVat = true
+      discountPercent = 0, vatPercent = 0, applyVat = true,
+      selectedBranchId
     } = req.body;
 
     if (!clientId || !items || items.length === 0) {
@@ -177,12 +185,19 @@ router.post("/invoices/create", async (req, res) => {
       : type === "quote" ? business.quotePrefix || "QT"
       : business.receiptPrefix || "RCPT";
 
-    const number = `${prefix}-${String(business.counters[counterKey]).padStart(6, "0")}`;
+   const number = `${prefix}-${String(business.counters[counterKey]).padStart(6, "0")}`;
     await business.save();
+
+    let effectiveBranchId;
+    if (role === "owner") {
+      effectiveBranchId = selectedBranchId || null;
+    } else {
+      effectiveBranchId = branchId || null;
+    }
 
     const invoice = await Invoice.create({
       businessId,
-      branchId: branchId || null,
+      branchId: effectiveBranchId,
       clientId,
       number,
       type,
