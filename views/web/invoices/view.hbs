@@ -1,223 +1,339 @@
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+<div class="page-header">
   <div>
-    <h1 class="text-2xl font-bold text-gray-800 mb-2">Invoice {{invoice.number}}</h1>
-    <p class="text-sm text-gray-600">Created on {{formatDate invoice.createdAt}}</p>
+    <div class="page-title">{{invoice.number}}</div>
+    <div class="page-subtitle">Created {{formatDate invoice.createdAt}}</div>
   </div>
-  <div class="mt-4 sm:mt-0 flex items-center space-x-3">
-    <button onclick="downloadPDF()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:scale-95">
-      <i class="fas fa-download mr-2"></i> Download PDF
+  <div class="page-actions">
+    <button onclick="downloadPDF()" class="btn btn-ghost">
+      <i class="fas fa-download"></i> Download PDF
     </button>
-    <button onclick="window.print()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 no-print">
-      <i class="fas fa-print mr-2"></i> Print
+    <button onclick="window.print()" class="btn btn-ghost no-print">
+      <i class="fas fa-print"></i> Print
     </button>
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-  
-  <!-- Main Invoice -->
-  <div class="lg:col-span-2">
-    <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8">
-      
-      <!-- Header -->
-      <div class="flex items-start justify-between mb-8 pb-6 border-b">
+<div style="display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start" id="invoiceGrid">
+
+  <!-- ── MAIN INVOICE ────────────────────────── -->
+  <div class="card" style="padding:0">
+    
+    <!-- Invoice Header -->
+    <div style="padding:32px 40px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
         <div>
           {{#if user.logoUrl}}
-            <img src="{{user.logoUrl}}" alt="Logo" class="h-16 mb-3">
+            <img src="{{user.logoUrl}}" alt="Logo" style="height:56px;margin-bottom:14px;border-radius:8px">
           {{/if}}
-          <h2 class="text-2xl font-bold text-gray-800">{{user.businessName}}</h2>
+          <h2 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--white);margin:0 0 6px 0">
+            {{user.businessName}}
+          </h2>
           {{#if user.address}}
-            <p class="text-sm text-gray-600 mt-1">{{user.address}}</p>
+            <p style="font-size:13px;color:var(--muted);margin:0;max-width:280px;line-height:1.6">
+              {{user.address}}
+            </p>
           {{/if}}
         </div>
         
-        <div class="text-right">
-          <h3 class="text-3xl font-bold text-blue-600">INVOICE</h3>
-          <p class="text-lg font-semibold text-gray-800 mt-1">{{invoice.number}}</p>
+        <div style="text-align:right">
+          <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--amber);letter-spacing:-0.5px;margin-bottom:8px">
+            INVOICE
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--white);margin-bottom:8px">
+            {{invoice.number}}
+          </div>
           {{#if invoice.branchName}}
-          <p class="text-sm text-gray-600 mt-1">
-            <i class="fas fa-building mr-1"></i>{{invoice.branchName}}
-          </p>
+          <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--muted)">
+            <i class="fas fa-building"></i>
+            <span>{{invoice.branchName}}</span>
+          </div>
           {{/if}}
         </div>
       </div>
-      
-      <!-- Client & Date Info -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+    </div>
+    
+    <!-- Client & Date Info -->
+    <div style="padding:32px 40px;border-bottom:1px solid var(--border)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">
         <div>
-          <h4 class="text-sm font-semibold text-gray-600 mb-2">BILL TO</h4>
-          <p class="font-semibold text-gray-800">{{invoice.clientName}}</p>
+          <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">
+            Bill To
+          </div>
+          <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:700;color:var(--white);margin-bottom:6px">
+            {{invoice.clientName}}
+          </div>
           {{#if invoice.clientId.phone}}
-            <p class="text-sm text-gray-600">{{invoice.clientId.phone}}</p>
+            <div style="font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px">
+              <i class="fas fa-phone" style="font-size:11px"></i>
+              <span>{{invoice.clientId.phone}}</span>
+            </div>
           {{/if}}
         </div>
         
-        <div class="sm:text-right">
-          <div class="mb-3">
-            <span class="text-sm text-gray-600">Invoice Date:</span>
-            <span class="ml-2 font-medium">{{formatDate invoice.createdAt}}</span>
-          </div>
-          <div>
-            <span class="text-sm text-gray-600">Status:</span>
-            <span class="ml-2 inline-block px-3 py-1 text-xs font-medium rounded-full {{#if (eq invoice.status 'paid')}}bg-green-100 text-green-800{{else if (eq invoice.status 'partial')}}bg-yellow-100 text-yellow-800{{else}}bg-red-100 text-red-800{{/if}}">
-              {{invoice.status}}
-            </span>
+        <div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:13px;color:var(--muted-2)">Invoice Date</span>
+              <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--white)">
+                {{formatDate invoice.createdAt}}
+              </span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:13px;color:var(--muted-2)">Status</span>
+              <span>
+                {{#if (eq invoice.status 'paid')}}
+                  <span class="badge badge-green">Paid</span>
+                {{else if (eq invoice.status 'partial')}}
+                  <span class="badge badge-amber">Partial</span>
+                {{else}}
+                  <span class="badge badge-red">Unpaid</span>
+                {{/if}}
+              </span>
+            </div>
           </div>
         </div>
       </div>
-      
-      <!-- Items Table -->
-      <div class="mb-8 overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b-2 border-gray-200">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Item</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Qty</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Unit Price</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
+    </div>
+    
+    <!-- Items Table -->
+    <div style="padding:32px 40px;border-bottom:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:12px 0;text-align:left;font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px;width:40px">#</th>
+            <th style="padding:12px 0;text-align:left;font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px">Item</th>
+            <th style="padding:12px 0;text-align:right;font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px;width:80px">Qty</th>
+            <th style="padding:12px 0;text-align:right;font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px;width:120px">Unit Price</th>
+            <th style="padding:12px 0;text-align:right;font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:1px;width:130px">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each invoice.items}}
+            <tr style="border-bottom:1px solid var(--border-subtle)">
+              <td style="padding:16px 0;font-size:13px;color:var(--muted)">{{inc @index}}</td>
+              <td style="padding:16px 0;font-size:14px;color:var(--white)">{{this.item}}</td>
+              <td style="padding:16px 0;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);text-align:right">{{this.qty}}</td>
+              <td style="padding:16px 0;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);text-align:right">
+                {{../invoice.currency}} {{this.unit}}
+              </td>
+              <td style="padding:16px 0;font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--white);text-align:right">
+                {{../invoice.currency}} {{this.total}}
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y">
-            {{#each invoice.items}}
-              <tr>
-                <td class="px-4 py-3 text-sm text-gray-600">{{inc @index}}</td>
-                <td class="px-4 py-3 text-sm text-gray-800">{{this.item}}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 text-right">{{this.qty}}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 text-right">{{../invoice.currency}} {{this.unit}}</td>
-                <td class="px-4 py-3 text-sm font-medium text-gray-800 text-right">{{../invoice.currency}} {{this.total}}</td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
-      </div>
-      
-      <!-- Totals -->
-      <div class="flex justify-end">
-        <div class="w-full sm:w-64 space-y-2">
-          <div class="flex justify-between text-sm">
-            <span class="text-gray-600">Subtotal</span>
-            <span class="font-medium">{{invoice.currency}} {{invoice.subtotal}}</span>
-          </div>
-          
-          {{#if (gt invoice.discountAmount 0)}}
-            <div class="flex justify-between text-sm text-green-600">
-              <span>Discount ({{invoice.discountPercent}}%)</span>
-              <span>- {{invoice.currency}} {{invoice.discountAmount}}</span>
-            </div>
-          {{/if}}
-          
-          {{#if (gt invoice.vatAmount 0)}}
-            <div class="flex justify-between text-sm text-blue-600">
-              <span>VAT ({{invoice.vatPercent}}%)</span>
-              <span>+ {{invoice.currency}} {{invoice.vatAmount}}</span>
-            </div>
-          {{/if}}
-          
-          <div class="flex justify-between pt-3 border-t-2 text-lg font-bold">
-            <span>Total</span>
-            <span>{{invoice.currency}} {{invoice.total}}</span>
-          </div>
-          
-          {{#if (gt invoice.amountPaid 0)}}
-            <div class="flex justify-between text-sm text-green-600">
-              <span>Amount Paid</span>
-              <span>{{invoice.currency}} {{invoice.amountPaid}}</span>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Totals -->
+    <div style="padding:32px 40px">
+      <div style="display:flex;justify-content:flex-end">
+        <div style="width:100%;max-width:340px">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:14px;color:var(--muted)">Subtotal</span>
+              <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--white)">
+                {{invoice.currency}} {{invoice.subtotal}}
+              </span>
             </div>
             
-            <div class="flex justify-between text-sm font-semibold text-red-600">
-              <span>Balance Due</span>
-              <span>{{invoice.currency}} {{invoice.balance}}</span>
+            {{#if (gt invoice.discountAmount 0)}}
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:14px;color:var(--green)">
+                  Discount ({{invoice.discountPercent}}%)
+                </span>
+                <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--green)">
+                  − {{invoice.currency}} {{invoice.discountAmount}}
+                </span>
+              </div>
+            {{/if}}
+            
+            {{#if (gt invoice.vatAmount 0)}}
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:14px;color:var(--blue)">
+                  VAT ({{invoice.vatPercent}}%)
+                </span>
+                <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--blue)">
+                  + {{invoice.currency}} {{invoice.vatAmount}}
+                </span>
+              </div>
+            {{/if}}
+            
+            <div style="height:1px;background:var(--border);margin:8px 0"></div>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--white)">
+                Total
+              </span>
+              <span style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:var(--amber)">
+                {{invoice.currency}} {{invoice.total}}
+              </span>
             </div>
+            
+            {{#if (gt invoice.amountPaid 0)}}
+              <div style="height:1px;background:var(--border);margin:4px 0"></div>
+              
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:14px;color:var(--green)">Amount Paid</span>
+                <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--green)">
+                  {{invoice.currency}} {{invoice.amountPaid}}
+                </span>
+              </div>
+              
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--red)">
+                  Balance Due
+                </span>
+                <span style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--red)">
+                  {{invoice.currency}} {{invoice.balance}}
+                </span>
+              </div>
+            {{/if}}
+            
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+  <!-- ── SIDEBAR ─────────────────────────────── -->
+  <div style="position:sticky;top:72px;display:flex;flex-direction:column;gap:14px">
+    
+    <!-- Actions -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-bolt"></i> Quick Actions</div>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button onclick="downloadPDF()" class="btn btn-primary" style="width:100%;justify-content:center">
+            <i class="fas fa-download"></i> Download PDF
+          </button>
+          <button onclick="window.print()" class="btn btn-ghost no-print" style="width:100%;justify-content:center">
+            <i class="fas fa-print"></i> Print Invoice
+          </button>
+          <button onclick="shareInvoice()" class="btn btn-ghost no-print" style="width:100%;justify-content:center">
+            <i class="fas fa-share-alt"></i> Share
+          </button>
+          
+          {{#if (or (eq user.role 'owner') (eq user.role 'manager'))}}
+            {{#if (ne invoice.status 'paid')}}
+              <div style="height:1px;background:var(--border);margin:4px 0"></div>
+              <button onclick="deleteInvoice()" class="btn btn-danger no-print" style="width:100%;justify-content:center">
+                <i class="fas fa-trash"></i> Delete Invoice
+              </button>
+            {{/if}}
           {{/if}}
         </div>
       </div>
-      
-    </div>
-  </div>
-  
-  <!-- Sidebar: Actions & Info -->
-  <div class="space-y-6">
-    
-    <!-- Quick Actions -->
-    <div class="bg-white rounded-xl shadow-sm p-6">
-      <h3 class="font-semibold text-gray-800 mb-4">Actions</h3>
-      
-      <div class="space-y-3">
-        <button onclick="downloadPDF()" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-left">
-          <i class="fas fa-download mr-2"></i> Download PDF
-        </button>
-        
-        <button onclick="window.print()" class="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-left no-print">
-          <i class="fas fa-print mr-2"></i> Print Invoice
-        </button>
-        
-        <button onclick="shareInvoice()" class="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-left no-print">
-          <i class="fas fa-share-alt mr-2"></i> Share
-        </button>
-        
-        {{#if (or (eq user.role 'owner') (eq user.role 'manager'))}}
-          {{#if (ne invoice.status 'paid')}}
-            <button onclick="deleteInvoice()" class="w-full px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-left no-print">
-              <i class="fas fa-trash mr-2"></i> Delete Invoice
-            </button>
-          {{/if}}
-        {{/if}}
-      </div>
     </div>
     
-    {{#if invoice.branchName}}
     <!-- Branch Info -->
-    <div class="bg-white rounded-xl shadow-sm p-6">
-      <h3 class="font-semibold text-gray-800 mb-4">Branch Information</h3>
-      <div class="flex items-center text-gray-700">
-        <i class="fas fa-building mr-3 text-blue-600"></i>
-        <span>{{invoice.branchName}}</span>
+    {{#if invoice.branchName}}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-building"></i> Branch</div>
+      </div>
+      <div class="card-body">
+        <div style="font-size:15px;font-weight:600;color:var(--white)">
+          {{invoice.branchName}}
+        </div>
       </div>
     </div>
     {{/if}}
     
     <!-- Payment Status -->
     {{#if (eq invoice.status 'unpaid')}}
-      <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
-          <h4 class="font-semibold text-yellow-800">Payment Pending</h4>
+      <div style="background:var(--red-g);border:1px solid var(--red-b);border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <i class="fas fa-exclamation-triangle" style="color:var(--red);font-size:18px"></i>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--red)">
+            Payment Pending
+          </div>
         </div>
-        <p class="text-sm text-yellow-700">This invoice has not been paid yet.</p>
-      </div>
-    {{else if (eq invoice.status 'partial')}}
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-info-circle text-blue-600 mr-2"></i>
-          <h4 class="font-semibold text-blue-800">Partially Paid</h4>
-        </div>
-        <p class="text-sm text-blue-700 mb-3">
-          Paid: {{invoice.currency}} {{invoice.amountPaid}}<br>
-          Balance: {{invoice.currency}} {{invoice.balance}}
+        <p style="font-size:13px;color:var(--muted);margin:0;line-height:1.6">
+          This invoice has not been paid yet.
         </p>
       </div>
-    {{else}}
-      <div class="bg-green-50 border border-green-200 rounded-xl p-6">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-check-circle text-green-600 mr-2"></i>
-          <h4 class="font-semibold text-green-800">Paid in Full</h4>
+    {{else if (eq invoice.status 'partial')}}
+      <div style="background:var(--amber-g);border:1px solid var(--amber-b);border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <i class="fas fa-info-circle" style="color:var(--amber);font-size:18px"></i>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--amber)">
+            Partially Paid
+          </div>
         </div>
-        <p class="text-sm text-green-700">This invoice has been fully paid.</p>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          <div style="margin-bottom:4px">
+            <strong style="color:var(--white)">Paid:</strong> {{invoice.currency}} {{invoice.amountPaid}}
+          </div>
+          <div>
+            <strong style="color:var(--white)">Balance:</strong> {{invoice.currency}} {{invoice.balance}}
+          </div>
+        </div>
+      </div>
+    {{else}}
+      <div style="background:var(--green-g);border:1px solid var(--green-b);border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <i class="fas fa-check-circle" style="color:var(--green);font-size:18px"></i>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--green)">
+            Paid in Full
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin:0;line-height:1.6">
+          This invoice has been fully paid.
+        </p>
       </div>
     {{/if}}
     
-    <!-- Back to List -->
-    <a href="/web/invoices" class="block w-full px-4 py-2 text-center border border-gray-300 rounded-lg hover:bg-gray-50 no-print">
-      <i class="fas fa-arrow-left mr-2"></i> Back to Invoices
+    <!-- Back -->
+    <a href="/web/invoices" class="btn btn-ghost no-print" style="width:100%;justify-content:center">
+      <i class="fas fa-arrow-left"></i> Back to Invoices
     </a>
     
   </div>
   
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div class="modal-backdrop" id="deleteModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">
+        <i class="fas fa-exclamation-triangle" style="color:var(--red)"></i>
+        Delete Invoice
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--muted);line-height:1.7;margin:0">
+        Are you sure you want to delete invoice <strong style="color:var(--white)">{{invoice.number}}</strong>? 
+        This action cannot be undone and all associated payment records will be permanently removed.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn" onclick="executeDelete()">
+        <span id="deleteText"><i class="fas fa-trash"></i> Delete Invoice</span>
+        <span class="spinner" id="deleteSpinner" style="display:none"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
+  // Responsive grid
+  function adjustGrid() {
+    const g = document.getElementById('invoiceGrid');
+    g.style.gridTemplateColumns = window.innerWidth < 1024 ? '1fr' : '1fr 340px';
+  }
+  adjustGrid();
+  window.addEventListener('resize', adjustGrid);
+
   async function downloadPDF() {
     try {
       const response = await fetch('/web/invoices/{{invoice._id}}/pdf');
@@ -225,19 +341,28 @@
       
       if (data.url) {
         window.open(data.url, '_blank');
+        showToast('PDF generated successfully', 'success');
       } else {
-        alert('Failed to generate PDF');
+        showToast('Failed to generate PDF', 'error');
       }
     } catch (error) {
       console.error('Download error:', error);
-      alert('Failed to download PDF');
+      showToast('Failed to download PDF', 'error');
     }
   }
   
-  async function deleteInvoice() {
-    if (!confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
-      return;
-    }
+  function deleteInvoice() {
+    openModal('deleteModal');
+  }
+
+  async function executeDelete() {
+    const btn = document.getElementById('confirmDeleteBtn');
+    const text = document.getElementById('deleteText');
+    const spinner = document.getElementById('deleteSpinner');
+    
+    btn.disabled = true;
+    text.style.display = 'none';
+    spinner.style.display = 'inline-block';
     
     try {
       const response = await fetch('/web/invoices/{{invoice._id}}', {
@@ -245,14 +370,21 @@
       });
       
       if (response.ok) {
-        window.location.href = '/web/invoices';
+        showToast('Invoice deleted successfully', 'success');
+        setTimeout(() => window.location.href = '/web/invoices', 800);
       } else {
         const data = await response.json();
-        alert(data.error || 'Failed to delete invoice');
+        showToast(data.error || 'Failed to delete invoice', 'error');
+        btn.disabled = false;
+        text.style.display = 'inline';
+        spinner.style.display = 'none';
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete invoice');
+      showToast('Failed to delete invoice', 'error');
+      btn.disabled = false;
+      text.style.display = 'inline';
+      spinner.style.display = 'none';
     }
   }
   
@@ -264,11 +396,14 @@
         title: 'Invoice {{invoice.number}}',
         text: 'View invoice {{invoice.number}} for {{invoice.clientName}}',
         url: url
-      });
+      }).then(() => {
+        showToast('Shared successfully', 'success');
+      }).catch(() => {});
     } else {
-      // Fallback: copy to clipboard
       navigator.clipboard.writeText(url).then(() => {
-        alert('Link copied to clipboard!');
+        showToast('Link copied to clipboard', 'success');
+      }).catch(() => {
+        showToast('Failed to copy link', 'error');
       });
     }
   }
