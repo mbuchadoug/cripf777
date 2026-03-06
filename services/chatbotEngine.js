@@ -208,6 +208,7 @@ export async function handleIncomingMessage({ from, action }) {
     typeof action === "string" &&
     (
       Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
+       a === "expense_generate_receipt" ||   // ✅ ADD THIS LINE
       a.startsWith("report_branch_") ||
       a.startsWith("branch_") ||
       a.startsWith("new_doc_branch_") ||
@@ -397,6 +398,54 @@ Reply *menu* to start.`);
     ]);
   }
 
+
+  // ✅ ADD THIS BLOCK immediately after the add_another_expense block
+if (a === "expense_generate_receipt") {
+  if (!biz) return sendMainMenu(from);
+
+  const lastExpense = biz.sessionData?.lastExpense;
+
+  if (!lastExpense) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ No expense found to generate receipt for.");
+    return sendMainMenu(from);
+  }
+
+  const receiptNumber = `EXP-${lastExpense.id.toString().slice(-6)}`;
+
+  const { filename } = await generatePDF({
+    type: "receipt",
+    number: receiptNumber,
+    date: lastExpense.date || new Date(),
+    billingTo: lastExpense.category,
+    items: [{
+      item: lastExpense.description || lastExpense.category,
+      qty: 1,
+      unit: lastExpense.amount,
+      total: lastExpense.amount
+    }],
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      _id: biz._id.toString(),
+      status: "paid"
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/receipts/${filename}`;
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "✅ Expense receipt generated!");
+  return sendMainMenu(from);
+}
 
 // ✅ NEW: Generate receipt for last expense (SKIP add another)
   if (biz?.sessionState === "expense_add_another_menu" && !isMetaAction) {

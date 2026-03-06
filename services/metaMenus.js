@@ -593,6 +593,7 @@ export async function sendExpenseAddAnotherMenu(to) {
     text: "What would you like to do next?",
     buttons: [
       { id: "add_another_expense", title: "➕ Add Another" },
+      { id: "expense_generate_receipt", title: "🧾Save & Get Receipt" },
       { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
     ]
   });
