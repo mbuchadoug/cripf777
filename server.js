@@ -81,6 +81,7 @@ import arenaRoutes from "./routes/arena.js";
 import adminScoiReports from "./routes/admin_scoi_reports.js";
 
 import webPayments from "./routes/web_payments.js";
+import webSubscription from "./routes/web_subscription.js"; // ← ADD
 
 
 
@@ -430,6 +431,7 @@ app.use("/web", webReportsRoutes);
 app.use("/web", webFilesRoutes);
 app.use("/web", webExpenses);
 app.use("/web", webPayments);
+app.use("/web", webSubscription); // ← ADD
 app.use("/web", webSettings); // ← ADD THIS
 // Add this route registration
 app.use(adminScoiReports);
