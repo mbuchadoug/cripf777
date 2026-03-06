@@ -42,6 +42,7 @@ import webFilesRoutes from "./routes/web_files.js";
 import battleRoutes from "./routes/battles.js";
 import webExpenses from "./routes/web_expenses.js";
 import webSettings from "./routes/web_settings.js"; // ← ADD THIS
+import webTeam from "./routes/web_team.js";          // ← ADD THIS
 //-------------------------------------------------------
 
 import {
@@ -422,6 +423,11 @@ app.use("/admin", adminExamRoutes);
 // ========================================
 // 🌐 WEB PLATFORM ROUTES (NEW)
 // ========================================
+// Inject bot number for JOIN link on team page
+app.use("/web", (req, res, next) => {
+  res.locals.botNumber = (process.env.TWILIO_WHATSAPP_NUMBER || "").replace(/\D+/g, "");
+  next();
+});
 app.use("/web", webAuthRoutes);
 app.use("/web", webDashboardRoutes);
 app.use("/web", webInvoicesRoutes);
@@ -433,6 +439,7 @@ app.use("/web", webExpenses);
 app.use("/web", webPayments);
 app.use("/web", webSubscription); // ← ADD
 app.use("/web", webSettings); // ← ADD THIS
+app.use("/web", webTeam);                            // ← ADD THIS
 // Add this route registration
 app.use(adminScoiReports);
 app.use(adminQuizRules);

@@ -1,0 +1,383 @@
+<div class="page-header">
+  <div>
+    <div class="page-title">Team &amp; Branches</div>
+    <div class="page-subtitle">Manage your branches, invite staff, and assign roles — mirrors your WhatsApp bot exactly.</div>
+  </div>
+</div>
+
+<!-- ── ALERTS ─────────────────────────────────────────────────────────────── -->
+{{#if saved}}
+<div class="alert alert-success" id="teamAlert">
+  <i class="fas fa-check-circle"></i>
+  {{#if (eq saved "branch_added")}}Branch added successfully.
+  {{else if (eq saved "branch_deleted")}}Branch deleted.
+  {{else if (eq saved "invited")}}Invitation created. Share the WhatsApp JOIN link with the user.
+  {{else if (eq saved "assigned")}}User reassigned to new branch.
+  {{else if (eq saved "locked")}}User account suspended.
+  {{else if (eq saved "unlocked")}}User account reactivated.
+  {{else if (eq saved "removed")}}User removed from your business.
+  {{else if (eq saved "invite_cancelled")}}Invitation cancelled.
+  {{else}}Saved successfully.{{/if}}
+</div>
+{{/if}}
+
+{{#if error}}
+<div class="alert alert-error">
+  <i class="fas fa-exclamation-circle"></i>
+  {{#if (eq error "branch_name_empty")}}Branch name cannot be empty.
+  {{else if (eq error "branch_exists")}}A branch with that name already exists.
+  {{else if (eq error "branch_has_users")}}Cannot delete a branch that still has users assigned. Reassign them first.
+  {{else if (eq error "last_branch")}}You cannot delete your only branch.
+  {{else if (eq error "invalid_phone")}}Invalid phone number. Use format: 0772123456 or +263772123456
+  {{else if (eq error "invalid_role")}}Invalid role selected.
+  {{else if (eq error "invalid_branch")}}Invalid branch selected.
+  {{else if (eq error "user_exists")}}That number is already an active user in your business.
+  {{else if (eq error "cannot_lock_owner")}}The owner account cannot be suspended.
+  {{else if (eq error "cannot_remove_owner")}}The owner account cannot be removed.
+  {{else if (eq error "not_found")}}Record not found.
+  {{else}}Something went wrong. Please try again.{{/if}}
+</div>
+{{/if}}
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;">
+
+  <!-- ══ LEFT: BRANCHES ══════════════════════════════════════════════════════ -->
+  <div style="display:flex; flex-direction:column; gap:20px;">
+
+    <!-- Add Branch ──────────────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-code-branch"></i> Add Branch</div>
+        <span class="badge badge-muted">{{branches.length}} total</span>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="/web/team/branch/add">
+          <div class="form-group">
+            <label class="form-label">Branch Name</label>
+            <input type="text" name="name" class="form-input"
+              placeholder="e.g. Harare CBD, Bulawayo, Mutare" required maxlength="60">
+            <div class="form-hint">Each branch gets its own sales, expenses and reports.</div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;">
+            <i class="fas fa-plus"></i> Add Branch
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Branch List ──────────────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-map-marker-alt"></i> Your Branches</div>
+      </div>
+      {{#if branches.length}}
+      <div style="overflow:hidden;">
+        {{#each branches}}
+        <div style="display:flex; align-items:center; justify-content:space-between;
+          padding:14px 20px; border-bottom:1px solid var(--border);">
+          <div>
+            <div style="font-weight:600; color:var(--white); font-size:13px;">
+              {{this.name}}
+              {{#if this.isDefault}}
+              <span class="badge badge-amber" style="margin-left:8px; font-size:9px;">Default</span>
+              {{/if}}
+            </div>
+            <div style="font-size:11px; color:var(--muted-2); margin-top:3px; font-family:'DM Mono',monospace;">
+              ID: {{this._id}}
+            </div>
+          </div>
+          <form method="POST" action="/web/team/branch/delete"
+            onsubmit="return confirm('Delete branch \'{{this.name}}\'? This cannot be undone.')">
+            <input type="hidden" name="branchId" value="{{this._id}}">
+            <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Delete branch">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </form>
+        </div>
+        {{/each}}
+      </div>
+      {{else}}
+      <div class="empty-state" style="padding:32px;">
+        <i class="fas fa-code-branch"></i>
+        <h3>No branches yet</h3>
+        <p>Add your first branch above to start managing locations.</p>
+      </div>
+      {{/if}}
+    </div>
+
+  </div><!-- end left column -->
+
+  <!-- ══ RIGHT: USERS ════════════════════════════════════════════════════════ -->
+  <div style="display:flex; flex-direction:column; gap:20px;">
+
+    <!-- Invite User ──────────────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-user-plus"></i> Invite User</div>
+      </div>
+      <div class="card-body">
+        {{#if branches.length}}
+        <form method="POST" action="/web/team/invite">
+          <div class="form-group">
+            <label class="form-label">WhatsApp Number</label>
+            <div class="form-prefix-wrap">
+              <span class="form-prefix">📱</span>
+              <input type="text" name="phone" class="form-input form-input-pl"
+                placeholder="0772123456" maxlength="15" required
+                style="font-family:'DM Mono',monospace; letter-spacing:1px;">
+            </div>
+            <div class="form-hint">The number they use on WhatsApp. Formats: 0772123456 or +263772123456</div>
+          </div>
+
+          <div class="grid-2" style="gap:12px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Role</label>
+              <select name="role" class="form-select">
+                <option value="clerk">Clerk — basic sales &amp; expenses</option>
+                <option value="manager">Manager — reports &amp; users</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Assign to Branch</label>
+              <select name="branchId" class="form-select">
+                {{#each branches}}
+                <option value="{{this._id}}">{{this.name}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </div>
+
+          <div style="background:var(--navy-3); border:1px solid var(--border);
+            border-radius:9px; padding:12px 14px; margin:16px 0; font-size:12px;
+            color:var(--muted); line-height:1.7;">
+            <i class="fas fa-info-circle" style="color:var(--amber); margin-right:6px;"></i>
+            After inviting, share the WhatsApp link below with the user.
+            They must tap it and send <strong style="color:var(--white);">JOIN</strong>
+            to activate their account.
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width:100%;">
+            <i class="fas fa-paper-plane"></i> Send Invitation
+          </button>
+        </form>
+
+        <!-- JOIN link display -->
+        <div style="margin-top:16px; padding:12px 14px; background:var(--amber-g);
+          border:1px solid var(--amber-b); border-radius:9px;">
+          <div style="font-size:10px; font-weight:700; color:var(--amber);
+            text-transform:uppercase; letter-spacing:0.7px; margin-bottom:6px;">
+            WhatsApp JOIN Link
+          </div>
+          <div id="joinLinkDisplay" style="font-family:'DM Mono',monospace; font-size:11px;
+            color:var(--white); word-break:break-all; margin-bottom:8px;">
+            Loading...
+          </div>
+          <button onclick="copyJoinLink()" class="btn btn-ghost btn-sm">
+            <i class="fas fa-copy"></i> Copy Link
+          </button>
+        </div>
+
+        {{else}}
+        <div class="empty-state" style="padding:24px;">
+          <i class="fas fa-code-branch" style="font-size:28px;"></i>
+          <h3>No branches yet</h3>
+          <p style="margin-bottom:0;">Add at least one branch before inviting users.</p>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Pending Invitations ───────────────────────────────────────────────── -->
+    {{#if pendingInvites.length}}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-clock"></i> Pending Invitations</div>
+        <span class="badge badge-amber">{{pendingInvites.length}}</span>
+      </div>
+      <div style="overflow:hidden;">
+        {{#each pendingInvites}}
+        <div style="display:flex; align-items:center; justify-content:space-between;
+          padding:12px 20px; border-bottom:1px solid var(--border);">
+          <div>
+            <div style="font-family:'DM Mono',monospace; font-size:12px;
+              color:var(--white); font-weight:500;">
+              {{this.phone}}
+            </div>
+            <div style="font-size:11px; color:var(--muted-2); margin-top:2px;">
+              {{this.role}} · {{#if this.branchId}}{{this.branchId.name}}{{else}}No branch{{/if}}
+            </div>
+          </div>
+          <form method="POST" action="/web/team/invite/cancel"
+            onsubmit="return confirm('Cancel this invitation?')">
+            <input type="hidden" name="inviteId" value="{{this._id}}">
+            <button type="submit" class="btn btn-ghost btn-sm">
+              <i class="fas fa-times"></i> Cancel
+            </button>
+          </form>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+  </div><!-- end right column -->
+</div>
+
+<!-- ══ ACTIVE USERS TABLE (full width) ═══════════════════════════════════════ -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-users"></i> Active Team Members</div>
+    <span class="badge badge-green">{{users.length}} active</span>
+  </div>
+  {{#if users.length}}
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Phone</th>
+          <th>Role</th>
+          <th>Branch</th>
+          <th>Status</th>
+          <th>Reassign Branch</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each users}}
+        <tr>
+          <!-- Phone -->
+          <td>
+            <div class="td-primary td-mono">{{this.phone}}</div>
+          </td>
+
+          <!-- Role -->
+          <td>
+            {{#if (eq this.role "owner")}}
+            <span class="badge badge-amber">Owner</span>
+            {{else if (eq this.role "manager")}}
+            <span class="badge badge-blue">Manager</span>
+            {{else}}
+            <span class="badge badge-muted">Clerk</span>
+            {{/if}}
+          </td>
+
+          <!-- Branch -->
+          <td>
+            <span style="font-size:12px; color:var(--white);">
+              {{#if this.branchId}}{{this.branchId.name}}{{else}}<span style="color:var(--muted-2);">—</span>{{/if}}
+            </span>
+          </td>
+
+          <!-- Status -->
+          <td>
+            {{#if this.locked}}
+            <span class="badge badge-red">Suspended</span>
+            {{else}}
+            <span class="badge badge-green">Active</span>
+            {{/if}}
+          </td>
+
+          <!-- Reassign branch (inline mini-form) -->
+          <td>
+            {{#if (eq this.role "owner")}}
+            <span style="font-size:11px; color:var(--muted-2);">—</span>
+            {{else}}
+            <form method="POST" action="/web/team/user/assign-branch"
+              style="display:flex; gap:6px; align-items:center;">
+              <input type="hidden" name="userId" value="{{this._id}}">
+              <select name="branchId" class="form-select"
+                style="padding:6px 10px; font-size:12px; min-width:130px;">
+                {{#each ../branches}}
+                <option value="{{this._id}}">{{this.name}}</option>
+                {{/each}}
+              </select>
+              <button type="submit" class="btn btn-ghost btn-sm btn-icon" title="Reassign">
+                <i class="fas fa-check"></i>
+              </button>
+            </form>
+            {{/if}}
+          </td>
+
+          <!-- Actions (lock / remove) -->
+          <td>
+            {{#unless (eq this.role "owner")}}
+            <div class="td-actions">
+              <!-- Toggle lock -->
+              <form method="POST" action="/web/team/user/toggle-lock">
+                <input type="hidden" name="userId" value="{{this._id}}">
+                <button type="submit"
+                  class="btn btn-sm {{#if this.locked}}btn-primary{{else}}btn-danger{{/if}} btn-icon"
+                  title="{{#if this.locked}}Reactivate{{else}}Suspend{{/if}}"
+                  onclick="return confirm('{{#if this.locked}}Reactivate this user?{{else}}Suspend this user?{{/if}}')">
+                  <i class="fas {{#if this.locked}}fa-unlock{{else}}fa-lock{{/if}}"></i>
+                </button>
+              </form>
+              <!-- Remove -->
+              <form method="POST" action="/web/team/user/remove"
+                onsubmit="return confirm('Remove {{this.phone}} from your business? They will lose all access.')">
+                <input type="hidden" name="userId" value="{{this._id}}">
+                <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Remove user">
+                  <i class="fas fa-user-times"></i>
+                </button>
+              </form>
+            </div>
+            {{/unless}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty-state">
+    <i class="fas fa-users"></i>
+    <h3>No team members yet</h3>
+    <p>Invite your first staff member using the form above.</p>
+  </div>
+  {{/if}}
+</div>
+
+<script>
+// ── Auto-dismiss success alert ─────────────────────────────────────────────
+const teamAlert = document.getElementById('teamAlert');
+if (teamAlert) {
+  setTimeout(() => {
+    teamAlert.style.cssText += 'opacity:0;transition:opacity 0.4s';
+    setTimeout(() => teamAlert.remove(), 400);
+  }, 5000);
+}
+
+// ── Build JOIN link from WhatsApp bot number in env ────────────────────────
+// The bot number comes from the page — we derive it from what the chatbot uses.
+// We embed it server-side via a data attribute to keep it dynamic.
+(function() {
+  // Pull from a meta tag we'll inject — see note below
+  const meta = document.querySelector('meta[name="bot-number"]');
+  const botRaw = meta ? meta.content : "";
+  const display = document.getElementById('joinLinkDisplay');
+  if (!display) return;
+
+  if (botRaw) {
+    const link = `https://wa.me/${botRaw}?text=JOIN`;
+    display.textContent = link;
+    display._link = link;
+  } else {
+    display.textContent = "Bot number not configured (set TWILIO_WHATSAPP_NUMBER in .env)";
+  }
+})();
+
+function copyJoinLink() {
+  const display = document.getElementById('joinLinkDisplay');
+  const link = display?._link || display?.textContent || "";
+  if (!link || link.includes("not configured")) return;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast("JOIN link copied!", "success");
+  });
+}
+</script>
+
+<style>
+@media (max-width: 900px) {
+  .team-grid { grid-template-columns: 1fr !important; }
+}
+</style>
