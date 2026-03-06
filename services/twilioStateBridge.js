@@ -624,8 +624,8 @@ They must click it to join.`);
     return true;
   }
 
-  /* ===========================
-     EXPENSE: METHOD → SAVE + RECEIPT
+/* ===========================
+     EXPENSE: METHOD → SAVE + SHOW "ADD ANOTHER" MENU
   =========================== */
   if (state === ACTIONS.EXPENSE_METHOD) {
     const methodMap = {
@@ -649,38 +649,28 @@ They must click it to join.`);
       createdBy: phone
     });
 
-    const receiptNumber = `EXP-${expense._id.toString().slice(-6)}`;
-
-    const { filename } = await generatePDF({
-      type: "receipt", number: receiptNumber, date: new Date(),
-      billingTo: biz.sessionData.category,
-      items: [{ item: biz.sessionData.description || biz.sessionData.category, qty: 1, unit: biz.sessionData.amount, total: biz.sessionData.amount }],
-      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
-    });
-
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    const url = `${site}/docs/generated/receipts/${filename}`;
-    await sendDocument(from, { link: url, filename });
+    // ✅ Store expense details for potential receipt generation
+    biz.sessionData.lastExpense = {
+      id: expense._id,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      method: expense.method,
+      date: expense.createdAt
+    };
 
     // Preserve targetBranchId for "Add another expense"
     const savedBranchId = biz.sessionData.targetBranchId;
-    biz.sessionState = "ready";
-    biz.sessionData = {};
+    
+    biz.sessionState = "expense_add_another_menu";
+    biz.sessionData.targetBranchId = savedBranchId; // Keep branch context
     await saveBizSafe(biz);
 
-    await sendText(from, "✅ Expense recorded successfully.");
+    await sendText(from, "✅ Expense recorded successfully!");
 
-    await sendButtons(from, {
-      text: "What would you like to do next?",
-      buttons: [
-        { id: "add_another_expense", title: "➕ Add another expense" },
-        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-      ]
-    });
-
-    // Store back for "add another" so branch is preserved
-    biz.sessionData = { targetBranchId: savedBranchId };
-    await saveBizSafe(biz);
+    // Import the menu function
+    const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
+    await sendExpenseAddAnotherMenu(from);
 
     return true;
   }

@@ -584,3 +584,41 @@ const { branches } = await ensureDefaultBranch(biz._id);
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
+
+/* =============================================================================
+   EXPENSE "ADD ANOTHER" MENU
+============================================================================= */
+export async function sendExpenseAddAnotherMenu(to) {
+  return sendButtons(to, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "add_another_expense", title: "➕ Add Another" },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+    ]
+  });
+}
+/* =============================================================================
+   EXPENSE "ADD ANOTHER" MENU
+============================================================================= */
+export async function sendExpenseAddAnotherMenu(to) {
+  return sendButtons(to, {
+    text: "✅ *Expense Recorded!*\n\nWhat would you like to do next?",
+    buttons: [
+      { id: "add_another_expense", title: "➕ Add Another" },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+    ]
+  });
+}
+
+/* =============================================================================
+   PAYMENT OUT "ADD ANOTHER" MENU (if you have separate payment out flow)
+============================================================================= */
+export async function sendPaymentOutAddAnotherMenu(to) {
+  return sendButtons(to, {
+    text: "✅ *Payment Recorded!*\n\nWhat would you like to do next?",
+    buttons: [
+      { id: "add_another_payment_out", title: "➕ Add Another" },
+      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+    ]
+  });
+}

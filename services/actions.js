@@ -29,11 +29,18 @@ DELETE_DOC: "delete_doc",
   CLIENT_STATEMENT: "client_statement",
 
   // PAYMENTS
+ // PAYMENTS
   RECORD_PAYMENT: "record_payment",
   RECORD_EXPENSE: "record_expense",
 
 PAYMENT_IN: "payment_in",
 PAYMENT_OUT: "payment_out",
+
+  // Add Another for Expenses/Payments
+  EXPENSE_ADD_ANOTHER: "expense_add_another",
+  EXPENSE_GENERATE_RECEIPT: "expense_generate_receipt",
+  PAYOUT_ADD_ANOTHER: "payout_add_another",
+  PAYOUT_GENERATE_RECEIPT: "payout_generate_receipt",
 
 VIEW_EXPENSE_RECEIPTS: "view_expense_receipts",
   VIEW_PAYMENT_HISTORY: "view_payment_history",

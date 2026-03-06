@@ -397,6 +397,62 @@ Reply *menu* to start.`);
     ]);
   }
 
+
+// ✅ NEW: Generate receipt for last expense (SKIP add another)
+  if (biz?.sessionState === "expense_add_another_menu" && !isMetaAction) {
+    const textLower = text.toLowerCase().trim();
+    
+    // User types anything (not a button) while in this state
+    if (textLower === "receipt" || textLower === "generate" || textLower === "skip") {
+      const lastExpense = biz.sessionData?.lastExpense;
+      
+      if (!lastExpense) {
+        biz.sessionState = "ready";
+        biz.sessionData = {};
+        await saveBizSafe(biz);
+        await sendText(from, "❌ No expense found.");
+        return sendMainMenu(from);
+      }
+
+      const receiptNumber = `EXP-${lastExpense.id.toString().slice(-6)}`;
+
+      const { filename } = await generatePDF({
+        type: "receipt", 
+        number: receiptNumber, 
+        date: lastExpense.date || new Date(),
+        billingTo: lastExpense.category,
+        items: [{
+          item: lastExpense.description || lastExpense.category,
+          qty: 1,
+          unit: lastExpense.amount,
+          total: lastExpense.amount
+        }],
+        bizMeta: {
+          name: biz.name,
+          logoUrl: biz.logoUrl,
+          address: biz.address || "",
+          _id: biz._id.toString(),
+          status: "paid"
+        }
+      });
+
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      const url = `${site}/docs/generated/receipts/${filename}`;
+      await sendDocument(from, { link: url, filename });
+
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+
+      await sendText(from, "✅ Receipt generated!");
+      return sendMainMenu(from);
+    }
+    
+    // Otherwise keep waiting for button press
+    return true;
+  }
+
+
   if (a === "inv_add_new_product") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "invoice_quick_add_product_name";
