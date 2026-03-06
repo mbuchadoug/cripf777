@@ -113,6 +113,7 @@ router.get("/dashboard", async (req, res) => {
       layout: "web",
       title: "Dashboard - ZimQuote",
       user: req.webUser,
+       user: req.webUser,
       stats: {
         todayRevenue: todayRevenue[0]?.total || 0,
         monthRevenue: currentMonth,

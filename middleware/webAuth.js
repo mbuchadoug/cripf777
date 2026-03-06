@@ -20,16 +20,18 @@ export async function requireWebAuth(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Check session exists
-    const session = await WebSession.findOne({ userId: decoded.userId });
-    
-    if (!session) {
-      res.clearCookie("web_token");
-      return res.redirect("/web/login?error=session_expired");
+   // Super-admin impersonation tokens skip session validation
+    if (!decoded.isSuperAdmin) {
+      const session = await WebSession.findOne({ userId: decoded.userId });
+      
+      if (!session) {
+        res.clearCookie("web_token");
+        return res.redirect("/web/login?error=session_expired");
+      }
+      
+      session.lastActivity = new Date();
+      await session.save();
     }
-    
-    // Update last activity
-    session.lastActivity = new Date();
-    await session.save();
     
     // Get user and business
     const [user, business] = await Promise.all([
@@ -53,9 +55,10 @@ export async function requireWebAuth(req, res, next) {
       businessName: business.name,
       currency: business.currency,
       package: business.package,
-      logoUrl: business.logoUrl
+      logoUrl: business.logoUrl,
+      isSuperAdmin: decoded.isSuperAdmin || false,       // ✅ impersonation flag
+      impersonating: decoded.impersonating || null        // ✅ which phone is being viewed
     };
-    
     next();
   } catch (error) {
     console.error("Web auth error:", error);

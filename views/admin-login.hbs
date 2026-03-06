@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Access — ZimQuote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0d1117; --navy-2:#161b22; --navy-3:#1f2937;
+      --red:#dc2626; --red-d:#b91c1c; --red-g:rgba(220,38,38,0.10); --red-b:rgba(220,38,38,0.25);
+      --white:#f8fafc; --muted:#8b949e; --muted-2:#6e7681;
+      --border:rgba(255,255,255,0.07);
+      --amber:#f59e0b;
+      --green:#3fb950;
+    }
+    html, body {
+      height: 100%;
+      background: var(--navy);
+      color: var(--white);
+      font-family: "Instrument Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 420px;
+      padding: 24px 20px;
+    }
+
+    /* Top warning bar */
+    .admin-bar {
+      background: linear-gradient(90deg, var(--red), var(--red-d));
+      border-radius: 10px 10px 0 0;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: white;
+    }
+    .admin-bar-dot {
+      width: 7px; height: 7px;
+      background: white;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    /* Card */
+    .card {
+      background: var(--navy-2);
+      border: 1px solid var(--red-b);
+      border-top: none;
+      border-radius: 0 0 14px 14px;
+      padding: 28px 28px 32px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .brand-icon {
+      width: 34px; height: 34px;
+      background: var(--red-g);
+      border: 1px solid var(--red-b);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .brand-name {
+      font-family: "Syne", sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--white);
+    }
+    .brand-sub {
+      font-size: 10px;
+      color: var(--red);
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      font-family: "Syne", sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--white);
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted-2);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    /* Alert */
+    .alert-err {
+      display: none;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--red-g);
+      border: 1px solid var(--red-b);
+      border-radius: 8px;
+      padding: 11px 13px;
+      margin-bottom: 18px;
+      font-size: 12px;
+      color: #fca5a5;
+      line-height: 1.5;
+      animation: slide 0.3s ease;
+    }
+    .alert-err.show { display: flex; }
+    @keyframes slide { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+
+    /* Divider */
+    .divider-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted-2);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .divider-label::before, .divider-label::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+    .input-wrap { position: relative; }
+    .input-prefix {
+      position: absolute;
+      left: 13px; top: 50%;
+      transform: translateY(-50%);
+      font-family: "DM Mono", monospace;
+      font-size: 12px;
+      color: var(--red);
+      font-weight: 500;
+      pointer-events: none;
+    }
+    .form-input {
+      width: 100%;
+      background: var(--navy-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 13px 12px 13px;
+      font-size: 14px;
+      font-family: "DM Mono", monospace;
+      color: var(--white);
+      outline: none;
+      transition: all 0.2s;
+    }
+    .form-input.has-prefix { padding-left: 72px; }
+    .form-input::placeholder { color: var(--muted-2); font-family: "Instrument Sans", sans-serif; font-size: 13px; }
+    .form-input:focus {
+      border-color: var(--red);
+      background: var(--navy);
+      box-shadow: 0 0 0 3px var(--red-g);
+    }
+
+    /* Eye toggle for password */
+    .input-eye {
+      position: absolute;
+      right: 13px; top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--muted-2);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      transition: color 0.2s;
+    }
+    .input-eye:hover { color: var(--white); }
+
+    /* Button */
+    .btn-admin {
+      width: 100%;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, var(--red), var(--red-d));
+      color: white;
+      border: none;
+      border-radius: 9px;
+      font-family: "Syne", sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .btn-admin:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(220,38,38,0.3); }
+    .btn-admin:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Back link */
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: var(--muted-2);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: var(--muted); }
+
+    /* Warning footer */
+    .warning-footer {
+      margin-top: 20px;
+      padding: 12px 14px;
+      background: rgba(220,38,38,0.05);
+      border: 1px solid rgba(220,38,38,0.12);
+      border-radius: 8px;
+      font-size: 11px;
+      color: var(--muted-2);
+      line-height: 1.6;
+      text-align: center;
+    }
+    .warning-footer strong { color: var(--red); }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="admin-bar">
+    <div class="admin-bar-dot"></div>
+    Super Admin Access Portal
+  </div>
+
+  <div class="card">
+    <div class="brand">
+      <div class="brand-icon">🔐</div>
+      <div>
+        <div class="brand-name">ZimQuote</div>
+        <div class="brand-sub">Admin Console</div>
+      </div>
+    </div>
+
+    <h2>Business Impersonation</h2>
+    <p class="subtitle">Enter a registered business owner's WhatsApp number and your master password to access their account.</p>
+
+    <div class="alert-err" id="errorAlert">
+      <span>⚠</span>
+      <span id="errorText">Something went wrong.</span>
+    </div>
+
+    <div class="divider-label">Business Details</div>
+
+    <div class="form-group">
+      <label class="form-label">Business Owner's WhatsApp Number</label>
+      <div class="input-wrap">
+        <span class="input-prefix">+263</span>
+        <input
+          type="tel"
+          id="phoneInput"
+          class="form-input has-prefix"
+          placeholder="077 123 4567"
+          maxlength="13"
+          inputmode="numeric"
+          autocomplete="off"
+        >
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Master Password</label>
+      <div class="input-wrap">
+        <input
+          type="password"
+          id="passwordInput"
+          class="form-input"
+          placeholder="Enter admin master password"
+          autocomplete="new-password"
+        >
+        <button class="input-eye" type="button" onclick="togglePwd()" id="eyeBtn">👁</button>
+      </div>
+    </div>
+
+    <button class="btn-admin" id="loginBtn" onclick="doImpersonate()">
+      <span id="btnText">Access Business Account</span>
+      <div class="spinner" id="btnSpinner"></div>
+    </button>
+
+    <a href="/web/login" class="back-link">← Back to normal login</a>
+
+    <div class="warning-footer">
+      <strong>⚠ Restricted Access</strong><br>
+      This portal is for authorised support staff only. All sessions are logged and monitored.
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Phone formatting
+  document.getElementById("phoneInput").addEventListener("input", function(e) {
+    let v = e.target.value.replace(/\D/g, "").slice(0, 10);
+    let f = v;
+    if (v.length > 2) f = v.slice(0, 2) + " " + v.slice(2);
+    if (v.length > 5) f = v.slice(0, 2) + " " + v.slice(2, 5) + " " + v.slice(5);
+    e.target.value = f;
+  });
+
+  // Enter key support
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") doImpersonate();
+  });
+
+  // Toggle password visibility
+  function togglePwd() {
+    const inp = document.getElementById("passwordInput");
+    const btn = document.getElementById("eyeBtn");
+    if (inp.type === "password") {
+      inp.type = "text";
+      btn.textContent = "🙈";
+    } else {
+      inp.type = "password";
+      btn.textContent = "👁";
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("errorAlert");
+    document.getElementById("errorText").textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 7000);
+  }
+
+  function setLoading(on) {
+    document.getElementById("loginBtn").disabled = on;
+    document.getElementById("btnSpinner").style.display = on ? "block" : "none";
+    document.getElementById("btnText").style.display = on ? "none" : "inline";
+  }
+
+  async function doImpersonate() {
+    const raw = document.getElementById("phoneInput").value.replace(/\s/g, "");
+    const masterPassword = document.getElementById("passwordInput").value;
+
+    if (!raw || raw.length < 9) {
+      showError("Please enter a valid WhatsApp number.");
+      return;
+    }
+    if (!masterPassword) {
+      showError("Please enter the master password.");
+      return;
+    }
+
+    let phone = raw;
+    if (phone.startsWith("0")) phone = "263" + phone.slice(1);
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/web/admin-auth/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, masterPassword })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        window.location.href = data.redirectUrl || "/web/dashboard";
+      } else {
+        showError(data.error || "Access denied.");
+      }
+    } catch (err) {
+      showError("Network error. Check your connection.");
+    }
+
+    setLoading(false);
+  }
+</script>
+</body>
+</html>

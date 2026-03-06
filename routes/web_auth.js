@@ -220,4 +220,95 @@ router.get("/logout", async (req, res) => {
   }
 });
 
+
+/**
+ * GET /web/admin-login
+ * Super-admin impersonation login
+ */
+router.get("/admin-login", (req, res) => {
+  const token = req.cookies.web_token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded.isSuperAdmin) return res.redirect("/web/dashboard");
+    } catch (_) {}
+  }
+  res.render("web/admin-login", {
+    layout: false,
+    title: "Admin Access — ZimQuote",
+    error: req.query.error
+  });
+});
+
+/**
+ * POST /web/admin-auth/impersonate
+ * Super-admin signs in as any business by phone number
+ */
+router.post("/admin-auth/impersonate", async (req, res) => {
+  try {
+    const { phone: rawPhone, masterPassword } = req.body;
+
+    // Verify master password
+    const MASTER_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
+    if (!MASTER_PASSWORD || masterPassword !== MASTER_PASSWORD) {
+      return res.status(401).json({ error: "Invalid master password." });
+    }
+
+    // Normalize phone
+    let phone = (rawPhone || "").replace(/\D+/g, "");
+    if (phone.startsWith("0")) phone = "263" + phone.slice(1);
+    if (!phone.startsWith("263") || phone.length !== 12) {
+      return res.status(400).json({ error: "Invalid phone number format. Use 0772123456" });
+    }
+
+    // Find the business owner by phone
+    const userRole = await UserRole.findOne({ phone, role: "owner", pending: false });
+    if (!userRole) {
+      return res.status(404).json({ error: "No business owner found for this number." });
+    }
+
+    const business = await Business.findById(userRole.businessId);
+    if (!business) {
+      return res.status(404).json({ error: "Business not found for this account." });
+    }
+
+    // Issue a JWT flagged as super-admin impersonation
+    const token = jwt.sign(
+      {
+        userId: userRole._id.toString(),
+        businessId: business._id.toString(),
+        phone: userRole.phone,
+        role: userRole.role,
+        isSuperAdmin: true,           // ✅ flag for impersonation banner
+        impersonating: phone          // ✅ track which business
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" }            // shorter session for security
+    );
+
+    res.cookie("web_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 8 * 60 * 60 * 1000,
+      sameSite: "lax"
+    });
+
+    res.json({ success: true, redirectUrl: "/web/dashboard" });
+
+  } catch (error) {
+    console.error("Admin impersonate error:", error);
+    res.status(500).json({ error: "Server error during impersonation." });
+  }
+});
+
+
+/**
+ * GET /web/admin-logout
+ * Clears the super-admin impersonation session
+ */
+router.get("/admin-logout", (req, res) => {
+  res.clearCookie("web_token");
+  res.redirect("/web/admin-login");
+});
+
 export default router;
