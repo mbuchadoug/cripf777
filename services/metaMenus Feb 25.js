@@ -190,7 +190,7 @@ export async function sendSettingsMenu(from) {
 export async function sendInvoiceConfirmMenu(to, summaryText) {
   return sendList(to, summaryText, [
     { id: "inv_add_item", title: "➕ Add another item" },
-    { id: "inv_generate_pdf", title: "📄 Generate PDF" },
+    { id: "inv_generate_pdf", title: "📄Save & Generate PDF" },
     { id: "inv_set_discount", title: "💸 Set discount %" },
     { id: "inv_set_vat", title: "🧾 Set VAT %" },
     { id: "inv_cancel", title: "❌ Cancel" }
