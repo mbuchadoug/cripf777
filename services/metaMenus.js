@@ -600,15 +600,7 @@ export async function sendExpenseAddAnotherMenu(to) {
 /* =============================================================================
    EXPENSE "ADD ANOTHER" MENU
 ============================================================================= */
-export async function sendExpenseAddAnotherMenu(to) {
-  return sendButtons(to, {
-    text: "✅ *Expense Recorded!*\n\nWhat would you like to do next?",
-    buttons: [
-      { id: "add_another_expense", title: "➕ Add Another" },
-      { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-    ]
-  });
-}
+
 
 /* =============================================================================
    PAYMENT OUT "ADD ANOTHER" MENU (if you have separate payment out flow)
