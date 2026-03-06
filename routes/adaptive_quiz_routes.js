@@ -212,6 +212,9 @@ router.get(
         { value: "responsibility", label: "Responsibility", icon: "🎯" },
         { value: "geography", label: "Geography", icon: "🔬" },
         { value: "history", label: "History", icon: "🔬" },
+        { value: "environmentalstudies", label: "Environmental Studies", icon: "🔬" },
+        { value: "biology", label: "Biology", icon: "🔬" },
+
       ];
 
       return res.json({

@@ -76,7 +76,7 @@ router.get("/student/knowledge-map", ensureAuth, async (req, res) => {
       });
     }
 
-    const subjects = ["math", "english","computerstudies", "science", "responsibility", 'history','geography', 'generalknowledge'];
+    const subjects = ["math", "english","computerstudies", "science", "responsibility",'environmentalstudies', 'history','geography', 'generalknowledge'];
 
     const knowledgeMaps = {};
     for (const subject of subjects) {
