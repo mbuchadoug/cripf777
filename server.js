@@ -41,7 +41,7 @@ import webReportsRoutes from "./routes/web_reports.js";
 import webFilesRoutes from "./routes/web_files.js";
 import battleRoutes from "./routes/battles.js";
 import webExpenses from "./routes/web_expenses.js";
-
+import webSettings from "./routes/web_settings.js"; // ← ADD THIS
 //-------------------------------------------------------
 
 import {
@@ -430,6 +430,7 @@ app.use("/web", webReportsRoutes);
 app.use("/web", webFilesRoutes);
 app.use("/web", webExpenses);
 app.use("/web", webPayments);
+app.use("/web", webSettings); // ← ADD THIS
 // Add this route registration
 app.use(adminScoiReports);
 app.use(adminQuizRules);
