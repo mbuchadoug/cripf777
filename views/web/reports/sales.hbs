@@ -1,7 +1,7 @@
 <div class="page-header">
   <div>
     <div class="page-title">Reports</div>
-    <div class="page-subtitle">Detailed analysis across sales, expenses, receivables and team performance</div>
+    <div class="page-subtitle">Detailed analysis across sales, expenses, receivables and branch performance</div>
   </div>
   <a href="/web/reports/export?period={{filters.period}}&branchFilter={{filters.branchFilter}}" class="btn btn-ghost btn-sm">
     <i class="fas fa-download"></i> Export CSV
@@ -56,22 +56,29 @@
 <!-- ══ SUMMARY KPI CARDS ══════════════════════════════════════════════════════ -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px">
 
+  <!-- Total Revenue -->
   <div class="card kpi-card">
     <div class="card-body" style="padding:18px 20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Total Invoiced</div>
-      <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{summary.invoiced}}</div>
-      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">{{summary.invoiceCount}} invoices · avg {{user.currency}} {{summary.avgSale}}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Total Revenue</div>
+      <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{summary.totalRevenue}}</div>
+      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">
+        {{summary.invoiceCount}} invoices · {{summary.receiptCount}} direct sales
+      </div>
     </div>
   </div>
 
+  <!-- Cash Received -->
   <div class="card kpi-card">
     <div class="card-body" style="padding:18px 20px">
       <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Cash Received</div>
       <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--green)">{{user.currency}} {{summary.cashReceived}}</div>
-      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">{{summary.collectionRate}}% collected · {{summary.profitMargin}}% margin</div>
+      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">
+        {{summary.collectionRate}}% invoice collection · {{summary.profitMargin}}% margin
+      </div>
     </div>
   </div>
 
+  <!-- Total Expenses -->
   <div class="card kpi-card">
     <div class="card-body" style="padding:18px 20px">
       <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Total Expenses</div>
@@ -80,13 +87,15 @@
     </div>
   </div>
 
+  <!-- Net Profit -->
   <div class="card kpi-card">
     <div class="card-body" style="padding:18px 20px">
       <div style="font-size:11px;font-weight:700;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Net Profit</div>
-      <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;{{#if (gt summary.netProfit 0)}}color:var(--green){{else}}color:var(--red){{/if}}">
+      <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;
+        {{#if (gt summary.netProfit 0)}}color:var(--green){{else}}color:var(--red){{/if}}">
         {{user.currency}} {{summary.netProfit}}
       </div>
-      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">Collected − expenses</div>
+      <div style="font-size:11px;color:var(--muted-2);margin-top:4px">Cash received − expenses</div>
     </div>
   </div>
 
@@ -98,40 +107,49 @@
   <!-- Cash received breakdown -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title"><i class="fas fa-sack-dollar"></i> Cash Received Breakdown</div>
+      <div class="card-title"><i class="fas fa-sack-dollar"></i> Cash Breakdown</div>
     </div>
     <div class="card-body" style="padding:18px 20px;display:grid;gap:10px">
+
+      <!-- Invoice payments row -->
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:9px">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--white)">Invoice Payments</div>
-          <div style="font-size:11px;color:var(--muted-2)">{{summary.paymentCount}} payments</div>
+          <div style="font-size:11px;color:var(--muted-2)">{{summary.paymentCount}} payments collected on invoices</div>
         </div>
         <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">{{user.currency}} {{summary.paymentCash}}</span>
       </div>
+
+      <!-- Direct sales / receipts row -->
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:9px">
         <div>
-          <div style="font-size:13px;font-weight:600;color:var(--white)">Direct Sales (Receipts)</div>
-          <div style="font-size:11px;color:var(--muted-2)">{{summary.receiptCount}} receipts</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white)">Direct Sales <span style="font-size:10px;font-weight:500;color:var(--blue);background:rgba(88,166,255,0.1);padding:2px 6px;border-radius:4px;margin-left:4px">Receipts</span></div>
+          <div style="font-size:11px;color:var(--muted-2)">{{summary.receiptCount}} direct cash sales — instantly paid in full</div>
         </div>
         <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">{{user.currency}} {{summary.receiptCash}}</span>
       </div>
+
+      <!-- Total cash in -->
       <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;background:rgba(63,185,80,0.06);border:1px solid rgba(63,185,80,0.2);border-radius:9px">
         <span style="font-size:14px;font-weight:700;color:var(--white)">Total Cash In</span>
         <span style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:var(--green)">{{user.currency}} {{summary.cashReceived}}</span>
       </div>
+
       <div style="display:flex;justify-content:space-between;padding:8px 4px">
-        <span style="font-size:12px;color:var(--muted-2)">Collection rate</span>
+        <span style="font-size:12px;color:var(--muted-2)">Invoice collection rate</span>
         <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;
           {{#if (gt summary.collectionRate 70)}}color:var(--green)
           {{else if (gt summary.collectionRate 40)}}color:var(--amber)
-          {{else}}color:var(--red){{/if}}">{{summary.collectionRate}}%</span>
+          {{else}}color:var(--red){{/if}}">{{summary.collectionRate}}%
+          <span style="font-weight:400;color:var(--muted-2);font-size:10px"> (invoices only)</span>
+        </span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:1px solid var(--border)">
         <span style="font-size:12px;color:var(--muted-2)">Profit margin</span>
         <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--blue)">{{summary.profitMargin}}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--muted-2)">Average sale value</span>
+        <span style="font-size:12px;color:var(--muted-2)">Avg invoice value</span>
         <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--white)">{{user.currency}} {{summary.avgSale}}</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:8px 4px;border-top:1px solid var(--border)">
@@ -149,7 +167,6 @@
     <div class="card-body" style="padding:18px 20px">
       <div style="display:grid;gap:4px">
 
-        <!-- Revenue row -->
         <div style="display:flex;align-items:center;gap:6px;padding:11px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:12px;color:var(--muted-2);flex:1;min-width:80px">Invoiced</span>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted-2);min-width:90px">{{user.currency}} {{prev.invoiced}}</span>
@@ -161,9 +178,8 @@
           </span>
         </div>
 
-        <!-- Collected row -->
         <div style="display:flex;align-items:center;gap:6px;padding:11px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:12px;color:var(--muted-2);flex:1;min-width:80px">Collected</span>
+          <span style="font-size:12px;color:var(--muted-2);flex:1;min-width:80px">Cash In</span>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted-2);min-width:90px">{{user.currency}} {{prev.cashReceived}}</span>
           <span style="color:var(--muted-2);font-size:11px">→</span>
           <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--white);min-width:90px">{{user.currency}} {{summary.cashReceived}}</span>
@@ -173,7 +189,6 @@
           </span>
         </div>
 
-        <!-- Expenses row -->
         <div style="display:flex;align-items:center;gap:6px;padding:11px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:12px;color:var(--muted-2);flex:1;min-width:80px">Expenses</span>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted-2);min-width:90px">{{user.currency}} {{prev.spent}}</span>
@@ -185,7 +200,6 @@
           </span>
         </div>
 
-        <!-- Profit row -->
         <div style="display:flex;align-items:center;gap:6px;padding:11px 0">
           <span style="font-size:12px;color:var(--muted-2);flex:1;min-width:80px">Net Profit</span>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted-2);min-width:90px">{{user.currency}} {{prev.netProfit}}</span>
@@ -207,15 +221,22 @@
 <!-- ══ INVOICE STATUS + PAYMENT METHODS ══════════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
-  <!-- Invoice status breakdown -->
+  <!-- Invoice status breakdown — invoices only, receipts always paid separately -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-file-invoice"></i> Invoice Status</div>
+      <span style="font-size:11px;color:var(--muted-2)">Excludes direct sales (receipts)</span>
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
         <thead>
-          <tr><th>Status</th><th style="text-align:right">Count</th><th style="text-align:right">Total</th></tr>
+          <tr>
+            <th>Status</th>
+            <th style="text-align:right">Count</th>
+            <th style="text-align:right">Billed</th>
+            <th style="text-align:right">Collected</th>
+            <th style="text-align:right">Balance</th>
+          </tr>
         </thead>
         <tbody>
           {{#each salesData}}
@@ -226,11 +247,24 @@
               </span>
             </td>
             <td style="text-align:right"><span class="td-mono">{{this.count}}</span></td>
-            <td style="text-align:right"><span class="td-mono td-primary">{{../user.currency}} {{this.total}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
+            <td style="text-align:right"><span class="td-mono" style="color:var(--green)">{{../user.currency}} {{this.paid}}</span></td>
+            <td style="text-align:right"><span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">{{../user.currency}} {{this.balance}}</span></td>
           </tr>
           {{else}}
-          <tr><td colspan="3"><div class="empty-state" style="padding:20px"><i class="fas fa-file-invoice"></i><p>No invoice data</p></div></td></tr>
+          <tr><td colspan="5"><div class="empty-state" style="padding:20px"><i class="fas fa-file-invoice"></i><p>No invoices in this period</p></div></td></tr>
           {{/each}}
+          {{#if summary.receiptCount}}
+          <tr style="background:rgba(88,166,255,0.04);cursor:default">
+            <td>
+              <span class="badge badge-blue">receipt</span>
+            </td>
+            <td style="text-align:right"><span class="td-mono">{{summary.receiptCount}}</span></td>
+            <td style="text-align:right"><span class="td-mono">{{user.currency}} {{summary.receiptCash}}</span></td>
+            <td style="text-align:right"><span class="td-mono" style="color:var(--green)">{{user.currency}} {{summary.receiptCash}}</span></td>
+            <td style="text-align:right"><span class="td-mono" style="color:var(--muted-2)">—</span></td>
+          </tr>
+          {{/if}}
         </tbody>
       </table>
     </div>
@@ -240,6 +274,7 @@
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-credit-card"></i> Payment Methods</div>
+      <span style="font-size:11px;color:var(--muted-2)">Invoice payments only</span>
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
@@ -254,7 +289,7 @@
             <td style="text-align:right"><span class="td-mono td-primary">{{../user.currency}} {{this.total}}</span></td>
           </tr>
           {{else}}
-          <tr><td colspan="3"><div class="empty-state" style="padding:20px"><i class="fas fa-credit-card"></i><p>No payment data</p></div></td></tr>
+          <tr><td colspan="3"><div class="empty-state" style="padding:20px"><i class="fas fa-credit-card"></i><p>No invoice payments recorded</p></div></td></tr>
           {{/each}}
         </tbody>
       </table>
@@ -263,7 +298,7 @@
 
 </div>
 
-<!-- ══ EXPENSE BREAKDOWN ═══════════════════════════════════════════════════════ -->
+<!-- ══ EXPENSE BREAKDOWN ══════════════════════════════════════════════════════ -->
 <div class="card" style="margin-bottom:22px">
   <div class="card-header">
     <div class="card-title"><i class="fas fa-wallet"></i> Expense Breakdown by Category</div>
@@ -290,7 +325,7 @@
           </td>
         </tr>
         {{else}}
-        <tr><td colspan="4"><div class="empty-state" style="padding:20px"><i class="fas fa-wallet"></i><p>No expense data</p></div></td></tr>
+        <tr><td colspan="4"><div class="empty-state" style="padding:20px"><i class="fas fa-wallet"></i><p>No expenses in this period</p></div></td></tr>
         {{/each}}
       </tbody>
     </table>
@@ -300,10 +335,10 @@
 <!-- ══ TOP PRODUCTS + TOP CUSTOMERS ══════════════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
-  <!-- Top products -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-boxes-stacked"></i> Top Products / Services</div>
+      <span style="font-size:11px;color:var(--muted-2)">Invoices + receipts</span>
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
@@ -325,10 +360,10 @@
     </div>
   </div>
 
-  <!-- Top customers -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-trophy"></i> Top Customers</div>
+      <span style="font-size:11px;color:var(--muted-2)">Invoices + receipts</span>
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
@@ -355,11 +390,11 @@
 <!-- ══ OVERDUE ANALYSIS + PERIOD HIGHLIGHTS ══════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
-  <!-- Overdue analysis -->
+  <!-- Outstanding receivables — invoices only, receipts can't be overdue -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-triangle-exclamation"></i> Outstanding Receivables</div>
-      <span style="font-size:11px;color:var(--muted-2)">Terms: {{termsDays}} days</span>
+      <span style="font-size:11px;color:var(--muted-2)">Terms: {{termsDays}} days · invoices only</span>
     </div>
     <div class="card-body" style="padding:16px 20px">
 
@@ -393,14 +428,12 @@
       </div>
       {{/if}}
 
-      {{#unless overdueList.length}}
-      {{#unless currentList.length}}
+      {{#unless overdueList.length}}{{#unless currentList.length}}
       <div class="empty-state" style="padding:24px">
         <i class="fas fa-check-circle" style="color:var(--green)"></i>
-        <p>No outstanding invoices</p>
+        <p>All invoices settled — no outstanding balances</p>
       </div>
-      {{/unless}}
-      {{/unless}}
+      {{/unless}}{{/unless}}
 
     </div>
   </div>
@@ -458,6 +491,7 @@
 <div class="card" style="margin-bottom:22px">
   <div class="card-header">
     <div class="card-title"><i class="fas fa-code-branch"></i> Branch Breakdown</div>
+    <span style="font-size:11px;color:var(--muted-2)">Collected = invoice payments + direct sales</span>
   </div>
   <div style="overflow-x:auto">
     <table class="data-table">
@@ -466,6 +500,7 @@
           <th>Branch</th>
           <th style="text-align:right">Invoiced</th>
           <th style="text-align:right">Collected</th>
+          <th style="text-align:right">Direct Sales</th>
           <th style="text-align:right">Expenses</th>
           <th style="text-align:right">Net Profit</th>
           <th style="text-align:right">Outstanding</th>
@@ -478,6 +513,7 @@
           <td class="td-primary">{{this.branchName}}</td>
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.revenue}}</span></td>
           <td style="text-align:right"><span class="td-mono" style="color:var(--green)">{{../user.currency}} {{this.collected}}</span></td>
+          <td style="text-align:right"><span class="td-mono" style="color:var(--blue)">{{../user.currency}} {{this.rcptCash}}</span></td>
           <td style="text-align:right"><span class="td-mono" style="color:var(--red)">{{../user.currency}} {{this.spent}}</span></td>
           <td style="text-align:right">
             <span class="td-mono" style="{{#if (gt this.profit 0)}}color:var(--green){{else if (lt this.profit 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">
@@ -498,15 +534,17 @@
 <!-- ══ ACTIVITY LOG ═══════════════════════════════════════════════════════════ -->
 <div class="card">
   <div class="card-header">
-    <div class="card-title"><i class="fas fa-list-ul"></i> Invoice Activity Log</div>
+    <div class="card-title"><i class="fas fa-list-ul"></i> Sales & Invoice Activity</div>
     <span style="font-size:12px;color:var(--muted-2)">Last {{activityLog.length}} in period</span>
   </div>
+
   {{#if activityLog.length}}
   <div style="overflow-x:auto">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Invoice</th>
+          <th>Number</th>
+          <th>Type</th>
           <th>Client</th>
           {{#if isOwner}}<th>Branch</th>{{/if}}
           <th style="text-align:right">Total</th>
@@ -517,14 +555,19 @@
       </thead>
       <tbody>
         {{#each activityLog}}
-        <tr onclick="location.href='/web/invoices/{{this._id}}'" style="cursor:pointer">
+        <tr onclick="location.href='/web/{{#if (eq this.type 'receipt')}}receipts{{else}}invoices{{/if}}/{{this._id}}'" style="cursor:pointer">
           <td><span class="td-mono" style="color:var(--amber)">{{this.number}}</span></td>
+          <td>
+            <span class="badge {{#if (eq this.type 'receipt')}}badge-blue{{else}}badge-default{{/if}}" style="font-size:10px;text-transform:capitalize">
+              {{this.type}}
+            </span>
+          </td>
           <td class="td-primary">{{this.clientName}}</td>
           {{#if ../isOwner}}<td><span style="font-size:12px;color:var(--muted)">{{this.branchName}}</span></td>{{/if}}
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
           <td style="text-align:right">
-            <span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--green){{/if}}">
-              {{../user.currency}} {{this.balance}}
+            <span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">
+              {{#if (eq this.type 'receipt')}}—{{else}}{{../user.currency}} {{this.balance}}{{/if}}
             </span>
           </td>
           <td>
@@ -546,24 +589,3 @@
   </div>
   {{/if}}
 </div>
-
-<script>
-// Revenue sparkline from report data
-(function() {
-  const canvas = document.getElementById('reportSparkline');
-  if (!canvas) return;
-  try {
-    const data = JSON.parse('{{{chartRevenue}}}');
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width = canvas.offsetWidth;
-    const h = canvas.height = 48;
-    const max = Math.max(...data.map(d => d.amount), 1);
-    const pts = data.map((d, i) => [i / (data.length - 1) * w, h - (d.amount / max) * (h - 4) - 2]);
-    ctx.beginPath();
-    ctx.strokeStyle = '#3fb950';
-    ctx.lineWidth = 1.5;
-    pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
-    ctx.stroke();
-  } catch (e) {}
-})();
-</script>

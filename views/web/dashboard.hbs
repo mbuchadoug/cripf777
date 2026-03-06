@@ -13,8 +13,8 @@
   </div>
 </div>
 
-<!-- ══ KPI CARDS ══════════════════════════════════════════════════════════════ -->
-<div class="kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px">
+<!-- ══ PRIMARY KPI CARDS ═════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px">
 
   <!-- Today Collected -->
   <div class="card kpi-card">
@@ -28,11 +28,11 @@
       <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--white);margin-bottom:6px">
         {{user.currency}} {{stats.todayRevenue}}
       </div>
-      <div style="font-size:11px;color:var(--muted-2)">Payments + direct sales</div>
+      <div style="font-size:11px;color:var(--muted-2)">Invoice payments + direct sales</div>
     </div>
   </div>
 
-  <!-- This Month Collected -->
+  <!-- Month Cash Received -->
   <div class="card kpi-card">
     <div class="card-body" style="padding:20px 22px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -42,16 +42,24 @@
         </div>
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--white);margin-bottom:6px">
-        {{user.currency}} {{stats.monthCollected}}
+        {{user.currency}} {{stats.cashReceived}}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:600;{{#if (gt stats.revenueGrowth 0)}}color:var(--green){{else if (lt stats.revenueGrowth 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">
-          {{#if (gt stats.revenueGrowth 0)}}↑{{else if (lt stats.revenueGrowth 0)}}↓{{/if}} {{stats.revenueGrowth}}% vs last month
+        <span style="font-size:11px;font-weight:600;
+          {{#if (gt stats.cashGrowth 0)}}color:var(--green)
+          {{else if (lt stats.cashGrowth 0)}}color:var(--red)
+          {{else}}color:var(--muted-2){{/if}}">
+          {{#if (gt stats.cashGrowth 0)}}↑{{else if (lt stats.cashGrowth 0)}}↓{{/if}} {{stats.cashGrowth}}% vs last month
         </span>
+        {{#if stats.monthInvoiced}}
         <span style="font-size:11px;color:var(--muted-2)">·</span>
-        <span style="font-size:11px;font-weight:600;{{#if (gt stats.collectionRate 70)}}color:var(--green){{else if (gt stats.collectionRate 40)}}color:var(--amber){{else}}color:var(--red){{/if}}">
-          {{stats.collectionRate}}% collected
+        <span style="font-size:11px;font-weight:600;
+          {{#if (gt stats.collectionRate 70)}}color:var(--green)
+          {{else if (gt stats.collectionRate 40)}}color:var(--amber)
+          {{else}}color:var(--red){{/if}}">
+          {{stats.collectionRate}}% invoice collection
         </span>
+        {{/if}}
       </div>
     </div>
   </div>
@@ -65,8 +73,9 @@
           <i class="fas fa-sack-dollar" style="font-size:13px;color:var(--amber)"></i>
         </div>
       </div>
-      <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;{{#if (gt stats.monthProfit 0)}}color:var(--green){{else}}color:var(--red){{/if}};margin-bottom:6px">
-        {{user.currency}} {{stats.monthProfit}}
+      <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;
+        {{#if (gt stats.netProfit 0)}}color:var(--green){{else}}color:var(--red){{/if}};margin-bottom:6px">
+        {{user.currency}} {{stats.netProfit}}
       </div>
       <div style="font-size:11px;color:var(--muted-2)">Collected − expenses ({{user.currency}} {{stats.monthSpent}})</div>
     </div>
@@ -93,22 +102,37 @@
 <!-- ══ SECONDARY KPI ROW ══════════════════════════════════════════════════════ -->
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px">
 
+  <!-- Month Invoiced -->
   <div class="card" style="border:1px solid var(--border)">
     <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;gap:14px">
       <div style="width:40px;height:40px;border-radius:10px;background:rgba(88,166,255,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
         <i class="fas fa-file-invoice-dollar" style="color:var(--blue)"></i>
       </div>
       <div>
-        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{stats.monthRevenue}}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{stats.monthInvoiced}}</div>
         <div style="font-size:11px;color:var(--muted-2)">Month invoiced (excl. receipts)</div>
       </div>
     </div>
   </div>
 
+  <!-- Direct Sales -->
   <div class="card" style="border:1px solid var(--border)">
     <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;gap:14px">
       <div style="width:40px;height:40px;border-radius:10px;background:rgba(63,185,80,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <i class="fas fa-users" style="color:var(--green)"></i>
+        <i class="fas fa-receipt" style="color:var(--green)"></i>
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{stats.monthRcptCash}}</div>
+        <div style="font-size:11px;color:var(--muted-2)">Direct sales — {{stats.monthRcptCount}} receipts</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Total Clients -->
+  <div class="card" style="border:1px solid var(--border)">
+    <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;gap:14px">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,158,11,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fas fa-users" style="color:var(--amber)"></i>
       </div>
       <div>
         <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{stats.totalClients}}</div>
@@ -117,27 +141,16 @@
     </div>
   </div>
 
-  <div class="card" style="border:1px solid var(--border)">
-    <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;gap:14px">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,158,11,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <i class="fas fa-boxes-stacked" style="color:var(--amber)"></i>
-      </div>
-      <div>
-        <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{stats.totalProducts}}</div>
-        <div style="font-size:11px;color:var(--muted-2)">Unique products / services</div>
-      </div>
-    </div>
-  </div>
-
 </div>
 
-<!-- ══ REVENUE CHART + RECENT ACTIVITY ══════════════════════════════════════ -->
+<!-- ══ REVENUE CHART + QUICK ACTIONS ════════════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
   <!-- Revenue chart -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-chart-area"></i> Revenue (Last 30 Days)</div>
+      <span style="font-size:11px;color:var(--muted-2)">Invoices + direct sales</span>
     </div>
     <div class="card-body" style="padding:16px 20px">
       <canvas id="revenueChart" height="130"></canvas>
@@ -154,7 +167,7 @@
         <i class="fas fa-file-invoice" style="width:16px;text-align:center"></i> Create Invoice
       </a>
       <a href="/web/receipts/new" class="btn btn-ghost" style="justify-content:flex-start;gap:12px">
-        <i class="fas fa-receipt" style="width:16px;text-align:center"></i> Record Sale (Receipt)
+        <i class="fas fa-receipt" style="width:16px;text-align:center"></i> Record Direct Sale (Receipt)
       </a>
       <a href="/web/expenses/new" class="btn btn-ghost" style="justify-content:flex-start;gap:12px">
         <i class="fas fa-wallet" style="width:16px;text-align:center"></i> Log Expense
@@ -185,6 +198,7 @@
           <th>Branch</th>
           <th style="text-align:right">Invoiced</th>
           <th style="text-align:right">Collected</th>
+          <th style="text-align:right">Direct Sales</th>
           <th style="text-align:right">Expenses</th>
           <th style="text-align:right">Net Profit</th>
           <th style="text-align:right">Outstanding</th>
@@ -197,6 +211,7 @@
           <td class="td-primary">{{this.name}}</td>
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.revenue}}</span></td>
           <td style="text-align:right"><span class="td-mono" style="color:var(--green)">{{../user.currency}} {{this.collected}}</span></td>
+          <td style="text-align:right"><span class="td-mono" style="color:var(--blue)">{{../user.currency}} {{this.rcptCash}}</span></td>
           <td style="text-align:right"><span class="td-mono" style="color:var(--red)">{{../user.currency}} {{this.spent}}</span></td>
           <td style="text-align:right">
             <span class="td-mono" style="{{#if (gt this.profit 0)}}color:var(--green){{else if (lt this.profit 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">
@@ -217,15 +232,20 @@
 <!-- ══ RECENT ACTIVITY ════════════════════════════════════════════════════════ -->
 <div class="card">
   <div class="card-header">
-    <div class="card-title"><i class="fas fa-list"></i> Recent Invoices</div>
-    <a href="/web/invoices" class="btn btn-ghost btn-sm">View all →</a>
+    <div class="card-title"><i class="fas fa-list"></i> Recent Activity</div>
+    <div style="display:flex;gap:8px">
+      <a href="/web/invoices" class="btn btn-ghost btn-sm">Invoices →</a>
+      <a href="/web/receipts" class="btn btn-ghost btn-sm">Receipts →</a>
+    </div>
   </div>
-  {{#if recentInvoices.length}}
+
+  {{#if recentDocs.length}}
   <div style="overflow-x:auto">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Invoice</th>
+          <th>Number</th>
+          <th>Type</th>
           <th>Client</th>
           {{#if isOwner}}<th>Branch</th>{{/if}}
           <th style="text-align:right">Total</th>
@@ -235,17 +255,24 @@
         </tr>
       </thead>
       <tbody>
-        {{#each recentInvoices}}
-        <tr onclick="location.href='/web/invoices/{{this._id}}'" style="cursor:pointer">
+        {{#each recentDocs}}
+        <tr onclick="location.href='/web/{{#if (eq this.type 'receipt')}}receipts{{else}}invoices{{/if}}/{{this._id}}'" style="cursor:pointer">
           <td><span class="td-mono" style="color:var(--amber)">{{this.number}}</span></td>
+          <td>
+            <span class="badge {{#if (eq this.type 'receipt')}}badge-blue{{else}}badge-default{{/if}}" style="font-size:10px;text-transform:capitalize">
+              {{this.type}}
+            </span>
+          </td>
           <td class="td-primary">{{this.clientName}}</td>
           {{#if ../isOwner}}<td><span style="font-size:12px;color:var(--muted)">{{this.branchName}}</span></td>{{/if}}
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
-          <td style="text-align:right"><span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--green){{/if}}">{{../user.currency}} {{this.balance}}</span></td>
-          <td>
-            <span class="badge {{#if (eq this.status 'paid')}}badge-green{{else if (eq this.status 'partial')}}badge-amber{{else}}badge-red{{/if}}">
-              {{this.status}}
+          <td style="text-align:right">
+            <span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--green){{/if}}">
+              {{#if (eq this.type 'receipt')}}—{{else}}{{../user.currency}} {{this.balance}}{{/if}}
             </span>
+          </td>
+          <td>
+            <span class="badge badge-green">{{this.status}}</span>
           </td>
           <td style="font-size:11px;color:var(--muted-2)">{{this.createdAt}}</td>
         </tr>
@@ -256,8 +283,8 @@
   {{else}}
   <div class="empty-state">
     <i class="fas fa-file-invoice"></i>
-    <h3>No invoices yet</h3>
-    <p>Create your first invoice to get started.</p>
+    <h3>No activity yet</h3>
+    <p>Create an invoice or record a direct sale to get started.</p>
     <a href="/web/invoices/new" class="btn btn-primary btn-sm">Create Invoice</a>
   </div>
   {{/if}}
@@ -266,11 +293,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-  const raw = {{{chartData}}};
+  const raw     = {{{chartData}}};
   const labels  = raw.map(d => d.label);
   const amounts = raw.map(d => d.amount);
-
-  const ctx = document.getElementById('revenueChart');
+  const ctx     = document.getElementById('revenueChart');
   if (!ctx) return;
 
   new Chart(ctx, {
@@ -302,17 +328,17 @@
           titleColor: '#e6edf3',
           bodyColor: '#7d8590',
           callbacks: {
-            label: ctx => ' ' + '{{user.currency}}' + ' ' + ctx.parsed.y.toFixed(2)
+            label: ctx => ' {{user.currency}} ' + ctx.parsed.y.toFixed(2)
           }
         }
       },
       scales: {
         x: {
-          grid: { color: 'rgba(48,54,61,0.5)' },
+          grid:  { color: 'rgba(48,54,61,0.5)' },
           ticks: { color: '#7d8590', font: { size: 10 }, maxTicksLimit: 8 }
         },
         y: {
-          grid: { color: 'rgba(48,54,61,0.5)' },
+          grid:  { color: 'rgba(48,54,61,0.5)' },
           ticks: { color: '#7d8590', font: { size: 10 }, callback: v => '{{user.currency}} ' + v }
         }
       }
