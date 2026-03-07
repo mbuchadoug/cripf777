@@ -207,6 +207,7 @@ router.get(
       const subjects = [
         { value: "math", label: "Mathematics", icon: "📐" },
         { value: "english", label: "English", icon: "📚" },
+        { value: "businessstudies", label: "Business Studies", icon: "📚" },
         { value: "science", label: "Science", icon: "🔬" },
         { value: "computerstudies", label: "Computer Studies", icon: "🔬" },
         { value: "responsibility", label: "Responsibility", icon: "🎯" },

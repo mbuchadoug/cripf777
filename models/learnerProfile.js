@@ -28,7 +28,7 @@ const LearnerProfileSchema = new mongoose.Schema({
 
   subjects: [{
     type: String,
-    enum: ["maths", "english", "science", 'genralknowledge','environmentalstudies','biology','geography', 'history']
+    enum: ["maths", "english", "science", 'genralknowledge','environmentalstudies','biology','geography','businessstudies', 'history']
   }],
 
   subscriptionStatus: {
@@ -45,6 +45,7 @@ const LearnerProfileSchema = new mongoose.Schema({
     environmentalstudies: { type: Number, default: 0 },
     geography: { type: Number, default: 0 },
     biology: { type: Number, default: 0 },
+    businessstudies: { type: Number, default: 0 },
     history: { type: Number, default: 0 },
     generalknowledge: { type: Number, default: 0 },
   },

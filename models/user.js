@@ -109,6 +109,7 @@ const UserSchema = new mongoose.Schema({
     science: { type: Number, default: 0 },
     geography: { type: Number, default: 0 },
     biology: { type: Number, default: 0 },
+     businessstudies: { type: Number, default: 0 },
     environmentalstudies: { type: Number, default: 0 },
     history: { type: Number, default: 0 },
     generalknowledge: { type: Number, default: 0 },
