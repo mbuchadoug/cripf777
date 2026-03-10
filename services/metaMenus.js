@@ -81,7 +81,8 @@ export async function sendMainMenu(to) {
     { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
     // ✅ Owner-only: subscription & upgrade hidden from clerk/manager via section guard
     { id: ACTIONS.SUBSCRIPTION_MENU, title: "💳 Subscription", section: "owner_only" },
-    { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package", section: "owner_only" }
+    { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package", section: "owner_only" },
+     { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" }
   ];
 
   const filtered = await filterMenuByRole({ from: to, biz, items });
@@ -622,27 +623,55 @@ export async function sendPaymentOutAddAnotherMenu(to) {
 // Add to services/metaMenus.js
 
 export async function sendSuppliersMenu(to) {
-  const supplier = await SupplierProfile.findOne({ phone: to });
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const phone = to.replace(/\D+/g, "");
+  const supplier = await SupplierProfile.findOne({ phone });
 
-  if (supplier) {
+  if (supplier?.active) {
     return sendButtons(to, {
-      text: "🏪 ZimQuote Suppliers",
+      text: "🏪 *ZimQuote Suppliers*",
       buttons: [
-        { id: ACTIONS.FIND_SUPPLIER, title: "🔍 Find Suppliers" },
-        { id: ACTIONS.MY_SUPPLIER_ACCOUNT, title: "🏪 My Account" },
-        { id: ACTIONS.BACK, title: "⬅ Back" }
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "my_supplier_account", title: "🏪 My Account" },
+        { id: "back", title: "⬅ Back" }
       ]
     });
   }
 
   return sendButtons(to, {
-    text: "🏪 ZimQuote Suppliers",
+    text: "🏪 *ZimQuote Suppliers*",
     buttons: [
-      { id: ACTIONS.FIND_SUPPLIER, title: "🔍 Find Suppliers" },
-      { id: ACTIONS.REGISTER_SUPPLIER, title: "📦 List My Business" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
+      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "register_supplier", title: "📦 List My Business" },
+      { id: "back", title: "⬅ Back" }
     ]
   });
+}
+
+export async function sendSupplierAccountMenu(to, supplier) {
+  return sendList(to, `🏪 ${supplier.businessName}`, [
+    { id: "sup_update_products", title: "✏️ Update Products" },
+    { id: "sup_update_prices", title: "💰 Update Prices" },
+    { id: "sup_update_delivery", title: "🚚 Update Delivery" },
+    { id: "sup_stock_update", title: "📦 Update Stock Status" },
+    { id: "sup_view_orders", title: "🛒 View Orders" },
+    { id: "sup_view_stats", title: "📊 My Stats" },
+    { id: "sup_broadcast", title: "📢 Broadcast to Buyers" },
+    { id: "sup_flash_deal", title: "🔥 Post Flash Deal" },
+    { id: "supplier_upgrade", title: "⭐ Upgrade Listing" },
+    { id: "back", title: "⬅ Back" }
+  ]);
+}
+
+export async function sendSupplierUpgradeMenu(to, currentTier) {
+  return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}`, [
+    { id: "sup_plan_basic_monthly", title: "✅ Basic — $5/mo" },
+    { id: "sup_plan_basic_annual", title: "✅ Basic — $50/yr (save $10)" },
+    { id: "sup_plan_pro_monthly", title: "⭐ Pro — $12/mo" },
+    { id: "sup_plan_pro_annual", title: "⭐ Pro — $120/yr (save $24)" },
+    { id: "sup_plan_featured_monthly", title: "🔥 Featured — $25/mo" },
+    { id: "back", title: "⬅ Back" }
+  ]);
 }
 
 export async function sendSupplierAccountMenu(to, supplier) {

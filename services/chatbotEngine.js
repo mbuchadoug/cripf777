@@ -1821,8 +1821,28 @@ Or type *same* to use this WhatsApp number.`);
   }
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
-  if (a === "find_supplier") {
+if (a === "find_supplier") {
+    // If no business, show category picker directly without needing session state
+    if (!biz) {
+      return sendList(from, "🔍 What are you looking for?", [
+        ...SUPPLIER_CATEGORIES.map(c => ({
+          id: `sup_search_cat_${c.id}`,
+          title: c.label
+        }))
+      ]);
+    }
     return startSupplierSearch(from, biz, saveBizSafe);
+  }
+
+  if (a === "register_supplier") {
+    // If no business, we must first create one so session state can be stored
+    if (!biz) {
+      await startOnboarding(from, phone);
+      // After onboarding creates biz, re-fetch and start registration
+      const newBiz = await getBizForPhone(from);
+      return startSupplierRegistration(from, newBiz);
+    }
+    return startSupplierRegistration(from, biz);
   }
 
   if (a === "register_supplier") {
@@ -1833,6 +1853,131 @@ Or type *same* to use this WhatsApp number.`);
     const supplier = await SupplierProfile.findOne({ phone });
     if (!supplier) return sendSuppliersMenu(from);
     return sendSupplierAccountMenu(from, supplier);
+  }
+
+
+
+  // ── Supplier city selected from list during registration ──────────────────
+  if (a.startsWith("sup_city_")) {
+    const cityRaw = a.replace("sup_city_", "");
+    const city = cityRaw === "other" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
+
+    if (!city) {
+      // Ask them to type their city
+      if (biz) {
+        biz.sessionState = "supplier_reg_area";
+        biz.sessionData = biz.sessionData || {};
+        biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+        biz.sessionData.supplierReg.city = "Other";
+        await saveBizSafe(biz);
+      }
+      return sendButtons(from, {
+        text: "📍 Please type your city name:",
+        buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      });
+    }
+
+    if (biz) {
+      biz.sessionData = biz.sessionData || {};
+      biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+      biz.sessionData.supplierReg.city = city;
+      biz.sessionState = "supplier_reg_area";
+      await saveBizSafe(biz);
+    }
+
+    return sendButtons(from, {
+      text: `📍 *${city}*\n\nWhat area or suburb are you in?\n\nExample: Mbare, Chitungwiza, Belgravia`,
+      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Supplier category selected during registration ────────────────────────
+  if (a.startsWith("sup_cat_")) {
+    const catId = a.replace("sup_cat_", "");
+    if (!biz) return sendMainMenu(from);
+
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    const existing = biz.sessionData.supplierReg.categories || [];
+    if (!existing.includes(catId)) existing.push(catId);
+    biz.sessionData.supplierReg.categories = existing;
+    biz.sessionState = "supplier_reg_products";
+    await saveBizSafe(biz);
+
+    return sendButtons(from, {
+      text: `✅ Category selected!\n\nNow list your main products, separated by commas:\n\nExample: cooking oil, rice, sugar, flour`,
+      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Delivery yes/no during registration ───────────────────────────────────
+  if (a === "sup_del_yes") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.delivery = { available: true, range: "city_wide" };
+    biz.sessionState = "supplier_reg_minorder";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
+      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    });
+  }
+
+  if (a === "sup_del_no") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.delivery = { available: false };
+    biz.sessionState = "supplier_reg_minorder";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
+      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Supplier confirms listing → save + show plan picker ──────────────────
+  if (a === "sup_confirm_yes") {
+    if (!biz) return sendMainMenu(from);
+    const reg = biz.sessionData?.supplierReg;
+    if (!reg?.businessName) {
+      await sendText(from, "❌ Registration data missing. Please start again.");
+      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+      return startSupplierRegistration(from, biz);
+    }
+
+    // Create inactive supplier profile
+    const supplier = await SupplierProfile.create({
+      phone,
+      businessName: reg.businessName,
+      location: { city: reg.city || "Harare", area: reg.area || "" },
+      categories: reg.categories || [],
+      products: reg.products || [],
+      delivery: reg.delivery || { available: false },
+      minOrder: reg.minOrder || 0,
+      active: false,
+      subscriptionStatus: "pending"
+    });
+
+    biz.sessionData.pendingSupplierId = supplier._id.toString();
+    biz.sessionState = "supplier_reg_choose_plan";
+    await saveBizSafe(biz);
+
+    return sendList(from,
+      `🎉 *Listing created!*\n\nChoose your plan to go live:\n\n✅ All plans include:\n• Listed in directory\n• Phone visible\n• Products visible\n• Receive orders`,
+      [
+        { id: "sup_plan_basic_monthly", title: "✅ Basic — $5/month", description: "Up to 10 orders/month" },
+        { id: "sup_plan_basic_annual", title: "✅ Basic — $50/year (save $10)", description: "Best value" },
+        { id: "sup_plan_pro_monthly", title: "⭐ Pro — $12/month", description: "Unlimited orders, boosted placement" },
+        { id: "sup_plan_pro_annual", title: "⭐ Pro — $120/year (save $24)", description: "Most popular" },
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured — $25/month", description: "Top of search results" }
+      ]
+    );
+  }
+
+  if (a === "sup_confirm_no") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    return startSupplierRegistration(from, biz);
   }
 
   // ── Supplier search: category selected ────────────────────────────────────
@@ -1856,7 +2001,8 @@ Or type *same* to use this WhatsApp number.`);
   if (a.startsWith("sup_search_city_")) {
     const cityRaw = a.replace("sup_search_city_", "");
     const city = cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
-    const category = biz?.sessionData?.supplierSearch?.category;
+    // category may be stored in session OR passed via the action chain
+    const category = biz?.sessionData?.supplierSearch?.category || null;
 
     const results = await runSupplierSearch({ city, category });
 

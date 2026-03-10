@@ -3,19 +3,35 @@
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
-import { saveBizSafe } from "./bizHelpers.js";
 
 export async function startSupplierRegistration(from, biz) {
+  const phone = from.replace(/\D+/g, "");
+
   // Check if already registered
-  const existing = await SupplierProfile.findOne({ phone: from });
+  const existing = await SupplierProfile.findOne({ phone });
   if (existing) {
     await sendText(from, "⚠️ You already have a supplier listing.");
     const { sendSupplierAccountMenu } = await import("./metaMenus.js");
     return sendSupplierAccountMenu(from, existing);
   }
 
+  // If user has no business yet, store reg state in UserSession instead
+  if (!biz) {
+    const UserSession = (await import("../models/userSession.js")).default;
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { phone, supplierRegState: "supplier_reg_name", supplierRegData: {} },
+      { upsert: true }
+    );
+    return sendButtons(from, {
+      text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
+      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    });
+  }
+
   biz.sessionState = "supplier_reg_name";
   biz.sessionData = { supplierReg: {} };
+  const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
   return sendButtons(from, {
@@ -27,6 +43,7 @@ export async function startSupplierRegistration(from, biz) {
 export async function handleSupplierRegistrationStates({
   state, from, text, biz, saveBiz
 }) {
+  const phone = from.replace(/\D+/g, "");
 
   // ── Step 1: Business Name ──────────────────────────────
   if (state === "supplier_reg_name") {
@@ -35,6 +52,7 @@ export async function handleSupplierRegistrationStates({
       await sendText(from, "❌ Please enter a valid business name:");
       return true;
     }
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.businessName = name;
     biz.sessionState = "supplier_reg_city";
     await saveBiz(biz);
@@ -49,17 +67,18 @@ export async function handleSupplierRegistrationStates({
   if (state === "supplier_reg_area") {
     const area = text.trim();
     if (!area || area.length < 2) {
-      await sendText(from, "❌ Please enter your area:");
+      await sendText(from, "❌ Please enter your area/suburb:");
       return true;
     }
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.area = area;
     biz.sessionState = "supplier_reg_category";
     await saveBiz(biz);
 
-    return sendList(from, "🗂 What do you mainly sell?\n(You can be in multiple categories — type numbers separated by commas e.g. 1, 3)", [
-      ...SUPPLIER_CATEGORIES.map((c, i) => ({
+    return sendList(from, "🗂 What do you mainly sell?", [
+      ...SUPPLIER_CATEGORIES.map(c => ({
         id: `sup_cat_${c.id}`, title: c.label
-      })),
+      }))
     ]);
   }
 
@@ -76,6 +95,7 @@ export async function handleSupplierRegistrationStates({
       return true;
     }
 
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.products = products;
     biz.sessionState = "supplier_reg_delivery";
     await saveBiz(biz);
@@ -97,6 +117,7 @@ export async function handleSupplierRegistrationStates({
       return true;
     }
 
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.minOrder = amount;
     biz.sessionState = "supplier_reg_confirm";
     await saveBiz(biz);
