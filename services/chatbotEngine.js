@@ -315,9 +315,13 @@ Reply *menu* to start.`);
   // =========================
   // 🆕 NEW USER — WELCOME SCREEN (not auto-onboard)
   // =========================
-  if (!biz && !ownerRole) {
+if (!biz && !ownerRole) {
     const supplierExists = await SupplierProfile.findOne({ phone });
-    if (!supplierExists && al !== "join") {
+    
+    // If they're pressing a welcome screen button, let the action handlers below run
+    const welcomeActions = ["onboard_business", "find_supplier", "register_supplier"];
+    
+    if (!supplierExists && al !== "join" && !welcomeActions.includes(a)) {
       return sendButtons(from, {
         text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
         buttons: [
@@ -328,7 +332,6 @@ Reply *menu* to start.`);
       });
     }
   }
-
   // =========================
   // 🔑 ROLE CHECK
   // =========================
