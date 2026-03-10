@@ -23,9 +23,9 @@ export async function startSupplierRegistration(from, biz) {
       { phone, supplierRegState: "supplier_reg_name", supplierRegData: {} },
       { upsert: true }
     );
-    return sendButtons(from, {
+   return sendButtons(from, {
       text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
-      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
   }
 
@@ -34,9 +34,9 @@ export async function startSupplierRegistration(from, biz) {
   const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
-  return sendButtons(from, {
+return sendButtons(from, {
     text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
-    buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+    buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
   });
 }
 

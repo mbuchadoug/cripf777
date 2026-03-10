@@ -71,7 +71,7 @@ const { branches } = await ensureDefaultBranch(biz._id);
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
-  // ── No business: show welcome screen, not the business owner menu ─────────
+  // ── No business: never show business owner menu ───────────────────────────
   if (!biz) {
     const SupplierProfile = (await import("../models/supplierProfile.js")).default;
     const phone = to.replace(/\D+/g, "");
@@ -114,7 +114,6 @@ export async function sendMainMenu(to) {
   const filtered = await filterMenuByRole({ from: to, biz, items });
   return sendList(to, "📊 Main Menu", filtered);
 }
-
 /* =============================================================================
    SALES MENU
 ============================================================================= */

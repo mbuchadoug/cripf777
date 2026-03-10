@@ -245,10 +245,12 @@ const isMetaAction =
       a.startsWith("sup_search_cat_") ||
       a.startsWith("sup_search_city_") ||
       a.startsWith("sup_eta_") ||
-   a === "find_supplier" ||
+ a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
       a === "onboard_business" ||
+      a === "suppliers_home" ||
+      a === "back" ||
       a === "suppliers_home" ||
       a.startsWith("branch_") ||
       a.startsWith("new_doc_branch_") ||
@@ -1483,7 +1485,7 @@ const escapeWords = ["menu", "hi", "hello", "start"];
   }
 
 if (escapeWords.includes(al)) {
-    if (!biz) return sendMainMenu(from); // sendMainMenu now handles no-biz gracefully
+    if (!biz) return sendMainMenu(from);
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
@@ -1822,11 +1824,16 @@ Or type *same* to use this WhatsApp number.`);
   if (a === "suppliers_home") {
     return sendSuppliersMenu(from);
   }
+// ── Supplier home — safe back button for supplier flows ───────────────────
+  if (a === "suppliers_home") {
+    return sendSuppliersMenu(from);
+  }
 
   // ── Welcome screen: user chose "Run My Business" ──────────────────────────
   if (a === "onboard_business") {
     return startOnboarding(from, phone);
   }
+  
   // ── Welcome screen: user chose "Run My Business" ──────────────────────────
   if (a === "onboard_business") {
     return startOnboarding(from, phone);
