@@ -652,13 +652,13 @@ export async function sendSuppliersMenu(to) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  if (supplier?.active) {
+if (supplier?.active) {
     return sendButtons(to, {
       text: "🏪 *ZimQuote Suppliers*",
       buttons: [
         { id: "find_supplier", title: "🔍 Find Suppliers" },
         { id: "my_supplier_account", title: "🏪 My Account" },
-        { id: "back", title: "⬅ Back" }
+        { id: "menu", title: "🏠 Main Menu" }
       ]
     });
   }
@@ -668,7 +668,7 @@ export async function sendSuppliersMenu(to) {
     buttons: [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
       { id: "register_supplier", title: "📦 List My Business" },
-      { id: "back", title: "⬅ Back" }
+      { id: "menu", title: "🏠 Main Menu" }
     ]
   });
 }

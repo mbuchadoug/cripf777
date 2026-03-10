@@ -152,6 +152,8 @@ SUPPLIER_FLASH_DEAL: "supplier_flash_deal",
 SUPPLIER_STOCK_UPDATE: "supplier_stock_update",
 
   // NAV
-  BACK: "back"
+// NAV
+  BACK: "back",
+  SUPPLIERS_HOME: "suppliers_home"
 
 };

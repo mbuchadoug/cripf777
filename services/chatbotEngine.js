@@ -1820,19 +1820,13 @@ Or type *same* to use this WhatsApp number.`);
  // ─────────────────────────────────────────────────────────────────────────
   // 🏪 SUPPLIER PLATFORM ACTION HANDLERS
   // ─────────────────────────────────────────────────────────────────────────
-// ── Supplier home — safe landing for all user types ───────────────────────
-  if (a === "suppliers_home") {
-    return sendSuppliersMenu(from);
-  }
+
 // ── Supplier home — safe back button for supplier flows ───────────────────
   if (a === "suppliers_home") {
     return sendSuppliersMenu(from);
   }
 
-  // ── Welcome screen: user chose "Run My Business" ──────────────────────────
-  if (a === "onboard_business") {
-    return startOnboarding(from, phone);
-  }
+
   
   // ── Welcome screen: user chose "Run My Business" ──────────────────────────
   if (a === "onboard_business") {
@@ -2043,12 +2037,12 @@ if (a.startsWith("sup_search_cat_")) {
     const results = await runSupplierSearch({ city, category });
 
     if (!results.length) {
-      return sendButtons(from, {
+    return sendButtons(from, {
         text: `😕 No suppliers found for\n${category || "your search"} in ${city}.\n\nWould you like to post a request?\nSuppliers will reply with prices.`,
         buttons: [
-          { id: "sup_post_request", title: "📢 Post Request" },
           { id: "find_supplier", title: "🔍 Search Again" },
-          { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+          { id: "suppliers_home", title: "🏪 Suppliers" },
+          { id: "menu", title: "🏠 Main Menu" }
         ]
       });
     }
@@ -2084,7 +2078,7 @@ if (a.startsWith("sup_search_cat_")) {
     const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
     const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
 
-    return sendButtons(from, {
+  return sendButtons(from, {
       text: `🏪 *${supplier.businessName}*${tierBadge}\n` +
             `📍 ${supplier.location?.area}, ${supplier.location?.city}\n` +
             `📦 ${(supplier.products || []).slice(0, 5).join(", ")}\n` +
@@ -2094,7 +2088,7 @@ if (a.startsWith("sup_search_cat_")) {
       buttons: [
         { id: `sup_order_${supplierId}`, title: "🛒 Place Order" },
         { id: `sup_save_${supplierId}`, title: "❤️ Save Supplier" },
-        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+        { id: "suppliers_home", title: "🏪 Suppliers" }
       ]
     });
   }
