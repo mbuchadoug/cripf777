@@ -71,6 +71,31 @@ const { branches } = await ensureDefaultBranch(biz._id);
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
+  // ── Ghost business (pending_supplier_) = treat as no-biz user ────────────
+  if (biz && biz.name.startsWith("pending_supplier_")) {
+    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+    const phone = to.replace(/\D+/g, "");
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (supplier?.active) {
+      return sendButtons(to, {
+        text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
+        buttons: [
+          { id: "find_supplier", title: "🔍 Find Suppliers" },
+          { id: "my_supplier_account", title: "🏪 My Account" },
+          { id: "onboard_business", title: "🧾 Run My Business" }
+        ]
+      });
+    }
+    return sendButtons(to, {
+      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+      buttons: [
+        { id: "onboard_business", title: "🧾 Run My Business" },
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "register_supplier", title: "📦 List My Business" }
+      ]
+    });
+  }
+
   // ── No business: never show business owner menu ───────────────────────────
   if (!biz) {
     const SupplierProfile = (await import("../models/supplierProfile.js")).default;
@@ -652,27 +677,27 @@ export async function sendSuppliersMenu(to) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-if (supplier?.active) {
-    return sendButtons(to, {
-      text: "🏪 *ZimQuote Suppliers*",
-      buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "my_supplier_account", title: "🏪 My Account" },
-        { id: "menu", title: "🏠 Main Menu" }
-      ]
-    });
+  // Check if user has a REAL business (not a ghost pending_supplier_ one)
+  const { getBizForPhone } = await import("./bizHelpers.js");
+  const biz = await getBizForPhone(to);
+  const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
+
+  if (supplier?.active) {
+    const buttons = [
+      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "my_supplier_account", title: "🏪 My Account" }
+    ];
+    if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
+    return sendButtons(to, { text: "🏪 *ZimQuote Suppliers*", buttons });
   }
 
-  return sendButtons(to, {
-    text: "🏪 *ZimQuote Suppliers*",
-    buttons: [
-      { id: "find_supplier", title: "🔍 Find Suppliers" },
-      { id: "register_supplier", title: "📦 List My Business" },
-      { id: "menu", title: "🏠 Main Menu" }
-    ]
-  });
+  const buttons = [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "register_supplier", title: "📦 List My Business" }
+  ];
+  if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
+  return sendButtons(to, { text: "🏪 *ZimQuote Suppliers*", buttons });
 }
-
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {
   return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}`, [

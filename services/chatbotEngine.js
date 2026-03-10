@@ -305,9 +305,9 @@ Reply *menu* to start.`);
   // =========================
   const ownerRole = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
 
-  if (!biz && ownerRole?.businessId) {
+if (!biz && ownerRole?.businessId) {
     const existingBiz = await Business.findById(ownerRole.businessId);
-    if (existingBiz) {
+    if (existingBiz && !existingBiz.name.startsWith("pending_supplier_")) {
       await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: existingBiz._id }, { upsert: true });
       await sendText(from, "✅ Welcome back. Opening your menu...");
       await sendMainMenu(from);
@@ -1484,8 +1484,8 @@ const escapeWords = ["menu", "hi", "hello", "start"];
     if (handled) return;
   }
 
-if (escapeWords.includes(al)) {
-    if (!biz) return sendMainMenu(from);
+  if (escapeWords.includes(al)) {
+    if (!biz || biz.name?.startsWith("pending_supplier_")) return sendMainMenu(from);
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
