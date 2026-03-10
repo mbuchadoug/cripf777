@@ -1,0 +1,129 @@
+// services/supplierRegistration.js
+
+import SupplierProfile from "../models/supplierProfile.js";
+import { sendText, sendButtons, sendList } from "./metaSender.js";
+import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
+import { saveBizSafe } from "./bizHelpers.js";
+
+export async function startSupplierRegistration(from, biz) {
+  // Check if already registered
+  const existing = await SupplierProfile.findOne({ phone: from });
+  if (existing) {
+    await sendText(from, "⚠️ You already have a supplier listing.");
+    const { sendSupplierAccountMenu } = await import("./metaMenus.js");
+    return sendSupplierAccountMenu(from, existing);
+  }
+
+  biz.sessionState = "supplier_reg_name";
+  biz.sessionData = { supplierReg: {} };
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
+    buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+  });
+}
+
+export async function handleSupplierRegistrationStates({
+  state, from, text, biz, saveBiz
+}) {
+
+  // ── Step 1: Business Name ──────────────────────────────
+  if (state === "supplier_reg_name") {
+    const name = text.trim();
+    if (!name || name.length < 2) {
+      await sendText(from, "❌ Please enter a valid business name:");
+      return true;
+    }
+    biz.sessionData.supplierReg.businessName = name;
+    biz.sessionState = "supplier_reg_city";
+    await saveBiz(biz);
+
+    return sendList(from, "📍 Where are you based?", [
+      ...SUPPLIER_CITIES.map(c => ({ id: `sup_city_${c.toLowerCase()}`, title: c })),
+      { id: "sup_city_other", title: "📍 Other (type yours)" }
+    ]);
+  }
+
+  // ── Step 2: Area ───────────────────────────────────────
+  if (state === "supplier_reg_area") {
+    const area = text.trim();
+    if (!area || area.length < 2) {
+      await sendText(from, "❌ Please enter your area:");
+      return true;
+    }
+    biz.sessionData.supplierReg.area = area;
+    biz.sessionState = "supplier_reg_category";
+    await saveBiz(biz);
+
+    return sendList(from, "🗂 What do you mainly sell?\n(You can be in multiple categories — type numbers separated by commas e.g. 1, 3)", [
+      ...SUPPLIER_CATEGORIES.map((c, i) => ({
+        id: `sup_cat_${c.id}`, title: c.label
+      })),
+    ]);
+  }
+
+  // ── Step 3: Products ───────────────────────────────────
+  if (state === "supplier_reg_products") {
+    const products = text.split(",")
+      .map(p => p.trim().toLowerCase())
+      .filter(p => p.length > 0);
+
+    if (!products.length) {
+      await sendText(from,
+        "❌ Please list at least one product.\n\nExample: cooking oil, rice, sugar"
+      );
+      return true;
+    }
+
+    biz.sessionData.supplierReg.products = products;
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBiz(biz);
+
+    return sendButtons(from, {
+      text: "🚚 Do you deliver?",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no", title: "🏠 Collection Only" }
+      ]
+    });
+  }
+
+  // ── Step 4: Minimum Order ──────────────────────────────
+  if (state === "supplier_reg_minorder") {
+    const amount = Number(text.trim());
+    if (isNaN(amount) || amount < 0) {
+      await sendText(from, "❌ Enter a valid amount or 0 for no minimum:");
+      return true;
+    }
+
+    biz.sessionData.supplierReg.minOrder = amount;
+    biz.sessionState = "supplier_reg_confirm";
+    await saveBiz(biz);
+
+    const reg = biz.sessionData.supplierReg;
+    const deliveryText = reg.delivery?.available
+      ? `🚚 ${reg.delivery.range === "city_wide"
+          ? "Delivers in city"
+          : reg.delivery.range === "nationwide"
+          ? "Delivers nationwide"
+          : "Delivers nearby"}`
+      : "🏠 Collection only";
+
+    return sendButtons(from, {
+      text: `✅ *Almost done! Confirm your listing:*\n\n` +
+            `🏪 ${reg.businessName}\n` +
+            `📍 ${reg.area}, ${reg.city}\n` +
+            `📦 ${reg.products.join(", ")}\n` +
+            `${deliveryText}\n` +
+            `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}\n\n` +
+            `Is this correct?`,
+      buttons: [
+        { id: "sup_confirm_yes", title: "✅ Confirm" },
+        { id: "sup_confirm_no", title: "❌ Start Over" }
+      ]
+    });
+  }
+
+  return false;
+}

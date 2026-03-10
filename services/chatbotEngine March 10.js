@@ -59,37 +59,13 @@ import {
   sendBranchSelectorViewExpenses,
   sendBranchSelectorPaymentHistory,
   sendBranchSelectorAddClient,
-  sendBranchSelectorViewClients,
-  sendSuppliersMenu,
-  sendSupplierAccountMenu,
-  sendSupplierUpgradeMenu
+  sendBranchSelectorViewClients
 } from "./metaMenus.js";
 
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 import { importCsvFromMetaDocument } from "./csvImport.js";
 import axios from "axios";
-
-// ─── Supplier Platform Imports ────────────────────────────────────────────────
-import SupplierProfile from "../models/supplierProfile.js";
-import SupplierOrder from "../models/supplierOrder.js";
-import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
-import { SUPPLIER_PLANS, SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
-import {
-  startSupplierRegistration,
-  handleSupplierRegistrationStates
-} from "./supplierRegistration.js";
-import {
-  startSupplierSearch,
-  runSupplierSearch,
-  formatSupplierResults
-} from "./supplierSearch.js";
-import {
-  notifySupplierNewOrder,
-  handleOrderAccepted,
-  handleOrderDeclined
-} from "./supplierOrders.js";
-import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -228,27 +204,12 @@ export async function handleIncomingMessage({ from, action }) {
   const al = text.toLowerCase();
   const a = typeof action === "string" ? action.trim().toLowerCase() : "";
 
-const isMetaAction =
+  const isMetaAction =
     typeof action === "string" &&
     (
       Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
-       a === "expense_generate_receipt" ||
+       a === "expense_generate_receipt" ||   // ✅ ADD THIS LINE
       a.startsWith("report_branch_") ||
-      a.startsWith("sup_") ||
-      a.startsWith("rate_order_") ||
-      a.startsWith("sup_plan_") ||
-      a.startsWith("sup_accept_") ||
-      a.startsWith("sup_decline_") ||
-      a.startsWith("sup_order_") ||
-      a.startsWith("sup_view_") ||
-      a.startsWith("sup_save_") ||
-      a.startsWith("sup_search_cat_") ||
-      a.startsWith("sup_search_city_") ||
-      a.startsWith("sup_eta_") ||
-      a === "find_supplier" ||
-      a === "register_supplier" ||
-      a === "my_supplier_account" ||
-      a === "onboard_business" ||
       a.startsWith("branch_") ||
       a.startsWith("new_doc_branch_") ||
       a.startsWith("add_product_branch_") ||
@@ -309,23 +270,6 @@ Reply *menu* to start.`);
       await sendText(from, "✅ Welcome back. Opening your menu...");
       await sendMainMenu(from);
       return;
-    }
-  }
-
-  // =========================
-  // 🆕 NEW USER — WELCOME SCREEN (not auto-onboard)
-  // =========================
-  if (!biz && !ownerRole) {
-    const supplierExists = await SupplierProfile.findOne({ phone });
-    if (!supplierExists && al !== "join") {
-      return sendButtons(from, {
-        text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
-        buttons: [
-          { id: "onboard_business", title: "🧾 Run My Business" },
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "register_supplier", title: "📦 List My Business" }
-        ]
-      });
     }
   }
 
@@ -1456,24 +1400,9 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   // ── Pass text to Twilio state machine ─────────────────────────────────────
 
-const escapeWords = ["menu", "hi", "hello", "start"];
-
-  // Pass supplier registration states to the state bridge
-  const supplierStates = [
-    "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
-    "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
-    "supplier_reg_payment_pending", "supplier_search_city", "supplier_order_product",
-    "supplier_order_quantity", "supplier_order_address", "supplier_decline_reason"
-  ];
+  const escapeWords = ["menu", "hi", "hello", "start"];
 
   if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
-    // Handle supplier session states
-    if (supplierStates.includes(biz.sessionState)) {
-      const handled = await handleSupplierRegistrationStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
-      });
-      if (handled) return;
-    }
     const handled = await continueTwilioFlow({ from, text });
     if (handled) return;
   }
@@ -1811,243 +1740,6 @@ Or type *same* to use this WhatsApp number.`);
 
   // ─────────────────────────────────────────────────────────────────────────
 
- // ─────────────────────────────────────────────────────────────────────────
-  // 🏪 SUPPLIER PLATFORM ACTION HANDLERS
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ── Welcome screen: user chose "Run My Business" ──────────────────────────
-  if (a === "onboard_business") {
-    return startOnboarding(from, phone);
-  }
-
-  // ── Welcome screen: Find Suppliers or register ────────────────────────────
-  if (a === "find_supplier") {
-    return startSupplierSearch(from, biz, saveBizSafe);
-  }
-
-  if (a === "register_supplier") {
-    return startSupplierRegistration(from, biz);
-  }
-
-  if (a === "my_supplier_account") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    return sendSupplierAccountMenu(from, supplier);
-  }
-
-  // ── Supplier search: category selected ────────────────────────────────────
-  if (a.startsWith("sup_search_cat_")) {
-    const category = a.replace("sup_search_cat_", "");
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { category } };
-      biz.sessionState = "supplier_search_city";
-      await saveBizSafe(biz);
-    }
-    return sendList(from, "📍 Which city?", [
-      ...SUPPLIER_CITIES.map(c => ({
-        id: `sup_search_city_${c.toLowerCase()}`,
-        title: c
-      })),
-      { id: "sup_search_city_other", title: "📍 Other" }
-    ]);
-  }
-
-  // ── Supplier search: city selected ────────────────────────────────────────
-  if (a.startsWith("sup_search_city_")) {
-    const cityRaw = a.replace("sup_search_city_", "");
-    const city = cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
-    const category = biz?.sessionData?.supplierSearch?.category;
-
-    const results = await runSupplierSearch({ city, category });
-
-    if (!results.length) {
-      return sendButtons(from, {
-        text: `😕 No suppliers found for\n${category || "your search"} in ${city}.\n\nWould you like to post a request?\nSuppliers will reply with prices.`,
-        buttons: [
-          { id: "sup_post_request", title: "📢 Post Request" },
-          { id: "find_supplier", title: "🔍 Search Again" },
-          { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-        ]
-      });
-    }
-
-    if (biz) {
-      biz.sessionData = {
-        ...(biz.sessionData || {}),
-        supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), city }
-      };
-      await saveBizSafe(biz);
-    }
-
-    const rows = formatSupplierResults(results, city, category);
-    return sendList(from, `🔍 ${category || "Suppliers"} — ${city}\n${results.length} found`, rows);
-  }
-
-  // ── View supplier detail ───────────────────────────────────────────────────
-  if (a.startsWith("sup_view_")) {
-    const supplierId = a.replace("sup_view_", "");
-    const supplier = await SupplierProfile.findById(supplierId).lean();
-    if (!supplier) return sendText(from, "❌ Supplier not found.");
-
-    await SupplierProfile.findByIdAndUpdate(supplierId, {
-      $inc: { viewCount: 1, monthlyViews: 1 }
-    });
-
-    const deliveryText = supplier.delivery?.available
-      ? `🚚 Delivers (${(supplier.delivery.range || "").replace("_", " ")})`
-      : "🏠 Collection only";
-    const minText = supplier.minOrder > 0
-      ? `💵 Min order: $${supplier.minOrder}`
-      : "💵 No minimum order";
-    const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
-    const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
-
-    return sendButtons(from, {
-      text: `🏪 *${supplier.businessName}*${tierBadge}\n` +
-            `📍 ${supplier.location?.area}, ${supplier.location?.city}\n` +
-            `📦 ${(supplier.products || []).slice(0, 5).join(", ")}\n` +
-            `${deliveryText}\n${minText}${badge}\n` +
-            `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
-            `📞 ${supplier.phone}`,
-      buttons: [
-        { id: `sup_order_${supplierId}`, title: "🛒 Place Order" },
-        { id: `sup_save_${supplierId}`, title: "❤️ Save Supplier" },
-        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-      ]
-    });
-  }
-
-  // ── Save supplier ──────────────────────────────────────────────────────────
-  if (a.startsWith("sup_save_")) {
-    const supplierId = a.replace("sup_save_", "");
-    await SupplierProfile.findByIdAndUpdate(supplierId, {
-      $addToSet: { savedBy: phone }
-    });
-    await sendText(from, "❤️ Supplier saved! Find them in your saved list.");
-    return;
-  }
-
-  // ── Start order: ask what they want ───────────────────────────────────────
-  if (a.startsWith("sup_order_")) {
-    const supplierId = a.replace("sup_order_", "");
-    const supplier = await SupplierProfile.findById(supplierId).lean();
-    if (!supplier) return sendText(from, "❌ Supplier not found.");
-
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: supplierId };
-      biz.sessionState = "supplier_order_product";
-      await saveBizSafe(biz);
-    }
-
-    let productText = "";
-    if (supplier.prices?.length) {
-      productText = "\n\n" + supplier.prices
-        .map(p => `• ${p.product} — $${p.amount}/${p.unit}`)
-        .join("\n");
-    } else if (supplier.products?.length) {
-      productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
-    }
-
-    return sendButtons(from, {
-      text: `🛒 *Order from ${supplier.businessName}*${productText}\n\nWhat would you like to order?\n(type product name)`,
-      buttons: [
-        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-      ]
-    });
-  }
-
-  // ── Accept order ──────────────────────────────────────────────────────────
-  if (a.startsWith("sup_accept_")) {
-    const orderId = a.replace("sup_accept_", "");
-    return handleOrderAccepted(from, orderId, biz, saveBizSafe);
-  }
-
-  // ── Decline order ─────────────────────────────────────────────────────────
-  if (a.startsWith("sup_decline_")) {
-    const orderId = a.replace("sup_decline_", "");
-    return handleOrderDeclined(from, orderId, biz, saveBizSafe);
-  }
-
-  // ── ETA after accepting order ─────────────────────────────────────────────
-  if (a.startsWith("sup_eta_")) {
-    const parts = a.replace("sup_eta_", "").split("_");
-    const orderId = parts[parts.length - 1];
-    const etaLabel = parts.slice(0, -1).join(" ");
-
-    const order = await SupplierOrder.findById(orderId);
-    if (order) {
-      order.supplierNote = etaLabel;
-      await order.save();
-
-      await sendButtons(order.buyerPhone, {
-        text: `📅 *Order Update*\n\nYour order from the supplier\nwill be ready: *${etaLabel}*\n\n📞 ${from}`,
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-
-    await sendText(from, `✅ Buyer notified. Ready: ${etaLabel}`);
-    return;
-  }
-
-  // ── Supplier plan selection ───────────────────────────────────────────────
-  if (a.startsWith("sup_plan_")) {
-    const parts = a.replace("sup_plan_", "").split("_");
-    const tier = parts[0];
-    const plan = parts[1];
-
-    const planDetails = SUPPLIER_PLANS[tier]?.[plan];
-    if (!planDetails) {
-      await sendText(from, "❌ Invalid plan selected.");
-      return sendMainMenu(from);
-    }
-
-    if (biz) {
-      biz.sessionData = {
-        ...(biz.sessionData || {}),
-        supplierPayment: { tier, plan, amount: planDetails.price, currency: planDetails.currency, durationDays: planDetails.durationDays }
-      };
-      biz.sessionState = "supplier_reg_enter_ecocash";
-      await saveBizSafe(biz);
-    }
-
-    return sendButtons(from, {
-      text: `💳 *${SUPPLIER_PLANS[tier].name} Plan*\n$${planDetails.price} (${plan})\n\nEnter your EcoCash number:\nExample: 0772123456\n\nOr type *same* to use this number`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
-  }
-
-  // ── Rate order ────────────────────────────────────────────────────────────
-  if (a.startsWith("rate_")) {
-    const parts = a.split("_");
-    // rate_poor_ORDERID / rate_ok_ORDERID / rate_great_ORDERID
-    if (parts.length >= 3 && ["poor", "ok", "great"].includes(parts[1])) {
-      const rating = parts[1] === "poor" ? 1 : parts[1] === "ok" ? 3 : 5;
-      const orderId = parts.slice(2).join("_");
-      const order = await SupplierOrder.findById(orderId);
-      if (order) {
-        order.buyerRating = rating;
-        await order.save();
-        const supplier = await SupplierProfile.findOne({ phone: order.supplierPhone });
-        if (supplier) {
-          const totalRatings = supplier.reviewCount + 1;
-          supplier.rating = ((supplier.rating * supplier.reviewCount) + rating) / totalRatings;
-          supplier.reviewCount = totalRatings;
-          await supplier.save();
-          await updateSupplierCredibility(supplier._id);
-        }
-      }
-      await sendText(from, "⭐ Thanks for your rating!");
-      return;
-    }
-  }
-
-  // ── Suppliers menu ────────────────────────────────────────────────────────
-  if (a === ACTIONS.SUPPLIERS_MENU || a === "suppliers_menu") {
-    return sendSuppliersMenu(from);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-
   switch (a) {
 
     case ACTIONS.SALES_MENU:
@@ -2338,17 +2030,18 @@ Or type *same* to use this WhatsApp number.`);
       return showSalesDocs(from, "receipt");
     }
 
-case ACTIONS.ADD_CLIENT: {
-      if (!biz) return sendMainMenu(from);
-      if (caller?.role === "owner") return sendBranchSelectorAddClient(from);
-      biz.sessionState = "adding_client_name";
-      biz.sessionData = {};
-      await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: "👥 *Add Client*\n\nEnter client full name:",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
+ case ACTIONS.ADD_CLIENT: {
+  const maybeRedirect = await ensureBranchContextOrAsk({
+    biz, saveBiz, req, res, sendTwimlText,
+    purpose: { kind: "add_client" }
+  });
+  if (maybeRedirect?.ok !== true) return maybeRedirect;
+
+  biz.sessionState = "adding_client_name";
+  biz.sessionData = { ...(biz.sessionData || {}) };
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter client name:");
+}
     case ACTIONS.PRODUCTS_MENU:
       return sendProductsMenu(from);
 
@@ -2462,11 +2155,8 @@ Categories auto-detected ✨
       return showPaymentHistory(from, biz, caller?.branchId || null);
     }
 
-   case ACTIONS.MAIN_MENU:
+    case ACTIONS.MAIN_MENU:
       return sendMainMenu(from);
-
-    case ACTIONS.SUPPLIERS_MENU:
-      return sendSuppliersMenu(from);
 
     default: {
       // ── Sales doc branch selectors ─────────────────────────────────────────

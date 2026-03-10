@@ -133,6 +133,24 @@ PRODUCTS_MENU: "products_menu",
   SELECT_BRANCH_RECEIPTS: "select_branch_receipts",
   SELECT_BRANCH_PRODUCTS: "select_branch_products",
 
+  /////////////
+  // SUPPLIER PLATFORM
+SUPPLIERS_MENU: "suppliers_menu",
+FIND_SUPPLIER: "find_supplier",
+REGISTER_SUPPLIER: "register_supplier",
+MY_SUPPLIER_ACCOUNT: "my_supplier_account",
+SUPPLIER_UPGRADE: "supplier_upgrade",
+SUPPLIER_POST_REQUEST: "supplier_post_request",
+SUPPLIER_SAVE: "supplier_save",
+SUPPLIER_ORDER: "supplier_order",
+SUPPLIER_ACCEPT_ORDER: "supplier_accept_order",
+SUPPLIER_DECLINE_ORDER: "supplier_decline_order",
+SUPPLIER_VIEW_ORDERS: "supplier_view_orders",
+SUPPLIER_RATE: "supplier_rate",
+SUPPLIER_BROADCAST: "supplier_broadcast",
+SUPPLIER_FLASH_DEAL: "supplier_flash_deal",
+SUPPLIER_STOCK_UPDATE: "supplier_stock_update",
+
   // NAV
   BACK: "back"
 

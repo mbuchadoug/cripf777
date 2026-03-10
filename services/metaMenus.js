@@ -615,3 +615,56 @@ export async function sendPaymentOutAddAnotherMenu(to) {
     ]
   });
 }
+
+
+
+
+// Add to services/metaMenus.js
+
+export async function sendSuppliersMenu(to) {
+  const supplier = await SupplierProfile.findOne({ phone: to });
+
+  if (supplier) {
+    return sendButtons(to, {
+      text: "🏪 ZimQuote Suppliers",
+      buttons: [
+        { id: ACTIONS.FIND_SUPPLIER, title: "🔍 Find Suppliers" },
+        { id: ACTIONS.MY_SUPPLIER_ACCOUNT, title: "🏪 My Account" },
+        { id: ACTIONS.BACK, title: "⬅ Back" }
+      ]
+    });
+  }
+
+  return sendButtons(to, {
+    text: "🏪 ZimQuote Suppliers",
+    buttons: [
+      { id: ACTIONS.FIND_SUPPLIER, title: "🔍 Find Suppliers" },
+      { id: ACTIONS.REGISTER_SUPPLIER, title: "📦 List My Business" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  });
+}
+
+export async function sendSupplierAccountMenu(to, supplier) {
+  return sendList(to, `🏪 ${supplier.businessName}`, [
+    { id: "sup_update_products", title: "✏️ Update Products" },
+    { id: "sup_update_prices", title: "💰 Update Prices" },
+    { id: "sup_update_delivery", title: "🚚 Update Delivery" },
+    { id: "sup_stock_update", title: "📦 Update Stock Status" },
+    { id: "sup_view_orders", title: "🛒 View Orders" },
+    { id: "sup_view_stats", title: "📊 My Stats" },
+    { id: "sup_broadcast", title: "📢 Broadcast to Buyers" },
+    { id: "sup_flash_deal", title: "🔥 Post Flash Deal" },
+    { id: ACTIONS.SUPPLIER_UPGRADE, title: "⭐ Upgrade Listing" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+export async function sendSupplierUpgradeMenu(to, currentTier) {
+  return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${currentTier.toUpperCase()}`, [
+    { id: "sup_upgrade_basic", title: "✅ Basic — $5/mo or $50/yr" },
+    { id: "sup_upgrade_pro", title: "⭐ Pro — $12/mo or $120/yr" },
+    { id: "sup_upgrade_featured", title: "🔥 Featured — $25/mo" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}

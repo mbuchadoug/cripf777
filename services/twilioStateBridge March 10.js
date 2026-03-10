@@ -233,7 +233,7 @@ if (caller) caller.role = String(caller.role || "clerk").toLowerCase();
     return true;
   }
 
-const restrictedStateMap = {
+  const restrictedStateMap = {
     settings_currency: "settings",
     settings_terms: "settings",
     settings_inv_prefix: "settings",
@@ -252,8 +252,6 @@ const restrictedStateMap = {
     cash_payout_amount: "payments",
     cash_payout_reason: "payments",
     invite_user_phone: "users"
-    // Supplier states are intentionally NOT restricted —
-    // any role (owner, clerk, manager) can access the supplier marketplace
   };
 
   const section = restrictedStateMap[biz.sessionState];
@@ -1163,122 +1161,34 @@ console.log("INVOICE BRANCH DEBUG", {
   /* ===========================
      CASH BALANCE: PAYOUT REASON
   =========================== */
-/* ===========================
-     SUPPLIER: ENTER ECOCASH (payment after registration)
-  =========================== */
-  if (state === "supplier_reg_enter_ecocash") {
-    const waDigits = from.replace(/\D+/g, "");
-    const raw = (trimmed || "").replace(/\D+/g, "");
-    let ecocashPhone = trimmed.toLowerCase() === "same" ? waDigits : raw;
-    if (ecocashPhone.startsWith("263") && ecocashPhone.length === 12) ecocashPhone = "0" + ecocashPhone.slice(3);
-    if (!(ecocashPhone.startsWith("0") && ecocashPhone.length === 10)) {
-      await sendText(from, "❌ Invalid EcoCash number.\n\nSend like: 0772123456\nOr type *same* to use this number.");
-      return true;
-    }
-
-    const payment = biz.sessionData?.supplierPayment;
-    const supplierId = biz.sessionData?.pendingSupplierId;
-
-    if (!payment || !supplierId) {
-      await sendText(from, "❌ Payment info missing. Please restart registration.");
+  if (state === "cash_payout_reason") {
+    if (trimmed.toLowerCase() === "cancel") {
       biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      await sendMainMenu(from);
-      return true;
+      const { sendCashBalanceMenu } = await import("./metaMenus.js");
+      return sendCashBalanceMenu(from);
     }
 
-    const paynow = (await import("./paynow.js")).default;
-    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-    const SupplierSubscriptionPayment = (await import("../models/supplierSubscriptionPayment.js")).default;
-    const { SUPPLIER_PLANS } = await import("./supplierPlans.js");
+    const reason = trimmed;
+    const amount = biz.sessionData.payoutAmount;
+    const targetBranchId = biz.sessionData.targetBranchId || caller?.branchId || null;
 
-    const reference = `SUP_${supplierId}_${Date.now()}`;
-    const paynowPayment = paynow.createPayment(reference, biz.ownerEmail || "supplier@zimquote.co.zw");
-    paynowPayment.currency = payment.currency;
-    paynowPayment.add(`ZimQuote Supplier ${payment.tier} plan`, payment.amount);
+    if (!targetBranchId) { await sendText(from, "❌ No branch found. Contact your manager."); biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); await sendMainMenu(from); return true; }
 
-    const response = await paynow.sendMobile(paynowPayment, ecocashPhone, "ecocash");
+    const CashBalance = (await import("../models/cashBalance.js")).default;
+    const CashPayout = (await import("../models/cashPayout.js")).default;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    if (!response.success) {
-      await sendText(from, "❌ Failed to start EcoCash payment. Please try again.");
-      return true;
-    }
-
-    await SupplierSubscriptionPayment.create({
-      supplierPhone: phone,
-      supplierId,
-      tier: payment.tier,
-      plan: payment.plan,
-      amount: payment.amount,
-      currency: payment.currency,
-      reference,
-      pollUrl: response.pollUrl,
-      ecocashPhone,
-      status: "pending"
-    });
-
-    biz.sessionState = "supplier_reg_payment_pending";
-    biz.sessionData.supplierPaynow = { reference, pollUrl: response.pollUrl };
-    await saveBizSafe(biz);
-
-    await sendText(from,
-      `💳 *${payment.tier.toUpperCase()} Plan — $${payment.amount}*\n` +
-      `EcoCash: ${ecocashPhone}\n\n` +
-      `Please confirm the payment prompt on your phone.`
+    await CashPayout.create({ businessId: biz._id, branchId: targetBranchId, amount, reason, createdBy: phone, date: today });
+    await CashBalance.findOneAndUpdate(
+      { businessId: biz._id, branchId: targetBranchId, date: today },
+      { $inc: { cashOut: amount, closingBalance: -amount } },
+      { upsert: true }
     );
 
-    const pollUrl = response.pollUrl;
-    let attempts = 0;
-    const pollInterval = setInterval(async () => {
-      attempts++;
-      try {
-        const status = await paynow.pollTransaction(pollUrl);
-        if (status.status?.toLowerCase() === "paid") {
-          clearInterval(pollInterval);
-
-          const now = new Date();
-          const tierRank = SUPPLIER_PLANS[payment.tier]?.tierRank || 1;
-          const endsAt = new Date(now.getTime() + payment.durationDays * 24 * 60 * 60 * 1000);
-
-          await SupplierProfile.findByIdAndUpdate(supplierId, {
-            active: true,
-            verified: true,
-            tier: payment.tier,
-            tierRank,
-            subscriptionStatus: "active",
-            subscriptionStartedAt: now,
-            subscriptionEndsAt: endsAt,
-            subscriptionPlan: payment.plan
-          });
-
-          await SupplierSubscriptionPayment.findOneAndUpdate(
-            { reference },
-            { status: "paid", paidAt: now, endsAt }
-          );
-
-          const freshBiz = await Business.findById(biz._id);
-          if (freshBiz) {
-            freshBiz.sessionState = "ready";
-            freshBiz.sessionData = {};
-            await freshBiz.save();
-          }
-
-          await sendText(from,
-            `🎉 *You're now listed!*\n\n` +
-            `✅ ${payment.tier.toUpperCase()} Plan active\n` +
-            `📅 Renews: ${endsAt.toDateString()}\n\n` +
-            `Buyers in your area can now find and order from you!`
-          );
-
-          const { sendMainMenu } = await import("./metaMenus.js");
-          await sendMainMenu(from);
-        }
-        if (attempts >= 15) clearInterval(pollInterval);
-      } catch (err) {
-        console.error("Supplier payment poll error:", err);
-      }
-    }, 10000);
-
-    return true;
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await sendText(from, `✅ Payout recorded\n*Amount:* ${amount} ${biz.currency}\n*Reason:* ${reason}`);
+    const { sendCashBalanceMenu } = await import("./metaMenus.js");
+    return sendCashBalanceMenu(from);
   }
 
   return false;
