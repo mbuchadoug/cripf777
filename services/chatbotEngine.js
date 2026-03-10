@@ -1837,18 +1837,23 @@ if (a === "find_supplier") {
     return startSupplierSearch(from, biz, saveBizSafe);
   }
 
-  if (a === "register_supplier") {
-    // If no business, we must first create one so session state can be stored
+ if (a === "register_supplier") {
     if (!biz) {
-      await startOnboarding(from, phone);
-      // After onboarding creates biz, re-fetch and start registration
-      const newBiz = await getBizForPhone(from);
+      // Create a minimal ghost business just to hold session state
+      const UserRole = (await import("../models/userRole.js")).default;
+      const newBiz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        sessionState: "supplier_reg_name",
+        sessionData: {},
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: newBiz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: newBiz._id }, { upsert: true });
       return startSupplierRegistration(from, newBiz);
     }
-    return startSupplierRegistration(from, biz);
-  }
-
-  if (a === "register_supplier") {
     return startSupplierRegistration(from, biz);
   }
 
@@ -1984,12 +1989,19 @@ if (a === "find_supplier") {
   }
 
   // ── Supplier search: category selected ────────────────────────────────────
-  if (a.startsWith("sup_search_cat_")) {
+if (a.startsWith("sup_search_cat_")) {
     const category = a.replace("sup_search_cat_", "");
+    // Store in biz session if available, otherwise store in UserSession
     if (biz) {
       biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { category } };
       biz.sessionState = "supplier_search_city";
       await saveBizSafe(biz);
+    } else {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.supplierSearchCategory": category } },
+        { upsert: true }
+      );
     }
     return sendList(from, "📍 Which city?", [
       ...SUPPLIER_CITIES.map(c => ({
@@ -2001,11 +2013,16 @@ if (a === "find_supplier") {
   }
 
   // ── Supplier search: city selected ────────────────────────────────────────
-  if (a.startsWith("sup_search_city_")) {
+ if (a.startsWith("sup_search_city_")) {
     const cityRaw = a.replace("sup_search_city_", "");
     const city = cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
-    // category may be stored in session OR passed via the action chain
-    const category = biz?.sessionData?.supplierSearch?.category || null;
+    
+    // Get category from biz session or UserSession fallback
+    let category = biz?.sessionData?.supplierSearch?.category || null;
+    if (!category) {
+      const sess = await UserSession.findOne({ phone });
+      category = sess?.tempData?.supplierSearchCategory || null;
+    }
 
     const results = await runSupplierSearch({ city, category });
 
