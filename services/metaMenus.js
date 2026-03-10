@@ -71,6 +71,33 @@ const { branches } = await ensureDefaultBranch(biz._id);
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
+  // ── No business: show welcome screen, not the business owner menu ─────────
+  if (!biz) {
+    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+    const phone = to.replace(/\D+/g, "");
+    const supplier = await SupplierProfile.findOne({ phone });
+
+    if (supplier?.active) {
+      return sendButtons(to, {
+        text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
+        buttons: [
+          { id: "find_supplier", title: "🔍 Find Suppliers" },
+          { id: "my_supplier_account", title: "🏪 My Account" },
+          { id: "onboard_business", title: "🧾 Run My Business" }
+        ]
+      });
+    }
+
+    return sendButtons(to, {
+      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+      buttons: [
+        { id: "onboard_business", title: "🧾 Run My Business" },
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "register_supplier", title: "📦 List My Business" }
+      ]
+    });
+  }
+
   const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
     { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
@@ -79,10 +106,9 @@ export async function sendMainMenu(to) {
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
     { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
-    // ✅ Owner-only: subscription & upgrade hidden from clerk/manager via section guard
     { id: ACTIONS.SUBSCRIPTION_MENU, title: "💳 Subscription", section: "owner_only" },
     { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package", section: "owner_only" },
-     { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" }
+    { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" }
   ];
 
   const filtered = await filterMenuByRole({ from: to, biz, items });

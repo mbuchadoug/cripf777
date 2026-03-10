@@ -245,10 +245,11 @@ const isMetaAction =
       a.startsWith("sup_search_cat_") ||
       a.startsWith("sup_search_city_") ||
       a.startsWith("sup_eta_") ||
-      a === "find_supplier" ||
+   a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
       a === "onboard_business" ||
+      a === "suppliers_home" ||
       a.startsWith("branch_") ||
       a.startsWith("new_doc_branch_") ||
       a.startsWith("add_product_branch_") ||
@@ -1481,8 +1482,8 @@ const escapeWords = ["menu", "hi", "hello", "start"];
     if (handled) return;
   }
 
-  if (escapeWords.includes(al)) {
-    if (!biz) return startOnboarding(from, phone);
+if (escapeWords.includes(al)) {
+    if (!biz) return sendMainMenu(from); // sendMainMenu now handles no-biz gracefully
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
@@ -1817,7 +1818,15 @@ Or type *same* to use this WhatsApp number.`);
  // ─────────────────────────────────────────────────────────────────────────
   // 🏪 SUPPLIER PLATFORM ACTION HANDLERS
   // ─────────────────────────────────────────────────────────────────────────
+// ── Supplier home — safe landing for all user types ───────────────────────
+  if (a === "suppliers_home") {
+    return sendSuppliersMenu(from);
+  }
 
+  // ── Welcome screen: user chose "Run My Business" ──────────────────────────
+  if (a === "onboard_business") {
+    return startOnboarding(from, phone);
+  }
   // ── Welcome screen: user chose "Run My Business" ──────────────────────────
   if (a === "onboard_business") {
     return startOnboarding(from, phone);
@@ -1881,7 +1890,7 @@ if (a === "find_supplier") {
       }
       return sendButtons(from, {
         text: "📍 Please type your city name:",
-        buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+        buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
       });
     }
 
@@ -1895,7 +1904,7 @@ if (a === "find_supplier") {
 
     return sendButtons(from, {
       text: `📍 *${city}*\n\nWhat area or suburb are you in?\n\nExample: Mbare, Chitungwiza, Belgravia`,
-      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
   }
 
@@ -1914,7 +1923,7 @@ if (a === "find_supplier") {
 
     return sendButtons(from, {
       text: `✅ Category selected!\n\nNow list your main products, separated by commas:\n\nExample: cooking oil, rice, sugar, flour`,
-      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
   }
 
@@ -1927,7 +1936,7 @@ if (a === "find_supplier") {
     await saveBizSafe(biz);
     return sendButtons(from, {
       text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
   }
 
@@ -1939,7 +1948,7 @@ if (a === "find_supplier") {
     await saveBizSafe(biz);
     return sendButtons(from, {
       text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "menu", title: "🏠 Main Menu" }]
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
   }
 
