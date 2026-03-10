@@ -660,3 +660,17 @@ export async function sendSupplierUpgradeMenu(to, currentTier) {
   ]);
 }
 
+export async function sendSupplierAccountMenu(to, supplier) {
+  return sendList(to, `🏪 ${supplier.businessName}`, [
+    { id: "sup_update_products", title: "✏️ Update Products" },
+    { id: "sup_update_prices", title: "💰 Update Prices" },
+    { id: "sup_update_delivery", title: "🚚 Update Delivery" },
+    { id: "sup_stock_update", title: "📦 Update Stock Status" },
+    { id: "sup_view_orders", title: "🛒 View Orders" },
+    { id: "sup_view_stats", title: "📊 My Stats" },
+    { id: "sup_broadcast", title: "📢 Broadcast to Buyers" },
+    { id: "sup_flash_deal", title: "🔥 Post Flash Deal" },
+    { id: "supplier_upgrade", title: "⭐ Upgrade Listing" },
+    { id: "back", title: "⬅ Back" }
+  ]);
+}
