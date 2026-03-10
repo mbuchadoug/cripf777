@@ -144,12 +144,11 @@ async function startOnboarding(from, phone) {
     const b = await Business.findById(existingOwner.businessId);
     if (b) {
       await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: b._id }, { upsert: true });
-      if (!b.sessionState) {
-        b.sessionState = "awaiting_business_name";
-        b.sessionData = {};
-        await saveBizSafe(b);
-      }
-      await sendText(from, "👋 Welcome back! Send your business name:");
+      // Always reset to onboarding state (handles ghost biz and stale states)
+      b.sessionState = "awaiting_business_name";
+      b.sessionData = {};
+      await saveBizSafe(b);
+      await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
       return;
     }
   }
@@ -1335,11 +1334,12 @@ Categories auto-detected ✨`);
 
   // ── Settings text states ───────────────────────────────────────────────────
 
-  const settingsStates = [
+const settingsStates = [
     "settings_currency", "settings_terms", "settings_inv_prefix",
-    "settings_qt_prefix", "settings_rcpt_prefix", "settings_address", "bulk_upload_products"
+    "settings_qt_prefix", "settings_rcpt_prefix", "settings_address", "bulk_upload_products",
+    "awaiting_business_name", "awaiting_address_input", "awaiting_currency",
+    "awaiting_logo", "awaiting_logo_upload"
   ];
-
   // =========================
   // 💳 SUBSCRIPTION: ENTER ECOCASH NUMBER
   // =========================
