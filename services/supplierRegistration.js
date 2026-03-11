@@ -8,11 +8,12 @@ export async function startSupplierRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
 
   // Check if already registered
+  // Check if already registered — silently redirect to account
   const existing = await SupplierProfile.findOne({ phone });
   if (existing) {
-    await sendText(from, "⚠️ You already have a supplier listing.");
-    const { sendSupplierAccountMenu } = await import("./metaMenus.js");
-    return sendSupplierAccountMenu(from, existing);
+    const { sendSupplierAccountMenu, sendSuppliersMenu } = await import("./metaMenus.js");
+    if (existing.active) return sendSupplierAccountMenu(from, existing);
+    return sendSuppliersMenu(from);
   }
 
   // If user has no business yet, store reg state in UserSession instead

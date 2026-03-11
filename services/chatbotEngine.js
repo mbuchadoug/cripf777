@@ -1864,25 +1864,30 @@ if (a === "find_supplier") {
     return startSupplierSearch(from, biz, saveBizSafe);
   }
 
- if (a === "register_supplier") {
-    if (!biz) {
-      // Create a minimal ghost business just to hold session state
-      const UserRole = (await import("../models/userRole.js")).default;
-      const newBiz = await Business.create({
-        name: "pending_supplier_" + phone,
-        currency: "USD",
-        package: "trial",
-        subscriptionStatus: "inactive",
-        sessionState: "supplier_reg_name",
-        sessionData: {},
-        ownerPhone: phone
-      });
-      await UserRole.create({ phone, role: "owner", pending: false, businessId: newBiz._id });
-      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: newBiz._id }, { upsert: true });
-      return startSupplierRegistration(from, newBiz);
-    }
-    return startSupplierRegistration(from, biz);
+if (a === "register_supplier") {
+  // If supplier already exists, go to their account instead
+  const existingSupplier = await SupplierProfile.findOne({ phone });
+  if (existingSupplier) {
+    if (existingSupplier.active) return sendSupplierAccountMenu(from, existingSupplier);
+    return sendSuppliersMenu(from); // incomplete registration
   }
+
+  if (!biz) {
+    const newBiz = await Business.create({
+      name: "pending_supplier_" + phone,
+      currency: "USD",
+      package: "trial",
+      subscriptionStatus: "inactive",
+      sessionState: "supplier_reg_name",
+      sessionData: {},
+      ownerPhone: phone
+    });
+    await UserRole.create({ phone, role: "owner", pending: false, businessId: newBiz._id });
+    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: newBiz._id }, { upsert: true });
+    return startSupplierRegistration(from, newBiz);
+  }
+  return startSupplierRegistration(from, biz);
+}
 
   if (a === "my_supplier_account") {
     const supplier = await SupplierProfile.findOne({ phone });
