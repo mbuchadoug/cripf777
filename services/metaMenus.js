@@ -695,7 +695,7 @@ if (supplier?.active) {
   if (supplier && !supplier.active) {
     const buttons = [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
-      { id: "register_supplier", title: "⏳ Complete Registration" }
+     { id: "register_supplier", title: "⏳ Finish Setup" }
     ];
     if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
     return sendButtons(to, {

@@ -1863,13 +1863,20 @@ if (a === "find_supplier") {
   }
 
 if (a === "register_supplier") {
-  // If supplier already exists, go to their account instead
   const existingSupplier = await SupplierProfile.findOne({ phone });
+
+  // Already has a supplier profile
   if (existingSupplier) {
-    if (existingSupplier.active) return sendSupplierAccountMenu(from, existingSupplier);
-    return sendSuppliersMenu(from); // incomplete registration
+    // Active supplier -> account
+    if (existingSupplier.active) {
+      return sendSupplierAccountMenu(from, existingSupplier);
+    }
+
+    // Inactive / incomplete supplier -> suppliers menu
+    return sendSuppliersMenu(from);
   }
 
+  // No supplier profile yet -> start registration
   if (!biz) {
     const newBiz = await Business.create({
       name: "pending_supplier_" + phone,
@@ -1880,10 +1887,23 @@ if (a === "register_supplier") {
       sessionData: {},
       ownerPhone: phone
     });
-    await UserRole.create({ phone, role: "owner", pending: false, businessId: newBiz._id });
-    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: newBiz._id }, { upsert: true });
+
+    await UserRole.create({
+      phone,
+      role: "owner",
+      pending: false,
+      businessId: newBiz._id
+    });
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { activeBusinessId: newBiz._id },
+      { upsert: true }
+    );
+
     return startSupplierRegistration(from, newBiz);
   }
+
   return startSupplierRegistration(from, biz);
 }
 
