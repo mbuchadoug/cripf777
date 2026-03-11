@@ -61,7 +61,6 @@ import {
   sendBranchSelectorAddClient,
   sendBranchSelectorViewClients,
   sendSuppliersMenu,
-  sendSupplierAccountMenu,
   sendSupplierUpgradeMenu,
   sendSupplierAccountMenu,
 } from "./metaMenus.js";
