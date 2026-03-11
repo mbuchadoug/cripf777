@@ -83,6 +83,7 @@ export async function handleSupplierRegistrationStates({
   }
 
   // ── Step 3: Products ───────────────────────────────────
+ // ── Step 3: Products ───────────────────────────────────────────────────────
   if (state === "supplier_reg_products") {
     const products = text.split(",")
       .map(p => p.trim().toLowerCase())
@@ -97,18 +98,62 @@ export async function handleSupplierRegistrationStates({
 
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.products = products;
-    biz.sessionState = "supplier_reg_delivery";
+    biz.sessionData.supplierReg.prices = [];
+    biz.sessionData.supplierReg.priceIndex = 0;
+    biz.sessionState = "supplier_reg_prices";
     await saveBiz(biz);
 
+    const first = products[0];
     return sendButtons(from, {
-      text: "🚚 Do you deliver?",
+      text: `💰 *Add your prices* (buyers use these to compare)\n\nWhat is your price for *${first}*?\n\nFormat: amount unit\nExamples:\n• 4.50 each\n• 2.80 kg\n• 12 dozen\n• 8.50 bag`,
+      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
+    });
+  }
+
+  // ── Step 3b: Prices ────────────────────────────────────────────────────────
+  if (state === "supplier_reg_prices") {
+    const reg = biz.sessionData.supplierReg;
+    const products = reg.products || [];
+    const idx = reg.priceIndex || 0;
+
+    const raw = text.trim();
+    // Parse "4.50 kg" or "4.50" or "4.50each"
+    const match = raw.match(/^(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
+    if (!match) {
+      await sendText(from, `❌ Format: *amount unit*\nExamples: 4.50 kg  |  12 each  |  8 bag\n\nPrice for *${products[idx]}*:`);
+      return true;
+    }
+
+    const amount = parseFloat(match[1]);
+    const unit = match[3] || "each";
+
+    reg.prices = reg.prices || [];
+    reg.prices.push({ product: products[idx], amount, unit, inStock: true });
+    reg.priceIndex = idx + 1;
+
+    if (reg.priceIndex < products.length) {
+      const next = products[reg.priceIndex];
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: `✅ $${amount}/${unit} saved!\n\nPrice for *${next}*?`,
+        buttons: [
+          { id: "sup_skip_prices", title: "⏭ Skip Rest" },
+          { id: "sup_done_prices", title: "✅ Done Pricing" }
+        ]
+      });
+    }
+
+    // All products priced
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: `✅ All prices saved!\n\n🚚 Do you deliver?`,
       buttons: [
         { id: "sup_del_yes", title: "✅ Yes I Deliver" },
         { id: "sup_del_no", title: "🏠 Collection Only" }
       ]
     });
   }
-
   // ── Step 4: Minimum Order ──────────────────────────────
   if (state === "supplier_reg_minorder") {
     const amount = Number(text.trim());

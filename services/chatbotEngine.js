@@ -244,9 +244,15 @@ const isMetaAction =
       a.startsWith("sup_search_cat_") ||
       a.startsWith("sup_search_city_") ||
       a.startsWith("sup_eta_") ||
+a === "find_supplier" ||
+      a === "register_supplier" ||
+      a === "my_supplier_account" ||
  a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
+      a === "sup_skip_prices" ||
+      a === "sup_done_prices" ||
+      a === "sup_update_prices" ||
       a === "onboard_business" ||
       a === "suppliers_home" ||
       a === "back" ||
@@ -1465,8 +1471,9 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 const escapeWords = ["menu", "hi", "hello", "start"];
 
   // Pass supplier registration states to the state bridge
-  const supplierStates = [
+const supplierStates = [
     "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
+    "supplier_reg_prices", "supplier_update_prices",
     "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
     "supplier_reg_payment_pending", "supplier_search_city", "supplier_order_product",
     "supplier_order_quantity", "supplier_order_address", "supplier_decline_reason"
@@ -1928,6 +1935,36 @@ if (a === "find_supplier") {
     });
   }
 
+
+// ── Skip or finish pricing during registration ─────────────────────────────
+  if (a === "sup_skip_prices" || a === "sup_done_prices") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "🚚 Do you deliver?",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no", title: "🏠 Collection Only" }
+      ]
+    });
+  }
+
+// ── Skip or finish pricing during registration ─────────────────────────────
+  if (a === "sup_skip_prices" || a === "sup_done_prices") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "🚚 Do you deliver?",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no", title: "🏠 Collection Only" }
+      ]
+    });
+  }
+
+
   // ── Delivery yes/no during registration ───────────────────────────────────
   if (a === "sup_del_yes") {
     if (!biz) return sendMainMenu(from);
@@ -1964,16 +2001,18 @@ if (a === "find_supplier") {
     }
 
     // Create inactive supplier profile
-    const supplier = await SupplierProfile.create({
+const supplier = await SupplierProfile.create({
       phone,
       businessName: reg.businessName,
       location: { city: reg.city || "Harare", area: reg.area || "" },
       categories: reg.categories || [],
       products: reg.products || [],
+      prices: reg.prices || [],
       delivery: reg.delivery || { available: false },
       minOrder: reg.minOrder || 0,
       active: false,
-      subscriptionStatus: "pending"
+      subscriptionStatus: "pending",
+      priceUpdatedAt: reg.prices?.length ? new Date() : null
     });
 
     biz.sessionData.pendingSupplierId = supplier._id.toString();
@@ -2103,6 +2142,104 @@ if (a.startsWith("sup_search_cat_")) {
     return;
   }
 
+// ── Save supplier ──────────────────────────────────────────────────────────
+  if (a.startsWith("sup_save_")) {
+    const supplierId = a.replace("sup_save_", "");
+    await SupplierProfile.findByIdAndUpdate(supplierId, {
+      $addToSet: { savedBy: phone }
+    });
+    await sendText(from, "❤️ Supplier saved! Find them in your saved list.");
+    return;
+  }
+
+  // ── Update supplier prices ─────────────────────────────────────────────────
+  if (a === "sup_update_prices") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
+      biz.sessionState = "supplier_update_prices";
+      await saveBizSafe(biz);
+    }
+
+    const productList = supplier.products?.length
+      ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
+      : "No products listed";
+
+    return sendButtons(from, {
+      text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\nExample:\ncooking oil: 4.50 litre\nrice: 8 bag\nsugar: 1.20 kg\n\nYour products:\n${productList}`,
+      buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
+    });
+  }
+
+  // ── Handle price update text input ────────────────────────────────────────
+  if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+
+    const lines = text.split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
+    const updated = [], failed = [];
+
+    for (const line of lines) {
+      const match = line.match(/^(.+?):\s*(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
+      if (!match) { failed.push(line); continue; }
+      const product = match[1].trim().toLowerCase();
+      const amount = parseFloat(match[2]);
+      const unit = match[4] || "each";
+      updated.push({ product, amount, unit, inStock: true });
+    }
+
+    if (!updated.length) {
+      await sendText(from, `❌ Couldn't parse prices.\n\nFormat: *product: amount unit*\nExample: cooking oil: 4.50 litre\n\nFailed:\n${failed.slice(0, 3).join("\n")}`);
+      return;
+    }
+
+    const existing = supplier.prices || [];
+    for (const u of updated) {
+      const idx = existing.findIndex(p => p.product.toLowerCase() === u.product);
+      if (idx >= 0) existing[idx] = u;
+      else existing.push(u);
+    }
+
+    supplier.prices = existing;
+    supplier.priceUpdatedAt = new Date();
+    await supplier.save();
+
+    if (biz) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+    }
+
+    const summary = updated.map(u => `✅ ${u.product} — $${u.amount}/${u.unit}`).join("\n");
+    const failNote = failed.length ? `\n\n⚠️ Skipped ${failed.length}: ${failed.slice(0, 2).join(", ")}` : "";
+    await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  // ── Update supplier prices ─────────────────────────────────────────────────
+  if (a === "sup_update_prices") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
+      biz.sessionState = "supplier_update_prices";
+      await saveBizSafe(biz);
+    }
+
+    const productList = supplier.products?.length
+      ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
+      : "No products listed";
+
+    return sendButtons(from, {
+      text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\nExample:\ncooking oil: 4.50 litre\nrice: 8 bag\nsugar: 1.20 kg\n\nYour products:\n${productList}`,
+      buttons: [
+        { id: "suppliers_home", title: "🏪 Back" }
+      ]
+    });
+  }
   // ── Start order: ask what they want ───────────────────────────────────────
   if (a.startsWith("sup_order_")) {
     const supplierId = a.replace("sup_order_", "");
