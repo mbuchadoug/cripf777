@@ -247,9 +247,7 @@ const isMetaAction =
 a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
- a === "find_supplier" ||
-      a === "register_supplier" ||
-      a === "my_supplier_account" ||
+
     a === "sup_skip_prices" ||
       a === "sup_done_prices" ||
       a === "sup_update_prices" ||

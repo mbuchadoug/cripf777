@@ -15,7 +15,6 @@ export async function startSupplierRegistration(from, biz) {
     if (existing.active) return sendSupplierAccountMenu(from, existing);
     return sendSuppliersMenu(from);
   }
-
   // If user has no business yet, store reg state in UserSession instead
   if (!biz) {
     const UserSession = (await import("../models/userSession.js")).default;
