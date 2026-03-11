@@ -682,13 +682,26 @@ export async function sendSuppliersMenu(to) {
   const biz = await getBizForPhone(to);
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
-  if (supplier?.active) {
+if (supplier?.active) {
     const buttons = [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
       { id: "my_supplier_account", title: "🏪 My Account" }
     ];
     if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
     return sendButtons(to, { text: "🏪 *ZimQuote Suppliers*", buttons });
+  }
+
+  // Pending/incomplete registration — show continue option
+  if (supplier && !supplier.active) {
+    const buttons = [
+      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "register_supplier", title: "⏳ Complete Registration" }
+    ];
+    if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
+    return sendButtons(to, {
+      text: `🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active. Complete registration to go live.`,
+      buttons
+    });
   }
 
   const buttons = [
@@ -723,4 +736,63 @@ export async function sendSupplierAccountMenu(to, supplier) {
     { id: "supplier_upgrade", title: "⭐ Upgrade Listing" },
     { id: "back", title: "⬅ Back" }
   ]);
+
+  
+  
+}
+
+
+export async function sendSupplierAccountMenu(to, supplierDoc) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const phone = to.replace(/\D+/g, "");
+  const supplier = supplierDoc || await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(to);
+
+  const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo" }[supplier.tier] || supplier.tier || "None";
+  const statusIcon = supplier.active ? "🟢" : "🔴";
+  const renewDate = supplier.subscriptionExpiresAt
+    ? new Date(supplier.subscriptionExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    : "—";
+
+  const priceCount = supplier.prices?.length || 0;
+  const productCount = supplier.products?.length || 0;
+  const score = (supplier.credibilityScore || 0).toFixed(0);
+  const badge = (supplier.credibilityScore || 0) >= 70 && (supplier.completedOrders || 0) >= 10 ? " 🏅" : "";
+
+  return sendList(to, {
+    text: `🏪 *${supplier.businessName}*${badge}\n` +
+          `${statusIcon} ${supplier.active ? "Active" : "Inactive"} · 📦 ${supplier.tier ? tierLabel : "No Plan"}\n` +
+          `📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}\n` +
+          `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews) · Score: ${score}\n` +
+          `🗓 Renews: ${renewDate}\n\n` +
+          `Products: ${productCount} · Prices: ${priceCount}`,
+    buttonLabel: "Manage Account",
+    sections: [
+      {
+        title: "📋 My Listing",
+        rows: [
+          { id: "sup_edit_products", title: "✏️ Edit Products", description: `${productCount} products listed` },
+          { id: "sup_update_prices", title: "💰 Update Prices", description: `${priceCount} prices set` },
+          { id: "sup_edit_area", title: "📍 Edit Location", description: `${supplier.location?.area || "Not set"}, ${supplier.location?.city || ""}` },
+          { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery", description: supplier.delivery?.available ? "Currently: Delivering" : "Currently: Collection only" },
+          { id: "sup_toggle_active", title: statusIcon + (supplier.active ? " Deactivate Listing" : " Activate Listing"), description: supplier.active ? "Hide from search results" : "Show in search results" }
+        ]
+      },
+      {
+        title: "📊 Orders & Stats",
+        rows: [
+          { id: "sup_my_orders", title: "📦 My Orders", description: `${supplier.completedOrders || 0} completed` },
+          { id: "sup_my_earnings", title: "💵 Earnings Summary", description: "View order history" },
+          { id: "sup_my_reviews", title: "⭐ My Reviews", description: `${supplier.reviewCount || 0} reviews` }
+        ]
+      },
+      {
+        title: "💳 Subscription",
+        rows: [
+          { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan", description: `Current: ${tierLabel}` },
+          { id: "sup_renew_plan", title: "🔄 Renew Subscription", description: `Expires: ${renewDate}` }
+        ]
+      }
+    ]
+  });
 }

@@ -62,7 +62,8 @@ import {
   sendBranchSelectorViewClients,
   sendSuppliersMenu,
   sendSupplierAccountMenu,
-  sendSupplierUpgradeMenu
+  sendSupplierUpgradeMenu,
+  sendSupplierAccountMenu,
 } from "./metaMenus.js";
 
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
@@ -250,9 +251,18 @@ a === "find_supplier" ||
  a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
-      a === "sup_skip_prices" ||
+    a === "sup_skip_prices" ||
       a === "sup_done_prices" ||
       a === "sup_update_prices" ||
+      a === "sup_edit_products" ||
+      a === "sup_toggle_delivery" ||
+      a === "sup_toggle_active" ||
+      a === "sup_edit_area" ||
+      a === "sup_my_orders" ||
+      a === "sup_my_earnings" ||
+      a === "sup_my_reviews" ||
+      a === "sup_upgrade_plan" ||
+      a === "sup_renew_plan" ||
       a === "onboard_business" ||
       a === "suppliers_home" ||
       a === "back" ||
@@ -1471,9 +1481,10 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 const escapeWords = ["menu", "hi", "hello", "start"];
 
   // Pass supplier registration states to the state bridge
-const supplierStates = [
+  const supplierStates = [
     "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
     "supplier_reg_prices", "supplier_update_prices",
+    "supplier_edit_products", "supplier_edit_area",
     "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
     "supplier_reg_payment_pending", "supplier_search_city", "supplier_order_product",
     "supplier_order_quantity", "supplier_order_address", "supplier_decline_reason"
@@ -1880,6 +1891,136 @@ if (a === "find_supplier") {
     return sendSupplierAccountMenu(from, supplier);
   }
 
+  // ── Supplier account menu actions ─────────────────────────────────────────
+
+  if (a === "sup_edit_products") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    if (biz) {
+      biz.sessionState = "supplier_edit_products";
+      await saveBizSafe(biz);
+    }
+    const current = supplier.products?.join(", ") || "none listed";
+    return sendButtons(from, {
+      text: `✏️ *Edit Products*\n\nCurrent products:\n${current}\n\nSend your updated product list, comma-separated:\n\nExample: cooking oil, rice, sugar, flour`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+    });
+  }
+
+  if (a === "sup_toggle_delivery") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    const newVal = !supplier.delivery?.available;
+    supplier.delivery = { ...(supplier.delivery || {}), available: newVal };
+    await supplier.save();
+    await sendText(from, newVal
+      ? "✅ Delivery enabled. Buyers can now request delivery."
+      : "✅ Set to collection only.");
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  if (a === "sup_toggle_active") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    if (!supplier.active && !supplier.tier) {
+      return sendButtons(from, {
+        text: "⚠️ You need an active subscription to go live.\n\nChoose a plan to activate your listing:",
+        buttons: [
+          { id: "sup_upgrade_plan", title: "⬆️ Choose Plan" },
+          { id: "my_supplier_account", title: "🏪 My Account" }
+        ]
+      });
+    }
+    supplier.active = !supplier.active;
+    await supplier.save();
+    await sendText(from, supplier.active
+      ? "✅ Your listing is now *active*. Buyers can find you!"
+      : "⏸ Your listing is now *hidden* from search results.");
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  if (a === "sup_edit_area") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    if (biz) {
+      biz.sessionState = "supplier_edit_area";
+      await saveBizSafe(biz);
+    }
+    return sendButtons(from, {
+      text: `📍 *Edit Location*\n\nCurrent: ${supplier.location?.area || "not set"}, ${supplier.location?.city || ""}\n\nSend your area/suburb name:\nExample: Avondale, Bulawayo`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+    });
+  }
+
+  if (a === "sup_my_orders") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    const SupplierOrder = (await import("../models/supplierOrder.js")).default;
+    const orders = await SupplierOrder.find({ supplierId: supplier._id })
+      .sort({ createdAt: -1 }).limit(10);
+    if (!orders.length) {
+      return sendButtons(from, {
+        text: "📦 *My Orders*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
+        buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+      });
+    }
+    const lines = orders.map((o, i) => {
+      const statusIcon = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" }[o.status] || "•";
+      const date = new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      return `${statusIcon} *${o.items || "Order"}* — $${(o.amount || 0).toFixed(2)} (${date})`;
+    }).join("\n");
+    return sendButtons(from, {
+      text: `📦 *My Orders* (last ${orders.length})\n\n${lines}`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+    });
+  }
+
+  if (a === "sup_my_earnings") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    const SupplierOrder = (await import("../models/supplierOrder.js")).default;
+    const completed = await SupplierOrder.find({ supplierId: supplier._id, status: "completed" });
+    const total = completed.reduce((sum, o) => sum + (o.amount || 0), 0);
+    const thisMonth = completed.filter(o => {
+      const d = new Date(o.createdAt);
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).reduce((sum, o) => sum + (o.amount || 0), 0);
+    return sendButtons(from, {
+      text: `💵 *Earnings Summary*\n\n📦 Completed orders: ${completed.length}\n💰 Total earnings: $${total.toFixed(2)}\n📅 This month: $${thisMonth.toFixed(2)}\n\n⭐ Rating: ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n🏅 Score: ${(supplier.credibilityScore || 0).toFixed(0)}/100`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+    });
+  }
+
+  if (a === "sup_my_reviews") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    if (!supplier.reviewCount) {
+      return sendButtons(from, {
+        text: "⭐ *My Reviews*\n\nNo reviews yet. Complete orders to get rated by buyers!",
+        buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+      });
+    }
+    return sendButtons(from, {
+      text: `⭐ *My Reviews*\n\nRating: ${(supplier.rating || 0).toFixed(1)}/5\nReviews: ${supplier.reviewCount || 0}\nScore: ${(supplier.credibilityScore || 0).toFixed(0)}/100\n\n${(supplier.credibilityScore || 0) >= 70 && (supplier.completedOrders || 0) >= 10 ? "🏅 You have the Top Supplier badge!" : "Complete more orders to earn the 🏅 Top Supplier badge (score 70+, 10+ orders)"}`,
+      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+    });
+  }
+
+  if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
+    return sendList(from, {
+      text: `💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Product listing\n\nPick a plan to continue:`,
+      buttonLabel: "View Plans",
+      sections: [{
+        title: "Available Plans",
+        rows: [
+          { id: "sup_plan_basic", title: "Basic — $5/month", description: "Up to 10 orders/month" },
+          { id: "sup_plan_pro", title: "Pro — $12/month", description: "Unlimited orders + buyer requests" },
+          { id: "sup_plan_featured", title: "Featured — $25/month", description: "🔥 Top placement + featured badge (max 3/category)" }
+        ]
+      }]
+    });
+  }
 
 
   // ── Supplier city selected from list during registration ──────────────────
@@ -2214,7 +2355,38 @@ if (a.startsWith("sup_search_cat_")) {
 
     const summary = updated.map(u => `✅ ${u.product} — $${u.amount}/${u.unit}`).join("\n");
     const failNote = failed.length ? `\n\n⚠️ Skipped ${failed.length}: ${failed.slice(0, 2).join(", ")}` : "";
-    await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
+await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  // ── Handle edit products text input ───────────────────────────────────────
+  if (biz?.sessionState === "supplier_edit_products" && !isMetaAction) {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    const products = text.split(",").map(p => p.trim().toLowerCase()).filter(Boolean);
+    if (!products.length) {
+      await sendText(from, "❌ Please list at least one product, comma-separated.");
+      return;
+    }
+    supplier.products = products;
+    await supplier.save();
+    if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+    await sendText(from, `✅ Products updated!\n\n${products.map(p => `• ${p}`).join("\n")}`);
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  // ── Handle edit area text input ────────────────────────────────────────────
+  if (biz?.sessionState === "supplier_edit_area" && !isMetaAction) {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+    const parts = text.split(",").map(p => p.trim());
+    supplier.location = {
+      area: parts[0] || supplier.location?.area,
+      city: parts[1] || supplier.location?.city || "Harare"
+    };
+    await supplier.save();
+    if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+    await sendText(from, `✅ Location updated to: ${supplier.location.area}, ${supplier.location.city}`);
     return sendSupplierAccountMenu(from, supplier);
   }
 
