@@ -4,26 +4,49 @@ import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
 
+function isSupplierRegistrationComplete(supplier) {
+  if (!supplier) return false;
+
+  return Boolean(
+    supplier.businessName &&
+    supplier.location?.city &&
+    supplier.location?.area &&
+    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
+    Array.isArray(supplier.products) && supplier.products.length > 0 &&
+    supplier.delivery &&
+    typeof supplier.delivery.available === "boolean" &&
+    typeof supplier.minOrder === "number"
+  );
+}
+
 export async function startSupplierRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
-
-  // Check if already registered
-  // Check if already registered — silently redirect to account
   const existing = await SupplierProfile.findOne({ phone });
+
   if (existing) {
-    const { sendSupplierAccountMenu, sendSuppliersMenu } = await import("./metaMenus.js");
-    if (existing.active) return sendSupplierAccountMenu(from, existing);
-    return sendSuppliersMenu(from);
+    const { sendSupplierAccountMenu, sendSupplierUpgradeMenu } = await import("./metaMenus.js");
+
+    if (existing.active) {
+      return sendSupplierAccountMenu(from, existing);
+    }
+
+    if (isSupplierRegistrationComplete(existing)) {
+      return sendSupplierUpgradeMenu(from, existing.tier);
+    }
+
+    // incomplete suppliers continue below
   }
-  // If user has no business yet, store reg state in UserSession instead
+
   if (!biz) {
     const UserSession = (await import("../models/userSession.js")).default;
+
     await UserSession.findOneAndUpdate(
       { phone },
       { phone, supplierRegState: "supplier_reg_name", supplierRegData: {} },
       { upsert: true }
     );
-   return sendButtons(from, {
+
+    return sendButtons(from, {
       text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
       buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
     });
@@ -31,10 +54,11 @@ export async function startSupplierRegistration(from, biz) {
 
   biz.sessionState = "supplier_reg_name";
   biz.sessionData = { supplierReg: {} };
+
   const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
-return sendButtons(from, {
+  return sendButtons(from, {
     text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
     buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
   });

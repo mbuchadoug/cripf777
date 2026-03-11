@@ -1866,15 +1866,58 @@ if (a === "register_supplier") {
   const existingSupplier = await SupplierProfile.findOne({ phone });
 
   // Already has a supplier profile
+ function isSupplierRegistrationComplete(supplier) {
+  if (!supplier) return false;
+
+  return Boolean(
+    supplier.businessName &&
+    supplier.location?.city &&
+    supplier.location?.area &&
+    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
+    Array.isArray(supplier.products) && supplier.products.length > 0 &&
+    supplier.delivery &&
+    typeof supplier.delivery.available === "boolean" &&
+    typeof supplier.minOrder === "number"
+  );
+}
+
+if (a === "register_supplier") {
+  const existingSupplier = await SupplierProfile.findOne({ phone });
+
+function isSupplierRegistrationComplete(supplier) {
+  if (!supplier) return false;
+
+  return Boolean(
+    supplier.businessName &&
+    supplier.location?.city &&
+    supplier.location?.area &&
+    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
+    Array.isArray(supplier.products) && supplier.products.length > 0 &&
+    supplier.delivery &&
+    typeof supplier.delivery.available === "boolean" &&
+    typeof supplier.minOrder === "number"
+  );
+}
+
+if (a === "register_supplier") {
+  const existingSupplier = await SupplierProfile.findOne({ phone });
+
   if (existingSupplier) {
-    // Active supplier -> account
     if (existingSupplier.active) {
       return sendSupplierAccountMenu(from, existingSupplier);
     }
 
-    // Inactive / incomplete supplier -> suppliers menu
-    return sendSuppliersMenu(from);
+    if (isSupplierRegistrationComplete(existingSupplier)) {
+      return sendSupplierUpgradeMenu(from, existingSupplier.tier);
+    }
+
+    return startSupplierRegistration(from, biz);
   }
+
+  // existing new profile creation logic...
+}
+  // existing new profile creation logic...
+}
 
   // No supplier profile yet -> start registration
   if (!biz) {

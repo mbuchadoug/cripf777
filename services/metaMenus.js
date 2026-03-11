@@ -6,6 +6,21 @@ import { canAccessSection } from "./roleGuard.js";
 import UserRole from "../models/userRole.js";
 import { normalizePhone } from "./phone.js";
 
+function isSupplierRegistrationComplete(supplier) {
+  if (!supplier) return false;
+
+  return Boolean(
+    supplier.businessName &&
+    supplier.location?.city &&
+    supplier.location?.area &&
+    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
+    Array.isArray(supplier.products) && supplier.products.length > 0 &&
+    supplier.delivery &&
+    typeof supplier.delivery.available === "boolean" &&
+    typeof supplier.minOrder === "number"
+  );
+}
+
 // ─── Role-based menu filter ───────────────────────────────────────────────────
 
 async function filterMenuByRole({ from, biz, items }) {
@@ -677,29 +692,48 @@ export async function sendSuppliersMenu(to) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  // Check if user has a REAL business (not a ghost pending_supplier_ one)
   const { getBizForPhone } = await import("./bizHelpers.js");
   const biz = await getBizForPhone(to);
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
-if (supplier?.active) {
+  if (supplier?.active) {
     const buttons = [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
       { id: "my_supplier_account", title: "🏪 My Account" }
     ];
-    if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
-    return sendButtons(to, { text: "🏪 *ZimQuote Suppliers*", buttons });
+
+    if (hasRealBiz) {
+      buttons.push({ id: "menu", title: "🏠 Main Menu" });
+    }
+
+    return sendButtons(to, {
+      text: "🏪 *ZimQuote Suppliers*",
+      buttons
+    });
   }
 
-  // Pending/incomplete registration — show continue option
   if (supplier && !supplier.active) {
+    const complete = isSupplierRegistrationComplete(supplier);
+
     const buttons = [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
-     { id: "register_supplier", title: "⏳ Finish Setup" }
+      complete
+        ? { id: "sup_upgrade_plan", title: "💳 Activate Listing" }
+        : { id: "register_supplier", title: "⏳ Finish Setup" }
     ];
-    if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
+
+    if (complete) {
+      buttons.push({ id: "my_supplier_account", title: "🏪 My Account" });
+    }
+
+    if (hasRealBiz) {
+      buttons.push({ id: "menu", title: "🏠 Main Menu" });
+    }
+
     return sendButtons(to, {
-      text: `🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active. Complete registration to go live.`,
+      text: complete
+        ? "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is ready but not active yet.\nComplete payment to go live."
+        : "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active.\nComplete registration to go live.",
       buttons
     });
   }
@@ -708,8 +742,15 @@ if (supplier?.active) {
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "register_supplier", title: "📦 List My Business" }
   ];
-  if (hasRealBiz) buttons.push({ id: "menu", title: "🏠 Main Menu" });
-  return sendButtons(to, { text: "🏪 *ZimQuote Suppliers*", buttons });
+
+  if (hasRealBiz) {
+    buttons.push({ id: "menu", title: "🏠 Main Menu" });
+  }
+
+  return sendButtons(to, {
+    text: "🏪 *ZimQuote Suppliers*",
+    buttons
+  });
 }
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {
