@@ -2630,14 +2630,22 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
       return sendSuppliersMenu(from);
     }
 
-    const order = await SupplierOrder.create({
+const order = await SupplierOrder.create({
       supplierId: supplier._id,
       supplierPhone: supplier.phone,
       buyerPhone: phone,
-      items: `${orderProduct} x${orderQty}`,
-      deliveryAddress: address,
-      status: "pending",
-      amount: 0
+      items: [{
+        product: orderProduct,
+        quantity: isNaN(Number(orderQty)) ? 1 : Number(orderQty),
+        unit: isNaN(Number(orderQty)) ? orderQty : "units"
+      }],
+      totalAmount: 0,
+      currency: "USD",
+      delivery: {
+        required: supplier.delivery?.available || false,
+        address: address
+      },
+      status: "pending"
     });
 
     await notifySupplierNewOrder(supplier.phone, {
