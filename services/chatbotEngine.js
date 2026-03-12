@@ -2055,19 +2055,17 @@ if (a === "register_supplier") {
     });
   }
 
-  if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
-    return sendList(from, {
-      text: `💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Product listing\n\nPick a plan to continue:`,
-      buttonLabel: "View Plans",
-      sections: [{
-        title: "Available Plans",
-        rows: [
-          { id: "sup_plan_basic", title: "Basic — $5/month", description: "Up to 10 orders/month" },
-          { id: "sup_plan_pro", title: "Pro — $12/month", description: "Unlimited orders + buyer requests" },
-          { id: "sup_plan_featured", title: "Featured — $25/month", description: "🔥 Top placement + featured badge (max 3/category)" }
-        ]
-      }]
-    });
+if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
+    return sendList(from,
+      `💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Product listing\n\nPick a plan to continue:`,
+      [
+        { id: "sup_plan_basic_monthly", title: "✅ Basic — $5/month", description: "Up to 10 orders/month" },
+        { id: "sup_plan_basic_annual", title: "✅ Basic — $50/year", description: "Save $10 — pay once yearly" },
+        { id: "sup_plan_pro_monthly", title: "⭐ Pro — $12/month", description: "Unlimited orders + buyer requests" },
+        { id: "sup_plan_pro_annual", title: "⭐ Pro — $120/year", description: "Save $24 — most popular" },
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured — $25/month", description: "Top placement + featured badge" }
+      ]
+    );
   }
 
 
