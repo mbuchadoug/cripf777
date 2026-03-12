@@ -2571,7 +2571,7 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
   }
 
   // ── Supplier plan selection ───────────────────────────────────────────────
-  if (a.startsWith("sup_plan_")) {
+if (a.startsWith("sup_plan_")) {
     const parts = a.replace("sup_plan_", "").split("_");
     const tier = parts[0];
     const plan = parts[1];
@@ -2579,22 +2579,41 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
     const planDetails = SUPPLIER_PLANS[tier]?.[plan];
     if (!planDetails) {
       await sendText(from, "❌ Invalid plan selected.");
-      return sendMainMenu(from);
+      return sendSuppliersMenu(from);
     }
 
-    if (biz) {
-      biz.sessionData = {
-        ...(biz.sessionData || {}),
-        supplierPayment: { tier, plan, amount: planDetails.price, currency: planDetails.currency, durationDays: planDetails.durationDays }
-      };
-      biz.sessionState = "supplier_reg_enter_ecocash";
-      await saveBizSafe(biz);
+    // Ensure we have a biz session to track payment state
+    if (!biz) {
+      await sendText(from, "❌ Session expired. Please type *menu* and try again.");
+      return;
     }
 
-    return sendButtons(from, {
-      text: `💳 *${SUPPLIER_PLANS[tier].name} Plan*\n$${planDetails.price} (${plan})\n\nEnter your EcoCash number:\nExample: 0772123456\n\nOr type *same* to use this number`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
+    // Store plan details and move to EcoCash entry state
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierPayment: {
+        tier,
+        plan,
+        amount: planDetails.price,
+        currency: planDetails.currency,
+        durationDays: planDetails.durationDays,
+        supplierId: biz.sessionData?.pendingSupplierId || null
+      }
+    };
+    biz.sessionState = "supplier_reg_enter_ecocash";
+    await saveBizSafe(biz);
+
+    const waDigits = from.replace(/\D+/g, "");
+    return sendText(from,
+`💳 *${SUPPLIER_PLANS[tier].name} Plan — $${planDetails.price} ${planDetails.currency} (${plan})*
+
+To pay, enter your EcoCash number:
+*Example: 0772123456*
+
+Or type *same* to use this WhatsApp number (${waDigits}).
+
+_Type *cancel* to go back._`
+    );
   }
 
   // ── Rate order ────────────────────────────────────────────────────────────

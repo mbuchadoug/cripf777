@@ -260,5 +260,250 @@ What is your price for *${products[idx]}*?`
     });
   }
 
+// ── Step 5: EcoCash Number Entry ──────────────────────────────────────────
+  if (state === "supplier_reg_enter_ecocash") {
+    const raw = (text || "").trim();
+    const waDigits = from.replace(/\D+/g, "");
+
+    // Normalize: "same" uses their WhatsApp number
+    let normalized = raw.toLowerCase() === "same" ? waDigits : raw.replace(/\D+/g, "");
+    if (normalized.startsWith("263") && normalized.length === 12) normalized = "0" + normalized.slice(3);
+    if (normalized.length === 9 && normalized.startsWith("7")) normalized = "0" + normalized;
+
+    if (!normalized.startsWith("0") || normalized.length !== 10) {
+      await sendText(from,
+`❌ That number doesn't look right.
+
+Please send your EcoCash number like this:
+*0772123456*
+
+Or type *same* to use this WhatsApp number (${waDigits}).`
+      );
+      return true;
+    }
+
+    const supplierPayment = biz.sessionData?.supplierPayment;
+    if (!supplierPayment?.tier || !supplierPayment?.plan) {
+      await sendText(from, "❌ Payment details missing. Please select a plan again.");
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBiz(biz);
+      const { sendSuppliersMenu } = await import("./metaMenus.js");
+      return sendSuppliersMenu(from);
+    }
+
+    const { SUPPLIER_PLANS } = await import("./supplierPlans.js");
+    const planDetails = SUPPLIER_PLANS[supplierPayment.tier]?.[supplierPayment.plan];
+
+    if (!planDetails) {
+      await sendText(from, "❌ Invalid plan. Please select a plan again.");
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBiz(biz);
+      const { sendSuppliersMenu } = await import("./metaMenus.js");
+      return sendSuppliersMenu(from);
+    }
+
+    biz.sessionData.supplierPayment.ecocashPhone = normalized;
+    biz.sessionState = "supplier_reg_payment_pending";
+    await saveBiz(biz);
+
+    // Initiate Paynow payment
+    try {
+      const paynow = (await import("./paynow.js")).default;
+      const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+      const SupplierSubscriptionPayment = (await import("../models/supplierSubscriptionPayment.js")).default;
+      const Business = (await import("../models/business.js")).default;
+      const { sendDocument } = await import("./metaSender.js");
+      const { generatePDF } = await import("../routes/twilio_biz.js");
+
+      const reference = `SUP_${biz._id}_${Date.now()}`;
+      const payment = paynow.createPayment(reference, "bmusasa99@gmail.com");
+      payment.currency = planDetails.currency;
+      payment.add(`ZimQuote Supplier ${supplierPayment.tier} (${supplierPayment.plan})`, planDetails.price);
+
+      const response = await paynow.sendMobile(payment, normalized, "ecocash");
+
+      if (!response.success) {
+        biz.sessionState = "supplier_reg_enter_ecocash";
+        await saveBiz(biz);
+        await sendText(from,
+`❌ EcoCash payment failed to start.
+
+Make sure your number is correct and try again:
+*0772123456*
+
+Or type *same* to use this WhatsApp number.`
+        );
+        return true;
+      }
+
+      // Save pending payment record
+      const supplierId = biz.sessionData?.pendingSupplierId;
+      await SupplierSubscriptionPayment.create({
+        supplierId: supplierId || null,
+        businessId: biz._id,
+        tier: supplierPayment.tier,
+        plan: supplierPayment.plan,
+        amount: planDetails.price,
+        currency: planDetails.currency,
+        reference,
+        pollUrl: response.pollUrl,
+        ecocashPhone: normalized,
+        status: "pending"
+      });
+
+      biz.sessionData.supplierPayment.paynow = { reference, pollUrl: response.pollUrl };
+      await saveBiz(biz);
+
+      await sendText(from,
+`💳 *Payment Request Sent!*
+
+Plan: *${SUPPLIER_PLANS[supplierPayment.tier].name} (${supplierPayment.plan})*
+Amount: *$${planDetails.price} ${planDetails.currency}*
+EcoCash: *${normalized}*
+
+👉 *Check your phone now* — approve the EcoCash payment prompt.
+
+We will activate your listing automatically once payment is confirmed. ✅`
+      );
+
+      // Poll for payment
+      const pollUrl = response.pollUrl;
+      let attempts = 0;
+      const MAX_ATTEMPTS = 18; // 3 minutes
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const status = await paynow.pollTransaction(pollUrl);
+
+          if (status.status && status.status.toLowerCase() === "paid") {
+            clearInterval(pollInterval);
+
+            const freshBiz = await Business.findById(biz._id);
+            if (!freshBiz || freshBiz.sessionState !== "supplier_reg_payment_pending") return;
+
+            const supplierId = freshBiz.sessionData?.pendingSupplierId ||
+              freshBiz.sessionData?.supplierPayment?.supplierId;
+
+            const supplier = supplierId
+              ? await SupplierProfile.findById(supplierId)
+              : await SupplierProfile.findOne({ phone });
+
+            if (supplier) {
+              const now = new Date();
+              const expiresAt = new Date(now.getTime() + planDetails.durationDays * 24 * 60 * 60 * 1000);
+
+              supplier.tier = supplierPayment.tier;
+              supplier.active = true;
+              supplier.subscriptionStatus = "active";
+              supplier.subscriptionStartedAt = now;
+              supplier.subscriptionExpiresAt = expiresAt;
+              await supplier.save();
+
+              // Update payment record
+              await SupplierSubscriptionPayment.findOneAndUpdate(
+                { reference },
+                { status: "paid", paidAt: now }
+              );
+
+              // Generate receipt PDF
+              try {
+                const receiptNumber = `SUP-${reference.slice(-8).toUpperCase()}`;
+                const { filename } = await generatePDF({
+                  type: "receipt",
+                  number: receiptNumber,
+                  date: now,
+                  billingTo: supplier.businessName,
+                  items: [{
+                    item: `ZimQuote Supplier ${SUPPLIER_PLANS[supplierPayment.tier].name} Plan (${supplierPayment.plan})`,
+                    qty: 1,
+                    unit: planDetails.price,
+                    total: planDetails.price
+                  }],
+                  bizMeta: {
+                    name: "ZimQuote",
+                    logoUrl: "",
+                    address: "ZimQuote Supplier Platform",
+                    _id: biz._id.toString(),
+                    status: "paid"
+                  }
+                });
+
+                const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+                const receiptUrl = `${site}/docs/generated/receipts/${filename}`;
+                await sendDocument(from, { link: receiptUrl, filename });
+              } catch (pdfErr) {
+                console.error("[Supplier Payment] PDF generation failed:", pdfErr.message);
+              }
+
+              freshBiz.sessionState = "ready";
+              freshBiz.sessionData = {};
+              await freshBiz.save();
+
+              const { sendSupplierAccountMenu } = await import("./metaMenus.js");
+              await sendText(from,
+`✅ *Payment Confirmed! You are now LIVE!*
+
+Your listing is now *active*. Buyers in your area can find you when they search.
+
+Plan: *${SUPPLIER_PLANS[supplierPayment.tier].name}*
+Expires: *${expiresAt.toDateString()}*
+
+Start receiving orders! 🎉`
+              );
+              return sendSupplierAccountMenu(from, supplier);
+            }
+          }
+
+          if (attempts >= MAX_ATTEMPTS) {
+            clearInterval(pollInterval);
+            const freshBiz = await Business.findById(biz._id);
+            if (freshBiz?.sessionState === "supplier_reg_payment_pending") {
+              freshBiz.sessionState = "ready";
+              freshBiz.sessionData = {};
+              await freshBiz.save();
+            }
+            await sendText(from,
+`⏰ *Payment not confirmed yet.*
+
+If you already paid, your listing will be activated shortly. If not, please try again by typing *menu* and selecting List My Business → your plan.
+
+Need help? Contact support.`
+            );
+          }
+        } catch (pollErr) {
+          console.error("[Supplier Payment] Poll error:", pollErr.message);
+        }
+      }, 10000);
+
+    } catch (err) {
+      console.error("[Supplier Payment] Error:", err);
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBiz(biz);
+      await sendText(from, "❌ Something went wrong starting your payment. Please try again.");
+      const { sendSuppliersMenu } = await import("./metaMenus.js");
+      return sendSuppliersMenu(from);
+    }
+
+    return true;
+  }
+
+  // ── Step 5b: Payment pending — waiting for confirmation ──────────────────
+  if (state === "supplier_reg_payment_pending") {
+    await sendText(from,
+`⏳ *Waiting for your EcoCash payment...*
+
+Please check your phone and approve the payment prompt.
+
+If you already approved it, your listing will activate automatically within a minute.
+
+_Type *cancel* to start over._`
+    );
+    return true;
+  }
+
   return false;
 }
