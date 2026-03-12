@@ -339,6 +339,7 @@ Or type *same* to use this WhatsApp number.`
       }
 
       // Save pending payment record
+    // Save pending payment record
       const supplierId = biz.sessionData?.pendingSupplierId;
       await SupplierSubscriptionPayment.create({
         supplierId: supplierId || null,
@@ -350,6 +351,7 @@ Or type *same* to use this WhatsApp number.`
         reference,
         pollUrl: response.pollUrl,
         ecocashPhone: normalized,
+        supplierPhone: phone,          // ← ADD THIS LINE
         status: "pending"
       });
 
