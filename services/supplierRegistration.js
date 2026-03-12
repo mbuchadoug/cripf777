@@ -46,10 +46,15 @@ export async function startSupplierRegistration(from, biz) {
       { upsert: true }
     );
 
-    return sendButtons(from, {
-      text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+ return sendText(from,
+`📦 *List Your Business*
+
+Let's get you listed in 2 minutes 👍
+
+What is your *business name*?
+
+_At any time, type *cancel* to stop and go back to the main menu._`
+    );
   }
 
   biz.sessionState = "supplier_reg_name";
@@ -58,10 +63,15 @@ export async function startSupplierRegistration(from, biz) {
   const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
-  return sendButtons(from, {
-    text: "📦 *List Your Business*\n\nLet's get you listed in 2 minutes 👍\n\nWhat is your business name?",
-    buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-  });
+ return sendText(from,
+`📦 *List Your Business*
+
+Let's get you listed in 2 minutes 👍
+
+What is your *business name*?
+
+_At any time, type *cancel* to stop and go back to the main menu._`
+    );
 }
 
 export async function handleSupplierRegistrationStates({
@@ -113,9 +123,14 @@ export async function handleSupplierRegistrationStates({
       .map(p => p.trim().toLowerCase())
       .filter(p => p.length > 0);
 
-    if (!products.length) {
+  if (!products.length) {
       await sendText(from,
-        "❌ Please list at least one product.\n\nExample: cooking oil, rice, sugar"
+`❌ Please list at least one product, separated by commas.
+
+*Example:*
+*cooking oil, rice, sugar, flour, bread*
+
+Just type them and send 👇`
       );
       return true;
     }
@@ -127,9 +142,26 @@ export async function handleSupplierRegistrationStates({
     biz.sessionState = "supplier_reg_prices";
     await saveBiz(biz);
 
-    const first = products[0];
+  const first = products[0];
     return sendButtons(from, {
-      text: `💰 *Add your prices* (buyers use these to compare)\n\nWhat is your price for *${first}*?\n\nFormat: amount unit\nExamples:\n• 4.50 each\n• 2.80 kg\n• 12 dozen\n• 8.50 bag`,
+      text:
+`💰 *Add Your Prices*
+
+Buyers use prices to compare suppliers before ordering. Adding prices helps you get more orders!
+
+What is your price for *${first}*?
+
+*How to type it:*
+Just send the amount followed by the unit.
+
+*Examples:*
+- *4.50 litre* — for cooking oil by litre
+- *8.00 bag* — for a bag of rice
+- *1.20 kg* — for sugar per kg
+- *12.00 dozen* — for eggs per dozen
+- *5.00 each* — for single items
+
+_If you don't know yet, tap Skip below._`,
       buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
     });
   }
@@ -143,8 +175,21 @@ export async function handleSupplierRegistrationStates({
     const raw = text.trim();
     // Parse "4.50 kg" or "4.50" or "4.50each"
     const match = raw.match(/^(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
-    if (!match) {
-      await sendText(from, `❌ Format: *amount unit*\nExamples: 4.50 kg  |  12 each  |  8 bag\n\nPrice for *${products[idx]}*:`);
+   if (!match) {
+      await sendText(from,
+`❌ That format didn't work. Please try again.
+
+*How to type it:*
+Amount then unit, like this:
+
+- *4.50 litre*
+- *8 bag*
+- *1.20 kg*
+- *12 dozen*
+- *5 each*
+
+What is your price for *${products[idx]}*?`
+      );
       return true;
     }
 

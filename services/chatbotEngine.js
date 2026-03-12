@@ -2135,10 +2135,18 @@ if (a === "register_supplier") {
     biz.sessionState = "supplier_reg_products";
     await saveBizSafe(biz);
 
-    return sendButtons(from, {
-      text: `✅ Category selected!\n\nNow list your main products, separated by commas:\n\nExample: cooking oil, rice, sugar, flour`,
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+return sendText(from,
+`✅ *Category selected!*
+
+Now list your main products or services, separated by commas.
+
+*Example:*
+*cooking oil, rice, sugar, flour, bread*
+
+Just type them and send 👇
+
+_Type *cancel* to go back to main menu._`
+    );
   }
 
 
@@ -2225,14 +2233,20 @@ const supplier = await SupplierProfile.create({
     biz.sessionState = "supplier_reg_choose_plan";
     await saveBizSafe(biz);
 
-    return sendList(from,
-      `🎉 *Listing created!*\n\nChoose your plan to go live:\n\n✅ All plans include:\n• Listed in directory\n• Phone visible\n• Products visible\n• Receive orders`,
+return sendList(from,
+`🎉 *Your listing is ready!*
+
+But right now *buyers cannot find you yet.*
+
+To go live and start receiving orders, you need to choose a plan and pay. It's like paying for a market stall — once you pay, your business shows up when buyers search.
+
+💳 *Choose a plan below to activate your listing:*`,
       [
-        { id: "sup_plan_basic_monthly", title: "✅ Basic — $5/month", description: "Up to 10 orders/month" },
-        { id: "sup_plan_basic_annual", title: "✅ Basic — $50/year (save $10)", description: "Best value" },
-        { id: "sup_plan_pro_monthly", title: "⭐ Pro — $12/month", description: "Unlimited orders, boosted placement" },
-        { id: "sup_plan_pro_annual", title: "⭐ Pro — $120/year (save $24)", description: "Most popular" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured — $25/month", description: "Top of search results" }
+        { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 10 orders/month. Good to start." },
+        { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year (save $10)", description: "Pay once for the whole year" },
+        { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Unlimited orders + higher placement" },
+        { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year (save $24)", description: "Most popular choice" },
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Top of search — buyers see you first" }
       ]
     );
   }
