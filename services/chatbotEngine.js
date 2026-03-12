@@ -1475,7 +1475,7 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   // ── Pass text to Twilio state machine ─────────────────────────────────────
 
-const escapeWords = ["menu", "hi", "hello", "start"];
+const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
 
   // Pass supplier registration states to the state bridge
   const supplierStates = [
@@ -1487,7 +1487,16 @@ const escapeWords = ["menu", "hi", "hello", "start"];
     "supplier_order_quantity", "supplier_order_address", "supplier_decline_reason"
   ];
 
-  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
+ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
+    // ── Cancel command during any supplier registration flow ──────────────
+    if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Registration cancelled. Sending you back to the main menu.");
+      return sendMainMenu(from);
+    }
+
     // Handle supplier session states
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
@@ -1499,8 +1508,16 @@ const escapeWords = ["menu", "hi", "hello", "start"];
     if (handled) return;
   }
 
-  if (escapeWords.includes(al)) {
-    if (!biz || biz.name?.startsWith("pending_supplier_")) return sendMainMenu(from);
+if (escapeWords.includes(al)) {
+    if (!biz || biz.name?.startsWith("pending_supplier_")) {
+      // Clear supplier reg state if mid-flow
+      if (biz?.name?.startsWith("pending_supplier_")) {
+        biz.sessionState = "ready";
+        biz.sessionData = {};
+        await saveBizSafe(biz);
+      }
+      return sendMainMenu(from);
+    }
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
