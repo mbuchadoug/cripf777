@@ -1882,61 +1882,27 @@ if (a === "find_supplier") {
 if (a === "register_supplier") {
   const existingSupplier = await SupplierProfile.findOne({ phone });
 
-  // Already has a supplier profile
- function isSupplierRegistrationComplete(supplier) {
-  if (!supplier) return false;
-
-  return Boolean(
-    supplier.businessName &&
-    supplier.location?.city &&
-    supplier.location?.area &&
-    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
-    Array.isArray(supplier.products) && supplier.products.length > 0 &&
-    supplier.delivery &&
-    typeof supplier.delivery.available === "boolean" &&
-    typeof supplier.minOrder === "number"
-  );
-}
-
-if (a === "register_supplier") {
-  const existingSupplier = await SupplierProfile.findOne({ phone });
-
-function isSupplierRegistrationComplete(supplier) {
-  if (!supplier) return false;
-
-  return Boolean(
-    supplier.businessName &&
-    supplier.location?.city &&
-    supplier.location?.area &&
-    Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
-    Array.isArray(supplier.products) && supplier.products.length > 0 &&
-    supplier.delivery &&
-    typeof supplier.delivery.available === "boolean" &&
-    typeof supplier.minOrder === "number"
-  );
-}
-
-if (a === "register_supplier") {
-  const existingSupplier = await SupplierProfile.findOne({ phone });
-
   if (existingSupplier) {
     if (existingSupplier.active) {
       return sendSupplierAccountMenu(from, existingSupplier);
     }
-
-    if (isSupplierRegistrationComplete(existingSupplier)) {
+    const isComplete = Boolean(
+      existingSupplier.businessName &&
+      existingSupplier.location?.city &&
+      existingSupplier.location?.area &&
+      Array.isArray(existingSupplier.categories) && existingSupplier.categories.length > 0 &&
+      Array.isArray(existingSupplier.products) && existingSupplier.products.length > 0 &&
+      existingSupplier.delivery &&
+      typeof existingSupplier.delivery.available === "boolean" &&
+      typeof existingSupplier.minOrder === "number"
+    );
+    if (isComplete) {
       return sendSupplierUpgradeMenu(from, existingSupplier.tier);
     }
-
     return startSupplierRegistration(from, biz);
   }
 
-  // existing new profile creation logic...
-}
-  // existing new profile creation logic...
-}
-
-  // No supplier profile yet -> start registration
+  // No supplier profile yet — create pending business and start registration
   if (!biz) {
     const newBiz = await Business.create({
       name: "pending_supplier_" + phone,
