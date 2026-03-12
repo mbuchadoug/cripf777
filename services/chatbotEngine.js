@@ -2630,14 +2630,19 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
       return sendSuppliersMenu(from);
     }
 
-const order = await SupplierOrder.create({
+//const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
+const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
+    const order = await SupplierOrder.create({
       supplierId: supplier._id,
       supplierPhone: supplier.phone,
       buyerPhone: phone,
       items: [{
         product: orderProduct,
-        quantity: isNaN(Number(orderQty)) ? 1 : Number(orderQty),
-        unit: isNaN(Number(orderQty)) ? orderQty : "units"
+        quantity: qtyNum || 1,
+        unit: qtyNum ? "units" : orderQty,
+        pricePerUnit: null,   // ← supplier sets this when accepting
+        currency: "USD",
+        total: null           // ← calculated when price is known
       }],
       totalAmount: 0,
       currency: "USD",

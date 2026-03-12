@@ -7,18 +7,18 @@ import { sendText, sendButtons, sendList } from "./metaSender.js";
 export async function notifySupplierNewOrder(supplierPhone, order) {
   const { sendButtons } = await import("./metaSender.js");
 
-  const itemLines = order.items
-    .map(i => `• ${i.product} x${i.quantity} — $${i.total}`)
+const itemLines = order.items
+    .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
     .join("\n");
 
-  const deliveryLine = order.delivery.required
+  const deliveryLine = order.delivery?.required
     ? `🚚 Deliver to: ${order.delivery.address}`
     : "🏠 Collection";
 
   await sendButtons(supplierPhone, {
     text: `🛒 *New Order!*\n\n` +
           `${itemLines}\n\n` +
-          `💵 Total: $${order.totalAmount}\n` +
+          `💵 Total: Pending — set your price when accepting\n` +
           `${deliveryLine}\n` +
           `📞 Buyer: ${order.buyerPhone}`,
     buttons: [
@@ -46,7 +46,7 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     text: `✅ *Order Accepted!*\n\n` +
           `${order.items.map(i =>
             `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
-          `💵 $${order.totalAmount}\n` +
+        `💵 ${order.totalAmount > 0 ? `$${order.totalAmount}` : "Supplier will confirm pricing"}\n` +
           `📞 ${from}\n\n` +
           `Contact them to arrange\n` +
           `payment & delivery.`,
