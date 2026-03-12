@@ -1478,13 +1478,13 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
 
   // Pass supplier registration states to the state bridge
-  const supplierStates = [
+const supplierStates = [
     "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
     "supplier_reg_prices", "supplier_update_prices",
     "supplier_edit_products", "supplier_edit_area",
     "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
-    "supplier_reg_payment_pending", "supplier_search_city", "supplier_order_product",
-    "supplier_order_quantity", "supplier_order_address", "supplier_decline_reason"
+    "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason"
+    // supplier_order_product/quantity/address handled separately below
   ];
 
  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
@@ -2264,17 +2264,23 @@ if (a.startsWith("sup_search_cat_")) {
 
   // ── Supplier search: city selected ────────────────────────────────────────
  if (a.startsWith("sup_search_city_")) {
-    const cityRaw = a.replace("sup_search_city_", "");
-    const city = cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
-    
-    // Get category from biz session or UserSession fallback
+   const cityRaw = a.replace("sup_search_city_", "");
+    const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
+
+    // Get category AND product from biz session or UserSession fallback
     let category = biz?.sessionData?.supplierSearch?.category || null;
+    let product = biz?.sessionData?.supplierSearch?.product || null;
+    if (!category && !product) {
+      const sess = await UserSession.findOne({ phone });
+      category = sess?.tempData?.supplierSearchCategory || null;
+      product = sess?.tempData?.supplierSearchProduct || null;
+    }
     if (!category) {
       const sess = await UserSession.findOne({ phone });
       category = sess?.tempData?.supplierSearchCategory || null;
     }
 
-    const results = await runSupplierSearch({ city, category });
+   const results = await runSupplierSearch({ city, category, product });
 
     if (!results.length) {
     return sendButtons(from, {
@@ -2295,8 +2301,10 @@ if (a.startsWith("sup_search_cat_")) {
       await saveBizSafe(biz);
     }
 
-    const rows = formatSupplierResults(results, city, category);
-    return sendList(from, `🔍 ${category || "Suppliers"} — ${city}\n${results.length} found`, rows);
+const rows = formatSupplierResults(results, city, category || product);
+    const locationLabel = city || "All Cities";
+    const searchLabel = category || product || "Suppliers";
+    return sendList(from, `🔍 ${searchLabel} — ${locationLabel}\n${results.length} found`, rows);
   }
 
   // ── View supplier detail ───────────────────────────────────────────────────
@@ -2499,6 +2507,159 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
         { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
     });
+  }
+
+  // ── sup_search_all: buyer wants to search by product name (free text) ─────
+  if (a === "sup_search_all") {
+    if (biz) {
+      biz.sessionState = "supplier_search_product";
+      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: biz.sessionData?.supplierSearch || {} };
+      await saveBizSafe(biz);
+    } else {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.supplierSearchMode": "product" } },
+        { upsert: true }
+      );
+    }
+    return sendButtons(from, {
+      text: "🔍 *Search by product*\n\nType the product name you are looking for:\n\nExample: _flour_, _cooking oil_, _tiles_",
+      buttons: [{ id: "find_supplier", title: "⬅ Back" }]
+    });
+  }
+
+  // ── Buyer: free-text product search ──────────────────────────────────────
+  if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
+    const productQuery = text.trim();
+    if (!productQuery || productQuery.length < 1) {
+      return sendButtons(from, {
+        text: "❌ Please type the product name:",
+        buttons: [{ id: "find_supplier", title: "⬅ Back" }]
+      });
+    }
+
+    // Ask city after product
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { product: productQuery }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+
+    return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+      ...SUPPLIER_CITIES.map(c => ({
+        id: `sup_search_city_${c.toLowerCase()}`,
+        title: c
+      })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
+    ]);
+  }
+
+  // ── Buyer order: product name text input ──────────────────────────────────
+  if (biz?.sessionState === "supplier_order_product" && !isMetaAction) {
+    const productQuery = text.trim();
+    if (!productQuery || productQuery.length < 1) {
+      return sendButtons(from, {
+        text: "❌ Please type the product name:",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
+    }
+    biz.sessionData = { ...(biz.sessionData || {}), orderProduct: productQuery };
+    biz.sessionState = "supplier_order_quantity";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `🛒 *${productQuery}*\n\nHow many / what quantity do you need?`,
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Buyer order: quantity text input ──────────────────────────────────────
+  if (biz?.sessionState === "supplier_order_quantity" && !isMetaAction) {
+    const qty = text.trim();
+    if (!qty || qty.length < 1) {
+      return sendButtons(from, {
+        text: "❌ Please enter the quantity (e.g. 2 bags, 5kg, 3 units):",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
+    }
+    biz.sessionData = { ...(biz.sessionData || {}), orderQuantity: qty };
+    biz.sessionState = "supplier_order_address";
+    await saveBizSafe(biz);
+
+    const supplierId = biz.sessionData?.orderSupplierId;
+    const supplierDoc = supplierId
+      ? await SupplierProfile.findById(supplierId).lean()
+      : null;
+
+    const deliveryPrompt = supplierDoc?.delivery?.available
+      ? "📍 *Send your delivery address:*\n\nExample: 12 Borrowdale Rd, Harare"
+      : "🏠 This supplier is *collection only.*\n\nSend a contact note or your name so they can prepare your order:";
+
+    return sendButtons(from, {
+      text: deliveryPrompt,
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Buyer order: address / contact note text input ────────────────────────
+  if (biz?.sessionState === "supplier_order_address" && !isMetaAction) {
+    const address = text.trim();
+    if (!address || address.length < 2) {
+      return sendButtons(from, {
+        text: "❌ Please enter your delivery address or contact note:",
+        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+      });
+    }
+
+    const supplierId = biz.sessionData?.orderSupplierId;
+    const orderProduct = biz.sessionData?.orderProduct || "Unspecified";
+    const orderQty = biz.sessionData?.orderQuantity || "1";
+
+    if (!supplierId) {
+      biz.sessionState = "ready"; biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Order session expired. Please search for the supplier again.");
+      return sendMainMenu(from);
+    }
+
+    const supplier = await SupplierProfile.findById(supplierId).lean();
+    if (!supplier) {
+      biz.sessionState = "ready"; biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Supplier not found. Please search again.");
+      return sendSuppliersMenu(from);
+    }
+
+    const order = await SupplierOrder.create({
+      supplierId: supplier._id,
+      supplierPhone: supplier.phone,
+      buyerPhone: phone,
+      items: `${orderProduct} x${orderQty}`,
+      deliveryAddress: address,
+      status: "pending",
+      amount: 0
+    });
+
+    await notifySupplierNewOrder(supplier.phone, {
+      orderId: order._id,
+      buyerPhone: from,
+      items: order.items,
+      deliveryAddress: address
+    });
+
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+
+    await sendText(from,
+`✅ *Order sent to ${supplier.businessName}!*
+
+📦 ${orderProduct} x${orderQty}
+📍 ${address}
+📞 Supplier: ${supplier.phone}
+
+They will confirm your order and send pricing shortly. 🎉`
+    );
+    return sendMainMenu(from);
   }
 
   // ── Accept order ──────────────────────────────────────────────────────────
