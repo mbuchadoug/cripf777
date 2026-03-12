@@ -2648,13 +2648,7 @@ const order = await SupplierOrder.create({
       status: "pending"
     });
 
-    await notifySupplierNewOrder(supplier.phone, {
-      orderId: order._id,
-      buyerPhone: from,
-      items: order.items,
-      deliveryAddress: address
-    });
-
+    await notifySupplierNewOrder(supplier.phone, order);
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
 
