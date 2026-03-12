@@ -119,37 +119,7 @@ export async function sendButtons(to, payloadOrText, maybeButtons) {
 
 // services/metaSender.js
 
-export async function sendList(to, titleOrConfig, items) {
-  let bodyText, buttonLabel, sections;
-
-  if (typeof titleOrConfig === "object" && titleOrConfig !== null) {
-    // Sectioned call: sendList(to, { text, buttonLabel, sections })
-    bodyText    = titleOrConfig.text        || "Options";
-    buttonLabel = titleOrConfig.buttonLabel || "Select";
-    sections    = (titleOrConfig.sections || []).map(s => ({
-      title: String(s.title || "Options").slice(0, 24),
-      rows: (s.rows || []).map(r => ({
-        id: r.id,
-        title: String(r.title || "").slice(0, 24),
-        ...(r.description ? { description: String(r.description).slice(0, 72) } : {})
-      }))
-    }));
-  } else {
-    // Flat call: sendList(to, "Title string", [...rows])
-    bodyText    = titleOrConfig;
-    buttonLabel = "Select";
-    sections    = [
-      {
-        title: "Options",
-        rows: (items || []).map(i => ({
-          id: i.id,
-          title: String(i.title || "").slice(0, 24),
-          ...(i.description ? { description: String(i.description).slice(0, 72) } : {})
-        }))
-      }
-    ];
-  }
-
+export async function sendList(to, title, items) {
   return axios.post(
     API,
     {
@@ -158,10 +128,21 @@ export async function sendList(to, titleOrConfig, items) {
       type: "interactive",
       interactive: {
         type: "list",
-        body: { text: bodyText },
+        body: { text: title },
         action: {
-          button: buttonLabel,
-          sections
+          button: "Select",
+          sections: [
+            {
+              title: "Options",
+              rows: items.map(i => ({
+                id: i.id,
+                title: String(i.title || "").slice(0, 24), // WhatsApp title limit
+                ...(i.description
+                  ? { description: String(i.description).slice(0, 72) } // WhatsApp desc limit
+                  : {})
+              }))
+            }
+          ]
         }
       }
     },
