@@ -712,7 +712,7 @@ export async function sendSuppliersMenu(to) {
     });
   }
 
-  if (supplier && !supplier.active) {
+if (supplier && !supplier.active) {
     const complete = isSupplierRegistrationComplete(supplier);
 
     const buttons = [
@@ -724,10 +724,6 @@ export async function sendSuppliersMenu(to) {
 
     if (complete) {
       buttons.push({ id: "my_supplier_account", title: "🏪 My Account" });
-    }
-
-    if (hasRealBiz) {
-      buttons.push({ id: "menu", title: "🏠 Main Menu" });
     }
 
     return sendButtons(to, {
