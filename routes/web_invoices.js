@@ -13,7 +13,7 @@ router.use(requireWebAuth);
 
 /**
  * GET /web/invoices
- * List all invoices — owners see all or filter by branch
+ * List all invoices - owners see all or filter by branch
  */
 router.get("/invoices", async (req, res) => {
   try {
@@ -74,7 +74,7 @@ router.get("/invoices", async (req, res) => {
       invoices: invoices.map(inv => ({
         ...inv,
         clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown",
-        branchName: inv.branchId?.name || "—"
+        branchName: inv.branchId?.name || "-"
       })),
       pagination: {
         currentPage: parseInt(page),
@@ -254,7 +254,7 @@ router.get("/invoices/:id", async (req, res) => {
       invoice: {
         ...invoice,
         clientName: invoice.clientId?.name || invoice.clientId?.phone || "Unknown",
-        branchName: invoice.branchId?.name || "—"
+        branchName: invoice.branchId?.name || "-"
       },
       isOwner: role === "owner",
       canEdit: ["owner", "manager"].includes(role)
@@ -273,7 +273,7 @@ router.get("/invoices/:id", async (req, res) => {
 
 /**
  * PUT /web/invoices/:id
- * Edit invoice — owners and managers only
+ * Edit invoice - owners and managers only
  */
 router.put("/invoices/:id", async (req, res) => {
   try {

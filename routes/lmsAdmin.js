@@ -15,7 +15,7 @@ function ensureAdmin(req, res, next) {
     (process.env.ADMIN_EMAILS || "").split(",").map(s => (s || "").trim().toLowerCase()).filter(Boolean)
   );
   if (!email || !adminSet.has(email)) {
-    return res.status(403).send("Forbidden — admin only");
+    return res.status(403).send("Forbidden - admin only");
   }
   return next();
 }

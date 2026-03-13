@@ -143,7 +143,7 @@ router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {
 });*/
 
 
-// routes/api_org_quiz.js — replace the existing POST "/:slug/quiz/submit" handler with this
+// routes/api_org_quiz.js - replace the existing POST "/:slug/quiz/submit" handler with this
 
 // POST /api/org/:slug/quiz/submit  (replace the old handler with this)
 router.post("/:slug/quiz/submit", ensureAuth, async (req, res) => {

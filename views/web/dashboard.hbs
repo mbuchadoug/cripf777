@@ -123,7 +123,7 @@
       </div>
       <div>
         <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--white)">{{user.currency}} {{stats.monthRcptCash}}</div>
-        <div style="font-size:11px;color:var(--muted-2)">Direct sales — {{stats.monthRcptCount}} receipts</div>
+        <div style="font-size:11px;color:var(--muted-2)">Direct sales - {{stats.monthRcptCount}} receipts</div>
       </div>
     </div>
   </div>
@@ -188,7 +188,7 @@
 {{#if branchPerformance.length}}
 <div class="card" style="margin-bottom:22px">
   <div class="card-header">
-    <div class="card-title"><i class="fas fa-code-branch"></i> Branch Performance — This Month</div>
+    <div class="card-title"><i class="fas fa-code-branch"></i> Branch Performance - This Month</div>
     <a href="/web/reports" class="btn btn-ghost btn-sm">Full breakdown →</a>
   </div>
   <div style="overflow-x:auto">
@@ -268,7 +268,7 @@
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
           <td style="text-align:right">
             <span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--green){{/if}}">
-              {{#if (eq this.type 'receipt')}}—{{else}}{{../user.currency}} {{this.balance}}{{/if}}
+              {{#if (eq this.type 'receipt')}}-{{else}}{{../user.currency}} {{this.balance}}{{/if}}
             </span>
           </td>
           <td>

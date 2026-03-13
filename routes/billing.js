@@ -32,7 +32,7 @@ router.post(
           price_data: {
             currency: "usd",
             product_data: {
-              name: `CRIPFCnt SCOI Audit — ${audit.subject.name}`,
+              name: `CRIPFCnt SCOI Audit - ${audit.subject.name}`,
               description: `${audit.assessmentWindow.label} · Placement Audit`
             },
             unit_amount: PRICE_CENTS

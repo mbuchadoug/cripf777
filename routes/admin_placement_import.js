@@ -20,7 +20,7 @@ const upload = multer({
 });
 
 // ─────────────────────────────────────────────
-// GET — Import page
+// GET - Import page
 // ─────────────────────────────────────────────
 router.get(
   "/admin/placement-import",
@@ -34,7 +34,7 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// POST — Import JSON
+// POST - Import JSON
 // ─────────────────────────────────────────────
 router.post(
   "/admin/placement-import",

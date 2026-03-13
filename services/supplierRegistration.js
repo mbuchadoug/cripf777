@@ -155,11 +155,11 @@ What is your price for *${first}*?
 Just send the amount followed by the unit.
 
 *Examples:*
-- *4.50 litre* — for cooking oil by litre
-- *8.00 bag* — for a bag of rice
-- *1.20 kg* — for sugar per kg
-- *12.00 dozen* — for eggs per dozen
-- *5.00 each* — for single items
+- *4.50 litre* - for cooking oil by litre
+- *8.00 bag* - for a bag of rice
+- *1.20 kg* - for sugar per kg
+- *12.00 dozen* - for eggs per dozen
+- *5.00 each* - for single items
 
 _If you don't know yet, tap Skip below._`,
       buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
@@ -365,7 +365,7 @@ Plan: *${SUPPLIER_PLANS[supplierPayment.tier].name} (${supplierPayment.plan})*
 Amount: *$${planDetails.price} ${planDetails.currency}*
 EcoCash: *${normalized}*
 
-👉 *Check your phone now* — approve the EcoCash payment prompt.
+👉 *Check your phone now* - approve the EcoCash payment prompt.
 
 We will activate your listing automatically once payment is confirmed. ✅`
       );
@@ -493,7 +493,7 @@ Need help? Contact support.`
     return true;
   }
 
-  // ── Step 5b: Payment pending — waiting for confirmation ──────────────────
+  // ── Step 5b: Payment pending - waiting for confirmation ──────────────────
   if (state === "supplier_reg_payment_pending") {
     await sendText(from,
 `⏳ *Waiting for your EcoCash payment...*

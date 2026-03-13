@@ -44,7 +44,7 @@ router.get(
 
 // Case 1: attempt belongs to a student child
 // ✅ Resolve child via ExamInstance (SOURCE OF TRUTH)
-// ✅ Ownership check — SIMPLE AND CORRECT
+// ✅ Ownership check - SIMPLE AND CORRECT
 const child = await User.findOne({
   _id: attempt.userId,
   parentUserId: req.user._id,

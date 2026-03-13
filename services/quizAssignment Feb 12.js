@@ -64,7 +64,7 @@ await ExamInstance.create({
 
   module: rule.module,
 
-  // 🔥 REQUIRED — THIS IS THE FIX
+  // 🔥 REQUIRED - THIS IS THE FIX
   title: rule.quizTitle,
   quizTitle: rule.quizTitle,
   quizType: rule.quizType, // "trial" or "paid"

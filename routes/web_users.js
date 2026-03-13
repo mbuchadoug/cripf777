@@ -25,7 +25,7 @@ function ownerOnly(req, res, next) {
 
 /**
  * GET /web/users
- * List all staff — show role, branch, status, last activity
+ * List all staff - show role, branch, status, last activity
  */
 router.get("/users", ownerOnly, async (req, res) => {
   try {
@@ -45,7 +45,7 @@ router.get("/users", ownerOnly, async (req, res) => {
           .lean();
         return {
           ...u,
-          branchName: u.branchId?.name || "—",
+          branchName: u.branchId?.name || "-",
           lastActivity: lastInvoice?.createdAt || null,
           lastDoc: lastInvoice?.number || null
         };
@@ -74,7 +74,7 @@ router.get("/users", ownerOnly, async (req, res) => {
 
 /**
  * POST /web/users/invite
- * Invite a new user via WhatsApp — creates a pending UserRole.
+ * Invite a new user via WhatsApp - creates a pending UserRole.
  * The user must respond on WhatsApp to complete onboarding,
  * but the owner pre-assigns role and branch here.
  */
@@ -246,7 +246,7 @@ router.get("/users/:id/activity", ownerOnly, async (req, res) => {
       layout: "web",
       title: `${user.phone} Activity - ZimQuote`,
       user: req.webUser,
-      member: { ...user, branchName: user.branchId?.name || "—" },
+      member: { ...user, branchName: user.branchId?.name || "-" },
       invoices: invoices.map(i => ({
         ...i,
         clientName: i.clientId?.name || i.clientId?.phone || "Unknown"

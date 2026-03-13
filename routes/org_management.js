@@ -655,7 +655,7 @@ router.post(
 /*  (kept unchanged except minor style)                               */
 /* ------------------------------------------------------------------ */
 
-// (Keep your existing assign-quiz code here — I left it unchanged in your original file.)
+// (Keep your existing assign-quiz code here - I left it unchanged in your original file.)
 // For brevity in this file I will reuse the code block you already had above in your original file.
 // If you want me to paste the full assign-quiz implementation here too, tell me and I'll include it exactly as before.
 

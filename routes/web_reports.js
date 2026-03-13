@@ -91,11 +91,11 @@ router.get("/reports", async (req, res) => {
     //   Invoice (type="receipt") → DIRECT CASH SALE; instantly fully paid
     //     • balance=0, status="paid", amountPaid=total always
     //     • Income received IN FULL on createdAt date
-    //     • No InvoicePayment record — the receipt IS the payment
+    //     • No InvoicePayment record - the receipt IS the payment
     //
     //   invoiced       = sum invoice.total      (what was billed)
     //   paymentCash    = sum InvoicePayment.amount  (cash collected on invoices)
-    //   receiptCash    = sum receipt.total      (direct cash sales — 100% instant income)
+    //   receiptCash    = sum receipt.total      (direct cash sales - 100% instant income)
     //   cashReceived   = paymentCash + receiptCash
     //   spent          = sum Expense.amount
     //   netProfit      = cashReceived - spent
@@ -108,7 +108,7 @@ router.get("/reports", async (req, res) => {
 
     const [
       invoices,
-      receipts,       // direct cash sales — income received in full on creation
+      receipts,       // direct cash sales - income received in full on creation
       payments,
       expenses,
       prevInvoices,
@@ -139,7 +139,7 @@ router.get("/reports", async (req, res) => {
     const totalRevenue = fmt(invoiced + receiptCash);   // total business revenue
 
     // Collection rate = invoice payments only / invoiced
-    // (receipts are NOT "collected" — they are direct instant sales)
+    // (receipts are NOT "collected" - they are direct instant sales)
     const collectionRate = pct(paymentCash, invoiced);
     const profitMargin   = pct(netProfit, cashReceived);
     const avgSale        = invoices.length > 0 ? fmt(invoiced / invoices.length) : 0;
@@ -202,7 +202,7 @@ router.get("/reports", async (req, res) => {
       .sort((a, b) => b.total - a.total);
 
     // ── Top products/services ──────────────────────────────────────────────────
-    // Include items from BOTH invoices AND receipts — both generate revenue
+    // Include items from BOTH invoices AND receipts - both generate revenue
     const prodMap = {};
     [...invoices, ...receipts].forEach(doc => {
       (doc.items || []).forEach(item => {
@@ -244,7 +244,7 @@ router.get("/reports", async (req, res) => {
     const worstDay = sortedDays.length ? { date: sortedDays[sortedDays.length - 1][0], amount: fmt(sortedDays[sortedDays.length - 1][1]) } : null;
 
     // ── Overdue analysis ───────────────────────────────────────────────────────
-    // Only invoices can be overdue — receipts are always instantly paid
+    // Only invoices can be overdue - receipts are always instantly paid
     const termsDays = req.webUser.paymentTermsDays || 30;
     const nowMs     = Date.now();
     const overdueList = [];
@@ -264,8 +264,8 @@ router.get("/reports", async (req, res) => {
       .sort((a, b) => b.total - a.total).slice(0, 5)
       .map(i => ({ number: i.number, total: fmt(i.total), status: i.status }));
 
-    // ── Activity log — BOTH invoices AND receipts ──────────────────────────────
-    // Receipts are income records — must appear in activity log
+    // ── Activity log - BOTH invoices AND receipts ──────────────────────────────
+    // Receipts are income records - must appear in activity log
     const recentDocs = await Invoice.find({ ...baseQ, type: { $in: ["invoice", "receipt"] }, createdAt: dr })
       .populate("clientId", "name phone")
       .sort({ createdAt: -1 })
@@ -280,8 +280,8 @@ router.get("/reports", async (req, res) => {
       total:      fmt(doc.total),
       balance:    fmt(doc.balance),
       status:     doc.status,
-      clientName: doc.clientId?.name || doc.clientId?.phone || "—",
-      branchName: branchMap[String(doc.branchId)] || "—",
+      clientName: doc.clientId?.name || doc.clientId?.phone || "-",
+      branchName: branchMap[String(doc.branchId)] || "-",
       createdAt:  doc.createdAt
     }));
 
@@ -297,7 +297,7 @@ router.get("/reports", async (req, res) => {
           { $match: { businessId, createdAt: dr } },
           { $group: { _id: { $ifNull: ["$branchId", "NONE"] }, cashIn: { $sum: "$amount" } } }
         ]),
-        // Receipts per branch: direct cash sales — add full amount to collected
+        // Receipts per branch: direct cash sales - add full amount to collected
         Invoice.aggregate([
           { $match: { businessId, type: "receipt", createdAt: dr } },
           { $group: { _id: { $ifNull: ["$branchId", "NONE"] }, rcptCash: { $sum: "$total" }, rcptCount: { $sum: 1 } } }
@@ -349,7 +349,7 @@ router.get("/reports", async (req, res) => {
 
     res.render("web/reports/sales", {
       layout:  "web",
-      title:   "Reports — ZimQuote",
+      title:   "Reports - ZimQuote",
       pageKey: "reports",
       user:    req.webUser,
       isOwner: role === "owner",
@@ -363,7 +363,7 @@ router.get("/reports", async (req, res) => {
 
       summary: {
         invoiced,         // billed via invoices
-        receiptCash,      // direct cash sales (receipts — instant income)
+        receiptCash,      // direct cash sales (receipts - instant income)
         totalRevenue,     // invoiced + receiptCash
         paymentCash,      // cash collected on invoices
         cashReceived,     // paymentCash + receiptCash (total money in)
@@ -447,7 +447,7 @@ router.get("/reports/export", async (req, res) => {
       type:       doc.type,
       date:       new Date(doc.createdAt).toISOString().slice(0, 10),
       client:     doc.clientId?.name || doc.clientId?.phone || "Unknown",
-      branch:     branchMap[String(doc.branchId)] || "—",
+      branch:     branchMap[String(doc.branchId)] || "-",
       total:      doc.total,
       amountPaid: doc.amountPaid,
       balance:    doc.balance,

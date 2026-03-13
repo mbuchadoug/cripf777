@@ -10,16 +10,16 @@
 <!-- Open Graph -->
 <meta property="og:site_name" content="CRIPFCnt" />
 <meta property="og:type" content="website" />
-<meta property="og:title" content="CRIPFCnt — Recalibrating Intelligence & Society" />
+<meta property="og:title" content="CRIPFCnt - Recalibrating Intelligence & Society" />
 <meta property="og:description" content="CRIPFCnt by Donald Mataranyika: an eight-pillar framework and life manual redefining consciousness, responsibility and interpretation for the AI age." />
 <meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
 <meta property="og:image" content="{{siteUrl}}/static/img/logo.png" />
-<meta property="og:image:alt" content="CRIPFCnt — Donald Mataranyika" />
+<meta property="og:image:alt" content="CRIPFCnt - Donald Mataranyika" />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="CRIPFCnt — Recalibrating Intelligence & Society" />
-<meta name="twitter:description" content="CRIPFCnt — an eight-pillar framework and life manual for society, leadership and the AI era." />
+<meta name="twitter:title" content="CRIPFCnt - Recalibrating Intelligence & Society" />
+<meta name="twitter:description" content="CRIPFCnt - an eight-pillar framework and life manual for society, leadership and the AI era." />
 <meta name="twitter:image" content="{{siteUrl}}/static/img/logo.png" />
 
   <style>
@@ -142,9 +142,9 @@
 
       const output = document.getElementById("output");
       output.innerHTML = `
-        <b>🔍 SCOI Audit — ${escapeHtml(entity)}</b><br><br>
+        <b>🔍 SCOI Audit - ${escapeHtml(entity)}</b><br><br>
         <div class="loader" role="status" aria-hidden="true"></div>
-        <div class="loading-text">Analyzing "${escapeHtml(entity)}" — this may take a few seconds...</div>
+        <div class="loading-text">Analyzing "${escapeHtml(entity)}" - this may take a few seconds...</div>
       `;
 
       try {
@@ -281,7 +281,7 @@
           </div>
         `;
 
-        output.innerHTML = `<div><strong>Results for:</strong> ${escapeHtml(entity)}</div><br>` + (formatted || "<div>No detailed sections were produced — the model returned a short summary.</div>") + note;
+        output.innerHTML = `<div><strong>Results for:</strong> ${escapeHtml(entity)}</div><br>` + (formatted || "<div>No detailed sections were produced - the model returned a short summary.</div>") + note;
 
       } catch (err) {
         const output = document.getElementById("output");

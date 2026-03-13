@@ -1,7 +1,7 @@
 <div class="page-header">
   <div>
     <div class="page-title">Team &amp; Branches</div>
-    <div class="page-subtitle">Manage your branches, invite staff, and assign roles — mirrors your WhatsApp bot exactly.</div>
+    <div class="page-subtitle">Manage your branches, invite staff, and assign roles - mirrors your WhatsApp bot exactly.</div>
   </div>
 </div>
 
@@ -133,8 +133,8 @@
             <div class="form-group" style="margin-bottom:0;">
               <label class="form-label">Role</label>
               <select name="role" class="form-select">
-                <option value="clerk">Clerk — basic sales &amp; expenses</option>
-                <option value="manager">Manager — reports &amp; users</option>
+                <option value="clerk">Clerk - basic sales &amp; expenses</option>
+                <option value="manager">Manager - reports &amp; users</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom:0;">
@@ -264,7 +264,7 @@
           <!-- Branch -->
           <td>
             <span style="font-size:12px; color:var(--white);">
-              {{#if this.branchId}}{{this.branchId.name}}{{else}}<span style="color:var(--muted-2);">—</span>{{/if}}
+              {{#if this.branchId}}{{this.branchId.name}}{{else}}<span style="color:var(--muted-2);">-</span>{{/if}}
             </span>
           </td>
 
@@ -280,7 +280,7 @@
           <!-- Reassign branch (inline mini-form) -->
           <td>
             {{#if (eq this.role "owner")}}
-            <span style="font-size:11px; color:var(--muted-2);">—</span>
+            <span style="font-size:11px; color:var(--muted-2);">-</span>
             {{else}}
             <form method="POST" action="/web/team/user/assign-branch"
               style="display:flex; gap:6px; align-items:center;">
@@ -348,10 +348,10 @@ if (teamAlert) {
 }
 
 // ── Build JOIN link from WhatsApp bot number in env ────────────────────────
-// The bot number comes from the page — we derive it from what the chatbot uses.
+// The bot number comes from the page - we derive it from what the chatbot uses.
 // We embed it server-side via a data attribute to keep it dynamic.
 (function() {
-  // Pull from a meta tag we'll inject — see note below
+  // Pull from a meta tag we'll inject - see note below
   const meta = document.querySelector('meta[name="bot-number"]');
   const botRaw = meta ? meta.content : "";
   const display = document.getElementById('joinLinkDisplay');

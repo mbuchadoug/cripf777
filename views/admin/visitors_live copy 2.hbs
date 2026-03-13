@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin — Live Visitors</title>
+  <title>Admin - Live Visitors</title>
   <style>
     /* Modern fixed navbar + layout */
     :root{
@@ -67,7 +67,7 @@
   <nav class="navbar" role="navigation" aria-label="Admin main navigation">
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
-      <h1>CRIPFCnt — Admin</h1>
+      <h1>CRIPFCnt - Admin</h1>
     </div>
 
     <div class="nav-links" role="menubar" aria-label="Admin pages">
@@ -125,11 +125,11 @@
           <div class="metrics" style="margin-top:14px">
             <div class="metric">
               <h4>Total hits (today)</h4>
-              <p id="totalHits">—</p>
+              <p id="totalHits">-</p>
             </div>
             <div class="metric">
               <h4>Unique visitors (today)</h4>
-              <p id="uniqueToday">—</p>
+              <p id="uniqueToday">-</p>
             </div>
             <div class="metric" style="flex:2">
               <h4>Top paths (today)</h4>
@@ -176,7 +176,7 @@
 
           topPathsEl.innerHTML='';
           (data.topPaths||[]).forEach(tp=>{
-            const el = document.createElement('div'); el.style.fontSize='0.95rem'; el.textContent = `${tp._id} — ${tp.hits} hits`; topPathsEl.appendChild(el);
+            const el = document.createElement('div'); el.style.fontSize='0.95rem'; el.textContent = `${tp._id} - ${tp.hits} hits`; topPathsEl.appendChild(el);
           });
 
           const entry = document.createElement('div'); entry.className='log-item'; entry.textContent=`[${new Date(data.timestamp).toLocaleTimeString()}] total=${data.totalHits} unique=${data.uniqueToday}`; logEl.prepend(entry);

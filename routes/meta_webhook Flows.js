@@ -290,7 +290,7 @@ if (msg.type === "document") {
 
   } catch (e) {
     console.error("[META WEBHOOK ERROR]", e);
-    // ❌ Do NOT send res here — Meta already got 200
+    // ❌ Do NOT send res here - Meta already got 200
   }
 });
 

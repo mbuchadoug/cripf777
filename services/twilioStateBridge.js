@@ -252,7 +252,7 @@ const restrictedStateMap = {
     cash_payout_amount: "payments",
     cash_payout_reason: "payments",
     invite_user_phone: "users"
-    // Supplier states are intentionally NOT restricted —
+    // Supplier states are intentionally NOT restricted -
     // any role (owner, clerk, manager) can access the supplier marketplace
   };
 
@@ -1221,7 +1221,7 @@ console.log("INVOICE BRANCH DEBUG", {
     await saveBizSafe(biz);
 
     await sendText(from,
-      `💳 *${payment.tier.toUpperCase()} Plan — $${payment.amount}*\n` +
+      `💳 *${payment.tier.toUpperCase()} Plan - $${payment.amount}*\n` +
       `EcoCash: ${ecocashPhone}\n\n` +
       `Please confirm the payment prompt on your phone.`
     );

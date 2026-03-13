@@ -5,7 +5,7 @@ import { ensureAuth } from "../middleware/authGuard.js";
 const router = Router();
 
 /**
- * LIST — Special SCOI Audits
+ * LIST - Special SCOI Audits
  */
 router.get("/admin/special-scoi-audits", ensureAuth, async (req, res) => {
   try {
@@ -24,7 +24,7 @@ router.get("/admin/special-scoi-audits", ensureAuth, async (req, res) => {
 });
 
 /**
- * VIEW — Single Special SCOI Audit
+ * VIEW - Single Special SCOI Audit
  * ❗ DO NOT use .lean() (needed for getters, formatting, etc.)
  */
 router.get(

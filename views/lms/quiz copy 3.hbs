@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{{displayModule}} — {{#if isOrg}}{{orgSlug}} Quiz{{else}}Quick Quiz{{/if}}</title>
+  <title>{{displayModule}} - {{#if isOrg}}{{orgSlug}} Quiz{{else}}Quick Quiz{{/if}}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{
@@ -61,7 +61,7 @@
     <div class="card" role="main" aria-labelledby="quiz-title">
       <h1 id="quiz-title">
         {{displayModule}}
-        {{#if isOrg}} — {{orgSlug}} Quiz{{else}} — Quick Quiz{{/if}}
+        {{#if isOrg}} - {{orgSlug}} Quiz{{else}} - Quick Quiz{{/if}}
       </h1>
 
       <div class="muted">
@@ -258,7 +258,7 @@
        function showResult(resp){
       // show top summary
       result.style.display = 'block';
-      result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
+      result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} - ${resp.percentage}%</div>
                           <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
                           <div style="margin-top:10px">Detailed feedback below:</div>`;
 

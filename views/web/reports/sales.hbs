@@ -124,7 +124,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:9px">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--white)">Direct Sales <span style="font-size:10px;font-weight:500;color:var(--blue);background:rgba(88,166,255,0.1);padding:2px 6px;border-radius:4px;margin-left:4px">Receipts</span></div>
-          <div style="font-size:11px;color:var(--muted-2)">{{summary.receiptCount}} direct cash sales — instantly paid in full</div>
+          <div style="font-size:11px;color:var(--muted-2)">{{summary.receiptCount}} direct cash sales - instantly paid in full</div>
         </div>
         <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">{{user.currency}} {{summary.receiptCash}}</span>
       </div>
@@ -221,7 +221,7 @@
 <!-- ══ INVOICE STATUS + PAYMENT METHODS ══════════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
-  <!-- Invoice status breakdown — invoices only, receipts always paid separately -->
+  <!-- Invoice status breakdown - invoices only, receipts always paid separately -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-file-invoice"></i> Invoice Status</div>
@@ -262,7 +262,7 @@
             <td style="text-align:right"><span class="td-mono">{{summary.receiptCount}}</span></td>
             <td style="text-align:right"><span class="td-mono">{{user.currency}} {{summary.receiptCash}}</span></td>
             <td style="text-align:right"><span class="td-mono" style="color:var(--green)">{{user.currency}} {{summary.receiptCash}}</span></td>
-            <td style="text-align:right"><span class="td-mono" style="color:var(--muted-2)">—</span></td>
+            <td style="text-align:right"><span class="td-mono" style="color:var(--muted-2)">-</span></td>
           </tr>
           {{/if}}
         </tbody>
@@ -390,7 +390,7 @@
 <!-- ══ OVERDUE ANALYSIS + PERIOD HIGHLIGHTS ══════════════════════════════════ -->
 <div class="grid-2" style="margin-bottom:22px">
 
-  <!-- Outstanding receivables — invoices only, receipts can't be overdue -->
+  <!-- Outstanding receivables - invoices only, receipts can't be overdue -->
   <div class="card">
     <div class="card-header">
       <div class="card-title"><i class="fas fa-triangle-exclamation"></i> Outstanding Receivables</div>
@@ -401,7 +401,7 @@
       {{#if overdueList.length}}
       <div style="margin-bottom:16px">
         <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">
-          Overdue ({{overdueList.length}}) — {{user.currency}} {{totalOverdue}}
+          Overdue ({{overdueList.length}}) - {{user.currency}} {{totalOverdue}}
         </div>
         {{#each overdueList}}
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:7px;background:rgba(248,81,73,0.05);margin-bottom:4px;border:1px solid rgba(248,81,73,0.1)">
@@ -431,7 +431,7 @@
       {{#unless overdueList.length}}{{#unless currentList.length}}
       <div class="empty-state" style="padding:24px">
         <i class="fas fa-check-circle" style="color:var(--green)"></i>
-        <p>All invoices settled — no outstanding balances</p>
+        <p>All invoices settled - no outstanding balances</p>
       </div>
       {{/unless}}{{/unless}}
 
@@ -449,7 +449,7 @@
       <div style="padding:12px 14px;border:1px solid rgba(63,185,80,0.25);border-radius:9px;background:rgba(63,185,80,0.04)">
         <div style="font-size:10px;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:4px">Best Day</div>
         <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green);font-weight:600">
-          {{bestDay.date}} — {{user.currency}} {{bestDay.amount}}
+          {{bestDay.date}} - {{user.currency}} {{bestDay.amount}}
         </div>
       </div>
       {{/if}}
@@ -458,7 +458,7 @@
       <div style="padding:12px 14px;border:1px solid var(--border);border-radius:9px">
         <div style="font-size:10px;color:var(--muted-2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:4px">Slowest Day</div>
         <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);font-weight:600">
-          {{worstDay.date}} — {{user.currency}} {{worstDay.amount}}
+          {{worstDay.date}} - {{user.currency}} {{worstDay.amount}}
         </div>
       </div>
       {{/if}}
@@ -567,7 +567,7 @@
           <td style="text-align:right"><span class="td-mono">{{../user.currency}} {{this.total}}</span></td>
           <td style="text-align:right">
             <span class="td-mono" style="{{#if (gt this.balance 0)}}color:var(--red){{else}}color:var(--muted-2){{/if}}">
-              {{#if (eq this.type 'receipt')}}—{{else}}{{../user.currency}} {{this.balance}}{{/if}}
+              {{#if (eq this.type 'receipt')}}-{{else}}{{../user.currency}} {{this.balance}}{{/if}}
             </span>
           </td>
           <td>

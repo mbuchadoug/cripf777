@@ -160,7 +160,7 @@
     }
 
     // --- New helper: render one normal question into quizArea and return canonical question object
-    // positionLabel is optional — used to show numbering (Q1, Q2, ...)
+    // positionLabel is optional - used to show numbering (Q1, Q2, ...)
     function renderSingleQuestion(qObj, positionLabel) {
       const q = repairBlock(qObj);
       const qid = q.id || q._id || ('q-' + Math.random().toString(36).slice(2,9));
@@ -268,7 +268,7 @@
 
           quizArea.appendChild(passageBlock);
 
-          // Render children — prefer server to include full child objects in `children`
+          // Render children - prefer server to include full child objects in `children`
           const children = Array.isArray(item.children) ? item.children : [];
 
           if (!children.length) {
@@ -378,7 +378,7 @@
             bodyText = (ee && ee.message) || 'unknown';
           }
 
-          const msg = `submit failed (${res.status}) — ${bodyText || res.statusText}`;
+          const msg = `submit failed (${res.status}) - ${bodyText || res.statusText}`;
           console.warn('Submit response not ok:', res.status, bodyText);
           status.textContent = '';
           errorMsg.textContent = msg;
@@ -405,7 +405,7 @@
     function showResult(resp){
       result.style.display = 'block';
       result.innerHTML =
-        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' — ' + resp.percentage + '%</div>' +
+        '<div style="font-weight:800;font-size:16px">Score: ' + resp.score + ' / ' + resp.total + ' - ' + resp.percentage + '%</div>' +
         '<div style="margin-top:8px">' +
         (resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>') +
         ' (pass ' + resp.passThreshold + '%)</div>' +
@@ -479,7 +479,7 @@
         passMessage.style.fontWeight = '700';
         passMessage.style.fontSize = '15px';
         passMessage.style.marginBottom = '8px';
-        passMessage.textContent = 'Congratulations — you passed the quiz!';
+        passMessage.textContent = 'Congratulations - you passed the quiz!';
 
         certBox.appendChild(passMessage);
 

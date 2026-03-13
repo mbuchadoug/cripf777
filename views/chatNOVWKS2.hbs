@@ -68,7 +68,7 @@
       const entity = document.getElementById("entity").value.trim();
       if(!entity) return alert("Enter a company name");
       const output = document.getElementById("output");
-      output.innerHTML = `<b>🔍 SCOI Audit — ${escapeHtml(entity)}</b><br><br><div class="loader"></div><div class="loading-text">Analyzing data for ${escapeHtml(entity)}...</div>`;
+      output.innerHTML = `<b>🔍 SCOI Audit - ${escapeHtml(entity)}</b><br><br><div class="loader"></div><div class="loading-text">Analyzing data for ${escapeHtml(entity)}...</div>`;
 
       try{
         const res = await fetch("/api/chat-stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entity }) });
@@ -100,7 +100,7 @@
           const rawSCOI = visibility===0?0:+(contribution/visibility).toFixed(3);
           const erfUsed = ERF||1;
           const adjusted = +(rawSCOI * erfUsed).toFixed(3);
-          const auth = `<div class="section"><div class="section-header">✅ Computed SCOI — authoritative</div><div>Visibility = ${visibility} / 10<br>Contribution = ${contribution} / 10<br>SCOI = Contribution / Visibility = ${contribution} / ${visibility} = <b>${rawSCOI}</b><br>ERF = ${erfUsed}<br>Adjusted SCOI = SCOI × ERF = <b>${adjusted}</b></div></div><div class="divider"></div>`;
+          const auth = `<div class="section"><div class="section-header">✅ Computed SCOI - authoritative</div><div>Visibility = ${visibility} / 10<br>Contribution = ${contribution} / 10<br>SCOI = Contribution / Visibility = ${contribution} / ${visibility} = <b>${rawSCOI}</b><br>ERF = ${erfUsed}<br>Adjusted SCOI = SCOI × ERF = <b>${adjusted}</b></div></div><div class="divider"></div>`;
           formatted = auth + formatted;
         }
         formatted = formatted.replace(/(\d+(\.\d+)?\s*[×\/]\s*\d+(\.\d+)?)/g,"<b>$1</b>").replace(/\b(SCOI\s*=?\s*[\d.]+)/gi,"<b style='color:#004c99;'>$1</b>").replace(/\b(ERF\s*=?\s*[\d.]+)/gi,"<b style='color:#006600;'>$1</b>");

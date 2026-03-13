@@ -41,9 +41,9 @@ function ensureAdmin(req, res, next) {
   const ADMIN_SET = getAdminSet();
   if (!email || !ADMIN_SET.has(email)) {
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      return res.status(403).send("<h3>Forbidden — admin only</h3>");
+      return res.status(403).send("<h3>Forbidden - admin only</h3>");
     }
-    return res.status(403).json({ error: "Forbidden — admin only" });
+    return res.status(403).json({ error: "Forbidden - admin only" });
   }
   next();
 }

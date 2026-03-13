@@ -261,7 +261,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 }
 
 /* =============================================================================
-   REPORTS MENU — Owner sees two-tier, managers/clerks see their branch only
+   REPORTS MENU - Owner sees two-tier, managers/clerks see their branch only
 ============================================================================= */
 export async function sendReportsMenu(to, isGold = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
@@ -751,11 +751,11 @@ if (supplier && !supplier.active) {
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {
   return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}`, [
-    { id: "sup_plan_basic_monthly", title: "✅ Basic — $5/mo" },
-    { id: "sup_plan_basic_annual", title: "✅ Basic — $50/yr (save $10)" },
-    { id: "sup_plan_pro_monthly", title: "⭐ Pro — $12/mo" },
-    { id: "sup_plan_pro_annual", title: "⭐ Pro — $120/yr (save $24)" },
-    { id: "sup_plan_featured_monthly", title: "🔥 Featured — $25/mo" },
+    { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/mo" },
+    { id: "sup_plan_basic_annual", title: "✅ Basic - $50/yr (save $10)" },
+    { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/mo" },
+    { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/yr (save $24)" },
+    { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/mo" },
     { id: "back", title: "⬅ Back" }
   ]);
 }
@@ -773,7 +773,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   const statusIcon = supplier.active ? "🟢" : "🔴";
   const renewDate = supplier.subscriptionExpiresAt
     ? new Date(supplier.subscriptionExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-    : "—";
+    : "-";
 
   const priceCount = supplier.prices?.length || 0;
   const productCount = supplier.products?.length || 0;

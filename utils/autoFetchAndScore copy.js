@@ -21,7 +21,7 @@ export async function autoFetchAndScore(entity) {
   try {
     // 🕸️ Step 1: Web search for sustainability/ESG data
     const searchPrompt = `
-Find real, public information on ${entity} — specifically:
+Find real, public information on ${entity} - specifically:
 - ESG data, sustainability reports, CSR activities
 - Environmental impact, community contribution, governance quality
 
@@ -40,9 +40,9 @@ If nothing is found, respond with "NO DATA FOUND".
     // 🧮 Step 2: Convert qualitative web data to CRIPFCnt numeric values
     const analysisPrompt = `
 You are the CRIPFCnt analyzer. Based on this data about "${entity}", estimate:
-1. Voluntary Impact (VI) — 0 to 100
-2. Negative Externalities (NE) — 0 to 100
-3. Income Dependence (I) — 0 to 100
+1. Voluntary Impact (VI) - 0 to 100
+2. Negative Externalities (NE) - 0 to 100
+3. Income Dependence (I) - 0 to 100
 
 Respond strictly in JSON: {"VI": number, "NE": number, "I": number}
 Then, briefly explain your reasoning and list source credibility scores (0–1).

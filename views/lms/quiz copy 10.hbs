@@ -179,7 +179,7 @@ const QUIZ_TITLE =
     }
 
     // --- New helper: render one normal question into quizArea and return canonical question object
-    // positionLabel is optional — used to show numbering (Q1, Q2, ...)
+    // positionLabel is optional - used to show numbering (Q1, Q2, ...)
 function renderSingleQuestion(qObj, positionLabel) {
   const q = repairBlock(qObj);
 
@@ -323,7 +323,7 @@ return q;
 
           quizArea.appendChild(passageBlock);
 
-          // Render children — prefer server to include full child objects in `children`
+          // Render children - prefer server to include full child objects in `children`
           const children = Array.isArray(item.children) ? item.children : [];
 
           if (!children.length) {

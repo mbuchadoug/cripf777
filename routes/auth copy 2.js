@@ -51,7 +51,7 @@ function decodeState(state) {
 /*  ✅ PARENT SIGNUP ROUTE (renamed from /start to avoid conflict)    */
 /* ================================================================== */
 router.get("/parent", async (req, res) => {
-  // Already logged in — switch role directly, no need to re-authenticate
+  // Already logged in - switch role directly, no need to re-authenticate
   if (req.user) {
     if (!["parent", "private_teacher"].includes(req.user.role)) {
       await User.updateOne(
@@ -62,7 +62,7 @@ router.get("/parent", async (req, res) => {
     }
     return res.redirect("/parent/dashboard");
   }
-  // Not logged in — go through Google OAuth
+  // Not logged in - go through Google OAuth
   req.session.signupSource = "parent";
   req.session.save(() => {
     res.redirect("/auth/google");
@@ -74,7 +74,7 @@ router.get("/parent", async (req, res) => {
 /*  ✅ PRIVATE TEACHER SIGNUP ROUTE                                   */
 /* ================================================================== */
 router.get("/teacher", async (req, res) => {
-  // Already logged in — switch role directly, no need to re-authenticate
+  // Already logged in - switch role directly, no need to re-authenticate
   if (req.user) {
     if (req.user.role !== "private_teacher") {
       await User.updateOne(
@@ -90,7 +90,7 @@ router.get("/teacher", async (req, res) => {
     }
     return res.redirect("/teacher/dashboard");
   }
-  // Not logged in — go through Google OAuth
+  // Not logged in - go through Google OAuth
   req.session.signupSource = "private_teacher";
   req.session.save(() => {
     res.redirect("/auth/google");
@@ -216,7 +216,7 @@ else if (signupSource === "parent") {
   }
   redirectPath = "/parent/dashboard";
 }
-// 2️⃣ RETURNING USERS (no signup source — route by role)
+// 2️⃣ RETURNING USERS (no signup source - route by role)
 else if (req.user.role === "private_teacher") {
   const teacherDoc = await User.findById(req.user._id).select("needsProfileSetup schoolLevelsEnabled").lean();
   if (teacherDoc?.needsProfileSetup || !teacherDoc?.schoolLevelsEnabled?.length) {

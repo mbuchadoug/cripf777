@@ -24,14 +24,14 @@ try {
 // ----------------------
 function parseExemplars(text) {
   const exemplars = {};
-  const sectionRe = /CRIPFCnt SCOI Audit\s*—\s*[“"]?([^"\n(]+)[”"]?.*?\n([\s\S]*?)(?=\n⸻|\n-{3,}|\n?#|\n?CRIPFCnt SCOI Audit|$)/g;
+  const sectionRe = /CRIPFCnt SCOI Audit\s*-\s*[“"]?([^"\n(]+)[”"]?.*?\n([\s\S]*?)(?=\n⸻|\n-{3,}|\n?#|\n?CRIPFCnt SCOI Audit|$)/g;
   let m;
   while ((m = sectionRe.exec(text)) !== null) {
     const name = m[1].trim();
     const body = m[2];
 
-    const vis = /Visibility[^:]*[:—-]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
-    const con = /Contribution[^:]*[:—-]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
+    const vis = /Visibility[^:]*[:--]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
+    const con = /Contribution[^:]*[:--]\s*(\d+(?:\.\d+)?)\s*\/\s*10/i.exec(body)?.[1];
     const erf = /ERF[^:\d]*:\s*(\d+(?:\.\d+)?)/i.exec(body)?.[1];
 
     if (vis && con && erf) {

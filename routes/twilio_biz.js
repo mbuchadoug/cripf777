@@ -215,7 +215,7 @@ function verifyTwilioRequest(req) {
   }
   const authToken = process.env.TWILIO_BIZ_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
-    console.warn("TWILIO_VERIFY (biz): TWILIO_BIZ_AUTH_TOKEN and TWILIO_AUTH_TOKEN not set — skipping verification (dev)");
+    console.warn("TWILIO_VERIFY (biz): TWILIO_BIZ_AUTH_TOKEN and TWILIO_AUTH_TOKEN not set - skipping verification (dev)");
     return true;
   }
   try {
@@ -467,7 +467,7 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
   ${bizMeta.address ? `<div style="font-size:12px; color:#6b7280; margin-top:4px;">${escapeHtml(bizMeta.address)}</div>` : ""}
   
   <div style="margin-top:16px; font-weight:600; font-size: 15px;">
-    Client: ${escapeHtml(billingTo || "—")}
+    Client: ${escapeHtml(billingTo || "-")}
   </div>
   <div style="font-size:12px; color:#6b7280; margin-top: 4px;">
     Date: ${new Date().toISOString().slice(0,10)}
@@ -797,7 +797,7 @@ const statusBadge = bizMeta.status
       <div class="bill-label">Bill To</div>
       <div class="bill-name">${
         (!billingTo || billingTo === "Walk-in Customer" || billingTo === "walk-in") 
-          ? "—" 
+          ? "-" 
           : escapeHtml(billingTo)
       }</div>
       ${
@@ -1072,7 +1072,7 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
         }
       }
     } else {
-      // Twilio domain but no SID in URL — pick biz if present, else main
+      // Twilio domain but no SID in URL - pick biz if present, else main
       if (envBizSid && envBizToken) { useSid = envBizSid; useToken = envBizToken; }
       else if (envMainSid && envMainToken) { useSid = envMainSid; useToken = envMainToken; }
       else {
@@ -1100,7 +1100,7 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   } catch (err) {
     const status = err?.response?.status || "ERR";
     const twilioErrCode = err?.response?.headers?.["x-twilio-error-code"];
-    let message = `Failed to download media from ${mediaUrl} — HTTP ${status}`;
+    let message = `Failed to download media from ${mediaUrl} - HTTP ${status}`;
     if (twilioErrCode) message += ` (Twilio error ${twilioErrCode})`;
 
     if (isTwilioUrl) {
@@ -3389,7 +3389,7 @@ const invoiceDoc = await Invoice.create({
 
     // fallback
   // fallback only when truly idle
-// FINAL fallback — do NOT override active flows
+// FINAL fallback - do NOT override active flows
 /*if (state === "idle" || state === "ready") {
   return sendMenuForUser(res, biz, providerId);
 }*/

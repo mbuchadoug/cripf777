@@ -18,7 +18,7 @@ export function formatSCOI(result, entity) {
   } = result;
 
   return `
-## 🔷 CRIPFCnt SCOI Audit — ${entity}
+## 🔷 CRIPFCnt SCOI Audit - ${entity}
 
 ---
 

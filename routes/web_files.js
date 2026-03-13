@@ -8,7 +8,7 @@ router.use(requireWebAuth);
 
 /**
  * GET /web/files
- * Document download centre — all invoices, quotes, receipts
+ * Document download centre - all invoices, quotes, receipts
  */
 router.get("/files", async (req, res) => {
   try {
@@ -69,7 +69,7 @@ router.get("/files", async (req, res) => {
         return {
           ...doc,
           clientName: doc.clientId?.name || doc.clientId?.phone || "Unknown",
-          branchName: doc.branchId?.name || "—",
+          branchName: doc.branchId?.name || "-",
           folder,
           // The PDF filename follows the naming convention used in generatePDF
           pdfUrl: `${site}/docs/generated/${folder}/${doc.number.replace(/\//g, "-")}.pdf`

@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 
 /**
  * Battle = a public competition event (Arena / Blitz).
- * It does NOT replace your quiz system — it creates ExamInstances that reuse /lms/quiz.
+ * It does NOT replace your quiz system - it creates ExamInstances that reuse /lms/quiz.
  */
 const BattleSchema = new mongoose.Schema(
   {

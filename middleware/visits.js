@@ -1,4 +1,4 @@
-// middleware/visits.js — UPDATED (use this file)
+// middleware/visits.js - UPDATED (use this file)
 import Visit from "../models/visit.js";
 import UniqueVisit from "../models/uniqueVisit.js";
 
@@ -51,7 +51,7 @@ export function visitTracker(req, res, next) {
           }
         }
       } catch (e) {
-        // Log, but don't throw — visit tracker must never crash the request pipeline
+        // Log, but don't throw - visit tracker must never crash the request pipeline
         console.warn("visitTracker db error:", e?.message || e);
       }
     });

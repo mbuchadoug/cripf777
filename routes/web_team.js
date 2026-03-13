@@ -101,7 +101,7 @@ router.post("/team/branch/delete", requireWebAuth, async (req, res) => {
 });
 
 // ── POST /web/team/invite ─────────────────────────────────────────────────────
-// Sends a "pending" UserRole — user activates it by messaging "JOIN" on WhatsApp
+// Sends a "pending" UserRole - user activates it by messaging "JOIN" on WhatsApp
 router.post("/team/invite", requireWebAuth, async (req, res) => {
   try {
     const businessId = req.webUser.businessId;

@@ -13,7 +13,7 @@ router.use(requireWebAuth);
 
 /**
  * GET /web/dashboard
- * Main dashboard — owners see all branches + overall, clerks/managers see their branch only
+ * Main dashboard - owners see all branches + overall, clerks/managers see their branch only
  */
 router.get("/dashboard", async (req, res) => {
   try {
@@ -244,7 +244,7 @@ router.post("/users/invite", async (req, res) => {
     const UserRole = (await import("../models/userRole.js")).default;
     let { phone, role: inviteRole, branchId } = req.body;
 
-    // Normalize phone — mirrors chatbot invite_user_phone state
+    // Normalize phone - mirrors chatbot invite_user_phone state
     const raw = (phone || "").replace(/\D+/g, "");
     let p = raw;
     if (p.startsWith("0")) p = "263" + p.slice(1);

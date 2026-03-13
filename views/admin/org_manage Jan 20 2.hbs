@@ -398,7 +398,7 @@
              {{#if passages}}
                {{#each passages}}
                  <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
-                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} — org{{/if}}
+                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} - org{{/if}}
                  </option>
                {{/each}}
              {{/if}}
@@ -584,7 +584,7 @@ fb.innerHTML = `
 
           const ul = document.getElementById('invitesList');
           const li = document.createElement('li');
-          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
+          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> - <span class="badge">Pending</span>`;
           ul.prepend(li);
           f.reset();
         } catch (e) {
@@ -629,8 +629,8 @@ fb.innerHTML = `
       });
     });
 
-    // Assign Quiz (AJAX) — includes optional passageId when chosen
-// Assign Quiz (AJAX) — includes optional passageId when chosen
+    // Assign Quiz (AJAX) - includes optional passageId when chosen
+// Assign Quiz (AJAX) - includes optional passageId when chosen
 document.getElementById('assignForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const form = ev.currentTarget;
@@ -694,7 +694,7 @@ document.getElementById('assignForm').addEventListener('submit', async (ev) => {
   }
 });
 
-    // Create Passage Quiz (AJAX) — posts to /admin/orgs/:slug/passages
+    // Create Passage Quiz (AJAX) - posts to /admin/orgs/:slug/passages
     document.getElementById('createPassageForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const form = ev.currentTarget;

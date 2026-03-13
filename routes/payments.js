@@ -56,7 +56,7 @@ async function processSuccessfulPayment(paymentId) {
   payment.paidAt = new Date();
   await payment.save();
 
-  // Battle entry — stop here
+  // Battle entry - stop here
   if (payment.type === "battle_entry" && payment.battleId) {
     const BattleEntry = (await import("../models/battleEntry.js")).default;
     await BattleEntry.updateOne(
@@ -200,7 +200,7 @@ if (planKey.startsWith("teacher_")) {
 }
 /* ------------------------------
    INITIATE MOBILE (EcoCash) PAYMENT
-   Returns JSON — frontend polls for status
+   Returns JSON - frontend polls for status
 -------------------------------- */
 router.post("/paynow/init", ensureAuth, async (req, res) => {
   try {
@@ -331,13 +331,13 @@ router.get("/paynow/poll/:reference", ensureAuth, async (req, res) => {
       return res.json({ status: payment.status });
     }
 
-    // Still pending — manually poll Paynow
+    // Still pending - manually poll Paynow
     if (payment.pollUrl) {
       const pollResult = await paynow.pollTransaction(payment.pollUrl);
       const statusStr = String(pollResult.status || "").toLowerCase();
 
       if (statusStr === "paid") {
-        // Webhook may not have fired yet — trigger processing inline
+        // Webhook may not have fired yet - trigger processing inline
         await processSuccessfulPayment(payment._id);
         return res.json({ status: "paid" });
       }

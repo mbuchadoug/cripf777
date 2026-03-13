@@ -16,7 +16,7 @@ export async function autoFetchAndScore(entity) {
   try {
     // Step 1: Fetch public info
     const searchPrompt = `
-Find public information on ${entity} — ESG, CSR, sustainability, environmental and social impact.
+Find public information on ${entity} - ESG, CSR, sustainability, environmental and social impact.
 Return concise summary + 3 sources if possible. Respond "NO DATA FOUND" if none.
 `;
 

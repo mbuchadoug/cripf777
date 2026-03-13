@@ -1,4 +1,4 @@
-// server.js — cleaned & ordered
+// server.js - cleaned & ordered
 
 import dotenv from "dotenv";
 dotenv.config();   
@@ -80,7 +80,7 @@ if (!fs.existsSync(path.dirname(dataPath))) fs.mkdirSync(path.dirname(dataPath),
 // --------- MONGOOSE connect (optional but needed for Mongo-backed sessions) ----------
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
-  console.error("❌ MONGODB_URI missing in .env — cannot start sessions/persistence.");
+  console.error("❌ MONGODB_URI missing in .env - cannot start sessions/persistence.");
 } else {
   mongoose.set("strictQuery", true);
   mongoose
@@ -88,7 +88,7 @@ if (!mongoUri) {
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => {
       console.error("❌ MongoDB connection failed:", err.message || err);
-      // don't exit immediately — sessions will fail but server can run in limited mode
+      // don't exit immediately - sessions will fail but server can run in limited mode
     });
 }
 
@@ -153,17 +153,17 @@ function formatSCOI(entityData, entity) {
   const adjusted = adjustedSCOI || (rawSCOI * ERF).toFixed(3);
 
   return `
-### SCOI Audit — ${entity}
+### SCOI Audit - ${entity}
 
 ---
 
-**1️⃣ Visibility — Score: ${visibility} / 10**  
+**1️⃣ Visibility - Score: ${visibility} / 10**  
 **Rationale:**  
 ${visibilityRationale}
 
 ---
 
-**2️⃣ Contribution — Score: ${contribution} / 10**  
+**2️⃣ Contribution - Score: ${contribution} / 10**  
 **Rationale:**  
 ${contributionRationale}
 
@@ -176,7 +176,7 @@ ${scoiInterpretation}
 
 ---
 
-**4️⃣ Global Environment Adjustment — ERF: ${ERF}**  
+**4️⃣ Global Environment Adjustment - ERF: ${ERF}**  
 **Rationale:**  
 ${ERFRationale}
 
@@ -220,7 +220,7 @@ app.get("/audit", ensureAuth, (req, res) => {
 });
 
 // -------------------------------
-// Chat stream endpoint (SSE streaming — preserved behaviour)
+// Chat stream endpoint (SSE streaming - preserved behaviour)
 // -------------------------------
 app.post("/api/chat-stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -242,14 +242,14 @@ app.post("/api/chat-stream", async (req, res) => {
     }
 
     const systemPrompt = `
-You are the CRIPFCnt Audit Intelligence — trained under Donald Mataranyika’s civilization recalibration model.
+You are the CRIPFCnt Audit Intelligence - trained under Donald Mataranyika’s civilization recalibration model.
 Generate a single, clean, structured SCOI audit for the entity provided.
 Follow this structure exactly:
 
-1️⃣ Visibility — score and rationale
-2️⃣ Contribution — score and rationale
+1️⃣ Visibility - score and rationale
+2️⃣ Contribution - score and rationale
 3️⃣ SCOI = Contribution / Visibility (with brief interpretation)
-4️⃣ Global Environment Adjustment — assign ERF (Environmental Resilience Factor)
+4️⃣ Global Environment Adjustment - assign ERF (Environmental Resilience Factor)
 5️⃣ Adjusted SCOI = SCOI × ERF
 6️⃣ Final CRIPFCnt Commentary
 

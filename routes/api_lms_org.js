@@ -9,7 +9,7 @@ import { ensureAuth } from "../middleware/authGuard.js";
 
 const router = Router();
 
-// seeded shuffle — deterministic-ish using crypto HMAC
+// seeded shuffle - deterministic-ish using crypto HMAC
 function seededShuffle(arr, seed) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -67,7 +67,7 @@ router.get("/quiz", ensureAuth, async (req, res) => {
       difficulty: q.difficulty || "medium"
     }));
 
-    // exam meta token — not persisted server-side here (client returns ids)
+    // exam meta token - not persisted server-side here (client returns ids)
     const examId = crypto.randomUUID();
 
     return res.json({ examId, org: org.slug, module: moduleName, series });

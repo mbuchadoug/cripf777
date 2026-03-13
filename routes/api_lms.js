@@ -153,7 +153,7 @@ router.get("/quiz", async (req, res) => {
           const parsed = JSON.parse(t);
           if (Array.isArray(parsed)) return parsed.map(String);
         } catch (e) {
-          // not JSON — try to split by commas/spaces while preserving parent: markers and 24-hex ids
+          // not JSON - try to split by commas/spaces while preserving parent: markers and 24-hex ids
           // fallback: extract parent:... tokens and 24-hex object ids and any fid-... tokens
           const items = [];
           // parent:... tokens

@@ -7,7 +7,7 @@ $(document).ready(function() {
             title: "CRIPFCnt Structural Audits (SCOI)",
             content: `
                 <ul>
-                    <li>Quantitative assessment of contribution vs. visibility — the world’s first structural placement metric</li>
+                    <li>Quantitative assessment of contribution vs. visibility - the world’s first structural placement metric</li>
  
                 </ul>
             `

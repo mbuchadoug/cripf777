@@ -27,7 +27,7 @@
     <form method="post" enctype="multipart/form-data" action="/admin/lms/import">
       <label><strong>Upload .txt file</strong></label>
       <input type="file" name="file" accept=".txt,text/plain" />
-      <div style="margin:12px 0;text-align:center">— or —</div>
+      <div style="margin:12px 0;text-align:center">- or -</div>
       <label><strong>Paste questions (text)</strong></label>
       <textarea name="text" placeholder="Paste the question bank text here..."></textarea>
 
@@ -47,7 +47,7 @@
           <div class="errors">
             <ul>
               {{#each result.errors}}
-                <li>{{this.reason}} {{#if this.question}} — "{{this.question}}"{{/if}} {{#if this.block}}[block starts: {{this.block}}]{{/if}}</li>
+                <li>{{this.reason}} {{#if this.question}} - "{{this.question}}"{{/if}} {{#if this.block}}[block starts: {{this.block}}]{{/if}}</li>
               {{/each}}
             </ul>
           </div>

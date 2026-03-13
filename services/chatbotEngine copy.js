@@ -145,7 +145,7 @@ async function showSalesDocs(from, type) {
     `📄 Select ${type}`,
     docs.map(d => ({
       id: `doc_${d._id}`,
-      title: `${d.number} — ${d.total} ${d.currency}`
+      title: `${d.number} - ${d.total} ${d.currency}`
     }))
   );
 }
@@ -312,7 +312,7 @@ const text = typeof action === "string" ? action.trim() : "";*/
 
 
 
-// 📌 Main menu shortcut — ONLY when NOT onboardin
+// 📌 Main menu shortcut - ONLY when NOT onboardin
 
 
 
@@ -537,7 +537,7 @@ if (a === "inv_item_custom") {
   let msg = "📦 Product catalogue:\n\n";
 
   products.forEach((p, i) => {
-    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+    msg += `${i + 1}) ${p.name} - ${p.unitPrice} ${biz.currency}\n`;
   });
 
   msg += `\nReply *menu* to cancel or choose *Pick from catalogue* to add items.`;
@@ -763,7 +763,7 @@ if (biz?.sessionState === "product_add_price") {
 }
 
   /* =========================
-   ONBOARDING — BUSINESS NAME
+   ONBOARDING - BUSINESS NAME
 ========================= */
 
 // =========================
@@ -1319,7 +1319,7 @@ if (a.startsWith("assign_branch_")) {
 }
 
 /* =========================
-   SETTINGS (META) — STEP 4
+   SETTINGS (META) - STEP 4
    MUST BE BEFORE SWITCH
 ========================= */
 
@@ -2310,7 +2310,7 @@ case ACTIONS.VIEW_PRODUCTS: {
   let msg = "📦 Products:\n\n";
 
   products.forEach((p, i) => {
-    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+    msg += `${i + 1}) ${p.name} - ${p.unitPrice} ${biz.currency}\n`;
   });
 
   await sendText(from, msg);
@@ -2339,7 +2339,7 @@ case ACTIONS.SUBSCRIPTION_PAYMENTS: {
     "🧾 Subscription payments",
     rows.map(r => ({
       id: `subpay_${r._id}`,
-      title: `${(r.packageKey || "").toUpperCase()} — ${r.amount} ${r.currency}`,
+      title: `${(r.packageKey || "").toUpperCase()} - ${r.amount} ${r.currency}`,
       description: `${r.status}${r.paidAt ? ` • ${new Date(r.paidAt).toDateString()}` : ""}`
     }))
   );

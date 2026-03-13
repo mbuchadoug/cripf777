@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Take Quiz — Responsibility LMS</title>
+  <title>Take Quiz - Responsibility LMS</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:24px; background:#0b0b0b;color:#fff}
@@ -23,7 +23,7 @@
 <body>
   <div class="container">
     <div class="card">
-      <h1>Responsibility — Quick Quiz</h1>
+      <h1>Responsibility - Quick Quiz</h1>
       <div class="muted">Each quiz pulls random questions from the bank. Answer the 5 questions below and submit to see your score.</div>
 
       <div id="quizArea"></div>
@@ -129,7 +129,7 @@
 
       function showResult(resp){
         result.style.display = 'block';
-        result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} — ${resp.percentage}%</div>
+        result.innerHTML = `<div style="font-weight:800;font-size:16px">Score: ${resp.score} / ${resp.total} - ${resp.percentage}%</div>
                             <div style="margin-top:8px">${resp.passed ? '<strong style="color:#bfffb1">PASSED</strong>' : '<strong style="color:#ffb1b1">FAILED</strong>'} (pass ${resp.passThreshold}%)</div>
                             <div style="margin-top:10px">Detailed feedback below:</div>`;
 

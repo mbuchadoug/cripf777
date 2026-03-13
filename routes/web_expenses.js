@@ -55,7 +55,7 @@ router.get("/expenses", async (req, res) => {
       user: req.webUser,
       expenses: expenses.map(e => ({
         ...e,
-        branchName: e.branchId?.name || "—"
+        branchName: e.branchId?.name || "-"
       })),
       branches,
       isOwner: role === "owner",

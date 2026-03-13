@@ -35,7 +35,7 @@ router.get("/dashboard", async (req, res) => {
     //
     //   Invoice (type="receipt") → a DIRECT CASH SALE; instantly 100% paid
     //     amountPaid = total, balance = 0, status = "paid" always
-    //     Counts as cash income IN FULL on creation date — no InvoicePayment needed
+    //     Counts as cash income IN FULL on creation date - no InvoicePayment needed
     //
     //   cashReceived  = InvoicePayment.sum  +  Receipt.total.sum
     //   invoiced      = Invoice(type=invoice).total.sum   (what was billed)
@@ -62,7 +62,7 @@ router.get("/dashboard", async (req, res) => {
       unpaidCount,
       totalClients,
 
-      // Chart — last 30 days: invoices for billed, receipts for direct cash
+      // Chart - last 30 days: invoices for billed, receipts for direct cash
       chartInvoices,
       chartReceipts,
 
@@ -110,7 +110,7 @@ router.get("/dashboard", async (req, res) => {
       Invoice.countDocuments({ ...baseQ, type: "invoice", status: { $in: ["unpaid", "partial"] } }),
       Client.countDocuments({ businessId }),
 
-      // ── Chart: last 30 days — invoices billed + receipt cash sales ─────────
+      // ── Chart: last 30 days - invoices billed + receipt cash sales ─────────
       Invoice.find({ ...baseQ, type: "invoice", createdAt: { $gte: thirtyDaysAgo } }).lean(),
       Invoice.find({ ...baseQ, type: "receipt", createdAt: { $gte: thirtyDaysAgo } }).lean(),
 
@@ -136,7 +136,7 @@ router.get("/dashboard", async (req, res) => {
       : cashReceived > 0 ? "100.0" : "0.0";
 
     // Collection rate = invoice payments ONLY / invoiced
-    // Receipts are NOT "collected against an invoice" — they are direct sales
+    // Receipts are NOT "collected against an invoice" - they are direct sales
     const collectionRate = monthInvoiced > 0
       ? Math.round((monthPayCash / monthInvoiced) * 100)
       : 0;
@@ -180,7 +180,7 @@ router.get("/dashboard", async (req, res) => {
           { $match: { businessId, createdAt: { $gte: thisMonth } } },
           { $group: { _id: { $ifNull: ["$branchId", "NONE"] }, cashIn: { $sum: "$amount" } } }
         ]),
-        // Receipts per branch — direct cash sales, fully paid, add to collected
+        // Receipts per branch - direct cash sales, fully paid, add to collected
         Invoice.aggregate([
           { $match: { businessId, type: "receipt", createdAt: { $gte: thisMonth } } },
           { $group: { _id: { $ifNull: ["$branchId", "NONE"] }, rcptCash: { $sum: "$total" } } }
@@ -220,7 +220,7 @@ router.get("/dashboard", async (req, res) => {
       }).sort((a, b) => b.collected - a.collected);
     }
 
-    // ── Recent activity — BOTH invoices AND receipts ──────────────────────────
+    // ── Recent activity - BOTH invoices AND receipts ──────────────────────────
     // Receipts are income records and must appear in the activity feed
     const recentDocs = await Invoice.find({ ...baseQ, type: { $in: ["invoice", "receipt"] } })
       .populate("clientId", "name phone")
@@ -232,7 +232,7 @@ router.get("/dashboard", async (req, res) => {
 
     res.render("web/dashboard", {
       layout:  "web",
-      title:   "Dashboard — ZimQuote",
+      title:   "Dashboard - ZimQuote",
       pageKey: "dashboard",
       user:    req.webUser,
       isOwner: role === "owner",
@@ -262,8 +262,8 @@ router.get("/dashboard", async (req, res) => {
         total:      Math.round((doc.total   || 0) * 100) / 100,
         balance:    Math.round((doc.balance || 0) * 100) / 100,
         status:     doc.status,
-        clientName: doc.clientId?.name || doc.clientId?.phone || "—",
-        branchName: bMap[String(doc.branchId)] || "—",
+        clientName: doc.clientId?.name || doc.clientId?.phone || "-",
+        branchName: bMap[String(doc.branchId)] || "-",
         createdAt:  doc.createdAt
       }))
     });

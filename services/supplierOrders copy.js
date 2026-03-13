@@ -18,7 +18,7 @@ const itemLines = order.items
   await sendButtons(supplierPhone, {
     text: `🛒 *New Order!*\n\n` +
           `${itemLines}\n\n` +
-          `💵 Total: Pending — set your price when accepting\n` +
+          `💵 Total: Pending - set your price when accepting\n` +
           `${deliveryLine}\n` +
           `📞 Buyer: ${order.buyerPhone}`,
     buttons: [

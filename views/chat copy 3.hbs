@@ -130,8 +130,8 @@ async function startChat() {
       // Highlight key ratios (SCOI, ERF, etc.)
       .replace(/\b(SCOI|ERF)\b\s*[=:]?\s*([\d.]+)/gi, "<span class='highlight-key'>$1 = $2</span>")
       // Break into sections (handles 1️⃣, 2️⃣, etc.)
-      .replace(/(?:^|\s)([1-6])\s*[️⃣]*\s*[—\-–]?\s*(Visibility|Contribution|SCOI|Global|Adjusted|Final|Environment|Commentary)/gi,
-        "</div><br><div class='card'><div class='card-header'>SECTION $1 — <b>$2</b></div><hr>"
+      .replace(/(?:^|\s)([1-6])\s*[️⃣]*\s*[-\-–]?\s*(Visibility|Contribution|SCOI|Global|Adjusted|Final|Environment|Commentary)/gi,
+        "</div><br><div class='card'><div class='card-header'>SECTION $1 - <b>$2</b></div><hr>"
       )
       // Remove the first closing div if added
       .replace(/^<\/div><br>/, "")

@@ -157,7 +157,7 @@ let html = output.textContent
   .replace(/(ERF\s*[=:]?\s*[\d.]+)/gi, "<span class='highlight-key'>$1</span>")
   // Create new card sections for 1️⃣–6️⃣ patterns even without line breaks
   .replace(/(\b[1-6])\s*[️⃣]*\s*(Visibility|Contribution|SCOI|Global|Adjusted|Final)/gi, 
-    "</div><br><div class='card'><div class='card-header'>Section $1 — $2</div>")
+    "</div><br><div class='card'><div class='card-header'>Section $1 - $2</div>")
   // Bold and color key section titles
   .replace(/\b(Visibility|Contribution|Calculation|Adjustment|Environment|Final|Commentary)\b/gi, 
     "<b style='color:#003366;'>$1</b>")

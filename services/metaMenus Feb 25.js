@@ -198,7 +198,7 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 }
 
 /* =============================================================================
-   REPORTS MENU — Owner sees two-tier, managers/clerks see their branch only
+   REPORTS MENU - Owner sees two-tier, managers/clerks see their branch only
 ============================================================================= */
 export async function sendReportsMenu(to, isGold = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);

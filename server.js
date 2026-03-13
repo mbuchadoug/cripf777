@@ -1,4 +1,4 @@
-// server.js — CRIPFCnt SCOI Server (merged, updated)
+// server.js - CRIPFCnt SCOI Server (merged, updated)
 import express from "express";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -122,7 +122,7 @@ const app = express();
 // friendly support contact (configurable via .env)
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 
-// ⚠️ STRIPE WEBHOOK — MUST COME FIRST
+// ⚠️ STRIPE WEBHOOK - MUST COME FIRST
 
 
 // Normal parsers for everything else
@@ -137,7 +137,7 @@ app.use("/stripe/webhook", stripeWebhookRoutes);
 
 
 // Basic middleware
-// Basic middleware — skip body parsing for multipart (multer handles those)
+// Basic middleware - skip body parsing for multipart (multer handles those)
 app.use((req, res, next) => {
   if (req.headers['content-type']?.startsWith('multipart/form-data')) return next();
   express.json({ limit: '10mb' })(req, res, next);
@@ -401,7 +401,7 @@ app.use("/auth", authRoutes);
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
-// API routes — keep LMS API on /api/lms so quiz UI fetches work
+// API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
 
@@ -541,7 +541,7 @@ ${scoiInterpretation}
 
 ---
 
-**4️⃣ Global Environment Adjustment — ERF: ${ERF}**  
+**4️⃣ Global Environment Adjustment - ERF: ${ERF}**  
 **Rationale:**  
 ${ERFRationale}
 

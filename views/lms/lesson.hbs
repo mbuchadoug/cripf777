@@ -138,7 +138,7 @@
             });
             const jr = await r.json();
             if (!r.ok) throw new Error(jr && (jr.error || jr.detail) || 'Submit failed');
-            alert('Score: ' + jr.score + '/' + jr.maxScore + ' — ' + (jr.passed ? 'Passed' : 'Failed'));
+            alert('Score: ' + jr.score + '/' + jr.maxScore + ' - ' + (jr.passed ? 'Passed' : 'Failed'));
             if (jr.certificate) {
               const ok = confirm('You passed and a certificate was issued. Open certificate now?');
               if (ok) window.open('/api/lms/certificate/' + jr.certificate.serial, '_blank');

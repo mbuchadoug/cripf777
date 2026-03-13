@@ -164,13 +164,13 @@ async function showSalesDocs(from, type, ownerBranchId = undefined) {
   let header = `📄 Select ${type}`;
   if (ownerBranchId && caller?.role === "owner") {
     const branch = await Branch.findById(ownerBranchId);
-    if (branch) header = `📄 ${type}s — ${branch.name}`;
+    if (branch) header = `📄 ${type}s - ${branch.name}`;
   } else if (caller?.role === "owner" && ownerBranchId === null) {
-    header = `📄 ${type}s — All Branches`;
+    header = `📄 ${type}s - All Branches`;
   }
 
   return sendList(from, header,
-    docs.map(d => ({ id: `doc_${d._id}`, title: `${d.number} — ${d.total} ${d.currency}` }))
+    docs.map(d => ({ id: `doc_${d._id}`, title: `${d.number} - ${d.total} ${d.currency}` }))
   );
 }
 
@@ -279,7 +279,7 @@ Reply *menu* to start.`);
     callerRole = caller?.role || null;
   }
 
-  // ✅ LOCKED USER CHECK — block bot access for locked users
+  // ✅ LOCKED USER CHECK - block bot access for locked users
   if (caller?.locked) {
     await sendText(from, "🔒 Your account has been suspended. Please contact the business owner.");
     return;
@@ -439,7 +439,7 @@ Reply *menu* to start.`);
     const products = await Product.find({ businessId: biz._id, isActive: true }).lean();
     if (!products.length) return sendText(from, "📦 No products found.");
     let msg = "📦 *Product catalogue:*\n\n";
-    products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+    products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
     return sendText(from, msg);
   }
 
@@ -487,7 +487,7 @@ Reply *menu* to start.`);
     await saveBizSafe(biz);
     const branch = await Branch.findById(branchId);
     return sendButtons(from, {
-      text: `📦 *Add Product — ${branch?.name || "Branch"}*\n\nEnter product name:`,
+      text: `📦 *Add Product - ${branch?.name || "Branch"}*\n\nEnter product name:`,
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
@@ -503,7 +503,7 @@ Reply *menu* to start.`);
     await saveBizSafe(biz);
     const branch = await Branch.findById(branchId);
     return sendButtons(from, {
-      text: `👥 *Add Client — ${branch?.name || "Branch"}*\n\nEnter client full name:`,
+      text: `👥 *Add Client - ${branch?.name || "Branch"}*\n\nEnter client full name:`,
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
@@ -544,7 +544,7 @@ Reply *menu* to start.`);
     await saveBizSafe(biz);
     const branch = await Branch.findById(branchId);
     return sendText(from,
-`📋 *Bulk Add Expenses — ${branch?.name || "Branch"}*
+`📋 *Bulk Add Expenses - ${branch?.name || "Branch"}*
 
 ✅ Format: Description, Amount, Category
 
@@ -552,7 +552,7 @@ Example:
 Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
 
 Categories: Rent, Utilities, Transport, Supplies, Other
-(Category optional — defaults to Other)
+(Category optional - defaults to Other)
 
 Use *|* or new lines to separate.
 
@@ -1605,7 +1605,7 @@ Or type *same* to use this WhatsApp number.`);
       return sendBusinessMenu(from);
     }
 
-    // ✅ OWNER ONLY — subscription menu
+    // ✅ OWNER ONLY - subscription menu
     case ACTIONS.SUBSCRIPTION_MENU: {
       if (!biz) return sendMainMenu(from);
       if (!caller || caller.role !== "owner") {
@@ -1622,7 +1622,7 @@ Or type *same* to use this WhatsApp number.`);
       return sendSettingsMenu(from);
     }
 
-    // ✅ OWNER ONLY — upgrade package
+    // ✅ OWNER ONLY - upgrade package
     case ACTIONS.UPGRADE_PACKAGE: {
       if (!biz) return sendMainMenu(from);
       if (!caller || caller.role !== "owner") return sendText(from, "🔒 Only the business owner can change the package.");
@@ -1696,7 +1696,7 @@ Or type *same* to use this WhatsApp number.`);
       const products = await Product.find(query).lean();
       if (!products.length) { await sendText(from, "📦 No products found for your branch."); return sendMainMenu(from); }
       let msg = "📦 *Products (Your Branch):*\n\n";
-      products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+      products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
       await sendText(from, msg);
       return sendMainMenu(from);
     }
@@ -1762,7 +1762,7 @@ Example:
 Fuel, 50, Transport | Office supplies, 30, Supplies | Electricity, 100, Utilities
 
 Categories: Rent, Utilities, Transport, Supplies, Other
-(Category optional — defaults to Other)
+(Category optional - defaults to Other)
 
 Paste now, or reply *done* to finish.`);
     }
@@ -1774,7 +1774,7 @@ Paste now, or reply *done* to finish.`);
       if (!rows.length) { await sendText(from, "No subscription payments yet."); return sendSubscriptionMenu(from); }
       return sendList(from, "🧾 Subscription payments", rows.map(r => ({
         id: `subpay_${r._id}`,
-        title: `${(r.packageKey || "").toUpperCase()} — ${r.amount} ${r.currency}`,
+        title: `${(r.packageKey || "").toUpperCase()} - ${r.amount} ${r.currency}`,
         description: `${r.status}${r.paidAt ? ` • ${new Date(r.paidAt).toDateString()}` : ""}`
       })));
     }
@@ -1811,7 +1811,7 @@ Paste now, or reply *done* to finish.`);
         const products = await Product.find({ businessId: biz._id, isActive: true }).lean();
         if (!products.length) { await sendText(from, "📦 No products found."); return sendProductsMenu(from); }
         let msg = "📦 *All Products (All Branches):*\n\n";
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         return sendProductsMenu(from);
       }
@@ -1823,7 +1823,7 @@ Paste now, or reply *done* to finish.`);
         const products = await Product.find({ businessId: biz._id, branchId, isActive: true }).lean();
         if (!products.length) { await sendText(from, `📦 No products found for ${branch?.name || "this branch"}.`); return sendProductsMenu(from); }
         let msg = `📦 *Products (${branch?.name || "Branch"}):*\n\n`;
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         return sendProductsMenu(from);
       }
@@ -1898,7 +1898,7 @@ async function showClientsList(from, biz, branchId) {
   }
 
   const branch = branchId ? await Branch.findById(branchId) : null;
-  let msg = branch ? `👥 *Clients — ${branch.name}:*\n\n` : "👥 *All Clients:*\n\n";
+  let msg = branch ? `👥 *Clients - ${branch.name}:*\n\n` : "👥 *All Clients:*\n\n";
   clients.forEach((c, i) => {
     msg += `${i + 1}. *${c.name || "No name"}*\n`;
     if (c.phone) msg += `   📞 ${c.phone}\n`;
@@ -1925,12 +1925,12 @@ async function showExpenseReceipts(from, biz, branchId) {
 
   const branch = branchId ? await Branch.findById(branchId) : null;
   let msg = branch
-    ? `🧾 *Recent Expense Receipts — ${branch.name}:*\n\n`
+    ? `🧾 *Recent Expense Receipts - ${branch.name}:*\n\n`
     : "🧾 *Recent Expense Receipts (All Branches):*\n\n";
 
   expenses.forEach((e, i) => {
     const date = new Date(e.createdAt).toLocaleDateString();
-    msg += `${i + 1}. *${e.category || "Other"}* — ${e.amount} ${biz.currency}\n`;
+    msg += `${i + 1}. *${e.category || "Other"}* - ${e.amount} ${biz.currency}\n`;
     msg += `   ${e.description || "No description"}\n`;
     msg += `   ${date} (${e.method || "Unknown method"})\n\n`;
   });
@@ -1954,7 +1954,7 @@ async function showPaymentHistory(from, biz, branchId) {
 
   const branch = branchId ? await Branch.findById(branchId) : null;
   let msg = branch
-    ? `💵 *Recent Payments — ${branch.name}:*\n\n`
+    ? `💵 *Recent Payments - ${branch.name}:*\n\n`
     : "💵 *Recent Payments (All Branches):*\n\n";
 
   for (const p of payments) {
@@ -2004,7 +2004,7 @@ async function showBranchCashBalance(from, biz, branchId) {
   const cashOut = cashOutExpenses + cashOutPayouts;
   const closing = opening + cashIn - cashOut;
 
-  let msg = `💰 *Cash Balance — ${branchName}*\n📅 ${today.toDateString()}\n\n`;
+  let msg = `💰 *Cash Balance - ${branchName}*\n📅 ${today.toDateString()}\n\n`;
   msg += `━━━━━━━━━━━━━━\n`;
   msg += `📂 *Opening Balance:* ${opening} ${cur}\n\n`;
   msg += `📈 *Cash In:* +${cashIn} ${cur}\n`;
@@ -2040,7 +2040,7 @@ async function showAllBranchesCashBalance(from, biz) {
   if (!branches.length) { await sendText(from, "❌ No branches found."); return sendMainMenu(from); }
 
   const cur = biz.currency;
-  let msg = `💰 *Cash Balance Summary — All Branches*\n📅 ${today.toDateString()}\n\n`;
+  let msg = `💰 *Cash Balance Summary - All Branches*\n📅 ${today.toDateString()}\n\n`;
   let totalOpening = 0, totalIn = 0, totalOut = 0;
 
   for (const branch of branches) {

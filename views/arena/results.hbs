@@ -33,13 +33,13 @@
 
       <div style="margin-top:12px">
         <div><strong>Your Status:</strong> <span id="meStatus"></span></div>
-        <div><strong>Your Rank:</strong> <span id="meRank">—</span></div>
-        <div><strong>Your Score:</strong> <span id="meScore">—</span></div>
-        <div><strong>Your Time:</strong> <span id="meTime">—</span></div>
+        <div><strong>Your Rank:</strong> <span id="meRank">-</span></div>
+        <div><strong>Your Score:</strong> <span id="meScore">-</span></div>
+        <div><strong>Your Time:</strong> <span id="meTime">-</span></div>
       </div>
 
 <div style="margin-top:12px" class="muted">
-  <strong>Message:</strong> <span id="resultMsg">—</span>
+  <strong>Message:</strong> <span id="resultMsg">-</span>
 </div>
 
 
@@ -109,7 +109,7 @@
   }
 
   function fmtTime(sec){
-    if (sec == null) return "—";
+    if (sec == null) return "-";
     const s = Math.max(0, Number(sec));
     const mm = String(Math.floor(s/60)).padStart(2,'0');
     const ss = String(Math.floor(s%60)).padStart(2,'0');
@@ -139,14 +139,14 @@ if (payoutLink) {
 }
 
       if (data.me) {
-        meStatus.textContent = data.me.status || "—";
-        meRank.textContent = data.myRank != null ? ("#" + data.myRank) : "—";
+        meStatus.textContent = data.me.status || "-";
+        meRank.textContent = data.myRank != null ? ("#" + data.myRank) : "-";
 
         if (resultMsg) {
-  resultMsg.textContent = data.resultMessage || "—";
+  resultMsg.textContent = data.resultMessage || "-";
 }
 
-        meScore.textContent = data.me.scorePct != null ? (data.me.scorePct + "%") : "—";
+        meScore.textContent = data.me.scorePct != null ? (data.me.scorePct + "%") : "-";
         meTime.textContent = fmtTime(data.me.timeTakenSec);
 
         // If user started but not finished -> show continue link
@@ -162,7 +162,7 @@ if (payoutLink) {
         tr.innerHTML = `
           <td>#${r.rank}</td>
           <td>${escapeHtml(r.user)}</td>
-          <td>${r.scorePct != null ? (r.scorePct + "%") : "—"}</td>
+          <td>${r.scorePct != null ? (r.scorePct + "%") : "-"}</td>
           <td>${fmtTime(r.timeTakenSec)}</td>
         `;
         rows.appendChild(tr);

@@ -64,7 +64,7 @@ modules: [{
   }
 );
 
-// convenience virtual for question count (counts only real child entries — but includes markers)
+// convenience virtual for question count (counts only real child entries - but includes markers)
 ExamInstanceSchema.virtual("questionCount").get(function () {
   if (!Array.isArray(this.questionIds)) return 0;
   return this.questionIds.length;

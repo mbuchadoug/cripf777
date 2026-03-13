@@ -9,7 +9,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export async function autoFetchAndScore(entity) {
   try {
     const searchPrompt = `
-Find real, public information on ${entity} — CSR activities, sustainability, environmental impact.
+Find real, public information on ${entity} - CSR activities, sustainability, environmental impact.
 Provide a concise summary + up to 3 sources with URLs.
 If nothing is found, respond "NO DATA FOUND".
 `;

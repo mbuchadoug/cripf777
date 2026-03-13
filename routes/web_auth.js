@@ -39,10 +39,10 @@ router.get("/login", (req, res) => {
     return res.redirect("/web/dashboard");
   }
 
-  // ✅ layout: false — login page is self-contained HTML, no sidebar
+  // ✅ layout: false - login page is self-contained HTML, no sidebar
   res.render("web/login", {
     layout: false,
-    title: "Sign In — ZimQuote",
+    title: "Sign In - ZimQuote",
     error: req.query.error
   });
 });
@@ -57,7 +57,7 @@ router.get("/verify-otp", (req, res) => {
 
   res.render("web/otp-verify", {
     layout: false,
-    title: "Verify — ZimQuote",
+    title: "Verify - ZimQuote",
     phone,
     error: req.query.error
   });
@@ -235,7 +235,7 @@ router.get("/admin-login", (req, res) => {
   }
   res.render("web/admin-login", {
     layout: false,
-    title: "Admin Access — ZimQuote",
+    title: "Admin Access - ZimQuote",
     error: req.query.error
   });
 });

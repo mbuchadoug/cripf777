@@ -903,7 +903,7 @@ router.post("/quiz/submit", async (req, res) => {
     }
 
 
-    // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE — SOURCE OF TRUTH)
+    // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE - SOURCE OF TRUTH)
 // ⛔ CALENDAR-BASED EXPIRY ONLY
 if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
   if (new Date() > new Date(exam.expiresAt)) {
@@ -917,7 +917,7 @@ if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
 
 
 
-    // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
+    // 🔑 SINGLE SOURCE OF TRUTH - AFTER exam is known
 // ✅ SAFE EXAM ID RESOLUTION
 let finalExamId;
 

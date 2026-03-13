@@ -1131,7 +1131,7 @@ router.post(
       console.log('✅ [Database] Material created:', material._id);
 
       // ✅ QUEUE VIDEO PROCESSING (if video)
-    // ✅ QUEUE VIDEO PROCESSING (if video) — fire and forget, don't await
+    // ✅ QUEUE VIDEO PROCESSING (if video) - fire and forget, don't await
       if (isVideo && fileUrl) {
         console.log('🎥 [Video] Queuing for processing...');
         const videoPath = fileUrl;
@@ -1834,7 +1834,7 @@ router.get(
 
         if (parentDoc) {
           if (parentDoc.type === "comprehension" && Array.isArray(parentDoc.questionIds) && parentDoc.questionIds.length) {
-            // It's a comprehension parent — load its children
+            // It's a comprehension parent - load its children
             allQuestions = await Question.find({
               _id: { $in: parentDoc.questionIds }
             }).lean();
@@ -2528,7 +2528,7 @@ router.post(
 
 
 // ============================================================
-// TEACHER STUDENT MANAGEMENT — Edit & Delete
+// TEACHER STUDENT MANAGEMENT - Edit & Delete
 // ============================================================
 
 /**
@@ -2566,7 +2566,7 @@ router.get(
 
 /**
  * POST /teacher/student/:studentId/edit
- * Process edit form — update name, grade, PIN
+ * Process edit form - update name, grade, PIN
  */
 router.post(
   "/student/:studentId/edit",
@@ -2601,7 +2601,7 @@ router.post(
 
       await student.save();
 
-      // ✅ GRADE TRANSITION — same logic as parent route
+      // ✅ GRADE TRANSITION - same logic as parent route
       if (gradeChanged) {
         const { default: Organization } = await import("../models/organization.js");
         const { default: ExamInstance } = await import("../models/examInstance.js");
@@ -2676,7 +2676,7 @@ router.post(
         }
       }
 
-      // No grade change — redirect back to teacher dashboard
+      // No grade change - redirect back to teacher dashboard
       return res.redirect("/teacher/dashboard");
 
     } catch (error) {

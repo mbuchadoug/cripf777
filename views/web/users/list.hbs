@@ -57,14 +57,14 @@
                 </span>
               </div>
               <span class="font-medium text-gray-800">
-                {{#if this.name}}{{this.name}}{{else}}—{{/if}}
+                {{#if this.name}}{{this.name}}{{else}}-{{/if}}
               </span>
             </div>
           </td>
           <td class="px-5 py-3.5 text-gray-600 font-mono text-xs">{{this.phone}}</td>
           <td class="px-5 py-3.5 text-gray-400 text-xs hidden sm:table-cell">{{formatDate this.createdAt}}</td>
           <td class="px-5 py-3.5 text-gray-400 font-mono text-xs hidden md:table-cell">
-            {{#if this.createdBy}}{{this.createdBy}}{{else}}<span class="text-gray-300">—</span>{{/if}}
+            {{#if this.createdBy}}{{this.createdBy}}{{else}}<span class="text-gray-300">-</span>{{/if}}
           </td>
           <td class="px-5 py-3.5">
             <div class="flex items-center justify-end gap-2">

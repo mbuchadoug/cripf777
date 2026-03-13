@@ -63,7 +63,7 @@ router.get("/receipts", async (req, res) => {
       receipts: receipts.map(r => ({
         ...r,
         clientName: r.clientId?.name || r.clientId?.phone || "Unknown",
-        branchName: r.branchId?.name || "—"
+        branchName: r.branchId?.name || "-"
       })),
       branches,
       isOwner: role === "owner",
@@ -243,7 +243,7 @@ router.get("/receipts/:id", async (req, res) => {
       receipt: {
         ...receipt,
         clientName: receipt.clientId?.name || receipt.clientId?.phone || "Unknown",
-        branchName: receipt.branchId?.name || "—"
+        branchName: receipt.branchId?.name || "-"
       }
     });
   } catch (error) {

@@ -191,7 +191,7 @@
 
     <hr />
 
-{{!-- ===== IMPORT SECTIONS — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{!-- ===== IMPORT SECTIONS - HIDDEN FOR CRIPFCNT-HOME ===== --}}
 {{#unless isHomeSchool}}
 
 {{#if (eq org.type "school")}}
@@ -261,7 +261,7 @@
 {{/if}}
 {{/unless}}
 
-{{!-- ===== MODULES SECTION — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{!-- ===== MODULES SECTION - HIDDEN FOR CRIPFCNT-HOME ===== --}}
 {{#unless isHomeSchool}}
     <section>
       <h2>Modules</h2>
@@ -278,7 +278,7 @@
     <hr/>
 {{/unless}}
 
-{{!-- ===== ASSIGN QUIZ SECTION — HIDDEN FOR CRIPFCNT-HOME ===== --}}
+{{!-- ===== ASSIGN QUIZ SECTION - HIDDEN FOR CRIPFCNT-HOME ===== --}}
 {{#unless isHomeSchool}}
     <section>
   
@@ -370,7 +370,7 @@
              {{#if passages}}
                {{#each passages}}
                  <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
-                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} — org{{/if}}
+                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} - org{{/if}}
                  </option>
                {{/each}}
              {{/if}}
@@ -417,7 +417,7 @@
 {{/unless}}
 
 
-{{!-- ===== BULK ASSIGN ALL QUIZZES — FIXED FOR CRIPFCNT-SCHOOL ===== --}}
+{{!-- ===== BULK ASSIGN ALL QUIZZES - FIXED FOR CRIPFCNT-SCHOOL ===== --}}
 {{!-- Place this right after </section> of regular assign quiz, BEFORE the create passage section --}}
 
 {{#if (eq org.slug "cripfcnt-school")}}
@@ -694,7 +694,7 @@
 </script>
 {{/if}}
 
-{{!-- ===== CREATE PASSAGE SECTION — NOW AVAILABLE FOR ALL ORGS INCLUDING CRIPFCNT-HOME ===== --}}
+{{!-- ===== CREATE PASSAGE SECTION - NOW AVAILABLE FOR ALL ORGS INCLUDING CRIPFCNT-HOME ===== --}}
 <section>
      <div class="panel">
        <h3>Create Passage Quiz (for this organization)</h3>
@@ -735,7 +735,7 @@
 </section>
 
 
-{{!-- ===== QUIZ RULES — CRIPFCNT-HOME ONLY (REDESIGNED) ===== --}}
+{{!-- ===== QUIZ RULES - CRIPFCNT-HOME ONLY (REDESIGNED) ===== --}}
 {{#if isHomeSchool}}
 <hr/>
 
@@ -925,7 +925,7 @@
 
 
 
-{{!-- ===== QUIZ RULES — CRIPFCNT-SCHOOL ONLY (NO GRADE/SUBJECT) ===== --}}
+{{!-- ===== QUIZ RULES - CRIPFCNT-SCHOOL ONLY (NO GRADE/SUBJECT) ===== --}}
 {{#if isCripSchool}}
 <hr/>
 
@@ -1049,7 +1049,7 @@
 
   </main>
 
-  {{!-- ===== SCRIPTS — ONLY FOR NON-HOME ORGS ===== --}}
+  {{!-- ===== SCRIPTS - ONLY FOR NON-HOME ORGS ===== --}}
   {{#unless isHomeSchool}}
   <script>
     // helper: convert FormData -> object (handles multiple selects)
@@ -1180,7 +1180,7 @@ fb.innerHTML = `
 
           const ul = document.getElementById('invitesList');
           const li = document.createElement('li');
-          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
+          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> - <span class="badge">Pending</span>`;
           ul.prepend(li);
           f.reset();
         } catch (e) {
@@ -1336,7 +1336,7 @@ if (isSchool) {
   </script>
   {{/unless}}
 
-  {{!-- ===== CREATE PASSAGE SCRIPT — NOW FOR ALL ORGS ===== --}}
+  {{!-- ===== CREATE PASSAGE SCRIPT - NOW FOR ALL ORGS ===== --}}
   <script>
     // Create Passage Quiz (AJAX) - Works for all orgs including cripfcnt-home
     const createPassageForm = document.getElementById('createPassageForm');
@@ -1480,7 +1480,7 @@ if (role === "teacher") {
   }
 </script>
 
-{{!-- ===== QUIZ RULES FILTER SCRIPT — HOME ONLY ===== --}}
+{{!-- ===== QUIZ RULES FILTER SCRIPT - HOME ONLY ===== --}}
 {{#if isHomeSchool}}
 <script>
 (function() {
@@ -1597,7 +1597,7 @@ if (role === "teacher") {
 </script>
 {{/if}}
 
-{{!-- ===== INVITE AJAX — HOME ORG (since the non-home script block has it too) ===== --}}
+{{!-- ===== INVITE AJAX - HOME ORG (since the non-home script block has it too) ===== --}}
 {{#if isHomeSchool}}
 <script>
   function formToObject(form) {
@@ -1636,7 +1636,7 @@ if (role === "teacher") {
         fb.innerHTML = `<div class="success"><strong>Invite created ✅</strong><br><br><strong>Invite link:</strong><br><input type="text" value="${inviteLink}" readonly style="width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:13px;" onclick="this.select()"/><div class="muted small" style="margin-top:6px">Copy this link and send it to the user on WhatsApp</div></div>`;
         const ul = document.getElementById('invitesList');
         const li = document.createElement('li');
-        li.innerHTML = `${payload.email} | token: <code>${data.token}</code> — <span class="badge">Pending</span>`;
+        li.innerHTML = `${payload.email} | token: <code>${data.token}</code> - <span class="badge">Pending</span>`;
         ul.prepend(li);
         f.reset();
       } catch (e) {

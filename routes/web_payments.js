@@ -53,9 +53,9 @@ router.get("/payments", async (req, res) => {
     // If user searched invoice number/client, filter in-memory (fast enough for 20/page)
     let rows = payments.map(p => ({
       ...p,
-      invoiceNumber: p.invoiceId?.number || "—",
+      invoiceNumber: p.invoiceId?.number || "-",
       clientName: p.clientId?.name || p.clientId?.phone || "Unknown",
-      branchName: p.branchId?.name || "—"
+      branchName: p.branchId?.name || "-"
     }));
 
     if (search) {
@@ -147,7 +147,7 @@ router.get("/payments/create", async (req, res) => {
       invoices: invoices.map(inv => ({
         ...inv,
         clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown",
-        branchName: inv.branchId?.name || "—"
+        branchName: inv.branchId?.name || "-"
       })),
       branches,
       isOwner: role === "owner",

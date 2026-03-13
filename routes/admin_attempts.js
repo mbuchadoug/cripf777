@@ -55,7 +55,7 @@ router.get("/admin/orgs/:slug/attempts/:attemptId", ensureAuth,ensureAdminEmails
 
     if (!mongoose.isValidObjectId(attemptId)) return res.status(400).send("invalid attempt id");
 
-    // Load attempt (no populate of questions here — we'll fetch questions separately)
+    // Load attempt (no populate of questions here - we'll fetch questions separately)
     const attempt = await Attempt.findById(attemptId).lean();
     if (!attempt) return res.status(404).send("attempt not found");
 

@@ -376,7 +376,7 @@ res.render("web/reports/sales", {
   activityLog: activityLog.map(inv => ({
     ...inv,
     clientName: inv.clientId?.name || inv.clientId?.phone || "Unknown",
-    branchName: inv.branchId?.name || "—"
+    branchName: inv.branchId?.name || "-"
   })),
   summary: { totalRevenue, totalCollected, totalExpenses, netProfit },
   filters: { period, startDate, endDate, branchFilter },
@@ -423,12 +423,12 @@ router.get("/reports/export", async (req, res) => {
       number: inv.number,
       date: new Date(inv.createdAt).toLocaleDateString(),
       client: inv.clientId?.name || inv.clientId?.phone || "Unknown",
-      branch: inv.branchId?.name || "—",
+      branch: inv.branchId?.name || "-",
       total: inv.total,
       amountPaid: inv.amountPaid,
       balance: inv.balance,
       status: inv.status,
-      createdBy: inv.createdBy || "—"
+      createdBy: inv.createdBy || "-"
     }));
 
     res.json({ rows });

@@ -400,7 +400,7 @@ const text = typeof action === "string" ? action.trim() : "";*/
 
 
 
-// 📌 Main menu shortcut — ONLY when NOT onboardin
+// 📌 Main menu shortcut - ONLY when NOT onboardin
 
 
 
@@ -712,7 +712,7 @@ if (a === "inv_item_custom") {
   let msg = "📦 Product catalogue:\n\n";
 
   products.forEach((p, i) => {
-    //msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+    //msg += `${i + 1}) ${p.name} - ${p.unitPrice} ${biz.currency}\n`;
     msg += `${i + 1}) ${p.name} - ${formatMoney(p.unitPrice, biz.currency)}\n`;
 
   });
@@ -1075,7 +1075,7 @@ if (biz && biz.sessionState === "bulk_upload_products" && !isMetaAction) {
     })),
     { ordered: false }
   ).catch(() => {
-    // ordered:false may still throw if duplicates etc — ignore and continue
+    // ordered:false may still throw if duplicates etc - ignore and continue
   });
   
   let reply =
@@ -1259,7 +1259,7 @@ Type more products or reply *done* to finish.`
 }
 
   /* =========================
-   ONBOARDING — BUSINESS NAME
+   ONBOARDING - BUSINESS NAME
 ========================= */
 
 // =========================
@@ -1584,7 +1584,7 @@ if (
 
 
 if (escapeWords.includes(al)) {
-  // If no business, don't crash — start onboarding instead
+  // If no business, don't crash - start onboarding instead
   if (!biz) {
     return startOnboarding(from, phone); // we'll add this helper below
   }
@@ -1874,7 +1874,7 @@ if (a.startsWith("assign_branch_")) {
 }
 
 /* =========================
-   SETTINGS (META) — STEP 4
+   SETTINGS (META) - STEP 4
    MUST BE BEFORE SWITCH
 ========================= */
 

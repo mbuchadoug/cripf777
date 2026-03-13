@@ -24,7 +24,7 @@ export const ROLE_MATRIX = {
       "payments",
       "reports",
       "settings"
-      // ✅ owner_only intentionally excluded — no subscription/upgrade
+      // ✅ owner_only intentionally excluded - no subscription/upgrade
     ]
   },
 
@@ -34,7 +34,7 @@ export const ROLE_MATRIX = {
       "clients",
       "payments",
       "reports"
-      // ✅ owner_only intentionally excluded — no subscription/upgrade
+      // ✅ owner_only intentionally excluded - no subscription/upgrade
     ]
   }
 };

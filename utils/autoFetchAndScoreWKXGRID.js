@@ -78,12 +78,12 @@ ${cripfLogic}
 Perform a CRIPFCnt SCOI Audit for: "${entity}"
 
 Always follow this 6-step structure:
-1️⃣ Visibility — score (0–10) and rationale  
-2️⃣ Contribution — score (0–10) and rationale  
+1️⃣ Visibility - score (0–10) and rationale  
+2️⃣ Contribution - score (0–10) and rationale  
 3️⃣ SCOI Calculation (show formula + interpretation)  
-4️⃣ Global Environment Adjustment — ERF and rationale  
+4️⃣ Global Environment Adjustment - ERF and rationale  
 5️⃣ Adjusted SCOI (show full equation)  
-6️⃣ Final CRIPFCnt Commentary — with civilization tone and structural depth  
+6️⃣ Final CRIPFCnt Commentary - with civilization tone and structural depth  
 
 🧭 Rules:
 - Use the CRIPFCnt logic, weights, and ERF definitions above.
@@ -141,7 +141,7 @@ ${webText}
   // ----------------------
   const structuralInsight = `
 📘 Structural Insight:
-This audit reflects ${entity}'s position within the CRIPFCnt Axis Law —
+This audit reflects ${entity}'s position within the CRIPFCnt Axis Law -
 where Visibility, Responsibility, and Resilience define placement under civilization stress.
 The Adjusted SCOI of ${adjustedSCOI} situates it as a "${placementLevel}" within the Recalibration Spectrum.
 `;

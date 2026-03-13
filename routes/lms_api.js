@@ -1343,7 +1343,7 @@ return res.json({
   }
 }
 // END OF AI QUIZ SUBMIT HANDLING
-    // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE — SOURCE OF TRUTH)
+    // ⛔ QUIZ EXPIRY ENFORCEMENT (SERVER-SIDE - SOURCE OF TRUTH)
 // ⛔ CALENDAR-BASED EXPIRY ONLY
 if (process.env.QUIZ_EXPIRY_ENABLED === "true" && exam?.expiresAt) {
   if (new Date() > new Date(exam.expiresAt)) {
@@ -1374,7 +1374,7 @@ if (!attemptUserId) {
   throw new Error("Attempt userId (student) could not be resolved");
 }
 
-    // 🔑 SINGLE SOURCE OF TRUTH — AFTER exam is known
+    // 🔑 SINGLE SOURCE OF TRUTH - AFTER exam is known
 // ✅ SAFE EXAM ID RESOLUTION
 //let finalExamId;
 

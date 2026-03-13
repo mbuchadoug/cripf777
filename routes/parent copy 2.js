@@ -646,7 +646,7 @@ async function buildAttemptDetails(attempt) {
   return details;
 }
 
-// ⚠️ TEMP FIX — BACKFILL ATTEMPT QUIZ TITLES
+// ⚠️ TEMP FIX - BACKFILL ATTEMPT QUIZ TITLES
 router.get("/admin/fix-attempt-quiz-titles", ensureAuth, async (req, res) => {
   try {
     const AttemptModel = (await import("../models/attempt.js")).default;

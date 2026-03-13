@@ -5,7 +5,7 @@
 <body>
   {{> navbar}}
   <main>
-    <h1>{{org.name}} — Dashboard</h1>
+    <h1>{{org.name}} - Dashboard</h1>
     <p>{{org.description}}</p>
     <p>You are a <strong>{{membership.role}}</strong> in this organization.</p>
 
@@ -15,7 +15,7 @@
         <ul>
           {{#each modules}}
             <li>
-              <strong>{{this.title}}</strong> — <small>{{this.slug}}</small>
+              <strong>{{this.title}}</strong> - <small>{{this.slug}}</small>
               <a href="/org/{{org.slug}}/quiz?module={{this.slug}}">Take Quiz</a>
               {{!-- optionally link to materials --}}
             </li>

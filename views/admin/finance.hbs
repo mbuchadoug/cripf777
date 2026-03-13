@@ -291,7 +291,7 @@
               {{else if (eq plan "silver")}}
                 <span class="badge badge-silver">Silver</span>
               {{else}}
-                <span style="color:var(--muted);">—</span>
+                <span style="color:var(--muted);">-</span>
               {{/if}}
             </td>
             <td>
@@ -306,7 +306,7 @@
               {{#if expiresAt}}
                 {{formatDate expiresAt}}
               {{else}}
-                —
+                -
               {{/if}}
             </td>
             <td>
@@ -324,7 +324,7 @@
               {{#if lastPaymentDate}}
                 ${{lastPaymentAmount}} · {{formatDate lastPaymentDate}}
               {{else}}
-                —
+                -
               {{/if}}
             </td>
           </tr>

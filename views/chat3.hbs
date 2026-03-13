@@ -29,7 +29,7 @@ async function startChat() {
   if (!entity) return alert("Enter a company name");
 
   const output = document.getElementById("output");
-  output.textContent = `SCOI Audit — ${entity}\n\n`;
+  output.textContent = `SCOI Audit - ${entity}\n\n`;
 
   try {
     const res = await fetch("/api/chat-stream", {

@@ -30,8 +30,8 @@ async function run() {
   course = await Course.create({
     slug: "responsibility-lms",
     title: "RESPONSIBILITY LMS",
-    shortDescription: "Learn responsibility as placement — CRIPFCnt structured discipline for individuals and organizations.",
-    longDescription: `Welcome to the CRIPFCnt Responsibility Learning System — the first global platform that teaches responsibility as placement.`,
+    shortDescription: "Learn responsibility as placement - CRIPFCnt structured discipline for individuals and organizations.",
+    longDescription: `Welcome to the CRIPFCnt Responsibility Learning System - the first global platform that teaches responsibility as placement.`,
     heroImage: "/static/lms/hero.jpg",
     colorPalette: { gold: "#D4AF37", black: "#0A0A0A", charcoal: "#1B1B1B", white: "#F5F5F5" },
     published: true
@@ -40,7 +40,7 @@ async function run() {
   // Modules & lessons content from brief
   const modules = [
     { title: "Introduction & Positioning", lessons: [
-      { title: "Welcome — Responsibility is the First Architecture", body: `“Responsibility is the First Architecture of Civilization. Before purpose, before performance, before success - there is responsibility.”\n\nThis LMS introduces placement-based responsibility...` }
+      { title: "Welcome - Responsibility is the First Architecture", body: `“Responsibility is the First Architecture of Civilization. Before purpose, before performance, before success - there is responsibility.”\n\nThis LMS introduces placement-based responsibility...` }
     ]},
     { title: "The Science of Responsibility", lessons: [
       { title: "How responsibility interacts with consciousness", body: "How responsibility interacts with consciousness, subconsciousness, interpretation, and purpose. Why responsible people outperform talent, skill, and motivation." }
@@ -58,7 +58,7 @@ async function run() {
       { title: "Micro-tests & Simulations", body: "Real-world micro-tests, daily scenarios, simulated decisions. Training instinct, not memory." }
     ]},
     { title: "Certification", lessons: [
-      { title: "Final Exam (Responsibility Final Exam)", body: "Final exam — multiple choice & short answers. Pass to receive CRIPFCnt Responsibility Certificate." }
+      { title: "Final Exam (Responsibility Final Exam)", body: "Final exam - multiple choice & short answers. Pass to receive CRIPFCnt Responsibility Certificate." }
     ]},
   ];
 

@@ -37,11 +37,11 @@
     <div class="grid-2">
       <div>
         <div class="form-label" style="margin-bottom:6px;">Name</div>
-        <div class="td-primary">{{#if client.name}}{{client.name}}{{else}}—{{/if}}</div>
+        <div class="td-primary">{{#if client.name}}{{client.name}}{{else}}-{{/if}}</div>
       </div>
       <div>
         <div class="form-label" style="margin-bottom:6px;">Phone</div>
-        <div class="td-primary td-mono">{{#if client.phone}}{{client.phone}}{{else}}—{{/if}}</div>
+        <div class="td-primary td-mono">{{#if client.phone}}{{client.phone}}{{else}}-{{/if}}</div>
       </div>
     </div>
   </div>

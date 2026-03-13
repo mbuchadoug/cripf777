@@ -87,7 +87,7 @@ export async function handleClientPicked(to, clientId) {
   // ✅ PRESERVE docType before resetting
   const docType = biz.sessionData?.docType || "invoice";
 
-  // 🔒 CRITICAL FIX — persist durable ID
+  // 🔒 CRITICAL FIX - persist durable ID
   biz.sessionData.clientId = client._id;
 
   // Optional cache (safe)

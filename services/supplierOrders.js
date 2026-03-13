@@ -9,7 +9,7 @@ function formatOrderItems(items = []) {
     const name = i.product || "Item";
     const qty = i.quantity ?? 1;
     const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
-    const lineTotal = typeof i.total === "number" ? ` — $${i.total.toFixed(2)}` : "";
+    const lineTotal = typeof i.total === "number" ? ` - $${i.total.toFixed(2)}` : "";
     return `• ${name} x${qty}${unitSuffix}${lineTotal}`;
   }).join("\n");
 }
@@ -28,7 +28,7 @@ export async function notifySupplierNewOrder(supplierPhone, order) {
 
   const totalLine = hasPricing
     ? `💵 Total: $${Number(order.totalAmount || 0).toFixed(2)}`
-    : `💵 Total: Pending — set your price when accepting`;
+    : `💵 Total: Pending - set your price when accepting`;
 
   await sendButtons(supplierPhone, {
     text:
