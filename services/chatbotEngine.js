@@ -362,6 +362,145 @@ if (!biz && !ownerRole) {
       });
     }
   }
+
+
+
+  // =========================
+  // 🛒 BUYER ORDER FLOW (no-biz users via UserSession)
+  // =========================
+  if (!biz && !isMetaAction) {
+    const sess = await UserSession.findOne({ phone });
+    const orderState = sess?.tempData?.orderState;
+
+    if (orderState === "supplier_order_product") {
+      const productQuery = text.trim();
+      if (!productQuery || productQuery.length < 1) {
+        return sendButtons(from, {
+          text: "❌ Please type the product name:",
+          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+        });
+      }
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: {
+          "tempData.orderProduct": productQuery,
+          "tempData.orderState": "supplier_order_quantity"
+        }}
+      );
+      return sendButtons(from, {
+        text: `🛒 *${productQuery}*\n\nHow many / what quantity do you need?`,
+        buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+      });
+    }
+
+    if (orderState === "supplier_order_quantity") {
+      const qty = text.trim();
+      if (!qty || qty.length < 1) {
+        return sendButtons(from, {
+          text: "❌ Please enter the quantity (e.g. 2 bags, 5kg, 3 units):",
+          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+        });
+      }
+      const sess2 = await UserSession.findOne({ phone });
+      const supplierId = sess2?.tempData?.orderSupplierId;
+      const supplierDoc = supplierId ? await SupplierProfile.findById(supplierId).lean() : null;
+
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: {
+          "tempData.orderQuantity": qty,
+          "tempData.orderState": "supplier_order_address"
+        }}
+      );
+
+      const deliveryPrompt = supplierDoc?.delivery?.available
+        ? "📍 *Send your delivery address:*\n\nExample: 12 Borrowdale Rd, Harare"
+        : "🏠 This supplier is *collection only.*\n\nSend a contact note or your name so they can prepare your order:";
+
+      return sendButtons(from, {
+        text: deliveryPrompt,
+        buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+      });
+    }
+
+    if (orderState === "supplier_order_address") {
+      const address = text.trim();
+      if (!address || address.length < 2) {
+        return sendButtons(from, {
+          text: "❌ Please enter your delivery address or contact note:",
+          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+        });
+      }
+
+      const sess3 = await UserSession.findOne({ phone });
+      const supplierId = sess3?.tempData?.orderSupplierId;
+      const orderProduct = sess3?.tempData?.orderProduct || "Unspecified";
+      const orderQty = sess3?.tempData?.orderQuantity || "1";
+
+      if (!supplierId) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
+                       "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
+        );
+        await sendText(from, "❌ Order session expired. Please search for the supplier again.");
+        return sendSuppliersMenu(from);
+      }
+
+      const supplier = await SupplierProfile.findById(supplierId).lean();
+      if (!supplier) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
+                       "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
+        );
+        await sendText(from, "❌ Supplier not found. Please search again.");
+        return sendSuppliersMenu(from);
+      }
+
+      const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
+      const order = await SupplierOrder.create({
+        supplierId: supplier._id,
+        supplierPhone: supplier.phone,
+        buyerPhone: phone,
+        items: [{
+          product: orderProduct,
+          quantity: qtyNum || 1,
+          unit: qtyNum ? "units" : orderQty,
+          pricePerUnit: null,
+          currency: "USD",
+          total: null
+        }],
+        totalAmount: 0,
+        currency: "USD",
+        delivery: {
+          required: supplier.delivery?.available || false,
+          address: address
+        },
+        status: "pending"
+      });
+
+      await notifySupplierNewOrder(supplier.phone, order);
+
+      // Clear order state from UserSession
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
+                     "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
+      );
+
+      await sendText(from,
+`✅ *Order sent to ${supplier.businessName}!*
+
+📦 ${orderProduct} x${orderQty}
+${supplier.delivery?.available ? `📍 ${address}` : `📝 Note: ${address}`}
+📞 Supplier: ${supplier.phone}
+
+They will confirm your order and send pricing shortly. 🎉`
+      );
+      return sendSuppliersMenu(from);
+    }
+  }
   // =========================
   // 🔑 ROLE CHECK
   // =========================
@@ -2501,10 +2640,21 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
     });
   }
   // ── Start order: ask what they want ───────────────────────────────────────
+// ── Start order: ask what they want ───────────────────────────────────────
   if (a.startsWith("sup_order_")) {
     const supplierId = a.replace("sup_order_", "");
     const supplier = await SupplierProfile.findById(supplierId).lean();
     if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+    // Store order state in UserSession for biz-less buyers
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: {
+        "tempData.orderSupplierId": supplierId,
+        "tempData.orderState": "supplier_order_product"
+      }},
+      { upsert: true }
+    );
 
     if (biz) {
       biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: supplierId };
