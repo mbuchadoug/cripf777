@@ -1994,10 +1994,16 @@ if (a === "register_supplier") {
       biz.sessionState = "supplier_edit_area";
       await saveBizSafe(biz);
     }
-    return sendButtons(from, {
-      text: `📍 *Edit Location*\n\nCurrent: ${supplier.location?.area || "not set"}, ${supplier.location?.city || ""}\n\nSend your area/suburb name:\nExample: Avondale, Bulawayo`,
-      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
-    });
+   return sendText(from,
+`📍 *Edit Location*
+
+Current: ${supplier.location?.area || "not set"}, ${supplier.location?.city || ""}
+
+Send your area/suburb name:
+Example: *Avondale, Bulawayo*
+
+_Type *cancel* to go back to your account._`
+    );
   }
 
   if (a === "sup_my_orders") {
@@ -2083,10 +2089,9 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
         biz.sessionData.supplierReg.city = "Other";
         await saveBizSafe(biz);
       }
-      return sendButtons(from, {
-        text: "📍 Please type your city name:",
-        buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-      });
+  return sendText(from,
+        "📍 Please type your city name:\n\n_Type *cancel* to return to main menu._"
+      );
     }
 
     if (biz) {
@@ -2097,10 +2102,15 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
       await saveBizSafe(biz);
     }
 
-    return sendButtons(from, {
-      text: `📍 *${city}*\n\nWhat area or suburb are you in?\n\nExample: Mbare, Chitungwiza, Belgravia`,
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+return sendText(from,
+`📍 *${city}*
+
+What area or suburb are you in?
+
+Example: *Mbare, Chitungwiza, Belgravia*
+
+_Type *cancel* to return to main menu._`
+    );
   }
 
   // ── Supplier category selected during registration ────────────────────────
@@ -2268,27 +2278,22 @@ if (a.startsWith("sup_search_cat_")) {
     const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
 
     // Get category AND product from biz session or UserSession fallback
-    let category = biz?.sessionData?.supplierSearch?.category || null;
+   let category = biz?.sessionData?.supplierSearch?.category || null;
     let product = biz?.sessionData?.supplierSearch?.product || null;
     if (!category && !product) {
       const sess = await UserSession.findOne({ phone });
       category = sess?.tempData?.supplierSearchCategory || null;
       product = sess?.tempData?.supplierSearchProduct || null;
     }
-    if (!category) {
-      const sess = await UserSession.findOne({ phone });
-      category = sess?.tempData?.supplierSearchCategory || null;
-    }
 
    const results = await runSupplierSearch({ city, category, product });
 
-    if (!results.length) {
-    return sendButtons(from, {
-        text: `😕 No suppliers found for\n${category || "your search"} in ${city}.\n\nWould you like to post a request?\nSuppliers will reply with prices.`,
+  if (!results.length) {
+      return sendButtons(from, {
+        text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
-          { id: "suppliers_home", title: "🏪 Suppliers" },
-          { id: "menu", title: "🏠 Main Menu" }
+          { id: "suppliers_home", title: "🏪 Suppliers" }
         ]
       });
     }

@@ -138,17 +138,17 @@ export async function sendMainMenu(to) {
     });
   }
 
-  const items = [
+const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
     { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
     { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
     { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments", section: "payments" },
+    { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" },
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
     { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
     { id: ACTIONS.SUBSCRIPTION_MENU, title: "💳 Subscription", section: "owner_only" },
     { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package", section: "owner_only" },
-    { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" }
   ];
 
   const filtered = await filterMenuByRole({ from: to, biz, items });

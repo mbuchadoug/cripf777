@@ -42,14 +42,14 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
   );
 
   // Notify buyer
+// Notify buyer their order was accepted
+  const supplier = await SupplierProfile.findOne({ phone: from });
   await sendButtons(order.buyerPhone, {
     text: `✅ *Order Accepted!*\n\n` +
-          `${order.items.map(i =>
-            `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
-        `💵 ${order.totalAmount > 0 ? `$${order.totalAmount}` : "Supplier will confirm pricing"}\n` +
-          `📞 ${from}\n\n` +
-          `Contact them to arrange\n` +
-          `payment & delivery.`,
+          `*${supplier?.businessName || from}* has accepted your order:\n\n` +
+          `${order.items.map(i => `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
+          `📞 Contact: ${from}\n\n` +
+          `They will be in touch to arrange payment & delivery.`,
     buttons: [
       { id: `rate_order_${order._id}`, title: "⭐ Rate After Delivery" },
       { id: "menu", title: "🏠 Main Menu" }
