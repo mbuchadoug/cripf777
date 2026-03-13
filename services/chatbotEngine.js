@@ -473,23 +473,43 @@ if (searchMode === "product") {
   if (!biz && !isMetaAction) {
     const sess = await UserSession.findOne({ phone });
     const orderState = sess?.tempData?.orderState;
+
+    if (
+  al === "cancel" &&
+  (orderState === "supplier_order_product" || orderState === "supplier_order_address")
+) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.orderState": "",
+        "tempData.orderSupplierId": "",
+        "tempData.orderItems": "",
+        "tempData.orderProduct": "",
+        "tempData.orderQuantity": ""
+      }
+    }
+  );
+
+  await sendText(from, "❌ Order cancelled.");
+  return sendSuppliersMenu(from);
+}
 if (orderState === "supplier_order_product") {
   const parsedItems = parseBulkOrderInput(text);
 
   if (!parsedItems.length || parsedItems.every(i => !i.valid)) {
-    return sendButtons(from, {
-      text:
+  return sendText(from,
 `❌ Please enter your order in this format:
 
-*product name, product qty*
+*product qty, product qty*
 
 Examples:
 *sugar 2, bread 3, milk 1*
 *cement 10, river sand 2*
 
-You can also send one per line.`,
-      buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-    });
+You can also send one per line.
+
+Type *cancel* to stop this order.`);
   }
 
   await UserSession.findOneAndUpdate(
@@ -510,27 +530,26 @@ You can also send one per line.`,
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
     .join("\n");
 
-  return sendButtons(from, {
-    text:
+  return sendText(from,
 `🛒 *Order Summary*
 
 ${preview}
 
-Now send your delivery address or contact note:`,
-    buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-  });
+Now send your delivery address or contact note:
+
+Type *cancel* to stop this order.`);
 }
 
    
 
 if (orderState === "supplier_order_address") {
   const address = text.trim();
-  if (!address || address.length < 2) {
-    return sendButtons(from, {
-      text: "❌ Please enter your delivery address or contact note:",
-      buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-    });
-  }
+if (!address || address.length < 2) {
+  return sendText(from,
+`❌ Please enter your delivery address or contact note:
+
+Type *cancel* to stop this order.`);
+}
 
   const sess3 = await UserSession.findOne({ phone });
   const supplierId = sess3?.tempData?.orderSupplierId;
@@ -1820,6 +1839,21 @@ const supplierStates = [
     if (handled) return;
   }
 
+
+  if (
+  biz &&
+  !isMetaAction &&
+  al === "cancel" &&
+  (biz.sessionState === "supplier_order_product" || biz.sessionState === "supplier_order_address")
+) {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "❌ Order cancelled.");
+  return sendSuppliersMenu(from);
+}
+
 if (escapeWords.includes(al)) {
     if (!biz || biz.name?.startsWith("pending_supplier_")) {
       // Clear supplier reg state if mid-flow
@@ -2867,24 +2901,21 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
       productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
     }
 
-  return sendButtons(from, {
-  text:
+return sendText(from,
 `🛒 *Order from ${supplier.businessName}*${productText}
 
 Send your items in one message.
 
 *Format:*
-product name, product qty
+product qty, product qty
 
 *Examples:*
 sugar 2, bread 3, milk 1
 cement 10, river sand 2
 
-You can also send one per line.`,
-  buttons: [
-    { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-  ]
-});
+You can also send one per line.
+
+Type *cancel* to stop this order.`);
   }
 
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
@@ -2938,19 +2969,18 @@ if (biz?.sessionState === "supplier_order_product" && !isMetaAction) {
   const parsedItems = parseBulkOrderInput(text);
 
   if (!parsedItems.length || parsedItems.every(i => !i.valid)) {
-    return sendButtons(from, {
-      text:
+   return sendText(from,
 `❌ Please enter your order in this format:
 
-*product name, product qty*
+*product qty, product qty*
 
 Examples:
 *sugar 2, bread 3, milk 1*
 *cement 10, river sand 2*
 
-You can also send one per line.`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
+You can also send one per line.
+
+Type *cancel* to stop this order.`);
   }
 
   biz.sessionData = { ...(biz.sessionData || {}), orderItems: parsedItems };
@@ -2961,15 +2991,14 @@ You can also send one per line.`,
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
     .join("\n");
 
-  return sendButtons(from, {
-    text:
+ return sendText(from,
 `🛒 *Order Summary*
 
 ${preview}
 
-Now send your delivery address or contact note:`,
-    buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-  });
+Now send your delivery address or contact note:
+
+Type *cancel* to stop this order.`);
 }
 
   // ── Buyer order: quantity text input ──────────────────────────────────────
@@ -2978,12 +3007,12 @@ Now send your delivery address or contact note:`,
   // ── Buyer order: address / contact note text input ────────────────────────
   if (biz?.sessionState === "supplier_order_address" && !isMetaAction) {
     const address = text.trim();
-    if (!address || address.length < 2) {
-      return sendButtons(from, {
-        text: "❌ Please enter your delivery address or contact note:",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
+ if (!address || address.length < 2) {
+  return sendText(from,
+`❌ Please enter your delivery address or contact note:
+
+Type *cancel* to stop this order.`);
+}
 
     const supplierId = biz.sessionData?.orderSupplierId;
    const orderItemsInput = biz.sessionData?.orderItems || [];
