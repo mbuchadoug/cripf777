@@ -254,8 +254,15 @@ await UserRole.create({
 
 await UserSession.findOneAndUpdate(
   { phone },
-  { activeBusinessId: biz._id },
-  { upsert: true }
+  {
+    $unset: {
+      "tempData.orderState": "",
+      "tempData.orderSupplierId": "",
+      "tempData.orderItems": "",
+      "tempData.orderProduct": "",
+      "tempData.orderQuantity": ""
+    }
+  }
 );
 
 biz.sessionState = "awaiting_business_name";

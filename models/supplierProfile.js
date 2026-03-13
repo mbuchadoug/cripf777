@@ -11,12 +11,14 @@ const SupplierProfileSchema = new mongoose.Schema({
   categories: [{ type: String }],
   products: [{ type: String }],
   prices: [{
-    product: String,
-    amount: Number,
+    product: { type: String, required: true },
+    amount: { type: Number, required: true },
     currency: { type: String, enum: ["USD", "ZWL"], default: "USD" },
-    unit: String,
+    unit: { type: String, default: "each" },
+    inStock: { type: Boolean, default: true },
     validUntil: Date
   }],
+  priceUpdatedAt: { type: Date },
   delivery: {
     available: { type: Boolean, default: false },
     range: {
@@ -69,14 +71,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   disputeCount: { type: Number, default: 0 },
   suspended: { type: Boolean, default: false },
 
-   prices: [{
-    product: { type: String, required: true },
-    amount: { type: Number, required: true },
-    currency: { type: String, enum: ["USD", "ZWL"], default: "USD" },
-    unit: { type: String, default: "each" },
-    inStock: { type: Boolean, default: true },
-    validUntil: Date
-  }],
+ 
   priceUpdatedAt: { type: Date },
 priceUpdatedAt: { type: Date },
   // Analytics

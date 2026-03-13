@@ -112,6 +112,70 @@ function formatMoney(amount, currency) {
   return `${sym}${n}`;
 }
 
+function normalizeProductName(value = "") {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function findMatchingSupplierPrice(supplier, requestedProduct) {
+  if (!supplier?.prices?.length || !requestedProduct) return null;
+
+  const wanted = normalizeProductName(requestedProduct);
+
+  // exact normalized match first
+  let match = supplier.prices.find(p =>
+    p?.inStock !== false &&
+    normalizeProductName(p.product) === wanted
+  );
+  if (match) return match;
+
+  // fallback partial match
+  match = supplier.prices.find(p => {
+    if (p?.inStock === false || !p?.product) return false;
+    const candidate = normalizeProductName(p.product);
+    return candidate.includes(wanted) || wanted.includes(candidate);
+  });
+
+  return match || null;
+}
+
+function parseBulkOrderInput(text = "") {
+  const raw = String(text).trim();
+  if (!raw) return [];
+
+  return raw
+    .split(/[|\n,]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(part => {
+      // examples:
+      // sugar 2
+      // cooking oil x3
+      // rice 5kg
+      // bread 4 loaves
+      const m = part.match(/^(.+?)\s+(?:x\s*)?(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+      if (!m) {
+        return {
+          raw: part,
+          product: part,
+          quantity: 1,
+          unitLabel: "units",
+          valid: false
+        };
+      }
+
+      return {
+        raw: part,
+        product: m[1].trim(),
+        quantity: Number(m[2]),
+        unitLabel: m[3]?.trim() || "units",
+        valid: true
+      };
+    });
+}
 
 
 
@@ -409,57 +473,55 @@ if (searchMode === "product") {
   if (!biz && !isMetaAction) {
     const sess = await UserSession.findOne({ phone });
     const orderState = sess?.tempData?.orderState;
+if (orderState === "supplier_order_product") {
+  const parsedItems = parseBulkOrderInput(text);
 
-    if (orderState === "supplier_order_product") {
-      const productQuery = text.trim();
-      if (!productQuery || productQuery.length < 1) {
-        return sendButtons(from, {
-          text: "❌ Please type the product name:",
-          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-        });
+  if (!parsedItems.length || parsedItems.every(i => !i.valid)) {
+    return sendButtons(from, {
+      text:
+`❌ Please enter your order in this format:
+
+*product qty, product qty*
+
+Examples:
+*sugar 2, bread 3, milk 1*
+*cement 10, river sand 2*
+
+You can also send one per line.`,
+      buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+    });
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.orderItems": parsedItems,
+        "tempData.orderState": "supplier_order_address"
+      },
+      $unset: {
+        "tempData.orderProduct": "",
+        "tempData.orderQuantity": ""
       }
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: {
-          "tempData.orderProduct": productQuery,
-          "tempData.orderState": "supplier_order_quantity"
-        }}
-      );
-      return sendButtons(from, {
-        text: `🛒 *${productQuery}*\n\nHow many / what quantity do you need?`,
-        buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-      });
     }
+  );
 
-    if (orderState === "supplier_order_quantity") {
-      const qty = text.trim();
-      if (!qty || qty.length < 1) {
-        return sendButtons(from, {
-          text: "❌ Please enter the quantity (e.g. 2 bags, 5kg, 3 units):",
-          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-        });
-      }
-      const sess2 = await UserSession.findOne({ phone });
-      const supplierId = sess2?.tempData?.orderSupplierId;
-      const supplierDoc = supplierId ? await SupplierProfile.findById(supplierId).lean() : null;
+  const preview = parsedItems
+    .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
+    .join("\n");
 
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: {
-          "tempData.orderQuantity": qty,
-          "tempData.orderState": "supplier_order_address"
-        }}
-      );
+  return sendButtons(from, {
+    text:
+`🛒 *Order Summary*
 
-      const deliveryPrompt = supplierDoc?.delivery?.available
-        ? "📍 *Send your delivery address:*\n\nExample: 12 Borrowdale Rd, Harare"
-        : "🏠 This supplier is *collection only.*\n\nSend a contact note or your name so they can prepare your order:";
+${preview}
 
-      return sendButtons(from, {
-        text: deliveryPrompt,
-        buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-      });
-    }
+Now send your delivery address or contact note:`,
+    buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+  });
+}
+
+   
 
     if (orderState === "supplier_order_address") {
       const address = text.trim();
@@ -472,18 +534,24 @@ if (searchMode === "product") {
 
       const sess3 = await UserSession.findOne({ phone });
       const supplierId = sess3?.tempData?.orderSupplierId;
-      const orderProduct = sess3?.tempData?.orderProduct || "Unspecified";
-      const orderQty = sess3?.tempData?.orderQuantity || "1";
+const orderItemsInput = sess3?.tempData?.orderItems || [];
 
-      if (!supplierId) {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
-                       "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
-        );
-        await sendText(from, "❌ Order session expired. Please search for the supplier again.");
-        return sendSuppliersMenu(from);
+if (!supplier) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.orderState": "",
+        "tempData.orderSupplierId": "",
+        "tempData.orderItems": "",
+        "tempData.orderProduct": "",
+        "tempData.orderQuantity": ""
       }
+    }
+  );
+  await sendText(from, "❌ Supplier not found. Please search again.");
+  return sendSuppliersMenu(from);
+}
 
       const supplier = await SupplierProfile.findById(supplierId).lean();
       if (!supplier) {
@@ -496,39 +564,54 @@ if (searchMode === "product") {
         return sendSuppliersMenu(from);
       }
 
- const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
-const matchedPrice = findMatchingSupplierPrice(supplier, orderProduct);
-
-const itemQuantity = qtyNum || 1;
-const itemUnit = qtyNum ? "units" : orderQty;
-
-let pricePerUnit = null;
-let lineTotal = null;
-let totalAmount = 0;
-
-if (matchedPrice && typeof matchedPrice.amount === "number") {
-  pricePerUnit = matchedPrice.amount;
-  lineTotal = itemQuantity * matchedPrice.amount;
-  totalAmount = lineTotal;
+ const normalizedItems = Array.isArray(orderItemsInput) ? orderItemsInput : [];
+if (!normalizedItems.length) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderItems": "" } }
+  );
+  await sendText(from, "❌ Order session expired. Please start again.");
+  return sendSuppliersMenu(from);
 }
+
+let totalAmount = 0;
+let pricedCount = 0;
+
+const finalItems = normalizedItems.map(entry => {
+  const quantity = Number(entry.quantity) || 1;
+  const unitLabel = entry.unitLabel || "units";
+  const matchedPrice = findMatchingSupplierPrice(supplier, entry.product);
+
+  let pricePerUnit = null;
+  let total = null;
+
+  if (matchedPrice && typeof matchedPrice.amount === "number") {
+    pricePerUnit = matchedPrice.amount;
+    total = quantity * matchedPrice.amount;
+    totalAmount += total;
+    pricedCount++;
+  }
+
+  return {
+    product: entry.product,
+    quantity,
+    unit: unitLabel,
+    pricePerUnit,
+    currency: "USD",
+    total
+  };
+});
 
 const order = await SupplierOrder.create({
   supplierId: supplier._id,
   supplierPhone: supplier.phone,
   buyerPhone: phone,
-  items: [{
-    product: orderProduct,
-    quantity: itemQuantity,
-    unit: itemUnit,
-    pricePerUnit,
-    currency: "USD",
-    total: lineTotal
-  }],
+  items: finalItems,
   totalAmount,
   currency: "USD",
   delivery: {
     required: supplier.delivery?.available || false,
-    address: address
+    address
   },
   status: "pending"
 });
@@ -542,16 +625,22 @@ const order = await SupplierOrder.create({
                      "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
       );
 
-   await sendText(from,
+ const itemSummary = finalItems
+  .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
+  .join("\n");
+
+await sendText(from,
 `✅ *Order sent to ${supplier.businessName}!*
 
-📦 ${orderProduct} x${orderQty}
+${itemSummary}
 ${supplier.delivery?.available ? `📍 ${address}` : `📝 Note: ${address}`}
-${pricePerUnit !== null ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
+${pricedCount > 0 ? `💵 Current estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
-${pricePerUnit !== null
-  ? "They can now confirm your priced order. 🎉"
-  : "They will confirm your order and send pricing shortly. 🎉"}`
+${pricedCount === finalItems.length
+  ? "All items were auto-priced. Supplier can confirm immediately. 🎉"
+  : pricedCount > 0
+    ? "Some items were auto-priced. Supplier will confirm the rest. 🎉"
+    : "Supplier will confirm pricing shortly. 🎉"}`
 );
       return sendSuppliersMenu(from);
     }
@@ -1688,14 +1777,12 @@ const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
 
   // Pass supplier registration states to the state bridge
 const supplierStates = [
-    "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
-    "supplier_reg_prices", "supplier_update_prices",
-    "supplier_edit_products", "supplier_edit_area",
-    "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
-    "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
-    "supplier_order_enter_price"
-    // supplier_order_product/quantity/address handled separately below
-  ];
+  "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
+  "supplier_reg_prices", "supplier_update_prices",
+  "supplier_edit_products", "supplier_edit_area",
+  "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
+  "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason"
+];
 
  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
     // ── Cancel command during any supplier registration flow ──────────────
@@ -2765,12 +2852,24 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
       productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
     }
 
-    return sendButtons(from, {
-      text: `🛒 *Order from ${supplier.businessName}*${productText}\n\nWhat would you like to order?\n(type product name)`,
-      buttons: [
-        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
-      ]
-    });
+  return sendButtons(from, {
+  text:
+`🛒 *Order from ${supplier.businessName}*${productText}
+
+Send your items in one message.
+
+*Format:*
+product qty, product qty
+
+*Examples:*
+sugar 2, bread 3, milk 1
+cement 10, river sand 2
+
+You can also send one per line.`,
+  buttons: [
+    { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+  ]
+});
   }
 
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
@@ -2820,50 +2919,46 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
   }
 
   // ── Buyer order: product name text input ──────────────────────────────────
-  if (biz?.sessionState === "supplier_order_product" && !isMetaAction) {
-    const productQuery = text.trim();
-    if (!productQuery || productQuery.length < 1) {
-      return sendButtons(from, {
-        text: "❌ Please type the product name:",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-    biz.sessionData = { ...(biz.sessionData || {}), orderProduct: productQuery };
-    biz.sessionState = "supplier_order_quantity";
-    await saveBizSafe(biz);
+if (biz?.sessionState === "supplier_order_product" && !isMetaAction) {
+  const parsedItems = parseBulkOrderInput(text);
+
+  if (!parsedItems.length || parsedItems.every(i => !i.valid)) {
     return sendButtons(from, {
-      text: `🛒 *${productQuery}*\n\nHow many / what quantity do you need?`,
+      text:
+`❌ Please enter your order in this format:
+
+*product qty, product qty*
+
+Examples:
+*sugar 2, bread 3, milk 1*
+*cement 10, river sand 2*
+
+You can also send one per line.`,
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
     });
   }
+
+  biz.sessionData = { ...(biz.sessionData || {}), orderItems: parsedItems };
+  biz.sessionState = "supplier_order_address";
+  await saveBizSafe(biz);
+
+  const preview = parsedItems
+    .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
+    .join("\n");
+
+  return sendButtons(from, {
+    text:
+`🛒 *Order Summary*
+
+${preview}
+
+Now send your delivery address or contact note:`,
+    buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+  });
+}
 
   // ── Buyer order: quantity text input ──────────────────────────────────────
-  if (biz?.sessionState === "supplier_order_quantity" && !isMetaAction) {
-    const qty = text.trim();
-    if (!qty || qty.length < 1) {
-      return sendButtons(from, {
-        text: "❌ Please enter the quantity (e.g. 2 bags, 5kg, 3 units):",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-    biz.sessionData = { ...(biz.sessionData || {}), orderQuantity: qty };
-    biz.sessionState = "supplier_order_address";
-    await saveBizSafe(biz);
 
-    const supplierId = biz.sessionData?.orderSupplierId;
-    const supplierDoc = supplierId
-      ? await SupplierProfile.findById(supplierId).lean()
-      : null;
-
-    const deliveryPrompt = supplierDoc?.delivery?.available
-      ? "📍 *Send your delivery address:*\n\nExample: 12 Borrowdale Rd, Harare"
-      : "🏠 This supplier is *collection only.*\n\nSend a contact note or your name so they can prepare your order:";
-
-    return sendButtons(from, {
-      text: deliveryPrompt,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
-  }
 
   // ── Buyer order: address / contact note text input ────────────────────────
   if (biz?.sessionState === "supplier_order_address" && !isMetaAction) {
@@ -2876,8 +2971,7 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
     }
 
     const supplierId = biz.sessionData?.orderSupplierId;
-    const orderProduct = biz.sessionData?.orderProduct || "Unspecified";
-    const orderQty = biz.sessionData?.orderQuantity || "1";
+   const orderItemsInput = biz.sessionData?.orderItems || [];
 
     if (!supplierId) {
       biz.sessionState = "ready"; biz.sessionData = {};
@@ -2895,39 +2989,53 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
     }
 
 //const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
-const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
-const matchedPrice = findMatchingSupplierPrice(supplier, orderProduct);
-
-const itemQuantity = qtyNum || 1;
-const itemUnit = qtyNum ? "units" : orderQty;
-
-let pricePerUnit = null;
-let lineTotal = null;
-let totalAmount = 0;
-
-if (matchedPrice && typeof matchedPrice.amount === "number") {
-  pricePerUnit = matchedPrice.amount;
-  lineTotal = itemQuantity * matchedPrice.amount;
-  totalAmount = lineTotal;
+const normalizedItems = Array.isArray(orderItemsInput) ? orderItemsInput : [];
+if (!normalizedItems.length) {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+  await sendText(from, "❌ Order session expired. Please start again.");
+  return sendSuppliersMenu(from);
 }
+
+let totalAmount = 0;
+let pricedCount = 0;
+
+const finalItems = normalizedItems.map(entry => {
+  const quantity = Number(entry.quantity) || 1;
+  const unitLabel = entry.unitLabel || "units";
+  const matchedPrice = findMatchingSupplierPrice(supplier, entry.product);
+
+  let pricePerUnit = null;
+  let total = null;
+
+  if (matchedPrice && typeof matchedPrice.amount === "number") {
+    pricePerUnit = matchedPrice.amount;
+    total = quantity * matchedPrice.amount;
+    totalAmount += total;
+    pricedCount++;
+  }
+
+  return {
+    product: entry.product,
+    quantity,
+    unit: unitLabel,
+    pricePerUnit,
+    currency: "USD",
+    total
+  };
+});
 
 const order = await SupplierOrder.create({
   supplierId: supplier._id,
   supplierPhone: supplier.phone,
   buyerPhone: phone,
-  items: [{
-    product: orderProduct,
-    quantity: itemQuantity,
-    unit: itemUnit,
-    pricePerUnit,
-    currency: "USD",
-    total: lineTotal
-  }],
+  items: finalItems,
   totalAmount,
   currency: "USD",
   delivery: {
     required: supplier.delivery?.available || false,
-    address: address
+    address
   },
   status: "pending"
 });
@@ -2935,16 +3043,22 @@ const order = await SupplierOrder.create({
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
 
+const itemSummary = finalItems
+  .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
+  .join("\n");
+
 await sendText(from,
 `✅ *Order sent to ${supplier.businessName}!*
 
-📦 ${orderProduct} x${orderQty}
+${itemSummary}
 📍 ${address}
-${pricePerUnit !== null ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
+${pricedCount > 0 ? `💵 Current estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
-${pricePerUnit !== null
-  ? "They can now confirm your priced order. 🎉"
-  : "They will confirm your order and send pricing shortly. 🎉"}`
+${pricedCount === finalItems.length
+  ? "All items were auto-priced. Supplier can confirm immediately. 🎉"
+  : pricedCount > 0
+    ? "Some items were auto-priced. Supplier will confirm the rest. 🎉"
+    : "Supplier will confirm pricing shortly. 🎉"}`
 );
     return sendMainMenu(from);
   }
