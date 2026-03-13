@@ -333,16 +333,31 @@ if (!biz && ownerRole?.businessId) {
 if (!biz && !ownerRole) {
     const supplierExists = await SupplierProfile.findOne({ phone });
     
-    // If they're pressing a welcome screen button, let the action handlers below run
-    const welcomeActions = ["onboard_business", "find_supplier", "register_supplier"];
+    // Allow supplier search flow actions through for non-registered users
+    const allowedWithoutBiz =
+      a === "onboard_business" ||
+      a === "find_supplier" ||
+      a === "register_supplier" ||
+      a === "suppliers_home" ||
+      a === "sup_search_all" ||
+      a.startsWith("sup_search_cat_") ||
+      a.startsWith("sup_search_city_") ||
+      a.startsWith("sup_view_") ||
+      a.startsWith("sup_order_") ||
+      a.startsWith("sup_save_") ||
+      a.startsWith("rate_order_") ||
+      a.startsWith("sup_accept_") ||
+      a.startsWith("sup_decline_") ||
+      a === "my_supplier_account";
     
-    if (!supplierExists && al !== "join" && !welcomeActions.includes(a)) {
+    if (!supplierExists && al !== "join" && !allowedWithoutBiz) {
       return sendButtons(from, {
         text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
         buttons: [
-          { id: "onboard_business", title: "🧾 Run My Business" },
+        
           { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "register_supplier", title: "📦 List My Business" }
+          { id: "register_supplier", title: "📦 List My Business" },
+            { id: "onboard_business", title: "🧾 Run My Business" },
         ]
       });
     }
