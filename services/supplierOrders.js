@@ -1,26 +1,33 @@
-// services/supplierOrders.js
-
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 
-export async function notifySupplierNewOrder(supplierPhone, order) {
-  const { sendButtons } = await import("./metaSender.js");
+function formatOrderItems(items = []) {
+  if (!Array.isArray(items) || !items.length) return "• No items";
 
-const itemLines = order.items
-    .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
-    .join("\n");
+  return items.map(i => {
+    const name = i.product || "Item";
+    const qty = i.quantity ?? 1;
+    const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
+    const lineTotal = typeof i.total === "number" ? ` — $${i.total.toFixed(2)}` : "";
+    return `• ${name} x${qty}${unitSuffix}${lineTotal}`;
+  }).join("\n");
+}
+
+export async function notifySupplierNewOrder(supplierPhone, order) {
+  const itemLines = formatOrderItems(order.items);
 
   const deliveryLine = order.delivery?.required
     ? `🚚 Deliver to: ${order.delivery.address}`
     : "🏠 Collection";
 
   await sendButtons(supplierPhone, {
-    text: `🛒 *New Order!*\n\n` +
-          `${itemLines}\n\n` +
-          `💵 Total: Pending — set your price when accepting\n` +
-          `${deliveryLine}\n` +
-          `📞 Buyer: ${order.buyerPhone}`,
+    text:
+      `🛒 *New Order!*\n\n` +
+      `${itemLines}\n\n` +
+      `💵 Total: Pending — set your price when accepting\n` +
+      `${deliveryLine}\n` +
+      `📞 Buyer: ${order.buyerPhone}`,
     buttons: [
       { id: `sup_accept_${order._id}`, title: "✅ Accept" },
       { id: `sup_decline_${order._id}`, title: "❌ Decline" }
@@ -30,41 +37,37 @@ const itemLines = order.items
 
 export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
   const order = await SupplierOrder.findById(orderId);
-  if (!order) return;
-
-  order.status = "accepted";
-  await order.save();
-
-  // Update supplier stats
-  await SupplierProfile.findOneAndUpdate(
-    { phone: from },
-    { $inc: { completedOrders: 1, monthlyOrders: 1 } }
-  );
-
-  const supplier = await SupplierProfile.findOne({ phone: from });
-
-  try {
-    await sendButtons(order.buyerPhone, {
-      text: `✅ *Order Accepted!*\n\n` +
-            `*${supplier?.businessName || from}* has accepted your order:\n\n` +
-            `${order.items.map(i => `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
-            `📞 Contact: ${from}\n\n` +
-            `They will be in touch to arrange payment & delivery.`,
-      buttons: [
-        { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
-        { id: "menu", title: "🏠 Main Menu" }
-      ]
-    });
-  } catch (err) {
-    console.error("[SUPPLIER ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
+  if (!order) {
+    await sendText(from, "❌ Order not found.");
+    return;
   }
 
-  return sendList(from, "When will the order be ready?", [
-    { id: `sup_eta_today_${orderId}`, title: "Today" },
-    { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
-    { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
-    { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
-  ]);
+  if (!biz) {
+    await sendText(from, "❌ Session expired. Type *menu* and try again.");
+    return;
+  }
+
+  biz.sessionState = "supplier_order_enter_price";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    pricingOrderId: orderId
+  };
+  await saveBiz(biz);
+
+  const itemLines = formatOrderItems(order.items);
+
+  const instructions =
+    order.items.length === 1
+      ? "Reply with the *unit price*.\nExample: *4.50*"
+      : "Reply with prices in item order, separated by commas.\nExample: *4.50, 8, 1.20*";
+
+  return sendButtons(from, {
+    text:
+      `💰 *Set Price for Order*\n\n` +
+      `${itemLines}\n\n` +
+      `${instructions}`,
+    buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
+  });
 }
 
 export async function handleOrderDeclined(from, orderId, biz, saveBiz) {

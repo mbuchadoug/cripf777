@@ -1675,7 +1675,8 @@ const supplierStates = [
     "supplier_reg_prices", "supplier_update_prices",
     "supplier_edit_products", "supplier_edit_area",
     "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
-    "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason"
+    "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
+    "supplier_order_enter_price"
     // supplier_order_product/quantity/address handled separately below
   ];
 
@@ -2198,7 +2199,7 @@ _Type *cancel* to go back to your account._`
     );
   }
 
-   if (a === "sup_my_orders") {
+  if (a === "sup_my_orders") {
     const supplier = await SupplierProfile.findOne({ phone });
     if (!supplier) return sendSuppliersMenu(from);
 
@@ -2215,7 +2216,7 @@ _Type *cancel* to go back to your account._`
       });
     }
 
-    const lines = orders.map((o, i) => {
+    const lines = orders.map((o) => {
       const statusIcon = {
         pending: "⏳",
         accepted: "✅",
@@ -2228,28 +2229,25 @@ _Type *cancel* to go back to your account._`
         month: "short"
       });
 
+      const orderRef = String(o._id).slice(-6).toUpperCase();
+
       const itemSummary = Array.isArray(o.items) && o.items.length
         ? o.items.map(item => {
             const name = item.product || "Item";
             const qty = item.quantity ?? 1;
-            const unitSuffix =
-              item.unit && item.unit !== "units"
-                ? ` ${item.unit}`
-                : "";
-            return `• ${name} x${qty}${unitSuffix}`;
+            const unitSuffix = item.unit && item.unit !== "units" ? ` ${item.unit}` : "";
+            const lineTotal = typeof item.total === "number" ? ` — $${item.total.toFixed(2)}` : "";
+            return `• ${name} x${qty}${unitSuffix}${lineTotal}`;
           }).join("\n")
         : "• Order items not available";
 
-      const amount =
-        typeof o.totalAmount === "number"
-          ? o.totalAmount
-          : (typeof o.amount === "number" ? o.amount : 0);
+      const amount = typeof o.totalAmount === "number" ? o.totalAmount : 0;
 
       const deliveryLine = o.delivery?.required
         ? `🚚 Delivery: ${o.delivery.address || "Address not provided"}`
         : "🏠 Collection";
 
-      return `${statusIcon} *Order ${i + 1}* (${date})
+      return `${statusIcon} *Order #${orderRef}* (${date})
 ${itemSummary}
 ${deliveryLine}
 💵 Total: $${amount.toFixed(2)}
@@ -2267,12 +2265,12 @@ ${deliveryLine}
     if (!supplier) return sendSuppliersMenu(from);
     const SupplierOrder = (await import("../models/supplierOrder.js")).default;
     const completed = await SupplierOrder.find({ supplierId: supplier._id, status: "completed" });
-    const total = completed.reduce((sum, o) => sum + (o.amount || 0), 0);
+   const total = completed.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     const thisMonth = completed.filter(o => {
       const d = new Date(o.createdAt);
       const now = new Date();
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).reduce((sum, o) => sum + (o.amount || 0), 0);
+   }).reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     return sendButtons(from, {
       text: `💵 *Earnings Summary*\n\n📦 Completed orders: ${completed.length}\n💰 Total earnings: $${total.toFixed(2)}\n📅 This month: $${thisMonth.toFixed(2)}\n\n⭐ Rating: ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n🏅 Score: ${(supplier.credibilityScore || 0).toFixed(0)}/100`,
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
@@ -2930,6 +2928,121 @@ They will confirm your order and send pricing shortly. 🎉`
     return handleOrderDeclined(from, orderId, biz, saveBizSafe);
   }
 
+
+    if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
+    const orderId = biz.sessionData?.pricingOrderId;
+    if (!orderId) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Pricing session expired.");
+      return sendSuppliersMenu(from);
+    }
+
+    const order = await SupplierOrder.findById(orderId);
+    if (!order) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Order not found.");
+      return sendSuppliersMenu(from);
+    }
+
+    const raw = (text || "").trim();
+    if (!raw) {
+      await sendText(from, "❌ Enter a valid price.\n\nExample: 4.50\nOr for multiple items: 4.50, 8, 1.20");
+      return;
+    }
+
+    const values = raw
+      .split(",")
+      .map(v => Number(v.trim()))
+      .filter(v => !Number.isNaN(v) && v >= 0);
+
+    if (!values.length) {
+      await sendText(from, "❌ Invalid price format.\n\nExample: 4.50\nOr: 4.50, 8, 1.20");
+      return;
+    }
+
+    if (order.items.length === 1 && values.length !== 1) {
+      await sendText(from, "❌ This order has 1 item. Reply with one unit price only.\n\nExample: 4.50");
+      return;
+    }
+
+    if (order.items.length > 1 && values.length !== order.items.length) {
+      await sendText(from, `❌ This order has ${order.items.length} items. Please send ${order.items.length} prices separated by commas.`);
+      return;
+    }
+
+    let grandTotal = 0;
+
+    order.items = order.items.map((item, idx) => {
+      const unitPrice = values[idx];
+      const qty = Number(item.quantity) || 1;
+      const lineTotal = qty * unitPrice;
+      grandTotal += lineTotal;
+
+      return {
+        ...item.toObject?.() || item,
+        pricePerUnit: unitPrice,
+        total: lineTotal,
+        currency: "USD"
+      };
+    });
+
+    order.totalAmount = grandTotal;
+    order.currency = "USD";
+    order.status = "accepted";
+    await order.save();
+
+    await SupplierProfile.findOneAndUpdate(
+      { phone: from },
+      { $inc: { monthlyOrders: 1 } }
+    );
+
+    const supplier = await SupplierProfile.findOne({ phone: from });
+
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+
+    const itemLines = order.items
+      .map(i => {
+        const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
+        return `• ${i.product} x${i.quantity}${unitSuffix} @ $${Number(i.pricePerUnit).toFixed(2)} = $${Number(i.total).toFixed(2)}`;
+      })
+      .join("\n");
+
+    const deliveryLine = order.delivery?.required
+      ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
+      : "🏠 Collection";
+
+    try {
+      await sendButtons(order.buyerPhone, {
+        text:
+          `✅ *Order Accepted!*\n\n` +
+          `*${supplier?.businessName || from}* has accepted your order:\n\n` +
+          `${itemLines}\n\n` +
+          `${deliveryLine}\n` +
+          `💵 *Order Total: $${grandTotal.toFixed(2)}*\n` +
+          `📞 Contact: ${from}\n\n` +
+          `They will be in touch to arrange payment & delivery.`,
+        buttons: [
+          { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
+          { id: "menu", title: "🏠 Main Menu" }
+        ]
+      });
+    } catch (err) {
+      console.error("[SUPPLIER PRICE ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
+    }
+
+    return sendList(from, `✅ Price saved. Total: $${grandTotal.toFixed(2)}\n\nWhen will the order be ready?`, [
+      { id: `sup_eta_today_${orderId}`, title: "Today" },
+      { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
+      { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
+      { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
+    ]);
+  }
   // ── ETA after accepting order ─────────────────────────────────────────────
   if (a.startsWith("sup_eta_")) {
     const parts = a.replace("sup_eta_", "").split("_");
