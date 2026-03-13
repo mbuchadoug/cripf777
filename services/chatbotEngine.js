@@ -523,47 +523,55 @@ Now send your delivery address or contact note:`,
 
    
 
-    if (orderState === "supplier_order_address") {
-      const address = text.trim();
-      if (!address || address.length < 2) {
-        return sendButtons(from, {
-          text: "❌ Please enter your delivery address or contact note:",
-          buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
-        });
+if (orderState === "supplier_order_address") {
+  const address = text.trim();
+  if (!address || address.length < 2) {
+    return sendButtons(from, {
+      text: "❌ Please enter your delivery address or contact note:",
+      buttons: [{ id: "suppliers_home", title: "🏪 Suppliers" }]
+    });
+  }
+
+  const sess3 = await UserSession.findOne({ phone });
+  const supplierId = sess3?.tempData?.orderSupplierId;
+  const orderItemsInput = sess3?.tempData?.orderItems || [];
+
+  if (!supplierId) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.orderState": "",
+          "tempData.orderSupplierId": "",
+          "tempData.orderItems": "",
+          "tempData.orderProduct": "",
+          "tempData.orderQuantity": ""
+        }
       }
+    );
+    await sendText(from, "❌ Order session expired. Please search for the supplier again.");
+    return sendSuppliersMenu(from);
+  }
 
-      const sess3 = await UserSession.findOne({ phone });
-      const supplierId = sess3?.tempData?.orderSupplierId;
-const orderItemsInput = sess3?.tempData?.orderItems || [];
+  const supplier = await SupplierProfile.findById(supplierId).lean();
 
-if (!supplier) {
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $unset: {
-        "tempData.orderState": "",
-        "tempData.orderSupplierId": "",
-        "tempData.orderItems": "",
-        "tempData.orderProduct": "",
-        "tempData.orderQuantity": ""
+  if (!supplier) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.orderState": "",
+          "tempData.orderSupplierId": "",
+          "tempData.orderItems": "",
+          "tempData.orderProduct": "",
+          "tempData.orderQuantity": ""
+        }
       }
-    }
-  );
-  await sendText(from, "❌ Supplier not found. Please search again.");
-  return sendSuppliersMenu(from);
-}
-
-      const supplier = await SupplierProfile.findById(supplierId).lean();
-      if (!supplier) {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
-                       "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
-        );
-        await sendText(from, "❌ Supplier not found. Please search again.");
-        return sendSuppliersMenu(from);
-      }
-
+    );
+    await sendText(from, "❌ Supplier not found. Please search again.");
+    return sendSuppliersMenu(from);
+  }
+ 
  const normalizedItems = Array.isArray(orderItemsInput) ? orderItemsInput : [];
 if (!normalizedItems.length) {
   await UserSession.findOneAndUpdate(
@@ -619,11 +627,18 @@ const order = await SupplierOrder.create({
       await notifySupplierNewOrder(supplier.phone, order);
 
       // Clear order state from UserSession
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "",
-                     "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
-      );
+    await UserSession.findOneAndUpdate(
+  { phone },
+  {
+    $unset: {
+      "tempData.orderState": "",
+      "tempData.orderSupplierId": "",
+      "tempData.orderItems": "",
+      "tempData.orderProduct": "",
+      "tempData.orderQuantity": ""
+    }
+  }
+);
 
  const itemSummary = finalItems
   .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
