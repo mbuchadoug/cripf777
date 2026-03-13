@@ -2198,23 +2198,64 @@ _Type *cancel* to go back to your account._`
     );
   }
 
-  if (a === "sup_my_orders") {
+   if (a === "sup_my_orders") {
     const supplier = await SupplierProfile.findOne({ phone });
     if (!supplier) return sendSuppliersMenu(from);
+
     const SupplierOrder = (await import("../models/supplierOrder.js")).default;
     const orders = await SupplierOrder.find({ supplierId: supplier._id })
-      .sort({ createdAt: -1 }).limit(10);
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
     if (!orders.length) {
       return sendButtons(from, {
         text: "📦 *My Orders*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
         buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
       });
     }
+
     const lines = orders.map((o, i) => {
-      const statusIcon = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" }[o.status] || "•";
-      const date = new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-      return `${statusIcon} *${o.items || "Order"}* — $${(o.amount || 0).toFixed(2)} (${date})`;
-    }).join("\n");
+      const statusIcon = {
+        pending: "⏳",
+        accepted: "✅",
+        declined: "❌",
+        completed: "🏁"
+      }[o.status] || "•";
+
+      const date = new Date(o.createdAt).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short"
+      });
+
+      const itemSummary = Array.isArray(o.items) && o.items.length
+        ? o.items.map(item => {
+            const name = item.product || "Item";
+            const qty = item.quantity ?? 1;
+            const unitSuffix =
+              item.unit && item.unit !== "units"
+                ? ` ${item.unit}`
+                : "";
+            return `• ${name} x${qty}${unitSuffix}`;
+          }).join("\n")
+        : "• Order items not available";
+
+      const amount =
+        typeof o.totalAmount === "number"
+          ? o.totalAmount
+          : (typeof o.amount === "number" ? o.amount : 0);
+
+      const deliveryLine = o.delivery?.required
+        ? `🚚 Delivery: ${o.delivery.address || "Address not provided"}`
+        : "🏠 Collection";
+
+      return `${statusIcon} *Order ${i + 1}* (${date})
+${itemSummary}
+${deliveryLine}
+💵 Total: $${amount.toFixed(2)}
+📌 Status: ${o.status}`;
+    }).join("\n\n");
+
     return sendButtons(from, {
       text: `📦 *My Orders* (last ${orders.length})\n\n${lines}`,
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
@@ -2532,7 +2573,7 @@ const rows = formatSupplierResults(results, city, category || product);
             `📞 ${supplier.phone}`,
       buttons: [
         { id: `sup_order_${supplierId}`, title: "🛒 Place Order" },
-        { id: `sup_save_${supplierId}`, title: "❤️ Save Supplier" },
+        { id: `sup_save_${supplierId}`, title: "Save Supplier" },
         { id: "suppliers_home", title: "🏪 Suppliers" }
       ]
     });
@@ -2544,7 +2585,7 @@ const rows = formatSupplierResults(results, city, category || product);
     await SupplierProfile.findByIdAndUpdate(supplierId, {
       $addToSet: { savedBy: phone }
     });
-    await sendText(from, "❤️ Supplier saved! Find them in your saved list.");
+    await sendText(from, "Supplier saved! Find them in your saved list.");
     return;
   }
 
@@ -2554,7 +2595,7 @@ const rows = formatSupplierResults(results, city, category || product);
     await SupplierProfile.findByIdAndUpdate(supplierId, {
       $addToSet: { savedBy: phone }
     });
-    await sendText(from, "❤️ Supplier saved! Find them in your saved list.");
+    await sendText(from, "Supplier saved! Find them in your saved list.");
     return;
   }
 
