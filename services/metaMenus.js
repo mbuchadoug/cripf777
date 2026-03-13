@@ -87,56 +87,58 @@ export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
   // ── Ghost business (pending_supplier_) = treat as no-biz user ────────────
-  if (biz && biz.name.startsWith("pending_supplier_")) {
-    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-    const phone = to.replace(/\D+/g, "");
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (supplier?.active) {
-      return sendButtons(to, {
-        text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
-        buttons: [
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "my_supplier_account", title: "🏪 My Account" },
-          { id: "onboard_business", title: "🧾 Run My Business" }
-        ]
-      });
-    }
+ if (biz && biz.name.startsWith("pending_supplier_")) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const phone = to.replace(/\D+/g, "");
+  const supplier = await SupplierProfile.findOne({ phone });
+
+  if (supplier) {
     return sendButtons(to, {
-      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+      text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
       buttons: [
-        { id: "onboard_business", title: "🧾 Run My Business" },
         { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "register_supplier", title: "📦 List My Business" }
+        { id: "my_supplier_account", title: "🏪 My Account" },
+        { id: "onboard_business", title: "🧾 Run My Business" }
       ]
     });
   }
+
+  return sendButtons(to, {
+    text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+    buttons: [
+      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "register_supplier", title: "📦 Become a Supplier" },
+      { id: "onboard_business", title: "🧾 Run My Business" }
+    ]
+  });
+}
 
   // ── No business: never show business owner menu ───────────────────────────
-  if (!biz) {
-    const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-    const phone = to.replace(/\D+/g, "");
-    const supplier = await SupplierProfile.findOne({ phone });
+ if (!biz) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const phone = to.replace(/\D+/g, "");
+  const supplier = await SupplierProfile.findOne({ phone });
 
-    if (supplier?.active) {
-      return sendButtons(to, {
-        text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
-        buttons: [
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "my_supplier_account", title: "🏪 My Account" },
-          { id: "onboard_business", title: "🧾 Run My Business" }
-        ]
-      });
-    }
-
+  if (supplier) {
     return sendButtons(to, {
-      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+      text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
       buttons: [
-        { id: "onboard_business", title: "🧾 Run My Business" },
         { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "register_supplier", title: "📦 List My Business" }
+        { id: "my_supplier_account", title: "🏪 My Account" },
+        { id: "onboard_business", title: "🧾 Run My Business" }
       ]
     });
   }
+
+  return sendButtons(to, {
+    text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+    buttons: [
+      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "register_supplier", title: "📦 Become a Supplier" },
+      { id: "onboard_business", title: "🧾 Run My Business" }
+    ]
+  });
+}
 
 const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
@@ -734,10 +736,10 @@ if (supplier && !supplier.active) {
     });
   }
 
-  const buttons = [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
-    { id: "register_supplier", title: "📦 List My Business" }
-  ];
+ const buttons = [
+  { id: "find_supplier", title: "🔍 Find Suppliers" },
+  { id: "register_supplier", title: "📦 Become a Supplier" }
+];
 
   if (hasRealBiz) {
     buttons.push({ id: "menu", title: "🏠 Main Menu" });
