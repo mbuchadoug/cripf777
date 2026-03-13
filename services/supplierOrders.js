@@ -41,27 +41,29 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     { $inc: { completedOrders: 1, monthlyOrders: 1 } }
   );
 
-  // Notify buyer
-// Notify buyer their order was accepted
   const supplier = await SupplierProfile.findOne({ phone: from });
-  await sendButtons(order.buyerPhone, {
-    text: `✅ *Order Accepted!*\n\n` +
-          `*${supplier?.businessName || from}* has accepted your order:\n\n` +
-          `${order.items.map(i => `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
-          `📞 Contact: ${from}\n\n` +
-          `They will be in touch to arrange payment & delivery.`,
-    buttons: [
-      { id: `rate_order_${order._id}`, title: "⭐ Rate After Delivery" },
-      { id: "menu", title: "🏠 Main Menu" }
-    ]
-  });
 
-  // Ask supplier for estimated time
+  try {
+    await sendButtons(order.buyerPhone, {
+      text: `✅ *Order Accepted!*\n\n` +
+            `*${supplier?.businessName || from}* has accepted your order:\n\n` +
+            `${order.items.map(i => `• ${i.product} x${i.quantity}`).join("\n")}\n\n` +
+            `📞 Contact: ${from}\n\n` +
+            `They will be in touch to arrange payment & delivery.`,
+      buttons: [
+        { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
+        { id: "menu", title: "🏠 Main Menu" }
+      ]
+    });
+  } catch (err) {
+    console.error("[SUPPLIER ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
+  }
+
   return sendList(from, "When will the order be ready?", [
     { id: `sup_eta_today_${orderId}`, title: "Today" },
     { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
-    { id: `sup_eta_twodays_${orderId}`, title: "Within 2-3 days" },
-    { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer directly" }
+    { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
+    { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
   ]);
 }
 
