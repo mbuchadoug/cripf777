@@ -2227,17 +2227,30 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
-    // If no business, show category picker directly without needing session state
-    if (!biz) {
-      return sendList(from, "🔍 What are you looking for?", [
-        ...SUPPLIER_CATEGORIES.map(c => ({
-          id: `sup_search_cat_${c.id}`,
-          title: c.label
-        }))
-      ]);
-    }
-    return startSupplierSearch(from, biz, saveBizSafe);
+  const categoryRows = [
+    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
+      id: `sup_search_cat_${c.id}`,
+      title: c.label
+    })),
+    { id: "sup_search_more_categories", title: "➕ More Categories" }
+  ];
+
+  if (!biz) {
+    return sendList(from, "🔍 What are you looking for?", categoryRows);
   }
+
+  return sendList(from, "🔍 What are you looking for?", categoryRows);
+}
+
+if (a === "sup_search_more_categories") {
+  return sendList(from, "🔍 More Categories", [
+    ...SUPPLIER_CATEGORIES.slice(9).map(c => ({
+      id: `sup_search_cat_${c.id}`,
+      title: c.label
+    })),
+    { id: "find_supplier", title: "⬅ Back" }
+  ]);
+}
 
 if (a === "register_supplier") {
   const existingSupplier = await SupplierProfile.findOne({ phone });
