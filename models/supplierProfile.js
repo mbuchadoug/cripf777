@@ -69,12 +69,15 @@ const SupplierProfileSchema = new mongoose.Schema({
   disputeCount: { type: Number, default: 0 },
   suspended: { type: Boolean, default: false },
 
-  prices: [{
-  product: { type: String, required: true },   // "Cooking Oil 2L"
-  amount: { type: Number, required: true },     // 4.50
-  unit: { type: String, default: "each" },      // "each", "kg", "litre", "dozen", "bag"
-  inStock: { type: Boolean, default: true }
-}],
+   prices: [{
+    product: { type: String, required: true },
+    amount: { type: Number, required: true },
+    currency: { type: String, enum: ["USD", "ZWL"], default: "USD" },
+    unit: { type: String, default: "each" },
+    inStock: { type: Boolean, default: true },
+    validUntil: Date
+  }],
+  priceUpdatedAt: { type: Date },
 priceUpdatedAt: { type: Date },
   // Analytics
   viewCount: { type: Number, default: 0 },

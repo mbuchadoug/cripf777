@@ -88,6 +88,36 @@ function formatMoney(amount, currency) {
   return `${sym}${n}`;
 }
 
+
+function normalizeProductName(value = "") {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function findMatchingSupplierPrice(supplier, requestedProduct) {
+  if (!supplier?.prices?.length || !requestedProduct) return null;
+
+  const wanted = normalizeProductName(requestedProduct);
+
+  // 1. exact normalized match
+  let match = supplier.prices.find(
+    p => p?.inStock !== false && normalizeProductName(p.product) === wanted
+  );
+  if (match) return match;
+
+  // 2. contains match: "brown sugar" matches "sugar", etc.
+  match = supplier.prices.find(p => {
+    if (p?.inStock === false || !p?.product) return false;
+    const candidate = normalizeProductName(p.product);
+    return candidate.includes(wanted) || wanted.includes(candidate);
+  });
+
+  return match || null;
+}
+
 function normalizeEcocashNumber(input, fallbackWhatsApp) {
   const raw = (input || "").replace(/\D+/g, "");
   const fb = (fallbackWhatsApp || "").replace(/\D+/g, "");

@@ -496,27 +496,42 @@ if (searchMode === "product") {
         return sendSuppliersMenu(from);
       }
 
-      const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
-      const order = await SupplierOrder.create({
-        supplierId: supplier._id,
-        supplierPhone: supplier.phone,
-        buyerPhone: phone,
-        items: [{
-          product: orderProduct,
-          quantity: qtyNum || 1,
-          unit: qtyNum ? "units" : orderQty,
-          pricePerUnit: null,
-          currency: "USD",
-          total: null
-        }],
-        totalAmount: 0,
-        currency: "USD",
-        delivery: {
-          required: supplier.delivery?.available || false,
-          address: address
-        },
-        status: "pending"
-      });
+ const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
+const matchedPrice = findMatchingSupplierPrice(supplier, orderProduct);
+
+const itemQuantity = qtyNum || 1;
+const itemUnit = qtyNum ? "units" : orderQty;
+
+let pricePerUnit = null;
+let lineTotal = null;
+let totalAmount = 0;
+
+if (matchedPrice && typeof matchedPrice.amount === "number") {
+  pricePerUnit = matchedPrice.amount;
+  lineTotal = itemQuantity * matchedPrice.amount;
+  totalAmount = lineTotal;
+}
+
+const order = await SupplierOrder.create({
+  supplierId: supplier._id,
+  supplierPhone: supplier.phone,
+  buyerPhone: phone,
+  items: [{
+    product: orderProduct,
+    quantity: itemQuantity,
+    unit: itemUnit,
+    pricePerUnit,
+    currency: "USD",
+    total: lineTotal
+  }],
+  totalAmount,
+  currency: "USD",
+  delivery: {
+    required: supplier.delivery?.available || false,
+    address: address
+  },
+  status: "pending"
+});
 
       await notifySupplierNewOrder(supplier.phone, order);
 
@@ -527,15 +542,17 @@ if (searchMode === "product") {
                      "tempData.orderProduct": "", "tempData.orderQuantity": "" }}
       );
 
-      await sendText(from,
+   await sendText(from,
 `✅ *Order sent to ${supplier.businessName}!*
 
 📦 ${orderProduct} x${orderQty}
 ${supplier.delivery?.available ? `📍 ${address}` : `📝 Note: ${address}`}
-📞 Supplier: ${supplier.phone}
+${pricePerUnit !== null ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
-They will confirm your order and send pricing shortly. 🎉`
-      );
+${pricePerUnit !== null
+  ? "They can now confirm your priced order. 🎉"
+  : "They will confirm your order and send pricing shortly. 🎉"}`
+);
       return sendSuppliersMenu(from);
     }
   }
@@ -2879,40 +2896,56 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
 
 //const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
 const qtyNum = isNaN(Number(orderQty)) ? null : Number(orderQty);
-    const order = await SupplierOrder.create({
-      supplierId: supplier._id,
-      supplierPhone: supplier.phone,
-      buyerPhone: phone,
-      items: [{
-        product: orderProduct,
-        quantity: qtyNum || 1,
-        unit: qtyNum ? "units" : orderQty,
-        pricePerUnit: null,   // ← supplier sets this when accepting
-        currency: "USD",
-        total: null           // ← calculated when price is known
-      }],
-      totalAmount: 0,
-      currency: "USD",
-      delivery: {
-        required: supplier.delivery?.available || false,
-        address: address
-      },
-      status: "pending"
-    });
+const matchedPrice = findMatchingSupplierPrice(supplier, orderProduct);
 
+const itemQuantity = qtyNum || 1;
+const itemUnit = qtyNum ? "units" : orderQty;
+
+let pricePerUnit = null;
+let lineTotal = null;
+let totalAmount = 0;
+
+if (matchedPrice && typeof matchedPrice.amount === "number") {
+  pricePerUnit = matchedPrice.amount;
+  lineTotal = itemQuantity * matchedPrice.amount;
+  totalAmount = lineTotal;
+}
+
+const order = await SupplierOrder.create({
+  supplierId: supplier._id,
+  supplierPhone: supplier.phone,
+  buyerPhone: phone,
+  items: [{
+    product: orderProduct,
+    quantity: itemQuantity,
+    unit: itemUnit,
+    pricePerUnit,
+    currency: "USD",
+    total: lineTotal
+  }],
+  totalAmount,
+  currency: "USD",
+  delivery: {
+    required: supplier.delivery?.available || false,
+    address: address
+  },
+  status: "pending"
+});
     await notifySupplierNewOrder(supplier.phone, order);
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
 
-    await sendText(from,
+await sendText(from,
 `✅ *Order sent to ${supplier.businessName}!*
 
 📦 ${orderProduct} x${orderQty}
 📍 ${address}
-📞 Supplier: ${supplier.phone}
+${pricePerUnit !== null ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
-They will confirm your order and send pricing shortly. 🎉`
-    );
+${pricePerUnit !== null
+  ? "They can now confirm your priced order. 🎉"
+  : "They will confirm your order and send pricing shortly. 🎉"}`
+);
     return sendMainMenu(from);
   }
 
