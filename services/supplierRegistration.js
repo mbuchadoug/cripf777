@@ -98,7 +98,7 @@ export async function handleSupplierRegistrationStates({
   }
 
   // ── Step 2: Area ───────────────────────────────────────
-  if (state === "supplier_reg_area") {
+if (state === "supplier_reg_area") {
     const area = text.trim();
     if (!area || area.length < 2) {
       await sendText(from, "❌ Please enter your area/suburb:");
@@ -106,16 +106,17 @@ export async function handleSupplierRegistrationStates({
     }
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.area = area;
-    biz.sessionState = "supplier_reg_category";
+    biz.sessionState = "supplier_reg_type";
     await saveBiz(biz);
 
-    return sendList(from, "🗂 What do you mainly sell?", [
-      ...SUPPLIER_CATEGORIES.map(c => ({
-        id: `sup_cat_${c.id}`, title: c.label
-      }))
-    ]);
+    return sendButtons(from, {
+      text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
+      buttons: [
+        { id: "reg_type_product", title: "📦 I Sell Products" },
+        { id: "reg_type_service", title: "🔧 I Offer Services" }
+      ]
+    });
   }
-
   // ── Step 3: Products ───────────────────────────────────
  // ── Step 3: Products ───────────────────────────────────────────────────────
   if (state === "supplier_reg_products") {
@@ -142,9 +143,30 @@ Just type them and send 👇`
     biz.sessionState = "supplier_reg_prices";
     await saveBiz(biz);
 
-  const first = products[0];
+ const first = products[0];
+  const isService = biz.sessionData.supplierReg?.profileType === "service";
+
+  if (isService) {
+    biz.sessionState = "supplier_reg_prices"; // reuse same state, handled below
+    await saveBiz(biz);
     return sendButtons(from, {
       text:
+`💰 *Your Rates*
+
+What do you charge? Send as free text.
+
+*Examples:*
+- *$10/hr, $50 full day*
+- *$30 per job*
+- *$15/hr, minimum 2 hours*
+
+_If you don't know yet, tap Skip below._`,
+      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+    });
+  }
+
+  return sendButtons(from, {
+    text:
 `💰 *Add Your Prices*
 
 Buyers use prices to compare suppliers before ordering. Adding prices helps you get more orders!
@@ -162,13 +184,27 @@ Just send the amount followed by the unit.
 - *5.00 each* - for single items
 
 _If you don't know yet, tap Skip below._`,
-      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
-    });
-  }
-
+    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
+  });
+}
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
-  if (state === "supplier_reg_prices") {
+ if (state === "supplier_reg_prices") {
     const reg = biz.sessionData.supplierReg;
+
+    // ── Service provider: save free-text rates, skip to travel step ──────
+    if (reg.profileType === "service") {
+      reg.rates = text.trim();
+      biz.sessionState = "supplier_reg_travel";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: "🚗 *Do you travel to clients?*",
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+
     const products = reg.products || [];
     const idx = reg.priceIndex || 0;
 
@@ -213,6 +249,19 @@ What is your price for *${products[idx]}*?`
     }
 
     // All products priced
+   // All products priced
+    if (reg.profileType === "service") {
+      biz.sessionState = "supplier_reg_travel";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: `✅ All rates saved!\n\n🚗 Do you travel to clients?`,
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+
     biz.sessionState = "supplier_reg_delivery";
     await saveBiz(biz);
     return sendButtons(from, {
@@ -237,21 +286,29 @@ What is your price for *${products[idx]}*?`
     await saveBiz(biz);
 
     const reg = biz.sessionData.supplierReg;
-    const deliveryText = reg.delivery?.available
-      ? `🚚 ${reg.delivery.range === "city_wide"
-          ? "Delivers in city"
-          : reg.delivery.range === "nationwide"
-          ? "Delivers nationwide"
-          : "Delivers nearby"}`
-      : "🏠 Collection only";
+ const isService = reg.profileType === "service";
+
+    const deliveryText = isService
+      ? `🚗 ${reg.travelAvailable ? "Travels to clients" : "Client comes to provider"}`
+      : reg.delivery?.available
+        ? `🚚 ${reg.delivery.range === "city_wide"
+            ? "Delivers in city"
+            : reg.delivery.range === "nationwide"
+            ? "Delivers nationwide"
+            : "Delivers nearby"}`
+        : "🏠 Collection only";
+
+    const pricingText = isService
+      ? `💰 Rates: ${reg.rates || "Not specified"}`
+      : `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}`;
 
     return sendButtons(from, {
       text: `✅ *Almost done! Confirm your listing:*\n\n` +
             `🏪 ${reg.businessName}\n` +
             `📍 ${reg.area}, ${reg.city}\n` +
-            `📦 ${reg.products.join(", ")}\n` +
+            `${isService ? "🔧" : "📦"} ${reg.products.join(", ")}\n` +
             `${deliveryText}\n` +
-            `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}\n\n` +
+            `${pricingText}\n\n` +
             `Is this correct?`,
       buttons: [
         { id: "sup_confirm_yes", title: "✅ Confirm" },

@@ -79,7 +79,10 @@ priceUpdatedAt: { type: Date },
   monthlyViews: { type: Number, default: 0 },
   monthlyOrders: { type: Number, default: 0 },
   monthlyRevenue: { type: Number, default: 0 },
-
+profileType:     { type: String, enum: ['product', 'service'], default: 'product' },
+rates:           { type: String },          // e.g. "$20/hr or $50/job"
+travelAvailable: { type: Boolean },         // service providers: do they travel to client?
+serviceArea:     { type: String },          // e.g. "Harare CBD and suburbs"
   // Saved by buyers
   savedBy: [{ type: String }], // array of phone numbers
 

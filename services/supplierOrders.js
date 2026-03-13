@@ -14,10 +14,34 @@ function formatOrderItems(items = []) {
   }).join("\n");
 }
 
-export async function notifySupplierNewOrder(supplierPhone, order) {
+export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, options = {}) {
+  const { isBooking } = options;
+
+  // ── Booking notification (service providers) ──────────────────────────────
+  if (isBooking) {
+    const service  = order.items?.[0]?.product || "Service";
+    const location = order.delivery?.address   || "Not specified";
+    const when     = order.supplierNote        || "Not specified";
+    return sendButtons(supplierPhone, {
+      text:
+        `📅 *New Booking Request!*\n\n` +
+        `🔧 Service: ${service}\n` +
+        `📍 Location: ${location}\n` +
+        `🗓 When: ${when}\n` +
+        `📞 Buyer: ${buyerPhone || order.buyerPhone}`,
+      buttons: [
+        { id: `sup_book_confirm_${order._id}`, title: "✅ Accept Booking" },
+        { id: `sup_decline_${order._id}`,      title: "❌ Decline" }
+      ]
+    });
+  }
+
   const itemLines = formatOrderItems(order.items);
 
   const deliveryLine = order.delivery?.required
+  //const itemLines = formatOrderItems(order.items);
+
+  //const deliveryLine = order.delivery?.required
     ? `🚚 Deliver to: ${order.delivery.address}`
     : "🏠 Collection";
 
@@ -90,9 +114,9 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
           `💵 *Order Total: $${Number(order.totalAmount).toFixed(2)}*\n` +
           `📞 Contact: ${from}\n\n` +
           `They will be in touch to arrange payment & delivery.`,
-        buttons: [
+      buttons: [
           { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
-          { id: "menu", title: "🏠 Main Menu" }
+          { id: "suppliers_home",           title: "🏪 Suppliers" }
         ]
       });
     } catch (err) {
@@ -134,6 +158,54 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
   });
 }
+
+export async function handleBookingAccepted(from, orderId) {
+  const order = await SupplierOrder.findById(orderId);
+  if (!order) {
+    await sendText(from, "❌ Booking not found.");
+    return;
+  }
+
+  order.status = "accepted";
+  await order.save();
+
+  await SupplierProfile.findOneAndUpdate(
+    { phone: from },
+    { $inc: { monthlyOrders: 1 } }
+  );
+
+  const supplier = await SupplierProfile.findOne({ phone: from });
+
+  // Notify buyer
+  try {
+    await sendButtons(order.buyerPhone, {
+      text:
+        `✅ *Booking Accepted!*\n\n` +
+        `*${supplier?.businessName || from}* has accepted your booking.\n\n` +
+        `🔧 ${order.items?.[0]?.product || "Service"}\n` +
+        `📍 ${order.delivery?.address || "Location TBC"}\n` +
+        `🗓 ${order.supplierNote || "Time TBC"}\n\n` +
+        `📞 Contact: ${from}\n\n` +
+        `They will be in touch to confirm details.`,
+      buttons: [
+        { id: `rate_order_${order._id}`, title: "⭐ Rate Service" },
+        { id: "suppliers_home",           title: "🏪 Suppliers" }
+      ]
+    });
+  } catch (err) {
+    console.error("[BOOKING ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
+  }
+
+  return sendButtons(from, {
+    text: `✅ *Booking confirmed!*\n\nThe buyer has been notified. Contact them at ${order.buyerPhone} to arrange the job.`,
+    buttons: [
+      { id: "sup_my_orders",   title: "📦 My Orders" },
+      { id: "suppliers_home",  title: "🏪 Suppliers" }
+    ]
+  });
+}
+
+
 
 export async function handleOrderDeclined(from, orderId, biz, saveBiz) {
   biz.sessionState = "supplier_decline_reason";

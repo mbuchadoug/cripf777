@@ -1,3 +1,5 @@
+//chatbotEngine
+
 import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
@@ -87,7 +89,8 @@ import {
 import {
   notifySupplierNewOrder,
   handleOrderAccepted,
-  handleOrderDeclined
+  handleOrderDeclined,
+  handleBookingAccepted
 } from "./supplierOrders.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
@@ -311,6 +314,15 @@ const isMetaAction =
 a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
+      a === "my_orders" ||
+      a.startsWith("order_detail_") ||
+      a.startsWith("sup_book_") ||
+      a.startsWith("sup_book_confirm_") ||
+      a === "reg_type_product" ||
+      a === "reg_type_service" ||
+      a === "sup_travel_yes" ||
+      a === "sup_travel_no" ||
+
 
     a === "sup_skip_prices" ||
       a === "sup_done_prices" ||
@@ -1815,7 +1827,9 @@ const supplierStates = [
   "supplier_reg_prices", "supplier_update_prices",
   "supplier_edit_products", "supplier_edit_area",
   "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
-  "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason"
+  "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
+   "supplier_reg_type",    // ← ADD
+  "supplier_reg_travel",  // ← ADD
 ];
 
  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
@@ -2285,6 +2299,67 @@ if (a === "register_supplier") {
     return sendSupplierAccountMenu(from, supplier);
   }
 
+
+  // ── Buyer: My Orders list ─────────────────────────────────────────────────
+  if (a === "my_orders") {
+    const orders = await SupplierOrder.find({ buyerPhone: phone })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate("supplierId", "businessName");
+
+    if (!orders.length) {
+      return sendButtons(from, {
+        text: "📋 *My Orders*\n\nNo orders yet.",
+        buttons: [
+          { id: "find_supplier", title: "🔍 Find Suppliers" },
+          { id: "suppliers_home", title: "🏪 Suppliers" }
+        ]
+      });
+    }
+
+    const si = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" };
+    const rows = orders.map(o => ({
+      id: `order_detail_${o._id}`,
+      title: o.supplierId?.businessName || "Supplier",
+      description: `${o.items?.[0]?.product || ""} · ${si[o.status] || "⏳"} ${o.status} · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+    }));
+
+    return sendList(from, "📋 My Recent Orders", rows);
+  }
+
+  // ── Buyer: Order detail ───────────────────────────────────────────────────
+  if (a.startsWith("order_detail_")) {
+    const orderId = a.replace("order_detail_", "");
+    const order = await SupplierOrder.findById(orderId).populate("supplierId", "businessName phone");
+    if (!order) {
+      return sendButtons(from, {
+        text: "❌ Order not found.",
+        buttons: [{ id: "my_orders", title: "⬅ Back" }]
+      });
+    }
+
+    const si = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" };
+    const itemLines = (order.items || []).map(i => `• ${i.product} x${i.quantity}`).join("\n");
+    const msg = [
+      `📋 *Order Details*`,
+      `Supplier: ${order.supplierId?.businessName || "Unknown"}`,
+      ``,
+      `${itemLines}`,
+      ``,
+      `Delivery: ${order.delivery?.address || "Collection"}`,
+      `Status: ${si[order.status] || "⏳"} ${order.status}`,
+      `Date: ${new Date(order.createdAt).toLocaleDateString()}`
+    ].join("\n");
+
+    const btns = [];
+    if (order.status === "completed" && !order.buyerRating) {
+      btns.push({ id: `rate_order_${order._id}`, title: "⭐ Rate Order" });
+    }
+    btns.push({ id: "my_orders", title: "⬅ My Orders" });
+    if (btns.length < 3) btns.push({ id: "suppliers_home", title: "🏪 Suppliers" });
+
+    return sendButtons(from, { text: msg, buttons: btns });
+  }
   // ── Supplier account menu actions ─────────────────────────────────────────
 
   if (a === "sup_edit_products") {
@@ -2497,6 +2572,47 @@ _Type *cancel* to return to main menu._`
     );
   }
 
+
+  // ── Profile type: Products or Services ───────────────────────────────────
+  if (a === "reg_type_product" || a === "reg_type_service") {
+    if (!biz) return sendMainMenu(from);
+    const profileType = a === "reg_type_service" ? "service" : "product";
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.profileType = profileType;
+    biz.sessionState = "supplier_reg_category";
+    await saveBizSafe(biz);
+
+    return sendList(from, "🗂 What do you mainly offer?", [
+      ...SUPPLIER_CATEGORIES.map(c => ({
+        id: `sup_cat_${c.id}`, title: c.label
+      }))
+    ]);
+  }
+
+  // ── Travel yes/no during service registration ─────────────────────────────
+  if (a === "sup_travel_yes") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.travelAvailable = true;
+    biz.sessionState = "supplier_reg_minorder";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "💵 What is your minimum job value in USD?\n\nType *0* for no minimum:",
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
+    });
+  }
+
+  if (a === "sup_travel_no") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.travelAvailable = false;
+    biz.sessionState = "supplier_reg_minorder";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "💵 What is your minimum job value in USD?\n\nType *0* for no minimum:",
+      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
+    });
+  }
   // ── Supplier category selected during registration ────────────────────────
   if (a.startsWith("sup_cat_")) {
     const catId = a.replace("sup_cat_", "");
@@ -2539,19 +2655,7 @@ _Type *cancel* to go back to main menu._`
     });
   }
 
-// ── Skip or finish pricing during registration ─────────────────────────────
-  if (a === "sup_skip_prices" || a === "sup_done_prices") {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "supplier_reg_delivery";
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "🚚 Do you deliver?",
-      buttons: [
-        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-        { id: "sup_del_no", title: "🏠 Collection Only" }
-      ]
-    });
-  }
+
 
 
   // ── Delivery yes/no during registration ───────────────────────────────────
@@ -2599,6 +2703,9 @@ const supplier = await SupplierProfile.create({
       prices: reg.prices || [],
       delivery: reg.delivery || { available: false },
       minOrder: reg.minOrder || 0,
+      profileType: reg.profileType || "product",   // ← ADD
+      rates: reg.rates || null,                     // ← ADD
+      travelAvailable: reg.travelAvailable ?? null, // ← ADD
       active: false,
       subscriptionStatus: "pending",
       priceUpdatedAt: reg.prices?.length ? new Date() : null
@@ -2740,15 +2847,7 @@ const rows = formatSupplierResults(results, city, category || product);
     return;
   }
 
-// ── Save supplier ──────────────────────────────────────────────────────────
-  if (a.startsWith("sup_save_")) {
-    const supplierId = a.replace("sup_save_", "");
-    await SupplierProfile.findByIdAndUpdate(supplierId, {
-      $addToSet: { savedBy: phone }
-    });
-    await sendText(from, "Supplier saved! Find them in your saved list.");
-    return;
-  }
+
 
   // ── Update supplier prices ─────────────────────────────────────────────────
   if (a === "sup_update_prices") {
@@ -2847,28 +2946,7 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
     return sendSupplierAccountMenu(from, supplier);
   }
 
-  // ── Update supplier prices ─────────────────────────────────────────────────
-  if (a === "sup_update_prices") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
 
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
-      biz.sessionState = "supplier_update_prices";
-      await saveBizSafe(biz);
-    }
-
-    const productList = supplier.products?.length
-      ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
-      : "No products listed";
-
-    return sendButtons(from, {
-      text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\nExample:\ncooking oil: 4.50 litre\nrice: 8 bag\nsugar: 1.20 kg\n\nYour products:\n${productList}`,
-      buttons: [
-        { id: "suppliers_home", title: "🏪 Back" }
-      ]
-    });
-  }
   // ── Start order: ask what they want ───────────────────────────────────────
 // ── Start order: ask what they want ───────────────────────────────────────
   if (a.startsWith("sup_order_")) {
@@ -3113,6 +3191,11 @@ ${pricedCount === finalItems.length
     return handleOrderAccepted(from, orderId, biz, saveBizSafe);
   }
 
+ if (a.startsWith("sup_book_confirm_")) {
+    const orderId = a.replace("sup_book_confirm_", "");
+    await handleBookingAccepted(from, orderId);
+    return;
+  }
   // ── Decline order ─────────────────────────────────────────────────────────
   if (a.startsWith("sup_decline_")) {
     const orderId = a.replace("sup_decline_", "");
@@ -3218,9 +3301,9 @@ ${pricedCount === finalItems.length
           `💵 *Order Total: $${grandTotal.toFixed(2)}*\n` +
           `📞 Contact: ${from}\n\n` +
           `They will be in touch to arrange payment & delivery.`,
-        buttons: [
+    buttons: [
           { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
-          { id: "menu", title: "🏠 Main Menu" }
+          { id: "suppliers_home",           title: "🏪 Suppliers" }
         ]
       });
     } catch (err) {

@@ -38,5 +38,12 @@ export const SUPPLIER_CATEGORIES = [
   { id: "agriculture", label: "🌽 Agriculture & Farming" },
   { id: "electronics", label: "📱 Electronics" },
   { id: "crossborder", label: "✈️ Cross-border Goods" },
-  { id: "other", label: "🗂 Other" }
+ { id: 'cosmetics',   label: '💄 Cosmetics & Beauty' },
+  { id: 'furniture',   label: '🛋 Furniture & Home' },
+  { id: 'services',    label: '🔧 Services & Trades' },
+  { id: 'health',      label: '💊 Health & Pharmacy' },
+  { id: 'transport',   label: '🚛 Transport & Logistics' },
+  { id: 'food_cooked', label: '🍱 Cooked Food & Catering' },
+  { id: 'printing',    label: '🖨 Printing & Stationery' },
+  { id: 'other',       label: '🗂 Other' }
 ];

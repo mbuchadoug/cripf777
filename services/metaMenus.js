@@ -1,3 +1,4 @@
+//metaMenus
 import { ACTIONS } from "./actions.js";
 import { sendList, sendText, sendButtons } from "./metaSender.js";
 import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
@@ -8,6 +9,19 @@ import { normalizePhone } from "./phone.js";
 
 function isSupplierRegistrationComplete(supplier) {
   if (!supplier) return false;
+
+  const isService = supplier.profileType === "service";
+
+  if (isService) {
+    return Boolean(
+      supplier.businessName &&
+      supplier.location?.city &&
+      supplier.location?.area &&
+      Array.isArray(supplier.categories) && supplier.categories.length > 0 &&
+      Array.isArray(supplier.products) && supplier.products.length > 0 &&
+      typeof supplier.minOrder === "number"
+    );
+  }
 
   return Boolean(
     supplier.businessName &&
@@ -698,15 +712,13 @@ export async function sendSuppliersMenu(to) {
   const biz = await getBizForPhone(to);
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
-  if (supplier?.active) {
+if (supplier?.active) {
     const buttons = [
-      { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
+      { id: "my_orders",           title: "📋 My Orders" },
       { id: "my_supplier_account", title: "🏪 My Account" }
     ];
-
-    if (hasRealBiz) {
-      buttons.push({ id: "menu", title: "🏠 Main Menu" });
-    }
+    // NOTE: buttons is now full at 3 — removed hasRealBiz push
 
     return sendButtons(to, {
       text: "🏪 *ZimQuote Suppliers*",
