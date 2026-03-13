@@ -330,38 +330,76 @@ if (!biz && ownerRole?.businessId) {
   // =========================
   // 🆕 NEW USER — WELCOME SCREEN (not auto-onboard)
   // =========================
+// =========================
+// 🆕 NEW USER — WELCOME SCREEN (not auto-onboard)
+// =========================
+
 if (!biz && !ownerRole) {
-    const supplierExists = await SupplierProfile.findOne({ phone });
-    
-    // Allow supplier search flow actions through for non-registered users
-    const allowedWithoutBiz =
-      a === "onboard_business" ||
-      a === "find_supplier" ||
-      a === "register_supplier" ||
-      a === "suppliers_home" ||
-      a === "sup_search_all" ||
-      a.startsWith("sup_search_cat_") ||
-      a.startsWith("sup_search_city_") ||
-      a.startsWith("sup_view_") ||
-      a.startsWith("sup_order_") ||
-      a.startsWith("sup_save_") ||
-      a.startsWith("rate_order_") ||
-      a.startsWith("sup_accept_") ||
-      a.startsWith("sup_decline_") ||
-      a === "my_supplier_account";
-    
-    if (!supplierExists && al !== "join" && !allowedWithoutBiz) {
-      return sendButtons(from, {
-        text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
-        buttons: [
-        
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "register_supplier", title: "📦 List My Business" },
-            { id: "onboard_business", title: "🧾 Run My Business" },
-        ]
-      });
-    }
+  const supplierExists = await SupplierProfile.findOne({ phone });
+  const sess = await UserSession.findOne({ phone });
+
+const searchMode = sess?.tempData?.supplierSearchMode;
+
+if (searchMode === "product") {
+  const productQuery = text.trim();
+  if (!productQuery || productQuery.length < 1) {
+    return sendButtons(from, {
+      text: "❌ Please type the product name:",
+      buttons: [{ id: "find_supplier", title: "⬅ Back" }]
+    });
   }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: { "tempData.supplierSearchProduct": productQuery },
+      $unset: { "tempData.supplierSearchMode": "" }
+    }
+  );
+
+  return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+    ...SUPPLIER_CITIES.map(c => ({
+      id: `sup_search_city_${c.toLowerCase()}`,
+      title: c
+    })),
+    { id: "sup_search_city_all", title: "📍 All Cities" }
+  ]);
+}
+
+  const hasActiveBuyerFlow =
+    !!sess?.tempData?.orderState ||
+    !!sess?.tempData?.supplierSearchMode ||
+    !!sess?.tempData?.supplierSearchCategory ||
+    !!sess?.tempData?.supplierSearchProduct;
+
+  // Allow supplier search/order actions through for non-registered users
+  const allowedWithoutBiz =
+    a === "onboard_business" ||
+    a === "find_supplier" ||
+    a === "register_supplier" ||
+    a === "suppliers_home" ||
+    a === "sup_search_all" ||
+    a.startsWith("sup_search_cat_") ||
+    a.startsWith("sup_search_city_") ||
+    a.startsWith("sup_view_") ||
+    a.startsWith("sup_order_") ||
+    a.startsWith("sup_save_") ||
+    a.startsWith("rate_order_") ||
+    a.startsWith("sup_accept_") ||
+    a.startsWith("sup_decline_") ||
+    a === "my_supplier_account";
+
+  if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
+    return sendButtons(from, {
+      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
+      buttons: [
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "register_supplier", title: "📦 List My Business" },
+        { id: "onboard_business", title: "🧾 Run My Business" },
+      ]
+    });
+  }
+}
 
 
 
