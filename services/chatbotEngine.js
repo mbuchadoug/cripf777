@@ -129,26 +129,91 @@ function getSupplierCategoriesForType(profileType = "product") {
     Array.isArray(cat.types) ? cat.types.includes(profileType) : true
   );
 }
+function parseSupplierRateValue(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return null;
+
+  // examples: "10/hr", "$10/hr", "50/trip", "15"
+  const m = raw.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+
+  return Number(m[1]);
+}
+
+function parseSupplierRateUnit(rate = "") {
+  const raw = String(rate || "").trim();
+  const parts = raw.split("/");
+  if (parts.length < 2) return "each";
+  return parts[1].trim() || "each";
+}
+
 function findMatchingSupplierPrice(supplier, requestedProduct) {
-  if (!supplier?.prices?.length || !requestedProduct) return null;
+  if (!requestedProduct) return null;
 
   const wanted = normalizeProductName(requestedProduct);
 
-  // exact normalized match first
-  let match = supplier.prices.find(p =>
-    p?.inStock !== false &&
-    normalizeProductName(p.product) === wanted
-  );
-  if (match) return match;
+  // 1) normal product prices
+  if (Array.isArray(supplier?.prices) && supplier.prices.length) {
+    let match = supplier.prices.find(p =>
+      p?.inStock !== false &&
+      normalizeProductName(p.product) === wanted
+    );
+    if (match) {
+      return {
+        product: match.product,
+        amount: Number(match.amount),
+        unit: match.unit || "each",
+        source: "prices"
+      };
+    }
 
-  // fallback partial match
-  match = supplier.prices.find(p => {
-    if (p?.inStock === false || !p?.product) return false;
-    const candidate = normalizeProductName(p.product);
-    return candidate.includes(wanted) || wanted.includes(candidate);
-  });
+    match = supplier.prices.find(p => {
+      if (p?.inStock === false || !p?.product) return false;
+      const candidate = normalizeProductName(p.product);
+      return candidate.includes(wanted) || wanted.includes(candidate);
+    });
 
-  return match || null;
+    if (match) {
+      return {
+        product: match.product,
+        amount: Number(match.amount),
+        unit: match.unit || "each",
+        source: "prices"
+      };
+    }
+  }
+
+  // 2) service rates
+  if (Array.isArray(supplier?.rates) && supplier.rates.length) {
+    let match = supplier.rates.find(r =>
+      normalizeProductName(r.service) === wanted
+    );
+    if (match) {
+      return {
+        product: match.service,
+        amount: parseSupplierRateValue(match.rate),
+        unit: parseSupplierRateUnit(match.rate),
+        source: "rates"
+      };
+    }
+
+    match = supplier.rates.find(r => {
+      if (!r?.service) return false;
+      const candidate = normalizeProductName(r.service);
+      return candidate.includes(wanted) || wanted.includes(candidate);
+    });
+
+    if (match) {
+      return {
+        product: match.service,
+        amount: parseSupplierRateValue(match.rate),
+        unit: parseSupplierRateUnit(match.rate),
+        source: "rates"
+      };
+    }
+  }
+
+  return null;
 }
 
 function parseBulkOrderInput(text = "") {
@@ -624,15 +689,17 @@ let pricedCount = 0;
 
 const finalItems = normalizedItems.map(entry => {
   const quantity = Number(entry.quantity) || 1;
-  const unitLabel = entry.unitLabel || "units";
+  const requestedUnit = entry.unitLabel || "units";
   const matchedPrice = findMatchingSupplierPrice(supplier, entry.product);
 
   let pricePerUnit = null;
   let total = null;
+  let finalUnit = requestedUnit;
 
   if (matchedPrice && typeof matchedPrice.amount === "number") {
     pricePerUnit = matchedPrice.amount;
     total = quantity * matchedPrice.amount;
+    finalUnit = matchedPrice.unit || requestedUnit;
     totalAmount += total;
     pricedCount++;
   }
@@ -640,7 +707,7 @@ const finalItems = normalizedItems.map(entry => {
   return {
     product: entry.product,
     quantity,
-    unit: unitLabel,
+    unit: finalUnit,
     pricePerUnit,
     currency: "USD",
     total
@@ -3000,9 +3067,14 @@ const rows = formatSupplierResults(results, city, category || product);
       : "💵 No minimum order";
     const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
     const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
-
 const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
-const offeringText = (supplier.products || []).slice(0, 5).join(", ");
+const offeringText = supplier.profileType === "service"
+  ? (supplier.rates?.length
+      ? supplier.rates.slice(0, 5).map(r => `${r.service} (${r.rate})`).join(", ")
+      : (supplier.products || []).slice(0, 5).join(", "))
+  : (supplier.prices?.length
+      ? supplier.prices.slice(0, 5).map(p => `${p.product} ($${p.amount}/${p.unit})`).join(", ")
+      : (supplier.products || []).slice(0, 5).join(", "));
 
 return sendButtons(from, {
       text: `🏪 *${supplier.businessName}*${tierBadge}\n` +
@@ -3152,14 +3224,19 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
       await saveBizSafe(biz);
     }
 
-    let productText = "";
-    if (supplier.prices?.length) {
-      productText = "\n\n" + supplier.prices
-        .map(p => `• ${p.product} - $${p.amount}/${p.unit}`)
-        .join("\n");
-    } else if (supplier.products?.length) {
-      productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
-    }
+   let productText = "";
+
+if (supplier.profileType === "service" && supplier.rates?.length) {
+  productText = "\n\n" + supplier.rates
+    .map(r => `• ${r.service} - ${r.rate}`)
+    .join("\n");
+} else if (supplier.prices?.length) {
+  productText = "\n\n" + supplier.prices
+    .map(p => `• ${p.product} - $${p.amount}/${p.unit}`)
+    .join("\n");
+} else if (supplier.products?.length) {
+  productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
+}
 
 return sendText(from,
 `🛒 *Order from ${supplier.businessName}*${productText}
