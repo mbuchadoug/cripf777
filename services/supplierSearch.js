@@ -30,12 +30,20 @@ export async function runSupplierSearch({ city, category, product, profileType }
   if (city) query["location.city"] = city;
   if (category) query.categories = category;
 
-  if (product) {
+ if (product) {
+  if (profileType === "service") {
+    query.$or = [
+      { products: { $regex: product, $options: "i" } },
+      { "rates.service": { $regex: product, $options: "i" } }
+    ];
+  } else {
     query.products = {
       $regex: product,
       $options: "i"
     };
   }
+}
+
 
   return SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1 })

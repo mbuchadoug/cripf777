@@ -537,21 +537,27 @@ await UserSession.findOneAndUpdate(
     !!sess?.tempData?.supplierSearchProduct;
 
   // Allow supplier search/order actions through for non-registered users
-  const allowedWithoutBiz =
-    a === "onboard_business" ||
-    a === "find_supplier" ||
-    a === "register_supplier" ||
-    a === "suppliers_home" ||
-    a === "sup_search_all" ||
-    a.startsWith("sup_search_cat_") ||
-    a.startsWith("sup_search_city_") ||
-    a.startsWith("sup_view_") ||
-    a.startsWith("sup_order_") ||
-    a.startsWith("sup_save_") ||
-    a.startsWith("rate_order_") ||
-    a.startsWith("sup_accept_") ||
-    a.startsWith("sup_decline_") ||
-    a === "my_supplier_account";
+ const allowedWithoutBiz =
+  a === "onboard_business" ||
+  a === "find_supplier" ||
+  a === "register_supplier" ||
+  a === "suppliers_home" ||
+  a === "sup_search_type_product" ||
+  a === "sup_search_type_service" ||
+  a === "sup_search_more_categories" ||
+  a === "sup_search_all" ||
+  a.startsWith("sup_search_cat_") ||
+  a.startsWith("sup_search_city_") ||
+  a.startsWith("sup_view_") ||
+  a.startsWith("sup_order_") ||
+  a.startsWith("sup_save_") ||
+  a.startsWith("rate_order_") ||
+  a.startsWith("sup_accept_") ||
+  a.startsWith("sup_decline_") ||
+  a === "my_supplier_account" ||
+  a === "my_orders" ||
+  a.startsWith("order_detail_");
+
 
   if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
     return sendButtons(from, {
