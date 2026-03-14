@@ -36,36 +36,38 @@ export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, o
     });
   }
 
-  const itemLines = formatOrderItems(order.items);
+ const itemLines = formatOrderItems(order.items);
 
-  const deliveryLine = order.delivery?.required
-  //const itemLines = formatOrderItems(order.items);
+const supplier = await SupplierProfile.findOne({ phone: supplierPhone }).lean();
+const isServiceSupplier = supplier?.profileType === "service";
 
-  //const deliveryLine = order.delivery?.required
-    ? `🚚 Deliver to: ${order.delivery.address}`
+const deliveryLine = order.delivery?.required
+  ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
+  : isServiceSupplier
+    ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
     : "🏠 Collection";
 
-  const hasPricing =
-    Array.isArray(order.items) &&
-    order.items.length > 0 &&
-    order.items.every(i => typeof i.pricePerUnit === "number" && typeof i.total === "number");
+const hasPricing =
+  Array.isArray(order.items) &&
+  order.items.length > 0 &&
+  order.items.every(i => typeof i.pricePerUnit === "number" && typeof i.total === "number");
 
-  const totalLine = hasPricing
-    ? `💵 Total: $${Number(order.totalAmount || 0).toFixed(2)}`
-    : `💵 Total: Pending - set your price when accepting`;
+const totalLine = hasPricing
+  ? `💵 Total: $${Number(order.totalAmount || 0).toFixed(2)}`
+  : `💵 Total: Pending - set your price when accepting`;
 
-  await sendButtons(supplierPhone, {
-    text:
-      `🛒 *New Order!*\n\n` +
-      `${itemLines}\n\n` +
-      `${totalLine}\n` +
-      `${deliveryLine}\n` +
-      `📞 Buyer: ${order.buyerPhone}`,
-    buttons: [
-      { id: `sup_accept_${order._id}`, title: "✅ Accept" },
-      { id: `sup_decline_${order._id}`, title: "❌ Decline" }
-    ]
-  });
+await sendButtons(supplierPhone, {
+  text:
+    `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "New Booking Request!" : "New Order!"}*\n\n` +
+    `${itemLines}\n\n` +
+    `${totalLine}\n` +
+    `${deliveryLine}\n` +
+    `📞 Buyer: ${order.buyerPhone}`,
+  buttons: [
+    { id: `sup_accept_${order._id}`, title: "✅ Accept" },
+    { id: `sup_decline_${order._id}`, title: "❌ Decline" }
+  ]
+});
 }
 
 export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
@@ -83,6 +85,7 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     order.totalAmount > 0;
 
   const supplier = await SupplierProfile.findOne({ phone: from });
+  const isServiceSupplier = supplier?.profileType === "service";
 
   if (hasPricing) {
     order.status = "accepted";
@@ -102,33 +105,39 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
 
     const deliveryLine = order.delivery?.required
       ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
-      : "🏠 Collection";
+      : isServiceSupplier
+        ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
+        : "🏠 Collection";
 
     try {
       await sendButtons(order.buyerPhone, {
         text:
-          `✅ *Order Accepted!*\n\n` +
-          `*${supplier?.businessName || from}* has accepted your order:\n\n` +
+          `✅ *${isServiceSupplier ? "Booking Accepted!" : "Order Accepted!"}*\n\n` +
+          `*${supplier?.businessName || from}* has accepted your ${isServiceSupplier ? "booking" : "order"}:\n\n` +
           `${itemLines}\n\n` +
           `${deliveryLine}\n` +
-          `💵 *Order Total: $${Number(order.totalAmount).toFixed(2)}*\n` +
+          `💵 *${isServiceSupplier ? "Booking Total" : "Order Total"}: $${Number(order.totalAmount).toFixed(2)}*\n` +
           `📞 Contact: ${from}\n\n` +
-          `They will be in touch to arrange payment & delivery.`,
-      buttons: [
-          { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
-          { id: "suppliers_home",           title: "🏪 Suppliers" }
+          `They will be in touch to arrange ${isServiceSupplier ? "the service" : "payment & delivery"}.`,
+        buttons: [
+          { id: `rate_order_${order._id}`, title: isServiceSupplier ? "⭐ Rate Service" : "⭐ Rate Order" },
+          { id: "suppliers_home", title: "🏪 Suppliers" }
         ]
       });
     } catch (err) {
       console.error("[SUPPLIER AUTO-ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
     }
 
-    return sendList(from, `✅ Order accepted. Total: $${Number(order.totalAmount).toFixed(2)}\n\nWhen will the order be ready?`, [
-      { id: `sup_eta_today_${orderId}`, title: "Today" },
-      { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
-      { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
-      { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
-    ]);
+    return sendList(
+      from,
+      `✅ ${isServiceSupplier ? "Booking accepted" : "Order accepted"}. Total: $${Number(order.totalAmount).toFixed(2)}\n\n${isServiceSupplier ? "When will you do the job?" : "When will the order be ready?"}`,
+      [
+        { id: `sup_eta_today_${orderId}`, title: "Today" },
+        { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
+        { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
+        { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
+      ]
+    );
   }
 
   if (!biz) {
@@ -152,7 +161,7 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-      `💰 *Set Price for Order*\n\n` +
+      `💰 *Set Price for ${isServiceSupplier ? "Booking" : "Order"}*\n\n` +
       `${itemLines}\n\n` +
       `${instructions}`,
     buttons: [{ id: "suppliers_home", title: "🏪 Back" }]

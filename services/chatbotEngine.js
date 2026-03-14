@@ -147,6 +147,23 @@ function parseSupplierRateUnit(rate = "") {
   return parts[1].trim() || "each";
 }
 
+
+function formatSupplierRateDisplay(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return "";
+
+  // If it already starts with $, keep it
+  if (raw.startsWith("$")) return raw;
+
+  const value = parseSupplierRateValue(raw);
+  const unit = parseSupplierRateUnit(raw);
+
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return `$${value}/${unit}`;
+  }
+
+  return raw;
+}
 function findMatchingSupplierPrice(supplier, requestedProduct) {
   if (!requestedProduct) return null;
 
@@ -613,14 +630,21 @@ Type *cancel* to stop this order.`);
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
     .join("\n");
 
-  return sendText(from,
-`🛒 *Order Summary*
+const sess2 = await UserSession.findOne({ phone });
+const supplierIdForSummary = sess2?.tempData?.orderSupplierId;
+const supplierForSummary = supplierIdForSummary
+  ? await SupplierProfile.findById(supplierIdForSummary).lean()
+  : null;
+const isServiceSupplier = supplierForSummary?.profileType === "service";
+
+return sendText(from,
+`${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Booking Summary" : "Order Summary"}*
 
 ${preview}
 
-Now send your delivery address or contact note:
+Now send your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:
 
-Type *cancel* to stop this order.`);
+Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
 }
 
    
@@ -748,19 +772,24 @@ const order = await SupplierOrder.create({
   .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
   .join("\n");
 
+const isServiceSupplier = supplier.profileType === "service";
+
 await sendText(from,
-`✅ *Order sent to ${supplier.businessName}!*
+`✅ *${isServiceSupplier ? "Booking sent to" : "Order sent to"} ${supplier.businessName}!*
 
 ${itemSummary}
-${supplier.delivery?.available ? `📍 ${address}` : `📝 Note: ${address}`}
+${supplier.delivery?.available
+  ? `📍 ${address}`
+  : isServiceSupplier
+    ? `📍 Location/Note: ${address}`
+    : `📝 Note: ${address}`}
 ${pricedCount > 0 ? `💵 Current estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
 ${pricedCount === finalItems.length
-  ? "All items were auto-priced. Supplier can confirm immediately. 🎉"
+  ? `${isServiceSupplier ? "All services were auto-priced. Supplier can confirm immediately. 🎉" : "All items were auto-priced. Supplier can confirm immediately. 🎉"}`
   : pricedCount > 0
-    ? "Some items were auto-priced. Supplier will confirm the rest. 🎉"
-    : "Supplier will confirm pricing shortly. 🎉"}`
-);
+    ? `${isServiceSupplier ? "Some services were auto-priced. Supplier will confirm the rest. 🎉" : "Some items were auto-priced. Supplier will confirm the rest. 🎉"}`
+    : `${isServiceSupplier ? "Supplier will confirm pricing for the booking shortly. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`}`);
       return sendSuppliersMenu(from);
     }
   }
@@ -3070,7 +3099,7 @@ const rows = formatSupplierResults(results, city, category || product);
 const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
 const offeringText = supplier.profileType === "service"
   ? (supplier.rates?.length
-      ? supplier.rates.slice(0, 5).map(r => `${r.service} (${r.rate})`).join(", ")
+      ? supplier.rates.slice(0, 5).map(r => `${r.service} (${formatSupplierRateDisplay(r.rate)})`).join(", ")
       : (supplier.products || []).slice(0, 5).join(", "))
   : (supplier.prices?.length
       ? supplier.prices.slice(0, 5).map(p => `${p.product} ($${p.amount}/${p.unit})`).join(", ")
@@ -3083,11 +3112,14 @@ return sendButtons(from, {
             `${deliveryText}\n${minText}${badge}\n` +
             `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
             `📞 ${supplier.phone}`,
-      buttons: [
-        { id: `sup_order_${supplierId}`, title: "🛒 Place Order" },
-        { id: `sup_save_${supplierId}`, title: "Save Supplier" },
-        { id: "suppliers_home", title: "🏪 Suppliers" }
-      ]
+    buttons: [
+  {
+    id: `sup_order_${supplierId}`,
+    title: supplier.profileType === "service" ? "📅 Book Service" : "🛒 Place Order"
+  },
+  { id: `sup_save_${supplierId}`, title: "Save Supplier" },
+  { id: "suppliers_home", title: "🏪 Suppliers" }
+]
     });
   }
 
@@ -3228,7 +3260,7 @@ await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
 
 if (supplier.profileType === "service" && supplier.rates?.length) {
   productText = "\n\n" + supplier.rates
-    .map(r => `• ${r.service} - ${r.rate}`)
+    .map(r => `• ${r.service} - ${formatSupplierRateDisplay(r.rate)}`)
     .join("\n");
 } else if (supplier.prices?.length) {
   productText = "\n\n" + supplier.prices
@@ -3238,21 +3270,26 @@ if (supplier.profileType === "service" && supplier.rates?.length) {
   productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
 }
 
-return sendText(from,
-`🛒 *Order from ${supplier.businessName}*${productText}
+const isServiceSupplier = supplier.profileType === "service";
 
-Send your items in one message.
+return sendText(from,
+`${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Book with" : "Order from"} ${supplier.businessName}*${productText}
+
+${isServiceSupplier
+  ? "Send the services you want in one message."
+  : "Send your items in one message."}
 
 *Format:*
-product qty, product qty
+${isServiceSupplier ? "service qty, service qty" : "product qty, product qty"}
 
 *Examples:*
-sugar 2, bread 3, milk 1
-cement 10, river sand 2
+${isServiceSupplier
+  ? "*car hire 2 hr, delivery 1 trip*\n*plumbing 2 hr, welding 1 job*"
+  : "*sugar 2, bread 3, milk 1*\n*cement 10, river sand 2*"}
 
 You can also send one per line.
 
-Type *cancel* to stop this order.`);
+Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
   }
 
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
@@ -3352,14 +3389,20 @@ Type *cancel* to stop this order.`);
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
     .join("\n");
 
- return sendText(from,
-`🛒 *Order Summary*
+const supplierIdForSummary = biz.sessionData?.orderSupplierId;
+const supplierForSummary = supplierIdForSummary
+  ? await SupplierProfile.findById(supplierIdForSummary).lean()
+  : null;
+const isServiceSupplier = supplierForSummary?.profileType === "service";
+
+return sendText(from,
+`${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Booking Summary" : "Order Summary"}*
 
 ${preview}
 
-Now send your delivery address or contact note:
+Now send your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:
 
-Type *cancel* to stop this order.`);
+Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
 }
 
   // ── Buyer order: quantity text input ──────────────────────────────────────
@@ -3408,15 +3451,17 @@ let pricedCount = 0;
 
 const finalItems = normalizedItems.map(entry => {
   const quantity = Number(entry.quantity) || 1;
-  const unitLabel = entry.unitLabel || "units";
+  const requestedUnit = entry.unitLabel || "units";
   const matchedPrice = findMatchingSupplierPrice(supplier, entry.product);
 
   let pricePerUnit = null;
   let total = null;
+  let finalUnit = requestedUnit;
 
   if (matchedPrice && typeof matchedPrice.amount === "number") {
     pricePerUnit = matchedPrice.amount;
     total = quantity * matchedPrice.amount;
+    finalUnit = matchedPrice.unit || requestedUnit;
     totalAmount += total;
     pricedCount++;
   }
@@ -3424,7 +3469,7 @@ const finalItems = normalizedItems.map(entry => {
   return {
     product: entry.product,
     quantity,
-    unit: unitLabel,
+    unit: finalUnit,
     pricePerUnit,
     currency: "USD",
     total
@@ -3452,19 +3497,20 @@ const itemSummary = finalItems
   .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
   .join("\n");
 
+const isServiceSupplier = supplier.profileType === "service";
+
 await sendText(from,
-`✅ *Order sent to ${supplier.businessName}!*
+`✅ *${isServiceSupplier ? "Booking sent to" : "Order sent to"} ${supplier.businessName}!*
 
 ${itemSummary}
-📍 ${address}
+${isServiceSupplier ? `📍 Location/Note: ${address}` : `📍 ${address}`}
 ${pricedCount > 0 ? `💵 Current estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
 ${pricedCount === finalItems.length
-  ? "All items were auto-priced. Supplier can confirm immediately. 🎉"
+  ? `${isServiceSupplier ? "All services were auto-priced. Supplier can confirm immediately. 🎉" : "All items were auto-priced. Supplier can confirm immediately. 🎉"}`
   : pricedCount > 0
-    ? "Some items were auto-priced. Supplier will confirm the rest. 🎉"
-    : "Supplier will confirm pricing shortly. 🎉"}`
-);
+    ? `${isServiceSupplier ? "Some services were auto-priced. Supplier will confirm the rest. 🎉" : "Some items were auto-priced. Supplier will confirm the rest. 🎉"}`
+    : `${isServiceSupplier ? "Supplier will confirm pricing for the booking shortly. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`}`);
     return sendMainMenu(from);
   }
 
