@@ -431,13 +431,13 @@ if (searchMode === "product") {
     });
   }
 
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: { "tempData.supplierSearchProduct": productQuery },
-      $unset: { "tempData.supplierSearchMode": "" }
-    }
-  );
+await UserSession.findOneAndUpdate(
+  { phone },
+  {
+    $set: { "tempData.supplierSearchProduct": productQuery },
+    $unset: { "tempData.supplierSearchMode": "" }
+  }
+);
 
   return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
@@ -2233,24 +2233,92 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
-  const categoryRows = [
-    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
-      id: `sup_search_cat_${c.id}`,
-      title: c.label
-    })),
-    { id: "sup_search_more_categories", title: "➕ More Categories" }
-  ];
-
-  if (!biz) {
-    return sendList(from, "🔍 What are you looking for?", categoryRows);
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {}
+    };
+    await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.supplierSearchCategory": "",
+          "tempData.supplierSearchProduct": "",
+          "tempData.supplierSearchType": ""
+        }
+      },
+      { upsert: true }
+    );
   }
 
-  return sendList(from, "🔍 What are you looking for?", categoryRows);
+  return sendButtons(from, {
+    text: "🔍 *Find Suppliers*\n\nWhat are you looking for?",
+    buttons: [
+      { id: "sup_search_type_product", title: "📦 Products" },
+      { id: "sup_search_type_service", title: "🔧 Services" }
+    ]
+  });
+}
+
+
+if (a === "sup_search_type_product" || a === "sup_search_type_service") {
+  const searchType = a === "sup_search_type_service" ? "service" : "product";
+  const filteredCategories = getSupplierCategoriesForType(searchType);
+
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
+        ...(biz.sessionData?.supplierSearch || {}),
+        type: searchType
+      }
+    };
+    await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.supplierSearchType": searchType } },
+      { upsert: true }
+    );
+  }
+
+ const categoryRows = [
+  ...filteredCategories.slice(0, 8).map(c => ({
+    id: `sup_search_cat_${c.id}`,
+    title: c.label
+  })),
+  {
+    id: "sup_search_all",
+    title: searchType === "service" ? "🔍 Search by service name" : "🔍 Search by product name"
+  },
+  ...(filteredCategories.length > 8
+    ? [{ id: "sup_search_more_categories", title: "➕ More Categories" }]
+    : [])
+];
+
+  return sendList(
+    from,
+    searchType === "service"
+      ? "🔧 Choose a service category"
+      : "📦 Choose a product category",
+    categoryRows
+  );
 }
 
 if (a === "sup_search_more_categories") {
+  let searchType = biz?.sessionData?.supplierSearch?.type || null;
+
+  if (!searchType) {
+    const sess = await UserSession.findOne({ phone });
+    searchType = sess?.tempData?.supplierSearchType || "product";
+  }
+
+  const filteredCategories = getSupplierCategoriesForType(searchType);
+
   return sendList(from, "🔍 More Categories", [
-    ...SUPPLIER_CATEGORIES.slice(9).map(c => ({
+    ...filteredCategories.slice(9).map(c => ({
       id: `sup_search_cat_${c.id}`,
       title: c.label
     })),
@@ -2831,27 +2899,46 @@ To go live and start receiving orders, you need to choose a plan and pay. It's l
 
   // ── Supplier search: category selected ────────────────────────────────────
 if (a.startsWith("sup_search_cat_")) {
-    const category = a.replace("sup_search_cat_", "");
-    // Store in biz session if available, otherwise store in UserSession
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { category } };
-      biz.sessionState = "supplier_search_city";
-      await saveBizSafe(biz);
-    } else {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.supplierSearchCategory": category } },
-        { upsert: true }
-      );
-    }
-    return sendList(from, "📍 Which city?", [
-      ...SUPPLIER_CITIES.map(c => ({
-        id: `sup_search_city_${c.toLowerCase()}`,
-        title: c
-      })),
-      { id: "sup_search_city_other", title: "📍 Other" }
-    ]);
+  const category = a.replace("sup_search_cat_", "");
+
+  let searchType = biz?.sessionData?.supplierSearch?.type || null;
+  if (!searchType) {
+    const sess = await UserSession.findOne({ phone });
+    searchType = sess?.tempData?.supplierSearchType || "product";
   }
+
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
+        ...(biz.sessionData?.supplierSearch || {}),
+        type: searchType,
+        category
+      }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.supplierSearchCategory": category,
+          "tempData.supplierSearchType": searchType
+        }
+      },
+      { upsert: true }
+    );
+  }
+
+  return sendList(from, "📍 Which city?", [
+    ...SUPPLIER_CITIES.map(c => ({
+      id: `sup_search_city_${c.toLowerCase()}`,
+      title: c
+    })),
+    { id: "sup_search_city_other", title: "📍 Other" }
+  ]);
+}
 
   // ── Supplier search: city selected ────────────────────────────────────────
  if (a.startsWith("sup_search_city_")) {
@@ -2859,16 +2946,18 @@ if (a.startsWith("sup_search_cat_")) {
     const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
 
     // Get category AND product from biz session or UserSession fallback
-   let category = biz?.sessionData?.supplierSearch?.category || null;
-    let product = biz?.sessionData?.supplierSearch?.product || null;
-    if (!category && !product) {
-      const sess = await UserSession.findOne({ phone });
-      category = sess?.tempData?.supplierSearchCategory || null;
-      product = sess?.tempData?.supplierSearchProduct || null;
-    }
+  let category = biz?.sessionData?.supplierSearch?.category || null;
+let product = biz?.sessionData?.supplierSearch?.product || null;
+let profileType = biz?.sessionData?.supplierSearch?.type || null;
 
-   const results = await runSupplierSearch({ city, category, product });
+if (!category && !product && !profileType) {
+  const sess = await UserSession.findOne({ phone });
+  category = sess?.tempData?.supplierSearchCategory || null;
+  product = sess?.tempData?.supplierSearchProduct || null;
+  profileType = sess?.tempData?.supplierSearchType || null;
+}
 
+const results = await runSupplierSearch({ city, category, product, profileType });
   if (!results.length) {
       return sendButtons(from, {
         text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
@@ -2912,10 +3001,13 @@ const rows = formatSupplierResults(results, city, category || product);
     const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
     const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
 
-  return sendButtons(from, {
+const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
+const offeringText = (supplier.products || []).slice(0, 5).join(", ");
+
+return sendButtons(from, {
       text: `🏪 *${supplier.businessName}*${tierBadge}\n` +
             `📍 ${supplier.location?.area}, ${supplier.location?.city}\n` +
-            `📦 ${(supplier.products || []).slice(0, 5).join(", ")}\n` +
+            `${offeringLabel} ${offeringText}\n` +
             `${deliveryText}\n${minText}${badge}\n` +
             `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
             `📞 ${supplier.phone}`,
@@ -3088,22 +3180,43 @@ Type *cancel* to stop this order.`);
 
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
-    if (biz) {
-      biz.sessionState = "supplier_search_product";
-      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: biz.sessionData?.supplierSearch || {} };
-      await saveBizSafe(biz);
-    } else {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.supplierSearchMode": "product" } },
-        { upsert: true }
-      );
-    }
-    return sendButtons(from, {
-      text: "🔍 *Search by product*\n\nType the product name you are looking for:\n\nExample: _flour_, _cooking oil_, _tiles_",
-      buttons: [{ id: "find_supplier", title: "⬅ Back" }]
-    });
+  let searchType = biz?.sessionData?.supplierSearch?.type || null;
+
+  if (!searchType) {
+    const sess = await UserSession.findOne({ phone });
+    searchType = sess?.tempData?.supplierSearchType || "product";
   }
+
+  if (biz) {
+    biz.sessionState = "supplier_search_product";
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
+        ...(biz.sessionData?.supplierSearch || {}),
+        type: searchType
+      }
+    };
+    await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.supplierSearchMode": "product",
+          "tempData.supplierSearchType": searchType
+        }
+      },
+      { upsert: true }
+    );
+  }
+
+  return sendButtons(from, {
+    text: searchType === "service"
+      ? "🔍 *Search by service*\n\nType the service you are looking for:\n\nExample: _plumbing_, _car hire_, _delivery_"
+      : "🔍 *Search by product*\n\nType the product name you are looking for:\n\nExample: _flour_, _cooking oil_, _tiles_",
+    buttons: [{ id: "find_supplier", title: "⬅ Back" }]
+  });
+}
 
   // ── Buyer: free-text product search ──────────────────────────────────────
   if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
@@ -3116,10 +3229,13 @@ Type *cancel* to stop this order.`);
     }
 
     // Ask city after product
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: { product: productQuery }
-    };
+  biz.sessionData = {
+  ...(biz.sessionData || {}),
+  supplierSearch: {
+    ...(biz.sessionData?.supplierSearch || {}),
+    product: productQuery
+  }
+};
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
 

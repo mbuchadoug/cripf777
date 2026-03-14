@@ -19,18 +19,21 @@ export async function startSupplierSearch(from, biz, saveBiz) {
   ]);
 }
 
-export async function runSupplierSearch({ city, category, product }) {
+export async function runSupplierSearch({ city, category, product, profileType }) {
   const query = {
     active: true,
     suspended: false,
     subscriptionStatus: "active"
   };
 
+  if (profileType) query.profileType = profileType;
   if (city) query["location.city"] = city;
   if (category) query.categories = category;
+
   if (product) {
     query.products = {
-      $regex: product, $options: "i"
+      $regex: product,
+      $options: "i"
     };
   }
 
@@ -39,7 +42,6 @@ export async function runSupplierSearch({ city, category, product }) {
     .limit(10)
     .lean();
 }
-
 export function formatSupplierResults(suppliers, city, category) {
   if (!suppliers.length) return null;
 
