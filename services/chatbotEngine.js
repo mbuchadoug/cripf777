@@ -2587,20 +2587,50 @@ _Type *cancel* to return to main menu._`
 
 
   // ── Profile type: Products or Services ───────────────────────────────────
-  if (a === "reg_type_product" || a === "reg_type_service") {
-    if (!biz) return sendMainMenu(from);
-    const profileType = a === "reg_type_service" ? "service" : "product";
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.profileType = profileType;
-    biz.sessionState = "supplier_reg_category";
-    await saveBizSafe(biz);
+ if (a === "reg_type_product" || a === "reg_type_service") {
+  if (!biz) return sendMainMenu(from);
 
-    return sendList(from, "🗂 What do you mainly offer?", [
-      ...SUPPLIER_CATEGORIES.map(c => ({
-        id: `sup_cat_${c.id}`, title: c.label
-      }))
-    ]);
-  }
+  const profileType = a === "reg_type_service" ? "service" : "product";
+
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.profileType = profileType;
+  biz.sessionState = "supplier_reg_category";
+  await saveBizSafe(biz);
+
+  const categoryRows = [
+    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
+      id: `sup_cat_${c.id}`,
+      title: c.label
+    })),
+    { id: "sup_cat_more", title: "➕ More Categories" }
+  ];
+
+  return sendList(from, "🗂 What do you mainly offer?", categoryRows);
+}
+
+
+if (a === "reg_type_product" || a === "reg_type_service") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = a === "reg_type_service" ? "service" : "product";
+
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.profileType = profileType;
+  biz.sessionState = "supplier_reg_category";
+  await saveBizSafe(biz);
+
+  const categoryRows = [
+    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
+      id: `sup_cat_${c.id}`,
+      title: c.label
+    })),
+    { id: "sup_cat_more", title: "➕ More Categories" }
+  ];
+
+  return sendList(from, "🗂 What do you mainly offer?", categoryRows);
+}
 
   // ── Travel yes/no during service registration ─────────────────────────────
   if (a === "sup_travel_yes") {
