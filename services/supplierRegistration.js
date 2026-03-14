@@ -119,51 +119,68 @@ if (state === "supplier_reg_area") {
   }
   // ── Step 3: Products ───────────────────────────────────
  // ── Step 3: Products ───────────────────────────────────────────────────────
-  if (state === "supplier_reg_products") {
-    const products = text.split(",")
-      .map(p => p.trim().toLowerCase())
-      .filter(p => p.length > 0);
+if (state === "supplier_reg_products") {
+  const items = text.split(",")
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
 
-  if (!products.length) {
-      await sendText(from,
-`❌ Please list at least one product, separated by commas.
+  const isService = biz.sessionData?.supplierReg?.profileType === "service";
+
+  if (!items.length) {
+    await sendText(from,
+isService
+  ? `❌ Please list at least one service, separated by commas.
+
+*Example:*
+*car hire, delivery, airport transfers*
+
+Just type them and send 👇`
+  : `❌ Please list at least one product, separated by commas.
 
 *Example:*
 *cooking oil, rice, sugar, flour, bread*
 
 Just type them and send 👇`
-      );
-      return true;
-    }
+    );
+    return true;
+  }
 
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.products = products;
-    biz.sessionData.supplierReg.prices = [];
-    biz.sessionData.supplierReg.priceIndex = 0;
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.products = items.map(p => p.toLowerCase());
+
+  if (isService) {
+    biz.sessionData.supplierReg.rates = [];
+    biz.sessionData.supplierReg.rateIndex = 0;
     biz.sessionState = "supplier_reg_prices";
     await saveBiz(biz);
 
- const first = products[0];
-  const isService = biz.sessionData.supplierReg?.profileType === "service";
+    const firstService = items[0];
 
-  if (isService) {
-    biz.sessionState = "supplier_reg_prices"; // reuse same state, handled below
-    await saveBiz(biz);
     return sendButtons(from, {
       text:
-`💰 *Your Rates*
+`💰 *Add Your Rates*
 
-What do you charge? Send as free text.
+What do you charge for *${firstService}*?
+
+Send as free text.
 
 *Examples:*
-- *$10/hr, $50 full day*
-- *$30 per job*
-- *$15/hr, minimum 2 hours*
+- *$10/hr*
+- *$50 full day*
+- *$30 per trip*
+- *$15/hr minimum 2 hours*
 
 _If you don't know yet, tap Skip below._`,
       buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
     });
   }
+
+  biz.sessionData.supplierReg.prices = [];
+  biz.sessionData.supplierReg.priceIndex = 0;
+  biz.sessionState = "supplier_reg_prices";
+  await saveBiz(biz);
+
+  const first = items[0];
 
   return sendButtons(from, {
     text:
@@ -188,31 +205,66 @@ _If you don't know yet, tap Skip below._`,
   });
 }
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
- if (state === "supplier_reg_prices") {
-    const reg = biz.sessionData.supplierReg;
+if (state === "supplier_reg_prices") {
+  const reg = biz.sessionData.supplierReg;
 
-    // ── Service provider: save free-text rates, skip to travel step ──────
-    if (reg.profileType === "service") {
-      reg.rates = text.trim();
-      biz.sessionState = "supplier_reg_travel";
+  // ── Service provider: collect one rate per service ──────
+  if (reg.profileType === "service") {
+    const services = reg.products || [];
+    const idx = reg.rateIndex || 0;
+    const rawRate = text.trim();
+
+    if (!rawRate) {
+      await sendText(from, `❌ Please enter a valid rate for *${services[idx] || "this service"}*.`);
+      return true;
+    }
+
+    reg.rates = reg.rates || [];
+    reg.rates.push({
+      service: services[idx],
+      rate: rawRate
+    });
+    reg.rateIndex = idx + 1;
+
+    if (reg.rateIndex < services.length) {
+      const nextService = services[reg.rateIndex];
       await saveBiz(biz);
       return sendButtons(from, {
-        text: "🚗 *Do you travel to clients?*",
+        text:
+`✅ Rate saved for *${services[idx]}*
+
+Now enter your rate for *${nextService}*.
+
+*Examples:*
+- *$10/hr*
+- *$50 full day*
+- *$30 per trip*`,
         buttons: [
-          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+          { id: "sup_skip_prices", title: "⏭ Skip Rest" },
+          { id: "sup_done_prices", title: "✅ Done Rates" }
         ]
       });
     }
 
-    const products = reg.products || [];
-    const idx = reg.priceIndex || 0;
+    biz.sessionState = "supplier_reg_travel";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: `✅ All service rates saved!\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
 
-    const raw = text.trim();
-    // Parse "4.50 kg" or "4.50" or "4.50each"
-    const match = raw.match(/^(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
-   if (!match) {
-      await sendText(from,
+  // ── Product supplier: collect one price per product ──────
+  const products = reg.products || [];
+  const idx = reg.priceIndex || 0;
+  const raw = text.trim();
+
+  const match = raw.match(/^(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
+  if (!match) {
+    await sendText(from,
 `❌ That format didn't work. Please try again.
 
 *How to type it:*
@@ -225,53 +277,44 @@ Amount then unit, like this:
 - *5 each*
 
 What is your price for *${products[idx]}*?`
-      );
-      return true;
-    }
+    );
+    return true;
+  }
 
-    const amount = parseFloat(match[1]);
-    const unit = match[3] || "each";
+  const amount = parseFloat(match[1]);
+  const unit = match[3] || "each";
 
-    reg.prices = reg.prices || [];
-    reg.prices.push({ product: products[idx], amount, unit, inStock: true });
-    reg.priceIndex = idx + 1;
+  reg.prices = reg.prices || [];
+  reg.prices.push({
+    product: products[idx],
+    amount,
+    unit,
+    inStock: true
+  });
+  reg.priceIndex = idx + 1;
 
-    if (reg.priceIndex < products.length) {
-      const next = products[reg.priceIndex];
-      await saveBiz(biz);
-      return sendButtons(from, {
-        text: `✅ $${amount}/${unit} saved!\n\nPrice for *${next}*?`,
-        buttons: [
-          { id: "sup_skip_prices", title: "⏭ Skip Rest" },
-          { id: "sup_done_prices", title: "✅ Done Pricing" }
-        ]
-      });
-    }
-
-    // All products priced
-   // All products priced
-    if (reg.profileType === "service") {
-      biz.sessionState = "supplier_reg_travel";
-      await saveBiz(biz);
-      return sendButtons(from, {
-        text: `✅ All rates saved!\n\n🚗 Do you travel to clients?`,
-        buttons: [
-          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
-        ]
-      });
-    }
-
-    biz.sessionState = "supplier_reg_delivery";
+  if (reg.priceIndex < products.length) {
+    const next = products[reg.priceIndex];
     await saveBiz(biz);
     return sendButtons(from, {
-      text: `✅ All prices saved!\n\n🚚 Do you deliver?`,
+      text: `✅ $${amount}/${unit} saved!\n\nPrice for *${next}*?`,
       buttons: [
-        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-        { id: "sup_del_no", title: "🏠 Collection Only" }
+        { id: "sup_skip_prices", title: "⏭ Skip Rest" },
+        { id: "sup_done_prices", title: "✅ Done Pricing" }
       ]
     });
   }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text: `✅ All prices saved!\n\n🚚 Do you deliver?`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no", title: "🏠 Collection Only" }
+    ]
+  });
+}
   // ── Step 4: Minimum Order ──────────────────────────────
   if (state === "supplier_reg_minorder") {
     const amount = Number(text.trim());
@@ -298,9 +341,11 @@ What is your price for *${products[idx]}*?`
             : "Delivers nearby"}`
         : "🏠 Collection only";
 
-    const pricingText = isService
-      ? `💰 Rates: ${reg.rates || "Not specified"}`
-      : `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}`;
+const pricingText = isService
+  ? `💰 Rates:\n${Array.isArray(reg.rates) && reg.rates.length
+      ? reg.rates.map(r => `• ${r.service}: ${r.rate}`).join("\n")
+      : "Not specified"}`
+  : `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}`;
 
     return sendButtons(from, {
       text: `✅ *Almost done! Confirm your listing:*\n\n` +

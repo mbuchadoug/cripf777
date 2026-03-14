@@ -2717,18 +2717,33 @@ _Type *cancel* to go back to main menu._`);
 
 
 // ── Skip or finish pricing during registration ─────────────────────────────
-  if (a === "sup_skip_prices" || a === "sup_done_prices") {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "supplier_reg_delivery";
+if (a === "sup_skip_prices" || a === "sup_done_prices") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+
+  if (profileType === "service") {
+    biz.sessionState = "supplier_reg_travel";
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: "🚚 Do you deliver?",
+      text: "🚗 *Do you travel to clients?*",
       buttons: [
-        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-        { id: "sup_del_no", title: "🏠 Collection Only" }
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
       ]
     });
   }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: "🚚 Do you deliver?",
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no", title: "🏠 Collection Only" }
+    ]
+  });
+}
 
 
 
