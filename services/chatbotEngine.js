@@ -123,6 +123,12 @@ function normalizeProductName(value = "") {
     .replace(/\s+/g, " ");
 }
 
+
+function getSupplierCategoriesForType(profileType = "product") {
+  return SUPPLIER_CATEGORIES.filter(cat =>
+    Array.isArray(cat.types) ? cat.types.includes(profileType) : true
+  );
+}
 function findMatchingSupplierPrice(supplier, requestedProduct) {
   if (!supplier?.prices?.length || !requestedProduct) return null;
 
@@ -2587,27 +2593,7 @@ _Type *cancel* to return to main menu._`
 
 
   // ── Profile type: Products or Services ───────────────────────────────────
- if (a === "reg_type_product" || a === "reg_type_service") {
-  if (!biz) return sendMainMenu(from);
 
-  const profileType = a === "reg_type_service" ? "service" : "product";
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  biz.sessionData.supplierReg.profileType = profileType;
-  biz.sessionState = "supplier_reg_category";
-  await saveBizSafe(biz);
-
-  const categoryRows = [
-    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
-      id: `sup_cat_${c.id}`,
-      title: c.label
-    })),
-    { id: "sup_cat_more", title: "➕ More Categories" }
-  ];
-
-  return sendList(from, "🗂 What do you mainly offer?", categoryRows);
-}
 
 
 if (a === "reg_type_product" || a === "reg_type_service") {
@@ -2621,15 +2607,46 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   biz.sessionState = "supplier_reg_category";
   await saveBizSafe(biz);
 
+  const filteredCategories = getSupplierCategoriesForType(profileType);
+
   const categoryRows = [
-    ...SUPPLIER_CATEGORIES.slice(0, 9).map(c => ({
+    ...filteredCategories.slice(0, 9).map(c => ({
       id: `sup_cat_${c.id}`,
       title: c.label
     })),
-    { id: "sup_cat_more", title: "➕ More Categories" }
+    ...(filteredCategories.length > 9
+      ? [{ id: "sup_cat_more", title: "➕ More Categories" }]
+      : [])
   ];
 
-  return sendList(from, "🗂 What do you mainly offer?", categoryRows);
+  return sendList(
+    from,
+    profileType === "service"
+      ? "🗂 What service do you mainly offer?"
+      : "🗂 What product do you mainly offer?",
+    categoryRows
+  );
+}
+
+
+
+if (a === "sup_cat_more") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+  const filteredCategories = getSupplierCategoriesForType(profileType);
+
+  return sendList(
+    from,
+    "🗂 More Categories",
+    [
+      ...filteredCategories.slice(9).map(c => ({
+        id: `sup_cat_${c.id}`,
+        title: c.label
+      })),
+      { id: "suppliers_home", title: "🏠 Home" }
+    ]
+  );
 }
 
   // ── Travel yes/no during service registration ─────────────────────────────
@@ -2657,31 +2674,46 @@ if (a === "reg_type_product" || a === "reg_type_service") {
     });
   }
   // ── Supplier category selected during registration ────────────────────────
-  if (a.startsWith("sup_cat_")) {
-    const catId = a.replace("sup_cat_", "");
-    if (!biz) return sendMainMenu(from);
+if (a.startsWith("sup_cat_")) {
+  const catId = a.replace("sup_cat_", "");
+  if (!biz) return sendMainMenu(from);
 
-    biz.sessionData = biz.sessionData || {};
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    const existing = biz.sessionData.supplierReg.categories || [];
-    if (!existing.includes(catId)) existing.push(catId);
-    biz.sessionData.supplierReg.categories = existing;
-    biz.sessionState = "supplier_reg_products";
-    await saveBizSafe(biz);
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
 
-return sendText(from,
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  const existing = biz.sessionData.supplierReg.categories || [];
+  if (!existing.includes(catId)) existing.push(catId);
+  biz.sessionData.supplierReg.categories = existing;
+  biz.sessionState = "supplier_reg_products";
+  await saveBizSafe(biz);
+
+  if (profileType === "service") {
+    return sendText(from,
 `✅ *Category selected!*
 
-Now list your main products or services, separated by commas.
+Now list your main services, separated by commas.
+
+*Example:*
+*plumbing, welding, electrical repairs, painting*
+
+Just type them and send 👇
+
+_Type *cancel* to go back to main menu._`);
+  }
+
+  return sendText(from,
+`✅ *Category selected!*
+
+Now list your main products, separated by commas.
 
 *Example:*
 *cooking oil, rice, sugar, flour, bread*
 
 Just type them and send 👇
 
-_Type *cancel* to go back to main menu._`
-    );
-  }
+_Type *cancel* to go back to main menu._`);
+}
 
 
 // ── Skip or finish pricing during registration ─────────────────────────────

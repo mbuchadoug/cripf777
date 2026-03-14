@@ -32,18 +32,20 @@ export const SUPPLIER_CITIES = [
 ];
 
 export const SUPPLIER_CATEGORIES = [
-  { id: "groceries", label: "🛒 Groceries & Food" },
-  { id: "clothing", label: "👗 Clothing & Shoes" },
-  { id: "hardware", label: "🏗 Hardware & Building" },
-  { id: "agriculture", label: "🌽 Agriculture & Farming" },
-  { id: "electronics", label: "📱 Electronics" },
-  { id: "crossborder", label: "✈️ Cross-border Goods" },
- { id: 'cosmetics',   label: '💄 Cosmetics & Beauty' },
-  { id: 'furniture',   label: '🛋 Furniture & Home' },
-  { id: 'services',    label: '🔧 Services & Trades' },
-  { id: 'health',      label: '💊 Health & Pharmacy' },
-  { id: 'transport',   label: '🚛 Transport & Logistics' },
-  { id: 'food_cooked', label: '🍱 Cooked Food & Catering' },
-  { id: 'printing',    label: '🖨 Printing & Stationery' },
-  { id: 'other',       label: '🗂 Other' }
+  { id: "groceries",   label: "🛒 Groceries & Food",       types: ["product"] },
+  { id: "clothing",    label: "👗 Clothing & Shoes",       types: ["product"] },
+  { id: "hardware",    label: "🏗 Hardware & Building",    types: ["product"] },
+  { id: "agriculture", label: "🌽 Agriculture & Farming",  types: ["product"] },
+  { id: "electronics", label: "📱 Electronics",            types: ["product"] },
+  { id: "crossborder", label: "✈️ Cross-border Goods",     types: ["product"] },
+  { id: "cosmetics",   label: "💄 Cosmetics & Beauty",     types: ["product"] },
+  { id: "furniture",   label: "🛋 Furniture & Home",       types: ["product"] },
+
+  { id: "services",    label: "🔧 Services & Trades",      types: ["service"] },
+  { id: "transport",   label: "🚛 Transport & Logistics",  types: ["service"] },
+  { id: "food_cooked", label: "🍱 Cooked Food & Catering", types: ["service"] },
+  { id: "printing",    label: "🖨 Printing & Stationery",  types: ["service"] },
+
+  { id: "health",      label: "💊 Health & Pharmacy",      types: ["product", "service"] },
+  { id: "other",       label: "🗂 Other",                  types: ["product", "service"] }
 ];
