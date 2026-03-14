@@ -148,32 +148,69 @@ Just type them and send 👇`
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.products = items.map(p => p.toLowerCase());
 
-  if (isService) {
-    biz.sessionData.supplierReg.rates = [];
-    biz.sessionData.supplierReg.rateIndex = 0;
-    biz.sessionState = "supplier_reg_prices";
-    await saveBiz(biz);
+if (isService) {
+  biz.sessionData.supplierReg.rates = [];
+  delete biz.sessionData.supplierReg.rateIndex;
+  biz.sessionState = "supplier_reg_prices";
+  await saveBiz(biz);
 
-    const firstService = items[0];
-
-    return sendButtons(from, {
-      text:
+  const examples = items
+    .slice(0, 3)
+    .map((service, i) => {
+      const sampleRates = ["$10/hr", "$50/trip", "$30/job"];
+      return `*${service}: ${sampleRates[i] || "$20/job"}*`;
+    })
+    .join("\n");
+return sendButtons(from, {
+  text:
 `💰 *Add Your Rates*
 
-What do you charge for *${firstService}*?
+Send *all your service rates in one line*, separated by commas.
 
-Send as free text.
+*Format:*
+service: rate, service: rate, service: rate
 
-*Examples:*
-- *$10/hr*
-- *$50 full day*
-- *$30 per trip*
-- *$15/hr minimum 2 hours*
+*Examples using your services:*
+${examples}
+
+⚠️ Use commas to separate each service rate.
 
 _If you don't know yet, tap Skip below._`,
-      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
-    });
-  }
+  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+});
+
+}
+
+biz.sessionData.supplierReg.prices = [];
+delete biz.sessionData.supplierReg.priceIndex;
+biz.sessionState = "supplier_reg_prices";
+await saveBiz(biz);
+
+const examples = items
+  .slice(0, 3)
+  .map((product, i) => {
+    const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
+    return `*${product}: ${sampleValues[i] || "5 each"}*`;
+  })
+  .join("\n");
+
+return sendButtons(from, {
+  text:
+`💰 *Add Your Prices*
+
+Send *all your product prices in one line*, separated by commas.
+
+*Format:*
+product: amount unit, product: amount unit, product: amount unit
+
+*Examples using your products:*
+${examples}
+
+⚠️ Use commas to separate each product price.
+
+_If you don't know yet, tap Skip below._`,
+  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
+});
 
   biz.sessionData.supplierReg.prices = [];
   biz.sessionData.supplierReg.priceIndex = 0;
@@ -206,50 +243,69 @@ _If you don't know yet, tap Skip below._`,
 }
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
 if (state === "supplier_reg_prices") {
-  const reg = biz.sessionData.supplierReg;
+  const reg = biz.sessionData.supplierReg || {};
+  const items = reg.products || [];
+  const raw = text.trim();
 
-  // ── Service provider: collect one rate per service ──────
+  if (!raw) {
+    await sendText(from, "❌ Please send your prices/rates in the correct format.");
+    return true;
+  }
+
+  // Accept newline or comma-separated entries
+const lines = raw
+  .split(/,(?=\s*[^,]+?:)/)
+  .map(line => line.trim())
+  .filter(Boolean);
+
   if (reg.profileType === "service") {
-    const services = reg.products || [];
-    const idx = reg.rateIndex || 0;
-    const rawRate = text.trim();
+    const parsedRates = [];
+    const failed = [];
 
-    if (!rawRate) {
-      await sendText(from, `❌ Please enter a valid rate for *${services[idx] || "this service"}*.`);
+    for (const line of lines) {
+      const match = line.match(/^(.+?)\s*:\s*(.+)$/);
+      if (!match) {
+        failed.push(line);
+        continue;
+      }
+
+      const service = match[1].trim().toLowerCase();
+      const rate = match[2].trim();
+
+      if (!service || !rate) {
+        failed.push(line);
+        continue;
+      }
+
+      parsedRates.push({ service, rate });
+    }
+
+    if (!parsedRates.length) {
+      const examples = items
+        .slice(0, 3)
+        .map((service, i) => {
+          const sampleRates = ["$10/hr", "$50/trip", "$30/job"];
+          return `*${service}: ${sampleRates[i] || "$20/job"}*`;
+        })
+        .join("\n");
+
+    await sendText(from,
+`❌ Couldn't read your service rates.
+
+*Send them in one line like this:*
+${examples}
+
+⚠️ Separate each one with commas.`
+);
       return true;
     }
 
-    reg.rates = reg.rates || [];
-    reg.rates.push({
-      service: services[idx],
-      rate: rawRate
-    });
-    reg.rateIndex = idx + 1;
-
-    if (reg.rateIndex < services.length) {
-      const nextService = services[reg.rateIndex];
-      await saveBiz(biz);
-      return sendButtons(from, {
-        text:
-`✅ Rate saved for *${services[idx]}*
-
-Now enter your rate for *${nextService}*.
-
-*Examples:*
-- *$10/hr*
-- *$50 full day*
-- *$30 per trip*`,
-        buttons: [
-          { id: "sup_skip_prices", title: "⏭ Skip Rest" },
-          { id: "sup_done_prices", title: "✅ Done Rates" }
-        ]
-      });
-    }
-
+    reg.rates = parsedRates;
     biz.sessionState = "supplier_reg_travel";
     await saveBiz(biz);
+
     return sendButtons(from, {
-      text: `✅ All service rates saved!\n\n🚗 *Do you travel to clients?*`,
+      text: `✅ Saved ${parsedRates.length} service rate(s)!\n\n🚗 *Do you travel to clients?*`,
       buttons: [
         { id: "sup_travel_yes", title: "✅ Yes I Travel" },
         { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
@@ -257,58 +313,60 @@ Now enter your rate for *${nextService}*.
     });
   }
 
-  // ── Product supplier: collect one price per product ──────
-  const products = reg.products || [];
-  const idx = reg.priceIndex || 0;
-  const raw = text.trim();
+  // Product suppliers
+  const parsedPrices = [];
+  const failed = [];
 
-  const match = raw.match(/^(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
-  if (!match) {
-    await sendText(from,
-`❌ That format didn't work. Please try again.
+  for (const line of lines) {
+    const match = line.match(/^(.+?)\s*:\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
+    if (!match) {
+      failed.push(line);
+      continue;
+    }
 
-*How to type it:*
-Amount then unit, like this:
+    const product = match[1].trim().toLowerCase();
+    const amount = parseFloat(match[2]);
+    const unit = (match[3] || "each").trim();
 
-- *4.50 litre*
-- *8 bag*
-- *1.20 kg*
-- *12 dozen*
-- *5 each*
+    if (!product || Number.isNaN(amount)) {
+      failed.push(line);
+      continue;
+    }
 
-What is your price for *${products[idx]}*?`
-    );
-    return true;
-  }
-
-  const amount = parseFloat(match[1]);
-  const unit = match[3] || "each";
-
-  reg.prices = reg.prices || [];
-  reg.prices.push({
-    product: products[idx],
-    amount,
-    unit,
-    inStock: true
-  });
-  reg.priceIndex = idx + 1;
-
-  if (reg.priceIndex < products.length) {
-    const next = products[reg.priceIndex];
-    await saveBiz(biz);
-    return sendButtons(from, {
-      text: `✅ $${amount}/${unit} saved!\n\nPrice for *${next}*?`,
-      buttons: [
-        { id: "sup_skip_prices", title: "⏭ Skip Rest" },
-        { id: "sup_done_prices", title: "✅ Done Pricing" }
-      ]
+    parsedPrices.push({
+      product,
+      amount,
+      unit,
+      inStock: true
     });
   }
 
+  if (!parsedPrices.length) {
+    const examples = items
+      .slice(0, 3)
+      .map((product, i) => {
+        const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
+        return `*${product}: ${sampleValues[i] || "5 each"}*`;
+      })
+      .join("\n");
+
+  await sendText(from,
+`❌ Couldn't read your product prices.
+
+*Send them in one line like this:*
+${examples}
+
+⚠️ Separate each one with commas.`
+);
+    return true;
+  }
+
+  reg.prices = parsedPrices;
   biz.sessionState = "supplier_reg_delivery";
   await saveBiz(biz);
+
   return sendButtons(from, {
-    text: `✅ All prices saved!\n\n🚚 Do you deliver?`,
+    text: `✅ Saved ${parsedPrices.length} product price(s)!\n\n🚚 *Do you deliver?*`,
     buttons: [
       { id: "sup_del_yes", title: "✅ Yes I Deliver" },
       { id: "sup_del_no", title: "🏠 Collection Only" }
