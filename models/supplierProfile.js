@@ -18,7 +18,7 @@ const SupplierProfileSchema = new mongoose.Schema({
     inStock: { type: Boolean, default: true },
     validUntil: Date
   }],
-  priceUpdatedAt: { type: Date },
+ // priceUpdatedAt: { type: Date },
   delivery: {
     available: { type: Boolean, default: false },
     range: {
@@ -72,7 +72,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   suspended: { type: Boolean, default: false },
 
  
-  priceUpdatedAt: { type: Date },
+  //priceUpdatedAt: { type: Date },
 priceUpdatedAt: { type: Date },
   // Analytics
   viewCount: { type: Number, default: 0 },
@@ -80,7 +80,15 @@ priceUpdatedAt: { type: Date },
   monthlyOrders: { type: Number, default: 0 },
   monthlyRevenue: { type: Number, default: 0 },
 profileType:     { type: String, enum: ['product', 'service'], default: 'product' },
-rates:           { type: String },          // e.g. "$20/hr or $50/job"
+rates: {
+  type: [
+    {
+      service: { type: String, trim: true },
+      rate: { type: String, trim: true }
+    }
+  ],
+  default: []
+},         // e.g. "$20/hr or $50/job"
 travelAvailable: { type: Boolean },         // service providers: do they travel to client?
 serviceArea:     { type: String },          // e.g. "Harare CBD and suburbs"
   // Saved by buyers

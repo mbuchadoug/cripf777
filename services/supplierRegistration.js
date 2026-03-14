@@ -118,7 +118,6 @@ if (state === "supplier_reg_area") {
     });
   }
   // ── Step 3: Products ───────────────────────────────────
- // ── Step 3: Products ───────────────────────────────────────────────────────
 if (state === "supplier_reg_products") {
   const items = text.split(",")
     .map(p => p.trim())
@@ -127,15 +126,16 @@ if (state === "supplier_reg_products") {
   const isService = biz.sessionData?.supplierReg?.profileType === "service";
 
   if (!items.length) {
-    await sendText(from,
-isService
-  ? `❌ Please list at least one service, separated by commas.
+    await sendText(
+      from,
+      isService
+        ? `❌ Please list at least one service, separated by commas.
 
 *Example:*
 *car hire, delivery, airport transfers*
 
 Just type them and send 👇`
-  : `❌ Please list at least one product, separated by commas.
+        : `❌ Please list at least one product, separated by commas.
 
 *Example:*
 *cooking oil, rice, sugar, flour, bread*
@@ -147,97 +147,63 @@ Just type them and send 👇`
 
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.products = items.map(p => p.toLowerCase());
-
-if (isService) {
-  biz.sessionData.supplierReg.rates = [];
-  delete biz.sessionData.supplierReg.rateIndex;
   biz.sessionState = "supplier_reg_prices";
-  await saveBiz(biz);
 
-  const examples = items
-    .slice(0, 3)
-    .map((service, i) => {
-      const sampleRates = ["$10/hr", "$50/trip", "$30/job"];
-      return `*${service}: ${sampleRates[i] || "$20/job"}*`;
-    })
-    .join("\n");
-return sendButtons(from, {
-  text:
+  if (isService) {
+    biz.sessionData.supplierReg.rates = [];
+    await saveBiz(biz);
+
+    const examples = items
+      .slice(0, 3)
+      .map((service, i) => {
+        const sampleRates = ["10/hr", "50/trip", "30/job"];
+        return `*${service} ${sampleRates[i] || "20/job"}*`;
+      })
+      .join("\n");
+
+    return sendButtons(from, {
+      text:
 `💰 *Add Your Rates*
 
 Send *all your service rates in one line*, separated by commas.
 
 *Format:*
-service: rate, service: rate, service: rate
+service rate, service rate, service rate
 
 *Examples using your services:*
 ${examples}
 
 ⚠️ Use commas to separate each service rate.
-
-_If you don't know yet, tap Skip below._`,
-  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
-});
-
-}
-
-biz.sessionData.supplierReg.prices = [];
-delete biz.sessionData.supplierReg.priceIndex;
-biz.sessionState = "supplier_reg_prices";
-await saveBiz(biz);
-
-const examples = items
-  .slice(0, 3)
-  .map((product, i) => {
-    const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
-    return `*${product}: ${sampleValues[i] || "5 each"}*`;
-  })
-  .join("\n");
-
-return sendButtons(from, {
-  text:
-`💰 *Add Your Prices*
-
-Send *all your product prices in one line*, separated by commas.
-
-*Format:*
-product: amount unit, product: amount unit, product: amount unit
-
-*Examples using your products:*
-${examples}
-
-⚠️ Use commas to separate each product price.
-
-_If you don't know yet, tap Skip below._`,
-  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
-});
+Do not use $ or :`,
+      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+    });
+  }
 
   biz.sessionData.supplierReg.prices = [];
-  biz.sessionData.supplierReg.priceIndex = 0;
-  biz.sessionState = "supplier_reg_prices";
   await saveBiz(biz);
 
-  const first = items[0];
+  const examples = items
+    .slice(0, 3)
+    .map((product, i) => {
+      const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
+      return `*${product} ${sampleValues[i] || "5 each"}*`;
+    })
+    .join("\n");
 
   return sendButtons(from, {
     text:
 `💰 *Add Your Prices*
 
-Buyers use prices to compare suppliers before ordering. Adding prices helps you get more orders!
+Send *all your product prices in one line*, separated by commas.
 
-What is your price for *${first}*?
+*Format:*
+product amount unit, product amount unit, product amount unit
 
-*How to type it:*
-Just send the amount followed by the unit.
+*Examples using your products:*
+${examples}
 
-*Examples:*
-- *4.50 litre* - for cooking oil by litre
-- *8.00 bag* - for a bag of rice
-- *1.20 kg* - for sugar per kg
-- *12.00 dozen* - for eggs per dozen
-- *5.00 each* - for single items
-
-_If you don't know yet, tap Skip below._`,
+⚠️ Use commas to separate each product price.
+Do not use $ or :`,
     buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
   });
 }
@@ -245,32 +211,31 @@ _If you don't know yet, tap Skip below._`,
 if (state === "supplier_reg_prices") {
   const reg = biz.sessionData.supplierReg || {};
   const items = reg.products || [];
-  const raw = text.trim();
+  const raw = text.trim().replace(/\s+/g, " ");
 
   if (!raw) {
-    await sendText(from, "❌ Please send your prices/rates in the correct format.");
+    await sendText(from, "❌ Please send your prices or rates in the correct format.");
     return true;
   }
 
-  // Accept newline or comma-separated entries
-const lines = raw
-  .split(/,(?=\s*[^,]+?:)/)
-  .map(line => line.trim())
-  .filter(Boolean);
+  const lines = raw
+    .split(",")
+    .map(line => line.trim())
+    .filter(Boolean);
 
   if (reg.profileType === "service") {
     const parsedRates = [];
     const failed = [];
 
     for (const line of lines) {
-      const match = line.match(/^(.+?)\s*:\s*(.+)$/);
+      const match = line.match(/^(.+?)\s+(\d+(?:\.\d+)?(?:\/[a-zA-Z]+|(?:\s+[a-zA-Z]+)*)?)$/);
       if (!match) {
         failed.push(line);
         continue;
       }
 
       const service = match[1].trim().toLowerCase();
-      const rate = match[2].trim();
+      const rate = match[2].trim().toLowerCase();
 
       if (!service || !rate) {
         failed.push(line);
@@ -284,23 +249,24 @@ const lines = raw
       const examples = items
         .slice(0, 3)
         .map((service, i) => {
-          const sampleRates = ["$10/hr", "$50/trip", "$30/job"];
-          return `*${service}: ${sampleRates[i] || "$20/job"}*`;
+          const sampleRates = ["10/hr", "50/trip", "30/job"];
+          return `*${service} ${sampleRates[i] || "20/job"}*`;
         })
         .join("\n");
 
-    await sendText(from,
+      await sendText(from,
 `❌ Couldn't read your service rates.
 
 *Send them in one line like this:*
 ${examples}
 
-⚠️ Separate each one with commas.`
-);
+⚠️ Separate each one with commas.
+Do not use $ or :`
+      );
       return true;
     }
 
-    reg.rates = parsedRates;
+    biz.sessionData.supplierReg.rates = parsedRates;
     biz.sessionState = "supplier_reg_travel";
     await saveBiz(biz);
 
@@ -313,12 +279,11 @@ ${examples}
     });
   }
 
-  // Product suppliers
   const parsedPrices = [];
   const failed = [];
 
   for (const line of lines) {
-    const match = line.match(/^(.+?)\s*:\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
+    const match = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
     if (!match) {
       failed.push(line);
       continue;
@@ -326,7 +291,7 @@ ${examples}
 
     const product = match[1].trim().toLowerCase();
     const amount = parseFloat(match[2]);
-    const unit = (match[3] || "each").trim();
+    const unit = (match[3] || "each").trim().toLowerCase();
 
     if (!product || Number.isNaN(amount)) {
       failed.push(line);
@@ -346,22 +311,23 @@ ${examples}
       .slice(0, 3)
       .map((product, i) => {
         const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
-        return `*${product}: ${sampleValues[i] || "5 each"}*`;
+        return `*${product} ${sampleValues[i] || "5 each"}*`;
       })
       .join("\n");
 
-  await sendText(from,
+    await sendText(from,
 `❌ Couldn't read your product prices.
 
 *Send them in one line like this:*
 ${examples}
 
-⚠️ Separate each one with commas.`
-);
+⚠️ Separate each one with commas.
+Do not use $ or :`
+    );
     return true;
   }
 
-  reg.prices = parsedPrices;
+  biz.sessionData.supplierReg.prices = parsedPrices;
   biz.sessionState = "supplier_reg_delivery";
   await saveBiz(biz);
 
@@ -401,7 +367,7 @@ ${examples}
 
 const pricingText = isService
   ? `💰 Rates:\n${Array.isArray(reg.rates) && reg.rates.length
-      ? reg.rates.map(r => `• ${r.service}: ${r.rate}`).join("\n")
+      ? reg.rates.map(r => `• ${r.service} ${r.rate}`).join("\n")
       : "Not specified"}`
   : `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}`;
 
