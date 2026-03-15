@@ -168,13 +168,50 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
   if (!requestedProduct) return null;
 
   const wanted = normalizeProductName(requestedProduct);
+  const isServiceSupplier = supplier?.profileType === "service";
 
-  // 1) normal product prices
+  // SERVICES: only use rates
+  if (isServiceSupplier) {
+    if (Array.isArray(supplier?.rates) && supplier.rates.length) {
+      let match = supplier.rates.find(r =>
+        normalizeProductName(r.service) === wanted
+      );
+
+      if (match) {
+        return {
+          product: match.service,
+          amount: parseSupplierRateValue(match.rate),
+          unit: parseSupplierRateUnit(match.rate),
+          source: "rates"
+        };
+      }
+
+      match = supplier.rates.find(r => {
+        if (!r?.service) return false;
+        const candidate = normalizeProductName(r.service);
+        return candidate.includes(wanted) || wanted.includes(candidate);
+      });
+
+      if (match) {
+        return {
+          product: match.service,
+          amount: parseSupplierRateValue(match.rate),
+          unit: parseSupplierRateUnit(match.rate),
+          source: "rates"
+        };
+      }
+    }
+
+    return null;
+  }
+
+  // PRODUCTS: only use prices
   if (Array.isArray(supplier?.prices) && supplier.prices.length) {
     let match = supplier.prices.find(p =>
       p?.inStock !== false &&
       normalizeProductName(p.product) === wanted
     );
+
     if (match) {
       return {
         product: match.product,
@@ -200,38 +237,9 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
     }
   }
 
-  // 2) service rates
-  if (Array.isArray(supplier?.rates) && supplier.rates.length) {
-    let match = supplier.rates.find(r =>
-      normalizeProductName(r.service) === wanted
-    );
-    if (match) {
-      return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
-        source: "rates"
-      };
-    }
-
-    match = supplier.rates.find(r => {
-      if (!r?.service) return false;
-      const candidate = normalizeProductName(r.service);
-      return candidate.includes(wanted) || wanted.includes(candidate);
-    });
-
-    if (match) {
-      return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
-        source: "rates"
-      };
-    }
-  }
-
   return null;
 }
+
 
 function parseBulkOrderInput(text = "") {
   const raw = String(text).trim();
@@ -537,7 +545,7 @@ await UserSession.findOneAndUpdate(
     !!sess?.tempData?.supplierSearchProduct;
 
   // Allow supplier search/order actions through for non-registered users
- const allowedWithoutBiz =
+const allowedWithoutBiz =
   a === "onboard_business" ||
   a === "find_supplier" ||
   a === "register_supplier" ||
@@ -554,9 +562,7 @@ await UserSession.findOneAndUpdate(
   a.startsWith("rate_order_") ||
   a.startsWith("sup_accept_") ||
   a.startsWith("sup_decline_") ||
-  a === "my_supplier_account" ||
-  a === "my_orders" ||
-  a.startsWith("order_detail_");
+  a === "my_supplier_account";
 
 
   if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
@@ -648,9 +654,17 @@ return sendText(from,
 
 ${preview}
 
-Now send your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:
+*Now enter your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:*
+
+${isServiceSupplier
+  ? "Examples:\n• *House number 24, Mabelreign*\n• *Come tomorrow 10am*\n• *Call me when you arrive*"
+  : "Examples:\n• *123 Samora Machel Ave, Harare*\n• *Deliver to Avondale after 4pm*\n• *Call me when you get here*"
+}
 
 Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
+
+
+
 }
 
    
@@ -668,22 +682,33 @@ Type *cancel* to stop this order.`);
   const supplierId = sess3?.tempData?.orderSupplierId;
   const orderItemsInput = sess3?.tempData?.orderItems || [];
 
-  if (!supplierId) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $unset: {
-          "tempData.orderState": "",
-          "tempData.orderSupplierId": "",
-          "tempData.orderItems": "",
-          "tempData.orderProduct": "",
-          "tempData.orderQuantity": ""
-        }
+if (!supplierId) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.orderState": "",
+        "tempData.orderSupplierId": "",
+        "tempData.orderItems": "",
+        "tempData.orderProduct": "",
+        "tempData.orderQuantity": ""
       }
-    );
-    await sendText(from, "❌ Order session expired. Please search for the supplier again.");
-    return sendSuppliersMenu(from);
-  }
+    }
+  );
+  await sendText(from, "❌ Order session expired. Please search for the supplier again.");
+  //return sendSuppliersMenu(from);
+
+  return sendButtons(from, {
+  text: "What would you like to do next?",
+  buttons: [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "register_supplier", title: "📦 Become a Supplier" }
+  ]
+});
+
+}
+
+
 
   const supplier = await SupplierProfile.findById(supplierId).lean();
 
@@ -796,7 +821,14 @@ ${pricedCount === finalItems.length
   : pricedCount > 0
     ? `${isServiceSupplier ? "Some services were auto-priced. Supplier will confirm the rest. 🎉" : "Some items were auto-priced. Supplier will confirm the rest. 🎉"}`
     : `${isServiceSupplier ? "Supplier will confirm pricing for the booking shortly. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`}`);
-      return sendSuppliersMenu(from);
+  return sendButtons(from, {
+  text: "What would you like to do next?",
+  buttons: [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "register_supplier", title: "📦 Become a Supplier" }
+  ]
+});
+
     }
   }
   // =========================
@@ -2628,7 +2660,8 @@ _Type *cancel* to go back to your account._`
 
     if (!orders.length) {
       return sendButtons(from, {
-        text: "📦 *My Orders*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
+        text: "📦 *Orders From Buyers*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
+
         buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
       });
     }
@@ -2672,7 +2705,8 @@ ${deliveryLine}
     }).join("\n\n");
 
     return sendButtons(from, {
-      text: `📦 *My Orders* (last ${orders.length})\n\n${lines}`,
+     text: `📦 *Orders From Buyers* (last ${orders.length})\n\n${lines}`,
+
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
     });
   }
@@ -2807,16 +2841,16 @@ if (a === "sup_cat_more") {
   const filteredCategories = getSupplierCategoriesForType(profileType);
 
   return sendList(
-    from,
-    "🗂 More Categories",
-    [
-      ...filteredCategories.slice(9).map(c => ({
-        id: `sup_cat_${c.id}`,
-        title: c.label
-      })),
-      { id: "suppliers_home", title: "🏠 Home" }
-    ]
-  );
+  from,
+  "🗂 More Categories",
+  [
+    ...filteredCategories.slice(9).map(c => ({
+      id: `sup_cat_${c.id}`,
+      title: c.label
+    }))
+  ]
+);
+
 }
 
   // ── Travel yes/no during service registration ─────────────────────────────
@@ -2826,10 +2860,13 @@ if (a === "sup_cat_more") {
     biz.sessionData.supplierReg.travelAvailable = true;
     biz.sessionState = "supplier_reg_minorder";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "💵 What is your minimum job value in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+   return sendText(from,
+`💵 What is your minimum job value in USD?
+
+Type *0* for no minimum.
+
+Type *cancel* to stop registration.`);
+
   }
 
   if (a === "sup_travel_no") {
@@ -2838,10 +2875,13 @@ if (a === "sup_cat_more") {
     biz.sessionData.supplierReg.travelAvailable = false;
     biz.sessionState = "supplier_reg_minorder";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "💵 What is your minimum job value in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+return sendText(from,
+`💵 What is your minimum job value in USD?
+
+Type *0* for no minimum.
+
+Type *cancel* to stop registration.`);
+
   }
   // ── Supplier category selected during registration ────────────────────────
 if (a.startsWith("sup_cat_")) {
@@ -2925,10 +2965,13 @@ if (a === "sup_skip_prices" || a === "sup_done_prices") {
     biz.sessionData.supplierReg.delivery = { available: true, range: "city_wide" };
     biz.sessionState = "supplier_reg_minorder";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+return sendText(from,
+`💵 What is your minimum order amount in USD?
+
+Type *0* for no minimum.
+
+Type *cancel* to stop registration.`);
+
   }
 
   if (a === "sup_del_no") {
@@ -2937,10 +2980,13 @@ if (a === "sup_skip_prices" || a === "sup_done_prices") {
     biz.sessionData.supplierReg.delivery = { available: false };
     biz.sessionState = "supplier_reg_minorder";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "💵 What is your minimum order amount in USD?\n\nType *0* for no minimum:",
-      buttons: [{ id: "suppliers_home", title: "🏠 Home" }]
-    });
+  return sendText(from,
+`💵 What is your minimum order amount in USD?
+
+Type *0* for no minimum.
+
+Type *cancel* to stop registration.`);
+
   }
 
   // ── Supplier confirms listing → save + show plan picker ──────────────────
@@ -3097,9 +3143,7 @@ const rows = formatSupplierResults(results, city, category || product);
     const deliveryText = supplier.delivery?.available
       ? `🚚 Delivers (${(supplier.delivery.range || "").replace("_", " ")})`
       : "🏠 Collection only";
-    const minText = supplier.minOrder > 0
-      ? `💵 Min order: $${supplier.minOrder}`
-      : "💵 No minimum order";
+  
     const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
     const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
 const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
@@ -3115,7 +3159,7 @@ return sendButtons(from, {
       text: `🏪 *${supplier.businessName}*${tierBadge}\n` +
             `📍 ${supplier.location?.area}, ${supplier.location?.city}\n` +
             `${offeringLabel} ${offeringText}\n` +
-            `${deliveryText}\n${minText}${badge}\n` +
+       `${deliveryText}${badge}\n` +
             `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
             `📞 ${supplier.phone}`,
     buttons: [
@@ -3517,7 +3561,15 @@ ${pricedCount === finalItems.length
   : pricedCount > 0
     ? `${isServiceSupplier ? "Some services were auto-priced. Supplier will confirm the rest. 🎉" : "Some items were auto-priced. Supplier will confirm the rest. 🎉"}`
     : `${isServiceSupplier ? "Supplier will confirm pricing for the booking shortly. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`}`);
-    return sendMainMenu(from);
+
+return sendButtons(from, {
+  text: "What would you like to do next?",
+  buttons: [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "register_supplier", title: "📦 Become a Supplier" }
+  ]
+});
+
   }
 
   // ── Accept order ──────────────────────────────────────────────────────────

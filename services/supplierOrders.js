@@ -208,7 +208,7 @@ export async function handleBookingAccepted(from, orderId) {
   return sendButtons(from, {
     text: `✅ *Booking confirmed!*\n\nThe buyer has been notified. Contact them at ${order.buyerPhone} to arrange the job.`,
     buttons: [
-      { id: "sup_my_orders",   title: "📦 My Orders" },
+    { id: "sup_my_orders",   title: "📦 Orders From Buyers" },
       { id: "suppliers_home",  title: "🏪 Suppliers" }
     ]
   });
@@ -218,7 +218,10 @@ export async function handleBookingAccepted(from, orderId) {
 
 export async function handleOrderDeclined(from, orderId, biz, saveBiz) {
   biz.sessionState = "supplier_decline_reason";
-  biz.sessionData = { declineOrderId: orderId };
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    declineOrderId: orderId
+  };
   await saveBiz(biz);
 
   return sendList(from, "Why are you declining?", [
