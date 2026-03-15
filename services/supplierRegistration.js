@@ -153,13 +153,10 @@ Just type them and send 👇`
     biz.sessionData.supplierReg.rates = [];
     await saveBiz(biz);
 
-    const examples = items
-      .slice(0, 3)
-      .map((service, i) => {
-        const sampleRates = ["10/hr", "50/trip", "30/job"];
-        return `*${service} ${sampleRates[i] || "20/job"}*`;
-      })
-      .join("\n");
+ const examples = items
+  .slice(0, 3)
+  .map((service) => `*${service} 20/job*`)
+  .join("\n");
 
     return sendButtons(from, {
       text:
@@ -182,13 +179,10 @@ Do not use $ or :`,
   biz.sessionData.supplierReg.prices = [];
   await saveBiz(biz);
 
-  const examples = items
-    .slice(0, 3)
-    .map((product, i) => {
-      const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
-      return `*${product} ${sampleValues[i] || "5 each"}*`;
-    })
-    .join("\n");
+const examples = items
+  .slice(0, 3)
+  .map((product) => `*${product} 5.00 each*`)
+  .join("\n");
 
   return sendButtons(from, {
     text:

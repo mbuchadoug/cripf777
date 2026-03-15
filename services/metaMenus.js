@@ -713,54 +713,36 @@ export async function sendSuppliersMenu(to) {
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
 if (supplier?.active) {
-    const buttons = [
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_orders",           title: "📋 My Orders" },
-      { id: "my_supplier_account", title: "🏪 My Account" }
-    ];
-    // NOTE: buttons is now full at 3 — removed hasRealBiz push
-
-    return sendButtons(to, {
-      text: "🏪 *ZimQuote Suppliers*",
-      buttons
-    });
-  }
+  return sendList(to, "🏪 *ZimQuote Suppliers*", [
+    { id: "find_supplier",       title: "🔍 Find Suppliers" },
+    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+    { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+    { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+  ]);
+}
 
 if (supplier && !supplier.active) {
-    const complete = isSupplierRegistrationComplete(supplier);
-
-    const buttons = [
+  const complete = isSupplierRegistrationComplete(supplier);
+  return sendList(to, complete
+    ? "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is ready but not active yet.\nComplete payment to go live."
+    : "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active.\nComplete registration to go live.",
+    [
       { id: "find_supplier", title: "🔍 Find Suppliers" },
+      { id: "my_orders", title: "📋 My Orders (Buyer)" },
       complete
         ? { id: "sup_upgrade_plan", title: "💳 Activate Listing" }
-        : { id: "register_supplier", title: "⏳ Finish Setup" }
-    ];
+        : { id: "register_supplier", title: "⏳ Finish Setup" },
+      { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+    ]
+  );
+}
 
-    if (complete) {
-      buttons.push({ id: "my_supplier_account", title: "🏪 My Account" });
-    }
-
-    return sendButtons(to, {
-      text: complete
-        ? "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is ready but not active yet.\nComplete payment to go live."
-        : "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active.\nComplete registration to go live.",
-      buttons
-    });
-  }
-
- const buttons = [
+return sendList(to, "🏪 *ZimQuote Suppliers*", [
   { id: "find_supplier", title: "🔍 Find Suppliers" },
-  { id: "register_supplier", title: "📦 Become a Supplier" }
-];
-
-  if (hasRealBiz) {
-    buttons.push({ id: "menu", title: "🏠 Main Menu" });
-  }
-
-  return sendButtons(to, {
-    text: "🏪 *ZimQuote Suppliers*",
-    buttons
-  });
+  { id: "register_supplier", title: "📦 Become a Supplier" },
+  { id: "my_orders", title: "📋 My Orders" },
+  { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+]);
 }
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {

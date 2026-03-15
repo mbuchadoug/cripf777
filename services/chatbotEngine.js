@@ -550,6 +550,7 @@ const allowedWithoutBiz =
   a === "find_supplier" ||
   a === "register_supplier" ||
   a === "suppliers_home" ||
+   a === "my_orders" ||   
   a === "sup_search_type_product" ||
   a === "sup_search_type_service" ||
   a === "sup_search_more_categories" ||
@@ -603,8 +604,15 @@ const allowedWithoutBiz =
     }
   );
 
-  await sendText(from, "❌ Order cancelled.");
-  return sendSuppliersMenu(from);
+await sendText(from, "❌ Order cancelled.");
+return sendButtons(from, {
+  text: "What would you like to do next?",
+  buttons: [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "my_orders", title: "📋 My Orders" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
+  ]
+});
 }
 if (orderState === "supplier_order_product") {
   const parsedItems = parseBulkOrderInput(text);
@@ -698,11 +706,12 @@ if (!supplierId) {
   await sendText(from, "❌ Order session expired. Please search for the supplier again.");
   //return sendSuppliersMenu(from);
 
-  return sendButtons(from, {
+return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
-    { id: "register_supplier", title: "📦 Become a Supplier" }
+    { id: "register_supplier", title: "📦 Become a Supplier" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
   ]
 });
 
@@ -821,11 +830,12 @@ ${pricedCount === finalItems.length
   : pricedCount > 0
     ? `${isServiceSupplier ? "Some services were auto-priced. Supplier will confirm the rest. 🎉" : "Some items were auto-priced. Supplier will confirm the rest. 🎉"}`
     : `${isServiceSupplier ? "Supplier will confirm pricing for the booking shortly. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`}`);
-  return sendButtons(from, {
+return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
-    { id: "register_supplier", title: "📦 Become a Supplier" }
+    { id: "register_supplier", title: "📦 Become a Supplier" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
   ]
 });
 
@@ -2005,7 +2015,14 @@ const supplierStates = [
   await saveBizSafe(biz);
 
   await sendText(from, "❌ Order cancelled.");
-  return sendSuppliersMenu(from);
+return sendButtons(from, {
+  text: "What would you like to do next?",
+  buttons: [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "my_orders", title: "📋 My Orders" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
+  ]
+});
 }
 
 if (escapeWords.includes(al)) {
@@ -2545,7 +2562,7 @@ if (a === "register_supplier") {
       description: `${o.items?.[0]?.product || ""} · ${si[o.status] || "⏳"} ${o.status} · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
     }));
 
-    return sendList(from, "📋 My Recent Orders", rows);
+   return sendList(from, "📋 My Placed Orders (as Buyer)", rows);
   }
 
   // ── Buyer: Order detail ───────────────────────────────────────────────────
@@ -2705,7 +2722,7 @@ ${deliveryLine}
     }).join("\n\n");
 
     return sendButtons(from, {
-     text: `📦 *Orders From Buyers* (last ${orders.length})\n\n${lines}`,
+   text: `📦 *Incoming Orders (From Buyers)* — last ${orders.length}\n\n${lines}`,
 
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
     });
@@ -3566,7 +3583,8 @@ return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
-    { id: "register_supplier", title: "📦 Become a Supplier" }
+    { id: "my_orders", title: "📋 My Orders" },
+    { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
   ]
 });
 
