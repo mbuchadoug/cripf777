@@ -117,41 +117,36 @@ export async function sendMainMenu(to) {
     });
   }
 
-  return sendButtons(to, {
-    text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
-    buttons: [
-      { id: "find_supplier", title: "🔍 Find Suppliers" },
-      { id: "register_supplier", title: "📦 Become a Supplier" },
-      { id: "onboard_business", title: "🧾 Run My Business" }
-    ]
-  });
+// FIXED
+return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
+  { id: "find_supplier",    title: "🔍 Find Suppliers" },
+  { id: "my_orders",        title: "📋 My Orders" },
+  { id: "register_supplier", title: "📦 List My Business" },
+  { id: "onboard_business", title: "🧾 Run My Business" }
+]);
 }
 
   // ── No business: never show business owner menu ───────────────────────────
- if (!biz) {
+if (!biz) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
   if (supplier) {
-    return sendButtons(to, {
-      text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
-      buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "my_supplier_account", title: "🏪 My Account" },
-        { id: "onboard_business", title: "🧾 Run My Business" }
-      ]
-    });
+    return sendList(to, "👋 *Welcome to ZimQuote!*", [
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
+      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+      { id: "onboard_business",    title: "🧾 Run My Business" }
+    ]);
   }
 
-  return sendButtons(to, {
-    text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
-    buttons: [
-      { id: "find_supplier", title: "🔍 Find Suppliers" },
-      { id: "register_supplier", title: "📦 Become a Supplier" },
-      { id: "onboard_business", title: "🧾 Run My Business" }
-    ]
-  });
+  return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
+    { id: "find_supplier",   title: "🔍 Find Suppliers" },
+    { id: "my_orders",       title: "📋 My Orders" },
+    { id: "register_supplier", title: "📦 List My Business" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
+  ]);
 }
 
 const items = [

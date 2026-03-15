@@ -566,16 +566,16 @@ const allowedWithoutBiz =
   a === "my_supplier_account";
 
 
+ 
+
   if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
-    return sendButtons(from, {
-      text: "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.\n\nWhat would you like to do?",
-      buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "register_supplier", title: "📦 List My Business" },
-        { id: "onboard_business", title: "🧾 Run My Business" },
-      ]
-    });
-  }
+  return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
+    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "my_orders", title: "📋 My Orders" },
+    { id: "register_supplier", title: "📦 List My Business" },
+    { id: "onboard_business", title: "🧾 Run My Business" }
+  ]);
+}
 }
 
 

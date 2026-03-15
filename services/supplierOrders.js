@@ -91,10 +91,11 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     order.status = "accepted";
     await order.save();
 
-    await SupplierProfile.findOneAndUpdate(
-      { phone: from },
-      { $inc: { monthlyOrders: 1 } }
-    );
+  // FIXED - also increments completedOrders
+await SupplierProfile.findOneAndUpdate(
+  { phone: from },
+  { $inc: { monthlyOrders: 1, completedOrders: 1 } }
+);
 
     const itemLines = order.items
       .map(i => {
@@ -178,10 +179,11 @@ export async function handleBookingAccepted(from, orderId) {
   order.status = "accepted";
   await order.save();
 
-  await SupplierProfile.findOneAndUpdate(
-    { phone: from },
-    { $inc: { monthlyOrders: 1 } }
-  );
+// FIXED - also increments completedOrders
+await SupplierProfile.findOneAndUpdate(
+  { phone: from },
+  { $inc: { monthlyOrders: 1, completedOrders: 1 } }
+);
 
   const supplier = await SupplierProfile.findOne({ phone: from });
 
