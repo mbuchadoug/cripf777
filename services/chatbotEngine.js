@@ -605,7 +605,7 @@ const allowedWithoutBiz =
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
   if (!isMetaAction && text.trim().length > 2) {
-    const { parseShortcodeSearch } = await import("./supplierSearch22.js");
+    const { parseShortcodeSearch } = await import("./supplierSearch.js");
     const shortcode = parseShortcodeSearch(text);
     if (shortcode) {
       await UserSession.findOneAndUpdate(
@@ -2104,7 +2104,7 @@ return sendButtons(from, {
 
 // ── Shortcode search for any user ─────────────────────────────────────────
 if (!isMetaAction && biz && text.trim().length > 2) {
-  const { parseShortcodeSearch } = await import("./supplierSearch22.js");
+  const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
     if (shortcode.city) {
