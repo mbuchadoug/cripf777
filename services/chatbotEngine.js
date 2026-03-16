@@ -86,7 +86,7 @@ import {
   runSupplierSearch,
   formatSupplierResults,
   parseShortcodeSearch
-} from "./supplierSearch22.js";
+} from "./supplierSearch.js";
 import {
   notifySupplierNewOrder,
   handleOrderAccepted,
