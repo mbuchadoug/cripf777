@@ -267,18 +267,24 @@ router.get("/suppliers/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Registered</dt><dd>${new Date(supplier.createdAt).toDateString()}</dd>
             ${supplier.adminNote ? `<dt>Admin Note</dt><dd class="admin-note">${esc(supplier.adminNote)}</dd>` : ""}
           </dl>
-          <div class="action-row">
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-active" style="display:inline">
-              <button class="btn ${supplier.active ? "btn-orange" : "btn-green"}">
-                ${supplier.active ? "⏸ Deactivate" : "✅ Activate"}
-              </button>
-            </form>
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-suspend" style="display:inline">
-              <button class="btn ${supplier.suspended ? "btn-green" : "btn-red"}">
-                ${supplier.suspended ? "🔓 Unsuspend" : "⛔ Suspend"}
-              </button>
-            </form>
-          </div>
+         <div class="action-row">
+  <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-active" style="display:inline">
+    <button class="btn ${supplier.active ? "btn-orange" : "btn-green"}">
+      ${supplier.active ? "⏸ Deactivate" : "✅ Activate"}
+    </button>
+  </form>
+  <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-suspend" style="display:inline">
+    <button class="btn ${supplier.suspended ? "btn-green" : "btn-red"}">
+      ${supplier.suspended ? "🔓 Unsuspend" : "⛔ Suspend"}
+    </button>
+  </form>
+  <a href="/zq-admin/suppliers/${supplier._id}/activate" class="btn btn-green">
+    🎁 Manual Activation
+  </a>
+  <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-blue">
+    📦 Manage Products
+  </a>
+</div>
         </div>
 
         <div>
@@ -529,6 +535,562 @@ router.post("/suppliers/:id/toggle-suspend", requireSupplierAdmin, async (req, r
   res.redirect(`/zq-admin/suppliers/${req.params.id}`);
 });
 
+
+// ── Manual Activation ──────────────────────────────────────────────────────
+router.get("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const { SUPPLIER_PLANS } = await import("../services/supplierPlans.js");
+
+    res.send(layout(`Activate: ${esc(supplier.businessName)}`, `
+      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
+      <div class="panel">
+        <h3>🎁 Manual Activation</h3>
+        <p style="color:var(--muted);margin-bottom:20px;font-size:13px">
+          Activate this supplier without requiring EcoCash payment. 
+          Use for testing, free trials, or manual arrangements.
+        </p>
+        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/activate" class="edit-form">
+          <div class="form-grid">
+            <div class="fg">
+              <label>Tier / Plan</label>
+              <select name="tier" required>
+                <option value="">Select a plan...</option>
+                <option value="basic">✅ Basic — $5/month</option>
+                <option value="pro">⭐ Pro — $12/month</option>
+                <option value="featured">🔥 Featured — $25/month</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Billing Cycle</label>
+              <select name="plan">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Duration (days)</label>
+              <input type="number" name="durationDays" value="30" min="1" max="365" />
+            </div>
+            <div class="fg">
+              <label>Reason / Note</label>
+              <input name="reason" placeholder="e.g. Free trial, paid cash..." />
+            </div>
+          </div>
+          <div class="fg full" style="margin-bottom:16px">
+            <label>Also set active?</label>
+            <select name="setActive">
+              <option value="true">Yes — make listing visible to buyers</option>
+              <option value="false">No — activate subscription only</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-green">✅ Activate Now</button>
+            <a href="/zq-admin/suppliers/${supplier._id}" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.post("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { tier, plan, durationDays, reason, setActive } = req.body;
+    const { SUPPLIER_PLANS } = await import("../services/supplierPlans.js");
+
+    const planDetails = SUPPLIER_PLANS[tier]?.[plan];
+    const days = Number(durationDays) || planDetails?.durationDays || 30;
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const update = {
+      tier,
+      tierRank: tier === "featured" ? 3 : tier === "pro" ? 2 : 1,
+      subscriptionStatus: "active",
+      subscriptionStartedAt: now,
+      subscriptionExpiresAt: expiresAt,
+      subscriptionPlan: plan,
+      active: setActive === "true",
+      adminNote: reason
+        ? `[Admin activated ${tier}/${plan} on ${now.toDateString()}] ${reason}`
+        : `[Admin activated ${tier}/${plan} on ${now.toDateString()}]`
+    };
+
+    await SupplierProfile.findByIdAndUpdate(req.params.id, update);
+
+    // Log a payment record so it shows in payment history
+    await SupplierSubscriptionPayment.create({
+      supplierPhone: (await SupplierProfile.findById(req.params.id).lean())?.phone || "",
+      supplierId: req.params.id,
+      tier,
+      plan,
+      amount: 0,
+      currency: "USD",
+      reference: `MANUAL_${req.params.id}_${Date.now()}`,
+      status: "paid",
+      paidAt: now,
+      ecocashPhone: "manual-admin"
+    });
+
+    res.redirect(`/zq-admin/suppliers/${req.params.id}`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Manage Products ────────────────────────────────────────────────────────
+router.get("/suppliers/:id/products", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const { SUPPLIER_PRODUCT_TEMPLATES } = await import("../services/supplierProductTemplates.js").catch(() => ({ SUPPLIER_PRODUCT_TEMPLATES: {} }));
+    const templateKeys = Object.keys(SUPPLIER_PRODUCT_TEMPLATES || {});
+
+    res.send(layout(`Products: ${esc(supplier.businessName)}`, `
+      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
+
+      <div class="two-col">
+
+        <!-- Current products & prices -->
+        <div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Current Products (${(supplier.products || []).length})</h3>
+            </div>
+            ${supplier.products?.length ? `
+            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/update-list">
+              <div class="fg full" style="margin-bottom:12px">
+                <label>Edit product list (comma-separated)</label>
+                <textarea name="products" rows="5" style="font-size:13px">${(supplier.products || []).join(", ")}</textarea>
+              </div>
+              <button type="submit" class="btn btn-blue btn-sm">💾 Save Product List</button>
+            </form>` : `
+            <p class="muted" style="margin-bottom:12px">No products yet.</p>
+            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/update-list">
+              <div class="fg full" style="margin-bottom:12px">
+                <label>Add products (comma-separated)</label>
+                <textarea name="products" rows="4" placeholder="cooking oil, rice, sugar, flour"></textarea>
+              </div>
+              <button type="submit" class="btn btn-blue btn-sm">💾 Save</button>
+            </form>`}
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Prices (${(supplier.prices || []).length})</h3>
+              <a href="/zq-admin/suppliers/${supplier._id}/products/add-price" class="btn-link">+ Add Price</a>
+            </div>
+            ${supplier.prices?.length ? `
+            <table>
+              <thead><tr><th>Product</th><th>Price</th><th>Unit</th><th>Stock</th><th></th></tr></thead>
+              <tbody>
+                ${supplier.prices.map((p, i) => `
+                <tr>
+                  <td>${esc(p.product)}</td>
+                  <td>$${p.amount}</td>
+                  <td>${esc(p.unit || "each")}</td>
+                  <td>${p.inStock !== false ? "✅" : "❌"}</td>
+                  <td>
+                    <a href="/zq-admin/suppliers/${supplier._id}/products/edit-price/${i}" class="btn-link" style="font-size:12px">Edit</a>
+                    &nbsp;
+                    <a href="/zq-admin/suppliers/${supplier._id}/products/delete-price/${i}" 
+                       class="btn-link" style="color:#ef4444;font-size:12px"
+                       onclick="return confirm('Delete this price?')">Del</a>
+                  </td>
+                </tr>`).join("")}
+              </tbody>
+            </table>` : `<p class="muted">No prices set yet.</p>`}
+          </div>
+
+          ${supplier.rates?.length || supplier.profileType === "service" ? `
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Service Rates (${(supplier.rates || []).length})</h3>
+              <a href="/zq-admin/suppliers/${supplier._id}/products/add-rate" class="btn-link">+ Add Rate</a>
+            </div>
+            ${supplier.rates?.length ? `
+            <table>
+              <thead><tr><th>Service</th><th>Rate</th><th></th></tr></thead>
+              <tbody>
+                ${supplier.rates.map((r, i) => `
+                <tr>
+                  <td>${esc(r.service)}</td>
+                  <td>${esc(r.rate)}</td>
+                  <td>
+                    <a href="/zq-admin/suppliers/${supplier._id}/products/delete-rate/${i}"
+                       class="btn-link" style="color:#ef4444;font-size:12px"
+                       onclick="return confirm('Delete this rate?')">Del</a>
+                  </td>
+                </tr>`).join("")}
+              </tbody>
+            </table>` : `<p class="muted">No rates set yet.</p>`}
+          </div>` : ""}
+        </div>
+
+        <!-- Bulk add -->
+        <div>
+          <div class="panel">
+            <h3>📋 Bulk Add Products</h3>
+            <p style="color:var(--muted);font-size:12px;margin-bottom:14px">
+              Paste products one per line or comma-separated. Format:<br>
+              <code>product name, price, unit</code> or just <code>product name</code>
+            </p>
+            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/bulk-add">
+              <div class="fg full" style="margin-bottom:12px">
+                <label>Products (one per line)</label>
+                <textarea name="bulk" rows="10" placeholder="cooking oil, 4.50, litre&#10;rice, 8, bag&#10;sugar, 1.20, kg&#10;bread&#10;flour, 3, 5kg bag"></textarea>
+              </div>
+              <div class="fg" style="margin-bottom:12px">
+                <label>Add mode</label>
+                <select name="mode">
+                  <option value="append">Append to existing</option>
+                  <option value="replace">Replace all products</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-blue">📥 Import Products</button>
+            </form>
+          </div>
+
+          ${templateKeys.length ? `
+          <div class="panel">
+            <h3>📦 Load from Template</h3>
+            <p style="color:var(--muted);font-size:12px;margin-bottom:14px">
+              Load a preset product list for this supplier's category.
+            </p>
+            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/load-template">
+              <div class="fg" style="margin-bottom:12px">
+                <label>Template</label>
+                <select name="templateKey">
+                  ${templateKeys.map(k => {
+                    const t = SUPPLIER_PRODUCT_TEMPLATES[k];
+                    return `<option value="${esc(k)}">${esc(t.label)} (${t.products.length} items)</option>`;
+                  }).join("")}
+                </select>
+              </div>
+              <div class="fg" style="margin-bottom:12px">
+                <label>Mode</label>
+                <select name="mode">
+                  <option value="append">Append to existing</option>
+                  <option value="replace">Replace all</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-blue">📦 Load Template</button>
+            </form>
+          </div>` : ""}
+        </div>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Update product list (text area) ───────────────────────────────────────
+router.post("/suppliers/:id/products/update-list", requireSupplierAdmin, async (req, res) => {
+  const { products } = req.body;
+  const list = (products || "").split(",").map(p => p.trim().toLowerCase()).filter(Boolean);
+  await SupplierProfile.findByIdAndUpdate(req.params.id, { products: list });
+  res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+});
+
+// ── Bulk add products ──────────────────────────────────────────────────────
+router.post("/suppliers/:id/products/bulk-add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { bulk, mode } = req.body;
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const lines = (bulk || "").split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
+    const newProducts = [];
+    const newPrices = [];
+
+    for (const line of lines) {
+      // Try to parse "product, price, unit" format
+      const parts = line.split(",").map(p => p.trim());
+      const name = parts[0]?.toLowerCase();
+      if (!name) continue;
+
+      newProducts.push(name);
+
+      const price = parseFloat(parts[1]);
+      const unit = parts[2] || "each";
+      if (!isNaN(price) && price > 0) {
+        newPrices.push({ product: name, amount: price, unit, inStock: true });
+      }
+    }
+
+    if (mode === "replace") {
+      supplier.products = newProducts;
+      supplier.prices = newPrices.length ? newPrices : supplier.prices;
+    } else {
+      // Append — avoid duplicates
+      const existingNames = new Set(supplier.products || []);
+      for (const p of newProducts) {
+        if (!existingNames.has(p)) supplier.products.push(p);
+      }
+      const existingPriceNames = new Set((supplier.prices || []).map(p => p.product));
+      for (const p of newPrices) {
+        if (!existingPriceNames.has(p.product)) supplier.prices.push(p);
+      }
+    }
+
+    await supplier.save();
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Load template ──────────────────────────────────────────────────────────
+router.post("/suppliers/:id/products/load-template", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { templateKey, mode } = req.body;
+    const { SUPPLIER_PRODUCT_TEMPLATES } = await import("../services/supplierProductTemplates.js");
+    const template = SUPPLIER_PRODUCT_TEMPLATES[templateKey];
+    if (!template) return res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    if (mode === "replace") {
+      supplier.products = [...template.products];
+    } else {
+      const existing = new Set(supplier.products || []);
+      for (const p of template.products) {
+        if (!existing.has(p)) supplier.products.push(p);
+      }
+    }
+
+    await supplier.save();
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Add price ──────────────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/add-price", requireSupplierAdmin, async (req, res) => {
+  const supplier = await SupplierProfile.findById(req.params.id).lean();
+  if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+  res.send(layout("Add Price", `
+    <a href="/zq-admin/suppliers/${supplier._id}/products" class="back-link">← Back to Products</a>
+    <div class="panel" style="max-width:500px">
+      <h3>Add Price</h3>
+      <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/add-price" class="edit-form">
+        <div class="fg" style="margin-bottom:12px">
+          <label>Product Name</label>
+          <input name="product" list="product-suggestions" placeholder="e.g. cooking oil" required />
+          <datalist id="product-suggestions">
+            ${(supplier.products || []).map(p => `<option value="${esc(p)}">`).join("")}
+          </datalist>
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label>Price ($)</label>
+          <input type="number" name="amount" step="0.01" min="0" placeholder="4.50" required />
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label>Unit</label>
+          <input name="unit" placeholder="each, kg, litre, bag..." value="each" />
+        </div>
+        <div class="fg" style="margin-bottom:16px">
+          <label>In Stock</label>
+          <select name="inStock">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-blue">💾 Add Price</button>
+          <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-gray">Cancel</a>
+        </div>
+      </form>
+    </div>
+  `));
+});
+
+router.post("/suppliers/:id/products/add-price", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { product, amount, unit, inStock } = req.body;
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const newPrice = {
+      product: product.trim().toLowerCase(),
+      amount: parseFloat(amount),
+      unit: unit?.trim() || "each",
+      inStock: inStock === "true",
+      currency: "USD"
+    };
+
+    // Update existing or push new
+    const idx = supplier.prices.findIndex(p => p.product === newPrice.product);
+    if (idx >= 0) supplier.prices[idx] = newPrice;
+    else supplier.prices.push(newPrice);
+
+    // Also add to products list if not there
+    if (!supplier.products.includes(newPrice.product)) {
+      supplier.products.push(newPrice.product);
+    }
+
+    await supplier.save();
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Edit price ─────────────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/edit-price/:idx", requireSupplierAdmin, async (req, res) => {
+  const supplier = await SupplierProfile.findById(req.params.id).lean();
+  if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+  const idx = parseInt(req.params.idx);
+  const price = supplier.prices?.[idx];
+  if (!price) return res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+
+  res.send(layout("Edit Price", `
+    <a href="/zq-admin/suppliers/${supplier._id}/products" class="back-link">← Back to Products</a>
+    <div class="panel" style="max-width:500px">
+      <h3>Edit Price — ${esc(price.product)}</h3>
+      <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/edit-price/${idx}" class="edit-form">
+        <div class="fg" style="margin-bottom:12px">
+          <label>Product Name</label>
+          <input name="product" value="${esc(price.product)}" required />
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label>Price ($)</label>
+          <input type="number" name="amount" step="0.01" min="0" value="${price.amount}" required />
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label>Unit</label>
+          <input name="unit" value="${esc(price.unit || "each")}" />
+        </div>
+        <div class="fg" style="margin-bottom:16px">
+          <label>In Stock</label>
+          <select name="inStock">
+            <option ${price.inStock !== false ? "selected" : ""} value="true">Yes</option>
+            <option ${price.inStock === false ? "selected" : ""} value="false">No</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-blue">💾 Save</button>
+          <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-gray">Cancel</a>
+        </div>
+      </form>
+    </div>
+  `));
+});
+
+router.post("/suppliers/:id/products/edit-price/:idx", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const idx = parseInt(req.params.idx);
+    const { product, amount, unit, inStock } = req.body;
+
+    if (supplier.prices[idx]) {
+      supplier.prices[idx] = {
+        product: product.trim().toLowerCase(),
+        amount: parseFloat(amount),
+        unit: unit?.trim() || "each",
+        inStock: inStock === "true",
+        currency: "USD"
+      };
+      await supplier.save();
+    }
+
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Delete price ───────────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/delete-price/:idx", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (supplier) {
+      supplier.prices.splice(parseInt(req.params.idx), 1);
+      await supplier.save();
+    }
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+  }
+});
+
+// ── Add service rate ───────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/add-rate", requireSupplierAdmin, async (req, res) => {
+  const supplier = await SupplierProfile.findById(req.params.id).lean();
+  if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+  res.send(layout("Add Rate", `
+    <a href="/zq-admin/suppliers/${supplier._id}/products" class="back-link">← Back to Products</a>
+    <div class="panel" style="max-width:500px">
+      <h3>Add Service Rate</h3>
+      <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/add-rate" class="edit-form">
+        <div class="fg" style="margin-bottom:12px">
+          <label>Service Name</label>
+          <input name="service" placeholder="e.g. plumbing, car hire" required />
+        </div>
+        <div class="fg" style="margin-bottom:16px">
+          <label>Rate</label>
+          <input name="rate" placeholder="e.g. 20/job, 10/hr, 50/trip" required />
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-blue">💾 Add Rate</button>
+          <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-gray">Cancel</a>
+        </div>
+      </form>
+    </div>
+  `));
+});
+
+router.post("/suppliers/:id/products/add-rate", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { service, rate } = req.body;
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    if (!supplier.rates) supplier.rates = [];
+    supplier.rates.push({
+      service: service.trim().toLowerCase(),
+      rate: rate.trim().toLowerCase()
+    });
+
+    // Also add to products list
+    const svcName = service.trim().toLowerCase();
+    if (!supplier.products.includes(svcName)) supplier.products.push(svcName);
+
+    await supplier.save();
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+// ── Delete service rate ────────────────────────────────────────────────────
+router.get("/suppliers/:id/products/delete-rate/:idx", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id);
+    if (supplier?.rates) {
+      supplier.rates.splice(parseInt(req.params.idx), 1);
+      await supplier.save();
+    }
+    res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
+  } catch (err) {
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
+  }
+});
 // ── Orders ─────────────────────────────────────────────────────────────────
 router.get("/orders", requireSupplierAdmin, async (req, res) => {
   try {
