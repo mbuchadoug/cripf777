@@ -155,6 +155,36 @@ if (state === "supplier_reg_area") {
   }
   // ── Step 3: Products ───────────────────────────────────
 if (state === "supplier_reg_products") {
+  // ── Guard: if they already chose upload/skip via button, this state
+  //    should not be reached as text input. Route them forward.
+  const alreadySet = biz.sessionData?.supplierReg?.products?.[0] === "pending_upload";
+  if (alreadySet) {
+    const isService = biz.sessionData?.supplierReg?.profileType === "service";
+    if (isService) {
+      biz.sessionState = "supplier_reg_travel";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: "🚗 *Do you travel to clients?*",
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: "🚚 *Do you deliver?*",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no",  title: "🏠 Collection Only" }
+      ]
+    });
+  }
+
+  // ... rest of existing code unchanged below
+
+  
   const items = text.split(",")
     .map(p => p.trim())
     .filter(p => p.length > 0);
@@ -421,7 +451,11 @@ const pricingText = isService
       text: `✅ *Almost done! Confirm your listing:*\n\n` +
             `🏪 ${reg.businessName}\n` +
             `📍 ${reg.area}, ${reg.city}\n` +
-            `${isService ? "🔧" : "📦"} ${reg.products.join(", ")}\n` +
+          `${isService ? "🔧" : "📦"} ${
+  reg.products?.[0] === "pending_upload"
+    ? "_(Products to be uploaded)_"
+    : (reg.products || []).join(", ")
+}\n` +
             `${deliveryText}\n` +
             `${pricingText}\n\n` +
             `Is this correct?`,

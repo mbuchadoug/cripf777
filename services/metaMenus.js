@@ -797,13 +797,16 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
           `📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}\n` +
           `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews) · Score: ${score}\n` +
           `🗓 Renews: ${renewDate}\n\n` +
-          `Products: ${productCount} · Prices: ${priceCount}`,
+        `Products: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Prices: ${priceCount}`,
     buttonLabel: "Manage Account",
     sections: [
       {
         title: "📋 My Listing",
         rows: [
-          { id: "sup_edit_products", title: "✏️ Edit Products", description: `${productCount} products listed` },
+         { id: "sup_edit_products", title: "✏️ Edit Products", 
+  description: supplier.products?.[0] === "pending_upload"
+    ? "⏳ Upload pending — tap to add"
+    : `${productCount} products listed` },
           { id: "sup_update_prices", title: "💰 Update Prices", description: `${priceCount} prices set` },
           { id: "sup_edit_area", title: "📍 Edit Location", description: `${supplier.location?.area || "Not set"}, ${supplier.location?.city || ""}` },
           { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery", description: supplier.delivery?.available ? "Currently: Delivering" : "Currently: Collection only" },

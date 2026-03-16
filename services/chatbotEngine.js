@@ -418,7 +418,9 @@ a === "find_supplier" ||
       a === "reg_type_service" ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
-
+a === "sup_skip_products" ||
+a === "sup_enter_own_products" ||
+a === "sup_request_upload" ||
 
     a === "sup_skip_prices" ||
       a === "sup_done_prices" ||
@@ -2984,42 +2986,81 @@ if (a.startsWith("sup_cat_")) {
   await saveBizSafe(biz);
 
   // Get category-specific examples for either services or products
+ // Get category-specific examples for either services or products
   const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
+  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
+  const template = getTemplateForCategory(catId);
 
   if (profileType === "service") {
     const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
     const exampleText = catExamples.slice(0, 3).join(", ");
 
-    return sendText(from,
+    return sendButtons(from, {
+      text:
 `✅ *Category selected!*
 
-Now list your main services, separated by commas.
+Now add your services. You have 3 options:
 
-*Example:*
-*${exampleText}*
+✍️ *Type them* — list comma-separated
+📤 *Request upload* — send us your list and we'll load it
+⏭ *Skip for now* — add later from your account
 
-Just type them and send 👇
-
-_Type *cancel* to go back to main menu._`);
+*Example services for your category:*
+_${exampleText}_`,
+      buttons: [
+        { id: "sup_enter_own_products",  title: "✍️ Enter My Services" },
+        { id: "sup_request_upload",       title: "📤 Request Upload Help" },
+        { id: "sup_skip_products",        title: "⏭ Skip For Now" }
+      ]
+    });
   }
 
-  // Products
+  // Products — check for preset template first
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
   const exampleText = catExamples.slice(0, 3).join(", ");
 
-  return sendText(from,
+  if (template) {
+    return sendButtons(from, {
+      text:
 `✅ *Category selected!*
 
-Now list your main products, separated by commas.
+We have a preset list of *${template.products.length} products* for this category.
+Choose how to add your products:
 
-*Example:*
-*${exampleText}*
+📦 *Load Preset* — load our ready-made list instantly
+✍️ *Enter My Own* — type your own list
+📤 *Request Upload* — send us your list, we'll load it
+⏭ *Skip For Now* — add products later
 
-Just type them and send 👇
+_Preview: ${template.products.slice(0, 4).join(", ")}${template.products.length > 4 ? "..." : ""}_`,
+      buttons: [
+        { id: `sup_load_preset_${catId}`, title: "📦 Load Preset List" },
+        { id: "sup_enter_own_products",   title: "✍️ Enter My Own" },
+        { id: "sup_request_upload",        title: "📤 Request Upload Help" }
+      ]
+    });
+  }
 
-_Type *cancel* to go back to main menu._`);
+  // No preset for this category — still show all options
+  return sendButtons(from, {
+    text:
+`✅ *Category selected!*
+
+How would you like to add your products?
+
+✍️ *Type them* — list comma-separated
+📤 *Request upload* — send us your list and we'll load it
+⏭ *Skip for now* — add later from your account
+
+*Example products for your category:*
+_${exampleText}_`,
+    buttons: [
+      { id: "sup_enter_own_products",  title: "✍️ Enter My Own" },
+      { id: "sup_request_upload",       title: "📤 Request Upload Help" },
+      { id: "sup_skip_products",        title: "⏭ Skip For Now" }
+    ]
+  });
 }
-
 
 // ── Skip or finish pricing during registration ─────────────────────────────
 if (a === "sup_skip_prices" || a === "sup_done_prices") {
@@ -3051,6 +3092,127 @@ if (a === "sup_skip_prices" || a === "sup_done_prices") {
 }
 
 
+
+// ── Enter own products (manual entry) ────────────────────────────────────────
+if (a === "sup_enter_own_products") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+  const catId = biz.sessionData?.supplierReg?.categories?.[0] || "";
+  const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
+
+  const isService = profileType === "service";
+  const map = isService ? CATEGORY_SERVICE_EXAMPLES : CATEGORY_PRODUCT_EXAMPLES;
+  const catExamples = map[catId] || (isService ? ["service a", "service b"] : ["product a", "product b"]);
+  const exampleText = catExamples.slice(0, 3).join(", ");
+
+  biz.sessionState = "supplier_reg_products";
+  await saveBizSafe(biz);
+
+  return sendText(from,
+`✍️ *Enter Your ${isService ? "Services" : "Products"}*
+
+List them separated by commas, then send.
+
+*Example:*
+_${exampleText}_
+
+Type *cancel* to stop registration.`);
+}
+
+// ── Skip products entirely during registration ────────────────────────────────
+if (a === "sup_skip_products") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.products = ["pending_upload"];
+  biz.sessionData.supplierReg.prices = [];
+  if (profileType === "service") {
+    biz.sessionData.supplierReg.rates = [];
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `🚗 *Do you travel to clients?*\n\n_You can add your services later from your account._`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: `🚚 *Do you deliver?*\n\n_You can add your products later from your account._`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
+
+// ── Supplier requests catalogue upload help ───────────────────────────────────
+if (a === "sup_request_upload") {
+  if (!biz) return sendMainMenu(from);
+
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+  const isService = profileType === "service";
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.products = ["pending_upload"];
+  biz.sessionData.supplierReg.prices = [];
+
+  const existingSupplierId = biz.sessionData?.pendingSupplierId;
+  if (existingSupplierId) {
+    await SupplierProfile.findByIdAndUpdate(existingSupplierId, {
+      adminNote: `[Requested ${isService ? "service rates" : "catalogue"} upload via WhatsApp]`,
+      products: ["pending_upload"]
+    });
+  }
+
+  if (isService) {
+    biz.sessionData.supplierReg.rates = [];
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text:
+`📤 *Upload Request Noted!*
+
+After you finish registration, send your service list & rates to us:
+📱 *WhatsApp:* +263 77 114 3904
+📧 *Email:* info@zimquote.co.zw
+
+We'll load it within 24 hours and notify you. ✅
+
+Now one quick question — *do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text:
+`📤 *Upload Request Noted!*
+
+After you finish registration, send your product list & prices to us:
+📱 *WhatsApp:* +263 78 123 4567
+📧 *Email:* support@zimquote.co.zw
+
+You can also send a photo of your price list, Excel file, or typed list.
+We'll load it within 24 hours and notify you. ✅
+
+Now one quick question — *do you deliver?*`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
 
 
   // ── Delivery yes/no during registration ───────────────────────────────────
