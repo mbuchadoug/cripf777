@@ -2058,6 +2058,38 @@ const supplierStates = [
     "supplier_search_product",   // ← ADD THIS
 ];
 
+
+// ── Shortcode search for any user (runs BEFORE state machine) ─────────────
+if (!isMetaAction && biz && text.trim().length > 2 && !supplierStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
+  const shortcode = parseShortcodeSearch(text);
+  if (shortcode) {
+    if (shortcode.city) {
+      const results = await runSupplierSearch({
+        city: shortcode.city,
+        product: shortcode.product
+      });
+      if (results.length) {
+        const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+      }
+    }
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { product: shortcode.product }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+    return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+      ...SUPPLIER_CITIES.map(c => ({
+        id: `sup_search_city_${c.toLowerCase()}`,
+        title: c
+      })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
+    ]);
+  }
+}
+
+
  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
     // ── Cancel command during any supplier registration flow ──────────────
     if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
@@ -2103,36 +2135,7 @@ return sendButtons(from, {
 
 
 // ── Shortcode search for any user ─────────────────────────────────────────
-if (!isMetaAction && biz && text.trim().length > 2) {
-  const { parseShortcodeSearch } = await import("./supplierSearch.js");
-  const shortcode = parseShortcodeSearch(text);
-  if (shortcode) {
-    if (shortcode.city) {
-      const results = await runSupplierSearch({
-        city: shortcode.city,
-        product: shortcode.product
-      });
-      if (results.length) {
-        const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
-      }
-    }
-    // No city — ask for it
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: { product: shortcode.product }
-    };
-    biz.sessionState = "supplier_search_city";
-    await saveBizSafe(biz);
-    return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-      ...SUPPLIER_CITIES.map(c => ({
-        id: `sup_search_city_${c.toLowerCase()}`,
-        title: c
-      })),
-      { id: "sup_search_city_all", title: "📍 All Cities" }
-    ]);
-  }
-}
+
 
 if (escapeWords.includes(al)) {
     if (!biz || biz.name?.startsWith("pending_supplier_")) {
