@@ -2983,19 +2983,29 @@ if (a.startsWith("sup_cat_")) {
   biz.sessionState = "supplier_reg_products";
   await saveBizSafe(biz);
 
+  // Get category-specific examples for either services or products
+  const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
+
   if (profileType === "service") {
+    const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
+    const exampleText = catExamples.slice(0, 3).join(", ");
+
     return sendText(from,
 `✅ *Category selected!*
 
 Now list your main services, separated by commas.
 
 *Example:*
-*plumbing, welding, electrical repairs, painting*
+*${exampleText}*
 
 Just type them and send 👇
 
 _Type *cancel* to go back to main menu._`);
   }
+
+  // Products
+  const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
+  const exampleText = catExamples.slice(0, 3).join(", ");
 
   return sendText(from,
 `✅ *Category selected!*
@@ -3003,7 +3013,7 @@ _Type *cancel* to go back to main menu._`);
 Now list your main products, separated by commas.
 
 *Example:*
-*cooking oil, rice, sugar, flour, bread*
+*${exampleText}*
 
 Just type them and send 👇
 
@@ -3758,11 +3768,10 @@ return sendButtons(from, {
     order.status = "accepted";
     await order.save();
 
-    await SupplierProfile.findOneAndUpdate(
-      { phone: from },
-      { $inc: { monthlyOrders: 1 } }
-    );
-
+await SupplierProfile.findOneAndUpdate(
+  { phone: from },
+  { $inc: { monthlyOrders: 1, completedOrders: 1 } }
+);
     const supplier = await SupplierProfile.findOne({ phone: from });
 
     biz.sessionState = "ready";
