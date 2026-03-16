@@ -1993,6 +1993,7 @@ const supplierStates = [
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
    "supplier_reg_type",    // ← ADD
   "supplier_reg_travel",  // ← ADD
+    "supplier_search_product",   // ← ADD THIS
 ];
 
  if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {

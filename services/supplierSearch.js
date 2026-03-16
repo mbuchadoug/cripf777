@@ -20,11 +20,11 @@ export async function startSupplierSearch(from, biz, saveBiz) {
 }
 
 export async function runSupplierSearch({ city, category, product, profileType }) {
-  const query = {
-    active: true,
-    suspended: false,
-    subscriptionStatus: "active"
-  };
+const query = {
+  active: true,
+  $or: [{ suspended: false }, { suspended: { $exists: false } }],
+  subscriptionStatus: "active"
+};
 
   if (profileType) query.profileType = profileType;
   if (city) query["location.city"] = city;
