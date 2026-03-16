@@ -3005,11 +3005,11 @@ if (profileType === "service") {
   const exampleText = catExamples.slice(0, 2).join(", ");
 
   return sendButtons(from, {
-    text: `✅ *${catId}* selected!\n\nHow do you want to add your services?\n_e.g. ${exampleText}_`,
+    text: `✅ *Category selected!*\n\nHow would you like to add your services?\n\n_e.g. ${exampleText}_`,
     buttons: [
-      { id: "sup_request_upload",      title: "📤 Upload My Service List" },
-      { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
-      { id: "sup_skip_products",       title: "⏭ Skip For Now" }
+      { id: "sup_request_upload",     title: "📤 Send Us Your List" },
+      { id: "sup_enter_own_products", title: "✍️ Type My Own" },
+      { id: "sup_skip_products",      title: "⏭ Skip For Now" }
     ]
   });
 }
@@ -3030,7 +3030,7 @@ if (template) {
 
 How would you like to add your products?`,
     buttons: [
-      { id: "sup_request_upload",       title: "📤 Get Help Loading" },
+      { id: "sup_request_upload",       title: "📤 Send Us Your List" },
       { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
       { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
     ]
@@ -3047,7 +3047,7 @@ How would you like to add your products?
 
 _Examples: ${exampleText}_`,
     buttons: [
-      { id: "sup_request_upload",      title: "📤 Get Help Loading" },
+      { id: "sup_request_upload",      title: "📤 Send Us Your List" },
       { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
       { id: "sup_skip_products",       title: "⏭ Skip For Now" }
     ]
