@@ -3035,7 +3035,7 @@ if (template) {
 
 How would you like to add your products?`,
     buttons: [
-      { id: "sup_request_upload",       title: "📤 Upload My Own List" },
+      { id: "sup_request_upload",       title: "📤 Get Help Loading" },
       { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
       { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
     ]
@@ -3052,7 +3052,7 @@ How would you like to add your products?
 
 _Examples: ${exampleText}_`,
     buttons: [
-      { id: "sup_request_upload",      title: "📤 Upload My Own List" },
+      { id: "sup_request_upload",      title: "📤 Get Help Loading" },
       { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
       { id: "sup_skip_products",       title: "⏭ Skip For Now" }
     ]
@@ -3549,8 +3549,8 @@ Now one quick question — *do you travel to clients?*`,
 `📤 *Upload Request Noted!*
 
 After you finish registration, send your product list & prices to us:
-📱 *WhatsApp:* +263 78 123 4567
-📧 *Email:* support@zimquote.co.zw
+📱 *WhatsApp:* +263 78 990 1058
+📧 *Email:* info@zimquote.co.zw
 
 You can also send a photo of your price list, Excel file, or typed list.
 We'll load it within 24 hours and notify you. ✅
