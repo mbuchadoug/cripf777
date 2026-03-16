@@ -550,7 +550,9 @@ const allowedWithoutBiz =
   a === "find_supplier" ||
   a === "register_supplier" ||
   a === "suppliers_home" ||
-   a === "my_orders" ||   
+  a === "my_orders" ||
+  a === "sup_upgrade_plan" ||   // ← ADD THIS LINE
+  a === "sup_renew_plan" ||     // ← ADD THIS LINE  
   a === "sup_search_type_product" ||
   a === "sup_search_type_service" ||
   a === "sup_search_more_categories" ||
@@ -2531,11 +2533,36 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
-  if (a === "my_supplier_account") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    return sendSupplierAccountMenu(from, supplier);
+ if (a === "my_supplier_account") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  // Gate: must have paid to access account features
+  if (!supplier.active) {
+    const isComplete = Boolean(
+      supplier.businessName &&
+      supplier.products?.length > 0
+    );
+
+    if (!isComplete) {
+      await sendText(from,
+`⚠️ *Your registration is incomplete.*
+
+Let's finish setting up your listing first.`
+      );
+      return startSupplierRegistration(from, biz);
+    }
+
+    await sendText(from,
+`🔒 *Listing not yet active.*
+
+Your profile is saved but buyers cannot find you yet. Choose a plan to go live and unlock your full account.`
+    );
+    return sendSupplierUpgradeMenu(from, supplier.tier);
   }
+
+  return sendSupplierAccountMenu(from, supplier);
+}
 
 
   // ── Buyer: My Orders list ─────────────────────────────────────────────────
@@ -2600,11 +2627,17 @@ if (a === "register_supplier") {
   }
   // ── Supplier account menu actions ─────────────────────────────────────────
 
-  if (a === "sup_edit_products") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    if (biz) {
-      biz.sessionState = "supplier_edit_products";
+ if (a === "sup_edit_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first.*\n\nYou can edit products after your listing is live.");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  if (biz) {
+    biz.sessionState = "supplier_edit_products";
       await saveBizSafe(biz);
     }
     const current = supplier.products?.join(", ") || "none listed";
@@ -2614,10 +2647,16 @@ if (a === "register_supplier") {
     });
   }
 
-  if (a === "sup_toggle_delivery") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    const newVal = !supplier.delivery?.available;
+ if (a === "sup_toggle_delivery") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first.*");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  const newVal = !supplier.delivery?.available;
     supplier.delivery = { ...(supplier.delivery || {}), available: newVal };
     await supplier.save();
     await sendText(from, newVal
@@ -2646,11 +2685,17 @@ if (a === "register_supplier") {
     return sendSupplierAccountMenu(from, supplier);
   }
 
-  if (a === "sup_edit_area") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    if (biz) {
-      biz.sessionState = "supplier_edit_area";
+if (a === "sup_edit_area") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first.*");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  if (biz) {
+    biz.sessionState = "supplier_edit_area";
       await saveBizSafe(biz);
     }
    return sendText(from,
@@ -2665,12 +2710,23 @@ _Type *cancel* to go back to your account._`
     );
   }
 
-  if (a === "sup_my_orders") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
+ if (a === "sup_my_orders") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
 
-    const SupplierOrder = (await import("../models/supplierOrder.js")).default;
-    const orders = await SupplierOrder.find({ supplierId: supplier._id })
+  // Gate: must be active to see incoming orders
+  if (!supplier.active) {
+    await sendText(from,
+`🔒 *Activate your listing first.*
+
+Once your listing is live, buyers will start sending you orders. Choose a plan to activate.`
+    );
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  const SupplierOrder = (await import("../models/supplierOrder.js")).default;
+  const orders = await SupplierOrder.find({ supplierId: supplier._id })
+  // ... rest of the handler unchanged
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();
@@ -2728,10 +2784,16 @@ ${deliveryLine}
     });
   }
 
-  if (a === "sup_my_earnings") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    const SupplierOrder = (await import("../models/supplierOrder.js")).default;
+if (a === "sup_my_earnings") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first to view earnings.*");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  const SupplierOrder = (await import("../models/supplierOrder.js")).default;
     const completed = await SupplierOrder.find({ supplierId: supplier._id, status: "completed" });
    const total = completed.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     const thisMonth = completed.filter(o => {
@@ -2745,10 +2807,16 @@ ${deliveryLine}
     });
   }
 
-  if (a === "sup_my_reviews") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
-    if (!supplier.reviewCount) {
+if (a === "sup_my_reviews") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first to view reviews.*");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  if (!supplier.reviewCount) {
       return sendButtons(from, {
         text: "⭐ *My Reviews*\n\nNo reviews yet. Complete orders to get rated by buyers!",
         buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
@@ -3203,12 +3271,17 @@ return sendButtons(from, {
 
 
   // ── Update supplier prices ─────────────────────────────────────────────────
-  if (a === "sup_update_prices") {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
+if (a === "sup_update_prices") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
 
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
+  if (!supplier.active) {
+    await sendText(from, "🔒 *Activate your listing first.*\n\nYou can update prices after your listing is live.");
+    return sendSupplierUpgradeMenu(from, supplier.tier);
+  }
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
       biz.sessionState = "supplier_update_prices";
       await saveBizSafe(biz);
     }

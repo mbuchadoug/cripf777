@@ -101,20 +101,27 @@ export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
   // ── Ghost business (pending_supplier_) = treat as no-biz user ────────────
- if (biz && biz.name.startsWith("pending_supplier_")) {
+if (biz && biz.name.startsWith("pending_supplier_")) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
   if (supplier) {
-    return sendButtons(to, {
-      text: "👋 *Welcome to ZimQuote!*\n\nWhat would you like to do?",
-      buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
-        { id: "my_supplier_account", title: "🏪 My Account" },
+    // Gate: not paid yet → push to activate
+    if (!supplier.active) {
+      return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+        { id: "find_supplier",    title: "🔍 Find Suppliers" },
+        { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
         { id: "onboard_business", title: "🧾 Run My Business" }
-      ]
-    });
+      ]);
+    }
+    // Paid and active
+    return sendList(to, "👋 *Welcome to ZimQuote!*", [
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
+      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+      { id: "onboard_business",    title: "🧾 Run My Business" }
+    ]);
   }
 
 // FIXED
@@ -132,14 +139,23 @@ if (!biz) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  if (supplier) {
-    return sendList(to, "👋 *Welcome to ZimQuote!*", [
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
-      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-      { id: "onboard_business",    title: "🧾 Run My Business" }
+if (supplier) {
+  // Gate: not paid yet → push to activate, hide My Orders as buyer
+  if (!supplier.active) {
+    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+      { id: "find_supplier",    title: "🔍 Find Suppliers" },
+      { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
+      { id: "onboard_business", title: "🧾 Run My Business" }
     ]);
   }
+  // Paid and active — show full menu including My Orders as buyer
+  return sendList(to, "👋 *Welcome to ZimQuote!*", [
+    { id: "find_supplier",       title: "🔍 Find Suppliers" },
+    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+    { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+    { id: "onboard_business",    title: "🧾 Run My Business" }
+  ]);
+}
 
   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
     { id: "find_supplier",   title: "🔍 Find Suppliers" },
@@ -707,27 +723,31 @@ export async function sendSuppliersMenu(to) {
   const biz = await getBizForPhone(to);
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
+// VERIFY this is what your active supplier block looks like:
 if (supplier?.active) {
   return sendList(to, "🏪 *ZimQuote Suppliers*", [
     { id: "find_supplier",       title: "🔍 Find Suppliers" },
     { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-    { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+    { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
+      title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
   ]);
 }
 
+// FIND AND REPLACE the entire supplier && !supplier.active block:
 if (supplier && !supplier.active) {
   const complete = isSupplierRegistrationComplete(supplier);
-  return sendList(to, complete
-    ? "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is ready but not active yet.\nComplete payment to go live."
-    : "🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is not yet active.\nComplete registration to go live.",
+  return sendList(to,
+    complete
+      ? `🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
+      : `🏪 *ZimQuote Suppliers*\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
-      { id: "find_supplier", title: "🔍 Find Suppliers" },
-      { id: "my_orders", title: "📋 My Orders (Buyer)" },
+      { id: "find_supplier",   title: "🔍 Find Suppliers" },
       complete
-        ? { id: "sup_upgrade_plan", title: "💳 Activate Listing" }
-        : { id: "register_supplier", title: "⏳ Finish Setup" },
-      { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+        ? { id: "sup_upgrade_plan",  title: "💳 Activate My Listing" }
+        : { id: "register_supplier", title: "⏳ Finish Registration" },
+      { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
+        title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
     ]
   );
 }
