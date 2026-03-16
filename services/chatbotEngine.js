@@ -86,7 +86,7 @@ import {
   runSupplierSearch,
   formatSupplierResults,
   parseShortcodeSearch
-} from "./supplierSearch.js";
+} from "./supplierSearch22.js";
 import {
   notifySupplierNewOrder,
   handleOrderAccepted,
@@ -523,20 +523,17 @@ if (!biz && !ownerRole) {
   const sess = await UserSession.findOne({ phone });
 
 const searchMode = sess?.tempData?.supplierSearchMode;
-
 if (searchMode === "product") {
   const productQuery = text.trim();
   if (!productQuery || productQuery.length < 1) {
     return sendButtons(from, {
-      text: "❌ Please type the product name:",
+      text: "❌ Please type what you're looking for:\n\n_e.g. find cement, find plumber harare_",
       buttons: [{ id: "find_supplier", title: "⬅ Back" }]
     });
   }
 
-  // Check if they included a city in the query e.g. "tiles harare"
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
-  const parsed = parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null };
-
+  const parsed = parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null };
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -608,7 +605,7 @@ const allowedWithoutBiz =
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
   if (!isMetaAction && text.trim().length > 2) {
-    const { parseShortcodeSearch } = await import("./supplierSearch.js");
+    const { parseShortcodeSearch } = await import("./supplierSearch22.js");
     const shortcode = parseShortcodeSearch(text);
     if (shortcode) {
       await UserSession.findOneAndUpdate(
@@ -2107,7 +2104,7 @@ return sendButtons(from, {
 
 // ── Shortcode search for any user ─────────────────────────────────────────
 if (!isMetaAction && biz && text.trim().length > 2) {
-  const { parseShortcodeSearch } = await import("./supplierSearch.js");
+  const { parseShortcodeSearch } = await import("./supplierSearch22.js");
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
     if (shortcode.city) {
@@ -2496,16 +2493,19 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
+  // Clear previous search state
   if (biz) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: {}
     };
+    biz.sessionState = "supplier_search_product";
     await saveBizSafe(biz);
   } else {
     await UserSession.findOneAndUpdate(
       { phone },
       {
+        $set: { "tempData.supplierSearchMode": "product" },
         $unset: {
           "tempData.supplierSearchCategory": "",
           "tempData.supplierSearchProduct": "",
@@ -2516,15 +2516,25 @@ if (a === "find_supplier") {
     );
   }
 
-  return sendButtons(from, {
-    text: "🔍 *Find Suppliers*\n\nWhat are you looking for?",
-    buttons: [
-      { id: "sup_search_type_product", title: "📦 Products" },
-      { id: "sup_search_type_service", title: "🔧 Services" }
-    ]
-  });
-}
+  return sendText(from,
+`🔍 *Find Suppliers on ZimQuote*
 
+Type what you're looking for and send it:
+
+*Examples:*
+- _find cement_
+- _find plumber harare_
+- _find cooking oil_
+- _find car hire bulawayo_
+
+You can include a city at the end to search that city directly.
+
+Or pick a category 👇`,
+  ).then(() => sendList(from, "📂 Or browse by category:", [
+    { id: "sup_search_type_product", title: "📦 Products" },
+    { id: "sup_search_type_service", title: "🔧 Services" }
+  ]));
+}
 
 if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   const searchType = a === "sup_search_type_service" ? "service" : "product";
@@ -4207,27 +4217,55 @@ Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
 }
 
   // ── Buyer: free-text product search ──────────────────────────────────────
-  if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
+ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     const productQuery = text.trim();
     if (!productQuery || productQuery.length < 1) {
       return sendButtons(from, {
-        text: "❌ Please type the product name:",
+        text: "❌ Please type what you're looking for:\n\n_e.g. find cement, find plumber harare_",
         buttons: [{ id: "find_supplier", title: "⬅ Back" }]
       });
     }
 
-    // Ask city after product
-  biz.sessionData = {
-  ...(biz.sessionData || {}),
-  supplierSearch: {
-    ...(biz.sessionData?.supplierSearch || {}),
-    product: productQuery
-  }
-};
+    // Try shortcode parse first (handles "find cement harare", "s tiles", etc.)
+    const parsed = parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`);
+    const finalProduct = parsed?.product || productQuery;
+    const finalCity = parsed?.city || null;
+
+    if (finalCity) {
+      // City was included — run search immediately, skip city picker
+      const results = await runSupplierSearch({
+        city: finalCity,
+        product: finalProduct,
+        profileType: biz.sessionData?.supplierSearch?.type || null
+      });
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      if (!results.length) {
+        return sendButtons(from, {
+          text: `😕 No results for *${finalProduct}* in *${finalCity}*.\n\nTry a different city or search term.`,
+          buttons: [
+            { id: "find_supplier", title: "🔍 Search Again" },
+            { id: "sup_search_city_all", title: "📍 Try All Cities" }
+          ]
+        });
+      }
+      const rows = formatSupplierResults(results, finalCity, finalProduct);
+      return sendList(from, `🔍 *${finalProduct}* in ${finalCity} — ${results.length} found`, rows);
+    }
+
+    // No city — ask which city
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
+        ...(biz.sessionData?.supplierSearch || {}),
+        product: finalProduct
+      }
+    };
     biz.sessionState = "supplier_search_city";
     await saveBizSafe(biz);
 
-    return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+    return sendList(from, `🔍 Looking for: *${finalProduct}*\n\nWhich city?`, [
       ...SUPPLIER_CITIES.map(c => ({
         id: `sup_search_city_${c.toLowerCase()}`,
         title: c
