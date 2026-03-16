@@ -98,6 +98,7 @@ import lmsRoutes from "./routes/lms.js";
 // use the lms_api file that contains examInstance + attempt persistence
 import lmsApiRoutes from "./routes/lms_api.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
+import supplierAdminRoutes from "./routes/supplierAdmin.js"; // ← ADD THIS
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
 // org-specific quiz API (if present)
@@ -401,6 +402,7 @@ app.use("/auth", authRoutes);
 // ADMIN (single mount for admin UI & import routes)
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
+app.use("/zq-admin", supplierAdminRoutes); // ← ADD THIS
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
