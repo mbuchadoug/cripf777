@@ -2090,8 +2090,7 @@ if (!isMetaAction && biz && text.trim().length > 2 && !supplierStates.includes(b
 }
 
 
- if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
-    // ── Cancel command during any supplier registration flow ──────────────
+if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
     if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
       biz.sessionState = "ready";
       biz.sessionData = {};
@@ -2100,15 +2099,18 @@ if (!isMetaAction && biz && text.trim().length > 2 && !supplierStates.includes(b
       return sendMainMenu(from);
     }
 
-    // Handle supplier session states
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
         state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
-    const handled = await continueTwilioFlow({ from, text });
-    if (handled) return;
+
+    // ── Only pass to Twilio for real businesses, not ghost supplier biz ──
+    if (!biz.name?.startsWith("pending_supplier_")) {
+      const handled = await continueTwilioFlow({ from, text });
+      if (handled) return;
+    }
   }
 
 

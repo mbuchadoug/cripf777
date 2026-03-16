@@ -19,6 +19,36 @@ export async function startSupplierSearch(from, biz, saveBiz) {
   ]);
 }
 
+
+// Maps common search terms to their category IDs or related keywords
+const SEARCH_SYNONYMS = {
+  "teacher": ["tutor", "tutoring", "teaching", "lesson", "maths", "science", "english"],
+  "tutor": ["tutoring", "teacher", "teaching", "lesson"],
+  "doctor": ["health", "medical", "clinic", "nurse"],
+  "lawyer": ["legal", "attorney", "advocate"],
+  "builder": ["construction", "building", "bricklaying"],
+  "painter": ["painting", "paint"],
+  "welder": ["welding", "fabrication", "gate"],
+  "plumber": ["plumbing", "pipes", "geyser"],
+  "electrician": ["electrical", "wiring", "electric"],
+  "cleaner": ["cleaning", "clean"],
+  "driver": ["transport", "car hire", "delivery", "taxi"],
+  "mechanic": ["car repair", "vehicle", "auto"],
+  "gardener": ["gardening", "lawn", "garden"],
+  "security": ["guard", "security guard", "alarm"],
+  "photographer": ["photography", "photos", "pictures"],
+  "designer": ["printing", "graphics", "design"],
+  "carpenter": ["woodwork", "furniture"],
+  "tailor": ["sewing", "clothing", "alterations"]
+};
+
+function expandSearchTerms(product) {
+  const lower = (product || "").toLowerCase().trim();
+  const synonyms = SEARCH_SYNONYMS[lower];
+  if (!synonyms) return [product];
+  return [product, ...synonyms];
+}
+
 export async function runSupplierSearch({ city, category, product, profileType }) {
   // Base query — never show suspended or inactive suppliers
   const query = {
@@ -35,19 +65,17 @@ export async function runSupplierSearch({ city, category, product, profileType }
   if (category) query.categories = category;
 
   // Product/service free-text search — searches both product list AND priced items
-  if (product) {
-    const productOr = profileType === "service"
-      ? [
-          { products: { $regex: product, $options: "i" } },
-          { "rates.service": { $regex: product, $options: "i" } },
-          { categories: { $regex: product, $options: "i" } }
-        ]
-      : [
-          { products: { $regex: product, $options: "i" } },
-          { "prices.product": { $regex: product, $options: "i" } }
-        ];
+if (product) {
+    const searchTerms = expandSearchTerms(product);
 
-    // Merge into existing $and so we don't clobber the suspended $or
+    const productOr = searchTerms.flatMap(term => [
+      { products: { $regex: term, $options: "i" } },
+      { "rates.service": { $regex: term, $options: "i" } },
+      { categories: { $regex: term, $options: "i" } },
+      { "prices.product": { $regex: term, $options: "i" } },
+      { businessName: { $regex: term, $options: "i" } }
+    ]);
+
     query.$and.push({ $or: productOr });
   }
 
