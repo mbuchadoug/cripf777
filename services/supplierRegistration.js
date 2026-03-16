@@ -2,7 +2,7 @@
 
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
-import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";y
+import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
 
 // ── Category-specific product/service examples ────────────────────────────
 export const CATEGORY_PRODUCT_EXAMPLES = {
