@@ -2991,7 +2991,7 @@ if (a.startsWith("sup_cat_")) {
   const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
   const template = getTemplateForCategory(catId);
 
-  if (profileType === "service") {
+if (profileType === "service") {
     const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
     const exampleText = catExamples.slice(0, 3).join(", ");
 
@@ -2999,17 +2999,12 @@ if (a.startsWith("sup_cat_")) {
       text:
 `✅ *Category selected!*
 
-Now add your services. You have 3 options:
+How would you like to add your services?
 
-✍️ *Type them* — list comma-separated
-📤 *Request upload* — send us your list and we'll load it
-⏭ *Skip for now* — add later from your account
-
-*Example services for your category:*
-_${exampleText}_`,
+_Examples: ${exampleText}_`,
       buttons: [
         { id: "sup_enter_own_products",  title: "✍️ Enter My Services" },
-        { id: "sup_request_upload",       title: "📤 Request Upload Help" },
+        { id: "sup_request_upload",       title: "📤 Upload Help" },
         { id: "sup_skip_products",        title: "⏭ Skip For Now" }
       ]
     });
@@ -3019,44 +3014,34 @@ _${exampleText}_`,
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
   const exampleText = catExamples.slice(0, 3).join(", ");
 
-  if (template) {
+if (template) {
     return sendButtons(from, {
       text:
 `✅ *Category selected!*
 
-We have a preset list of *${template.products.length} products* for this category.
-Choose how to add your products:
+We have *${template.products.length} preset products* ready to load.
 
-📦 *Load Preset* — load our ready-made list instantly
-✍️ *Enter My Own* — type your own list
-📤 *Request Upload* — send us your list, we'll load it
-⏭ *Skip For Now* — add products later
-
-_Preview: ${template.products.slice(0, 4).join(", ")}${template.products.length > 4 ? "..." : ""}_`,
+Pick an option:`,
       buttons: [
         { id: `sup_load_preset_${catId}`, title: "📦 Load Preset List" },
         { id: "sup_enter_own_products",   title: "✍️ Enter My Own" },
-        { id: "sup_request_upload",        title: "📤 Request Upload Help" }
+        { id: "sup_request_upload",        title: "📤 Upload Help" }
       ]
     });
   }
 
   // No preset for this category — still show all options
+// No preset for this category — still show all options
   return sendButtons(from, {
     text:
 `✅ *Category selected!*
 
 How would you like to add your products?
 
-✍️ *Type them* — list comma-separated
-📤 *Request upload* — send us your list and we'll load it
-⏭ *Skip for now* — add later from your account
-
-*Example products for your category:*
-_${exampleText}_`,
+_Examples: ${exampleText}_`,
     buttons: [
       { id: "sup_enter_own_products",  title: "✍️ Enter My Own" },
-      { id: "sup_request_upload",       title: "📤 Request Upload Help" },
+      { id: "sup_request_upload",       title: "📤 Upload Help" },
       { id: "sup_skip_products",        title: "⏭ Skip For Now" }
     ]
   });
