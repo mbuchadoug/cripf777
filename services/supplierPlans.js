@@ -42,11 +42,23 @@ export const SUPPLIER_CATEGORIES = [
   { id: "cosmetics",   label: "💄 Cosmetics & Beauty",     types: ["product"] },
   { id: "furniture",   label: "🛋 Furniture & Home",       types: ["product"] },
 
-  { id: "services",    label: "🔧 Services & Trades",      types: ["service"] },
-  { id: "transport",   label: "🚛 Transport & Logistics",  types: ["service"] },
-  { id: "food_cooked", label: "🍱 Cooked Food & Catering", types: ["service"] },
-  { id: "printing",    label: "🖨 Printing & Stationery",  types: ["service"] },
+// ── SERVICE CATEGORIES ────────────────────────────────────────────────────
+  { id: "plumbing",     label: "🚿 Plumbing",                    types: ["service"] },
+  { id: "electrical",   label: "⚡ Electrical",                   types: ["service"] },
+  { id: "construction", label: "🏗️ Construction & Building",      types: ["service"] },
+  { id: "painting",     label: "🎨 Painting & Décor",             types: ["service"] },
+  { id: "welding",      label: "🔩 Welding & Fabrication",        types: ["service"] },
+  { id: "cleaning",     label: "🧹 Cleaning Services",            types: ["service"] },
+  { id: "gardening",    label: "🌿 Gardening & Landscaping",      types: ["service"] },
+  { id: "transport",    label: "🚗 Transport & Logistics",        types: ["service"] },
+  { id: "moving",       label: "📦 Moving & Removals",            types: ["service"] },
+  { id: "food_cooked",  label: "🍱 Cooked Food & Catering",       types: ["service"] },
+  { id: "printing",     label: "🖨️ Printing & Branding",          types: ["service"] },
+  { id: "beauty",       label: "💅 Beauty & Hair",                types: ["service"] },
+  { id: "photography",  label: "📸 Photography & Videography",    types: ["service"] },
+  { id: "tutoring",     label: "📚 Tutoring & Teaching",          types: ["service"] },
+  { id: "it_support",   label: "💻 IT & Tech Support",            types: ["service"] },
+  { id: "security",     label: "🔒 Security Services",            types: ["service"] },
+  { id: "other",        label: "🔧 Other Services",               types: ["service"] },
 
-  { id: "health",      label: "💊 Health & Pharmacy",      types: ["product", "service"] },
-  { id: "other",       label: "🗂 Other",                  types: ["product", "service"] }
 ];

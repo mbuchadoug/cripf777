@@ -20,12 +20,23 @@ export const CATEGORY_PRODUCT_EXAMPLES = {
 };
 
 export const CATEGORY_SERVICE_EXAMPLES = {
-  services:    ["plumbing", "welding", "painting"],
-  transport:   ["car hire", "delivery", "airport transfers"],
-  food_cooked: ["catering", "wedding cake", "lunch boxes"],
-  printing:    ["business cards", "banners", "flyers"],
-  health:      ["consultation", "wound dressing", "physiotherapy"],
-  other:       ["service a", "service b", "service c"]
+  plumbing:      ["burst pipe repair", "toilet installation", "geyser fitting"],
+  electrical:    ["wiring", "DB board", "light installation"],
+  construction:  ["bricklaying", "plastering", "roofing"],
+  painting:      ["interior painting", "exterior painting", "wall texture"],
+  welding:       ["gate fabrication", "burglar bars", "steel door"],
+  cleaning:      ["office cleaning", "carpet cleaning", "deep clean"],
+  gardening:     ["lawn mowing", "tree trimming", "garden maintenance"],
+  transport:     ["car hire", "delivery", "airport transfers"],
+  moving:        ["house moving", "furniture removal", "office relocation"],
+  food_cooked:   ["catering", "wedding cake", "lunch boxes"],
+  printing:      ["business cards", "banners", "flyers"],
+  beauty:        ["hair braiding", "nails", "makeup"],
+  photography:   ["wedding photos", "passport photos", "events"],
+  tutoring:      ["maths tutor", "English lessons", "primary school help"],
+  it_support:    ["laptop repair", "wifi setup", "CCTV installation"],
+  security:      ["security guard", "alarm installation", "access control"],
+  other:         ["service a", "service b", "service c"]
 };
 
 function getCategoryExamples(categories = [], profileType = "product") {

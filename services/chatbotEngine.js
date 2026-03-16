@@ -3001,16 +3001,11 @@ if (a.startsWith("sup_cat_")) {
   const template = getTemplateForCategory(catId);
 
 if (profileType === "service") {
-  const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
-  const exampleText = catExamples.slice(0, 3).join(", ");
+  const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b"];
+  const exampleText = catExamples.slice(0, 2).join(", ");
 
   return sendButtons(from, {
-    text:
-`✅ *Category selected!*
-
-How would you like to add your services?
-
-_Examples: ${exampleText}_`,
+    text: `✅ *${catId}* selected!\n\nHow do you want to add your services?\n_e.g. ${exampleText}_`,
     buttons: [
       { id: "sup_request_upload",      title: "📤 Upload My Service List" },
       { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
