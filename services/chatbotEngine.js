@@ -418,9 +418,18 @@ a === "find_supplier" ||
       a === "reg_type_service" ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
+      a === "sup_preset_confirm" ||
+a === "sup_preset_prices_yes" ||
+a.startsWith("sup_load_preset_") ||
 a === "sup_skip_products" ||
 a === "sup_enter_own_products" ||
 a === "sup_request_upload" ||
+a === "sup_prices_confirm_yes" ||
+a === "sup_price_update_confirm" ||
+a === "sup_prices_edit" ||
+a === "sup_preset_confirm" ||
+a === "sup_preset_prices_yes" ||
+a.startsWith("sup_load_preset_") ||
 
     a === "sup_skip_prices" ||
       a === "sup_done_prices" ||
@@ -2992,47 +3001,50 @@ if (a.startsWith("sup_cat_")) {
   const template = getTemplateForCategory(catId);
 
 if (profileType === "service") {
-    const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
-    const exampleText = catExamples.slice(0, 3).join(", ");
+  const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b", "service c"];
+  const exampleText = catExamples.slice(0, 3).join(", ");
 
-    return sendButtons(from, {
-      text:
+  return sendButtons(from, {
+    text:
 `✅ *Category selected!*
 
 How would you like to add your services?
 
 _Examples: ${exampleText}_`,
-      buttons: [
-        { id: "sup_enter_own_products",  title: "✍️ Enter My Services" },
-        { id: "sup_request_upload",       title: "📤 Upload Help" },
-        { id: "sup_skip_products",        title: "⏭ Skip For Now" }
-      ]
-    });
-  }
+    buttons: [
+      { id: "sup_request_upload",      title: "📤 Upload My Service List" },
+      { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
+      { id: "sup_skip_products",       title: "⏭ Skip For Now" }
+    ]
+  });
+}
 
   // Products — check for preset template first
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
   const exampleText = catExamples.slice(0, 3).join(", ");
 
 if (template) {
-    return sendButtons(from, {
-      text:
+  const preview = template.products.slice(0, 6).join(", ");
+  const moreCount = template.products.length - 6;
+
+  return sendButtons(from, {
+    text:
 `✅ *Category selected!*
 
-We have *${template.products.length} preset products* ready to load.
+📦 *Preset available:* _${preview}${moreCount > 0 ? ` + ${moreCount} more` : ""}_
 
-Pick an option:`,
-      buttons: [
-        { id: `sup_load_preset_${catId}`, title: "📦 Load Preset List" },
-        { id: "sup_enter_own_products",   title: "✍️ Enter My Own" },
-        { id: "sup_request_upload",        title: "📤 Upload Help" }
-      ]
-    });
-  }
+How would you like to add your products?`,
+    buttons: [
+      { id: "sup_request_upload",       title: "📤 Upload My Own List" },
+      { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
+      { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
+    ]
+  });
+}
 
   // No preset for this category — still show all options
 // No preset for this category — still show all options
-  return sendButtons(from, {
+return sendButtons(from, {
     text:
 `✅ *Category selected!*
 
@@ -3040,13 +3052,154 @@ How would you like to add your products?
 
 _Examples: ${exampleText}_`,
     buttons: [
-      { id: "sup_enter_own_products",  title: "✍️ Enter My Own" },
-      { id: "sup_request_upload",       title: "📤 Upload Help" },
-      { id: "sup_skip_products",        title: "⏭ Skip For Now" }
+      { id: "sup_request_upload",      title: "📤 Upload My Own List" },
+      { id: "sup_enter_own_products",  title: "✍️ Type My Own" },
+      { id: "sup_skip_products",       title: "⏭ Skip For Now" }
     ]
   });
 }
 
+
+
+// ── Load preset products with preview ─────────────────────────────────────
+if (a.startsWith("sup_load_preset_")) {
+  if (!biz) return sendMainMenu(from);
+  const catId = a.replace("sup_load_preset_", "");
+  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
+  const template = getTemplateForCategory(catId);
+
+  if (!template || !template.products?.length) {
+    await sendText(from, "❌ No preset found for this category.");
+    return sendSuppliersMenu(from);
+  }
+
+  // Store the preset catId so the confirm handler knows what to load
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.pendingPresetCatId = catId;
+  await saveBizSafe(biz);
+
+  // Build preview — split into chunks of 8 per line for readability
+  const chunks = [];
+  for (let i = 0; i < template.products.length; i += 8) {
+    chunks.push(template.products.slice(i, i + 8).join(", "));
+  }
+  const previewText = chunks.join("\n");
+
+  return sendButtons(from, {
+    text:
+`📦 *Preset List Preview* (${template.products.length} products)
+
+${previewText}
+
+Load all these products to your listing?`,
+    buttons: [
+      { id: "sup_preset_confirm",  title: "✅ Yes, Load These" },
+      { id: "sup_enter_own_products", title: "✍️ No, I'll Type Mine" }
+    ]
+  });
+}
+
+
+// ── Confirm preset load ────────────────────────────────────────────────────
+if (a === "sup_preset_confirm") {
+  if (!biz) return sendMainMenu(from);
+  const catId = biz.sessionData?.supplierReg?.pendingPresetCatId;
+  if (!catId) {
+    await sendText(from, "❌ Preset session expired. Please select your category again.");
+    return sendSuppliersMenu(from);
+  }
+
+  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
+  const template = getTemplateForCategory(catId);
+
+  if (!template?.products?.length) {
+    await sendText(from, "❌ Could not load preset. Please type your products manually.");
+    biz.sessionState = "supplier_reg_products";
+    await saveBizSafe(biz);
+    return;
+  }
+
+  biz.sessionData.supplierReg.products = template.products.map(p => p.toLowerCase());
+  biz.sessionData.supplierReg.prices = template.prices || [];
+  delete biz.sessionData.supplierReg.pendingPresetCatId;
+  biz.sessionState = "supplier_reg_prices";
+  await saveBizSafe(biz);
+
+  const hasPrices = template.prices?.length > 0;
+
+  if (hasPrices) {
+    // Show price preview too
+    const pricePreview = template.prices.slice(0, 5)
+      .map(p => `• ${p.product}: $${p.amount}/${p.unit}`)
+      .join("\n");
+
+    return sendButtons(from, {
+      text:
+`✅ *${template.products.length} products loaded!*
+
+We also have suggested prices for some items:
+${pricePreview}${template.prices.length > 5 ? `\n_...and ${template.prices.length - 5} more_` : ""}
+
+Use these suggested prices?`,
+      buttons: [
+        { id: "sup_preset_prices_yes", title: "✅ Use Suggested Prices" },
+        { id: "sup_skip_prices",        title: "✍️ I'll Set My Own" }
+      ]
+    });
+  }
+
+  // No preset prices — go straight to pricing step
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+  if (profileType === "service") {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `✅ *${template.products.length} services loaded!*\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: `✅ *${template.products.length} products loaded!*\n\nNow, do you deliver?`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
+
+
+// ── Accept preset suggested prices ────────────────────────────────────────
+if (a === "sup_preset_prices_yes") {
+  if (!biz) return sendMainMenu(from);
+  // Prices already loaded by sup_preset_confirm, just move forward
+  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
+  if (profileType === "service") {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "🚗 *Do you travel to clients?*",
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: "🚚 *Do you deliver?*",
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
 // ── Skip or finish pricing during registration ─────────────────────────────
 if (a === "sup_skip_prices" || a === "sup_done_prices") {
   if (!biz) return sendMainMenu(from);
@@ -3076,7 +3229,218 @@ if (a === "sup_skip_prices" || a === "sup_done_prices") {
   });
 }
 
+// ── Supplier confirms pricing preview ─────────────────────────────────────
+if (a === "sup_prices_confirm_yes") {
+  if (!biz) return sendMainMenu(from);
 
+  const isService = biz.sessionData?.supplierReg?.profileType === "service";
+  const prices = biz.sessionData?.supplierReg?.prices || [];
+  const rates  = biz.sessionData?.supplierReg?.rates  || [];
+  const count  = isService ? rates.length : prices.length;
+
+  if (isService) {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `✅ *${count} rate(s) confirmed!*\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: `✅ *${count} price(s) confirmed!*\n\n🚚 *Do you deliver?*`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
+
+// ── Supplier wants to re-enter prices ─────────────────────────────────────
+if (a === "sup_prices_edit") {
+  if (!biz) return sendMainMenu(from);
+
+  const isService = biz.sessionData?.supplierReg?.profileType === "service";
+  const productList = biz.sessionData?.supplierReg?.products || [];
+
+  // Clear existing prices so they re-enter
+  if (isService) {
+    biz.sessionData.supplierReg.rates = [];
+  } else {
+    biz.sessionData.supplierReg.prices = [];
+  }
+  biz.sessionState = "supplier_reg_prices";
+  await saveBizSafe(biz);
+
+  const numbered = productList.map((p, i) => `${i + 1}. ${p}`).join("\n");
+
+  return sendText(from,
+`✏️ *Re-enter Your ${isService ? "Rates" : "Prices"}*
+
+${numbered}
+
+*Fastest:* Just the numbers in order:
+_${productList.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${productList.length > 4 ? ", ..." : ""}_
+
+*Or name them:*
+_${productList.slice(0, 2).map(p => `${p}: 5.00`).join(", ")}_
+
+Type *skip* to skip pricing.`);
+}
+
+// ── Load preset products — show full preview before confirming ────────────
+if (a.startsWith("sup_load_preset_")) {
+  if (!biz) return sendMainMenu(from);
+
+  const catId = a.replace("sup_load_preset_", "");
+  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
+  const template = getTemplateForCategory(catId);
+
+  if (!template?.products?.length) {
+    await sendText(from, "❌ No preset found for this category. Please type your products.");
+    biz.sessionState = "supplier_reg_products";
+    await saveBizSafe(biz);
+    return;
+  }
+
+  // Store pending catId for confirm step
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.pendingPresetCatId = catId;
+  await saveBizSafe(biz);
+
+  // Build full product preview grouped in rows of 4
+  const allProducts = template.products;
+  const rows = [];
+  for (let i = 0; i < allProducts.length; i += 4) {
+    rows.push(allProducts.slice(i, i + 4).map((p, j) => `${i + j + 1}. ${p}`).join("   "));
+  }
+  const productPreview = rows.join("\n");
+
+  // Show price preview if available
+  const priceHint = template.prices?.length
+    ? `\n💰 *Suggested prices included for ${template.prices.length} items*`
+    : "";
+
+  return sendButtons(from, {
+    text:
+`📦 *Preset Product List* (${allProducts.length} items)
+
+${productPreview}${priceHint}
+
+Load all these to your listing?`,
+    buttons: [
+      { id: "sup_preset_confirm",      title: "✅ Yes, Load These" },
+      { id: "sup_enter_own_products",  title: "✍️ No, Type My Own" }
+    ]
+  });
+}
+
+// ── Supplier confirms preset load ─────────────────────────────────────────
+if (a === "sup_preset_confirm") {
+  if (!biz) return sendMainMenu(from);
+
+  const catId = biz.sessionData?.supplierReg?.pendingPresetCatId;
+  if (!catId) {
+    await sendText(from, "❌ Session expired. Please select your category again.");
+    return sendSuppliersMenu(from);
+  }
+
+  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
+  const template = getTemplateForCategory(catId);
+
+  if (!template?.products?.length) {
+    await sendText(from, "❌ Could not load preset. Please type your products.");
+    biz.sessionState = "supplier_reg_products";
+    await saveBizSafe(biz);
+    return;
+  }
+
+  // Load products
+  biz.sessionData.supplierReg.products = template.products.map(p => p.toLowerCase());
+  delete biz.sessionData.supplierReg.pendingPresetCatId;
+
+  // If template has prices — show price preview and ask to use them
+  if (template.prices?.length) {
+    biz.sessionData.supplierReg.prices = template.prices;
+    await saveBizSafe(biz);
+
+    const priceLines = template.prices.slice(0, 6)
+      .map(p => `• ${p.product}: $${p.amount}/${p.unit}`)
+      .join("\n");
+    const remaining = template.prices.length - 6;
+
+    return sendButtons(from, {
+      text:
+`✅ *${template.products.length} products loaded!*
+
+💰 *Suggested prices:*
+${priceLines}${remaining > 0 ? `\n_...and ${remaining} more_` : ""}
+
+Use these suggested prices?`,
+      buttons: [
+        { id: "sup_preset_prices_yes", title: "✅ Use These Prices" },
+        { id: "sup_prices_edit",        title: "✏️ Set My Own Prices" },
+        { id: "sup_skip_prices",        title: "⏭ Skip For Now" }
+      ]
+    });
+  }
+
+  // No preset prices — prompt them to enter prices using numbered list
+  biz.sessionData.supplierReg.prices = [];
+  biz.sessionState = "supplier_reg_prices";
+  await saveBizSafe(biz);
+
+  const numbered = template.products.map((p, i) => `${i + 1}. ${p}`).join("\n");
+
+  return sendButtons(from, {
+    text:
+`✅ *${template.products.length} products loaded!*
+
+💰 *Now set your prices:*
+${numbered}
+
+*Fastest:* Just numbers in order:
+_5.50, 8, 0.25, 12_
+
+*Or name them:* _cement 5.50, sand 8_`,
+    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip For Now" }]
+  });
+}
+
+// ── Supplier accepts preset suggested prices ──────────────────────────────
+if (a === "sup_preset_prices_yes") {
+  if (!biz) return sendMainMenu(from);
+
+  const isService = biz.sessionData?.supplierReg?.profileType === "service";
+  const prices = biz.sessionData?.supplierReg?.prices || [];
+
+  if (isService) {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `✅ *Prices accepted!*\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: `✅ *${prices.length} prices accepted!*\n\n🚚 *Do you deliver?*`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
 
 // ── Enter own products (manual entry) ────────────────────────────────────────
 if (a === "sup_enter_own_products") {
@@ -3438,76 +3802,184 @@ if (a === "sup_update_prices") {
   }
 
   if (biz) {
-    biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true, priceUpdateIndex: 0 };
-      biz.sessionState = "supplier_update_prices";
-      await saveBizSafe(biz);
-    }
-
-    const productList = supplier.products?.length
-    ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
-    : "No products listed";
-
-  // Build category-specific price examples
-  const { CATEGORY_PRODUCT_EXAMPLES } = await import("./supplierRegistration.js");
-  const supplierCats = supplier.categories || [];
-  let priceExampleItems = ["cooking oil", "rice", "sugar"];
-  for (const cat of supplierCats) {
-    if (CATEGORY_PRODUCT_EXAMPLES[cat]) {
-      priceExampleItems = CATEGORY_PRODUCT_EXAMPLES[cat].slice(0, 3);
-      break;
-    }
+    biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true };
+    biz.sessionState = "supplier_update_prices";
+    await saveBizSafe(biz);
   }
-  const priceExampleLines = priceExampleItems.map(p => `${p}: 4.50 each`).join("\n");
 
-  return sendButtons(from, {
-    text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\n*Examples for your category:*\n${priceExampleLines}\n\nYour products:\n${productList}`,
-    buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
-  });
+  const products = (supplier.products || []).filter(p => p !== "pending_upload");
+
+  if (!products.length) {
+    return sendButtons(from, {
+      text: "❌ Add your products first before setting prices.",
+      buttons: [{ id: "sup_edit_products", title: "✏️ Add Products" }]
+    });
+  }
+
+  // Show numbered list with current prices where known
+  const numbered = products.map((p, i) => {
+    const existing = supplier.prices?.find(pr =>
+      pr.product?.toLowerCase() === p.toLowerCase()
+    );
+    const priceStr = existing
+      ? ` — $${Number(existing.amount).toFixed(2)}/${existing.unit}`
+      : " — _(not set)_";
+    return `${i + 1}. ${p}${priceStr}`;
+  }).join("\n");
+
+  return sendText(from,
+`💰 *Update Prices*
+
+${numbered}
+
+*Fastest — just numbers in order:*
+_${products.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${products.length > 4 ? ", ..." : ""}_
+
+*Or name them (update specific items):*
+_cement: 6.00, sand: 9.50_
+
+*Or one per line:*
+_cement: 6.00_
+_sand: 9.50_
+
+Type *cancel* to go back.`);
 }
   // ── Handle price update text input ────────────────────────────────────────
-  if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
-    const supplier = await SupplierProfile.findOne({ phone });
-    if (!supplier) return sendSuppliersMenu(from);
+if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
 
-    const lines = text.split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
-    const updated = [], failed = [];
+  const raw = (text || "").trim();
+  if (!raw) {
+    await sendText(from, "❌ Please send your prices.");
+    return;
+  }
 
-    for (const line of lines) {
-      const match = line.match(/^(.+?):\s*(\d+(\.\d+)?)\s*([a-zA-Z]*)$/);
-      if (!match) { failed.push(line); continue; }
-      const product = match[1].trim().toLowerCase();
-      const amount = parseFloat(match[2]);
-      const unit = match[4] || "each";
-      updated.push({ product, amount, unit, inStock: true });
-    }
+  const products = (supplier.products || []).filter(p => p !== "pending_upload");
+  const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+  const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
+  const updated = [];
+  const failed = [];
 
-    if (!updated.length) {
-      await sendText(from, `❌ Couldn't parse prices.\n\nFormat: *product: amount unit*\nExample: cooking oil: 4.50 litre\n\nFailed:\n${failed.slice(0, 3).join("\n")}`);
+  if (allNumbers) {
+    // Strategy 1: numbers in order
+    if (parts.length !== products.length) {
+      const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
+      await sendText(from,
+`❌ You have *${products.length} products* but sent *${parts.length} prices*.
+
+Send one price per product in order:
+${numbered}`
+      );
       return;
     }
+    parts.forEach((numStr, i) => {
+      updated.push({
+        product: products[i].toLowerCase(),
+        amount: parseFloat(numStr),
+        unit: "each",
+        inStock: true
+      });
+    });
+  } else {
+    // Strategy 2: named pricing with aggressive paste parser
+    for (const line of parts) {
+      const clean = line
+        .replace(/^[-•*►▪✓]\s*/, "")
+        .replace(/^\d+[.)]\s*/, "")
+        .replace(/\$/g, "")
+        .trim();
 
-    const existing = supplier.prices || [];
-    for (const u of updated) {
-      const idx = existing.findIndex(p => p.product.toLowerCase() === u.product);
-      if (idx >= 0) existing[idx] = u;
-      else existing.push(u);
+      if (!clean) continue;
+
+      let match =
+        clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
+        clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
+
+      if (!match) { failed.push(line); continue; }
+
+      const product = match[1].replace(/[$@\-:,]+$/, "").trim().toLowerCase();
+      const amount = parseFloat(match[2]);
+      const unit = match[3]?.trim().toLowerCase() || "each";
+
+      if (!product || isNaN(amount)) { failed.push(line); continue; }
+      updated.push({ product, amount, unit, inStock: true });
     }
+  }
 
-    supplier.prices = existing;
-    supplier.priceUpdatedAt = new Date();
-    await supplier.save();
+  if (!updated.length) {
+    const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
+    await sendText(from,
+`❌ Couldn't read your prices.
 
-    if (biz) {
-      biz.sessionState = "ready";
-      biz.sessionData = {};
-      await saveBizSafe(biz);
-    }
+*Your products:*
+${numbered}
 
-    const summary = updated.map(u => `✅ ${u.product} - $${u.amount}/${u.unit}`).join("\n");
-    const failNote = failed.length ? `\n\n⚠️ Skipped ${failed.length}: ${failed.slice(0, 2).join(", ")}` : "";
-await sendText(from, `✅ *Prices updated!*\n\n${summary}${failNote}`);
+*Fastest — just numbers in order:*
+_${products.slice(0, 3).map((_, i) => ((i + 1) * 4) + ".00").join(", ")}_`
+    );
+    return;
+  }
+
+  // Preview before saving
+  const previewLines = updated.map(u => `• ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+  const failNote = failed.length ? `\n\n⚠️ Skipped ${failed.length}: _${failed.slice(0, 2).join(", ")}_` : "";
+
+  // Temporarily store pending update
+  biz.sessionData.pendingPriceUpdate = updated;
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text:
+`💰 *Price Preview* (${updated.length} items)
+
+${previewLines}${failNote}
+
+Save these prices?`,
+    buttons: [
+      { id: "sup_price_update_confirm", title: "✅ Save Prices" },
+      { id: "sup_update_prices",         title: "✏️ Re-enter" },
+      { id: "my_supplier_account",       title: "🏪 Cancel" }
+    ]
+  });
+}
+
+
+// ── Confirm saved price update from account menu ──────────────────────────
+if (a === "sup_price_update_confirm") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const pending = biz?.sessionData?.pendingPriceUpdate;
+  if (!pending?.length) {
+    await sendText(from, "❌ No pending prices found. Please re-enter.");
     return sendSupplierAccountMenu(from, supplier);
   }
+
+  const existing = supplier.prices || [];
+  for (const u of pending) {
+    const idx = existing.findIndex(p =>
+      p.product?.toLowerCase() === u.product
+    );
+    if (idx >= 0) existing[idx] = u;
+    else existing.push(u);
+  }
+
+  supplier.prices = existing;
+  supplier.priceUpdatedAt = new Date();
+  supplier.markModified("prices");
+  await supplier.save();
+
+  if (biz) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+  }
+
+  const summary = pending.map(u => `✅ ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+  await sendText(from, `✅ *Prices saved!*\n\n${summary}`);
+  return sendSupplierAccountMenu(from, supplier);
+}
 
   // ── Handle edit products text input ───────────────────────────────────────
   if (biz?.sessionState === "supplier_edit_products" && !isMetaAction) {

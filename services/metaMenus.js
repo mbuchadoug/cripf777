@@ -807,7 +807,16 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   description: supplier.products?.[0] === "pending_upload"
     ? "⏳ Upload pending — tap to add"
     : `${productCount} products listed` },
-          { id: "sup_update_prices", title: "💰 Update Prices", description: `${priceCount} prices set` },
+       { id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
+  const products = (supplier.products || []).filter(p => p !== "pending_upload");
+  if (!products.length) return "No products listed yet";
+  const priced = products.filter(p =>
+    (supplier.prices || []).some(pr => pr.product?.toLowerCase() === p.toLowerCase())
+  ).length;
+  if (priced === 0) return `⚠️ ${products.length} items — no prices set`;
+  if (priced < products.length) return `${priced}/${products.length} items priced`;
+  return `✅ All ${priced} items priced`;
+})() },
           { id: "sup_edit_area", title: "📍 Edit Location", description: `${supplier.location?.area || "Not set"}, ${supplier.location?.city || ""}` },
           { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery", description: supplier.delivery?.available ? "Currently: Delivering" : "Currently: Collection only" },
           { id: "sup_toggle_active", title: statusIcon + (supplier.active ? " Deactivate Listing" : " Activate Listing"), description: supplier.active ? "Hide from search results" : "Show in search results" }

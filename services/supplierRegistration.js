@@ -219,201 +219,175 @@ Just type them and send 👇`
     biz.sessionData.supplierReg.rates = [];
     await saveBiz(biz);
 
-const catExamples = getCategoryExamples(
-  biz.sessionData.supplierReg?.categories || [],
-  "service"
-);
-const examples = catExamples
-  .slice(0, 3)
-  .map((service) => `*${service} 20/job*`)
-  .join("\n");
+const savedProducts = biz.sessionData.supplierReg.products || [];
+const numberedList = savedProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
 
-    return sendButtons(from, {
-      text:
-`💰 *Add Your Rates*
+return sendButtons(from, {
+  text:
+`💰 *Set Your Prices*
 
-Send *all your service rates in one line*, separated by commas.
+${numberedList}
 
-*Format:*
-service rate, service rate, service rate
+*Fastest:* Reply with prices in order, comma-separated:
+_5.50, 8, 0.25, 12_
 
-*Examples using your services:*
-${examples}
+*Or name them:*
+_cement 5.50, sand 8, bricks 0.25_
 
-⚠️ Use commas to separate each service rate.
-Do not use $ or :`,
-      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
-    });
+*Or one per line:*
+_cement: 5.50_
+_sand: 8_
+
+Type *skip* to add prices later.`,
+  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip For Now" }]
+});
   }
 
   biz.sessionData.supplierReg.prices = [];
   await saveBiz(biz);
 
-const catExamples = getCategoryExamples(
-  biz.sessionData.supplierReg?.categories || [],
-  "product"
-);
-const examples = catExamples
-  .slice(0, 3)
-  .map((product) => `*${product} 5.00 each*`)
-  .join("\n");
+const savedServices = biz.sessionData.supplierReg.products || [];
+const numberedServiceList = savedServices.map((s, i) => `${i + 1}. ${s}`).join("\n");
 
-  return sendButtons(from, {
-    text:
-`💰 *Add Your Prices*
+return sendButtons(from, {
+  text:
+`💰 *Set Your Rates*
 
-Send *all your product prices in one line*, separated by commas.
+${numberedServiceList}
 
-*Format:*
-product amount unit, product amount unit, product amount unit
+*Fastest:* Reply with rates in order, comma-separated:
+_20, 50, 30_  ← just the numbers
 
-*Examples using your products:*
-${examples}
+*Or with units:*
+_20/hr, 50/trip, 30/job_
 
-⚠️ Use commas to separate each product price.
-Do not use $ or :`,
-    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Pricing" }]
-  });
+*Or name them:*
+_plumbing 20/hr, delivery 50/trip_
+
+Type *skip* to add rates later.`,
+  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+});
 }
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
 if (state === "supplier_reg_prices") {
   const reg = biz.sessionData.supplierReg || {};
-  const items = reg.products || [];
-  const raw = text.trim().replace(/\s+/g, " ");
+  const raw = text.trim();
+  const isService = reg.profileType === "service";
+  const productList = reg.products || [];
 
   if (!raw) {
-    await sendText(from, "❌ Please send your prices or rates in the correct format.");
+    await sendText(from, "❌ Please send your prices.");
     return true;
   }
 
-  const lines = raw
-    .split(",")
-    .map(line => line.trim())
-    .filter(Boolean);
+  // ── STRATEGY 1: Pure number list — fastest, matches by position ──────────
+  // Supplier just sends: 5.50, 8, 0.25, 12
+  const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+  const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
 
-  if (reg.profileType === "service") {
-    const parsedRates = [];
-    const failed = [];
-
-    for (const line of lines) {
-      const match = line.match(/^(.+?)\s+(\d+(?:\.\d+)?(?:\/[a-zA-Z]+|(?:\s+[a-zA-Z]+)*)?)$/);
-      if (!match) {
-        failed.push(line);
-        continue;
-      }
-
-      const service = match[1].trim().toLowerCase();
-      const rate = match[2].trim().toLowerCase();
-
-      if (!service || !rate) {
-        failed.push(line);
-        continue;
-      }
-
-      parsedRates.push({ service, rate });
-    }
-
-  if (!parsedRates.length) {
-      const catExamples = getCategoryExamples(
-        reg.categories || [],
-        "service"
-      );
-      const examples = catExamples
-        .slice(0, 3)
-        .map((service, i) => {
-          const sampleRates = ["10/hr", "50/trip", "30/job"];
-          return `*${service} ${sampleRates[i] || "20/job"}*`;
-        })
-        .join("\n");
-
+  if (allNumbers) {
+    if (productList.length > 0 && parts.length !== productList.length) {
+      const numbered = productList.map((p, i) => `${i + 1}. ${p}`).join("\n");
       await sendText(from,
-`❌ Couldn't read your service rates.
+`❌ You have *${productList.length} items* but sent *${parts.length} prices*.
 
-*Send them in one line like this:*
-${examples}
+Send one price per item in order:
+${numbered}
 
-⚠️ Separate each one with commas.
-Do not use $ or :`
+*Example:* ${productList.slice(0, 3).map(() => (Math.floor(Math.random() * 15) + 1) + ".00").join(", ")}${productList.length > 3 ? ", ..." : ""}`
       );
       return true;
     }
 
-    biz.sessionData.supplierReg.rates = parsedRates;
-    biz.sessionState = "supplier_reg_travel";
-    await saveBiz(biz);
-
-    return sendButtons(from, {
-      text: `✅ Saved ${parsedRates.length} service rate(s)!\n\n🚗 *Do you travel to clients?*`,
-      buttons: [
-        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-        { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
-      ]
+    const matched = parts.map((numStr, i) => {
+      const name = (productList[i] || `item ${i + 1}`).toLowerCase();
+      const amount = parseFloat(numStr);
+      return isService
+        ? { service: name, rate: `${amount}/job` }
+        : { product: name, amount, unit: "each", inStock: true };
     });
+
+    if (isService) {
+      biz.sessionData.supplierReg.rates = matched;
+    } else {
+      biz.sessionData.supplierReg.prices = matched;
+    }
+
+    return await _showPricingPreview(from, biz, saveBiz, matched, isService);
   }
 
-  const parsedPrices = [];
+  // ── STRATEGY 2: Named pricing — "cement 5.50" or "cement: 5.50" ──────────
+  // Also handles bullet paste from Excel/WhatsApp: "• Cement $5.50/bag"
+  const parsed = [];
   const failed = [];
 
-  for (const line of lines) {
-    const match = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
+  for (const line of parts) {
+    // Clean common paste artifacts: bullets, currency, trailing punctuation
+    const clean = line
+      .replace(/^[-•*►▪✓]\s*/, "")
+      .replace(/^\d+[.)]\s*/, "")
+      .replace(/\$/g, "")
+      .trim();
+
+    if (!clean) continue;
+
+    // Try "name: amount unit" first, then "name amount unit"
+    let match =
+      clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
+      clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
+
     if (!match) {
-      failed.push(line);
-      continue;
+      // Last resort: extract last number in line as price
+      const numMatch = clean.match(/^(.+?)\s+.*?(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
+      if (numMatch) match = numMatch;
     }
 
-    const product = match[1].trim().toLowerCase();
+    if (!match) { failed.push(line); continue; }
+
+    const name = match[1].replace(/[$@\-:,]+$/, "").trim().toLowerCase();
     const amount = parseFloat(match[2]);
-    const unit = (match[3] || "each").trim().toLowerCase();
+    const rawUnit = (match[3] || "").trim().toLowerCase();
+    const unit = rawUnit || (isService ? "job" : "each");
 
-    if (!product || Number.isNaN(amount)) {
-      failed.push(line);
-      continue;
+    if (!name || name.length < 1 || isNaN(amount) || amount < 0) {
+      failed.push(line); continue;
     }
 
-    parsedPrices.push({
-      product,
-      amount,
-      unit,
-      inStock: true
-    });
+    if (isService) {
+      parsed.push({ service: name, rate: `${amount}/${unit}` });
+    } else {
+      parsed.push({ product: name, amount, unit, inStock: true });
+    }
   }
 
- if (!parsedPrices.length) {
-    const catExamples = getCategoryExamples(
-      reg.categories || [],
-      "product"
-    );
-    const examples = catExamples
-      .slice(0, 3)
-      .map((product, i) => {
-        const sampleValues = ["4.50 each", "8 each", "1.20 each"];
-        return `*${product} ${sampleValues[i] || "5 each"}*`;
-      })
-      .join("\n");
-
+  if (!parsed.length) {
+    const numbered = productList.map((p, i) => `${i + 1}. ${p}`).join("\n");
     await sendText(from,
-`❌ Couldn't read your product prices.
+`❌ Couldn't read your prices.
 
-*Send them in one line like this:*
-${examples}
+*Fastest — just numbers in order:*
+${productList.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}
 
-⚠️ Separate each one with commas.
-Do not use $ or :`
+*Or name them:*
+${productList.slice(0, 2).map(p => `${p}: 5.00`).join(", ")}
+
+Your items:
+${numbered}`
     );
     return true;
   }
 
-  biz.sessionData.supplierReg.prices = parsedPrices;
-  biz.sessionState = "supplier_reg_delivery";
-  await saveBiz(biz);
+  if (failed.length) {
+    await sendText(from, `⚠️ Skipped ${failed.length} line(s) I couldn't read: _${failed.slice(0, 2).join(", ")}_`);
+  }
 
-  return sendButtons(from, {
-    text: `✅ Saved ${parsedPrices.length} product price(s)!\n\n🚚 *Do you deliver?*`,
-    buttons: [
-      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-      { id: "sup_del_no", title: "🏠 Collection Only" }
-    ]
-  });
+  if (isService) {
+    biz.sessionData.supplierReg.rates = parsed;
+  } else {
+    biz.sessionData.supplierReg.prices = parsed;
+  }
+
+  return await _showPricingPreview(from, biz, saveBiz, parsed, isService);
 }
   // ── Step 4: Minimum Order ──────────────────────────────
   if (state === "supplier_reg_minorder") {
@@ -712,6 +686,86 @@ _Type *cancel* to start over._`
     );
     return true;
   }
+
+
+  async function _finishPricingStep(from, biz, saveBiz, count, isService) {
+  if (isService) {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: `✅ Saved ${count} rate(s)!\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text: `✅ Saved ${count} price(s)!\n\n🚚 *Do you deliver?*`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
+
+// ── Pricing preview: show supplier what was saved, ask to confirm ─────────
+async function _showPricingPreview(from, biz, saveBiz, parsed, isService) {
+  // Build readable preview
+  const lines = isService
+    ? parsed.map(r => `• ${r.service} — ${r.rate}`)
+    : parsed.map(p => `• ${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`);
+
+  const preview = lines.join("\n");
+
+  // Store a flag so confirm handler knows what to do
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.pricingConfirmPending = true;
+  await saveBiz(biz);
+
+  return sendButtons(from, {
+    text:
+`✅ *Prices Preview* (${parsed.length} items)
+
+${preview}
+
+Is this correct?`,
+    buttons: [
+      { id: "sup_prices_confirm_yes", title: "✅ Looks Good" },
+      { id: "sup_prices_edit",        title: "✏️ Re-enter Prices" },
+      { id: "sup_skip_prices",        title: "⏭ Skip For Now" }
+    ]
+  });
+}
+
+// ── After pricing confirmed: route to delivery/travel step ───────────────
+async function _finishPricingStep(from, biz, saveBiz, count, isService) {
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  delete biz.sessionData.supplierReg.pricingConfirmPending;
+
+  if (isService) {
+    biz.sessionState = "supplier_reg_travel";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: `✅ ${count} rate(s) saved!\n\n🚗 *Do you travel to clients?*`,
+      buttons: [
+        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+      ]
+    });
+  }
+  biz.sessionState = "supplier_reg_delivery";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text: `✅ ${count} price(s) saved!\n\n🚚 *Do you deliver?*`,
+    buttons: [
+      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+      { id: "sup_del_no",  title: "🏠 Collection Only" }
+    ]
+  });
+}
 
   return false;
 }
