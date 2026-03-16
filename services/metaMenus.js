@@ -724,8 +724,10 @@ export async function sendSuppliersMenu(to) {
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
 // VERIFY this is what your active supplier block looks like:
+const searchTip = "\n\n💡 _Type *find [item]* to search instantly_\n_e.g. find cement, find plumber harare_";
+
 if (supplier?.active) {
-  return sendList(to, "🏪 *ZimQuote Suppliers*", [
+  return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
     { id: "find_supplier",       title: "🔍 Find Suppliers" },
     { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     { id: "my_supplier_account", title: "🏪 My Supplier Account" },
@@ -738,9 +740,9 @@ if (supplier?.active) {
 if (supplier && !supplier.active) {
   const complete = isSupplierRegistrationComplete(supplier);
   return sendList(to,
-    complete
-      ? `🏪 *ZimQuote Suppliers*\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
-      : `🏪 *ZimQuote Suppliers*\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
+   complete
+      ? `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
+      : `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
       { id: "find_supplier",   title: "🔍 Find Suppliers" },
       complete
@@ -752,7 +754,7 @@ if (supplier && !supplier.active) {
   );
 }
 
-return sendList(to, "🏪 *ZimQuote Suppliers*", [
+return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
   { id: "find_supplier", title: "🔍 Find Suppliers" },
   { id: "register_supplier", title: "📦 Become a Supplier" },
   { id: "my_orders", title: "📋 My Orders" },

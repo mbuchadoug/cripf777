@@ -84,7 +84,8 @@ import {
 import {
   startSupplierSearch,
   runSupplierSearch,
-  formatSupplierResults
+  formatSupplierResults,
+  parseShortcodeSearch
 } from "./supplierSearch.js";
 import {
   notifySupplierNewOrder,
@@ -532,15 +533,42 @@ if (searchMode === "product") {
     });
   }
 
-await UserSession.findOneAndUpdate(
-  { phone },
-  {
-    $set: { "tempData.supplierSearchProduct": productQuery },
-    $unset: { "tempData.supplierSearchMode": "" }
-  }
-);
+  // Check if they included a city in the query e.g. "tiles harare"
+  const { parseShortcodeSearch } = await import("./supplierSearch.js");
+  const parsed = parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null };
 
-  return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.supplierSearchProduct": parsed.product,
+        ...(parsed.city ? { "tempData.lastSearchCity": parsed.city } : {})
+      },
+      $unset: { "tempData.supplierSearchMode": "" }
+    }
+  );
+
+  if (parsed.city) {
+    // Skip city picker — go straight to results
+    const results = await runSupplierSearch({
+      city: parsed.city,
+      product: parsed.product,
+      profileType: sess?.tempData?.supplierSearchType || null
+    });
+    if (!results.length) {
+      return sendButtons(from, {
+        text: `😕 No results for *${parsed.product}* in *${parsed.city}*.\n\nTry a different city or search term.`,
+        buttons: [
+          { id: "find_supplier", title: "🔍 Search Again" },
+          { id: "sup_search_city_all", title: "📍 Try All Cities" }
+        ]
+      });
+    }
+    const rows = formatSupplierResults(results, parsed.city, parsed.product);
+    return sendList(from, `🔍 *${parsed.product}* in ${parsed.city} — ${results.length} found`, rows);
+  }
+
+  return sendList(from, `🔍 Looking for: *${parsed.product}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
@@ -577,6 +605,43 @@ const allowedWithoutBiz =
   a.startsWith("sup_accept_") ||
   a.startsWith("sup_decline_") ||
   a === "my_supplier_account";
+
+// ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
+  if (!isMetaAction && text.trim().length > 2) {
+    const { parseShortcodeSearch } = await import("./supplierSearch.js");
+    const shortcode = parseShortcodeSearch(text);
+    if (shortcode) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.supplierSearchProduct": shortcode.product,
+            ...(shortcode.city ? { "tempData.lastSearchCity": shortcode.city } : {})
+          }
+        },
+        { upsert: true }
+      );
+
+      if (shortcode.city) {
+        const results = await runSupplierSearch({
+          city: shortcode.city,
+          product: shortcode.product
+        });
+        if (results.length) {
+          const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+          return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+        }
+      }
+
+      return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+        ...SUPPLIER_CITIES.map(c => ({
+          id: `sup_search_city_${c.toLowerCase()}`,
+          title: c
+        })),
+        { id: "sup_search_city_all", title: "📍 All Cities" }
+      ]);
+    }
+  }
 
 
  
@@ -2037,6 +2102,39 @@ return sendButtons(from, {
     { id: "onboard_business", title: "🧾 Run My Business" }
   ]
 });
+}
+
+
+// ── Shortcode search for any user ─────────────────────────────────────────
+if (!isMetaAction && biz && text.trim().length > 2) {
+  const { parseShortcodeSearch } = await import("./supplierSearch.js");
+  const shortcode = parseShortcodeSearch(text);
+  if (shortcode) {
+    if (shortcode.city) {
+      const results = await runSupplierSearch({
+        city: shortcode.city,
+        product: shortcode.product
+      });
+      if (results.length) {
+        const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+      }
+    }
+    // No city — ask for it
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { product: shortcode.product }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+    return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+      ...SUPPLIER_CITIES.map(c => ({
+        id: `sup_search_city_${c.toLowerCase()}`,
+        title: c
+      })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
+    ]);
+  }
 }
 
 if (escapeWords.includes(al)) {
