@@ -33,6 +33,7 @@ export const SUPPLIER_CITIES = [
 
 export const SUPPLIER_CATEGORIES = [
   { id: "groceries",   label: "🛒 Groceries & Food",       types: ["product"] },
+  { id: "car_supplies", label: "🚗 Car Parts & Supplies",  types: ["product"] },
   { id: "clothing",    label: "👗 Clothing & Shoes",       types: ["product"] },
   { id: "hardware",    label: "🏗 Hardware & Building",    types: ["product"] },
   { id: "agriculture", label: "🌽 Agriculture & Farming",  types: ["product"] },

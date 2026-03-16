@@ -997,14 +997,13 @@ router.post("/suppliers/:id/products/edit-price/:idx", requireSupplierAdmin, asy
     const idx = parseInt(req.params.idx);
     const { product, amount, unit, inStock } = req.body;
 
-    if (supplier.prices[idx]) {
-      supplier.prices[idx] = {
-        product: product.trim().toLowerCase(),
-        amount: parseFloat(amount),
-        unit: unit?.trim() || "each",
-        inStock: inStock === "true",
-        currency: "USD"
-      };
+    if (idx >= 0 && idx < supplier.prices.length) {
+      supplier.prices[idx].product = product.trim().toLowerCase();
+      supplier.prices[idx].amount = parseFloat(amount);
+      supplier.prices[idx].unit = unit?.trim() || "each";
+      supplier.prices[idx].inStock = inStock === "true";
+      supplier.prices[idx].currency = "USD";
+      supplier.markModified("prices");  // ← THIS IS THE KEY FIX
       await supplier.save();
     }
 
@@ -1020,6 +1019,7 @@ router.get("/suppliers/:id/products/delete-price/:idx", requireSupplierAdmin, as
     const supplier = await SupplierProfile.findById(req.params.id);
     if (supplier) {
       supplier.prices.splice(parseInt(req.params.idx), 1);
+      supplier.markModified("prices");  // ← ADD THIS
       await supplier.save();
     }
     res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
@@ -1027,6 +1027,8 @@ router.get("/suppliers/:id/products/delete-price/:idx", requireSupplierAdmin, as
     res.redirect(`/zq-admin/suppliers/${req.params.id}/products`);
   }
 });
+
+
 
 // ── Add service rate ───────────────────────────────────────────────────────
 router.get("/suppliers/:id/products/add-rate", requireSupplierAdmin, async (req, res) => {
@@ -1084,6 +1086,7 @@ router.get("/suppliers/:id/products/delete-rate/:idx", requireSupplierAdmin, asy
     const supplier = await SupplierProfile.findById(req.params.id);
     if (supplier?.rates) {
       supplier.rates.splice(parseInt(req.params.idx), 1);
+      supplier.markModified("rates");  // ← ADD THIS
       await supplier.save();
     }
     res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);

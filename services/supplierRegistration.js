@@ -2,7 +2,43 @@
 
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
-import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
+import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";y
+
+// ── Category-specific product/service examples ────────────────────────────
+export const CATEGORY_PRODUCT_EXAMPLES = {
+  groceries:   ["cooking oil", "rice", "sugar"],
+  clothing:    ["t-shirts", "jeans", "sneakers"],
+  hardware:    ["cement", "roofing sheets", "steel bar"],
+  agriculture: ["maize seed", "fertilizer", "pesticide"],
+  electronics: ["phone charger", "earphones", "led bulb"],
+  crossborder: ["solar panel", "generator", "power bank"],
+  cosmetics:   ["face cream", "hair relaxer", "body lotion"],
+  furniture:   ["sofa", "bed frame", "dining table"],
+  car_supplies: ["car battery", "engine oil", "brake pads"],
+  health:      ["paracetamol", "vitamins", "blood pressure monitor"],
+  other:       ["product a", "product b", "product c"]
+};
+
+export const CATEGORY_SERVICE_EXAMPLES = {
+  services:    ["plumbing", "welding", "painting"],
+  transport:   ["car hire", "delivery", "airport transfers"],
+  food_cooked: ["catering", "wedding cake", "lunch boxes"],
+  printing:    ["business cards", "banners", "flyers"],
+  health:      ["consultation", "wound dressing", "physiotherapy"],
+  other:       ["service a", "service b", "service c"]
+};
+
+function getCategoryExamples(categories = [], profileType = "product") {
+  const map = profileType === "service" ? CATEGORY_SERVICE_EXAMPLES : CATEGORY_PRODUCT_EXAMPLES;
+  // Try first matching category
+  for (const cat of categories) {
+    if (map[cat]) return map[cat];
+  }
+  // Fallback
+  return profileType === "service"
+    ? ["plumbing", "delivery", "catering"]
+    : ["cooking oil", "rice", "sugar"];
+}
 
 function isSupplierRegistrationComplete(supplier) {
   if (!supplier) return false;
@@ -153,7 +189,11 @@ Just type them and send 👇`
     biz.sessionData.supplierReg.rates = [];
     await saveBiz(biz);
 
- const examples = items
+const catExamples = getCategoryExamples(
+  biz.sessionData.supplierReg?.categories || [],
+  "service"
+);
+const examples = catExamples
   .slice(0, 3)
   .map((service) => `*${service} 20/job*`)
   .join("\n");
@@ -179,7 +219,11 @@ Do not use $ or :`,
   biz.sessionData.supplierReg.prices = [];
   await saveBiz(biz);
 
-const examples = items
+const catExamples = getCategoryExamples(
+  biz.sessionData.supplierReg?.categories || [],
+  "product"
+);
+const examples = catExamples
   .slice(0, 3)
   .map((product) => `*${product} 5.00 each*`)
   .join("\n");
@@ -239,8 +283,12 @@ if (state === "supplier_reg_prices") {
       parsedRates.push({ service, rate });
     }
 
-    if (!parsedRates.length) {
-      const examples = items
+  if (!parsedRates.length) {
+      const catExamples = getCategoryExamples(
+        reg.categories || [],
+        "service"
+      );
+      const examples = catExamples
         .slice(0, 3)
         .map((service, i) => {
           const sampleRates = ["10/hr", "50/trip", "30/job"];
@@ -300,11 +348,15 @@ Do not use $ or :`
     });
   }
 
-  if (!parsedPrices.length) {
-    const examples = items
+ if (!parsedPrices.length) {
+    const catExamples = getCategoryExamples(
+      reg.categories || [],
+      "product"
+    );
+    const examples = catExamples
       .slice(0, 3)
       .map((product, i) => {
-        const sampleValues = ["4.50 litre", "8 bag", "1.20 kg"];
+        const sampleValues = ["4.50 each", "8 each", "1.20 each"];
         return `*${product} ${sampleValues[i] || "5 each"}*`;
       })
       .join("\n");

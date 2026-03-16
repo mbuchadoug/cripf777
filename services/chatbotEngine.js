@@ -3287,15 +3287,26 @@ if (a === "sup_update_prices") {
     }
 
     const productList = supplier.products?.length
-      ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
-      : "No products listed";
+    ? supplier.products.map((p, i) => `${i + 1}. ${p}`).join("\n")
+    : "No products listed";
 
-    return sendButtons(from, {
-      text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\nExample:\ncooking oil: 4.50 litre\nrice: 8 bag\nsugar: 1.20 kg\n\nYour products:\n${productList}`,
-      buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
-    });
+  // Build category-specific price examples
+  const { CATEGORY_PRODUCT_EXAMPLES } = await import("./supplierRegistration.js");
+  const supplierCats = supplier.categories || [];
+  let priceExampleItems = ["cooking oil", "rice", "sugar"];
+  for (const cat of supplierCats) {
+    if (CATEGORY_PRODUCT_EXAMPLES[cat]) {
+      priceExampleItems = CATEGORY_PRODUCT_EXAMPLES[cat].slice(0, 3);
+      break;
+    }
   }
+  const priceExampleLines = priceExampleItems.map(p => `${p}: 4.50 each`).join("\n");
 
+  return sendButtons(from, {
+    text: `💰 *Update Your Prices*\n\nSend prices in this format:\n\n*product name: price unit*\n\nOne per line or comma-separated:\n\n*Examples for your category:*\n${priceExampleLines}\n\nYour products:\n${productList}`,
+    buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
+  });
+}
   // ── Handle price update text input ────────────────────────────────────────
   if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
     const supplier = await SupplierProfile.findOne({ phone });

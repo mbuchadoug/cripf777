@@ -36,7 +36,21 @@ export const SUPPLIER_PRODUCT_TEMPLATES = {
       "distribution board", "earth leakage", "plug top", "lamp holder",
       "led bulb", "extension cord", "fluorescent tube"
     ]
+  },
+  car_supplies: {
+    label: "🚗 Car Parts & Supplies",
+    products: [
+      "engine oil", "gear oil", "brake fluid", "coolant",
+      "car battery", "spark plugs", "brake pads", "brake discs",
+      "air filter", "oil filter", "fuel filter", "timing belt",
+      "wiper blades", "headlight bulb", "car fuse", "jump cables",
+      "tyre", "inner tube", "rim", "wheel nut",
+      "radiator hose", "fan belt", "alternator belt", "water pump",
+      "shock absorber", "ball joint", "tie rod", "wheel bearing",
+      "car jack", "car battery charger", "tow rope", "car polish"
+    ]
   }
+
 };
 
 export function getTemplateForCategory(categoryId) {
