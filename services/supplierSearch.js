@@ -304,7 +304,7 @@ export function expandSearchTerms(product) {
 }
 
 export async function runSupplierSearch({ city, category, product, profileType }) {
-  // Base query — never show suspended or inactive suppliers
+  // Base query - never show suspended or inactive suppliers
   const query = {
     active: true,
     $and: [
@@ -317,11 +317,11 @@ export async function runSupplierSearch({ city, category, product, profileType }
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
   if (category) query.categories = category;
 
-  // Product/service free-text search — uses synonym expansion so "teacher" finds "tutoring" etc
+  // Product/service free-text search - uses synonym expansion so "teacher" finds "tutoring" etc
   if (product) {
     const searchTerms = expandSearchTerms(product);
 
-    // Search ALL fields regardless of profileType — buyer doesn't know supplier's category name
+    // Search ALL fields regardless of profileType - buyer doesn't know supplier's category name
     const productOr = searchTerms.flatMap(term => [
       { products: { $regex: term, $options: "i" } },
       { "rates.service": { $regex: term, $options: "i" } },
@@ -346,9 +346,9 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const badge = s.tier === "featured" ? "🔥 "
       : s.tier === "pro" ? "⭐ " : "";
 
-    const delivery = s.profileType === "service"
-      ? (s.travelAvailable ? "🚗 Travels" : "📍 Fixed location")
-      : (s.delivery?.available ? "🚚 Delivers" : "🏠 Collect");
+   const delivery = s.profileType === "service"
+  ? (s.travelAvailable ? "🚗 Mobile service" : "📍 Visit us")
+  : (s.delivery?.available ? "🚚 Delivers" : "🏠 Collect");
 
     const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";

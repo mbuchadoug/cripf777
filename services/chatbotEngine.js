@@ -546,7 +546,7 @@ if (searchMode === "product") {
   );
 
   if (parsed.city) {
-    // Skip city picker — go straight to results
+    // Skip city picker - go straight to results
     const results = await runSupplierSearch({
       city: parsed.city,
       product: parsed.product,
@@ -562,7 +562,7 @@ if (searchMode === "product") {
       });
     }
     const rows = formatSupplierResults(results, parsed.city, parsed.product);
-    return sendList(from, `🔍 *${parsed.product}* in ${parsed.city} — ${results.length} found`, rows);
+    return sendList(from, `🔍 *${parsed.product}* in ${parsed.city} - ${results.length} found`, rows);
   }
 
   return sendList(from, `🔍 Looking for: *${parsed.product}*\n\nWhich city?`, [
@@ -626,7 +626,7 @@ const allowedWithoutBiz =
         });
         if (results.length) {
           const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-          return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+          return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
         }
       }
 
@@ -2060,7 +2060,7 @@ const supplierStates = [
 
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
-// supplier_search_city is excluded from the block — typed text in that state
+// supplier_search_city is excluded from the block - typed text in that state
 // should be treated as a new shortcode search, not passed to the state machine
 const shortcodeBlockedStates = supplierStates.filter(s => s !== "supplier_search_city");
 if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
@@ -2073,7 +2073,7 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
       });
       if (results.length) {
         const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
       }
     }
     biz.sessionData = {
@@ -2113,7 +2113,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
             biz.sessionData = {};
             await saveBizSafe(biz);
             const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
           }
         }
         biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
@@ -2124,7 +2124,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
           { id: "sup_search_city_all", title: "📍 All Cities" }
         ]);
       }
-      // Not a shortcode but in supplier_search_city — treat the typed text as the product name directly
+      // Not a shortcode but in supplier_search_city - treat the typed text as the product name directly
       const productQuery = text.trim();
       if (productQuery.length > 1) {
         biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: productQuery } };
@@ -2144,19 +2144,19 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       if (handled) return;
     }
 
-    // Only pass to Twilio for real businesses — ghost supplier biz returns "Access denied"
+    // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
     if (!biz.name?.startsWith("pending_supplier_")) {
       const handled = await continueTwilioFlow({ from, text });
       if (handled) return;
     } else {
-      // Ghost biz user typed something unrecognised — try as a search first
+      // Ghost biz user typed something unrecognised - try as a search first
       const shortcode = parseShortcodeSearch(text);
       if (shortcode) {
         if (shortcode.city) {
           const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
           if (results.length) {
             const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
           }
         }
         biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
@@ -2167,7 +2167,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
           { id: "sup_search_city_all", title: "📍 All Cities" }
         ]);
       }
-      // Truly unrecognised — show helpful prompt
+      // Truly unrecognised - show helpful prompt
       return sendButtons(from, {
         text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
         buttons: [
@@ -2968,7 +2968,7 @@ ${deliveryLine}
     }).join("\n\n");
 
     return sendButtons(from, {
-   text: `📦 *Incoming Orders (From Buyers)* — last ${orders.length}\n\n${lines}`,
+   text: `📦 *Incoming Orders (From Buyers)* - last ${orders.length}\n\n${lines}`,
 
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
     });
@@ -3193,7 +3193,7 @@ if (profileType === "service") {
   });
 }
 
-  // Products — check for preset template first
+  // Products - check for preset template first
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
   const exampleText = catExamples.slice(0, 3).join(", ");
 
@@ -3216,8 +3216,8 @@ How would you like to add your products?`,
   });
 }
 
-  // No preset for this category — still show all options
-// No preset for this category — still show all options
+  // No preset for this category - still show all options
+// No preset for this category - still show all options
 return sendButtons(from, {
     text:
 `✅ *Category selected!*
@@ -3252,7 +3252,7 @@ if (a.startsWith("sup_load_preset_")) {
   biz.sessionData.supplierReg.pendingPresetCatId = catId;
   await saveBizSafe(biz);
 
-  // Build preview — split into chunks of 8 per line for readability
+  // Build preview - split into chunks of 8 per line for readability
   const chunks = [];
   for (let i = 0; i < template.products.length; i += 8) {
     chunks.push(template.products.slice(i, i + 8).join(", "));
@@ -3322,7 +3322,7 @@ Use these suggested prices?`,
     });
   }
 
-  // No preset prices — go straight to pricing step
+  // No preset prices - go straight to pricing step
   const profileType = biz.sessionData?.supplierReg?.profileType || "product";
   if (profileType === "service") {
     biz.sessionState = "supplier_reg_travel";
@@ -3467,7 +3467,7 @@ _${productList.slice(0, 2).map(p => `${p}: 5.00`).join(", ")}_
 Type *skip* to skip pricing.`);
 }
 
-// ── Load preset products — show full preview before confirming ────────────
+// ── Load preset products - show full preview before confirming ────────────
 if (a.startsWith("sup_load_preset_")) {
   if (!biz) return sendMainMenu(from);
 
@@ -3538,7 +3538,7 @@ if (a === "sup_preset_confirm") {
   biz.sessionData.supplierReg.products = template.products.map(p => p.toLowerCase());
   delete biz.sessionData.supplierReg.pendingPresetCatId;
 
-  // If template has prices — show price preview and ask to use them
+  // If template has prices - show price preview and ask to use them
   if (template.prices?.length) {
     biz.sessionData.supplierReg.prices = template.prices;
     await saveBizSafe(biz);
@@ -3564,7 +3564,7 @@ Use these suggested prices?`,
     });
   }
 
-  // No preset prices — prompt them to enter prices using numbered list
+  // No preset prices - prompt them to enter prices using numbered list
   biz.sessionData.supplierReg.prices = [];
   biz.sessionState = "supplier_reg_prices";
   await saveBizSafe(biz);
@@ -3708,7 +3708,7 @@ After you finish registration, send your service list & rates to us:
 
 We'll load it within 24 hours and notify you. ✅
 
-Now one quick question — *do you travel to clients?*`,
+Now one quick question - *do you travel to clients?*`,
       buttons: [
         { id: "sup_travel_yes", title: "✅ Yes I Travel" },
         { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
@@ -3729,7 +3729,7 @@ After you finish registration, send your product list & prices to us:
 You can also send a photo of your price list, Excel file, or typed list.
 We'll load it within 24 hours and notify you. ✅
 
-Now one quick question — *do you deliver?*`,
+Now one quick question - *do you deliver?*`,
     buttons: [
       { id: "sup_del_yes", title: "✅ Yes I Deliver" },
       { id: "sup_del_no",  title: "🏠 Collection Only" }
@@ -3920,9 +3920,11 @@ const rows = formatSupplierResults(results, city, category || product);
       $inc: { viewCount: 1, monthlyViews: 1 }
     });
 
-    const deliveryText = supplier.delivery?.available
+const deliveryText = supplier.profileType === "service"
+  ? (supplier.travelAvailable ? "🚗 Mobile service - travels to you" : "📍 Visit required - client comes to provider")
+  : (supplier.delivery?.available
       ? `🚚 Delivers (${(supplier.delivery.range || "").replace("_", " ")})`
-      : "🏠 Collection only";
+      : "🏠 Collection only");
   
     const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
     const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
@@ -3948,7 +3950,7 @@ return sendButtons(from, {
     title: supplier.profileType === "service" ? "📅 Book Service" : "🛒 Place Order"
   },
   { id: `sup_save_${supplierId}`, title: "Save Supplier" },
-  { id: "suppliers_home", title: "🏪 Suppliers" }
+ { id: "find_supplier", title: "🔍 Find Suppliers" }
 ]
     });
   }
@@ -3996,8 +3998,8 @@ if (a === "sup_update_prices") {
       pr.product?.toLowerCase() === p.toLowerCase()
     );
     const priceStr = existing
-      ? ` — $${Number(existing.amount).toFixed(2)}/${existing.unit}`
-      : " — _(not set)_";
+      ? ` - $${Number(existing.amount).toFixed(2)}/${existing.unit}`
+      : " - _(not set)_";
     return `${i + 1}. ${p}${priceStr}`;
   }).join("\n");
 
@@ -4006,7 +4008,7 @@ if (a === "sup_update_prices") {
 
 ${numbered}
 
-*Fastest — just numbers in order:*
+*Fastest - just numbers in order:*
 _${products.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${products.length > 4 ? ", ..." : ""}_
 
 *Or name them (update specific items):*
@@ -4089,14 +4091,14 @@ ${numbered}`
 *Your products:*
 ${numbered}
 
-*Fastest — just numbers in order:*
+*Fastest - just numbers in order:*
 _${products.slice(0, 3).map((_, i) => ((i + 1) * 4) + ".00").join(", ")}_`
     );
     return;
   }
 
   // Preview before saving
-  const previewLines = updated.map(u => `• ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+  const previewLines = updated.map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
   const failNote = failed.length ? `\n\n⚠️ Skipped ${failed.length}: _${failed.slice(0, 2).join(", ")}_` : "";
 
   // Temporarily store pending update
@@ -4150,7 +4152,7 @@ if (a === "sup_price_update_confirm") {
     await saveBizSafe(biz);
   }
 
-  const summary = pending.map(u => `✅ ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+  const summary = pending.map(u => `✅ ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
   await sendText(from, `✅ *Prices saved!*\n\n${summary}`);
   return sendSupplierAccountMenu(from, supplier);
 }
@@ -4302,7 +4304,7 @@ Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
     const finalCity = parsed?.city || null;
 
     if (finalCity) {
-      // City was included — run search immediately, skip city picker
+      // City was included - run search immediately, skip city picker
       const results = await runSupplierSearch({
         city: finalCity,
         product: finalProduct,
@@ -4321,10 +4323,10 @@ Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
         });
       }
       const rows = formatSupplierResults(results, finalCity, finalProduct);
-      return sendList(from, `🔍 *${finalProduct}* in ${finalCity} — ${results.length} found`, rows);
+      return sendList(from, `🔍 *${finalProduct}* in ${finalCity} - ${results.length} found`, rows);
     }
 
-    // No city — ask which city
+    // No city - ask which city
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: {

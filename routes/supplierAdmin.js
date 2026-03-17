@@ -558,9 +558,9 @@ router.get("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => 
               <label>Tier / Plan</label>
               <select name="tier" required>
                 <option value="">Select a plan...</option>
-                <option value="basic">✅ Basic — $5/month</option>
-                <option value="pro">⭐ Pro — $12/month</option>
-                <option value="featured">🔥 Featured — $25/month</option>
+                <option value="basic">✅ Basic - $5/month</option>
+                <option value="pro">⭐ Pro - $12/month</option>
+                <option value="featured">🔥 Featured - $25/month</option>
               </select>
             </div>
             <div class="fg">
@@ -582,8 +582,8 @@ router.get("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => 
           <div class="fg full" style="margin-bottom:16px">
             <label>Also set active?</label>
             <select name="setActive">
-              <option value="true">Yes — make listing visible to buyers</option>
-              <option value="false">No — activate subscription only</option>
+              <option value="true">Yes - make listing visible to buyers</option>
+              <option value="false">No - activate subscription only</option>
             </select>
           </div>
           <div class="form-actions">
@@ -830,7 +830,7 @@ router.post("/suppliers/:id/products/bulk-add", requireSupplierAdmin, async (req
       supplier.products = newProducts;
       supplier.prices = newPrices.length ? newPrices : supplier.prices;
     } else {
-      // Append — avoid duplicates
+      // Append - avoid duplicates
       const existingNames = new Set(supplier.products || []);
       for (const p of newProducts) {
         if (!existingNames.has(p)) supplier.products.push(p);
@@ -959,7 +959,7 @@ router.get("/suppliers/:id/products/edit-price/:idx", requireSupplierAdmin, asyn
   res.send(layout("Edit Price", `
     <a href="/zq-admin/suppliers/${supplier._id}/products" class="back-link">← Back to Products</a>
     <div class="panel" style="max-width:500px">
-      <h3>Edit Price — ${esc(price.product)}</h3>
+      <h3>Edit Price - ${esc(price.product)}</h3>
       <form method="POST" action="/zq-admin/suppliers/${supplier._id}/products/edit-price/${idx}" class="edit-form">
         <div class="fg" style="margin-bottom:12px">
           <label>Product Name</label>
@@ -1272,7 +1272,7 @@ function layout(title, content) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} — ZimQuote Admin</title>
+<title>${esc(title)} - ZimQuote Admin</title>
 <style>
 :root{
   --bg:#f1f5f9;--sidebar:#0f172a;--sidebar-hover:#1e293b;

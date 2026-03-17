@@ -50,7 +50,7 @@ function expandSearchTerms(product) {
 }
 
 export async function runSupplierSearch({ city, category, product, profileType }) {
-  // Base query — never show suspended or inactive suppliers
+  // Base query - never show suspended or inactive suppliers
   const query = {
     active: true,
     $and: [
@@ -64,12 +64,12 @@ export async function runSupplierSearch({ city, category, product, profileType }
 
   if (category) query.categories = category;
 
-  // Product/service free-text search — searches both product list AND priced items
-// Product/service free-text search — uses synonym expansion so "teacher" finds "tutoring" etc
+  // Product/service free-text search - searches both product list AND priced items
+// Product/service free-text search - uses synonym expansion so "teacher" finds "tutoring" etc
   if (product) {
     const searchTerms = expandSearchTerms(product);
 
-    // Search ALL fields regardless of profileType — buyer doesn't know supplier's category name
+    // Search ALL fields regardless of profileType - buyer doesn't know supplier's category name
     const productOr = searchTerms.flatMap(term => [
       { products: { $regex: term, $options: "i" } },
       { "rates.service": { $regex: term, $options: "i" } },

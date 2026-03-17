@@ -274,7 +274,7 @@ return sendButtons(from, {
 
 ${numberedServiceList}
 
-*Fastest — just rates in order:*
+*Fastest - just rates in order:*
 _${fastestExample}_
 
 *Or name them:*
@@ -324,7 +324,7 @@ if (state === "supplier_reg_prices") {
     return true;
   }
 
-  // ── STRATEGY 1: Pure number list — fastest, matches by position ──────────
+  // ── STRATEGY 1: Pure number list - fastest, matches by position ──────────
   // Supplier just sends: 5.50, 8, 0.25, 12
   const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
   const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
@@ -360,7 +360,7 @@ ${numbered}
     return await _showPricingPreview(from, biz, saveBiz, matched, isService);
   }
 
-  // ── STRATEGY 2: Named pricing — "cement 5.50" or "cement: 5.50" ──────────
+  // ── STRATEGY 2: Named pricing - "cement 5.50" or "cement: 5.50" ──────────
   // Also handles bullet paste from Excel/WhatsApp: "• Cement $5.50/bag"
   const parsed = [];
   const failed = [];
@@ -409,7 +409,7 @@ ${numbered}
     await sendText(from,
 `❌ Couldn't read your prices.
 
-*Fastest — just numbers in order:*
+*Fastest - just numbers in order:*
 ${productList.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}
 
 *Or name them:*
@@ -759,8 +759,8 @@ _Type *cancel* to start over._`
 async function _showPricingPreview(from, biz, saveBiz, parsed, isService) {
   // Build readable preview
   const lines = isService
-    ? parsed.map(r => `• ${r.service} — ${r.rate}`)
-    : parsed.map(p => `• ${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`);
+    ? parsed.map(r => `• ${r.service} - ${r.rate}`)
+    : parsed.map(p => `• ${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`);
 
   const preview = lines.join("\n");
 
