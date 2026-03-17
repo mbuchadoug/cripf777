@@ -4099,6 +4099,123 @@ if (a === "sup_price_update_confirm") {
   }
 
 
+  // ── Buyer types item name while browsing catalogue (supplier_order_picking) ──
+// Handles both biz session and no-biz UserSession
+const pickingStateBiz = biz?.sessionState === "supplier_order_picking";
+const pickingStateSess = await (async () => {
+  if (pickingStateBiz) return null;
+  const s = await UserSession.findOne({ phone });
+  return s?.tempData?.orderState === "supplier_order_picking" ? s : null;
+})();
+
+if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
+  const raw = text.trim();
+
+  if (!raw || raw.length < 1) return;
+
+  // Cancel check
+  if (raw.toLowerCase() === "cancel") {
+    if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate({ phone }, {
+      $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderCart": "", "tempData.orderIsService": "" }
+    });
+    await sendText(from, "❌ Order cancelled.");
+    return sendButtons(from, {
+      text: "What would you like to do next?",
+      buttons: [
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "my_orders",     title: "📋 My Orders" }
+      ]
+    });
+  }
+
+  const supplierId = biz?.sessionData?.orderSupplierId
+    || pickingStateSess?.tempData?.orderSupplierId;
+
+  if (!supplierId) return;
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return;
+
+  // ── Parse typed input as bulk order ──────────────────────────────────────
+  // Try "cement 5, sand 2" format first
+  const parsedBulk = parseBulkOrderInput(raw);
+  const isService  = supplier.profileType === "service";
+
+  let cart = biz?.sessionData?.orderCart
+    || pickingStateSess?.tempData?.orderCart
+    || [];
+
+  if (parsedBulk.length && parsedBulk.some(i => i.valid)) {
+    // Add all valid parsed items to cart, fuzzy-matching against supplier's list
+    for (const entry of parsedBulk.filter(i => i.valid)) {
+      const match = findMatchingSupplierPrice(supplier, entry.product);
+      const existing = cart.find(c =>
+        c.product.toLowerCase() === (match?.product || entry.product).toLowerCase()
+      );
+
+      if (existing) {
+        existing.quantity += entry.quantity;
+        if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
+      } else {
+        cart.push({
+          product: match?.product || entry.product,
+          quantity: entry.quantity,
+          unit: match?.unit || entry.unitLabel || (isService ? "job" : "units"),
+          pricePerUnit: match?.amount || null,
+          total: match?.amount ? entry.quantity * match.amount : null
+        });
+      }
+    }
+
+    // Save updated cart
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+      await saveBizSafe(biz);
+    }
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.orderCart": cart } },
+      { upsert: true }
+    );
+
+    return _sendSupplierCatalogueMenu(from, supplier, cart);
+  }
+
+  // ── Single word/phrase typed - treat as product name with qty 1 ──────────
+  // e.g. buyer just typed "cement" or "plumbing"
+  const singleEntry = { product: raw, quantity: 1, unitLabel: isService ? "job" : "units", valid: true };
+  const match = findMatchingSupplierPrice(supplier, raw);
+  const existing = cart.find(c =>
+    c.product.toLowerCase() === (match?.product || raw).toLowerCase()
+  );
+
+  if (existing) {
+    existing.quantity += 1;
+    if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
+  } else {
+    cart.push({
+      product: match?.product || raw,
+      quantity: 1,
+      unit: match?.unit || (isService ? "job" : "units"),
+      pricePerUnit: match?.amount || null,
+      total: match?.amount || null
+    });
+  }
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
+
+  return _sendSupplierCatalogueMenu(from, supplier, cart);
+}
+
   // ── Start order: ask what they want ───────────────────────────────────────
 // ── Start order: ask what they want ───────────────────────────────────────
  // ── Start order: show supplier's product/service list as selectable menu ──
@@ -4422,27 +4539,26 @@ if (a.startsWith("sup_cart_custom_")) {
 
   const isService = supplier.profileType === "service";
 
+  // Stay in picking state - typed input will be caught by the picking handler above
   if (biz) {
-    biz.sessionState = "supplier_order_product";
+    biz.sessionState = "supplier_order_picking";
     biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: supplierId };
     await saveBizSafe(biz);
   }
   await UserSession.findOneAndUpdate(
     { phone },
     { $set: {
-      "tempData.orderState": "supplier_order_product",
+      "tempData.orderState": "supplier_order_picking",
       "tempData.orderSupplierId": supplierId
     }},
     { upsert: true }
   );
 
   return sendText(from,
-`✍️ *Type your ${isService ? "service request" : "item"}*
-
-Format: *item qty, item qty*
-Example: ${isService ? "*plumbing 2 hr, welding 1 job*" : "*sugar 2 kg, flour 5 kg, rice 3*"}
-
-Type *cancel* to go back.`);
+isService
+  ? `✍️ *Type the service + quantity*\n\nExamples:\n_plumbing 2 hr_\n_welding 1 job_\n_electrical inspection_\n\nOr multiple:\n_plumbing 2, painting 1_\n\nType *cancel* to go back.`
+  : `✍️ *Type item name + quantity*\n\nExamples:\n_cement 10_\n_river sand 2, pit sand 1_\n_roofing sheets 20_\n\nType *cancel* to go back.`
+  );
 }
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
@@ -5493,31 +5609,38 @@ async function showClientsList(from, biz, branchId) {
 async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
   const isService = supplier.profileType === "service";
 
-  // Build item rows from rates (service) or prices (product)
   const items = isService
     ? (supplier.rates || []).map(r => ({
         id: r.service,
         label: r.service,
-        price: r.rate,
-        display: `${r.service} - ${r.rate}`
+        price: r.rate
       }))
     : (supplier.prices || [])
         .filter(p => p.inStock !== false)
         .map(p => ({
           id: p.product,
           label: p.product,
-          price: `$${Number(p.amount).toFixed(2)}/${p.unit}`,
-          display: `${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`
+          price: `$${Number(p.amount).toFixed(2)}/${p.unit}`
         }));
 
-  // Fallback: supplier listed products but no prices
   const fallbackItems = (supplier.products || [])
     .filter(p => p !== "pending_upload")
-    .map(p => ({ id: p, label: p, price: null, display: p }));
+    .map(p => ({ id: p, label: p, price: null }));
 
   const sourceItems = items.length ? items : fallbackItems;
 
   if (!sourceItems.length) {
+    // No products at all - go straight to free text
+    if (biz) {
+      biz.sessionState = "supplier_order_product";
+      biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: String(supplier._id) };
+      await saveBizSafe(biz);
+    }
+    await UserSession.findOneAndUpdate(
+      { phone: from.replace(/\D+/g, "") },
+      { $set: { "tempData.orderState": "supplier_order_product", "tempData.orderSupplierId": String(supplier._id) }},
+      { upsert: true }
+    );
     return sendText(from,
 `${isService ? "📅" : "🛒"} *${isService ? "Book with" : "Order from"} ${supplier.businessName}*
 
@@ -5528,50 +5651,46 @@ Type what you need:
 Type *cancel* to stop.`);
   }
 
-  // ── Calculate row budget ───────────────────────────────────────────────────
-  // WhatsApp hard limit: 10 rows per section
-  // Action rows needed:
-  //   - always: 1 (Type Custom Item)
-  //   - with cart: +2 remove rows (max) + 1 confirm + 1 clear = 4 more = 5 total action rows
-  //   - without cart: 1 total action rows
-const WHATSAPP_MAX = 10;
+  // ── Full product list for the header text ─────────────────────────────────
+  // Show ALL products/services as readable text so buyer knows everything available
+  const allItemNames = sourceItems.map((item, i) => {
+    const priceStr = item.price ? ` (${item.price})` : "";
+    return `${i + 1}. ${item.label}${priceStr}`;
+  }).join("\n");
 
-  // Action rows are dynamic based on actual cart contents:
-  // - 1 "Type Custom Item" (always)
-  // - min(cart.length, 2) remove rows (only if cart has items)
-  // - 1 "Confirm Order" (only if cart has items)
-  // - 1 "Clear Cart" (only if cart has items)
-  const removeRowCount = cart.length ? Math.min(cart.length, 2) : 0;
-  const actionSlots = cart.length
-    ? removeRowCount + 2 + 1  // removes + confirm + clear + custom
-    : 1;                       // just custom
-  const maxProductRows = WHATSAPP_MAX - actionSlots;
+  const totalCount = sourceItems.length;
 
-  // ── Cart summary header ────────────────────────────────────────────────────
+  // ── Cart summary ──────────────────────────────────────────────────────────
   let cartSummary = "";
   if (cart.length) {
-    const cartTotal = cart
-      .filter(c => c.pricePerUnit)
-      .reduce((sum, c) => sum + (c.quantity * c.pricePerUnit), 0);
-    const totalStr = cartTotal > 0 ? ` · Est. $${cartTotal.toFixed(2)}` : "";
-    const totalQty = cart.reduce((s, c) => s + c.quantity, 0);
+    const cartTotal = cart.filter(c => c.pricePerUnit).reduce((s, c) => s + c.quantity * c.pricePerUnit, 0);
+    const totalStr  = cartTotal > 0 ? ` · Est. $${cartTotal.toFixed(2)}` : "";
+    const totalQty  = cart.reduce((s, c) => s + c.quantity, 0);
     cartSummary =
       `🛒 *Cart (${totalQty} item${totalQty > 1 ? "s" : ""}${totalStr}):*\n` +
-      cart.map(c =>
-        `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`
-      ).join("\n") + "\n\n";
+      cart.map(c => `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`).join("\n") +
+      "\n\n";
   }
 
-  // ── Build product rows (capped) ────────────────────────────────────────────
-  const rows = sourceItems.slice(0, maxProductRows).map(item => ({
+  // ── Row budget ────────────────────────────────────────────────────────────
+  // WhatsApp max = 10 rows
+  // Always reserve: confirm(1) + clear(1) + remove rows(min cart,2) when cart has items
+  // No cart: all 10 rows for products (quick-tap shortcuts for top items)
+  const WHATSAPP_MAX   = 10;
+  const removeRowCount = cart.length ? Math.min(cart.length, 2) : 0;
+  const actionSlots    = cart.length ? (removeRowCount + 2) : 0;
+  // +1 always for "Type to order" hint row
+  const productSlots   = WHATSAPP_MAX - actionSlots - 1;
+
+  // ── Tappable shortcut rows (top items only) ────────────────────────────────
+  const rows = sourceItems.slice(0, productSlots).map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
     title: item.label.slice(0, 24),
-    description: item.price ? String(item.price).slice(0, 72) : ""
+    description: item.price ? String(item.price).slice(0, 72) : "Tap to add"
   }));
 
-  // ── Add action rows ────────────────────────────────────────────────────────
- if (cart.length) {
-    // Add remove rows - exactly as many as we budgeted (min of cart size and 2)
+  // ── Cart action rows ──────────────────────────────────────────────────────
+  if (cart.length) {
     cart.slice(0, removeRowCount).forEach(c => {
       rows.push({
         id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(c.product)}`,
@@ -5582,20 +5701,28 @@ const WHATSAPP_MAX = 10;
     rows.push({ id: `sup_cart_clear_${supplier._id}`,   title: "🗑 Clear Cart" });
   }
 
-  rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍️ Type Custom Item" });
+  // ── "Type to order" row - always last ─────────────────────────────────────
+  const hiddenCount = totalCount - productSlots;
+  rows.push({
+    id: `sup_cart_custom_${supplier._id}`,
+    title: hiddenCount > 0
+      ? `✍️ Order any item by typing`
+      : `✍️ Type Custom Item`
+  });
 
-  // ── Final safety check ─────────────────────────────────────────────────────
-  if (rows.length > 10) {
-    console.error(`[CATALOGUE BUG] ${rows.length} rows built for ${supplier.businessName} — truncating to 10`);
-    rows.splice(10);
-  }
+  if (rows.length > 10) rows.splice(10);
 
+  // ── Header text with full product list ───────────────────────────────────
   const stepHint = cart.length
-    ? `_Step 1 of 2 - tap ✅ Confirm when ready_`
-    : `_Tap items to add · then confirm to send_`;
+    ? `_Tap ✅ Confirm when ready · or keep adding_`
+    : `_Tap to quick-add · or *type item name + qty* to order_`;
+
+  const hiddenNote = hiddenCount > 0
+    ? `\n\n📋 *Full list (${totalCount} items):*\n${allItemNames}\n\n_Tap any from the list above, or type the name_`
+    : `\n\n📋 *Available (${totalCount} items):*\n${allItemNames}`;
 
   return sendList(from,
-    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n${stepHint}`,
+    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n${stepHint}${hiddenNote}`,
     rows
   );
 }
