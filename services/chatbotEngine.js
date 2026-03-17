@@ -2068,11 +2068,14 @@ const supplierStates = [
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
   "supplier_reg_type",
   "supplier_reg_travel",
+  "supplier_reg_city",       // ← ADD
+  "supplier_reg_category",   // ← ADD
+  "supplier_reg_delivery",   // ← ADD
   "supplier_search_product",
   "supplier_order_product",
   "supplier_order_address",
   "supplier_order_enter_price",
-  "supplier_order_picking",   // ← ADD: new cart browsing state
+  "supplier_order_picking",
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
@@ -3274,145 +3277,12 @@ _Examples: ${exampleText}_`,
 
 
 
-// ── Load preset products with preview ─────────────────────────────────────
-if (a.startsWith("sup_load_preset_")) {
-  if (!biz) return sendMainMenu(from);
-  const catId = a.replace("sup_load_preset_", "");
-  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
-  const template = getTemplateForCategory(catId);
-
-  if (!template || !template.products?.length) {
-    await sendText(from, "❌ No preset found for this category.");
-    return sendSuppliersMenu(from);
-  }
-
-  // Store the preset catId so the confirm handler knows what to load
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  biz.sessionData.supplierReg.pendingPresetCatId = catId;
-  await saveBizSafe(biz);
-
-  // Build preview - split into chunks of 8 per line for readability
-  const chunks = [];
-  for (let i = 0; i < template.products.length; i += 8) {
-    chunks.push(template.products.slice(i, i + 8).join(", "));
-  }
-  const previewText = chunks.join("\n");
-
-  return sendButtons(from, {
-    text:
-`📦 *Preset List Preview* (${template.products.length} products)
-
-${previewText}
-
-Load all these products to your listing?`,
-    buttons: [
-      { id: "sup_preset_confirm",  title: "✅ Yes, Load These" },
-      { id: "sup_enter_own_products", title: "✍️ No, I'll Type Mine" }
-    ]
-  });
-}
 
 
-// ── Confirm preset load ────────────────────────────────────────────────────
-if (a === "sup_preset_confirm") {
-  if (!biz) return sendMainMenu(from);
-  const catId = biz.sessionData?.supplierReg?.pendingPresetCatId;
-  if (!catId) {
-    await sendText(from, "❌ Preset session expired. Please select your category again.");
-    return sendSuppliersMenu(from);
-  }
-
-  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
-  const template = getTemplateForCategory(catId);
-
-  if (!template?.products?.length) {
-    await sendText(from, "❌ Could not load preset. Please type your products manually.");
-    biz.sessionState = "supplier_reg_products";
-    await saveBizSafe(biz);
-    return;
-  }
-
-  biz.sessionData.supplierReg.products = template.products.map(p => p.toLowerCase());
-  biz.sessionData.supplierReg.prices = template.prices || [];
-  delete biz.sessionData.supplierReg.pendingPresetCatId;
-  biz.sessionState = "supplier_reg_prices";
-  await saveBizSafe(biz);
-
-  const hasPrices = template.prices?.length > 0;
-
-  if (hasPrices) {
-    // Show price preview too
-    const pricePreview = template.prices.slice(0, 5)
-      .map(p => `• ${p.product}: $${p.amount}/${p.unit}`)
-      .join("\n");
-
-    return sendButtons(from, {
-      text:
-`✅ *${template.products.length} products loaded!*
-
-We also have suggested prices for some items:
-${pricePreview}${template.prices.length > 5 ? `\n_...and ${template.prices.length - 5} more_` : ""}
-
-Use these suggested prices?`,
-      buttons: [
-        { id: "sup_preset_prices_yes", title: "✅ Use Suggested Prices" },
-        { id: "sup_skip_prices",        title: "✍️ I'll Set My Own" }
-      ]
-    });
-  }
-
-  // No preset prices - go straight to pricing step
-  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
-  if (profileType === "service") {
-    biz.sessionState = "supplier_reg_travel";
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: `✅ *${template.products.length} services loaded!*\n\n🚗 *Do you travel to clients?*`,
-      buttons: [
-        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
-      ]
-    });
-  }
-
-  biz.sessionState = "supplier_reg_delivery";
-  await saveBizSafe(biz);
-  return sendButtons(from, {
-    text: `✅ *${template.products.length} products loaded!*\n\nNow, do you deliver?`,
-    buttons: [
-      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-      { id: "sup_del_no",  title: "🏠 Collection Only" }
-    ]
-  });
-}
 
 
-// ── Accept preset suggested prices ────────────────────────────────────────
-if (a === "sup_preset_prices_yes") {
-  if (!biz) return sendMainMenu(from);
-  // Prices already loaded by sup_preset_confirm, just move forward
-  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
-  if (profileType === "service") {
-    biz.sessionState = "supplier_reg_travel";
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: "🚗 *Do you travel to clients?*",
-      buttons: [
-        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
-      ]
-    });
-  }
-  biz.sessionState = "supplier_reg_delivery";
-  await saveBizSafe(biz);
-  return sendButtons(from, {
-    text: "🚚 *Do you deliver?*",
-    buttons: [
-      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-      { id: "sup_del_no",  title: "🏠 Collection Only" }
-    ]
-  });
-}
+
+
 // ── Skip or finish pricing during registration ─────────────────────────────
 if (a === "sup_skip_prices" || a === "sup_done_prices") {
   if (!biz) return sendMainMenu(from);
@@ -5648,7 +5518,6 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
   const sourceItems = items.length ? items : fallbackItems;
 
   if (!sourceItems.length) {
-    // No products at all - fall back to free-text order
     return sendText(from,
 `${isService ? "📅" : "🛒"} *${isService ? "Book with" : "Order from"} ${supplier.businessName}*
 
@@ -5659,28 +5528,44 @@ Type what you need:
 Type *cancel* to stop.`);
   }
 
-  // Show cart summary at top if items already added
-let cartSummary = "";
+  // ── Calculate row budget ───────────────────────────────────────────────────
+  // WhatsApp hard limit: 10 rows per section
+  // Action rows needed:
+  //   - always: 1 (Type Custom Item)
+  //   - with cart: +2 remove rows (max) + 1 confirm + 1 clear = 4 more = 5 total action rows
+  //   - without cart: 1 total action rows
+  const ACTION_ROWS_WITH_CART = 5;    // 2 remove + confirm + clear + custom
+  const ACTION_ROWS_NO_CART   = 1;    // just custom
+  const WHATSAPP_MAX           = 10;
+
+  const actionSlots = cart.length ? ACTION_ROWS_WITH_CART : ACTION_ROWS_NO_CART;
+  const maxProductRows = WHATSAPP_MAX - actionSlots;
+
+  // ── Cart summary header ────────────────────────────────────────────────────
+  let cartSummary = "";
   if (cart.length) {
     const cartTotal = cart
       .filter(c => c.pricePerUnit)
       .reduce((sum, c) => sum + (c.quantity * c.pricePerUnit), 0);
     const totalStr = cartTotal > 0 ? ` · Est. $${cartTotal.toFixed(2)}` : "";
-    cartSummary = `🛒 *Cart (${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) > 1 ? "s" : ""}${totalStr}):*\n` +
-      cart.map(c => `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`).join("\n") + "\n\n";
+    const totalQty = cart.reduce((s, c) => s + c.quantity, 0);
+    cartSummary =
+      `🛒 *Cart (${totalQty} item${totalQty > 1 ? "s" : ""}${totalStr}):*\n` +
+      cart.map(c =>
+        `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`
+      ).join("\n") + "\n\n";
   }
 
-  // Build list rows - cap at 10 (WhatsApp limit)
-  const rows = sourceItems.slice(0, 10).map(item => ({
+  // ── Build product rows (capped) ────────────────────────────────────────────
+  const rows = sourceItems.slice(0, maxProductRows).map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
-    title: item.label.slice(0, 24),           // WhatsApp title limit
-    description: item.price ? item.price.slice(0, 72) : ""
+    title: item.label.slice(0, 24),
+    description: item.price ? String(item.price).slice(0, 72) : ""
   }));
 
-  // Add cart action rows
-// Add per-item remove rows for items in cart (max 2 to stay under WhatsApp 10-row limit)
+  // ── Add action rows ────────────────────────────────────────────────────────
   if (cart.length) {
-    // Only show remove option if cart has items added beyond the pre-seed
+    // Up to 2 remove rows
     cart.slice(0, 2).forEach(c => {
       rows.push({
         id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(c.product)}`,
@@ -5688,12 +5573,18 @@ let cartSummary = "";
       });
     });
     rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm Order" });
-    rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
+    rows.push({ id: `sup_cart_clear_${supplier._id}`,   title: "🗑 Clear Cart" });
   }
 
   rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍️ Type Custom Item" });
 
-const stepHint = cart.length
+  // ── Final safety check ─────────────────────────────────────────────────────
+  if (rows.length > 10) {
+    console.error(`[CATALOGUE BUG] ${rows.length} rows built for ${supplier.businessName} — truncating to 10`);
+    rows.splice(10);
+  }
+
+  const stepHint = cart.length
     ? `_Step 1 of 2 - tap ✅ Confirm when ready_`
     : `_Tap items to add · then confirm to send_`;
 
