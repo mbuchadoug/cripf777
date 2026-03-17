@@ -601,6 +601,11 @@ const allowedWithoutBiz =
   a.startsWith("rate_order_") ||
   a.startsWith("sup_accept_") ||
   a.startsWith("sup_decline_") ||
+
+  a.startsWith("sup_cart_add_") ||
+a.startsWith("sup_cart_confirm_") ||
+a.startsWith("sup_cart_clear_") ||
+a.startsWith("sup_cart_custom_") ||
   a === "my_supplier_account";
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
@@ -763,7 +768,9 @@ Type *cancel* to stop this order.`);
 
   const sess3 = await UserSession.findOne({ phone });
   const supplierId = sess3?.tempData?.orderSupplierId;
-  const orderItemsInput = sess3?.tempData?.orderItems || [];
+ const orderItemsInput = sess3?.tempData?.orderCart?.length
+  ? sess3.tempData.orderCart
+  : (sess3?.tempData?.orderItems || []);
 
 if (!supplierId) {
   await UserSession.findOneAndUpdate(
@@ -2056,11 +2063,11 @@ const supplierStates = [
   "supplier_reg_type",
   "supplier_reg_travel",
   "supplier_search_product",
-  "supplier_order_product",   // ← ADD: buyer order item entry
-  "supplier_order_address",   // ← ADD: buyer order address entry
-  "supplier_order_enter_price", // ← ADD: supplier pricing entry
+  "supplier_order_product",
+  "supplier_order_address",
+  "supplier_order_enter_price",
+  "supplier_order_picking",   // ← ADD: new cart browsing state
 ];
-
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
 // supplier_search_city is excluded from the block - typed text in that state
@@ -2069,7 +2076,8 @@ const shortcodeBlockedStates = supplierStates.filter(s =>
   s !== "supplier_search_city" && 
   s !== "supplier_order_product" && 
   s !== "supplier_order_address" &&
-  s !== "supplier_order_enter_price"
+  s !== "supplier_order_enter_price" &&
+   s !== "supplier_order_picking" 
 );
 if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
   const shortcode = parseShortcodeSearch(text);
@@ -2163,7 +2171,8 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       if (
         biz.sessionState === "supplier_order_product" ||
         biz.sessionState === "supplier_order_address" ||
-        biz.sessionState === "supplier_order_enter_price"
+        biz.sessionState === "supplier_order_enter_price" ||
+          biz.sessionState === "supplier_order_picking"   // ← ADD
       ) {
         // Do nothing here — fall through to the order state handlers below
       } else {
@@ -4211,63 +4220,220 @@ if (a === "sup_price_update_confirm") {
 
   // ── Start order: ask what they want ───────────────────────────────────────
 // ── Start order: ask what they want ───────────────────────────────────────
-  if (a.startsWith("sup_order_")) {
-    const supplierId = a.replace("sup_order_", "");
-    const supplier = await SupplierProfile.findById(supplierId).lean();
-    if (!supplier) return sendText(from, "❌ Supplier not found.");
+ // ── Start order: show supplier's product/service list as selectable menu ──
+if (a.startsWith("sup_order_")) {
+  const supplierId = a.replace("sup_order_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
 
-    // Store order state in UserSession for biz-less buyers
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: {
-        "tempData.orderSupplierId": supplierId,
-        "tempData.orderState": "supplier_order_product"
-      }},
-      { upsert: true }
-    );
+  const isService = supplier.profileType === "service";
 
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: supplierId };
-      biz.sessionState = "supplier_order_product";
-      await saveBizSafe(biz);
-    }
+  // Store order state
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: {
+      "tempData.orderSupplierId": supplierId,
+      "tempData.orderState": "supplier_order_picking",
+      "tempData.orderCart": [],          // ← cart starts empty
+      "tempData.orderIsService": isService
+    }},
+    { upsert: true }
+  );
 
-   let productText = "";
-
-if (supplier.profileType === "service" && supplier.rates?.length) {
-  productText = "\n\n" + supplier.rates
-    .map(r => `• ${r.service} - ${formatSupplierRateDisplay(r.rate)}`)
-    .join("\n");
-} else if (supplier.prices?.length) {
-  productText = "\n\n" + supplier.prices
-    .map(p => `• ${p.product} - $${p.amount}/${p.unit}`)
-    .join("\n");
-} else if (supplier.products?.length) {
-  productText = "\n\n• " + supplier.products.slice(0, 8).join("\n• ");
-}
-
-const isServiceSupplier = supplier.profileType === "service";
-
-return sendText(from,
-`${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Book with" : "Order from"} ${supplier.businessName}*${productText}
-
-${isServiceSupplier
-  ? "Send the services you want in one message."
-  : "Send your items in one message."}
-
-*Format:*
-${isServiceSupplier ? "service qty, service qty" : "product qty, product qty"}
-
-*Examples:*
-${isServiceSupplier
-  ? "*car hire 2 hr, delivery 1 trip*\n*plumbing 2 hr, welding 1 job*"
-  : "*sugar 2, bread 3, milk 1*\n*cement 10, river sand 2*"}
-
-You can also send one per line.
-
-Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      orderSupplierId: supplierId,
+      orderCart: [],
+      orderIsService: isService
+    };
+    biz.sessionState = "supplier_order_picking";
+    await saveBizSafe(biz);
   }
 
+  return _sendSupplierCatalogueMenu(from, supplier, []);
+}
+
+
+
+// ── Cart: buyer taps an item from catalogue ───────────────────────────────
+if (a.startsWith("sup_cart_add_")) {
+  // format: sup_cart_add_{supplierId}_{encodedProductName}
+  const withoutPrefix = a.replace("sup_cart_add_", "");
+  const firstUnderscore = withoutPrefix.indexOf("_");
+  const supplierId = withoutPrefix.slice(0, firstUnderscore);
+  const encodedProduct = withoutPrefix.slice(firstUnderscore + 1);
+  const productName = decodeURIComponent(encodedProduct);
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  // Get current cart
+  let cart = [];
+  if (biz) {
+    cart = biz.sessionData?.orderCart || [];
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    cart = sess?.tempData?.orderCart || [];
+  }
+
+  // Check if item already in cart — increment qty
+  const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    // Find price for this item
+    const isService = supplier.profileType === "service";
+    let priceInfo = null;
+    if (isService) {
+      const rate = (supplier.rates || []).find(r =>
+        r.service.toLowerCase() === productName.toLowerCase()
+      );
+      if (rate) priceInfo = { amount: parseSupplierRateValue(rate.rate), unit: parseSupplierRateUnit(rate.rate) };
+    } else {
+      const price = (supplier.prices || []).find(p =>
+        p.product.toLowerCase() === productName.toLowerCase()
+      );
+      if (price) priceInfo = { amount: Number(price.amount), unit: price.unit || "each" };
+    }
+
+    cart.push({
+      product: productName,
+      quantity: 1,
+      unit: priceInfo?.unit || (isService ? "job" : "units"),
+      pricePerUnit: priceInfo?.amount || null,
+      total: priceInfo?.amount || null
+    });
+  }
+
+  // Save updated cart
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
+
+  // Show updated catalogue with cart
+  return _sendSupplierCatalogueMenu(from, supplier, cart);
+}
+
+// ── Cart: buyer confirms order from catalogue ─────────────────────────────
+if (a.startsWith("sup_cart_confirm_")) {
+  const supplierId = a.replace("sup_cart_confirm_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  let cart = [];
+  if (biz) {
+    cart = biz.sessionData?.orderCart || [];
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    cart = sess?.tempData?.orderCart || [];
+  }
+
+  if (!cart.length) {
+    return sendText(from, "❌ Your cart is empty. Tap items to add them.");
+  }
+
+  // Show order summary and ask for address
+  const isService = supplier.profileType === "service";
+  const previewLines = cart.map(c => {
+    const priceStr = c.pricePerUnit ? ` — $${Number(c.pricePerUnit).toFixed(2)}/${c.unit}` : "";
+    return `• ${c.product} x${c.quantity}${priceStr}`;
+  }).join("\n");
+
+  const knownTotal = cart
+    .filter(c => c.pricePerUnit)
+    .reduce((sum, c) => sum + (c.quantity * c.pricePerUnit), 0);
+
+  const totalLine = knownTotal > 0
+    ? `\n💵 *Estimated total: $${knownTotal.toFixed(2)}*`
+    : "";
+
+  // Move to address state
+  if (biz) {
+    biz.sessionState = "supplier_order_address";
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderState": "supplier_order_address" } },
+    { upsert: true }
+  );
+
+  return sendButtons(from, {
+    text:
+`${isService ? "📅" : "🛒"} *Order Summary*
+
+${previewLines}${totalLine}
+
+📍 *Where should we ${isService ? "come to / what's your location?" : "deliver? Or are you collecting?"}*
+
+Reply with your address or note:
+_e.g. 24 Borrowdale Rd, Harare_
+_e.g. I'll collect from your shop_
+_e.g. Call me on arrival_`,
+    buttons: [
+      { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
+      { id: "find_supplier", title: "❌ Cancel" }
+    ]
+  });
+}
+
+// ── Cart: buyer clears cart ───────────────────────────────────────────────
+if (a.startsWith("sup_cart_clear_")) {
+  const supplierId = a.replace("sup_cart_clear_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: [] };
+    biz.sessionState = "supplier_order_picking";
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": [], "tempData.orderState": "supplier_order_picking" } },
+    { upsert: true }
+  );
+
+  return _sendSupplierCatalogueMenu(from, supplier, []);
+}
+
+// ── Cart: buyer wants to type a custom item not in catalogue ─────────────
+if (a.startsWith("sup_cart_custom_")) {
+  const supplierId = a.replace("sup_cart_custom_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const isService = supplier.profileType === "service";
+
+  if (biz) {
+    biz.sessionState = "supplier_order_product";
+    biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: supplierId };
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: {
+      "tempData.orderState": "supplier_order_product",
+      "tempData.orderSupplierId": supplierId
+    }},
+    { upsert: true }
+  );
+
+  return sendText(from,
+`✍️ *Type your ${isService ? "service request" : "item"}*
+
+Format: *item qty, item qty*
+Example: ${isService ? "*plumbing 2 hr, welding 1 job*" : "*sugar 2 kg, flour 5 kg, rice 3*"}
+
+Type *cancel* to go back.`);
+}
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
   let searchType = biz?.sessionData?.supplierSearch?.type || null;
@@ -4423,7 +4589,9 @@ Type *cancel* to stop this order.`);
 }
 
     const supplierId = biz.sessionData?.orderSupplierId;
-   const orderItemsInput = biz.sessionData?.orderItems || [];
+const orderItemsInput = biz.sessionData?.orderCart?.length
+  ? biz.sessionData.orderCart
+  : (biz.sessionData?.orderItems || []);
 
     if (!supplierId) {
       biz.sessionState = "ready"; biz.sessionData = {};
@@ -5291,6 +5459,75 @@ async function showClientsList(from, biz, branchId) {
   return sendClientsMenu(from);
 }
 
+
+
+// ── Build and send the supplier catalogue as a WhatsApp list ─────────────
+async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
+  const isService = supplier.profileType === "service";
+
+  // Build item rows from rates (service) or prices (product)
+  const items = isService
+    ? (supplier.rates || []).map(r => ({
+        id: r.service,
+        label: r.service,
+        price: r.rate,
+        display: `${r.service} — ${r.rate}`
+      }))
+    : (supplier.prices || [])
+        .filter(p => p.inStock !== false)
+        .map(p => ({
+          id: p.product,
+          label: p.product,
+          price: `$${Number(p.amount).toFixed(2)}/${p.unit}`,
+          display: `${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`
+        }));
+
+  // Fallback: supplier listed products but no prices
+  const fallbackItems = (supplier.products || [])
+    .filter(p => p !== "pending_upload")
+    .map(p => ({ id: p, label: p, price: null, display: p }));
+
+  const sourceItems = items.length ? items : fallbackItems;
+
+  if (!sourceItems.length) {
+    // No products at all — fall back to free-text order
+    return sendText(from,
+`${isService ? "📅" : "🛒"} *${isService ? "Book with" : "Order from"} ${supplier.businessName}*
+
+Type what you need:
+*Format:* item qty, item qty
+*Example:* ${isService ? "plumbing 2 hr, welding 1 job" : "sugar 2, bread 3, milk 1"}
+
+Type *cancel* to stop.`);
+  }
+
+  // Show cart summary at top if items already added
+  let cartSummary = "";
+  if (cart.length) {
+    cartSummary = `🛒 *Cart (${cart.length} item${cart.length > 1 ? "s" : ""}):*\n` +
+      cart.map(c => `• ${c.product} x${c.quantity}`).join("\n") + "\n\n";
+  }
+
+  // Build list rows — cap at 10 (WhatsApp limit)
+  const rows = sourceItems.slice(0, 10).map(item => ({
+    id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
+    title: item.label.slice(0, 24),           // WhatsApp title limit
+    description: item.price ? item.price.slice(0, 72) : ""
+  }));
+
+  // Add cart action rows
+  if (cart.length) {
+    rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm Order" });
+    rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
+  }
+
+  rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍️ Type Custom Item" });
+
+  return sendList(from,
+    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\nTap items to add to your order:`,
+    rows
+  );
+}
 async function showExpenseReceipts(from, biz, branchId) {
   const Expense = (await import("../models/expense.js")).default;
   const query = { businessId: biz._id };
