@@ -5534,11 +5534,17 @@ Type *cancel* to stop.`);
   //   - always: 1 (Type Custom Item)
   //   - with cart: +2 remove rows (max) + 1 confirm + 1 clear = 4 more = 5 total action rows
   //   - without cart: 1 total action rows
-  const ACTION_ROWS_WITH_CART = 5;    // 2 remove + confirm + clear + custom
-  const ACTION_ROWS_NO_CART   = 1;    // just custom
-  const WHATSAPP_MAX           = 10;
+const WHATSAPP_MAX = 10;
 
-  const actionSlots = cart.length ? ACTION_ROWS_WITH_CART : ACTION_ROWS_NO_CART;
+  // Action rows are dynamic based on actual cart contents:
+  // - 1 "Type Custom Item" (always)
+  // - min(cart.length, 2) remove rows (only if cart has items)
+  // - 1 "Confirm Order" (only if cart has items)
+  // - 1 "Clear Cart" (only if cart has items)
+  const removeRowCount = cart.length ? Math.min(cart.length, 2) : 0;
+  const actionSlots = cart.length
+    ? removeRowCount + 2 + 1  // removes + confirm + clear + custom
+    : 1;                       // just custom
   const maxProductRows = WHATSAPP_MAX - actionSlots;
 
   // ── Cart summary header ────────────────────────────────────────────────────
@@ -5564,9 +5570,9 @@ Type *cancel* to stop.`);
   }));
 
   // ── Add action rows ────────────────────────────────────────────────────────
-  if (cart.length) {
-    // Up to 2 remove rows
-    cart.slice(0, 2).forEach(c => {
+ if (cart.length) {
+    // Add remove rows - exactly as many as we budgeted (min of cart size and 2)
+    cart.slice(0, removeRowCount).forEach(c => {
       rows.push({
         id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(c.product)}`,
         title: `➖ Remove: ${c.product.slice(0, 18)}`
