@@ -2060,7 +2060,10 @@ const supplierStates = [
 
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
-if (!isMetaAction && biz && text.trim().length > 2 && !supplierStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
+// supplier_search_city is excluded from the block — typed text in that state
+// should be treated as a new shortcode search, not passed to the state machine
+const shortcodeBlockedStates = supplierStates.filter(s => s !== "supplier_search_city");
+if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
     if (shortcode.city) {
@@ -2099,6 +2102,41 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       return sendMainMenu(from);
     }
 
+    // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
+    if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
+      const shortcode = parseShortcodeSearch(text);
+      if (shortcode) {
+        if (shortcode.city) {
+          const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
+          if (results.length) {
+            biz.sessionState = "ready";
+            biz.sessionData = {};
+            await saveBizSafe(biz);
+            const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+          }
+        }
+        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
+        biz.sessionState = "supplier_search_city";
+        await saveBizSafe(biz);
+        return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+          { id: "sup_search_city_all", title: "📍 All Cities" }
+        ]);
+      }
+      // Not a shortcode but in supplier_search_city — treat the typed text as the product name directly
+      const productQuery = text.trim();
+      if (productQuery.length > 1) {
+        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: productQuery } };
+        biz.sessionState = "supplier_search_city";
+        await saveBizSafe(biz);
+        return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+          { id: "sup_search_city_all", title: "📍 All Cities" }
+        ]);
+      }
+    }
+
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
         state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
@@ -2111,7 +2149,25 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       const handled = await continueTwilioFlow({ from, text });
       if (handled) return;
     } else {
-      // Ghost biz user typed something unrecognised — show helpful prompt
+      // Ghost biz user typed something unrecognised — try as a search first
+      const shortcode = parseShortcodeSearch(text);
+      if (shortcode) {
+        if (shortcode.city) {
+          const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
+          if (results.length) {
+            const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} — ${results.length} found`, rows);
+          }
+        }
+        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
+        biz.sessionState = "supplier_search_city";
+        await saveBizSafe(biz);
+        return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+          { id: "sup_search_city_all", title: "📍 All Cities" }
+        ]);
+      }
+      // Truly unrecognised — show helpful prompt
       return sendButtons(from, {
         text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
         buttons: [
@@ -2121,7 +2177,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       });
     }
   }
-
 
   if (
   biz &&
