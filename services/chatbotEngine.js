@@ -4445,18 +4445,24 @@ if (a.startsWith("sup_cart_confirm_")) {
     { upsert: true }
   );
 
-  return sendButtons(from, {
+return sendButtons(from, {
     text:
-`${isService ? "📅" : "🛒"} *Order Summary*
+`${isService ? "📅" : "🛒"} *${isService ? "Booking Summary" : "Order Summary"}*
 
 ${previewLines}${totalLine}
 
-📍 *Where should we ${isService ? "come to / what's your location?" : "deliver? Or are you collecting?"}*
+─────────────────
+⚠️ *Your order has NOT been sent yet.*
+─────────────────
 
-Reply with your address or note:
-_e.g. 24 Borrowdale Rd, Harare_
-_e.g. I'll collect from your shop_
-_e.g. Call me on arrival_`,
+*Step 2 of 2 — Enter your ${isService ? "location" : "delivery address"}* 👇
+
+${isService
+  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am, Mabelreign_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect — call me_`
+}
+
+_Type your address below and send to complete your ${isService ? "booking" : "order"}_ ✍️`,
     buttons: [
       { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
       { id: "find_supplier", title: "❌ Cancel" }
@@ -4690,14 +4696,28 @@ const supplierForSummary = supplierIdForSummary
   : null;
 const isServiceSupplier = supplierForSummary?.profileType === "service";
 
-return sendText(from,
+return sendButtons(from, {
+  text:
 `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Booking Summary" : "Order Summary"}*
 
 ${preview}
 
-Now send your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:
+─────────────────
+⚠️ *Your ${isServiceSupplier ? "booking" : "order"} has NOT been sent yet.*
+─────────────────
 
-Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
+*Step 2 of 2 — Enter your ${isServiceSupplier ? "location" : "delivery address"}* 👇
+
+${isServiceSupplier
+  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect — call me_`
+}
+
+_Type your address below and send to complete your ${isServiceSupplier ? "booking" : "order"}_ ✍️`,
+  buttons: [
+    { id: "find_supplier", title: "❌ Cancel Order" }
+  ]
+});
 }
 
   // ── Buyer order: quantity text input ──────────────────────────────────────
@@ -5660,8 +5680,12 @@ let cartSummary = "";
 
   rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍️ Type Custom Item" });
 
+const stepHint = cart.length
+    ? `_Step 1 of 2 — tap ✅ Confirm when ready_`
+    : `_Tap items to add · then confirm to send_`;
+
   return sendList(from,
-    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\nTap items to add to your order:`,
+    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n${stepHint}`,
     rows
   );
 }
