@@ -605,6 +605,7 @@ const allowedWithoutBiz =
   a.startsWith("sup_cart_add_") ||
 a.startsWith("sup_cart_confirm_") ||
 a.startsWith("sup_cart_clear_") ||
+a.startsWith("sup_cart_remove_") ||
 a.startsWith("sup_cart_custom_") ||
   a === "my_supplier_account";
 
@@ -3973,8 +3974,9 @@ return sendButtons(from, {
        `${deliveryText}${badge}\n` +
             `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
             `📞 ${supplier.phone}`,
-    buttons: [
+buttons: [
   {
+    // Encode the last searched product into the button so cart can pre-fill
     id: `sup_order_${supplierId}`,
     title: supplier.profileType === "service" ? "📅 Book Service" : "🛒 Place Order"
   },
@@ -4228,13 +4230,91 @@ if (a.startsWith("sup_order_")) {
 
   const isService = supplier.profileType === "service";
 
-  // Store order state
+  // ── Recover the search term that led the buyer here ───────────────────
+  let searchedProduct = biz?.sessionData?.supplierSearch?.product || null;
+  if (!searchedProduct) {
+    const sess = await UserSession.findOne({ phone });
+    searchedProduct = sess?.tempData?.supplierSearchProduct || null;
+  }
+
+  // ── Pre-seed cart if we have a search term that matches a real item ───
+  let initialCart = [];
+  if (searchedProduct) {
+    const isServiceSupplier = isService;
+    let priceInfo = null;
+
+    if (isServiceSupplier) {
+      // Try to find matching rate
+      const rate = (supplier.rates || []).find(r =>
+        r.service?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
+        searchedProduct.toLowerCase().includes(r.service?.toLowerCase())
+      );
+      if (rate) {
+        priceInfo = { amount: parseSupplierRateValue(rate.rate), unit: parseSupplierRateUnit(rate.rate) };
+        initialCart = [{
+          product: rate.service,
+          quantity: 1,
+          unit: priceInfo.unit || "job",
+          pricePerUnit: priceInfo.amount || null,
+          total: priceInfo.amount || null
+        }];
+      } else if (supplier.products?.length && !supplier.rates?.length) {
+        // Fallback: supplier has product list but no rates yet
+        const matchedProduct = supplier.products.find(p =>
+          p?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
+          searchedProduct.toLowerCase().includes(p?.toLowerCase())
+        );
+        if (matchedProduct) {
+          initialCart = [{
+            product: matchedProduct,
+            quantity: 1,
+            unit: "job",
+            pricePerUnit: null,
+            total: null
+          }];
+        }
+      }
+    } else {
+      // Product supplier - find matching price
+      const price = (supplier.prices || []).find(p =>
+        p.product?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
+        searchedProduct.toLowerCase().includes(p.product?.toLowerCase())
+      );
+      if (price) {
+        priceInfo = { amount: Number(price.amount), unit: price.unit || "each" };
+        initialCart = [{
+          product: price.product,
+          quantity: 1,
+          unit: priceInfo.unit,
+          pricePerUnit: priceInfo.amount,
+          total: priceInfo.amount
+        }];
+      } else {
+        // No price match - try products list
+        const matchedProduct = (supplier.products || []).find(p =>
+          p?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
+          searchedProduct.toLowerCase().includes(p?.toLowerCase())
+        );
+        if (matchedProduct) {
+          initialCart = [{
+            product: matchedProduct,
+            quantity: 1,
+            unit: "each",
+            pricePerUnit: null,
+            total: null
+          }];
+        }
+      }
+    }
+  }
+
+  // ── Store order state with pre-seeded cart ─────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     { $set: {
       "tempData.orderSupplierId": supplierId,
       "tempData.orderState": "supplier_order_picking",
-      "tempData.orderCart": [],          // ← cart starts empty
+      "tempData.orderCart": initialCart,
       "tempData.orderIsService": isService
     }},
     { upsert: true }
@@ -4244,14 +4324,14 @@ if (a.startsWith("sup_order_")) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
       orderSupplierId: supplierId,
-      orderCart: [],
+      orderCart: initialCart,
       orderIsService: isService
     };
     biz.sessionState = "supplier_order_picking";
     await saveBizSafe(biz);
   }
 
-  return _sendSupplierCatalogueMenu(from, supplier, []);
+  return _sendSupplierCatalogueMenu(from, supplier, initialCart);
 }
 
 
@@ -4404,6 +4484,51 @@ if (a.startsWith("sup_cart_clear_")) {
   return _sendSupplierCatalogueMenu(from, supplier, []);
 }
 
+
+// ── Cart: buyer removes one unit of an item ───────────────────────────────
+if (a.startsWith("sup_cart_remove_")) {
+  const withoutPrefix = a.replace("sup_cart_remove_", "");
+  const firstUnderscore = withoutPrefix.indexOf("_");
+  const supplierId = withoutPrefix.slice(0, firstUnderscore);
+  const encodedProduct = withoutPrefix.slice(firstUnderscore + 1);
+  const productName = decodeURIComponent(encodedProduct);
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  let cart = [];
+  if (biz) {
+    cart = biz.sessionData?.orderCart || [];
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    cart = sess?.tempData?.orderCart || [];
+  }
+
+  const idx = cart.findIndex(c => c.product.toLowerCase() === productName.toLowerCase());
+  if (idx >= 0) {
+    if (cart[idx].quantity > 1) {
+      cart[idx].quantity -= 1;
+      // Recalculate total
+      if (cart[idx].pricePerUnit) {
+        cart[idx].total = cart[idx].quantity * cart[idx].pricePerUnit;
+      }
+    } else {
+      cart.splice(idx, 1); // Remove entirely if qty reaches 0
+    }
+  }
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
+
+  return _sendSupplierCatalogueMenu(from, supplier, cart);
+}
 // ── Cart: buyer wants to type a custom item not in catalogue ─────────────
 if (a.startsWith("sup_cart_custom_")) {
   const supplierId = a.replace("sup_cart_custom_", "");
@@ -5502,10 +5627,14 @@ Type *cancel* to stop.`);
   }
 
   // Show cart summary at top if items already added
-  let cartSummary = "";
+let cartSummary = "";
   if (cart.length) {
-    cartSummary = `🛒 *Cart (${cart.length} item${cart.length > 1 ? "s" : ""}):*\n` +
-      cart.map(c => `• ${c.product} x${c.quantity}`).join("\n") + "\n\n";
+    const cartTotal = cart
+      .filter(c => c.pricePerUnit)
+      .reduce((sum, c) => sum + (c.quantity * c.pricePerUnit), 0);
+    const totalStr = cartTotal > 0 ? ` · Est. $${cartTotal.toFixed(2)}` : "";
+    cartSummary = `🛒 *Cart (${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) > 1 ? "s" : ""}${totalStr}):*\n` +
+      cart.map(c => `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`).join("\n") + "\n\n";
   }
 
   // Build list rows — cap at 10 (WhatsApp limit)
@@ -5516,7 +5645,15 @@ Type *cancel* to stop.`);
   }));
 
   // Add cart action rows
+// Add per-item remove rows for items in cart (max 2 to stay under WhatsApp 10-row limit)
   if (cart.length) {
+    // Only show remove option if cart has items added beyond the pre-seed
+    cart.slice(0, 2).forEach(c => {
+      rows.push({
+        id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(c.product)}`,
+        title: `➖ Remove: ${c.product.slice(0, 18)}`
+      });
+    });
     rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm Order" });
     rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
   }
