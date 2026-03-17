@@ -225,54 +225,52 @@ Just type them and send 👇`
   biz.sessionData.supplierReg.products = items.map(p => p.toLowerCase());
   biz.sessionState = "supplier_reg_prices";
 
-  if (isService) {
+if (isService) {
     biz.sessionData.supplierReg.rates = [];
     await saveBiz(biz);
 
-const savedProducts = biz.sessionData.supplierReg.products || [];
-const numberedList = savedProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
+    const savedProducts = biz.sessionData.supplierReg.products || [];
+    const numberedList = savedProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
 
-// Build smart rate examples from the actual services listed
-const rateExampleMap = {
-  "car hire": "50/day", "delivery": "10/trip", "airport transfers": "25/trip",
-  "plumbing": "15/hr", "burst pipe repair": "20/job", "toilet installation": "30/job",
-  "electrical": "15/hr", "wiring": "20/hr", "light fitting": "10/job",
-  "bricklaying": "8/hr", "plastering": "12/hr", "roofing": "50/job",
-  "interior painting": "15/hr", "exterior painting": "20/hr",
-  "gate fabrication": "80/job", "burglar bars": "60/job",
-  "office cleaning": "20/job", "carpet cleaning": "15/job",
-  "lawn mowing": "10/job", "tree trimming": "15/job",
-  "catering": "50/event", "wedding cake": "80/job", "lunch boxes": "5/box",
-  "business cards": "15/job", "banners": "20/job",
-  "hair braiding": "10/job", "nails": "8/job", "makeup": "15/job",
-  "wedding photos": "100/event", "passport photos": "5/job",
-  "laptop repair": "20/job", "wifi setup": "15/job",
-  "security guard": "10/hr", "alarm installation": "50/job",
-  "maths tutor": "10/hr", "english lessons": "8/hr",
-  "primary school help": "8/hr", "o-level prep": "12/hr",
-};
+    const rateExampleMap = {
+      "car hire": "50/day", "delivery": "10/trip", "airport transfers": "25/trip",
+      "plumbing": "15/hr", "burst pipe repair": "20/job", "toilet installation": "30/job",
+      "electrical": "15/hr", "wiring": "20/hr", "light fitting": "10/job",
+      "bricklaying": "8/hr", "plastering": "12/hr", "roofing": "50/job",
+      "interior painting": "15/hr", "exterior painting": "20/hr",
+      "gate fabrication": "80/job", "burglar bars": "60/job",
+      "office cleaning": "20/job", "carpet cleaning": "15/job",
+      "lawn mowing": "10/job", "tree trimming": "15/job",
+      "catering": "50/event", "wedding cake": "80/job", "lunch boxes": "5/box",
+      "business cards": "15/job", "banners": "20/job",
+      "hair braiding": "10/job", "nails": "8/job", "makeup": "15/job",
+      "wedding photos": "100/event", "passport photos": "5/job",
+      "laptop repair": "20/job", "wifi setup": "15/job",
+      "security guard": "10/hr", "alarm installation": "50/job",
+      "maths tutor": "10/hr", "english lessons": "8/hr",
+      "primary school help": "8/hr", "o-level prep": "12/hr",
+    };
 
-// Generate examples from actual services supplied
-const exampleLines = savedProducts.slice(0, 3).map(svc => {
-  const key = Object.keys(rateExampleMap).find(k =>
-    svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
-  );
-  const rate = key ? rateExampleMap[key] : "10/hr";
-  return `${svc}: ${rate}`;
-});
+    const exampleLines = savedProducts.slice(0, 3).map(svc => {
+      const key = Object.keys(rateExampleMap).find(k =>
+        svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
+      );
+      const rate = key ? rateExampleMap[key] : "10/hr";
+      return `${svc}: ${rate}`;
+    });
 
-const fastestExample = savedProducts.slice(0, 3).map(svc => {
-  const key = Object.keys(rateExampleMap).find(k =>
-    svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
-  );
-  return key ? rateExampleMap[key] : "10/hr";
-}).join(", ");
+    const fastestExample = savedProducts.slice(0, 3).map(svc => {
+      const key = Object.keys(rateExampleMap).find(k =>
+        svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
+      );
+      return key ? rateExampleMap[key] : "10/hr";
+    }).join(", ");
 
-return sendButtons(from, {
-  text:
+    return sendButtons(from, {
+      text:
 `💰 *Set Your Rates*
 
-${numberedServiceList}
+${numberedList}
 
 *Fastest - just rates in order:*
 _${fastestExample}_
@@ -283,8 +281,8 @@ _${exampleLines.slice(0, 2).join(", ")}_
 *Common units:* /hr, /job, /trip, /day, /event
 
 Type *skip* to add rates later.`,
-  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
-});
+      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+    });
   }
 
   biz.sessionData.supplierReg.prices = [];
