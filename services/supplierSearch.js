@@ -65,9 +65,11 @@ export async function runSupplierSearch({ city, category, product, profileType }
   if (category) query.categories = category;
 
   // Product/service free-text search — searches both product list AND priced items
-if (product) {
+// Product/service free-text search — uses synonym expansion so "teacher" finds "tutoring" etc
+  if (product) {
     const searchTerms = expandSearchTerms(product);
 
+    // Search ALL fields regardless of profileType — buyer doesn't know supplier's category name
     const productOr = searchTerms.flatMap(term => [
       { products: { $regex: term, $options: "i" } },
       { "rates.service": { $regex: term, $options: "i" } },
@@ -123,13 +125,13 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
 
 // ── Parse shortcode search from raw text ──────────────────────────────────
 // Handles: "find cement", "find plumber harare", "s tiles", "/find bread"
+// ── Parse shortcode search from raw text ──────────────────────────────────
+// Handles: "find cement", "find plumber harare", "s tiles", "/find bread"
 export function parseShortcodeSearch(text = "") {
   const raw = text.trim().toLowerCase();
 
-  // Patterns: "find X", "search X", "s X", "/find X", "buy X", "looking for X"
   const patterns = [
-    /^(?:\/find|find|search|s|buy|get|looking for|need|want)\s+(.+)$/i,
-    /^(?:find me|i need|i want)\s+(.+)$/i
+    /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i,
   ];
 
   for (const p of patterns) {
@@ -142,6 +144,312 @@ export function parseShortcodeSearch(text = "") {
   return null;
 }
 
+// ── Synonym/alias map keyed to category IDs and common product/service terms ──
+// Maps what buyers TYPE → what suppliers LIST
+const SEARCH_SYNONYMS = {
+  // ── GROCERIES & FOOD ─────────────────────────────────────────────────────
+  "food": ["groceries", "grocery", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar", "salt", "tomatoes", "onions", "vegetables", "fruit", "chicken", "beef", "pork", "fish", "eggs", "milk", "butter", "cheese", "yoghurt", "juice", "soft drinks", "water", "cooking", "sadza"],
+  "groceries": ["grocery", "supermarket", "food", "provisions", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar", "salt", "tomatoes", "onions", "vegetables"],
+  "grocery": ["groceries", "food", "provisions", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar"],
+  "mealie meal": ["sadza", "roller meal", "maize meal", "flour", "grain", "groceries"],
+  "sadza": ["mealie meal", "roller meal", "maize meal", "grain", "groceries"],
+  "cooking oil": ["oil", "sunflower oil", "vegetable oil", "groceries", "food"],
+  "oil": ["cooking oil", "sunflower oil", "vegetable oil", "lubricant", "engine oil"],
+  "bread": ["loaf", "buns", "bakery", "groceries", "food"],
+  "rice": ["basmati", "white rice", "groceries", "grain", "food"],
+  "flour": ["wheat flour", "self raising flour", "groceries", "baking", "food"],
+  "sugar": ["white sugar", "brown sugar", "groceries", "sweetener", "food"],
+  "chicken": ["poultry", "broiler", "frozen chicken", "meat", "groceries", "food"],
+  "beef": ["steak", "mince", "meat", "nyama", "groceries", "food"],
+  "fish": ["bream", "kapenta", "seafood", "groceries", "food"],
+  "vegetables": ["veggies", "tomatoes", "onions", "cabbage", "spinach", "sweet potatoes", "potatoes", "carrots", "groceries", "fresh produce", "food"],
+  "fruit": ["apples", "bananas", "oranges", "mangoes", "avocado", "tomatoes", "fresh produce", "groceries"],
+  "drinks": ["juice", "soft drinks", "water", "beverages", "cooldrink", "soda", "groceries"],
+  "water": ["drinking water", "mineral water", "bottled water", "drinks", "groceries"],
+  "milk": ["dairy", "fresh milk", "long life milk", "groceries", "food"],
+  "eggs": ["poultry", "groceries", "food", "dairy"],
+  "provisions": ["groceries", "food", "supplies", "household"],
+
+  // ── CAR PARTS & SUPPLIES ──────────────────────────────────────────────────
+  "car parts": ["auto parts", "spare parts", "spares", "vehicle parts", "car accessories", "car supplies", "mechanical parts"],
+  "spares": ["car parts", "spare parts", "auto parts", "vehicle parts", "car accessories", "car supplies"],
+  "spare parts": ["spares", "car parts", "auto parts", "vehicle parts", "mechanical parts", "car supplies"],
+  "auto parts": ["car parts", "spare parts", "spares", "vehicle parts", "car accessories"],
+  "tyres": ["tires", "wheels", "rims", "car supplies", "car parts", "spares"],
+  "tires": ["tyres", "wheels", "rims", "car supplies", "car parts"],
+  "battery": ["car battery", "batteries", "car parts", "spares", "electrical"],
+  "engine oil": ["oil", "lubricant", "motor oil", "car supplies", "car parts"],
+  "brake pads": ["brakes", "car parts", "spares", "auto parts"],
+  "filters": ["oil filter", "air filter", "car parts", "spares", "auto parts"],
+
+  // ── CLOTHING & SHOES ──────────────────────────────────────────────────────
+  "clothes": ["clothing", "fashion", "garments", "wear", "shirts", "trousers", "dresses", "jeans", "t-shirts", "suits", "uniforms", "shoes", "sneakers"],
+  "clothing": ["clothes", "fashion", "garments", "wear", "shirts", "trousers", "dresses", "jeans", "t-shirts", "suits"],
+  "shoes": ["sneakers", "boots", "heels", "sandals", "footwear", "clothing", "fashion"],
+  "sneakers": ["shoes", "trainers", "sports shoes", "footwear", "clothing"],
+  "school uniforms": ["uniforms", "school clothes", "clothing", "school wear", "school supplies"],
+  "uniforms": ["school uniforms", "work uniforms", "clothing", "corporate wear"],
+  "dresses": ["clothing", "fashion", "women wear", "ladies wear", "clothes"],
+  "suits": ["formal wear", "clothing", "men wear", "corporate wear", "fashion"],
+  "second hand": ["salaula", "used clothes", "secondhand", "thrift", "clothing"],
+  "salaula": ["second hand", "used clothes", "secondhand", "thrift", "clothing"],
+
+  // ── HARDWARE & BUILDING ───────────────────────────────────────────────────
+  "hardware": ["building materials", "construction materials", "cement", "sand", "bricks", "steel", "iron sheets", "timber", "paint", "tools", "nails", "screws"],
+  "cement": ["concrete", "building materials", "hardware", "construction", "portland cement"],
+  "sand": ["river sand", "building sand", "plaster sand", "hardware", "building materials", "construction"],
+  "river sand": ["sand", "building sand", "hardware", "building materials"],
+  "bricks": ["building bricks", "face bricks", "hardware", "building materials", "construction"],
+  "iron sheets": ["roofing sheets", "roof sheets", "corrugated iron", "hardware", "building materials", "roofing"],
+  "roofing": ["iron sheets", "roof sheets", "roofing sheets", "tiles", "hardware", "building materials"],
+  "timber": ["wood", "planks", "lumber", "hardware", "building materials", "furniture"],
+  "wood": ["timber", "planks", "lumber", "hardwood", "furniture", "hardware"],
+  "nails": ["screws", "bolts", "hardware", "fasteners", "building materials"],
+  "steel": ["steel bars", "rebar", "metal", "hardware", "building materials", "construction"],
+  "pipes": ["plumbing pipes", "pvc pipes", "hardware", "plumbing", "building materials"],
+  "tiles": ["floor tiles", "wall tiles", "ceramic tiles", "hardware", "building materials", "roofing"],
+  "paint": ["emulsion", "gloss paint", "hardware", "painting", "building materials"],
+  "tools": ["power tools", "hand tools", "drill", "hardware", "building materials"],
+  "building materials": ["hardware", "cement", "sand", "bricks", "steel", "iron sheets", "timber", "construction materials"],
+
+  // ── AGRICULTURE & FARMING ─────────────────────────────────────────────────
+  "farming": ["agriculture", "seeds", "fertilizer", "chemicals", "pesticides", "livestock", "crops", "maize", "soya", "tobacco"],
+  "agriculture": ["farming", "seeds", "fertilizer", "chemicals", "pesticides", "livestock", "crops"],
+  "seeds": ["maize seed", "vegetable seeds", "soya seed", "farming", "agriculture"],
+  "fertilizer": ["fertiliser", "compound D", "ammonium nitrate", "farming", "agriculture"],
+  "pesticides": ["chemicals", "herbicides", "insecticides", "farming", "agriculture"],
+  "maize": ["corn", "grain", "farming", "agriculture", "groceries"],
+  "soya": ["soya beans", "farming", "agriculture", "grain"],
+  "day old chicks": ["poultry", "chicks", "broilers", "farming", "agriculture", "livestock"],
+  "livestock": ["cattle", "goats", "pigs", "chickens", "poultry", "farming", "agriculture"],
+
+  // ── ELECTRONICS ───────────────────────────────────────────────────────────
+  "electronics": ["phones", "laptops", "computers", "tv", "television", "appliances", "gadgets", "solar", "inverter"],
+  "phone": ["smartphones", "mobile phones", "cell phones", "electronics", "gadgets"],
+  "phones": ["smartphones", "mobile phones", "cell phones", "electronics", "gadgets"],
+  "laptop": ["laptops", "computers", "notebooks", "electronics", "gadgets"],
+  "laptops": ["laptop", "computers", "notebooks", "electronics", "gadgets"],
+  "tv": ["television", "smart tv", "flat screen", "electronics", "appliances"],
+  "television": ["tv", "smart tv", "flat screen", "electronics", "appliances"],
+  "solar": ["solar panels", "solar system", "inverter", "batteries", "electronics", "energy"],
+  "inverter": ["solar", "ups", "power backup", "electronics", "energy"],
+  "appliances": ["fridge", "stove", "microwave", "washing machine", "electronics", "home appliances"],
+  "fridge": ["refrigerator", "freezer", "appliances", "electronics"],
+  "stove": ["cooker", "gas stove", "electric stove", "appliances", "electronics"],
+
+  // ── CROSS-BORDER GOODS ────────────────────────────────────────────────────
+  "cross border": ["imports", "foreign goods", "imported goods", "crossborder", "south africa goods", "china goods", "dubai goods"],
+  "crossborder": ["cross border", "imports", "foreign goods", "imported goods"],
+  "imports": ["cross border", "imported goods", "foreign goods", "crossborder"],
+  "imported": ["cross border", "imports", "foreign goods", "crossborder"],
+
+  // ── COSMETICS & BEAUTY ────────────────────────────────────────────────────
+  "cosmetics": ["beauty products", "skincare", "makeup", "lotion", "cream", "hair products", "perfume"],
+  "beauty products": ["cosmetics", "skincare", "makeup", "lotion", "cream", "hair products"],
+  "skincare": ["cosmetics", "beauty products", "lotion", "cream", "moisturiser", "sunscreen"],
+  "lotion": ["body lotion", "skincare", "cream", "cosmetics", "beauty products"],
+  "makeup": ["cosmetics", "foundation", "lipstick", "mascara", "beauty products"],
+  "perfume": ["fragrance", "cologne", "cosmetics", "beauty products"],
+  "hair products": ["weave", "extensions", "shampoo", "conditioner", "cosmetics", "beauty products", "hair"],
+  "weave": ["hair extensions", "hair products", "cosmetics", "beauty products"],
+
+  // ── FURNITURE & HOME ──────────────────────────────────────────────────────
+  "furniture": ["sofas", "chairs", "tables", "beds", "wardrobes", "cabinets", "home furniture", "office furniture"],
+  "sofas": ["couches", "sofa sets", "furniture", "lounge suite"],
+  "couch": ["sofas", "couches", "sofa sets", "furniture", "lounge suite"],
+  "beds": ["mattress", "bedroom furniture", "bunk beds", "furniture"],
+  "mattress": ["beds", "bedroom furniture", "furniture"],
+  "wardrobe": ["wardrobes", "closet", "bedroom furniture", "furniture"],
+  "tables": ["dining table", "coffee table", "desk", "furniture"],
+  "chairs": ["office chairs", "dining chairs", "furniture"],
+  "curtains": ["blinds", "drapes", "home décor", "furniture", "home"],
+  "appliances home": ["fridge", "stove", "microwave", "washing machine", "furniture", "home"],
+
+  // ── PLUMBING ──────────────────────────────────────────────────────────────
+  "plumber": ["plumbing", "pipes", "geyser", "water pipes", "burst pipe", "tap", "toilet", "drain"],
+  "plumbing": ["plumber", "pipes", "geyser", "water pipes", "burst pipe", "tap", "toilet", "drain", "sink"],
+  "geyser": ["water heater", "hot water", "plumbing", "plumber"],
+  "burst pipe": ["pipe", "pipes", "plumbing", "plumber", "water leak", "leak"],
+  "leak": ["water leak", "burst pipe", "plumbing", "plumber", "roof leak"],
+  "tap": ["faucet", "water tap", "plumbing", "plumber"],
+  "drain": ["drainage", "blocked drain", "sewage", "plumbing", "plumber"],
+  "toilet": ["bathroom", "flush", "plumbing", "plumber", "drain"],
+  "borehole": ["drilling", "water", "borehole drilling", "plumbing", "water supply"],
+
+  // ── ELECTRICAL ────────────────────────────────────────────────────────────
+  "electrician": ["electrical", "wiring", "power", "lights", "sockets", "DB board", "electrical fault"],
+  "electrical": ["electrician", "wiring", "power", "lights", "sockets", "DB board", "electrical repair"],
+  "wiring": ["electrical", "electrician", "rewiring", "cable", "power"],
+  "lights": ["lighting", "electrical", "electrician", "LED", "bulbs"],
+  "generator": ["genset", "power backup", "electrical", "energy"],
+  "solar installation": ["solar", "solar panels", "electrical", "electrician", "energy"],
+
+  // ── CONSTRUCTION & BUILDING ───────────────────────────────────────────────
+  "construction": ["building", "contractor", "builder", "renovation", "extension", "house building", "walls", "roofing"],
+  "builder": ["construction", "contractor", "building", "renovation", "house building"],
+  "contractor": ["construction", "builder", "building", "renovation", "house building"],
+  "renovation": ["construction", "builder", "contractor", "remodelling", "repair", "home improvement"],
+  "roofing contractor": ["roofing", "roof repair", "construction", "builder", "iron sheets"],
+  "plastering": ["plaster", "construction", "builder", "walls", "cement"],
+
+  // ── PAINTING & DÉCOR ──────────────────────────────────────────────────────
+  "painter": ["painting", "paint", "walls", "décor", "interior design", "house painting"],
+  "painting": ["painter", "paint", "walls", "décor", "house painting", "interior painting"],
+  "interior design": ["décor", "painting", "painter", "home improvement", "furniture"],
+  "décor": ["decoration", "interior design", "painting", "home décor", "curtains"],
+
+  // ── WELDING & FABRICATION ─────────────────────────────────────────────────
+  "welder": ["welding", "fabrication", "gates", "burglar bars", "metal work", "steel work"],
+  "welding": ["welder", "fabrication", "gates", "burglar bars", "metal work", "steel work"],
+  "gates": ["gate", "welding", "welder", "fabrication", "burglar bars", "metal work"],
+  "burglar bars": ["security bars", "welding", "welder", "fabrication", "gates"],
+  "fabrication": ["welding", "welder", "metal work", "steel work", "gates"],
+
+  // ── CLEANING SERVICES ─────────────────────────────────────────────────────
+  "cleaner": ["cleaning", "house cleaning", "office cleaning", "domestic worker", "maid", "laundry"],
+  "cleaning": ["cleaner", "house cleaning", "office cleaning", "domestic worker", "maid", "laundry"],
+  "domestic worker": ["maid", "cleaner", "house cleaning", "cleaning", "housekeeper"],
+  "maid": ["domestic worker", "cleaner", "house cleaning", "cleaning", "housekeeper"],
+  "laundry": ["washing", "dry cleaning", "clothes washing", "cleaning", "cleaner"],
+  "pest control": ["fumigation", "termites", "cockroaches", "rats", "cleaning", "exterminator"],
+  "fumigation": ["pest control", "termites", "cockroaches", "rats", "exterminator"],
+
+  // ── GARDENING & LANDSCAPING ───────────────────────────────────────────────
+  "gardener": ["gardening", "landscaping", "lawn", "grass cutting", "tree cutting", "plants"],
+  "gardening": ["gardener", "landscaping", "lawn", "grass cutting", "tree cutting", "plants"],
+  "lawn": ["grass cutting", "gardening", "gardener", "landscaping"],
+  "tree cutting": ["tree trimming", "gardening", "gardener", "landscaping", "tree removal"],
+  "landscaping": ["gardening", "gardener", "lawn", "grass cutting", "plants", "design"],
+
+  // ── TRANSPORT & LOGISTICS ─────────────────────────────────────────────────
+  "transport": ["delivery", "courier", "car hire", "taxi", "truck hire", "logistics", "moving"],
+  "delivery": ["transport", "courier", "logistics", "truck hire", "delivery service"],
+  "car hire": ["vehicle hire", "car rental", "transport", "taxi", "vehicle"],
+  "taxi": ["car hire", "transport", "cab", "ride", "uber"],
+  "truck hire": ["truck", "lorry", "transport", "logistics", "moving", "delivery"],
+  "courier": ["delivery", "transport", "logistics", "express delivery", "parcel"],
+  "logistics": ["transport", "delivery", "courier", "truck hire", "supply chain"],
+
+  // ── MOVING & REMOVALS ─────────────────────────────────────────────────────
+  "moving": ["removals", "relocation", "moving company", "furniture removal", "transport"],
+  "removals": ["moving", "relocation", "moving company", "furniture removal", "transport"],
+  "relocation": ["moving", "removals", "moving company", "transport"],
+
+  // ── COOKED FOOD & CATERING ────────────────────────────────────────────────
+  "catering": ["food", "cooked food", "meals", "event catering", "buffet", "chef"],
+  "cooked food": ["catering", "meals", "food delivery", "chef", "restaurant", "takeaway"],
+  "meals": ["cooked food", "catering", "food", "takeaway", "lunch", "dinner"],
+  "chef": ["catering", "cooking", "food", "cooked food", "meals"],
+  "takeaway": ["cooked food", "meals", "food", "fast food", "restaurant", "catering"],
+  "lunch": ["meals", "cooked food", "catering", "food", "takeaway"],
+  "baking": ["cakes", "bread", "pastries", "cooked food", "catering", "food"],
+  "cakes": ["baking", "pastries", "birthday cake", "catering", "cooked food", "food"],
+  "birthday cake": ["cakes", "baking", "catering", "cooked food", "food"],
+
+  // ── PRINTING & BRANDING ───────────────────────────────────────────────────
+  "printing": ["branding", "flyers", "banners", "t-shirts", "business cards", "stationery", "graphic design"],
+  "branding": ["printing", "logo design", "graphic design", "marketing", "flyers", "banners"],
+  "flyers": ["printing", "branding", "pamphlets", "marketing", "advertising"],
+  "banners": ["printing", "branding", "signage", "advertising", "marketing"],
+  "t-shirt printing": ["printing", "branding", "custom t-shirts", "clothing"],
+  "business cards": ["printing", "branding", "stationery", "cards"],
+  "graphic design": ["design", "printing", "branding", "logo design", "artwork"],
+  "logo": ["logo design", "graphic design", "branding", "printing"],
+  "signage": ["signs", "banners", "printing", "branding", "advertising"],
+
+  // ── BEAUTY & HAIR ─────────────────────────────────────────────────────────
+  "hairdresser": ["hair", "hairdressing", "salon", "beauty", "braiding", "weave", "relaxer"],
+  "hair": ["hairdresser", "hairdressing", "salon", "beauty", "braiding", "weave", "relaxer", "barber"],
+  "salon": ["beauty", "hair", "hairdresser", "nails", "makeup", "spa"],
+  "braiding": ["hair", "hairdresser", "salon", "beauty", "cornrows", "dreadlocks"],
+  "barber": ["haircut", "shaving", "barbershop", "hair", "beauty"],
+  "nails": ["nail technician", "manicure", "pedicure", "beauty", "salon"],
+  "makeup artist": ["makeup", "beauty", "salon", "cosmetics", "photography"],
+  "spa": ["massage", "beauty", "salon", "relaxation", "wellness"],
+  "massage": ["spa", "massage therapist", "beauty", "wellness", "relaxation"],
+
+  // ── PHOTOGRAPHY & VIDEOGRAPHY ─────────────────────────────────────────────
+  "photographer": ["photography", "photos", "pictures", "videography", "video", "wedding photography", "events"],
+  "photography": ["photographer", "photos", "pictures", "videography", "video", "events", "wedding"],
+  "videography": ["videographer", "video", "photography", "photographer", "events", "wedding"],
+  "wedding photography": ["photographer", "photography", "wedding", "videography", "events"],
+  "events": ["photography", "photographer", "catering", "videography", "DJ", "sound"],
+  "dj": ["music", "events", "sound system", "entertainment", "party"],
+  "sound system": ["DJ", "music", "events", "entertainment", "sound hire"],
+
+  // ── TUTORING & TEACHING ───────────────────────────────────────────────────
+  "teacher": ["tutor", "tutoring", "teaching", "lesson", "lessons", "maths", "science", "english", "education", "school", "tutoring"],
+  "tutor": ["teacher", "tutoring", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
+  "tutoring": ["tutor", "teacher", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
+  "lessons": ["tutoring", "tutor", "teacher", "teaching", "education", "school"],
+  "maths tutor": ["maths", "mathematics", "tutoring", "tutor", "teacher", "lessons"],
+  "maths": ["mathematics", "math", "tutoring", "tutor", "teacher", "lessons", "science"],
+  "mathematics": ["maths", "math", "tutoring", "tutor", "teacher", "lessons"],
+  "science": ["physics", "chemistry", "biology", "tutoring", "tutor", "teacher", "lessons"],
+  "physics": ["science", "tutoring", "tutor", "teacher", "lessons", "maths"],
+  "chemistry": ["science", "tutoring", "tutor", "teacher", "lessons"],
+  "biology": ["science", "life science", "tutoring", "tutor", "teacher", "lessons"],
+  "english tutor": ["english", "language", "tutoring", "tutor", "teacher", "lessons"],
+  "english": ["language", "tutoring", "tutor", "teacher", "lessons", "literature"],
+  "a level": ["alevel", "sixth form", "tutoring", "tutor", "teacher", "lessons", "education"],
+  "o level": ["olevel", "tutoring", "tutor", "teacher", "lessons", "education", "school"],
+  "education": ["tutoring", "tutor", "teacher", "lessons", "school"],
+
+  // ── IT & TECH SUPPORT ─────────────────────────────────────────────────────
+  "it support": ["computer repair", "tech support", "laptop repair", "software", "networking", "it"],
+  "computer repair": ["laptop repair", "it support", "tech support", "it", "electronics"],
+  "laptop repair": ["computer repair", "it support", "tech support", "it", "electronics"],
+  "tech support": ["it support", "computer repair", "laptop repair", "it", "software"],
+  "software": ["it support", "tech support", "programming", "app development", "it"],
+  "website": ["web design", "web development", "it support", "software", "it"],
+  "web design": ["website", "web development", "it support", "software", "graphic design"],
+  "networking": ["network", "wifi", "it support", "tech support", "it"],
+  "cctv": ["security cameras", "security", "it support", "surveillance", "cameras"],
+
+  // ── SECURITY SERVICES ─────────────────────────────────────────────────────
+  "security": ["security guard", "guard", "security company", "alarm", "cctv", "surveillance"],
+  "security guard": ["guard", "security", "security company", "watchman"],
+  "alarm": ["alarm system", "security", "security company", "cctv", "surveillance"],
+
+  // ── OTHER / GENERAL ───────────────────────────────────────────────────────
+  "repair": ["fix", "maintenance", "service", "technician"],
+  "technician": ["repair", "service", "maintenance", "it support", "electrician", "plumber"],
+  "fix": ["repair", "maintenance", "service"],
+  "hire": ["rent", "rental", "car hire", "truck hire", "equipment hire"],
+  "rent": ["hire", "rental", "car hire", "equipment hire"],
+};
+
+export function expandSearchTerms(product) {
+  const lower = (product || "").toLowerCase().trim();
+  const synonyms = SEARCH_SYNONYMS[lower];
+  // Return original term plus up to 6 synonyms to keep MongoDB $or manageable
+  if (!synonyms) return [lower];
+  return [lower, ...synonyms.slice(0, 6)];
+}
+
+// Splits "plumber harare" into { product: "plumber", city: "Harare" }
+function parseQueryWithCity(query = "") {
+  const KNOWN_CITIES = [
+    "harare", "bulawayo", "mutare", "gweru", "masvingo",
+    "kwekwe", "kadoma", "chinhoyi", "victoria falls"
+  ];
+
+  const words = query.trim().split(/\s+/);
+  let city = null;
+
+  for (let len = 2; len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ").toLowerCase();
+    const matched = KNOWN_CITIES.find(c => c === candidate);
+    if (matched) {
+      city = matched.charAt(0).toUpperCase() + matched.slice(1);
+      const product = words.slice(0, -len).join(" ").trim();
+      if (product) return { product, city };
+      break;
+    }
+  }
+
+  return { product: query.trim(), city: null };
+}
 // Splits "plumber harare" into { product: "plumber", city: "Harare" }
 function parseQueryWithCity(query = "") {
   // Import SUPPLIER_CITIES inline to avoid circular dependency

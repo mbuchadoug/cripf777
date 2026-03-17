@@ -2106,10 +2106,19 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       if (handled) return;
     }
 
-    // ── Only pass to Twilio for real businesses, not ghost supplier biz ──
+    // Only pass to Twilio for real businesses — ghost supplier biz returns "Access denied"
     if (!biz.name?.startsWith("pending_supplier_")) {
       const handled = await continueTwilioFlow({ from, text });
       if (handled) return;
+    } else {
+      // Ghost biz user typed something unrecognised — show helpful prompt
+      return sendButtons(from, {
+        text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
+        buttons: [
+          { id: "find_supplier", title: "🔍 Find Suppliers" },
+          { id: "register_supplier", title: "📦 List My Business" }
+        ]
+      });
     }
   }
 
@@ -2521,18 +2530,19 @@ if (a === "find_supplier") {
     );
   }
 
-  return sendText(from,
+return sendText(from,
 `🔍 *Find Suppliers on ZimQuote*
 
-Type what you're looking for and send it:
+Type what you need and send it. You can include a city at the end.
 
-*Examples:*
-- _find cement_
-- _find plumber harare_
-- _find cooking oil_
-- _find car hire bulawayo_
+*📦 Products:*
+_find cement_, _find cooking oil harare_, _find mealie meal_, _find river sand_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
 
-You can include a city at the end to search that city directly.
+*🔧 Services:*
+_find plumber_, _find electrician harare_, _find teacher_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder_, _find catering_, _find photographer_, _find it support_
+
+*🚗 Transport:*
+_find car hire_, _find delivery harare_, _find moving company bulawayo_
 
 Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Or browse by category:", [
