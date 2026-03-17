@@ -2053,16 +2053,24 @@ const supplierStates = [
   "supplier_edit_products", "supplier_edit_area",
   "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
-   "supplier_reg_type",    // ← ADD
-  "supplier_reg_travel",  // ← ADD
-    "supplier_search_product",   // ← ADD THIS
+  "supplier_reg_type",
+  "supplier_reg_travel",
+  "supplier_search_product",
+  "supplier_order_product",   // ← ADD: buyer order item entry
+  "supplier_order_address",   // ← ADD: buyer order address entry
+  "supplier_order_enter_price", // ← ADD: supplier pricing entry
 ];
 
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
 // supplier_search_city is excluded from the block - typed text in that state
 // should be treated as a new shortcode search, not passed to the state machine
-const shortcodeBlockedStates = supplierStates.filter(s => s !== "supplier_search_city");
+const shortcodeBlockedStates = supplierStates.filter(s => 
+  s !== "supplier_search_city" && 
+  s !== "supplier_order_product" && 
+  s !== "supplier_order_address" &&
+  s !== "supplier_order_enter_price"
+);
 if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
@@ -2145,37 +2153,49 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     }
 
     // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
+  
+   // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
     if (!biz.name?.startsWith("pending_supplier_")) {
       const handled = await continueTwilioFlow({ from, text });
       if (handled) return;
     } else {
-      // Ghost biz user typed something unrecognised - try as a search first
-      const shortcode = parseShortcodeSearch(text);
-      if (shortcode) {
-        if (shortcode.city) {
-          const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
-          if (results.length) {
-            const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
+      // ── If ghost biz user is mid-order, let order handlers below process it ──
+      if (
+        biz.sessionState === "supplier_order_product" ||
+        biz.sessionState === "supplier_order_address" ||
+        biz.sessionState === "supplier_order_enter_price"
+      ) {
+        // Do nothing here — fall through to the order state handlers below
+      } else {
+        // Ghost biz user typed something unrecognised - try as a search first
+        const shortcode = parseShortcodeSearch(text);
+        if (shortcode) {
+          if (shortcode.city) {
+            const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
+            if (results.length) {
+              const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+              return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
+            }
           }
+          biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
+          biz.sessionState = "supplier_search_city";
+          await saveBizSafe(biz);
+          return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
+            ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+            { id: "sup_search_city_all", title: "📍 All Cities" }
+          ]);
         }
-        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
-        biz.sessionState = "supplier_search_city";
-        await saveBizSafe(biz);
-        return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
-          { id: "sup_search_city_all", title: "📍 All Cities" }
-        ]);
+        // Truly unrecognised - show helpful prompt
+        return sendButtons(from, {
+          text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
+          buttons: [
+            { id: "find_supplier", title: "🔍 Find Suppliers" },
+            { id: "register_supplier", title: "📦 List My Business" }
+          ]
+        });
       }
-      // Truly unrecognised - show helpful prompt
-      return sendButtons(from, {
-        text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
-        buttons: [
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "register_supplier", title: "📦 List My Business" }
-        ]
-      });
     }
+  
   }
 
   if (

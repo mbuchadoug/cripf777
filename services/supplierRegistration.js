@@ -325,7 +325,8 @@ if (state === "supplier_reg_prices") {
   // ── STRATEGY 1: Pure number list - fastest, matches by position ──────────
   // Supplier just sends: 5.50, 8, 0.25, 12
   const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
-  const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
+// Also accept "20/job", "15/hr", "50/day" as pure rate entries (number/unit)
+const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?(?:\/\w+)?$/.test(s));
 
   if (allNumbers) {
     if (productList.length > 0 && parts.length !== productList.length) {
@@ -341,12 +342,15 @@ ${numbered}
       return true;
     }
 
-    const matched = parts.map((numStr, i) => {
+  const matched = parts.map((numStr, i) => {
       const name = (productList[i] || `item ${i + 1}`).toLowerCase();
       const amount = parseFloat(numStr);
+      // Preserve supplied unit if present (e.g. "20/job" → unit="job")
+      const slashIdx = numStr.indexOf("/");
+      const suppliedUnit = slashIdx >= 0 ? numStr.slice(slashIdx + 1).trim() : null;
       return isService
-        ? { service: name, rate: `${amount}/job` }
-        : { product: name, amount, unit: "each", inStock: true };
+        ? { service: name, rate: `${amount}/${suppliedUnit || "job"}` }
+        : { product: name, amount, unit: suppliedUnit || "each", inStock: true };
     });
 
     if (isService) {
