@@ -19,11 +19,137 @@ export async function startSupplierSearch(from, biz, saveBiz) {
   ]);
 }
 
-// ── Synonym/alias map: Maps what buyers TYPE → what suppliers LIST ────────────
+
+// Maps common search terms to their category IDs or related keywords
+const SEARCH_SYNONYMS = {
+  "teacher": ["tutor", "tutoring", "teaching", "lesson", "maths", "science", "english"],
+  "tutor": ["tutoring", "teacher", "teaching", "lesson"],
+  "doctor": ["health", "medical", "clinic", "nurse"],
+  "lawyer": ["legal", "attorney", "advocate"],
+  "builder": ["construction", "building", "bricklaying"],
+  "painter": ["painting", "paint"],
+  "welder": ["welding", "fabrication", "gate"],
+  "plumber": ["plumbing", "pipes", "geyser"],
+  "electrician": ["electrical", "wiring", "electric"],
+  "cleaner": ["cleaning", "clean"],
+  "driver": ["transport", "car hire", "delivery", "taxi"],
+  "mechanic": ["car repair", "vehicle", "auto"],
+  "gardener": ["gardening", "lawn", "garden"],
+  "security": ["guard", "security guard", "alarm"],
+  "photographer": ["photography", "photos", "pictures"],
+  "designer": ["printing", "graphics", "design"],
+  "carpenter": ["woodwork", "furniture"],
+  "tailor": ["sewing", "clothing", "alterations"]
+};
+
+function expandSearchTerms(product) {
+  const lower = (product || "").toLowerCase().trim();
+  const synonyms = SEARCH_SYNONYMS[lower];
+  if (!synonyms) return [product];
+  return [product, ...synonyms];
+}
+
+export async function runSupplierSearch({ city, category, product, profileType }) {
+  // Base query — never show suspended or inactive suppliers
+  const query = {
+    active: true,
+    $and: [
+      { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
+      { subscriptionStatus: "active" }
+    ]
+  };
+
+  if (profileType) query.profileType = profileType;
+  if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
+
+  if (category) query.categories = category;
+
+  // Product/service free-text search — searches both product list AND priced items
+// Product/service free-text search — uses synonym expansion so "teacher" finds "tutoring" etc
+  if (product) {
+    const searchTerms = expandSearchTerms(product);
+
+    // Search ALL fields regardless of profileType — buyer doesn't know supplier's category name
+    const productOr = searchTerms.flatMap(term => [
+      { products: { $regex: term, $options: "i" } },
+      { "rates.service": { $regex: term, $options: "i" } },
+      { categories: { $regex: term, $options: "i" } },
+      { "prices.product": { $regex: term, $options: "i" } },
+      { businessName: { $regex: term, $options: "i" } }
+    ]);
+
+    query.$and.push({ $or: productOr });
+  }
+
+  return SupplierProfile.find(query)
+    .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
+    .limit(10)
+    .lean();
+}
+
+export function formatSupplierResults(suppliers, city, searchTerm) {
+  if (!suppliers || !suppliers.length) return [];
+
+  return suppliers.map((s) => {
+    const badge = s.tier === "featured" ? "🔥 "
+      : s.tier === "pro" ? "⭐ " : "";
+
+    const delivery = s.profileType === "service"
+      ? (s.travelAvailable ? "🚗 Travels" : "📍 Fixed location")
+      : (s.delivery?.available ? "🚚 Delivers" : "🏠 Collect");
+
+    const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
+    const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
+
+    // Show a matching product/rate if we have a search term
+    let matchHint = "";
+    if (searchTerm && s.profileType === "service" && s.rates?.length) {
+      const match = s.rates.find(r =>
+        r.service?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (match) matchHint = ` · ${match.service} ${match.rate}`;
+    } else if (searchTerm && s.prices?.length) {
+      const match = s.prices.find(p =>
+        p.product?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (match) matchHint = ` · $${match.amount}/${match.unit}`;
+    }
+
+    return {
+      id: `sup_view_${s._id}`,
+      title: `${badge}${s.businessName}`,
+      description: `${delivery}${min}${rating}${matchHint}`
+    };
+  });
+}
+
+// ── Parse shortcode search from raw text ──────────────────────────────────
+// Handles: "find cement", "find plumber harare", "s tiles", "/find bread"
+// ── Parse shortcode search from raw text ──────────────────────────────────
+// Handles: "find cement", "find plumber harare", "s tiles", "/find bread"
+export function parseShortcodeSearch(text = "") {
+  const raw = text.trim().toLowerCase();
+
+  const patterns = [
+    /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i,
+  ];
+
+  for (const p of patterns) {
+    const m = raw.match(p);
+    if (m) {
+      const query = m[1].trim();
+      return parseQueryWithCity(query);
+    }
+  }
+  return null;
+}
+
+// ── Synonym/alias map keyed to category IDs and common product/service terms ──
+// Maps what buyers TYPE → what suppliers LIST
 const SEARCH_SYNONYMS = {
   // ── GROCERIES & FOOD ─────────────────────────────────────────────────────
-  "food": ["groceries", "grocery", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar", "sadza"],
-  "groceries": ["grocery", "supermarket", "food", "provisions", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar"],
+  "food": ["groceries", "grocery", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar", "salt", "tomatoes", "onions", "vegetables", "fruit", "chicken", "beef", "pork", "fish", "eggs", "milk", "butter", "cheese", "yoghurt", "juice", "soft drinks", "water", "cooking", "sadza"],
+  "groceries": ["grocery", "supermarket", "food", "provisions", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar", "salt", "tomatoes", "onions", "vegetables"],
   "grocery": ["groceries", "food", "provisions", "cooking oil", "mealie meal", "rice", "bread", "flour", "sugar"],
   "mealie meal": ["sadza", "roller meal", "maize meal", "flour", "grain", "groceries"],
   "sadza": ["mealie meal", "roller meal", "maize meal", "grain", "groceries"],
@@ -36,8 +162,8 @@ const SEARCH_SYNONYMS = {
   "chicken": ["poultry", "broiler", "frozen chicken", "meat", "groceries", "food"],
   "beef": ["steak", "mince", "meat", "nyama", "groceries", "food"],
   "fish": ["bream", "kapenta", "seafood", "groceries", "food"],
-  "vegetables": ["veggies", "tomatoes", "onions", "cabbage", "spinach", "potatoes", "carrots", "groceries", "fresh produce"],
-  "fruit": ["apples", "bananas", "oranges", "mangoes", "avocado", "fresh produce", "groceries"],
+  "vegetables": ["veggies", "tomatoes", "onions", "cabbage", "spinach", "sweet potatoes", "potatoes", "carrots", "groceries", "fresh produce", "food"],
+  "fruit": ["apples", "bananas", "oranges", "mangoes", "avocado", "tomatoes", "fresh produce", "groceries"],
   "drinks": ["juice", "soft drinks", "water", "beverages", "cooldrink", "soda", "groceries"],
   "water": ["drinking water", "mineral water", "bottled water", "drinks", "groceries"],
   "milk": ["dairy", "fresh milk", "long life milk", "groceries", "food"],
@@ -57,7 +183,7 @@ const SEARCH_SYNONYMS = {
   "filters": ["oil filter", "air filter", "car parts", "spares", "auto parts"],
 
   // ── CLOTHING & SHOES ──────────────────────────────────────────────────────
-  "clothes": ["clothing", "fashion", "garments", "wear", "shirts", "trousers", "dresses", "jeans", "t-shirts", "suits", "uniforms", "shoes"],
+  "clothes": ["clothing", "fashion", "garments", "wear", "shirts", "trousers", "dresses", "jeans", "t-shirts", "suits", "uniforms", "shoes", "sneakers"],
   "clothing": ["clothes", "fashion", "garments", "wear", "shirts", "trousers", "dresses", "jeans", "t-shirts", "suits"],
   "shoes": ["sneakers", "boots", "heels", "sandals", "footwear", "clothing", "fashion"],
   "sneakers": ["shoes", "trainers", "sports shoes", "footwear", "clothing"],
@@ -69,7 +195,7 @@ const SEARCH_SYNONYMS = {
   "salaula": ["second hand", "used clothes", "secondhand", "thrift", "clothing"],
 
   // ── HARDWARE & BUILDING ───────────────────────────────────────────────────
-  "hardware": ["building materials", "construction materials", "cement", "sand", "bricks", "steel", "iron sheets", "timber", "paint", "tools"],
+  "hardware": ["building materials", "construction materials", "cement", "sand", "bricks", "steel", "iron sheets", "timber", "paint", "tools", "nails", "screws"],
   "cement": ["concrete", "building materials", "hardware", "construction", "portland cement"],
   "sand": ["river sand", "building sand", "plaster sand", "hardware", "building materials", "construction"],
   "river sand": ["sand", "building sand", "hardware", "building materials"],
@@ -87,7 +213,7 @@ const SEARCH_SYNONYMS = {
   "building materials": ["hardware", "cement", "sand", "bricks", "steel", "iron sheets", "timber", "construction materials"],
 
   // ── AGRICULTURE & FARMING ─────────────────────────────────────────────────
-  "farming": ["agriculture", "seeds", "fertilizer", "chemicals", "pesticides", "livestock", "crops", "maize", "soya"],
+  "farming": ["agriculture", "seeds", "fertilizer", "chemicals", "pesticides", "livestock", "crops", "maize", "soya", "tobacco"],
   "agriculture": ["farming", "seeds", "fertilizer", "chemicals", "pesticides", "livestock", "crops"],
   "seeds": ["maize seed", "vegetable seeds", "soya seed", "farming", "agriculture"],
   "fertilizer": ["fertiliser", "compound D", "ammonium nitrate", "farming", "agriculture"],
@@ -112,7 +238,7 @@ const SEARCH_SYNONYMS = {
   "stove": ["cooker", "gas stove", "electric stove", "appliances", "electronics"],
 
   // ── CROSS-BORDER GOODS ────────────────────────────────────────────────────
-  "cross border": ["imports", "foreign goods", "imported goods", "crossborder", "south africa goods", "china goods"],
+  "cross border": ["imports", "foreign goods", "imported goods", "crossborder", "south africa goods", "china goods", "dubai goods"],
   "crossborder": ["cross border", "imports", "foreign goods", "imported goods"],
   "imports": ["cross border", "imported goods", "foreign goods", "crossborder"],
   "imported": ["cross border", "imports", "foreign goods", "crossborder"],
@@ -137,6 +263,7 @@ const SEARCH_SYNONYMS = {
   "tables": ["dining table", "coffee table", "desk", "furniture"],
   "chairs": ["office chairs", "dining chairs", "furniture"],
   "curtains": ["blinds", "drapes", "home décor", "furniture", "home"],
+  "appliances home": ["fridge", "stove", "microwave", "washing machine", "furniture", "home"],
 
   // ── PLUMBING ──────────────────────────────────────────────────────────────
   "plumber": ["plumbing", "pipes", "geyser", "water pipes", "burst pipe", "tap", "toilet", "drain"],
@@ -162,6 +289,7 @@ const SEARCH_SYNONYMS = {
   "builder": ["construction", "contractor", "building", "renovation", "house building"],
   "contractor": ["construction", "builder", "building", "renovation", "house building"],
   "renovation": ["construction", "builder", "contractor", "remodelling", "repair", "home improvement"],
+  "roofing contractor": ["roofing", "roof repair", "construction", "builder", "iron sheets"],
   "plastering": ["plaster", "construction", "builder", "walls", "cement"],
 
   // ── PAINTING & DÉCOR ──────────────────────────────────────────────────────
@@ -250,7 +378,7 @@ const SEARCH_SYNONYMS = {
   "sound system": ["DJ", "music", "events", "entertainment", "sound hire"],
 
   // ── TUTORING & TEACHING ───────────────────────────────────────────────────
-  "teacher": ["tutor", "tutoring", "teaching", "lesson", "lessons", "maths", "science", "english", "education", "school"],
+  "teacher": ["tutor", "tutoring", "teaching", "lesson", "lessons", "maths", "science", "english", "education", "school", "tutoring"],
   "tutor": ["teacher", "tutoring", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
   "tutoring": ["tutor", "teacher", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
   "lessons": ["tutoring", "tutor", "teacher", "teaching", "education", "school"],
@@ -261,6 +389,7 @@ const SEARCH_SYNONYMS = {
   "physics": ["science", "tutoring", "tutor", "teacher", "lessons", "maths"],
   "chemistry": ["science", "tutoring", "tutor", "teacher", "lessons"],
   "biology": ["science", "life science", "tutoring", "tutor", "teacher", "lessons"],
+  "english tutor": ["english", "language", "tutoring", "tutor", "teacher", "lessons"],
   "english": ["language", "tutoring", "tutor", "teacher", "lessons", "literature"],
   "a level": ["alevel", "sixth form", "tutoring", "tutor", "teacher", "lessons", "education"],
   "o level": ["olevel", "tutoring", "tutor", "teacher", "lessons", "education", "school"],
@@ -288,112 +417,17 @@ const SEARCH_SYNONYMS = {
   "fix": ["repair", "maintenance", "service"],
   "hire": ["rent", "rental", "car hire", "truck hire", "equipment hire"],
   "rent": ["hire", "rental", "car hire", "equipment hire"],
-  "mechanic": ["car repair", "vehicle", "auto", "garage", "car service"],
-  "carpenter": ["woodwork", "furniture", "carpentry", "timber", "doors"],
-  "tailor": ["sewing", "clothing", "alterations", "dressmaker", "fashion"],
-  "driver": ["transport", "car hire", "delivery", "taxi", "chauffeur"],
 };
 
-// ── Expand a search term using the synonym map ───────────────────────────────
-// Returns original term + up to 6 synonyms to keep MongoDB $or manageable
 export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   const synonyms = SEARCH_SYNONYMS[lower];
+  // Return original term plus up to 6 synonyms to keep MongoDB $or manageable
   if (!synonyms) return [lower];
   return [lower, ...synonyms.slice(0, 6)];
 }
 
-export async function runSupplierSearch({ city, category, product, profileType }) {
-  // Base query — never show suspended or inactive suppliers
-  const query = {
-    active: true,
-    $and: [
-      { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
-      { subscriptionStatus: "active" }
-    ]
-  };
-
-  if (profileType) query.profileType = profileType;
-  if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
-  if (category) query.categories = category;
-
-  // Product/service free-text search — uses synonym expansion so "teacher" finds "tutoring" etc
-  if (product) {
-    const searchTerms = expandSearchTerms(product);
-
-    // Search ALL fields regardless of profileType — buyer doesn't know supplier's category name
-    const productOr = searchTerms.flatMap(term => [
-      { products: { $regex: term, $options: "i" } },
-      { "rates.service": { $regex: term, $options: "i" } },
-      { categories: { $regex: term, $options: "i" } },
-      { "prices.product": { $regex: term, $options: "i" } },
-      { businessName: { $regex: term, $options: "i" } }
-    ]);
-
-    query.$and.push({ $or: productOr });
-  }
-
-  return SupplierProfile.find(query)
-    .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(10)
-    .lean();
-}
-
-export function formatSupplierResults(suppliers, city, searchTerm) {
-  if (!suppliers || !suppliers.length) return [];
-
-  return suppliers.map((s) => {
-    const badge = s.tier === "featured" ? "🔥 "
-      : s.tier === "pro" ? "⭐ " : "";
-
-    const delivery = s.profileType === "service"
-      ? (s.travelAvailable ? "🚗 Travels" : "📍 Fixed location")
-      : (s.delivery?.available ? "🚚 Delivers" : "🏠 Collect");
-
-    const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
-    const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
-
-    let matchHint = "";
-    if (searchTerm && s.profileType === "service" && s.rates?.length) {
-      const match = s.rates.find(r =>
-        r.service?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      if (match) matchHint = ` · ${match.service} ${match.rate}`;
-    } else if (searchTerm && s.prices?.length) {
-      const match = s.prices.find(p =>
-        p.product?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      if (match) matchHint = ` · $${match.amount}/${match.unit}`;
-    }
-
-    return {
-      id: `sup_view_${s._id}`,
-      title: `${badge}${s.businessName}`,
-      description: `${delivery}${min}${rating}${matchHint}`
-    };
-  });
-}
-
-// ── Parse shortcode search from raw text ─────────────────────────────────────
-// Handles: "find cement", "find plumber harare", "s tiles", "need teacher harare"
-export function parseShortcodeSearch(text = "") {
-  const raw = text.trim().toLowerCase();
-
-  const patterns = [
-    /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i,
-  ];
-
-  for (const p of patterns) {
-    const m = raw.match(p);
-    if (m) {
-      const query = m[1].trim();
-      return parseQueryWithCity(query);
-    }
-  }
-  return null;
-}
-
-// ── Split "plumber harare" into { product: "plumber", city: "Harare" } ───────
+// Splits "plumber harare" into { product: "plumber", city: "Harare" }
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
     "harare", "bulawayo", "mutare", "gweru", "masvingo",
@@ -403,7 +437,31 @@ function parseQueryWithCity(query = "") {
   const words = query.trim().split(/\s+/);
   let city = null;
 
-  // Check if last 1 or 2 words match a known city
+  for (let len = 2; len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ").toLowerCase();
+    const matched = KNOWN_CITIES.find(c => c === candidate);
+    if (matched) {
+      city = matched.charAt(0).toUpperCase() + matched.slice(1);
+      const product = words.slice(0, -len).join(" ").trim();
+      if (product) return { product, city };
+      break;
+    }
+  }
+
+  return { product: query.trim(), city: null };
+}
+// Splits "plumber harare" into { product: "plumber", city: "Harare" }
+function parseQueryWithCity(query = "") {
+  // Import SUPPLIER_CITIES inline to avoid circular dependency
+  const KNOWN_CITIES = [
+    "harare", "bulawayo", "mutare", "gweru", "masvingo",
+    "kwekwe", "kadoma", "chinhoyi", "victoria falls"
+  ];
+
+  const words = query.trim().split(/\s+/);
+  let city = null;
+
+  // Check if last word(s) match a city
   for (let len = 2; len >= 1; len--) {
     const candidate = words.slice(-len).join(" ").toLowerCase();
     const matched = KNOWN_CITIES.find(c => c === candidate);
