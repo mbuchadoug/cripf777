@@ -547,9 +547,10 @@ if (searchMode === "product") {
 
   if (parsed.city) {
     // Skip city picker - go straight to results
-    const results = await runSupplierSearch({
+  const results = await runSupplierSearch({
       city: parsed.city,
       product: parsed.product,
+      area: parsed.area || null,
       profileType: sess?.tempData?.supplierSearchType || null
     });
     if (!results.length) {
@@ -628,11 +629,15 @@ a.startsWith("sup_cart_custom_") ||
       if (shortcode.city) {
         const results = await runSupplierSearch({
           city: shortcode.city,
-          product: shortcode.product
+          product: shortcode.product,
+          area: shortcode.area || null
         });
         if (results.length) {
           const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-          return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
+          const locationLabel = shortcode.area
+            ? `${shortcode.area}, ${shortcode.city}`
+            : shortcode.city;
+          return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
         }
       }
 
@@ -2086,11 +2091,15 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
     if (shortcode.city) {
       const results = await runSupplierSearch({
         city: shortcode.city,
-        product: shortcode.product
+        product: shortcode.product,
+        area: shortcode.area || null
       });
       if (results.length) {
         const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-        return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
+        const locationLabel = shortcode.area
+            ? `${shortcode.area}, ${shortcode.city}`
+            : shortcode.city;
+          return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
     biz.sessionData = {
@@ -2175,7 +2184,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         biz.sessionState === "supplier_order_enter_price" ||
           biz.sessionState === "supplier_order_picking"   // ← ADD
       ) {
-        // Do nothing here — fall through to the order state handlers below
+        // Do nothing here - fall through to the order state handlers below
       } else {
         // Ghost biz user typed something unrecognised - try as a search first
         const shortcode = parseShortcodeSearch(text);
@@ -3915,7 +3924,7 @@ if (!category && !product && !profileType) {
   profileType = sess?.tempData?.supplierSearchType || null;
 }
 
-const results = await runSupplierSearch({ city, category, product, profileType });
+const results = await runSupplierSearch({ city, category, product, profileType, area: null });
   if (!results.length) {
       return sendButtons(from, {
         text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
@@ -4357,7 +4366,7 @@ if (a.startsWith("sup_cart_add_")) {
     cart = sess?.tempData?.orderCart || [];
   }
 
-  // Check if item already in cart — increment qty
+  // Check if item already in cart - increment qty
   const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
   if (existing) {
     existing.quantity += 1;
@@ -4422,7 +4431,7 @@ if (a.startsWith("sup_cart_confirm_")) {
   // Show order summary and ask for address
   const isService = supplier.profileType === "service";
   const previewLines = cart.map(c => {
-    const priceStr = c.pricePerUnit ? ` — $${Number(c.pricePerUnit).toFixed(2)}/${c.unit}` : "";
+    const priceStr = c.pricePerUnit ? ` - $${Number(c.pricePerUnit).toFixed(2)}/${c.unit}` : "";
     return `• ${c.product} x${c.quantity}${priceStr}`;
   }).join("\n");
 
@@ -4455,11 +4464,11 @@ ${previewLines}${totalLine}
 ⚠️ *Your order has NOT been sent yet.*
 ─────────────────
 
-*Step 2 of 2 — Enter your ${isService ? "location" : "delivery address"}* 👇
+*Step 2 of 2 - Enter your ${isService ? "location" : "delivery address"}* 👇
 
 ${isService
   ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am, Mabelreign_`
-  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect — call me_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect - call me_`
 }
 
 _Type your address below and send to complete your ${isService ? "booking" : "order"}_ ✍️`,
@@ -4622,9 +4631,10 @@ Type *cancel* to go back.`);
 
     if (finalCity) {
       // City was included - run search immediately, skip city picker
-      const results = await runSupplierSearch({
+       const results = await runSupplierSearch({
         city: finalCity,
         product: finalProduct,
+        area: parsed?.area || null,
         profileType: biz.sessionData?.supplierSearch?.type || null
       });
       biz.sessionState = "ready";
@@ -4639,8 +4649,11 @@ Type *cancel* to go back.`);
           ]
         });
       }
+     const locationLabel = parsed?.area
+        ? `${parsed.area}, ${finalCity}`
+        : finalCity;
       const rows = formatSupplierResults(results, finalCity, finalProduct);
-      return sendList(from, `🔍 *${finalProduct}* in ${finalCity} - ${results.length} found`, rows);
+      return sendList(from, `🔍 *${finalProduct}* in ${locationLabel} - ${results.length} found`, rows);
     }
 
     // No city - ask which city
@@ -4706,11 +4719,11 @@ ${preview}
 ⚠️ *Your ${isServiceSupplier ? "booking" : "order"} has NOT been sent yet.*
 ─────────────────
 
-*Step 2 of 2 — Enter your ${isServiceSupplier ? "location" : "delivery address"}* 👇
+*Step 2 of 2 - Enter your ${isServiceSupplier ? "location" : "delivery address"}* 👇
 
 ${isServiceSupplier
   ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am_`
-  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect — call me_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect - call me_`
 }
 
 _Type your address below and send to complete your ${isServiceSupplier ? "booking" : "order"}_ ✍️`,
@@ -5616,7 +5629,7 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
         id: r.service,
         label: r.service,
         price: r.rate,
-        display: `${r.service} — ${r.rate}`
+        display: `${r.service} - ${r.rate}`
       }))
     : (supplier.prices || [])
         .filter(p => p.inStock !== false)
@@ -5624,7 +5637,7 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
           id: p.product,
           label: p.product,
           price: `$${Number(p.amount).toFixed(2)}/${p.unit}`,
-          display: `${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`
+          display: `${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`
         }));
 
   // Fallback: supplier listed products but no prices
@@ -5635,7 +5648,7 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
   const sourceItems = items.length ? items : fallbackItems;
 
   if (!sourceItems.length) {
-    // No products at all — fall back to free-text order
+    // No products at all - fall back to free-text order
     return sendText(from,
 `${isService ? "📅" : "🛒"} *${isService ? "Book with" : "Order from"} ${supplier.businessName}*
 
@@ -5657,7 +5670,7 @@ let cartSummary = "";
       cart.map(c => `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`).join("\n") + "\n\n";
   }
 
-  // Build list rows — cap at 10 (WhatsApp limit)
+  // Build list rows - cap at 10 (WhatsApp limit)
   const rows = sourceItems.slice(0, 10).map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
     title: item.label.slice(0, 24),           // WhatsApp title limit
@@ -5681,7 +5694,7 @@ let cartSummary = "";
   rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍️ Type Custom Item" });
 
 const stepHint = cart.length
-    ? `_Step 1 of 2 — tap ✅ Confirm when ready_`
+    ? `_Step 1 of 2 - tap ✅ Confirm when ready_`
     : `_Tap items to add · then confirm to send_`;
 
   return sendList(from,

@@ -303,8 +303,7 @@ export function expandSearchTerms(product) {
   return [lower, ...synonyms.slice(0, 6)];
 }
 
-export async function runSupplierSearch({ city, category, product, profileType }) {
-  // Base query - never show suspended or inactive suppliers
+export async function runSupplierSearch({ city, category, product, profileType, area }) {
   const query = {
     active: true,
     $and: [
@@ -315,13 +314,16 @@ export async function runSupplierSearch({ city, category, product, profileType }
 
   if (profileType) query.profileType = profileType;
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
+  
+  // ── Area/suburb filter: boost results from that suburb ────────────────────
+  // We don't hard-filter by area (too restrictive — supplier may serve whole city)
+  // Instead we add it as a soft OR condition alongside the product search below
   if (category) query.categories = category;
 
   // Product/service free-text search - uses synonym expansion so "teacher" finds "tutoring" etc
-  if (product) {
+if (product) {
     const searchTerms = expandSearchTerms(product);
 
-    // Search ALL fields regardless of profileType - buyer doesn't know supplier's category name
     const productOr = searchTerms.flatMap(term => [
       { products: { $regex: term, $options: "i" } },
       { "rates.service": { $regex: term, $options: "i" } },
@@ -333,10 +335,25 @@ export async function runSupplierSearch({ city, category, product, profileType }
     query.$and.push({ $or: productOr });
   }
 
-  return SupplierProfile.find(query)
+  let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(10)
+    .limit(20)   // fetch more so we can re-sort by area proximity
     .lean();
+
+  // ── Area boost: float suppliers in the searched suburb to the top ─────────
+  if (area && results.length > 1) {
+    const areaLower = area.toLowerCase();
+    results.sort((a, b) => {
+      const aInArea = (a.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
+      const bInArea = (b.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
+      if (aInArea !== bInArea) return aInArea - bInArea;
+      // Preserve original sort within each group
+      return (b.tierRank || 0) - (a.tierRank || 0);
+    });
+  }
+
+  return results.slice(0, 10);
+
 }
 
 export function formatSupplierResults(suppliers, city, searchTerm) {
@@ -394,6 +411,109 @@ export function parseShortcodeSearch(text = "") {
 }
 
 // ── Split "plumber harare" into { product: "plumber", city: "Harare" } ───────
+// ── Suburb → City mapping ─────────────────────────────────────────────────
+const SUBURB_TO_CITY = {
+  // Harare suburbs
+  "avondale": "Harare",
+  "borrowdale": "Harare",
+  "mabelreign": "Harare",
+  "mbare": "Harare",
+  "highfield": "Harare",
+  "glen view": "Harare",
+  "glenview": "Harare",
+  "budiriro": "Harare",
+  "kuwadzana": "Harare",
+  "dzivarasekwa": "Harare",
+  "hatfield": "Harare",
+  "greendale": "Harare",
+  "msasa": "Harare",
+  "eastlea": "Harare",
+  "waterfalls": "Harare",
+  "glen norah": "Harare",
+  "glennorah": "Harare",
+  "mufakose": "Harare",
+  "chitungwiza": "Harare",
+  "ruwa": "Harare",
+  "epworth": "Harare",
+  "tafara": "Harare",
+  "mabvuku": "Harare",
+  "highlands": "Harare",
+  "mount pleasant": "Harare",
+  "belgravia": "Harare",
+  "milton park": "Harare",
+  "milton": "Harare",
+  "newlands": "Harare",
+  "chisipite": "Harare",
+  "gunhill": "Harare",
+  "greystone": "Harare",
+  "strathaven": "Harare",
+  "alexandra park": "Harare",
+  "alex park": "Harare",
+  "braeside": "Harare",
+  "arcadia": "Harare",
+  "southerton": "Harare",
+  "workington": "Harare",
+  "willowvale": "Harare",
+  "graniteside": "Harare",
+  "industrial": "Harare",
+  "seke": "Harare",
+  "norton": "Harare",
+  "dzivaresekwa": "Harare",
+  "kambuzuma": "Harare",
+  "warren park": "Harare",
+  "warren": "Harare",
+
+  // Bulawayo suburbs
+  "nkulumane": "Bulawayo",
+  "luveve": "Bulawayo",
+  "entumbane": "Bulawayo",
+  "njube": "Bulawayo",
+  "mpopoma": "Bulawayo",
+  "lobengula": "Bulawayo",
+  "makokoba": "Bulawayo",
+  "tshabalala": "Bulawayo",
+  "pelandaba": "Bulawayo",
+  "mabutweni": "Bulawayo",
+  "emakhandeni": "Bulawayo",
+  "pumula": "Bulawayo",
+  "iminyela": "Bulawayo",
+  "cowdray park": "Bulawayo",
+  "cowdray": "Bulawayo",
+  "magwegwe": "Bulawayo",
+  "selbourne": "Bulawayo",
+  "hillside": "Bulawayo",
+  "suburbs": "Bulawayo",
+  "white city": "Bulawayo",
+
+  // Mutare suburbs
+  "sakubva": "Mutare",
+  "dangamvura": "Mutare",
+  "chikanga": "Mutare",
+  "hobhouse": "Mutare",
+  "paulington": "Mutare",
+  "tiger's kloof": "Mutare",
+
+  // Gweru suburbs
+  "mambo": "Gweru",
+  "mkoba": "Gweru",
+  "senga": "Gweru",
+  "ascot": "Gweru",
+
+  // Masvingo suburbs
+  "mucheke": "Masvingo",
+  "rujeko": "Masvingo",
+  "eastvale": "Masvingo",
+
+  // Kwekwe suburbs  
+  "mbizo": "Kwekwe",
+  "amaveni": "Kwekwe",
+  "oh well": "Kwekwe",
+
+  // Chinhoyi suburbs
+  "chinhoyi heights": "Chinhoyi",
+  "mhangura": "Chinhoyi",
+};
+
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
     "harare", "bulawayo", "mutare", "gweru", "masvingo",
@@ -402,18 +522,32 @@ function parseQueryWithCity(query = "") {
 
   const words = query.trim().split(/\s+/);
   let city = null;
+  let area = null;
+  let productWords = words;
 
-  // Check if last 1 or 2 words match a known city
+  // ── Step 1: Check last 1–3 words for a known CITY ────────────────────────
   for (let len = 2; len >= 1; len--) {
     const candidate = words.slice(-len).join(" ").toLowerCase();
     const matched = KNOWN_CITIES.find(c => c === candidate);
     if (matched) {
       city = matched.charAt(0).toUpperCase() + matched.slice(1);
-      const product = words.slice(0, -len).join(" ").trim();
-      if (product) return { product, city };
+      productWords = words.slice(0, -len);
+      if (productWords.length) return { product: productWords.join(" ").trim(), city, area: null };
       break;
     }
   }
 
-  return { product: query.trim(), city: null };
+  // ── Step 2: Check last 1–3 words for a known SUBURB ──────────────────────
+  for (let len = 3; len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ").toLowerCase();
+    if (SUBURB_TO_CITY[candidate]) {
+      city = SUBURB_TO_CITY[candidate];
+      area = candidate.charAt(0).toUpperCase() + candidate.slice(1);
+      productWords = words.slice(0, -len);
+      if (productWords.length) return { product: productWords.join(" ").trim(), city, area };
+      break;
+    }
+  }
+
+  return { product: query.trim(), city: null, area: null };
 }
