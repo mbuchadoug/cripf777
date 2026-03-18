@@ -4173,7 +4173,7 @@ if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
     });
   }
 
-  const supplierId = biz?.sessionData?.orderSupplierId
+const supplierId = biz?.sessionData?.orderSupplierId
     || pickingStateSess?.tempData?.orderSupplierId;
   if (!supplierId) return;
 
@@ -4185,6 +4185,68 @@ if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
   let cart = [...(biz?.sessionData?.orderCart
     || pickingStateSess?.tempData?.orderCart
     || [])];
+
+  // ── Rebuild source items for numbered selection (Option C) ────────────────
+  const _catalogueItems = isService
+    ? (supplier.rates || []).map(r => ({ id: r.service, label: r.service, price: r.rate }))
+    : (supplier.prices || []).filter(p => p.inStock !== false).map(p => ({
+        id: p.product,
+        label: p.product,
+        price: `$${Number(p.amount).toFixed(2)}/${p.unit}`
+      }));
+  const _fallbackItems = (supplier.products || [])
+    .filter(p => p !== "pending_upload")
+    .map(p => ({ id: p, label: p, price: null }));
+  const sourceItems = _catalogueItems.length ? _catalogueItems : _fallbackItems;
+
+  // ── NUMBERED ITEM SELECTION: "1x5, 3x2" or "1x5" or "1 x 5" ─────────────
+  // Matches patterns like: 1x5  1x5,3x2  1x5, 3x2  1 x 5  1:5
+  const numberedSelectionPattern = /^\d+\s*[x:]\s*\d/i;
+  if (numberedSelectionPattern.test(rawLower.trim())) {
+    // Extract all "number x quantity" pairs
+    const pairs = raw.match(/(\d+)\s*[xX:]\s*(\d+(?:\.\d+)?)/g);
+    if (pairs && pairs.length) {
+      const errors = [];
+      for (const pair of pairs) {
+        const m = pair.match(/(\d+)\s*[xX:]\s*(\d+(?:\.\d+)?)/);
+        if (!m) continue;
+        const itemNum = parseInt(m[1]);
+        const qty = parseFloat(m[2]);
+
+        if (itemNum < 1 || itemNum > sourceItems.length) {
+          errors.push(`❌ No item #${itemNum} — list has ${sourceItems.length} items`);
+          continue;
+        }
+
+        const selectedItem = sourceItems[itemNum - 1]; // convert to 0-index
+        const match = findMatchingSupplierPrice(supplier, selectedItem.id);
+        const cartProduct = match?.product || selectedItem.label;
+        const existing = cart.find(c => c.product.toLowerCase() === cartProduct.toLowerCase());
+
+        if (existing) {
+          existing.quantity += qty;
+          if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
+        } else {
+          cart.push({
+            product: cartProduct,
+            quantity: qty,
+            unit: match?.unit || (isService ? "job" : "units"),
+            pricePerUnit: match?.amount || null,
+            total: match?.amount ? qty * match.amount : null
+          });
+        }
+      }
+
+      if (errors.length) {
+        await sendText(from, errors.join("\n") + `\n\nList has ${sourceItems.length} items. Check the price list above.`);
+      }
+
+      if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: cart }; await saveBizSafe(biz); }
+      await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": cart } }, { upsert: true });
+      return _sendSupplierCatalogueMenu(from, supplier, cart);
+    }
+  }
+
 
   // ── CONFIRM shortcut ─────────────────────────────────────────────────────
   if (rawLower === "confirm" || rawLower === "done" || rawLower === "send") {
@@ -5941,57 +6003,108 @@ Send your order now 👇`);
       "\n";
   }
 
-  const WHATSAPP_MAX   = 10;
+ const WHATSAPP_MAX   = 10;
   const removeRowCount = cart.length ? Math.min(cart.length, 2) : 0;
   const actionSlots    = cart.length ? (removeRowCount + 2) : 0;
-  const productSlots   = WHATSAPP_MAX - actionSlots - 1; // -1 for custom/type row
+  const productSlots   = WHATSAPP_MAX - actionSlots - 1;
 
   const isBigCatalogue = sourceItems.length > productSlots;
 
-  // ── For big catalogues: send price list as a TEXT message first ───────────
+  // ── BIG CATALOGUE: Option C — numbered text list + minimal action panel ───
   if (isBigCatalogue) {
+    // Build numbered price list — plain text, unlimited length, no scrolling trap
     const priceListLines = sourceItems.map((item, i) => {
       const priceStr = item.price ? ` — ${item.price}` : "";
       return `${i + 1}. ${item.label}${priceStr}`;
     }).join("\n");
 
-    const orderExamples = isService
-      ? `_plumbing 2, welding 1_`
-      : `_cement 10, river sand 2, bricks 500_`;
+    // Cart status block — shown only when buyer has already selected items
+    let cartStatus = "";
+    if (cart.length) {
+      const cartTotal = cart.filter(c => c.pricePerUnit).reduce((s, c) => s + c.quantity * c.pricePerUnit, 0);
+      cartStatus =
+        `\n✅ *Items selected so far:*\n` +
+        cart.map((c, i) => `${i + 1}. ${c.product} ×${c.quantity}${c.pricePerUnit ? ` = $${(c.quantity * c.pricePerUnit).toFixed(2)}` : ""}`).join("\n") +
+        (cartTotal > 0 ? `\n💵 *Running total: $${cartTotal.toFixed(2)}*` : "") +
+        "\n";
+    }
 
+    // Send the numbered price list as a plain text message — buyer can see ALL items, scroll freely
     await sendText(from,
-`${isService ? "🔧" : "📦"} *${supplier.businessName} — Full ${isService ? "Services" : "Price List"}*
-
+`${isService ? "🔧" : "📦"} *${supplier.businessName}*
+${isService ? "Services & Rates" : "Products & Prices"} — ${sourceItems.length} items
+${cartStatus}
 ${priceListLines}
 
 ─────────────────
-${cartSummary.length ? cartSummary + "\n─────────────────\n" : ""}
-*📌 How to order:*
+*📌 How to order — choose any style:*
 
-*Option 1 — Tap* any item in the list below ↓ to quick-add it
+*Style 1 — Item number + quantity:*
+_1x5, 3x2, 6x20_
+_(item 1 qty 5, item 3 qty 2, item 6 qty 20)_
 
-*Option 2 — Type* your order directly:
-Format: *item qty, item qty*
-Example: ${orderExamples}
+*Style 2 — Item name + quantity:*
+_cement 5, river sand 2, bricks 500_
 
-*Option 3 — Increase qty:* type the item name again e.g. _cement_ adds 1 more cement to cart
+*Style 3 — Mixed (numbers and names both work):*
+_1x5, sand 2, 6x20_
+
+*Increase qty:* type item again e.g. _cement_ or _1x1_ adds 1 more
 
 *Commands:*
-- *confirm* — send your order
-- *clear* — empty your cart
-- *remove cement* — remove an item
-- *r2* — remove item #2 from cart
-- *cancel* — cancel this order`);
+- *confirm* — finish and send your order
+- *r1* or *remove cement* — remove an item
+- *clear* — empty cart and start fresh
+- *cancel* — go back`);
+
+    // Minimal action panel — ONLY action buttons, no product rows competing for space
+    const actionRows = [];
+
+    if (cart.length) {
+      const totalQty = cart.reduce((s, c) => s + c.quantity, 0);
+      actionRows.push({
+        id: `sup_cart_confirm_${supplier._id}`,
+        title: `✅ Confirm Order (${totalQty} item${totalQty !== 1 ? "s" : ""})`
+      });
+      actionRows.push({
+        id: `sup_cart_clear_${supplier._id}`,
+        title: "🗑 Clear Cart & Start Over"
+      });
+      actionRows.push({
+        id: "find_supplier",
+        title: "❌ Cancel"
+      });
+    } else {
+      // No cart yet — just show guidance rows
+      actionRows.push({
+        id: `sup_cart_custom_${supplier._id}`,
+        title: "✍️ Type order above ↑"
+      });
+      actionRows.push({
+        id: "find_supplier",
+        title: "🔍 Find Different Supplier"
+      });
+      actionRows.push({
+        id: `sup_cart_clear_${supplier._id}`,
+        title: "❌ Cancel"
+      });
+    }
+
+    return sendList(from,
+      cart.length
+        ? `🛒 *${supplier.businessName}* · ${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) !== 1 ? "s" : ""} selected — tap Confirm or keep adding`
+        : `📋 *${supplier.businessName}* · ${sourceItems.length} items — see full list above, type to order`,
+      actionRows
+    );
   }
 
-  // ── Build list rows ───────────────────────────────────────────────────────
+  // ── SMALL CATALOGUE (≤ productSlots items): keep original tappable list ───
   const rows = sourceItems.slice(0, productSlots).map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
     title: item.label.slice(0, 24),
     description: item.price ? String(item.price).slice(0, 72) : "Tap to add to cart"
   }));
 
-  // Cart action rows
   if (cart.length) {
     cart.slice(0, removeRowCount).forEach(c => {
       rows.push({
@@ -6003,25 +6116,19 @@ Example: ${orderExamples}
     rows.push({ id: `sup_cart_clear_${supplier._id}`,   title: "🗑 Clear Cart" });
   }
 
-  const hiddenCount = sourceItems.length - productSlots;
   rows.push({
     id: `sup_cart_custom_${supplier._id}`,
-    title: hiddenCount > 0 ? `✍️ Type item + qty to order` : `✍️ Type Custom Item`
+    title: `✍️ Type Custom Item`
   });
 
   if (rows.length > 10) rows.splice(10);
 
-  // ── List header (short — WhatsApp safe) ───────────────────────────────────
-  const stepHint = cart.length
-    ? `Tap ✅ Confirm when ready`
-    : (isBigCatalogue ? `Tap to quick-add · see full list above` : `Tap item to add to cart`);
-
   const shortCartLine = cart.length
-    ? `🛒 ${cart.reduce((s,c)=>s+c.quantity,0)} items in cart · `
+    ? `🛒 ${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) !== 1 ? "s" : ""} in cart · `
     : "";
 
   return sendList(from,
-    `${shortCartLine}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n_${stepHint}_`,
+    `${shortCartLine}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n_Tap an item to add it to your order_`,
     rows
   );
 }
