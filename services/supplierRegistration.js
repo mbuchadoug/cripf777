@@ -311,22 +311,18 @@ Type *skip* to add rates later.`,
 });
 }
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
+// ── Step 3b: Prices ────────────────────────────────────────────────────────
 if (state === "supplier_reg_prices") {
   const reg = biz.sessionData?.supplierReg || {};
   const products = (reg.products || []).filter(p => p !== "pending_upload");
   const isService = reg.profileType === "service";
-  const label = isService ? "services" : "products";
   const rateLabel = isService ? "rates" : "prices";
 
   if (!products.length) {
     // No products yet - skip pricing
     if (isService) {
       biz.sessionState = "supplier_reg_travel";
-    } else {
-      biz.sessionState = "supplier_reg_delivery";
-    }
-    await saveBiz(biz);
-    if (isService) {
+      await saveBiz(biz);
       return sendButtons(from, {
         text: "🚗 *Do you travel to clients?*",
         buttons: [
@@ -335,6 +331,8 @@ if (state === "supplier_reg_prices") {
         ]
       });
     }
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBiz(biz);
     return sendButtons(from, {
       text: "🚚 *Do you deliver?*",
       buttons: [
@@ -344,7 +342,164 @@ if (state === "supplier_reg_prices") {
     });
   }
 
-  // Build numbered list with any existing prices shown inline
+  // ── CHECK: Did supplier type prices? ──────────────────────────────────────
+  // text is the raw input. If it looks like prices (numbers or named), parse them.
+  // If text is empty/whitespace, just show the form again.
+  const rawInput = (text || "").trim();
+  const lowerInput = rawInput.toLowerCase();
+
+  // If empty or this is a button action being routed here, just show the form
+  if (!rawInput || rawInput.length < 1) {
+    // Fall through to show the form below
+  } else if (lowerInput !== "skip" && lowerInput !== "done") {
+    // Supplier typed something that looks like prices - try to parse it
+    const parts = rawInput.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+    const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
+    const updated = [];
+    const failed = [];
+
+    if (allNumbers) {
+      // Strategy 1: plain numbers in order e.g. "5,10,7,9,8"
+      if (parts.length !== products.length) {
+        await sendText(from,
+`❌ You have *${products.length} ${isService ? "service" : "product"}${products.length > 1 ? "s" : ""}* but sent *${parts.length} price${parts.length > 1 ? "s" : ""}*.
+
+Send one price per ${isService ? "service" : "product"} in order:
+${products.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+
+Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
+        );
+        return true;
+      }
+      parts.forEach((numStr, i) => {
+        updated.push({
+          product: products[i].toLowerCase(),
+          amount: parseFloat(numStr),
+          unit: isService ? "job" : "each",
+          inStock: true
+        });
+      });
+
+    } else {
+      // Strategy 2: named pricing e.g. "cement 5.50, sand 8" or "20/job, 50/hr"
+      for (const line of parts) {
+        const clean = line
+          .replace(/^[-•*►▪✓]\s*/, "")
+          .replace(/^\d+[.)]\s*/, "")
+          .replace(/\$/g, "")
+          .trim();
+
+        if (!clean) continue;
+
+        // Strategy 2a: "NUMBER/UNIT" format e.g. "20/job", "50/hr" - assign positionally
+        const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
+        if (rateOnlyMatch) {
+          const posIdx = updated.length;
+          if (posIdx < products.length) {
+            updated.push({
+              product: products[posIdx].toLowerCase(),
+              amount: parseFloat(rateOnlyMatch[1]),
+              unit: rateOnlyMatch[2].toLowerCase(),
+              inStock: true
+            });
+          } else {
+            failed.push(line);
+          }
+          continue;
+        }
+
+        // Strategy 2b: "name: number" or "name number" format
+        const match =
+          clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
+          clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
+
+        if (!match) { failed.push(line); continue; }
+
+        const product = match[1].replace(/[$@\-:,]+$/, "").trim().toLowerCase();
+        const amount = parseFloat(match[2]);
+        const rawUnit = (match[3] || "").trim().toLowerCase();
+        const unit = rawUnit
+          ? rawUnit.replace(/^\//, "")
+          : (isService ? "job" : "each");
+
+        if (!product || isNaN(amount)) { failed.push(line); continue; }
+        updated.push({ product, amount, unit, inStock: true });
+      }
+    }
+
+    // If we parsed prices successfully, save and advance
+    if (updated.length > 0) {
+      biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+
+      if (isService) {
+        // Convert to rate format: { service, rate }
+        biz.sessionData.supplierReg.rates = updated.map(u => ({
+          service: u.product,
+          rate: `${u.amount}/${u.unit}`
+        }));
+      } else {
+        biz.sessionData.supplierReg.prices = updated;
+      }
+
+      const failNote = failed.length
+        ? `\n\n⚠️ Skipped ${failed.length} line${failed.length > 1 ? "s" : ""} — you can update later.`
+        : "";
+
+      // Build preview lines
+      const previewLines = isService
+        ? updated.map(u => `• ${u.service} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n")
+        : updated.map(u => `• ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+
+      // ── ADVANCE STATE immediately — no loop ────────────────────────────────
+      if (isService) {
+        biz.sessionState = "supplier_reg_travel";
+        await saveBiz(biz);
+        return sendButtons(from, {
+          text:
+`✅ *${updated.length} ${isService ? "rate" : "price"}${updated.length > 1 ? "s" : ""} saved!*
+
+${previewLines}${failNote}
+
+🚗 *Do you travel to clients?*`,
+          buttons: [
+            { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+            { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+          ]
+        });
+      }
+
+      biz.sessionState = "supplier_reg_delivery";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text:
+`✅ *${updated.length} price${updated.length > 1 ? "s" : ""} saved!*
+
+${previewLines}${failNote}
+
+🚚 *Do you deliver?*`,
+        buttons: [
+          { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+          { id: "sup_del_no",  title: "🏠 Collection Only" }
+        ]
+      });
+    }
+
+    // Nothing parseable — fall through to show the form with an error hint
+    if (failed.length > 0 || parts.length > 0) {
+      await sendText(from,
+`❌ Couldn't read your ${rateLabel}.
+
+${isService
+  ? `Enter rates like this:\n*${products.slice(0,3).map((_, i) => ((i+1)*10)).join(", ")}*  ← just numbers in order\n\nOr: *${products.slice(0,2).map(p => `${p}: 10/job`).join(", ")}*\n\nOr rate format: *20/job, 50/hr*`
+  : `Enter prices like this:\n*${products.slice(0,3).map((_, i) => ((i+1)*5+2)).join(", ")}*  ← just numbers in order\n\nOr: *${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}*`
+}
+
+Type *skip* to add ${rateLabel} later.`
+      );
+    }
+  }
+
+  // ── Show the price entry form ─────────────────────────────────────────────
   const existingPrices = reg.prices || [];
   const existingRates  = reg.rates  || [];
 
@@ -360,24 +515,15 @@ if (state === "supplier_reg_prices") {
     }
   }).join("\n");
 
-  // Build a realistic example using first few products
   const exampleNums = products.slice(0, Math.min(4, products.length))
-    .map((_, i) => [2.50, 8.00, 1.20, 15.00][i].toFixed(2))
-    .join(", ");
-
-  const exampleNamed = products.slice(0, 2)
-    .map((p, i) => `${p} ${[2.50, 8.00][i]}`)
+    .map((_, i) => [5.50, 8.00, 1.20, 15.00][i].toFixed(2))
     .join(", ");
 
   const serviceExampleNums = products.slice(0, Math.min(3, products.length))
-    .map((_, i) => [10.00, 25.00, 50.00][i].toFixed(2))
+    .map((_, i) => [10, 25, 50][i])
     .join(", ");
 
-  const serviceExampleNamed = products.slice(0, 2)
-    .map((p, i) => `${p} ${[10, 25][i]}/job`)
-    .join(", ");
-
- return sendButtons(from, {
+  return sendButtons(from, {
     text:
 `💰 *Set Your ${isService ? "Rates" : "Prices"} (USD)*
 
@@ -385,8 +531,8 @@ ${numbered}
 
 ─────────────────
 ${isService
-  ? `*Option 1 - Rate per job/hour:*\n_${serviceExampleNums}_\n\nor just: _20/job, 50/hr, 15/trip_\n\n*Option 2 - Name them:*\n_${serviceExampleNamed}_`
-  : `*Option 1 - Fastest* ✅\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them* 📝\n_${exampleNamed}_\n\n*Option 3 - Mixed units* 🔧\n_cement 5.50/bag, sand 8/load_`
+  ? `*Fastest — just numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
+  : `*Option 1 — Fastest ✅*\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 — Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 — With units:*\n_cement 5.50/bag, sand 8/load_`
 }
 ─────────────────
 _Enter your ${rateLabel} below or tap Skip_ 👇`,
