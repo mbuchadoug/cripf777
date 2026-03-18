@@ -427,6 +427,8 @@ a === "sup_enter_own_products" ||
 a === "sup_request_upload" ||
 a === "sup_prices_confirm_yes" ||
 a === "sup_price_update_confirm" ||
+a === "sup_price_confirm_yes" ||
+      a === "sup_price_confirm_no" ||
 a === "sup_prices_edit" ||
 a === "sup_preset_confirm" ||
 a === "sup_preset_prices_yes" ||
@@ -2096,6 +2098,7 @@ const supplierStates = [
   "supplier_order_product",
   "supplier_order_address",
   "supplier_order_enter_price",
+    "supplier_order_confirm_price",  // ← ADD THIS
   "supplier_order_picking",
 ];
 
@@ -4073,6 +4076,145 @@ Save these prices?`,
 }
 
 
+// ── Supplier confirms price they just entered ─────────────────────────────
+  if (a === "sup_price_confirm_yes") {
+    const orderId = biz?.sessionData?.pricingOrderId;
+    const pendingPrices = biz?.sessionData?.pendingPrices;
+
+    if (!orderId || !pendingPrices?.length) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Pricing session expired. Please check the order and try again.");
+      return sendSuppliersMenu(from);
+    }
+
+    const order = await SupplierOrder.findById(orderId);
+    if (!order) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Order not found.");
+      return sendSuppliersMenu(from);
+    }
+
+    const supplier = await SupplierProfile.findOne({ phone: from }).lean();
+    const isServiceSupplier = supplier?.profileType === "service";
+
+    // Apply the prices
+    let grandTotal = 0;
+    order.items = order.items.map((item, idx) => {
+      const unitPrice = pendingPrices[idx];
+      const qty = Number(item.quantity) || 1;
+      const lineTotal = qty * unitPrice;
+      grandTotal += lineTotal;
+      return {
+        ...item.toObject?.() || item,
+        pricePerUnit: unitPrice,
+        total: lineTotal,
+        currency: "USD"
+      };
+    });
+
+    order.totalAmount = grandTotal;
+    order.currency = "USD";
+    order.status = "accepted";
+    await order.save();
+
+    await SupplierProfile.findOneAndUpdate(
+      { phone: from },
+      { $inc: { monthlyOrders: 1, completedOrders: 1 } }
+    );
+
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+
+    // Build confirmed item lines for buyer notification
+    const itemLines = order.items.map(i => {
+      const unitLabel = i.unit && i.unit !== "units" ? i.unit : (isServiceSupplier ? "job" : "unit");
+      return `• ${i.product} × ${i.quantity} ${unitLabel} @ $${Number(i.pricePerUnit).toFixed(2)} = *$${Number(i.total).toFixed(2)}*`;
+    }).join("\n");
+
+    const deliveryLine = order.delivery?.required
+      ? `🚚 Delivery to: ${order.delivery.address}`
+      : isServiceSupplier
+        ? `📍 Location: ${order.delivery?.address || "TBC"}`
+        : `🏠 Collection`;
+
+    // Notify buyer
+    try {
+      await sendButtons(order.buyerPhone, {
+        text:
+          `✅ *${isServiceSupplier ? "Booking" : "Order"} Accepted!*\n\n` +
+          `*${supplier?.businessName || from}* has accepted your ${isServiceSupplier ? "booking" : "order"}:\n\n` +
+          `${itemLines}\n\n` +
+          `${deliveryLine}\n` +
+          `💵 *Total: $${grandTotal.toFixed(2)}*\n` +
+          `📞 Contact: ${from}\n\n` +
+          `They will be in touch to arrange ${isServiceSupplier ? "the service" : "payment & delivery"}.`,
+        buttons: [
+          { id: `rate_order_${order._id}`, title: isServiceSupplier ? "⭐ Rate Service" : "⭐ Rate Order" },
+          { id: "suppliers_home",          title: "🏪 Suppliers" }
+        ]
+      });
+    } catch (err) {
+      console.error("[SUPPLIER PRICE CONFIRM → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
+    }
+
+    // Ask supplier for ETA
+    return sendList(from,
+      `✅ *${isServiceSupplier ? "Booking" : "Order"} confirmed at $${grandTotal.toFixed(2)}.*\n\nWhen will it be ready?`,
+      [
+        { id: `sup_eta_today_${orderId}`,    title: "Today" },
+        { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
+        { id: `sup_eta_twodays_${orderId}`,  title: "2-3 days" },
+        { id: `sup_eta_contact_${orderId}`,  title: "I'll contact buyer" }
+      ]
+    );
+  }
+
+  // ── Supplier wants to re-enter prices ─────────────────────────────────────
+  if (a === "sup_price_confirm_no") {
+    const orderId = biz?.sessionData?.pricingOrderId;
+    if (!orderId) return sendSuppliersMenu(from);
+
+    const order = await SupplierOrder.findById(orderId).lean();
+    if (!order) return sendSuppliersMenu(from);
+
+    const isServiceSupplier = (await SupplierProfile.findOne({ phone: from }).lean())?.profileType === "service";
+
+    // Reset to enter_price state, clear pending prices
+    biz.sessionState = "supplier_order_enter_price";
+    biz.sessionData = { ...biz.sessionData, pendingPrices: null };
+    await saveBizSafe(biz);
+
+    // Show the pricing form again
+    const pricingLines = order.items.map((item, i) => {
+      const qty = Number(item.quantity) || 1;
+      const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
+      return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
+    }).join("\n\n");
+
+    const examplePrices = order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
+
+    return sendButtons(from, {
+      text:
+        `✏️ *Re-enter Your Prices*\n` +
+        `_Buyer: ${order.buyerPhone}_\n\n` +
+        `─────────────────\n` +
+        `${pricingLines}\n\n` +
+        `─────────────────\n` +
+        `💡 Enter price *per unit* for each item, in order:\n\n` +
+        `Example: *${examplePrices}*\n` +
+        `_${order.items.length} price${order.items.length > 1 ? "s" : ""}, separated by commas_`,
+      buttons: [{ id: "suppliers_home", title: "⬅ Cancel" }]
+    });
+  }
+
+  // ── Confirm saved price update from account menu ──────────────────────────
+
+
 // ── Confirm saved price update from account menu ──────────────────────────
 if (a === "sup_price_update_confirm") {
   const supplier = await SupplierProfile.findOne({ phone });
@@ -5189,13 +5331,13 @@ return sendButtons(from, {
   }
 
 
-    if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
+if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
     const orderId = biz.sessionData?.pricingOrderId;
     if (!orderId) {
       biz.sessionState = "ready";
       biz.sessionData = {};
       await saveBizSafe(biz);
-      await sendText(from, "❌ Pricing session expired.");
+      await sendText(from, "❌ Pricing session expired. Please check your orders.");
       return sendSuppliersMenu(from);
     }
 
@@ -5208,99 +5350,97 @@ return sendButtons(from, {
       return sendSuppliersMenu(from);
     }
 
+    const isServiceSupplier = (await SupplierProfile.findOne({ phone: from }).lean())?.profileType === "service";
+
     const raw = (text || "").trim();
+
+    // ── Handle cancel ────────────────────────────────────────────────────────
+    if (raw.toLowerCase() === "cancel") {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Pricing cancelled. The order is still pending.");
+      return sendSuppliersMenu(from);
+    }
+
     if (!raw) {
-      await sendText(from, "❌ Enter a valid price.\n\nExample: 4.50\nOr for multiple items: 4.50, 8, 1.20");
+      await sendText(from,
+        order.items.length === 1
+          ? `❌ Please enter the price per unit.\n\nExample: *12* (means $12 per unit)`
+          : `❌ Please enter ${order.items.length} prices separated by commas.\n\nExample: *12, 45, 0.08*`
+      );
       return;
     }
 
+    // ── Parse the entered values ─────────────────────────────────────────────
     const values = raw
       .split(",")
       .map(v => Number(v.trim()))
       .filter(v => !Number.isNaN(v) && v >= 0);
 
     if (!values.length) {
-      await sendText(from, "❌ Invalid price format.\n\nExample: 4.50\nOr: 4.50, 8, 1.20");
+      await sendText(from,
+        `❌ Couldn't read your prices. Use numbers only, separated by commas.\n\n` +
+        `Example for ${order.items.length} item${order.items.length > 1 ? "s" : ""}: ` +
+        `*${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+      );
       return;
     }
 
-    if (order.items.length === 1 && values.length !== 1) {
-      await sendText(from, "❌ This order has 1 item. Reply with one unit price only.\n\nExample: 4.50");
+    // ── Wrong count ───────────────────────────────────────────────────────────
+    if (values.length !== order.items.length) {
+      const itemList = order.items.map((item, i) => {
+        const qty = Number(item.quantity) || 1;
+        const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
+        return `${i + 1}. ${item.product} × ${qty} ${unitLabel}`;
+      }).join("\n");
+
+      await sendText(from,
+        `❌ You have *${order.items.length} item${order.items.length > 1 ? "s" : ""}* but sent *${values.length} price${values.length > 1 ? "s" : ""}*.\n\n` +
+        `Items to price:\n${itemList}\n\n` +
+        `Send exactly *${order.items.length}* price${order.items.length > 1 ? "s" : ""}, one per item, in order.\n` +
+        `Example: *${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+      );
       return;
     }
 
-    if (order.items.length > 1 && values.length !== order.items.length) {
-      await sendText(from, `❌ This order has ${order.items.length} items. Please send ${order.items.length} prices separated by commas.`);
-      return;
-    }
-
-    let grandTotal = 0;
-
-    order.items = order.items.map((item, idx) => {
+    // ── Build preview — show the supplier exactly what they entered and what it means ──
+    // This is the key UX fix: show "per unit × qty = line total" BEFORE saving
+    let previewGrandTotal = 0;
+    const previewLines = order.items.map((item, idx) => {
       const unitPrice = values[idx];
       const qty = Number(item.quantity) || 1;
-      const lineTotal = qty * unitPrice;
-      grandTotal += lineTotal;
+      const lineTotal = unitPrice * qty;
+      previewGrandTotal += lineTotal;
+      const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
+      return `${idx + 1}. *${item.product}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
+    }).join("\n\n");
 
-      return {
-        ...item.toObject?.() || item,
-        pricePerUnit: unitPrice,
-        total: lineTotal,
-        currency: "USD"
-      };
-    });
-
-    order.totalAmount = grandTotal;
-    order.currency = "USD";
-    order.status = "accepted";
-    await order.save();
-
-await SupplierProfile.findOneAndUpdate(
-  { phone: from },
-  { $inc: { monthlyOrders: 1, completedOrders: 1 } }
-);
-    const supplier = await SupplierProfile.findOne({ phone: from });
-
-    biz.sessionState = "ready";
-    biz.sessionData = {};
+    // ── Save preview to sessionData so the confirm handler can use it ─────────
+    biz.sessionData = {
+      ...biz.sessionData,
+      pendingPrices: values,
+      pricingOrderId: orderId
+    };
+    biz.sessionState = "supplier_order_confirm_price";
     await saveBizSafe(biz);
 
-    const itemLines = order.items
-      .map(i => {
-        const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
-        return `• ${i.product} x${i.quantity}${unitSuffix} @ $${Number(i.pricePerUnit).toFixed(2)} = $${Number(i.total).toFixed(2)}`;
-      })
-      .join("\n");
-
-    const deliveryLine = order.delivery?.required
-      ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
-      : "🏠 Collection";
-
-    try {
-      await sendButtons(order.buyerPhone, {
-        text:
-          `✅ *Order Accepted!*\n\n` +
-          `*${supplier?.businessName || from}* has accepted your order:\n\n` +
-          `${itemLines}\n\n` +
-          `${deliveryLine}\n` +
-          `💵 *Order Total: $${grandTotal.toFixed(2)}*\n` +
-          `📞 Contact: ${from}\n\n` +
-          `They will be in touch to arrange payment & delivery.`,
-    buttons: [
-          { id: `rate_order_${order._id}`, title: "⭐ Rate Order" },
-          { id: "suppliers_home",           title: "🏪 Suppliers" }
-        ]
-      });
-    } catch (err) {
-      console.error("[SUPPLIER PRICE ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
-    }
-
-    return sendList(from, `✅ Price saved. Total: $${grandTotal.toFixed(2)}\n\nWhen will the order be ready?`, [
-      { id: `sup_eta_today_${orderId}`, title: "Today" },
-      { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
-      { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
-      { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
-    ]);
+    return sendButtons(from, {
+      text:
+        `💰 *Price Summary — Please Confirm*\n` +
+        `_Buyer: ${order.buyerPhone}_\n\n` +
+        `─────────────────\n` +
+        `${previewLines}\n\n` +
+        `─────────────────\n` +
+        `💵 *Order Total: $${previewGrandTotal.toFixed(2)}*\n\n` +
+        `Does this look correct?\n` +
+        `_Tap ✅ Confirm to accept the order at these prices._`,
+      buttons: [
+        { id: "sup_price_confirm_yes", title: "✅ Confirm & Accept" },
+        { id: "sup_price_confirm_no",  title: "✏️ Re-enter Prices" },
+        { id: "suppliers_home",        title: "⬅ Cancel" }
+      ]
+    });
   }
   // ── ETA after accepting order ─────────────────────────────────────────────
   if (a.startsWith("sup_eta_")) {

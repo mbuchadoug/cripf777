@@ -146,26 +146,64 @@ await SupplierProfile.findOneAndUpdate(
     return;
   }
 
-  biz.sessionState = "supplier_order_enter_price";
+biz.sessionState = "supplier_order_enter_price";
   biz.sessionData = {
     ...(biz.sessionData || {}),
     pricingOrderId: orderId
   };
   await saveBiz(biz);
 
-  const itemLines = formatOrderItems(order.items);
+  // Build a numbered pricing form — each line shows exactly what needs a price
+  // Format: "1. cement × 10 bags → price per bag = ?"
+  const pricingLines = order.items.map((item, i) => {
+    const qty = Number(item.quantity) || 1;
+    const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
+    return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
+  }).join("\n\n");
 
-  const instructions =
-    order.items.length === 1
-      ? "Reply with the *unit price*.\nExample: *4.50*"
-      : "Reply with prices in item order, separated by commas.\nExample: *4.50, 8, 1.20*";
+  // Build a concrete example using the ACTUAL first item from the order
+  const firstItem = order.items[0];
+  const firstQty = Number(firstItem?.quantity) || 1;
+  const firstUnit = firstItem?.unit && firstItem.unit !== "units"
+    ? firstItem.unit
+    : (isServiceSupplier ? "job" : "unit");
+
+  let instructions;
+  if (order.items.length === 1) {
+    // Single item — very explicit
+    instructions =
+      `💡 *Enter the price per ${firstUnit}.*\n\n` +
+      `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
+      `and the buyer wants *${firstQty}*, total = *$${12 * firstQty}*.\n\n` +
+      `So just type: *12*\n\n` +
+      `_The system multiplies your unit price × quantity automatically._`;
+  } else {
+    // Multiple items — numbered, explicit per-unit
+    const examplePrices = order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
+    const exampleLines = order.items.map((item, i) => {
+      const qty = Number(item.quantity) || 1;
+      const unitPrice = (i + 1) * 5 + 7;
+      const exUnit = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
+      return `  ${i + 1}. ${item.product}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
+    }).join("\n");
+
+    instructions =
+      `💡 *Enter price per unit for each item, in order, separated by commas.*\n\n` +
+      `Example reply: *${examplePrices}*\n` +
+      `That means:\n${exampleLines}\n\n` +
+      `_Enter ${order.items.length} prices. The system calculates totals automatically._`;
+  }
 
   return sendButtons(from, {
     text:
-      `💰 *Set Price for ${isServiceSupplier ? "Booking" : "Order"}*\n\n` +
-      `${itemLines}\n\n` +
+      `💰 *Price This ${isServiceSupplier ? "Booking" : "Order"}*\n` +
+      `_Buyer: ${order.buyerPhone}_\n\n` +
+      `─────────────────\n` +
+      `*What was ordered:*\n\n` +
+      `${pricingLines}\n\n` +
+      `─────────────────\n` +
       `${instructions}`,
-    buttons: [{ id: "suppliers_home", title: "🏪 Back" }]
+    buttons: [{ id: "suppliers_home", title: "⬅ Back" }]
   });
 }
 
