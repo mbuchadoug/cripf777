@@ -4185,9 +4185,31 @@ Save these prices?`,
     const isServiceSupplier = (await SupplierProfile.findOne({ phone: from }).lean())?.profileType === "service";
 
     // Reset to enter_price state, clear pending prices
-    biz.sessionState = "supplier_order_enter_price";
-    biz.sessionData = { ...biz.sessionData, pendingPrices: null };
-    await saveBizSafe(biz);
+biz.sessionState = "supplier_order_enter_price";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    pricingOrderId: orderId
+  };
+  await saveBiz(biz);
+
+  // ── Clear any stale buyer/picking session state for this phone.
+  // This prevents the supplier's typed price input (e.g. "12") from being
+  // misrouted to the cart picking handler due to stale UserSession data.
+  const UserSession = (await import("../models/userSession.js")).default;
+  await UserSession.findOneAndUpdate(
+    { phone: from.replace(/\D+/g, "") },
+    {
+      $unset: {
+        "tempData.orderState":      "",
+        "tempData.orderSupplierId": "",
+        "tempData.orderCart":       "",
+        "tempData.orderIsService":  "",
+        "tempData.orderItems":      ""
+      }
+    }
+  );
+
+  // Build a numbered pricing form — each line shows exactly what needs a price
 
     // Show the pricing form again
     const pricingLines = order.items.map((item, i) => {
@@ -4287,8 +4309,17 @@ if (a === "sup_price_update_confirm") {
 // Handles both biz session and no-biz UserSession
 // ── Buyer types while browsing catalogue (supplier_order_picking) ──────────
 const pickingStateBiz = biz?.sessionState === "supplier_order_picking";
+
+// ── IMPORTANT: Never let stale UserSession picking state interfere when
+// the supplier's biz session is in price-entry or confirm-price mode.
+// This prevents "12" being treated as a product name instead of a price.
+const supplierIsPricingOrder =
+  biz?.sessionState === "supplier_order_enter_price" ||
+  biz?.sessionState === "supplier_order_confirm_price";
+
 const pickingStateSess = await (async () => {
   if (pickingStateBiz) return null;
+  if (supplierIsPricingOrder) return null; // ← KEY FIX: biz pricing takes priority
   const s = await UserSession.findOne({ phone });
   return s?.tempData?.orderState === "supplier_order_picking" ? s : null;
 })();
