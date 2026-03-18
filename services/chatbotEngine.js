@@ -2647,7 +2647,7 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
-  // Clear previous search state
+  // Clear previous search state in BOTH biz and UserSession
   if (biz) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
@@ -2655,44 +2655,20 @@ if (a === "find_supplier") {
     };
     biz.sessionState = "supplier_search_product";
     await saveBizSafe(biz);
-  } else {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: { "tempData.supplierSearchMode": "product" },
-        $unset: {
-          "tempData.supplierSearchCategory": "",
-          "tempData.supplierSearchProduct": "",
-          "tempData.supplierSearchType": ""
-        }
-      },
-      { upsert: true }
-    );
   }
-
-return sendText(from,
-`🔍 *Find Suppliers on ZimQuote*
-
-Type what you need. Add a city or suburb at the end for nearby results.
-
-*📦 Products:*
-_find cement_, _find cement mbare_, _find cooking oil harare_, _find mealie meal_, _find river sand avondale_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
-
-*🔧 Services:*
-_find plumber_, _find plumber borrowdale_, _find electrician harare_, _find teacher mabelreign_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder workington_, _find catering_, _find photographer_, _find it support_
-
-*🚗 Transport:*
-_find car hire_, _find delivery harare_, _find moving company bulawayo_
-
-*💡 Tip: Include your suburb for closer results!*
-_find plumber avondale_, _find electrician glen view_, _find delivery chitungwiza_
-
-Or pick a category 👇`,
-  ).then(() => sendList(from, "📂 Or browse by category:", [
-    { id: "sup_search_type_product", title: "📦 Products" },
-    { id: "sup_search_type_service", title: "🔧 Services" }
-  ]));
-}
+  // Always clear UserSession — covers ghost-biz users who have biz but also buy
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: { "tempData.supplierSearchMode": "product" },
+      $unset: {
+        "tempData.supplierSearchCategory": "",
+        "tempData.supplierSearchProduct": "",
+        "tempData.supplierSearchType": ""
+      }
+    },
+    { upsert: true }
+  );
 
 if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   const searchType = a === "sup_search_type_service" ? "service" : "product";
@@ -3689,17 +3665,12 @@ if (a === "sup_del_yes") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.delivery = { available: true, range: "city_wide" };
-    biz.sessionData.supplierReg.minOrder = 0;  // ← default to 0, skip the question
+    biz.sessionData.supplierReg.minOrder = 0;
     biz.sessionState = "supplier_reg_confirm";
     await saveBizSafe(biz);
-    const { buildSupplierConfirmText } = await import("./supplierRegistration.js");
-    return sendButtons(from, {
-      text: buildSupplierConfirmText(biz.sessionData.supplierReg),
-      buttons: [
-        { id: "sup_confirm_yes", title: "✅ Confirm & List" },
-        { id: "sup_confirm_no",  title: "✏️ Start Over" }
-      ]
-    });
+    // Use the local helper _sendSupplierConfirmPrompt - buildSupplierConfirmText
+    // is not exported from supplierRegistration.js
+    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
   }
 
 if (a === "sup_del_no") {
@@ -4457,12 +4428,17 @@ const supplierId = biz?.sessionData?.orderSupplierId
 
 
   // ── CONFIRM shortcut ─────────────────────────────────────────────────────
-  if (rawLower === "confirm" || rawLower === "done" || rawLower === "send") {
+if (rawLower === "confirm" || rawLower === "done" || rawLower === "send") {
     if (!cart.length) {
       return sendText(from, "❌ Your cart is empty. Tap items or type to add them first.");
     }
-    // Trigger the confirm flow by routing to sup_cart_confirm_ handler
-    // We do this by setting state to address and sending the summary
+    // For collection-only product suppliers, route straight to sup_cart_confirm_
+    // which will skip the address step automatically
+    const needsAddress = isService || supplier.delivery?.available;
+    if (!needsAddress) {
+      // Redirect to the confirm handler which handles collection-only path
+      return handleIncomingMessage({ from, action: `sup_cart_confirm_${supplierId}` });
+    }
     if (biz) {
       biz.sessionState = "supplier_order_address";
       await saveBizSafe(biz);
@@ -4757,15 +4733,13 @@ if (a.startsWith("sup_order_")) {
 // ── Recover the search term that led the buyer here ───────────────────
   // ALWAYS check UserSession first — biz.sessionData can have stale product
   // from a previous search (especially for ghost-biz supplier users who also buy)
-  const _sess = await UserSession.findOne({ phone });
 // ── Recover the search term that led the buyer here ───────────────────
-  // Read UserSession AND biz, then pick the most recent one.
-  // We cannot trust biz.sessionData.supplierSearch.product alone because
-  // the biz shortcode intercept does not update it on the direct-results path.
-  const _orderSess = await UserSession.findOne({ phone });
-  const _sessProduct = _orderSess?.tempData?.supplierSearchProduct || null;
+  // UserSession is updated on every search (biz and no-biz paths both write to it).
+  // biz.sessionData.supplierSearch.product can be stale from a previous search.
+  const _preSeedSess = await UserSession.findOne({ phone });
+  const _sessProduct = _preSeedSess?.tempData?.supplierSearchProduct || null;
   const _bizProduct  = biz?.sessionData?.supplierSearch?.product || null;
-  // UserSession is updated on every search; biz may lag. Prefer UserSession.
+  // Prefer UserSession (always fresh); fall back to biz if UserSession is empty.
   let searchedProduct = _sessProduct || _bizProduct || null;
   // ── Pre-seed cart if we have a search term that matches a real item ───
   let initialCart = [];
@@ -5014,7 +4988,60 @@ if (a.startsWith("sup_cart_confirm_")) {
     { upsert: true }
   );
 
-return sendButtons(from, {
+// For collection-only product suppliers, no address needed — use a placeholder
+  const needsAddress = isService || supplier.delivery?.available;
+
+  if (!needsAddress) {
+    // Collection only - no address needed, send order immediately with placeholder
+    if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderCart": "", "tempData.orderIsService": "" } },
+      { upsert: true }
+    );
+
+    // Build and submit order directly
+    let totalAmount = 0;
+    let pricedCount = 0;
+    const finalItems = cart.map(entry => {
+      const quantity = Number(entry.quantity) || 1;
+      const pricePerUnit = entry.pricePerUnit || null;
+      const total = pricePerUnit ? quantity * pricePerUnit : null;
+      if (total) { totalAmount += total; pricedCount++; }
+      return { product: entry.product, quantity, unit: entry.unit || "each", pricePerUnit, currency: "USD", total };
+    });
+
+    const order = await SupplierOrder.create({
+      supplierId: supplier._id,
+      supplierPhone: supplier.phone,
+      buyerPhone: phone,
+      items: finalItems,
+      totalAmount,
+      currency: "USD",
+      delivery: { required: false, address: "Collection" },
+      status: "pending"
+    });
+    await notifySupplierNewOrder(supplier.phone, order);
+
+    const itemSummary = finalItems.map(i => `• ${i.product} ×${i.quantity}`).join("\n");
+    await sendText(from,
+`✅ *Order sent to ${supplier.businessName}!*
+
+${itemSummary}
+🏠 Collection only - you will pick up from the supplier
+${pricedCount > 0 ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
+
+${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can confirm immediately. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`);
+    return sendButtons(from, {
+      text: "What would you like to do next?",
+      buttons: [
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "my_orders", title: "📋 My Orders" }
+      ]
+    });
+  }
+
+  return sendButtons(from, {
     text:
 `${isService ? "📅" : "🛒"} *${isService ? "Booking Summary" : "Order Summary"}*
 

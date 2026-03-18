@@ -792,99 +792,13 @@ _Type *cancel* to start over._`
   }
 
 
-  async function _finishPricingStep(from, biz, saveBiz, count, isService) {
-  if (isService) {
-    biz.sessionState = "supplier_reg_travel";
-    await saveBiz(biz);
-    return sendButtons(from, {
-      text: `✅ Saved ${count} rate(s)!\n\n🚗 *Do you travel to clients?*`,
-      buttons: [
-        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
-      ]
-    });
-  }
-  biz.sessionState = "supplier_reg_delivery";
-  await saveBiz(biz);
-  return sendButtons(from, {
-    text: `✅ Saved ${count} price(s)!\n\n🚚 *Do you deliver?*`,
-    buttons: [
-      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-      { id: "sup_del_no",  title: "🏠 Collection Only" }
-    ]
-  });
-}
+
 
 // ── Pricing preview: show supplier what was saved, ask to confirm ─────────
-async function _showPricingPreview(from, biz, saveBiz, parsed, isService) {
-  // Build readable preview
-  const lines = isService
-    ? parsed.map(r => `• ${r.service} - ${r.rate}`)
-    : parsed.map(p => `• ${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`);
 
-  const preview = lines.join("\n");
-
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-
-  // ── FIX: Advance state NOW so re-typing doesn't loop back here ───────────
-  // State moves to travel/delivery. The confirm buttons (sup_travel_yes etc.)
-  // are the natural next step. "✏️ Re-enter" resets to supplier_reg_prices.
-  if (isService) {
-    biz.sessionState = "supplier_reg_travel";
-  } else {
-    biz.sessionState = "supplier_reg_delivery";
-  }
-  await saveBiz(biz);
-
-  return sendButtons(from, {
-    text:
-`✅ *${isService ? "Rates" : "Prices"} Saved!* (${parsed.length} item${parsed.length > 1 ? "s" : ""})
-
-${preview}
-
-_You can update these anytime from your account._
-
-${isService ? "🚗 *Do you travel to clients?*" : "🚚 *Do you deliver?*"}`,
-    buttons: isService
-      ? [
-          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-          { id: "sup_travel_no",  title: "🏠 Client Comes to Me" },
-          { id: "sup_prices_edit", title: "✏️ Re-enter Rates" }
-        ]
-      : [
-          { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-          { id: "sup_del_no",  title: "🏠 Collection Only" },
-          { id: "sup_prices_edit", title: "✏️ Re-enter Prices" }
-        ]
-  });
-}
 
 // ── After pricing confirmed: route to delivery/travel step ───────────────
-async function _finishPricingStep(from, biz, saveBiz, count, isService) {
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  delete biz.sessionData.supplierReg.pricingConfirmPending;
 
-  if (isService) {
-    biz.sessionState = "supplier_reg_travel";
-    await saveBiz(biz);
-    return sendButtons(from, {
-      text: `✅ ${count} rate(s) saved!\n\n🚗 *Do you travel to clients?*`,
-      buttons: [
-        { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-        { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
-      ]
-    });
-  }
-  biz.sessionState = "supplier_reg_delivery";
-  await saveBiz(biz);
-  return sendButtons(from, {
-    text: `✅ ${count} price(s) saved!\n\n🚚 *Do you deliver?*`,
-    buttons: [
-      { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-      { id: "sup_del_no",  title: "🏠 Collection Only" }
-    ]
-  });
-}
 
   return false;
 }
