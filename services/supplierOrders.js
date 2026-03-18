@@ -130,11 +130,47 @@ await SupplierProfile.findOneAndUpdate(
     }
 
 // ── Build delivery line for supplier's ETA prompt ─────────────────────
+// ── Build delivery line for supplier's ETA prompt ─────────────────────
     const supplierDeliveryLine = order.delivery?.required
       ? `🚚 *Deliver to:* ${order.delivery.address}`
       : isServiceSupplier
         ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
         : `🏠 Collection (buyer will pick up)`;
+
+    // ── Generate PDF order summary and send to supplier ───────────────────
+    try {
+      const { generatePDF } = await import("../routes/twilio_biz.js");
+      const { sendDocument } = await import("./metaSender.js");
+      const orderRef = `ORD-${String(order._id).slice(-8).toUpperCase()}`;
+      const deliveryNote = order.delivery?.required
+        ? `Deliver to: ${order.delivery.address}`
+        : isServiceSupplier
+          ? `Service location: ${order.delivery?.address || "TBC"}`
+          : "Collection - buyer will pick up";
+      const { filename } = await generatePDF({
+        type: "receipt",
+        number: orderRef,
+        date: new Date(),
+        billingTo: `Buyer: ${order.buyerPhone}\n${deliveryNote}`,
+        items: order.items.map(i => ({
+          item: i.product,
+          qty: Number(i.quantity) || 1,
+          unit: Number(i.pricePerUnit || 0),
+          total: Number(i.total || 0)
+        })),
+        bizMeta: {
+          name: supplier?.businessName || from,
+          logoUrl: "",
+          address: `${supplier?.location?.area || ""}, ${supplier?.location?.city || ""}`,
+          _id: String(order._id),
+          status: "paid"
+        }
+      });
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+    } catch (pdfErr) {
+      console.error("[ORDER ACCEPT PDF]", pdfErr.message);
+    }
 
     return sendList(
       from,
@@ -145,8 +181,7 @@ await SupplierProfile.findOneAndUpdate(
         { id: `sup_eta_twodays_${orderId}`, title: "2-3 days" },
         { id: `sup_eta_contact_${orderId}`, title: "I'll contact buyer" }
       ]
-    );
-  }
+    );  }
 
   if (!biz) {
     await sendText(from, "❌ Session expired. Type *menu* and try again.");

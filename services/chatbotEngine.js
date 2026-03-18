@@ -723,6 +723,9 @@ return sendButtons(from, {
   ]
 });
 }
+
+
+
 if (orderState === "supplier_order_product") {
   const parsedItems = parseBulkOrderInput(text);
 
@@ -741,6 +744,73 @@ You can also send one per line.
 Type *cancel* to stop this order.`);
   }
 
+  // Fetch supplier to check if delivery is required
+  const _sess2 = await UserSession.findOne({ phone });
+  const _sid2 = _sess2?.tempData?.orderSupplierId;
+  const _sup2 = _sid2 ? await SupplierProfile.findById(_sid2).lean() : null;
+  const isServiceSupplier = _sup2?.profileType === "service";
+  const _needsAddress2 = isServiceSupplier || (_sup2?.delivery?.available === true);
+
+  const preview = parsedItems
+    .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
+    .join("\n");
+
+  if (!_needsAddress2 && _sup2) {
+    // Collection-only: submit the order immediately, no address needed
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: { "tempData.orderItems": parsedItems },
+        $unset: { "tempData.orderProduct": "", "tempData.orderQuantity": "" }
+      }
+    );
+
+    let totalAmount = 0; let pricedCount = 0;
+    const finalItems = parsedItems.filter(i => i.valid).map(entry => {
+      const quantity = Number(entry.quantity) || 1;
+      const matchedPrice = findMatchingSupplierPrice(_sup2, entry.product);
+      let pricePerUnit = null, total = null, finalUnit = entry.unitLabel || "units";
+      if (matchedPrice && typeof matchedPrice.amount === "number") {
+        pricePerUnit = matchedPrice.amount;
+        total = quantity * matchedPrice.amount;
+        finalUnit = matchedPrice.unit || finalUnit;
+        totalAmount += total; pricedCount++;
+      }
+      return { product: entry.product, quantity, unit: finalUnit, pricePerUnit, currency: "USD", total };
+    });
+
+    const order = await SupplierOrder.create({
+      supplierId: _sup2._id, supplierPhone: _sup2.phone,
+      buyerPhone: phone, items: finalItems, totalAmount, currency: "USD",
+      delivery: { required: false, address: "Collection" }, status: "pending"
+    });
+    await notifySupplierNewOrder(_sup2.phone, order);
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderItems": "", "tempData.orderProduct": "", "tempData.orderQuantity": "" } }
+    );
+
+    const itemSummary = finalItems.map(i => `• ${i.product} x${i.quantity}`).join("\n");
+    await sendText(from,
+`✅ *Order sent to ${_sup2.businessName}!*
+
+${itemSummary}
+🏠 *Collection only* - contact the supplier to arrange pickup
+${pricedCount > 0 ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${_sup2.phone}
+
+${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can confirm immediately. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`);
+    return sendButtons(from, {
+      text: "What would you like to do next?",
+      buttons: [
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "my_orders", title: "📋 My Orders" },
+        { id: "onboard_business", title: "🧾 Run My Business" }
+      ]
+    });
+  }
+
+  // Delivery/service supplier: ask for address
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -755,23 +825,12 @@ Type *cancel* to stop this order.`);
     }
   );
 
-  const preview = parsedItems
-    .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
-    .join("\n");
-
-const sess2 = await UserSession.findOne({ phone });
-const supplierIdForSummary = sess2?.tempData?.orderSupplierId;
-const supplierForSummary = supplierIdForSummary
-  ? await SupplierProfile.findById(supplierIdForSummary).lean()
-  : null;
-const isServiceSupplier = supplierForSummary?.profileType === "service";
-
 return sendText(from,
 `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "Booking Summary" : "Order Summary"}*
 
 ${preview}
 
-*Now enter your ${isServiceSupplier ? "location or contact note" : "delivery address or contact note"}:*
+*Now enter your ${isServiceSupplier ? "location or contact note" : "delivery address"}:*
 
 ${isServiceSupplier
   ? "Examples:\n• *House number 24, Mabelreign*\n• *Come tomorrow 10am*\n• *Call me when you arrive*"
@@ -779,9 +838,6 @@ ${isServiceSupplier
 }
 
 Type *cancel* to stop this ${isServiceSupplier ? "booking" : "order"}.`);
-
-
-
 }
 
    
@@ -4186,11 +4242,45 @@ Save these prices?`,
 
     // Ask supplier for ETA
 // Ask supplier for ETA -include delivery address so they have it handy
+   // Ask supplier for ETA - include delivery address so they have it handy
     const confirmDeliveryLine = order.delivery?.required
       ? `🚚 *Deliver to:* ${order.delivery.address}`
       : isServiceSupplier
         ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
         : `🏠 *Collection* (buyer will pick up)`;
+
+    // ── Generate PDF order summary and send to supplier ───────────────────
+    try {
+      const orderRef = `ORD-${String(order._id).slice(-8).toUpperCase()}`;
+      const deliveryNote = order.delivery?.required
+        ? `Deliver to: ${order.delivery.address}`
+        : isServiceSupplier
+          ? `Service location: ${order.delivery?.address || "TBC"}`
+          : "Collection - buyer will pick up";
+      const { filename } = await generatePDF({
+        type: "receipt",
+        number: orderRef,
+        date: new Date(),
+        billingTo: `Buyer: ${order.buyerPhone}\n${deliveryNote}`,
+        items: order.items.map(i => ({
+          item: i.product,
+          qty: Number(i.quantity) || 1,
+          unit: Number(i.pricePerUnit || 0),
+          total: Number(i.total || 0)
+        })),
+        bizMeta: {
+          name: supplier?.businessName || from,
+          logoUrl: "",
+          address: `${supplier?.location?.area || ""}, ${supplier?.location?.city || ""}`,
+          _id: String(order._id),
+          status: "paid"
+        }
+      });
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+    } catch (pdfErr) {
+      console.error("[PRICE CONFIRM PDF]", pdfErr.message);
+    }
 
     return sendList(from,
       `✅ *${isServiceSupplier ? "Booking" : "Order"} confirmed at $${grandTotal.toFixed(2)}.*\n\n${confirmDeliveryLine}\n\n${isServiceSupplier ? "When will you do the job?" : "When will the order be ready?"}`,
@@ -5314,19 +5404,64 @@ You can also send one per line.
 Type *cancel* to stop this order.`);
   }
 
-  biz.sessionData = { ...(biz.sessionData || {}), orderItems: parsedItems };
-  biz.sessionState = "supplier_order_address";
-  await saveBizSafe(biz);
+  const _sidBiz = biz.sessionData?.orderSupplierId;
+  const _supBiz = _sidBiz ? await SupplierProfile.findById(_sidBiz).lean() : null;
+  const isServiceSupplier = _supBiz?.profileType === "service";
+  const _needsAddressBiz = isServiceSupplier || (_supBiz?.delivery?.available === true);
 
   const preview = parsedItems
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
     .join("\n");
 
-const supplierIdForSummary = biz.sessionData?.orderSupplierId;
-const supplierForSummary = supplierIdForSummary
-  ? await SupplierProfile.findById(supplierIdForSummary).lean()
-  : null;
-const isServiceSupplier = supplierForSummary?.profileType === "service";
+  if (!_needsAddressBiz && _supBiz) {
+    // Collection-only: submit immediately, no address needed
+    let totalAmount = 0; let pricedCount = 0;
+    const finalItems = parsedItems.filter(i => i.valid).map(entry => {
+      const quantity = Number(entry.quantity) || 1;
+      const matchedPrice = findMatchingSupplierPrice(_supBiz, entry.product);
+      let pricePerUnit = null, total = null, finalUnit = entry.unitLabel || "units";
+      if (matchedPrice && typeof matchedPrice.amount === "number") {
+        pricePerUnit = matchedPrice.amount;
+        total = quantity * matchedPrice.amount;
+        finalUnit = matchedPrice.unit || finalUnit;
+        totalAmount += total; pricedCount++;
+      }
+      return { product: entry.product, quantity, unit: finalUnit, pricePerUnit, currency: "USD", total };
+    });
+
+    const order = await SupplierOrder.create({
+      supplierId: _supBiz._id, supplierPhone: _supBiz.phone,
+      buyerPhone: phone, items: finalItems, totalAmount, currency: "USD",
+      delivery: { required: false, address: "Collection" }, status: "pending"
+    });
+    await notifySupplierNewOrder(_supBiz.phone, order);
+
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+
+    const itemSummary = finalItems.map(i => `• ${i.product} x${i.quantity}`).join("\n");
+    await sendText(from,
+`✅ *Order sent to ${_supBiz.businessName}!*
+
+${itemSummary}
+🏠 *Collection only* - contact the supplier to arrange pickup
+${pricedCount > 0 ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${_supBiz.phone}
+
+${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can confirm immediately. 🎉" : "Supplier will confirm pricing shortly. 🎉"}`);
+    return sendButtons(from, {
+      text: "What would you like to do next?",
+      buttons: [
+        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "my_orders", title: "📋 My Orders" },
+        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
+      ]
+    });
+  }
+
+  // Delivery/service: ask for address
+  biz.sessionData = { ...(biz.sessionData || {}), orderItems: parsedItems };
+  biz.sessionState = "supplier_order_address";
+  await saveBizSafe(biz);
 
 return sendButtons(from, {
   text:

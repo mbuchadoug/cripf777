@@ -446,10 +446,12 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
         : "";
 
       // Build preview lines
-      const previewLines = isService
-        ? updated.map(u => `• ${u.service} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n")
-        : updated.map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
-
+    // At this point, updated[] items always have shape { product, amount, unit }
+      // regardless of isService — the conversion to { service, rate } happens below
+      // when saving to reg.rates. So always read u.product for the preview.
+      const previewLines = updated
+        .map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`)
+        .join("\n");
       // ── ADVANCE STATE immediately - no loop ────────────────────────────────
       if (isService) {
         biz.sessionState = "supplier_reg_travel";
