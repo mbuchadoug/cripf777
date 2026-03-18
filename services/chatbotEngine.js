@@ -2670,6 +2670,30 @@ if (a === "find_supplier") {
     { upsert: true }
   );
 
+return sendText(from,
+`🔍 *Find Suppliers on ZimQuote*
+
+Type what you need. Add a city or suburb at the end for nearby results.
+
+*📦 Products:*
+_find cement_, _find cement mbare_, _find cooking oil harare_, _find mealie meal_, _find river sand avondale_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
+
+*🔧 Services:*
+_find plumber_, _find plumber borrowdale_, _find electrician harare_, _find teacher mabelreign_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder workington_, _find catering_, _find photographer_, _find it support_
+
+*🚗 Transport:*
+_find car hire_, _find delivery harare_, _find moving company bulawayo_
+
+*💡 Tip: Include your suburb for closer results!*
+_find plumber avondale_, _find electrician glen view_, _find delivery chitungwiza_
+
+Or pick a category 👇`,
+  ).then(() => sendList(from, "📂 Or browse by category:", [
+    { id: "sup_search_type_product", title: "📦 Products" },
+    { id: "sup_search_type_service", title: "🔧 Services" }
+  ]));
+}
+
 if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   const searchType = a === "sup_search_type_service" ? "service" : "product";
   const filteredCategories = getSupplierCategoriesForType(searchType);
