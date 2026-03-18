@@ -4163,8 +4163,15 @@ Save these prices?`,
     }
 
     // Ask supplier for ETA
+// Ask supplier for ETA -include delivery address so they have it handy
+    const confirmDeliveryLine = order.delivery?.required
+      ? `🚚 *Deliver to:* ${order.delivery.address}`
+      : isServiceSupplier
+        ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+        : `🏠 *Collection* (buyer will pick up)`;
+
     return sendList(from,
-      `✅ *${isServiceSupplier ? "Booking" : "Order"} confirmed at $${grandTotal.toFixed(2)}.*\n\nWhen will it be ready?`,
+      `✅ *${isServiceSupplier ? "Booking" : "Order"} confirmed at $${grandTotal.toFixed(2)}.*\n\n${confirmDeliveryLine}\n\n${isServiceSupplier ? "When will you do the job?" : "When will the order be ready?"}`,
       [
         { id: `sup_eta_today_${orderId}`,    title: "Today" },
         { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
@@ -4172,6 +4179,7 @@ Save these prices?`,
         { id: `sup_eta_contact_${orderId}`,  title: "I'll contact buyer" }
       ]
     );
+
   }
 
   // ── Supplier wants to re-enter prices ─────────────────────────────────────
@@ -4209,7 +4217,7 @@ biz.sessionState = "supplier_order_enter_price";
     }
   );
 
-  // Build a numbered pricing form — each line shows exactly what needs a price
+  // Build a numbered pricing form -each line shows exactly what needs a price
 
     // Show the pricing form again
     const pricingLines = order.items.map((item, i) => {
@@ -4387,7 +4395,7 @@ const supplierId = biz?.sessionData?.orderSupplierId
         const qty = parseFloat(m[2]);
 
         if (itemNum < 1 || itemNum > sourceItems.length) {
-          errors.push(`❌ No item #${itemNum} — list has ${sourceItems.length} items`);
+          errors.push(`❌ No item #${itemNum} -list has ${sourceItems.length} items`);
           continue;
         }
 
@@ -4438,7 +4446,7 @@ const supplierId = biz?.sessionData?.orderSupplierId
       { upsert: true }
     );
     const previewLines = cart.map(c => {
-      const priceStr = c.pricePerUnit ? ` — $${(c.quantity * c.pricePerUnit).toFixed(2)}` : "";
+      const priceStr = c.pricePerUnit ? ` -$${(c.quantity * c.pricePerUnit).toFixed(2)}` : "";
       return `• ${c.product} ×${c.quantity}${priceStr}`;
     }).join("\n");
     const knownTotal = cart.filter(c=>c.pricePerUnit).reduce((s,c)=>s+(c.quantity*c.pricePerUnit),0);
@@ -4453,11 +4461,11 @@ ${previewLines}${totalLine}
 ⚠️ *Your order has NOT been sent yet.*
 ─────────────────
 
-*Step 2 of 2 — Enter your ${isService ? "location" : "delivery address"}* 👇
+*Step 2 of 2 -Enter your ${isService ? "location" : "delivery address"}* 👇
 
 ${isService
   ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Come tomorrow 10am_`
-  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect — call me_`}
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect -call me_`}
 
 _Type your address below and send_ ✍️`,
       buttons: [
@@ -4510,7 +4518,7 @@ _Type your address below and send_ ✍️`,
   // ── HELP command ─────────────────────────────────────────────────────────
   if (rawLower === "help" || rawLower === "?") {
     return sendText(from,
-`📋 *Ordering Help — ${supplier.businessName}*
+`📋 *Ordering Help -${supplier.businessName}*
 
 *➕ Add items:*
 Type: _cement 10_ or _cement 10 bags_
@@ -4521,18 +4529,18 @@ Type the item name alone: _cement_ adds 1 more
 Or: _cement 5_ adds 5 more
 
 *🗑 Remove items:*
-_remove cement_ — remove by name
-_r2_ or _remove 2_ — remove item #2
+_remove cement_ -remove by name
+_r2_ or _remove 2_ -remove item #2
 
 *🗑 Clear cart:*
-_clear_ — empty entire cart
+_clear_ -empty entire cart
 
 *✅ Confirm order:*
-_confirm_ — go to delivery step
+_confirm_ -go to delivery step
 Or tap ✅ Confirm in the list below
 
 *❌ Cancel:*
-_cancel_ — cancel this order`);
+_cancel_ -cancel this order`);
   }
 
   // ── PARSE as order input: "cement 10", "cement 10 bags", "cement 10, sand 2" ──
@@ -4565,7 +4573,7 @@ _cancel_ — cancel this order`);
     return _sendSupplierCatalogueMenu(from, supplier, cart);
   }
 
-  // ── SINGLE WORD — treat as item name, add qty 1 (or increase existing) ───
+  // ── SINGLE WORD -treat as item name, add qty 1 (or increase existing) ───
   // e.g. buyer types "cement" → adds 1 cement or increments qty
   const singleItemName = raw.trim();
   if (singleItemName.length >= 2) {
@@ -4639,7 +4647,7 @@ if (a === "sup_search_next_page") {
   const hasMore = allResults.length > start + PAGE_SIZE;
   const hasPrev = currentPage > 0;
 
-  // Nav rows — always last, within the 10 row budget
+  // Nav rows -always last, within the 10 row budget
   // rows is max 9 items so we have room for nav
   if (hasPrev) {
     rows.push({ id: "sup_search_prev_page", title: `⬅ Back (prev ${PAGE_SIZE})` });
@@ -5435,7 +5443,7 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
       return;
     }
 
-    // ── Build preview — show the supplier exactly what they entered and what it means ──
+    // ── Build preview -show the supplier exactly what they entered and what it means ──
     // This is the key UX fix: show "per unit × qty = line total" BEFORE saving
     let previewGrandTotal = 0;
     const previewLines = order.items.map((item, idx) => {
@@ -5456,13 +5464,21 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
     biz.sessionState = "supplier_order_confirm_price";
     await saveBizSafe(biz);
 
+ // ── Delivery line for price summary ───────────────────────────────────────
+    const previewDeliveryLine = order.delivery?.required
+      ? `🚚 *Deliver to:* ${order.delivery.address}`
+      : isServiceSupplier
+        ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+        : `🏠 *Collection* (buyer will pick up)`;
+
     return sendButtons(from, {
       text:
-        `💰 *Price Summary — Please Confirm*\n` +
+        `💰 *Price Summary -Please Confirm*\n` +
         `_Buyer: ${order.buyerPhone}_\n\n` +
         `─────────────────\n` +
         `${previewLines}\n\n` +
         `─────────────────\n` +
+        `${previewDeliveryLine}\n` +
         `💵 *Order Total: $${previewGrandTotal.toFixed(2)}*\n\n` +
         `Does this look correct?\n` +
         `_Tap ✅ Confirm to accept the order at these prices._`,
@@ -6157,7 +6173,7 @@ ${isService
   : `_sugar 2 kg, bread 3, cooking oil 1_\n_cement 10 bags, river sand 2 trips_`}
 
 📌 *Commands:*
-- *cancel* — cancel this order
+- *cancel* -cancel this order
 
 Send your order now 👇`);
   }
@@ -6181,15 +6197,15 @@ Send your order now 👇`);
 
   const isBigCatalogue = sourceItems.length > productSlots;
 
-  // ── BIG CATALOGUE: Option C — numbered text list + minimal action panel ───
+  // ── BIG CATALOGUE: Option C -numbered text list + minimal action panel ───
   if (isBigCatalogue) {
-    // Build numbered price list — plain text, unlimited length, no scrolling trap
+    // Build numbered price list -plain text, unlimited length, no scrolling trap
     const priceListLines = sourceItems.map((item, i) => {
-      const priceStr = item.price ? ` — ${item.price}` : "";
+      const priceStr = item.price ? ` -${item.price}` : "";
       return `${i + 1}. ${item.label}${priceStr}`;
     }).join("\n");
 
-    // Cart status block — shown only when buyer has already selected items
+    // Cart status block -shown only when buyer has already selected items
     let cartStatus = "";
     if (cart.length) {
       const cartTotal = cart.filter(c => c.pricePerUnit).reduce((s, c) => s + c.quantity * c.pricePerUnit, 0);
@@ -6200,35 +6216,35 @@ Send your order now 👇`);
         "\n";
     }
 
-    // Send the numbered price list as a plain text message — buyer can see ALL items, scroll freely
+    // Send the numbered price list as a plain text message -buyer can see ALL items, scroll freely
     await sendText(from,
 `${isService ? "🔧" : "📦"} *${supplier.businessName}*
-${isService ? "Services & Rates" : "Products & Prices"} — ${sourceItems.length} items
+${isService ? "Services & Rates" : "Products & Prices"} -${sourceItems.length} items
 ${cartStatus}
 ${priceListLines}
 
 ─────────────────
-*📌 How to order — choose any style:*
+*📌 How to order -choose any style:*
 
-*Style 1 — Item number + quantity:*
+*Style 1 -Item number + quantity:*
 _1x5, 3x2, 6x20_
 _(item 1 qty 5, item 3 qty 2, item 6 qty 20)_
 
-*Style 2 — Item name + quantity:*
+*Style 2 -Item name + quantity:*
 _cement 5, river sand 2, bricks 500_
 
-*Style 3 — Mixed (numbers and names both work):*
+*Style 3 -Mixed (numbers and names both work):*
 _1x5, sand 2, 6x20_
 
 *Increase qty:* type item again e.g. _cement_ or _1x1_ adds 1 more
 
 *Commands:*
-- *confirm* — finish and send your order
-- *r1* or *remove cement* — remove an item
-- *clear* — empty cart and start fresh
-- *cancel* — go back`);
+- *confirm* -finish and send your order
+- *r1* or *remove cement* -remove an item
+- *clear* -empty cart and start fresh
+- *cancel* -go back`);
 
-    // Minimal action panel — ONLY action buttons, no product rows competing for space
+    // Minimal action panel -ONLY action buttons, no product rows competing for space
     const actionRows = [];
 
     if (cart.length) {
@@ -6246,7 +6262,7 @@ _1x5, sand 2, 6x20_
         title: "❌ Cancel"
       });
     } else {
-      // No cart yet — just show guidance rows
+      // No cart yet -just show guidance rows
       actionRows.push({
         id: `sup_cart_custom_${supplier._id}`,
         title: "✍️ Type order above ↑"
@@ -6263,8 +6279,8 @@ _1x5, sand 2, 6x20_
 
     return sendList(from,
       cart.length
-        ? `🛒 *${supplier.businessName}* · ${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) !== 1 ? "s" : ""} selected — tap Confirm or keep adding`
-        : `📋 *${supplier.businessName}* · ${sourceItems.length} items — see full list above, type to order`,
+        ? `🛒 *${supplier.businessName}* · ${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) !== 1 ? "s" : ""} selected -tap Confirm or keep adding`
+        : `📋 *${supplier.businessName}* · ${sourceItems.length} items -see full list above, type to order`,
       actionRows
     );
   }

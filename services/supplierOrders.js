@@ -129,9 +129,16 @@ await SupplierProfile.findOneAndUpdate(
       console.error("[SUPPLIER AUTO-ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
     }
 
+// ── Build delivery line for supplier's ETA prompt ─────────────────────
+    const supplierDeliveryLine = order.delivery?.required
+      ? `🚚 *Deliver to:* ${order.delivery.address}`
+      : isServiceSupplier
+        ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+        : `🏠 Collection (buyer will pick up)`;
+
     return sendList(
       from,
-      `✅ ${isServiceSupplier ? "Booking accepted" : "Order accepted"}. Total: $${Number(order.totalAmount).toFixed(2)}\n\n${isServiceSupplier ? "When will you do the job?" : "When will the order be ready?"}`,
+      `✅ ${isServiceSupplier ? "Booking accepted" : "Order accepted"}. Total: $${Number(order.totalAmount).toFixed(2)}\n\n${supplierDeliveryLine}\n\n${isServiceSupplier ? "When will you do the job?" : "When will the order be ready?"}`,
       [
         { id: `sup_eta_today_${orderId}`, title: "Today" },
         { id: `sup_eta_tomorrow_${orderId}`, title: "Tomorrow" },
@@ -153,7 +160,7 @@ biz.sessionState = "supplier_order_enter_price";
   };
   await saveBiz(biz);
 
-  // Build a numbered pricing form — each line shows exactly what needs a price
+  // Build a numbered pricing form -each line shows exactly what needs a price
   // Format: "1. cement × 10 bags → price per bag = ?"
   const pricingLines = order.items.map((item, i) => {
     const qty = Number(item.quantity) || 1;
@@ -170,7 +177,7 @@ biz.sessionState = "supplier_order_enter_price";
 
   let instructions;
   if (order.items.length === 1) {
-    // Single item — very explicit
+    // Single item -very explicit
     instructions =
       `💡 *Enter the price per ${firstUnit}.*\n\n` +
       `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
@@ -178,7 +185,7 @@ biz.sessionState = "supplier_order_enter_price";
       `So just type: *12*\n\n` +
       `_The system multiplies your unit price × quantity automatically._`;
   } else {
-    // Multiple items — numbered, explicit per-unit
+    // Multiple items -numbered, explicit per-unit
     const examplePrices = order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
     const exampleLines = order.items.map((item, i) => {
       const qty = Number(item.quantity) || 1;
@@ -194,6 +201,13 @@ biz.sessionState = "supplier_order_enter_price";
       `_Enter ${order.items.length} prices. The system calculates totals automatically._`;
   }
 
+// ── Delivery line for the pricing form ────────────────────────────────────
+  const pricingDeliveryLine = order.delivery?.required
+    ? `🚚 *Deliver to:* ${order.delivery.address}`
+    : isServiceSupplier
+      ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+      : `🏠 *Collection* (buyer will pick up)`;
+
   return sendButtons(from, {
     text:
       `💰 *Price This ${isServiceSupplier ? "Booking" : "Order"}*\n` +
@@ -201,6 +215,8 @@ biz.sessionState = "supplier_order_enter_price";
       `─────────────────\n` +
       `*What was ordered:*\n\n` +
       `${pricingLines}\n\n` +
+      `─────────────────\n` +
+      `${pricingDeliveryLine}\n\n` +
       `─────────────────\n` +
       `${instructions}`,
     buttons: [{ id: "suppliers_home", title: "⬅ Back" }]

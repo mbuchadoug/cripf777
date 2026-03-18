@@ -316,7 +316,7 @@ export async function runSupplierSearch({ city, category, product, profileType, 
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
   
   // ── Area/suburb filter: boost results from that suburb ────────────────────
-  // We don't hard-filter by area (too restrictive — supplier may serve whole city)
+  // We don't hard-filter by area (too restrictive -supplier may serve whole city)
   // Instead we add it as a soft OR condition alongside the product search below
   if (category) query.categories = category;
 
@@ -337,7 +337,7 @@ if (product) {
 
 let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(50)   // fetch more — pagination will slice to 9 per page
+    .limit(50)   // fetch more -pagination will slice to 9 per page
     .lean();
 
   // ── Area boost: float suppliers in the searched suburb to the top ─────────
