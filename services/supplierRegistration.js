@@ -442,15 +442,15 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
       }
 
       const failNote = failed.length
-        ? `\n\n⚠️ Skipped ${failed.length} line${failed.length > 1 ? "s" : ""} — you can update later.`
+        ? `\n\n⚠️ Skipped ${failed.length} line${failed.length > 1 ? "s" : ""} - you can update later.`
         : "";
 
       // Build preview lines
       const previewLines = isService
-        ? updated.map(u => `• ${u.service} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n")
-        : updated.map(u => `• ${u.product} — $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
+        ? updated.map(u => `• ${u.service} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n")
+        : updated.map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`).join("\n");
 
-      // ── ADVANCE STATE immediately — no loop ────────────────────────────────
+      // ── ADVANCE STATE immediately - no loop ────────────────────────────────
       if (isService) {
         biz.sessionState = "supplier_reg_travel";
         await saveBiz(biz);
@@ -484,7 +484,7 @@ ${previewLines}${failNote}
       });
     }
 
-    // Nothing parseable — fall through to show the form with an error hint
+    // Nothing parseable - fall through to show the form with an error hint
     if (failed.length > 0 || parts.length > 0) {
       await sendText(from,
 `❌ Couldn't read your ${rateLabel}.
@@ -531,8 +531,8 @@ ${numbered}
 
 ─────────────────
 ${isService
-  ? `*Fastest — just numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
-  : `*Option 1 — Fastest ✅*\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 — Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 — With units:*\n_cement 5.50/bag, sand 8/load_`
+  ? `*Fastest - just numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
+  : `*Option 1 - Fastest ✅*\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 - With units:*\n_cement 5.50/bag, sand 8/load_`
 }
 ─────────────────
 _Enter your ${rateLabel} below or tap Skip_ 👇`,
@@ -819,8 +819,8 @@ _Type *cancel* to start over._`
 async function _showPricingPreview(from, biz, saveBiz, parsed, isService) {
   // Build readable preview
   const lines = isService
-    ? parsed.map(r => `• ${r.service} — ${r.rate}`)
-    : parsed.map(p => `• ${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`);
+    ? parsed.map(r => `• ${r.service} - ${r.rate}`)
+    : parsed.map(p => `• ${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`);
 
   const preview = lines.join("\n");
 

@@ -4017,7 +4017,7 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
       if (!clean) continue;
 
       // ── Strategy 2a: "NUMBER/UNIT" format e.g. "20/job", "50/hr", "15/trip" ──
-      // This is how service suppliers naturally type rates — number/unit without name
+      // This is how service suppliers naturally type rates - number/unit without name
       // We assign them positionally to the products list (in order)
       const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
       if (rateOnlyMatch) {
@@ -4917,12 +4917,12 @@ const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerC
   // Show updated catalogue with cart
 // ── After adding to cart: for services (and small catalogues with cart items),
   // send a short confirmation nudge BEFORE the catalogue refresh.
-  // This tells the buyer "added ✓ — confirm or keep browsing".
+  // This tells the buyer "added ✓ - confirm or keep browsing".
   const isServiceCart = supplier.profileType === "service";
   const addedItem = existing ? `${productName} (×${existing.quantity} total)` : productName;
 
   if (isServiceCart) {
-    // For services: buyer added a service — tell them clearly what's next
+    // For services: buyer added a service - tell them clearly what's next
     await sendText(from,
       `✅ *${addedItem}* added.\n\n_Tap ✅ Confirm Booking below to send your request, or add more services._`
     );
