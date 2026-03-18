@@ -2087,7 +2087,7 @@ const supplierStates = [
   "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
   "supplier_reg_prices", "supplier_update_prices",
   "supplier_edit_products", "supplier_edit_area",
-  "supplier_reg_minorder", "supplier_reg_confirm", "supplier_reg_enter_ecocash",
+"supplier_reg_confirm", "supplier_reg_enter_ecocash",
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
   "supplier_reg_type",
   "supplier_reg_travel",
@@ -2663,16 +2663,19 @@ if (a === "find_supplier") {
 return sendText(from,
 `🔍 *Find Suppliers on ZimQuote*
 
-Type what you need and send it. You can include a city at the end.
+Type what you need. Add a city or suburb at the end for nearby results.
 
 *📦 Products:*
-_find cement_, _find cooking oil harare_, _find mealie meal_, _find river sand_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
+_find cement_, _find cement mbare_, _find cooking oil harare_, _find mealie meal_, _find river sand avondale_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
 
 *🔧 Services:*
-_find plumber_, _find electrician harare_, _find teacher_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder_, _find catering_, _find photographer_, _find it support_
+_find plumber_, _find plumber borrowdale_, _find electrician harare_, _find teacher mabelreign_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder workington_, _find catering_, _find photographer_, _find it support_
 
 *🚗 Transport:*
 _find car hire_, _find delivery harare_, _find moving company bulawayo_
+
+*💡 Tip: Include your suburb for closer results!*
+_find plumber avondale_, _find electrician glen view_, _find delivery chitungwiza_
 
 Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Or browse by category:", [
@@ -3204,34 +3207,25 @@ if (a === "sup_cat_more") {
 }
 
   // ── Travel yes/no during service registration ─────────────────────────────
-  if (a === "sup_travel_yes") {
+if (a === "sup_travel_yes") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.travelAvailable = true;
-    biz.sessionState = "supplier_reg_minorder";
+    biz.sessionData.supplierReg.minOrder = 0;
+    biz.sessionState = "supplier_reg_confirm";
     await saveBizSafe(biz);
-   return sendText(from,
-`💵 What is your minimum job value in USD?
-
-Type *0* for no minimum.
-
-Type *cancel* to stop registration.`);
-
+    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
   }
 
-  if (a === "sup_travel_no") {
+
+if (a === "sup_travel_no") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.travelAvailable = false;
-    biz.sessionState = "supplier_reg_minorder";
+    biz.sessionData.supplierReg.minOrder = 0;
+    biz.sessionState = "supplier_reg_confirm";
     await saveBizSafe(biz);
-return sendText(from,
-`💵 What is your minimum job value in USD?
-
-Type *0* for no minimum.
-
-Type *cancel* to stop registration.`);
-
+    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
   }
   // ── Supplier category selected during registration ────────────────────────
 if (a.startsWith("sup_cat_")) {
@@ -3681,34 +3675,31 @@ Now one quick question - *do you deliver?*`,
 
 
   // ── Delivery yes/no during registration ───────────────────────────────────
-  if (a === "sup_del_yes") {
+if (a === "sup_del_yes") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.delivery = { available: true, range: "city_wide" };
-    biz.sessionState = "supplier_reg_minorder";
+    biz.sessionData.supplierReg.minOrder = 0;  // ← default to 0, skip the question
+    biz.sessionState = "supplier_reg_confirm";
     await saveBizSafe(biz);
-return sendText(from,
-`💵 What is your minimum order amount in USD?
-
-Type *0* for no minimum.
-
-Type *cancel* to stop registration.`);
-
+    const { buildSupplierConfirmText } = await import("./supplierRegistration.js");
+    return sendButtons(from, {
+      text: buildSupplierConfirmText(biz.sessionData.supplierReg),
+      buttons: [
+        { id: "sup_confirm_yes", title: "✅ Confirm & List" },
+        { id: "sup_confirm_no",  title: "✏️ Start Over" }
+      ]
+    });
   }
 
-  if (a === "sup_del_no") {
+if (a === "sup_del_no") {
     if (!biz) return sendMainMenu(from);
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.delivery = { available: false };
-    biz.sessionState = "supplier_reg_minorder";
+    biz.sessionData.supplierReg.minOrder = 0;
+    biz.sessionState = "supplier_reg_confirm";
     await saveBizSafe(biz);
-  return sendText(from,
-`💵 What is your minimum order amount in USD?
-
-Type *0* for no minimum.
-
-Type *cancel* to stop registration.`);
-
+    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
   }
 
   // ── Supplier confirms listing → save + show plan picker ──────────────────
@@ -3992,28 +3983,30 @@ if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
   const updated = [];
   const failed = [];
 
-  if (allNumbers) {
+if (allNumbers) {
     // Strategy 1: numbers in order
     if (parts.length !== products.length) {
       const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
       await sendText(from,
-`❌ You have *${products.length} products* but sent *${parts.length} prices*.
+`❌ You have *${products.length} product${products.length > 1 ? "s" : ""}* but sent *${parts.length} price${parts.length > 1 ? "s" : ""}*.
 
-Send one price per product in order:
-${numbered}`
+Send one price per ${isService ? "service" : "product"} in order:
+${numbered}
+
+Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
       );
-      return;
+      return true;
     }
     parts.forEach((numStr, i) => {
       updated.push({
         product: products[i].toLowerCase(),
         amount: parseFloat(numStr),
-        unit: "each",
+        unit: isService ? "job" : "each",  // ← FIX: services get "job" not "each"
         inStock: true
       });
     });
-  } else {
-    // Strategy 2: named pricing with aggressive paste parser
+ } else {
+    // Strategy 2: named pricing OR rate-style "NUMBER/UNIT" format
     for (const line of parts) {
       const clean = line
         .replace(/^[-•*►▪✓]\s*/, "")
@@ -4023,6 +4016,26 @@ ${numbered}`
 
       if (!clean) continue;
 
+      // ── Strategy 2a: "NUMBER/UNIT" format e.g. "20/job", "50/hr", "15/trip" ──
+      // This is how service suppliers naturally type rates — number/unit without name
+      // We assign them positionally to the products list (in order)
+      const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
+      if (rateOnlyMatch) {
+        const posIdx = updated.length; // assign to next product in order
+        if (posIdx < products.length) {
+          updated.push({
+            product: products[posIdx].toLowerCase(),
+            amount: parseFloat(rateOnlyMatch[1]),
+            unit: rateOnlyMatch[2].toLowerCase(),
+            inStock: true
+          });
+        } else {
+          failed.push(line); // more rates than products
+        }
+        continue;
+      }
+
+      // ── Strategy 2b: named pricing e.g. "burst pipe repair: 20", "plumbing 50/hr" ──
       let match =
         clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
         clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
@@ -4031,7 +4044,11 @@ ${numbered}`
 
       const product = match[1].replace(/[$@\-:,]+$/, "").trim().toLowerCase();
       const amount = parseFloat(match[2]);
-      const unit = match[3]?.trim().toLowerCase() || "each";
+      // Parse unit: "50/hr" → "hr", "50" alone → default based on type
+      const rawUnit = match[3]?.trim().toLowerCase() || "";
+      const unit = rawUnit
+        ? rawUnit.replace(/^\//, "") // strip leading slash if any
+        : (isService ? "job" : "each");  // ← FIX: services default to "job"
 
       if (!product || isNaN(amount)) { failed.push(line); continue; }
       updated.push({ product, amount, unit, inStock: true });
@@ -4896,6 +4913,31 @@ const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerC
     { $set: { "tempData.orderCart": cart } },
     { upsert: true }
   );
+
+  // Show updated catalogue with cart
+// ── After adding to cart: for services (and small catalogues with cart items),
+  // send a short confirmation nudge BEFORE the catalogue refresh.
+  // This tells the buyer "added ✓ — confirm or keep browsing".
+  const isServiceCart = supplier.profileType === "service";
+  const addedItem = existing ? `${productName} (×${existing.quantity} total)` : productName;
+
+  if (isServiceCart) {
+    // For services: buyer added a service — tell them clearly what's next
+    await sendText(from,
+      `✅ *${addedItem}* added.\n\n_Tap ✅ Confirm Booking below to send your request, or add more services._`
+    );
+  }
+
+// ── After adding to cart: for services, send a brief confirmation nudge ──
+  // This tells the buyer what they added and what to do next.
+  if (supplier.profileType === "service" && cart.length > 0) {
+    const addedItem = existing
+      ? `${productName} ×${existing.quantity} total`
+      : productName;
+    await sendText(from,
+      `✅ *${addedItem}* added to your booking.\n\n_Tap ✅ Confirm Booking to send your request, or add more services below._`
+    );
+  }
 
   // Show updated catalogue with cart
   return _sendSupplierCatalogueMenu(from, supplier, cart);
@@ -6314,11 +6356,70 @@ _1x5, sand 2, 6x20_
     ? `🛒 ${cart.reduce((s,c)=>s+c.quantity,0)} item${cart.reduce((s,c)=>s+c.quantity,0) !== 1 ? "s" : ""} in cart · `
     : "";
 
+const catalogueHint = cart.length > 0
+    ? (isService
+        ? `_Tap ✅ Confirm to book, or add more services_`
+        : `_Tap ✅ Confirm to order, or add more items_`)
+    : `_Tap an item to add it to your ${isService ? "booking" : "order"}_`;
+
+const catalogueActionHint = cart.length > 0
+    ? (isService
+        ? `_Tap ✅ Confirm to book, or add more services_`
+        : `_Tap ✅ Confirm to order, or add more items_`)
+    : `_Tap to add to your ${isService ? "booking" : "order"}_`;
+
   return sendList(from,
-    `${shortCartLine}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n_Tap an item to add it to your order_`,
+    `${shortCartLine}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n${catalogueActionHint}`,
     rows
   );
 }
+
+// ── Build and send the supplier registration confirm summary ─────────────
+async function _sendSupplierConfirmPrompt(from, reg = {}) {
+  const isService = reg.profileType === "service";
+
+  const productList = (reg.products || [])
+    .filter(p => p !== "pending_upload")
+    .slice(0, 6)
+    .join(", ") || "_(to be added)_";
+
+  const priceSummary = isService
+    ? (Array.isArray(reg.rates) && reg.rates.length
+        ? reg.rates.slice(0, 3).map(r => `${r.service} (${r.rate})`).join(", ") +
+          (reg.rates.length > 3 ? ` +${reg.rates.length - 3} more` : "")
+        : "_Rates to be added_")
+    : (Array.isArray(reg.prices) && reg.prices.length
+        ? reg.prices.slice(0, 3).map(p => `${p.product} $${Number(p.amount).toFixed(2)}`).join(", ") +
+          (reg.prices.length > 3 ? ` +${reg.prices.length - 3} more` : "")
+        : "_Prices to be added_");
+
+  const deliveryLine = isService
+    ? (reg.travelAvailable ? "🚗 Travels to clients" : "📍 Clients visit provider")
+    : (reg.delivery?.available ? "🚚 Delivers to buyers" : "🏠 Collection only");
+
+  const productLabel = reg.products?.[0] === "pending_upload"
+    ? "_(Catalogue to be uploaded)_"
+    : productList;
+
+  return sendButtons(from, {
+    text:
+`✅ *Almost done! Confirm your listing:*
+
+🏪 *${reg.businessName || "Not set"}*
+📍 ${reg.area || ""}, ${reg.city || ""}
+${isService ? "🔧" : "📦"} ${productLabel}
+${deliveryLine}
+💰 ${priceSummary}
+
+_Is this correct?_`,
+    buttons: [
+      { id: "sup_confirm_yes", title: "✅ Confirm & List" },
+      { id: "sup_confirm_no",  title: "❌ Start Over" }
+    ]
+  });
+}
+
+
 async function showExpenseReceipts(from, biz, branchId) {
   const Expense = (await import("../models/expense.js")).default;
   const query = { businessId: biz._id };

@@ -377,22 +377,17 @@ if (state === "supplier_reg_prices") {
     .map((p, i) => `${p} ${[10, 25][i]}/job`)
     .join(", ");
 
-  return sendButtons(from, {
+ return sendButtons(from, {
     text:
 `💰 *Set Your ${isService ? "Rates" : "Prices"} (USD)*
 
 ${numbered}
 
 ─────────────────
-*Option 1 - Fastest* ✅
-Just numbers in order (one per product):
-_${isService ? serviceExampleNums : exampleNums}_
-
-*Option 2 - Name them* 📝
-${isService ? `_${serviceExampleNamed}_` : `_${exampleNamed}_`}
-
-*Option 3 - Mixed units* 🔧
-${isService ? `_geyser repair 45/job, drain 20/hr_` : `_cement 5.50/bag, sand 8/load_`}
+${isService
+  ? `*Option 1 - Rate per job/hour:*\n_${serviceExampleNums}_\n\nor just: _20/job, 50/hr, 15/trip_\n\n*Option 2 - Name them:*\n_${serviceExampleNamed}_`
+  : `*Option 1 - Fastest* ✅\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them* 📝\n_${exampleNamed}_\n\n*Option 3 - Mixed units* 🔧\n_cement 5.50/bag, sand 8/load_`
+}
 ─────────────────
 _Enter your ${rateLabel} below or tap Skip_ 👇`,
     buttons: [
@@ -401,55 +396,7 @@ _Enter your ${rateLabel} below or tap Skip_ 👇`,
   });
 }
   // ── Step 4: Minimum Order ──────────────────────────────
-  if (state === "supplier_reg_minorder") {
-    const amount = Number(text.trim());
-    if (isNaN(amount) || amount < 0) {
-      await sendText(from, "❌ Enter a valid amount or 0 for no minimum:");
-      return true;
-    }
 
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.minOrder = amount;
-    biz.sessionState = "supplier_reg_confirm";
-    await saveBiz(biz);
-
-    const reg = biz.sessionData.supplierReg;
- const isService = reg.profileType === "service";
-
-    const deliveryText = isService
-      ? `🚗 ${reg.travelAvailable ? "Travels to clients" : "Client comes to provider"}`
-      : reg.delivery?.available
-        ? `🚚 ${reg.delivery.range === "city_wide"
-            ? "Delivers in city"
-            : reg.delivery.range === "nationwide"
-            ? "Delivers nationwide"
-            : "Delivers nearby"}`
-        : "🏠 Collection only";
-
-const pricingText = isService
-  ? `💰 Rates:\n${Array.isArray(reg.rates) && reg.rates.length
-      ? reg.rates.map(r => `• ${r.service} ${r.rate}`).join("\n")
-      : "Not specified"}`
-  : `💵 Min order: ${amount > 0 ? `$${amount}` : "No minimum"}`;
-
-    return sendButtons(from, {
-      text: `✅ *Almost done! Confirm your listing:*\n\n` +
-            `🏪 ${reg.businessName}\n` +
-            `📍 ${reg.area}, ${reg.city}\n` +
-          `${isService ? "🔧" : "📦"} ${
-  reg.products?.[0] === "pending_upload"
-    ? "_(Products to be uploaded)_"
-    : (reg.products || []).join(", ")
-}\n` +
-            `${deliveryText}\n` +
-            `${pricingText}\n\n` +
-            `Is this correct?`,
-      buttons: [
-        { id: "sup_confirm_yes", title: "✅ Confirm" },
-        { id: "sup_confirm_no", title: "❌ Start Over" }
-      ]
-    });
-  }
 
 // ── Step 5: EcoCash Number Entry ──────────────────────────────────────────
   if (state === "supplier_reg_enter_ecocash") {
@@ -726,28 +673,43 @@ _Type *cancel* to start over._`
 async function _showPricingPreview(from, biz, saveBiz, parsed, isService) {
   // Build readable preview
   const lines = isService
-    ? parsed.map(r => `• ${r.service} - ${r.rate}`)
-    : parsed.map(p => `• ${p.product} - $${Number(p.amount).toFixed(2)}/${p.unit}`);
+    ? parsed.map(r => `• ${r.service} — ${r.rate}`)
+    : parsed.map(p => `• ${p.product} — $${Number(p.amount).toFixed(2)}/${p.unit}`);
 
   const preview = lines.join("\n");
 
-  // Store a flag so confirm handler knows what to do
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  biz.sessionData.supplierReg.pricingConfirmPending = true;
+
+  // ── FIX: Advance state NOW so re-typing doesn't loop back here ───────────
+  // State moves to travel/delivery. The confirm buttons (sup_travel_yes etc.)
+  // are the natural next step. "✏️ Re-enter" resets to supplier_reg_prices.
+  if (isService) {
+    biz.sessionState = "supplier_reg_travel";
+  } else {
+    biz.sessionState = "supplier_reg_delivery";
+  }
   await saveBiz(biz);
 
   return sendButtons(from, {
     text:
-`✅ *Prices Preview* (${parsed.length} items)
+`✅ *${isService ? "Rates" : "Prices"} Saved!* (${parsed.length} item${parsed.length > 1 ? "s" : ""})
 
 ${preview}
 
-Is this correct?`,
-    buttons: [
-      { id: "sup_prices_confirm_yes", title: "✅ Looks Good" },
-      { id: "sup_prices_edit",        title: "✏️ Re-enter Prices" },
-      { id: "sup_skip_prices",        title: "⏭ Skip For Now" }
-    ]
+_You can update these anytime from your account._
+
+${isService ? "🚗 *Do you travel to clients?*" : "🚚 *Do you deliver?*"}`,
+    buttons: isService
+      ? [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no",  title: "🏠 Client Comes to Me" },
+          { id: "sup_prices_edit", title: "✏️ Re-enter Rates" }
+        ]
+      : [
+          { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+          { id: "sup_del_no",  title: "🏠 Collection Only" },
+          { id: "sup_prices_edit", title: "✏️ Re-enter Prices" }
+        ]
   });
 }
 
