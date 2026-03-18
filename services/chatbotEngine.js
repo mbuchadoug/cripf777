@@ -2122,19 +2122,22 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
         area: shortcode.area || null
       });
       if (results.length) {
-const pageResults = results.slice(0, 9);
+        // ── FIX: always update biz.sessionData with current search term ──────
+        biz.sessionData = {
+          ...(biz.sessionData || {}),
+          supplierSearch: { product: shortcode.product, city: shortcode.city }
+        };
+        const pageResults = results.slice(0, 9);
         const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
         const locationLabel = shortcode.area
             ? `${shortcode.area}, ${shortcode.city}`
             : shortcode.city;
         const hasMore = results.length > 9;
         if (hasMore) {
-          if (biz) {
-            biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
-            await saveBizSafe(biz);
-          }
+          biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
         }
+        await saveBizSafe(biz);
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
@@ -4744,10 +4747,14 @@ if (a.startsWith("sup_order_")) {
   const isService = supplier.profileType === "service";
 
   // ── Recover the search term that led the buyer here ───────────────────
-  let searchedProduct = biz?.sessionData?.supplierSearch?.product || null;
+// ── Recover the search term that led the buyer here ───────────────────
+  // ALWAYS check UserSession first — biz.sessionData can have stale product
+  // from a previous search (especially for ghost-biz supplier users who also buy)
+  const _sess = await UserSession.findOne({ phone });
+  let searchedProduct = _sess?.tempData?.supplierSearchProduct || null;
+  // Fall back to biz session only if UserSession has nothing
   if (!searchedProduct) {
-    const sess = await UserSession.findOne({ phone });
-    searchedProduct = sess?.tempData?.supplierSearchProduct || null;
+    searchedProduct = biz?.sessionData?.supplierSearch?.product || null;
   }
 
   // ── Pre-seed cart if we have a search term that matches a real item ───
@@ -4758,10 +4765,13 @@ if (a.startsWith("sup_order_")) {
 
     if (isServiceSupplier) {
       // Try to find matching rate
-      const rate = (supplier.rates || []).find(r =>
-        r.service?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
-        searchedProduct.toLowerCase().includes(r.service?.toLowerCase())
-      );
+ 
+      const _wantedSvc = searchedProduct.toLowerCase();
+      const rate =
+        (supplier.rates || []).find(r => r.service?.toLowerCase() === _wantedSvc) ||
+        (supplier.rates || []).find(r => r.service?.toLowerCase().startsWith(_wantedSvc) || _wantedSvc.startsWith(r.service?.toLowerCase())) ||
+        (supplier.rates || []).find(r => r.service?.toLowerCase().includes(_wantedSvc)) ||
+        (supplier.rates || []).find(r => _wantedSvc.includes(r.service?.toLowerCase()) && r.service?.length >= 4);
       if (rate) {
         priceInfo = { amount: parseSupplierRateValue(rate.rate), unit: parseSupplierRateUnit(rate.rate) };
         initialCart = [{
@@ -4773,10 +4783,11 @@ if (a.startsWith("sup_order_")) {
         }];
       } else if (supplier.products?.length && !supplier.rates?.length) {
         // Fallback: supplier has product list but no rates yet
-        const matchedProduct = supplier.products.find(p =>
-          p?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
-          searchedProduct.toLowerCase().includes(p?.toLowerCase())
-        );
+     const _wp = searchedProduct.toLowerCase();
+        const matchedProduct =
+          supplier.products.find(p => p?.toLowerCase() === _wp) ||
+          supplier.products.find(p => p?.toLowerCase().includes(_wp)) ||
+          supplier.products.find(p => _wp.includes(p?.toLowerCase()) && p?.length >= 4);
         if (matchedProduct) {
           initialCart = [{
             product: matchedProduct,
@@ -4789,10 +4800,15 @@ if (a.startsWith("sup_order_")) {
       }
     } else {
       // Product supplier - find matching price
-      const price = (supplier.prices || []).find(p =>
-        p.product?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
-        searchedProduct.toLowerCase().includes(p.product?.toLowerCase())
-      );
+    // Product supplier - find matching price
+      // Priority: exact → starts-with/ends-with → contains (both directions)
+      const _wanted = searchedProduct.toLowerCase();
+      const price =
+        (supplier.prices || []).find(p => p.product?.toLowerCase() === _wanted) ||
+        (supplier.prices || []).find(p => p.product?.toLowerCase().startsWith(_wanted) || _wanted.startsWith(p.product?.toLowerCase())) ||
+        (supplier.prices || []).find(p => p.product?.toLowerCase().includes(_wanted)) ||
+        (supplier.prices || []).find(p => _wanted.includes(p.product?.toLowerCase()) && p.product?.length >= 4);
+        // ↑ minimum 4 chars prevents "a", "ad" etc from matching "padlock"
       if (price) {
         priceInfo = { amount: Number(price.amount), unit: price.unit || "each" };
         initialCart = [{
@@ -4804,10 +4820,11 @@ if (a.startsWith("sup_order_")) {
         }];
       } else {
         // No price match - try products list
-        const matchedProduct = (supplier.products || []).find(p =>
-          p?.toLowerCase().includes(searchedProduct.toLowerCase()) ||
-          searchedProduct.toLowerCase().includes(p?.toLowerCase())
-        );
+    const _wp2 = searchedProduct.toLowerCase();
+        const matchedProduct =
+          (supplier.products || []).find(p => p?.toLowerCase() === _wp2) ||
+          (supplier.products || []).find(p => p?.toLowerCase().includes(_wp2)) ||
+          (supplier.products || []).find(p => _wp2.includes(p?.toLowerCase()) && p?.length >= 4);
         if (matchedProduct) {
           initialCart = [{
             product: matchedProduct,
