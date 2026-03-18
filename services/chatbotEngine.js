@@ -458,7 +458,10 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("view_expense_receipts_branch_") ||
       a.startsWith("view_payment_history_branch_") ||
       a.startsWith("view_clients_branch_") ||
-      a.startsWith("cashbal_branch_")
+     a.startsWith("cashbal_branch_") ||
+      a === "sup_search_next_page" ||
+      a === "sup_search_prev_page"
+    
     );
 
   // =========================
@@ -562,7 +565,15 @@ if (searchMode === "product") {
         ]
       });
     }
-    const rows = formatSupplierResults(results, parsed.city, parsed.product);
+  const pageResults = results.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, parsed.city, parsed.product);
+    const hasMore = results.length > 9;
+    if (hasMore) {
+      await UserSession.findOneAndUpdate({ phone }, {
+        $set: { "tempData.searchResults": results, "tempData.searchPage": 0 }
+      }, { upsert: true });
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+    }
     return sendList(from, `🔍 *${parsed.product}* in ${parsed.city} - ${results.length} found`, rows);
   }
 
@@ -608,6 +619,8 @@ a.startsWith("sup_cart_confirm_") ||
 a.startsWith("sup_cart_clear_") ||
 a.startsWith("sup_cart_remove_") ||
 a.startsWith("sup_cart_custom_") ||
+  a === "sup_search_next_page" ||
+  a === "sup_search_prev_page" ||
   a === "my_supplier_account";
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
@@ -633,10 +646,18 @@ a.startsWith("sup_cart_custom_") ||
           area: shortcode.area || null
         });
         if (results.length) {
-          const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+const pageResults = results.slice(0, 9);
+          const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
           const locationLabel = shortcode.area
             ? `${shortcode.area}, ${shortcode.city}`
             : shortcode.city;
+          const hasMore = results.length > 9;
+          if (hasMore) {
+            await UserSession.findOneAndUpdate({ phone }, {
+              $set: { "tempData.searchResults": results, "tempData.searchPage": 0 }
+            }, { upsert: true });
+            rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+          }
           return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
         }
       }
@@ -2098,11 +2119,20 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
         area: shortcode.area || null
       });
       if (results.length) {
-        const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
+const pageResults = results.slice(0, 9);
+        const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
         const locationLabel = shortcode.area
             ? `${shortcode.area}, ${shortcode.city}`
             : shortcode.city;
-          return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+        const hasMore = results.length > 9;
+        if (hasMore) {
+          if (biz) {
+            biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+            await saveBizSafe(biz);
+          }
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
     biz.sessionData = {
@@ -3812,10 +3842,22 @@ const results = await runSupplierSearch({ city, category, product, profileType, 
       };
       await saveBizSafe(biz);
     }
-
-const rows = formatSupplierResults(results, city, category || product);
+const pageResults = results.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, city, category || product);
     const locationLabel = city || "All Cities";
     const searchLabel = category || product || "Suppliers";
+    const hasMore = results.length > 9;
+    if (hasMore) {
+      if (biz) {
+        biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+        await saveBizSafe(biz);
+      } else {
+        await UserSession.findOneAndUpdate({ phone }, {
+          $set: { "tempData.searchResults": results, "tempData.searchPage": 0 }
+        }, { upsert: true });
+      }
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+    }
     return sendList(from, `🔍 ${searchLabel} - ${locationLabel}\n${results.length} found`, rows);
   }
 
@@ -4101,6 +4143,7 @@ if (a === "sup_price_update_confirm") {
 
   // ── Buyer types item name while browsing catalogue (supplier_order_picking) ──
 // Handles both biz session and no-biz UserSession
+// ── Buyer types while browsing catalogue (supplier_order_picking) ──────────
 const pickingStateBiz = biz?.sessionState === "supplier_order_picking";
 const pickingStateSess = await (async () => {
   if (pickingStateBiz) return null;
@@ -4110,11 +4153,12 @@ const pickingStateSess = await (async () => {
 
 if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
   const raw = text.trim();
-
   if (!raw || raw.length < 1) return;
 
-  // Cancel check
-  if (raw.toLowerCase() === "cancel") {
+  const rawLower = raw.toLowerCase();
+
+  // ── CANCEL ──────────────────────────────────────────────────────────────
+  if (rawLower === "cancel") {
     if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
     await UserSession.findOneAndUpdate({ phone }, {
       $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderCart": "", "tempData.orderIsService": "" }
@@ -4131,35 +4175,148 @@ if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
 
   const supplierId = biz?.sessionData?.orderSupplierId
     || pickingStateSess?.tempData?.orderSupplierId;
-
   if (!supplierId) return;
 
   const supplier = await SupplierProfile.findById(supplierId).lean();
   if (!supplier) return;
 
-  // ── Parse typed input as bulk order ──────────────────────────────────────
-  // Try "cement 5, sand 2" format first
-  const parsedBulk = parseBulkOrderInput(raw);
-  const isService  = supplier.profileType === "service";
+  const isService = supplier.profileType === "service";
 
-  let cart = biz?.sessionData?.orderCart
+  let cart = [...(biz?.sessionData?.orderCart
     || pickingStateSess?.tempData?.orderCart
-    || [];
+    || [])];
 
+  // ── CONFIRM shortcut ─────────────────────────────────────────────────────
+  if (rawLower === "confirm" || rawLower === "done" || rawLower === "send") {
+    if (!cart.length) {
+      return sendText(from, "❌ Your cart is empty. Tap items or type to add them first.");
+    }
+    // Trigger the confirm flow by routing to sup_cart_confirm_ handler
+    // We do this by setting state to address and sending the summary
+    if (biz) {
+      biz.sessionState = "supplier_order_address";
+      await saveBizSafe(biz);
+    }
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.orderState": "supplier_order_address" } },
+      { upsert: true }
+    );
+    const previewLines = cart.map(c => {
+      const priceStr = c.pricePerUnit ? ` — $${(c.quantity * c.pricePerUnit).toFixed(2)}` : "";
+      return `• ${c.product} ×${c.quantity}${priceStr}`;
+    }).join("\n");
+    const knownTotal = cart.filter(c=>c.pricePerUnit).reduce((s,c)=>s+(c.quantity*c.pricePerUnit),0);
+    const totalLine = knownTotal > 0 ? `\n💵 *Estimated total: $${knownTotal.toFixed(2)}*` : "";
+    return sendButtons(from, {
+      text:
+`${isService ? "📅" : "🛒"} *${isService ? "Booking" : "Order"} Summary*
+
+${previewLines}${totalLine}
+
+─────────────────
+⚠️ *Your order has NOT been sent yet.*
+─────────────────
+
+*Step 2 of 2 — Enter your ${isService ? "location" : "delivery address"}* 👇
+
+${isService
+  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Come tomorrow 10am_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect — call me_`}
+
+_Type your address below and send_ ✍️`,
+      buttons: [
+        { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
+        { id: "find_supplier", title: "❌ Cancel" }
+      ]
+    });
+  }
+
+  // ── CLEAR cart ───────────────────────────────────────────────────────────
+  if (rawLower === "clear") {
+    cart = [];
+    if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: [] }; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": [] } }, { upsert: true });
+    await sendText(from, "🗑 Cart cleared.");
+    return _sendSupplierCatalogueMenu(from, supplier, []);
+  }
+
+  // ── REMOVE by position: r2, r 2, remove 2 ────────────────────────────────
+  const removeByPos = rawLower.match(/^(?:remove|r)\s*(\d+)$/);
+  if (removeByPos) {
+    const idx = parseInt(removeByPos[1]) - 1;
+    if (idx >= 0 && idx < cart.length) {
+      const removed = cart.splice(idx, 1)[0];
+      if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: cart }; await saveBizSafe(biz); }
+      await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": cart } }, { upsert: true });
+      await sendText(from, `✅ Removed *${removed.product}* from cart.`);
+      return _sendSupplierCatalogueMenu(from, supplier, cart);
+    } else {
+      return sendText(from, `❌ No item #${idx+1} in cart. You have ${cart.length} item${cart.length !== 1 ? "s" : ""}.`);
+    }
+  }
+
+  // ── REMOVE by name: "remove cement" ──────────────────────────────────────
+  const removeByName = rawLower.match(/^remove\s+(.+)$/);
+  if (removeByName) {
+    const nameToRemove = removeByName[1].trim();
+    const idx = cart.findIndex(c => c.product.toLowerCase().includes(nameToRemove));
+    if (idx >= 0) {
+      const removed = cart.splice(idx, 1)[0];
+      if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: cart }; await saveBizSafe(biz); }
+      await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": cart } }, { upsert: true });
+      await sendText(from, `✅ Removed *${removed.product}* from cart.`);
+      return _sendSupplierCatalogueMenu(from, supplier, cart);
+    } else {
+      return sendText(from, `❌ *${nameToRemove}* not found in cart.`);
+    }
+  }
+
+  // ── HELP command ─────────────────────────────────────────────────────────
+  if (rawLower === "help" || rawLower === "?") {
+    return sendText(from,
+`📋 *Ordering Help — ${supplier.businessName}*
+
+*➕ Add items:*
+Type: _cement 10_ or _cement 10 bags_
+Multiple: _cement 10, sand 2, bricks 500_
+
+*➕ Increase qty:*
+Type the item name alone: _cement_ adds 1 more
+Or: _cement 5_ adds 5 more
+
+*🗑 Remove items:*
+_remove cement_ — remove by name
+_r2_ or _remove 2_ — remove item #2
+
+*🗑 Clear cart:*
+_clear_ — empty entire cart
+
+*✅ Confirm order:*
+_confirm_ — go to delivery step
+Or tap ✅ Confirm in the list below
+
+*❌ Cancel:*
+_cancel_ — cancel this order`);
+  }
+
+  // ── PARSE as order input: "cement 10", "cement 10 bags", "cement 10, sand 2" ──
+  const parsedBulk = parseBulkOrderInput(raw);
+  
   if (parsedBulk.length && parsedBulk.some(i => i.valid)) {
-    // Add all valid parsed items to cart, fuzzy-matching against supplier's list
+    // Process all valid parsed items
     for (const entry of parsedBulk.filter(i => i.valid)) {
       const match = findMatchingSupplierPrice(supplier, entry.product);
-      const existing = cart.find(c =>
-        c.product.toLowerCase() === (match?.product || entry.product).toLowerCase()
-      );
+      const cartProduct = match?.product || entry.product;
+      const existing = cart.find(c => c.product.toLowerCase() === cartProduct.toLowerCase());
 
       if (existing) {
+        // Add to existing quantity
         existing.quantity += entry.quantity;
         if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
       } else {
         cart.push({
-          product: match?.product || entry.product,
+          product: cartProduct,
           quantity: entry.quantity,
           unit: match?.unit || entry.unitLabel || (isService ? "job" : "units"),
           pricePerUnit: match?.amount || null,
@@ -4168,57 +4325,157 @@ if (!isMetaAction && (pickingStateBiz || pickingStateSess)) {
       }
     }
 
-    // Save updated cart
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
-      await saveBizSafe(biz);
-    }
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: { "tempData.orderCart": cart } },
-      { upsert: true }
-    );
-
+    if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: cart }; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": cart } }, { upsert: true });
     return _sendSupplierCatalogueMenu(from, supplier, cart);
   }
 
-  // ── Single word/phrase typed - treat as product name with qty 1 ──────────
-  // e.g. buyer just typed "cement" or "plumbing"
-  const singleEntry = { product: raw, quantity: 1, unitLabel: isService ? "job" : "units", valid: true };
-  const match = findMatchingSupplierPrice(supplier, raw);
-  const existing = cart.find(c =>
-    c.product.toLowerCase() === (match?.product || raw).toLowerCase()
-  );
+  // ── SINGLE WORD — treat as item name, add qty 1 (or increase existing) ───
+  // e.g. buyer types "cement" → adds 1 cement or increments qty
+  const singleItemName = raw.trim();
+  if (singleItemName.length >= 2) {
+    const match = findMatchingSupplierPrice(supplier, singleItemName);
+    const cartProduct = match?.product || singleItemName;
+    const existing = cart.find(c => c.product.toLowerCase() === cartProduct.toLowerCase());
 
-  if (existing) {
-    existing.quantity += 1;
-    if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
+    if (existing) {
+      existing.quantity += 1;
+      if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
+    } else {
+      cart.push({
+        product: cartProduct,
+        quantity: 1,
+        unit: match?.unit || (isService ? "job" : "units"),
+        pricePerUnit: match?.amount || null,
+        total: match?.amount || null
+      });
+    }
+
+    if (biz) { biz.sessionData = { ...(biz.sessionData||{}), orderCart: cart }; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.orderCart": cart } }, { upsert: true });
+    return _sendSupplierCatalogueMenu(from, supplier, cart);
+  }
+}
+
+
+
+
+
+// ── Paginate search results: next page ───────────────────────────────────
+if (a === "sup_search_next_page") {
+  let allResults = [];
+  let currentPage = 0;
+
+  if (biz) {
+    allResults = biz.sessionData?.searchResults || [];
+    currentPage = (biz.sessionData?.searchPage || 0) + 1;
+    biz.sessionData = { ...(biz.sessionData || {}), searchPage: currentPage };
+    await saveBizSafe(biz);
   } else {
-    cart.push({
-      product: match?.product || raw,
-      quantity: 1,
-      unit: match?.unit || (isService ? "job" : "units"),
-      pricePerUnit: match?.amount || null,
-      total: match?.amount || null
+    const sess = await UserSession.findOne({ phone });
+    allResults = sess?.tempData?.searchResults || [];
+    currentPage = (sess?.tempData?.searchPage || 0) + 1;
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.searchPage": currentPage } },
+      { upsert: true }
+    );
+  }
+
+  if (!allResults.length) {
+    return sendButtons(from, {
+      text: "❌ Search session expired. Please search again.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
     });
   }
 
-  if (biz) {
-    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
-    await saveBizSafe(biz);
-  }
-  await UserSession.findOneAndUpdate(
-    { phone },
-    { $set: { "tempData.orderCart": cart } },
-    { upsert: true }
-  );
+  const PAGE_SIZE = 9;
+  const start = currentPage * PAGE_SIZE;
+  const pageResults = allResults.slice(start, start + PAGE_SIZE);
 
-  return _sendSupplierCatalogueMenu(from, supplier, cart);
+  if (!pageResults.length) {
+    return sendButtons(from, {
+      text: "❌ No more results on this page.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+    });
+  }
+
+  const rows = formatSupplierResults(pageResults, null, null);
+  const hasMore = allResults.length > start + PAGE_SIZE;
+  const hasPrev = currentPage > 0;
+
+  // Nav rows — always last, within the 10 row budget
+  // rows is max 9 items so we have room for nav
+  if (hasPrev) {
+    rows.push({ id: "sup_search_prev_page", title: `⬅ Back (prev ${PAGE_SIZE})` });
+  }
+  if (hasMore) {
+    rows.push({ id: "sup_search_next_page", title: `➡ More (${allResults.length - start - PAGE_SIZE} more)` });
+  }
+
+  if (rows.length > 10) rows.splice(10);
+
+  const showing = `${start + 1}–${Math.min(start + PAGE_SIZE, allResults.length)}`;
+  return sendList(
+    from,
+    `🔍 Results ${showing} of ${allResults.length}\n_Tap a supplier to view details_`,
+    rows
+  );
 }
 
-  // ── Start order: ask what they want ───────────────────────────────────────
-// ── Start order: ask what they want ───────────────────────────────────────
- // ── Start order: show supplier's product/service list as selectable menu ──
+// ── Paginate search results: previous page ────────────────────────────────
+if (a === "sup_search_prev_page") {
+  let allResults = [];
+  let currentPage = 0;
+
+  if (biz) {
+    allResults = biz.sessionData?.searchResults || [];
+    currentPage = Math.max(0, (biz.sessionData?.searchPage || 1) - 1);
+    biz.sessionData = { ...(biz.sessionData || {}), searchPage: currentPage };
+    await saveBizSafe(biz);
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    allResults = sess?.tempData?.searchResults || [];
+    currentPage = Math.max(0, (sess?.tempData?.searchPage || 1) - 1);
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.searchPage": currentPage } },
+      { upsert: true }
+    );
+  }
+
+  if (!allResults.length) {
+    return sendButtons(from, {
+      text: "❌ Search session expired. Please search again.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+    });
+  }
+
+  const PAGE_SIZE = 9;
+  const start = currentPage * PAGE_SIZE;
+  const pageResults = allResults.slice(start, start + PAGE_SIZE);
+  const rows = formatSupplierResults(pageResults, null, null);
+  const hasMore = allResults.length > start + PAGE_SIZE;
+  const hasPrev = currentPage > 0;
+
+  if (hasPrev) {
+    rows.push({ id: "sup_search_prev_page", title: `⬅ Back` });
+  }
+  if (hasMore) {
+    rows.push({ id: "sup_search_next_page", title: `➡ More results` });
+  }
+
+  if (rows.length > 10) rows.splice(10);
+
+  const showing = `${start + 1}–${Math.min(start + PAGE_SIZE, allResults.length)}`;
+  return sendList(
+    from,
+    `🔍 Results ${showing} of ${allResults.length}\n_Tap a supplier to view details_`,
+    rows
+  );
+}
+
+// ── Start order: show supplier's product/service list as selectable menu ──
 if (a.startsWith("sup_order_")) {
   const supplierId = a.replace("sup_order_", "");
   const supplier = await SupplierProfile.findById(supplierId).lean();
@@ -4354,9 +4611,13 @@ if (a.startsWith("sup_cart_add_")) {
   }
 
   // Check if item already in cart - increment qty
-  const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
+const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
   if (existing) {
     existing.quantity += 1;
+    // Recalculate total when increasing qty
+    if (existing.pricePerUnit) {
+      existing.total = existing.quantity * existing.pricePerUnit;
+    }
   } else {
     // Find price for this item
     const isService = supplier.profileType === "service";
@@ -4638,7 +4899,16 @@ isService
      const locationLabel = parsed?.area
         ? `${parsed.area}, ${finalCity}`
         : finalCity;
-      const rows = formatSupplierResults(results, finalCity, finalProduct);
+const pageResults = results.slice(0, 9);
+      const rows = formatSupplierResults(pageResults, finalCity, finalProduct);
+      const hasMore = results.length > 9;
+      if (hasMore) {
+        if (biz) {
+          biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+          await saveBizSafe(biz);
+        }
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+      }
       return sendList(from, `🔍 *${finalProduct}* in ${locationLabel} - ${results.length} found`, rows);
     }
 
@@ -5608,6 +5878,7 @@ async function showClientsList(from, biz, branchId) {
 // ── Build and send the supplier catalogue as a WhatsApp list ─────────────
 async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
   const isService = supplier.profileType === "service";
+  const phone = from.replace(/\D+/g, "");
 
   const items = isService
     ? (supplier.rates || []).map(r => ({
@@ -5629,67 +5900,98 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
 
   const sourceItems = items.length ? items : fallbackItems;
 
+  // ── No products at all ────────────────────────────────────────────────────
   if (!sourceItems.length) {
-    // No products at all - go straight to free text
     if (biz) {
       biz.sessionState = "supplier_order_product";
       biz.sessionData = { ...(biz.sessionData || {}), orderSupplierId: String(supplier._id) };
       await saveBizSafe(biz);
     }
     await UserSession.findOneAndUpdate(
-      { phone: from.replace(/\D+/g, "") },
+      { phone },
       { $set: { "tempData.orderState": "supplier_order_product", "tempData.orderSupplierId": String(supplier._id) }},
       { upsert: true }
     );
     return sendText(from,
-`${isService ? "📅" : "🛒"} *${isService ? "Book with" : "Order from"} ${supplier.businessName}*
+`${isService ? "📅" : "🛒"} *Order from ${supplier.businessName}*
 
-Type what you need:
-*Format:* item qty, item qty
-*Example:* ${isService ? "plumbing 2 hr, welding 1 job" : "sugar 2, bread 3, milk 1"}
+✍️ *Type your order like this:*
+_item name quantity, item name quantity_
 
-Type *cancel* to stop.`);
+*Examples:*
+${isService
+  ? `_plumbing 2 hr_\n_welding 1 job, painting 1 day_`
+  : `_sugar 2 kg, bread 3, cooking oil 1_\n_cement 10 bags, river sand 2 trips_`}
+
+📌 *Commands:*
+- *cancel* — cancel this order
+
+Send your order now 👇`);
   }
 
-  // ── Full product list for the header text ─────────────────────────────────
-  // Show ALL products/services as readable text so buyer knows everything available
-  const allItemNames = sourceItems.map((item, i) => {
-    const priceStr = item.price ? ` (${item.price})` : "";
-    return `${i + 1}. ${item.label}${priceStr}`;
-  }).join("\n");
-
-  const totalCount = sourceItems.length;
-
-  // ── Cart summary ──────────────────────────────────────────────────────────
+  // ── Cart summary text ─────────────────────────────────────────────────────
   let cartSummary = "";
   if (cart.length) {
     const cartTotal = cart.filter(c => c.pricePerUnit).reduce((s, c) => s + c.quantity * c.pricePerUnit, 0);
-    const totalStr  = cartTotal > 0 ? ` · Est. $${cartTotal.toFixed(2)}` : "";
+    const totalStr  = cartTotal > 0 ? ` · Est. *$${cartTotal.toFixed(2)}*` : "";
     const totalQty  = cart.reduce((s, c) => s + c.quantity, 0);
     cartSummary =
       `🛒 *Cart (${totalQty} item${totalQty > 1 ? "s" : ""}${totalStr}):*\n` +
-      cart.map(c => `• ${c.product} ×${c.quantity}${c.pricePerUnit ? ` ($${(c.quantity * c.pricePerUnit).toFixed(2)})` : ""}`).join("\n") +
-      "\n\n";
+      cart.map((c, i) => `${i + 1}. ${c.product} ×${c.quantity}${c.pricePerUnit ? ` = $${(c.quantity * c.pricePerUnit).toFixed(2)}` : ""}`).join("\n") +
+      "\n";
   }
 
-  // ── Row budget ────────────────────────────────────────────────────────────
-  // WhatsApp max = 10 rows
-  // Always reserve: confirm(1) + clear(1) + remove rows(min cart,2) when cart has items
-  // No cart: all 10 rows for products (quick-tap shortcuts for top items)
   const WHATSAPP_MAX   = 10;
   const removeRowCount = cart.length ? Math.min(cart.length, 2) : 0;
   const actionSlots    = cart.length ? (removeRowCount + 2) : 0;
-  // +1 always for "Type to order" hint row
-  const productSlots   = WHATSAPP_MAX - actionSlots - 1;
+  const productSlots   = WHATSAPP_MAX - actionSlots - 1; // -1 for custom/type row
 
-  // ── Tappable shortcut rows (top items only) ────────────────────────────────
+  const isBigCatalogue = sourceItems.length > productSlots;
+
+  // ── For big catalogues: send price list as a TEXT message first ───────────
+  if (isBigCatalogue) {
+    const priceListLines = sourceItems.map((item, i) => {
+      const priceStr = item.price ? ` — ${item.price}` : "";
+      return `${i + 1}. ${item.label}${priceStr}`;
+    }).join("\n");
+
+    const orderExamples = isService
+      ? `_plumbing 2, welding 1_`
+      : `_cement 10, river sand 2, bricks 500_`;
+
+    await sendText(from,
+`${isService ? "🔧" : "📦"} *${supplier.businessName} — Full ${isService ? "Services" : "Price List"}*
+
+${priceListLines}
+
+─────────────────
+${cartSummary.length ? cartSummary + "\n─────────────────\n" : ""}
+*📌 How to order:*
+
+*Option 1 — Tap* any item in the list below ↓ to quick-add it
+
+*Option 2 — Type* your order directly:
+Format: *item qty, item qty*
+Example: ${orderExamples}
+
+*Option 3 — Increase qty:* type the item name again e.g. _cement_ adds 1 more cement to cart
+
+*Commands:*
+- *confirm* — send your order
+- *clear* — empty your cart
+- *remove cement* — remove an item
+- *r2* — remove item #2 from cart
+- *cancel* — cancel this order`);
+  }
+
+  // ── Build list rows ───────────────────────────────────────────────────────
   const rows = sourceItems.slice(0, productSlots).map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.id)}`,
     title: item.label.slice(0, 24),
-    description: item.price ? String(item.price).slice(0, 72) : "Tap to add"
+    description: item.price ? String(item.price).slice(0, 72) : "Tap to add to cart"
   }));
 
-  // ── Cart action rows ──────────────────────────────────────────────────────
+  // Cart action rows
   if (cart.length) {
     cart.slice(0, removeRowCount).forEach(c => {
       rows.push({
@@ -5697,32 +5999,29 @@ Type *cancel* to stop.`);
         title: `➖ Remove: ${c.product.slice(0, 18)}`
       });
     });
-    rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm Order" });
+    rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm & Send Order" });
     rows.push({ id: `sup_cart_clear_${supplier._id}`,   title: "🗑 Clear Cart" });
   }
 
-  // ── "Type to order" row - always last ─────────────────────────────────────
-  const hiddenCount = totalCount - productSlots;
+  const hiddenCount = sourceItems.length - productSlots;
   rows.push({
     id: `sup_cart_custom_${supplier._id}`,
-    title: hiddenCount > 0
-      ? `✍️ Order any item by typing`
-      : `✍️ Type Custom Item`
+    title: hiddenCount > 0 ? `✍️ Type item + qty to order` : `✍️ Type Custom Item`
   });
 
   if (rows.length > 10) rows.splice(10);
 
-  // ── Header text with full product list ───────────────────────────────────
+  // ── List header (short — WhatsApp safe) ───────────────────────────────────
   const stepHint = cart.length
-    ? `_Tap ✅ Confirm when ready · or keep adding_`
-    : `_Tap to quick-add · or *type item name + qty* to order_`;
+    ? `Tap ✅ Confirm when ready`
+    : (isBigCatalogue ? `Tap to quick-add · see full list above` : `Tap item to add to cart`);
 
-  const hiddenNote = hiddenCount > 0
-    ? `\n\n📋 *Full list (${totalCount} items):*\n${allItemNames}\n\n_Tap any from the list above, or type the name_`
-    : `\n\n📋 *Available (${totalCount} items):*\n${allItemNames}`;
+  const shortCartLine = cart.length
+    ? `🛒 ${cart.reduce((s,c)=>s+c.quantity,0)} items in cart · `
+    : "";
 
   return sendList(from,
-    `${cartSummary}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n${stepHint}${hiddenNote}`,
+    `${shortCartLine}${isService ? "🔧" : "📦"} *${supplier.businessName}*\n_${stepHint}_`,
     rows
   );
 }

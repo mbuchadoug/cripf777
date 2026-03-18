@@ -335,9 +335,9 @@ if (product) {
     query.$and.push({ $or: productOr });
   }
 
-  let results = await SupplierProfile.find(query)
+let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(20)   // fetch more so we can re-sort by area proximity
+    .limit(50)   // fetch more — pagination will slice to 9 per page
     .lean();
 
   // ── Area boost: float suppliers in the searched suburb to the top ─────────
@@ -352,7 +352,7 @@ if (product) {
     });
   }
 
-  return results.slice(0, 10);
+  return results.slice(0, 20);
 
 }
 
