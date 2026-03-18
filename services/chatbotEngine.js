@@ -2653,6 +2653,55 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {}
+    };
+    biz.sessionState = "supplier_search_product";
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: { "tempData.supplierSearchMode": "product" },
+      $unset: {
+        "tempData.supplierSearchCategory": "",
+        "tempData.supplierSearchProduct": "",
+        "tempData.supplierSearchType": ""
+      }
+    },
+    { upsert: true }
+  );
+
+  return sendText(
+    from,
+    "🔍 What product or service are you looking for?\n\nExamples:\n• cement\n• plumber\n• welding\n• groceries"
+  );
+}
+  // Clear previous search state in BOTH biz and UserSession to prevent stale pre-seeding
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {}
+    };
+    biz.sessionState = "supplier_search_product";
+    await saveBizSafe(biz);
+  }
+  // Always clear UserSession regardless of biz — covers ghost-biz users too
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: { "tempData.supplierSearchMode": "product" },
+      $unset: {
+        "tempData.supplierSearchCategory": "",
+        "tempData.supplierSearchProduct": "",
+        "tempData.supplierSearchType": ""
+      }
+    },
+    { upsert: true }
+  );
   // Clear previous search state in BOTH biz and UserSession to prevent stale pre-seeding
   if (biz) {
     biz.sessionData = {
