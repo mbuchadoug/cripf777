@@ -2122,7 +2122,7 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
         area: shortcode.area || null
       });
       if (results.length) {
-        // ── FIX: always update biz.sessionData with current search term ──────
+        // ← ADD: always update biz.sessionData so sup_order_ gets correct product
         biz.sessionData = {
           ...(biz.sessionData || {}),
           supplierSearch: { product: shortcode.product, city: shortcode.city }
@@ -2137,7 +2137,7 @@ if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.in
           biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
         }
-        await saveBizSafe(biz);
+        await saveBizSafe(biz); // ← ADD: save the updated supplierSearch.product
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
@@ -4751,12 +4751,15 @@ if (a.startsWith("sup_order_")) {
   // ALWAYS check UserSession first — biz.sessionData can have stale product
   // from a previous search (especially for ghost-biz supplier users who also buy)
   const _sess = await UserSession.findOne({ phone });
-  let searchedProduct = _sess?.tempData?.supplierSearchProduct || null;
-  // Fall back to biz session only if UserSession has nothing
-  if (!searchedProduct) {
-    searchedProduct = biz?.sessionData?.supplierSearch?.product || null;
-  }
-
+// ── Recover the search term that led the buyer here ───────────────────
+  // Read UserSession AND biz, then pick the most recent one.
+  // We cannot trust biz.sessionData.supplierSearch.product alone because
+  // the biz shortcode intercept does not update it on the direct-results path.
+  const _orderSess = await UserSession.findOne({ phone });
+  const _sessProduct = _orderSess?.tempData?.supplierSearchProduct || null;
+  const _bizProduct  = biz?.sessionData?.supplierSearch?.product || null;
+  // UserSession is updated on every search; biz may lag. Prefer UserSession.
+  let searchedProduct = _sessProduct || _bizProduct || null;
   // ── Pre-seed cart if we have a search term that matches a real item ───
   let initialCart = [];
   if (searchedProduct) {
