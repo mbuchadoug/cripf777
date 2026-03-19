@@ -2961,7 +2961,7 @@ Your profile is saved but buyers cannot find you yet. Choose a plan to go live a
   }
   // ── Supplier account menu actions ─────────────────────────────────────────
 
- if (a === "sup_edit_products") {
+if (a === "sup_edit_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
 
@@ -2972,15 +2972,37 @@ Your profile is saved but buyers cannot find you yet. Choose a plan to go live a
 
   if (biz) {
     biz.sessionState = "supplier_edit_products";
-      await saveBizSafe(biz);
-    }
-    const current = supplier.products?.join(", ") || "none listed";
-    return sendButtons(from, {
-      text: `✏️ *Edit Products*\n\nCurrent products:\n${current}\n\nSend your updated product list, comma-separated:\n\nExample: cooking oil, rice, sugar, flour`,
-      buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
-    });
+    await saveBizSafe(biz);
   }
 
+  const allProducts = (supplier.products || []).filter(p => p !== "pending_upload");
+  const isService = supplier.profileType === "service";
+  const label = isService ? "services" : "products";
+
+  // ── Send product list as plain text (no 1024 limit) ─────────────────────
+  if (allProducts.length) {
+    const CHUNK = 25;
+    for (let i = 0; i < allProducts.length; i += CHUNK) {
+      const chunk = allProducts.slice(i, i + CHUNK);
+      const lines = chunk.map((p, j) => `${i + j + 1}. ${p}`).join("\n");
+      const isFirst = i === 0;
+      const isLast = i + CHUNK >= allProducts.length;
+      await sendText(from,
+        isFirst
+          ? `✏️ *Edit ${isService ? "Services" : "Products"}*\nYou have *${allProducts.length} ${label}*:\n\n${lines}${isLast ? "" : "\n_(continued...)_"}`
+          : `${lines}${isLast ? "" : "\n_(continued...)_"}`
+      );
+    }
+  } else {
+    await sendText(from, `✏️ *Edit ${isService ? "Services" : "Products"}*\n\nNo ${label} listed yet.`);
+  }
+
+  // ── Short button message asking for the new list ─────────────────────────
+  return sendButtons(from, {
+    text: `Send your updated ${label} list, separated by commas.\n\nExample: ${isService ? "plumbing, electrical, painting" : "cooking oil, rice, sugar, flour"}`,
+    buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+  });
+}
  if (a === "sup_toggle_delivery") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
@@ -4000,6 +4022,7 @@ if (a === "sup_update_prices") {
   }
 
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
+  const isService = supplier.profileType === "service";
 
   if (!products.length) {
     return sendButtons(from, {
@@ -4008,31 +4031,41 @@ if (a === "sup_update_prices") {
     });
   }
 
-  // Show numbered list with current prices where known
-  const numbered = products.map((p, i) => {
-    const existing = supplier.prices?.find(pr =>
-      pr.product?.toLowerCase() === p.toLowerCase()
+  // ── Send numbered list in chunks of 25 (each chunk safely under 4096) ────
+  const CHUNK = 25;
+  for (let i = 0; i < products.length; i += CHUNK) {
+    const chunk = products.slice(i, i + CHUNK);
+    const lines = chunk.map((p, j) => {
+      const idx = i + j;
+      const existing = supplier.prices?.find(pr =>
+        pr.product?.toLowerCase() === p.toLowerCase()
+      );
+      const priceStr = existing
+        ? ` - $${Number(existing.amount).toFixed(2)}/${existing.unit}`
+        : " - _(not set)_";
+      return `${idx + 1}. ${p}${priceStr}`;
+    }).join("\n");
+
+    const isFirst = i === 0;
+    const isLast = i + CHUNK >= products.length;
+    await sendText(from,
+      isFirst
+        ? `💰 *Update Prices* (${products.length} ${isService ? "services" : "products"})\n\n${lines}${isLast ? "" : "\n_(continued...)_"}`
+        : `${lines}${isLast ? "" : "\n_(continued...)_"}`
     );
-    const priceStr = existing
-      ? ` - $${Number(existing.amount).toFixed(2)}/${existing.unit}`
-      : " - _(not set)_";
-    return `${i + 1}. ${p}${priceStr}`;
-  }).join("\n");
+  }
 
+  // ── Send instruction message separately (always short) ───────────────────
   return sendText(from,
-`💰 *Update Prices*
-
-${numbered}
-
-*Fastest - just numbers in order:*
+`─────────────────
+*Enter prices in order, comma-separated:*
 _${products.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${products.length > 4 ? ", ..." : ""}_
 
-*Or name them (update specific items):*
-_cement: 6.00, sand: 9.50_
+*Or name them:*
+_${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
 
 *Or one per line:*
-_cement: 6.00_
-_sand: 9.50_
+_${products[0]}: 6.00_
 
 Type *cancel* to go back.`);
 }
