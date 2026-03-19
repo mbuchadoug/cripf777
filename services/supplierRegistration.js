@@ -362,8 +362,31 @@ if (state === "supplier_reg_prices") {
   const lowerInput = rawInput.toLowerCase();
 
   // If empty or this is a button action being routed here, just show the form
+ // If empty or this is a button action being routed here, just show the form
   if (!rawInput || rawInput.length < 1) {
     // Fall through to show the form below
+  } else if (lowerInput === "skip" || lowerInput === "done") {
+    // ── User typed "skip" or "done" → advance state immediately ──────────
+    if (isService) {
+      biz.sessionState = "supplier_reg_travel";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: "🚗 *Do you travel to clients?*",
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no",  title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+    biz.sessionState = "supplier_reg_delivery";
+    await saveBiz(biz);
+    return sendButtons(from, {
+      text: "🚚 *Do you deliver?*",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no",  title: "🏠 Collection Only" }
+      ]
+    });
   } else if (lowerInput !== "skip" && lowerInput !== "done") {
     // Supplier typed something that looks like prices - try to parse it
     const parts = rawInput.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
@@ -515,10 +538,17 @@ Type *skip* to add ${rateLabel} later.`
   }
 
   // ── Show the price entry form ─────────────────────────────────────────────
+ // ── Show the price entry form ─────────────────────────────────────────────
   const existingPrices = reg.prices || [];
   const existingRates  = reg.rates  || [];
 
-  const numbered = products.map((p, i) => {
+  // Truncate display to first 20 products to keep message safe
+  // For large preset lists, show first 20 with a "... and N more" note
+  const DISPLAY_MAX = 20;
+  const displayProducts = products.slice(0, DISPLAY_MAX);
+  const hiddenCount = products.length - DISPLAY_MAX;
+
+  const numbered = displayProducts.map((p, i) => {
     if (isService) {
       const existing = existingRates.find(r => r.service?.toLowerCase() === p.toLowerCase());
       const rateStr = existing ? ` _(${existing.rate})_` : "";
@@ -530,6 +560,10 @@ Type *skip* to add ${rateLabel} later.`
     }
   }).join("\n");
 
+  const moreNote = hiddenCount > 0
+    ? `\n_...and ${hiddenCount} more products_`
+    : "";
+
   const exampleNums = products.slice(0, Math.min(4, products.length))
     .map((_, i) => [5.50, 8.00, 1.20, 15.00][i].toFixed(2))
     .join(", ");
@@ -538,19 +572,24 @@ Type *skip* to add ${rateLabel} later.`
     .map((_, i) => [10, 25, 50][i])
     .join(", ");
 
-  return sendButtons(from, {
-    text:
+  // ── Split into 2 messages: text list (no char limit issue) + skip button ──
+  await sendText(from,
 `💰 *Set Your ${isService ? "Rates" : "Prices"} (USD)*
+You have *${products.length} ${isService ? "service" : "product"}${products.length > 1 ? "s" : ""}*
 
-${numbered}
+${numbered}${moreNote}
 
 ─────────────────
 ${isService
-  ? `*Fastest - just numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
-  : `*Option 1 - Fastest ✅*\nJust numbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 - With units:*\n_cement 5.50/bag, sand 8/load_`
+  ? `*Fastest - numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
+  : `*Option 1 - Fastest ✅*\nNumbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 - With units:*\n_cement 5.50/bag, sand 8/load_`
 }
 ─────────────────
-_Enter your ${rateLabel} below or tap Skip_ 👇`,
+Type your ${rateLabel} and send, or tap Skip 👇`
+  );
+
+  return sendButtons(from, {
+    text: `⏭ Skip setting ${rateLabel} for now? You can add them later from your account.`,
     buttons: [
       { id: "sup_skip_prices", title: "⏭ Skip For Now" }
     ]
