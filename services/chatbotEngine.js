@@ -5403,17 +5403,52 @@ if (a === "sup_price_update_confirm" && (!biz || isGhostSupplierBiz)) {
       return true;
     }
 
-    if (supplier.profileType === "service") {
-      supplier.rates = pending.map(u => ({
-        service: u.product,
-        rate: `${u.amount}/${u.unit}`
-      }));
-    } else {
-      supplier.prices = pending;
-    }
+if (supplier.profileType === "service") {
+  const existingRates = Array.isArray(supplier.rates) ? [...supplier.rates] : [];
 
-    supplier.priceUpdatedAt = new Date();
-    await supplier.save();
+  for (const u of pending) {
+    const idx = existingRates.findIndex(r =>
+      String(r?.service || "").toLowerCase() === String(u.product || "").toLowerCase()
+    );
+
+    const nextRate = {
+      service: u.product,
+      rate: `${u.amount}/${u.unit}`
+    };
+
+    if (idx >= 0) existingRates[idx] = nextRate;
+    else existingRates.push(nextRate);
+  }
+
+  supplier.rates = existingRates;
+  supplier.markModified("rates");
+} else {
+  const existingPrices = Array.isArray(supplier.prices) ? [...supplier.prices] : [];
+
+  for (const u of pending) {
+    const idx = existingPrices.findIndex(p =>
+      String(p?.product || "").toLowerCase() === String(u.product || "").toLowerCase()
+    );
+
+    const nextPrice = {
+      ...(idx >= 0 && existingPrices[idx]?._id ? { _id: existingPrices[idx]._id } : {}),
+      product: u.product,
+      amount: Number(u.amount),
+      currency: "USD",
+      unit: u.unit || "each",
+      inStock: u.inStock !== false
+    };
+
+    if (idx >= 0) existingPrices[idx] = nextPrice;
+    else existingPrices.push(nextPrice);
+  }
+
+  supplier.prices = existingPrices;
+  supplier.markModified("prices");
+}
+
+supplier.priceUpdatedAt = new Date();
+await supplier.save();
 
     await UserSession.findOneAndUpdate(
       { phone },
