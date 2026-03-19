@@ -681,6 +681,196 @@ function normalizeEcocashNumber(input, fallbackWhatsApp) {
   return null;
 }
 
+function getSupplierCatalogueSourceItems(supplier) {
+  if (!supplier) return [];
+
+  if (supplier.profileType === "service") {
+    return (supplier.rates || [])
+      .filter(r => r?.service)
+      .map(r => ({
+        name: String(r.service).trim(),
+        priceLabel: formatSupplierRateDisplay(r.rate || ""),
+        rawPrice: parseSupplierRateValue(r.rate || ""),
+        unit: parseSupplierRateUnit(r.rate || "") || "job"
+      }));
+  }
+
+  const pricedMap = new Map();
+  for (const p of (supplier.prices || [])) {
+    if (!p?.product) continue;
+    pricedMap.set(normalizeProductName(p.product), p);
+  }
+
+  const allProducts = Array.isArray(supplier.products) ? supplier.products : [];
+  return allProducts
+    .filter(Boolean)
+    .filter(p => p !== "pending_upload")
+    .map(name => {
+      const match = pricedMap.get(normalizeProductName(name));
+      return {
+        name: String(name).trim(),
+        priceLabel: match ? `$${Number(match.amount).toFixed(2)}/${match.unit || "each"}` : "",
+        rawPrice: match ? Number(match.amount) : null,
+        unit: match?.unit || "each"
+      };
+    });
+}
+
+function getFilteredSupplierCatalogueItems(supplier, searchTerm = "") {
+  const items = getSupplierCatalogueSourceItems(supplier);
+  const q = normalizeProductName(searchTerm || "");
+
+  if (!q) return items;
+
+  return items.filter(item => {
+    const n = normalizeProductName(item.name);
+    return n.includes(q) || q.includes(n);
+  });
+}
+
+function formatCatalogueHeader({ supplier, page, totalPages, totalItems, searchTerm = "", cartCount = 0 }) {
+  const label = supplier?.businessName || "Supplier";
+  const searchLine = searchTerm ? `\n🔎 Search: *${searchTerm}*` : "";
+  const cartLine = cartCount > 0 ? `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` : "";
+  return `🛍 *${label} Catalogue*${searchLine}${cartLine}\n\nPage ${page + 1} of ${totalPages} • ${totalItems} item${totalItems === 1 ? "" : "s"}`;
+}
+
+async function getCurrentOrderCart({ biz, phone }) {
+  if (biz) return biz.sessionData?.orderCart || [];
+  const sess = await UserSession.findOne({ phone });
+  return sess?.tempData?.orderCart || [];
+}
+
+async function persistOrderFlowState({ biz, phone, patch = {}, unset = {} }) {
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), ...patch };
+    for (const key of Object.keys(unset)) delete biz.sessionData[key];
+    await saveBizSafe(biz);
+  }
+
+  const setDoc = {};
+  const unsetDoc = {};
+
+  for (const [k, v] of Object.entries(patch)) {
+    setDoc[`tempData.${k}`] = v;
+  }
+
+  for (const k of Object.keys(unset)) {
+    unsetDoc[`tempData.${k}`] = "";
+  }
+
+  const update = {};
+  if (Object.keys(setDoc).length) update.$set = setDoc;
+  if (Object.keys(unsetDoc).length) update.$unset = unsetDoc;
+
+  if (Object.keys(update).length) {
+    await UserSession.findOneAndUpdate({ phone }, update, { upsert: true });
+  }
+}
+
+async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
+  const searchTerm = opts.searchTerm || "";
+  const pageSize = opts.pageSize || 7;
+
+  const allItems = getFilteredSupplierCatalogueItems(supplier, searchTerm);
+  const totalItems = allItems.length;
+
+  if (!totalItems) {
+    return sendButtons(from, {
+      text:
+        `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
+        (searchTerm ? ` for *${searchTerm}*.` : "."),
+      buttons: [
+        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
+        { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" },
+        { id: "suppliers_home", title: "⬅ Suppliers" }
+      ]
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const page = Math.max(0, Math.min(Number(opts.page || 0), totalPages - 1));
+  const start = page * pageSize;
+  const visible = allItems.slice(start, start + pageSize);
+
+  if (page === 0) {
+    await sendText(
+      from,
+      `⚡ Fastest: type item number and quantity.\nExamples: _2x3, 7x1, 10x4_`
+    );
+  }
+
+  const rows = visible.map(item => ({
+    id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.name)}`,
+    title: item.name.slice(0, 72),
+    description: item.priceLabel || (supplier.profileType === "service" ? "Tap to add service" : "Tap to add item")
+  }));
+
+  if (page > 0) {
+    rows.push({ id: `sup_catalog_page_prev_${supplier._id}`, title: "⬅ Previous Products" });
+  }
+  if (page < totalPages - 1) {
+    rows.push({ id: `sup_catalog_page_next_${supplier._id}`, title: "➡ More Products" });
+  }
+
+  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
+  rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
+
+  const header = formatCatalogueHeader({
+    supplier,
+    page,
+    totalPages,
+    totalItems,
+    searchTerm,
+    cartCount: cart.length
+  });
+
+  return sendList(from, header, rows);
+}
+
+async function _sendSupplierCartMenu(from, supplier, cart = []) {
+  if (!cart.length) {
+    return sendButtons(from, {
+      text: "🛒 Your cart is empty.",
+      buttons: [
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Browse Catalogue" },
+        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Supplier" },
+        { id: "suppliers_home", title: "⬅ Suppliers" }
+      ]
+    });
+  }
+
+  const rows = cart.slice(0, 6).map(item => ({
+    id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(item.product)}`,
+    title: `➖ Remove ${item.product}`.slice(0, 72),
+    description:
+      `Qty ${item.quantity}` +
+      (typeof item.pricePerUnit === "number" ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}` : "")
+  }));
+
+  rows.push({
+    id: `sup_cart_confirm_${supplier._id}`,
+    title: supplier.profileType === "service" ? "✅ Confirm & Send Booking" : "✅ Confirm & Send Order"
+  });
+
+  rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
+  rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Add More Items" });
+  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
+  rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
+
+  const summary = cart
+    .map(i => {
+      const price = typeof i.pricePerUnit === "number" ? ` @ $${Number(i.pricePerUnit).toFixed(2)}` : "";
+      return `• ${i.product} x${i.quantity}${price}`;
+    })
+    .join("\n");
+
+  return sendList(
+    from,
+    `🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
+    rows
+  );
+}
 /**
  * Helper: get caller's effective branchId.
  * - Clerks/managers → their assigned branchId
