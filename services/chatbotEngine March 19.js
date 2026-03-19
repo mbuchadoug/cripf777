@@ -125,106 +125,6 @@ function normalizeProductName(value = "") {
 }
 
 
-function parseSupplierItemsInput(text = "") {
-  return String(text || "")
-    .split(/[,\n]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
-function dedupeSupplierItems(items = []) {
-  const seen = new Set();
-  const out = [];
-
-  for (const raw of items) {
-    const clean = raw.trim();
-    const key = normalizeProductName(clean);
-    if (!clean || !key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(clean);
-  }
-
-  return out;
-}
-
-function findSupplierItemIndexes(input = "", currentItems = []) {
-  const tokens = String(input || "")
-    .split(/[,\n]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-
-  const indexes = new Set();
-  const names = [];
-
-  for (const token of tokens) {
-    // support single numbers like 2, 5, 19
-    if (/^\d+$/.test(token)) {
-      const idx = Number(token) - 1;
-      if (idx >= 0 && idx < currentItems.length) indexes.add(idx);
-      continue;
-    }
-
-    // support ranges like 5-8
-    const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
-    if (rangeMatch) {
-      const start = Number(rangeMatch[1]) - 1;
-      const end = Number(rangeMatch[2]) - 1;
-      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-        if (i >= 0 && i < currentItems.length) indexes.add(i);
-      }
-      continue;
-    }
-
-    names.push(normalizeProductName(token));
-  }
-
-  if (names.length) {
-    currentItems.forEach((item, i) => {
-      const normalized = normalizeProductName(item);
-      if (names.includes(normalized)) indexes.add(i);
-    });
-  }
-
-  return [...indexes].sort((a, b) => a - b);
-}
-
-async function sendSupplierItemsInChunks(from, items, heading = "📦 Current Items") {
-  const cleanItems = (items || []).filter(p => p && p !== "pending_upload");
-
-  if (!cleanItems.length) {
-    return sendText(from, "No items listed yet.");
-  }
-
-  const CHUNK = 25;
-  for (let i = 0; i < cleanItems.length; i += CHUNK) {
-    const chunk = cleanItems.slice(i, i + CHUNK);
-    const lines = chunk
-      .map((p, j) => `${i + j + 1}. ${p}`)
-      .join("\n");
-
-    const isFirst = i === 0;
-    const isLast = i + CHUNK >= cleanItems.length;
-
-    await sendText(
-      from,
-      isFirst
-        ? `${heading} (${cleanItems.length})\n\n${lines}${isLast ? "" : "\n_(continued...)_"}`
-        : `${lines}${isLast ? "" : "\n_(continued...)_"}`
-    );
-  }
-}
-
-function filterPricesForRemainingProducts(prices = [], remainingProducts = []) {
-  const allowed = new Set(remainingProducts.map(p => normalizeProductName(p)));
-  return (prices || []).filter(pr => allowed.has(normalizeProductName(pr.product)));
-}
-
-function filterRatesForRemainingServices(rates = [], remainingProducts = []) {
-  const allowed = new Set(remainingProducts.map(p => normalizeProductName(p)));
-  return (rates || []).filter(r => allowed.has(normalizeProductName(r.service)));
-}
-
 function getSupplierCategoriesForType(profileType = "product") {
   return SUPPLIER_CATEGORIES.filter(cat =>
     Array.isArray(cat.types) ? cat.types.includes(profileType) : true
@@ -3070,137 +2970,39 @@ if (a === "sup_edit_products") {
     return sendSupplierUpgradeMenu(from, supplier.tier);
   }
 
-  const isService = supplier.profileType === "service";
-  const label = isService ? "Services" : "Products";
-  const items = (supplier.products || []).filter(p => p !== "pending_upload");
-
   if (biz) {
-    biz.sessionState = "supplier_manage_products_menu";
+    biz.sessionState = "supplier_edit_products";
     await saveBizSafe(biz);
   }
 
-  return sendList(from, `✏️ Manage ${label}`, [
-    { id: "sup_view_products", title: `📋 View Current ${label}` },
-    { id: "sup_add_products", title: `➕ Add ${isService ? "Services" : "Products"}` },
-    { id: "sup_delete_products", title: `🗑 Delete ${isService ? "Services" : "Products"}` },
-    { id: "sup_replace_products", title: `♻️ Replace Full ${label} List` },
-    { id: "my_supplier_account", title: "🏪 My Account" }
-  ]);
-}
-
-
-if (a === "sup_view_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-
+  const allProducts = (supplier.products || []).filter(p => p !== "pending_upload");
   const isService = supplier.profileType === "service";
-  const items = (supplier.products || []).filter(p => p !== "pending_upload");
+  const label = isService ? "services" : "products";
 
-  await sendSupplierItemsInChunks(
-    from,
-    items,
-    `📋 Current ${isService ? "Services" : "Products"}`
-  );
-
-  return sendList(from, "What would you like to do next?", [
-    { id: "sup_add_products", title: `➕ Add ${isService ? "Services" : "Products"}` },
-    { id: "sup_delete_products", title: `🗑 Delete ${isService ? "Services" : "Products"}` },
-    { id: "sup_replace_products", title: `♻️ Replace Full ${isService ? "Services" : "Products"} List` },
-    { id: "my_supplier_account", title: "🏪 My Account" }
-  ]);
-}
-
-if (a === "sup_add_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-
-  const isService = supplier.profileType === "service";
-  if (biz) {
-    biz.sessionState = "supplier_add_products";
-    await saveBizSafe(biz);
+  // ── Send product list as plain text (no 1024 limit) ─────────────────────
+  if (allProducts.length) {
+    const CHUNK = 25;
+    for (let i = 0; i < allProducts.length; i += CHUNK) {
+      const chunk = allProducts.slice(i, i + CHUNK);
+      const lines = chunk.map((p, j) => `${i + j + 1}. ${p}`).join("\n");
+      const isFirst = i === 0;
+      const isLast = i + CHUNK >= allProducts.length;
+      await sendText(from,
+        isFirst
+          ? `✏️ *Edit ${isService ? "Services" : "Products"}*\nYou have *${allProducts.length} ${label}*:\n\n${lines}${isLast ? "" : "\n_(continued...)_"}`
+          : `${lines}${isLast ? "" : "\n_(continued...)_"}`
+      );
+    }
+  } else {
+    await sendText(from, `✏️ *Edit ${isService ? "Services" : "Products"}*\n\nNo ${label} listed yet.`);
   }
 
-  return sendText(
-    from,
-`➕ *Add ${isService ? "Services" : "Products"}*
-
-Send only the new ${isService ? "services" : "products"} you want to add.
-Use commas or one per line.
-
-Example:
-${isService ? "geyser fitting, blocked drain, toilet installation" : "25mm pvc elbow, basin mixer, toilet seat"}
-
-Duplicates will be ignored.
-
-Type *cancel* to go back.`
-  );
+  // ── Short button message asking for the new list ─────────────────────────
+  return sendButtons(from, {
+    text: `Send your updated ${label} list, separated by commas.\n\nExample: ${isService ? "plumbing, electrical, painting" : "cooking oil, rice, sugar, flour"}`,
+    buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+  });
 }
-
-if (a === "sup_delete_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-
-  const isService = supplier.profileType === "service";
-  const items = (supplier.products || []).filter(p => p !== "pending_upload");
-
-  if (!items.length) {
-    return sendText(from, `❌ No ${isService ? "services" : "products"} listed yet.`);
-  }
-
-  if (biz) {
-    biz.sessionState = "supplier_delete_products";
-    await saveBizSafe(biz);
-  }
-
-  await sendSupplierItemsInChunks(
-    from,
-    items,
-    `🗑 Select ${isService ? "Services" : "Products"} to Delete`
-  );
-
-  return sendText(
-    from,
-`Reply with the *numbers* or *exact names* you want to delete.
-
-Examples:
-*2, 5, 9*
-*5-8*
-*basin mixer, shower trap*
-
-You can delete just a few items — you do NOT need to resend the whole list.
-
-Type *cancel* to go back.`
-  );
-}
-
-if (a === "sup_replace_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-
-  const isService = supplier.profileType === "service";
-  if (biz) {
-    biz.sessionState = "supplier_replace_products";
-    await saveBizSafe(biz);
-  }
-
-  return sendText(
-    from,
-`♻️ *Replace Full ${isService ? "Service" : "Product"} List*
-
-Send the full updated ${isService ? "service" : "product"} list, comma-separated or one per line.
-
-⚠️ This replaces your whole list.
-Any old item not included will be removed.
-
-Example:
-${isService ? "plumbing, geyser fitting, blocked drain" : "cooking oil, rice, sugar, flour"}
-
-Type *cancel* to go back.`
-  );
-}
-
-
-
  if (a === "sup_toggle_delivery") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
@@ -4254,21 +4056,16 @@ if (a === "sup_update_prices") {
   }
 
   // ── Send instruction message separately (always short) ───────────────────
-   // ── Send instruction message separately (always short) ───────────────────
   return sendText(from,
 `─────────────────
-*You can update ALL items or just SOME items.*
+*Enter prices in order, comma-separated:*
+_${products.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${products.length > 4 ? ", ..." : ""}_
 
-*Option 1 - update ALL in order:*
-_${products.slice(0, 4).map((_, i) => (((i + 1) * 3) + 2).toFixed(2)).join(", ")}${products.length > 4 ? ", ..." : ""}_
-
-*Option 2 - update only selected items by name:*
+*Or name them:*
 _${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
 
-*Option 3 - one per line:*
-_${products[0]}: 6.00_${products[1] ? `\n_${products[1]}: 8.50_` : ""}
-
-${isService ? `*For services, units also work:*\n_plumbing: 20/job_\n_delivery: 15/trip_` : ""}
+*Or one per line:*
+_${products[0]}: 6.00_
 
 Type *cancel* to go back.`);
 }
@@ -4399,6 +4196,121 @@ Save these prices?`,
   });
 }
 
+
+if (biz?.sessionState === "supplier_add_products" && !isMetaAction) {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const isService = supplier.profileType === "service";
+  const existing = (supplier.products || []).filter(p => p !== "pending_upload");
+  const incoming = parseSupplierItemsInput(text);
+
+  if (!incoming.length) {
+    await sendText(from, `❌ Please send at least one ${isService ? "service" : "product"}.`);
+    return true;
+  }
+
+  const merged = dedupeSupplierItems([...existing, ...incoming]);
+  const oldCount = existing.length;
+  const addedCount = merged.length - oldCount;
+
+  supplier.products = merged;
+  if (isService) {
+    supplier.rates = filterRatesForRemainingServices(supplier.rates || [], merged);
+  } else {
+    supplier.prices = filterPricesForRemainingProducts(supplier.prices || [], merged);
+  }
+  await supplier.save();
+
+  if (biz) {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+  }
+
+  await sendText(
+    from,
+    `✅ Added *${addedCount}* ${isService ? "service" : "product"}${addedCount === 1 ? "" : "s"}.\n\nTotal now: *${merged.length}*`
+  );
+  return sendSupplierAccountMenu(from, supplier);
+}
+
+if (biz?.sessionState === "supplier_delete_products" && !isMetaAction) {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const isService = supplier.profileType === "service";
+  const items = (supplier.products || []).filter(p => p !== "pending_upload");
+
+  if (!items.length) {
+    await sendText(from, `❌ No ${isService ? "services" : "products"} listed.`);
+    return sendSupplierAccountMenu(from, supplier);
+  }
+
+  const indexes = findSupplierItemIndexes(text, items);
+  if (!indexes.length) {
+    await sendText(
+      from,
+      `❌ I could not match any ${isService ? "services" : "products"}.\n\nReply with numbers like *2, 5, 9* or exact names.`
+    );
+    return true;
+  }
+
+  const removed = indexes.map(i => items[i]);
+  const remaining = items.filter((_, i) => !indexes.includes(i));
+
+  supplier.products = remaining;
+  if (isService) {
+    supplier.rates = filterRatesForRemainingServices(supplier.rates || [], remaining);
+  } else {
+    supplier.prices = filterPricesForRemainingProducts(supplier.prices || [], remaining);
+  }
+  await supplier.save();
+
+  if (biz) {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+  }
+
+  await sendText(
+    from,
+    `✅ Deleted *${removed.length}* ${isService ? "service" : "product"}${removed.length === 1 ? "" : "s"}.\n\nRemoved:\n${removed.map(p => `• ${p}`).join("\n")}`
+  );
+  return sendSupplierAccountMenu(from, supplier);
+}
+
+if (biz?.sessionState === "supplier_replace_products" && !isMetaAction) {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const isService = supplier.profileType === "service";
+  const incoming = parseSupplierItemsInput(text);
+
+  if (!incoming.length) {
+    await sendText(from, `❌ Please send at least one ${isService ? "service" : "product"}.`);
+    return true;
+  }
+
+  const replaced = dedupeSupplierItems(incoming);
+
+  supplier.products = replaced;
+  if (isService) {
+    supplier.rates = filterRatesForRemainingServices(supplier.rates || [], replaced);
+  } else {
+    supplier.prices = filterPricesForRemainingProducts(supplier.prices || [], replaced);
+  }
+  await supplier.save();
+
+  if (biz) {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+  }
+
+  await sendText(
+    from,
+    `✅ Full ${isService ? "service" : "product"} list replaced.\n\nNow listed: *${replaced.length}*`
+  );
+  return sendSupplierAccountMenu(from, supplier);
+}
 
 // ── Supplier confirms price they just entered ─────────────────────────────
   if (a === "sup_price_confirm_yes") {

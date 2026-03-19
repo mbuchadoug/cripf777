@@ -805,19 +805,18 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
       {
         title: "📋 My Listing",
         rows: [
-   { id: "sup_edit_products", title: "✏️ Manage Products", 
+         { id: "sup_edit_products", title: "✏️ Edit Products", 
   description: supplier.products?.[0] === "pending_upload"
     ? "⏳ Upload pending - tap to add"
-    : `${productCount} listed · add / delete / replace` },
-
-{ id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
+    : `${productCount} products listed` },
+       { id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
   if (!products.length) return "No products listed yet";
   const priced = products.filter(p =>
     (supplier.prices || []).some(pr => pr.product?.toLowerCase() === p.toLowerCase())
   ).length;
   if (priced === 0) return `⚠️ ${products.length} items - no prices set`;
-  if (priced < products.length) return `${priced}/${products.length} items priced · partial updates supported`;
+  if (priced < products.length) return `${priced}/${products.length} items priced`;
   return `✅ All ${priced} items priced`;
 })() },
           { id: "sup_edit_area", title: "📍 Edit Location", description: `${supplier.location?.area || "Not set"}, ${supplier.location?.city || ""}` },
