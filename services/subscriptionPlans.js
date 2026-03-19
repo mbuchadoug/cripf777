@@ -1,4 +1,4 @@
-// services/supplierPlans.js
+// services/subscriptionPlans
 // ─── Supplier subscription plans ─────────────────────────────────────────────
 
 export const SUBSCRIPTION_PLANS = {
