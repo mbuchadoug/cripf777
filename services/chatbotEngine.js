@@ -204,9 +204,9 @@ function parseQuickPriceUpdates(input = "", currentItems = [], isService = false
     // 5,7,9 x 3.50
     // 20-30 x 1.25
     // 3 x 20/job
-    const grouped = group.match(
-      /^([\d,\-\s]+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
-    );
+  const grouped = group.match(
+  /^([\d,\-\s]+)\s*(?:x|=|@)\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+);
 
     if (grouped) {
       matchedAny = true;
@@ -238,9 +238,9 @@ function parseQuickPriceUpdates(input = "", currentItems = [], isService = false
     const parts = group.split(",").map(s => s.trim()).filter(Boolean);
 
     for (const part of parts) {
-      const single = part.match(
-        /^(\d+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
-      );
+    const single = part.match(
+  /^(\d+)\s*(?:x|=|@)\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+);
 
       if (!single) {
         failed.push(part);
@@ -479,16 +479,20 @@ async function sendSupplierQuickPriceHelp(from, products = [], isService = false
 *Fastest way: update by item number*
 
 *Single item:*
+_75x3.50_
 _75 x 3.50_
-${isService ? `_3 x 20/job_` : ""}
+${isService ? `_3x20/job_` : ""}
 
 *Same price for selected items:*
+_5,7,9x3.50_
 _5,7,9 x 3.50_
 
 *Same price for a range:*
+_20-30x1.25_
 _20-30 x 1.25_
 
 *Mixed updates:*
+_5x3.50,7x4.20_
 _5 x 3.50, 7 x 4.20${isService ? ", 9 x 15/job" : ""}_
 
 *Other options still work:*
@@ -917,7 +921,14 @@ if (!biz && !ownerRole) {
   const sess = await UserSession.findOne({ phone });
 
 const searchMode = sess?.tempData?.supplierSearchMode;
-if (searchMode === "product") {
+const supplierAccountState = sess?.tempData?.supplierAccountState;
+const supplierRegState = sess?.supplierRegState;
+
+if (
+  searchMode === "product" &&
+  supplierAccountState !== "supplier_update_prices" &&
+  supplierRegState !== "supplier_reg_prices"
+) {
   const productQuery = text.trim();
   if (!productQuery || productQuery.length < 1) {
     return sendButtons(from, {
@@ -4728,17 +4739,25 @@ if (a === "sup_update_prices") {
     biz.sessionState = "supplier_update_prices";
     await saveBizSafe(biz);
   } else {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.supplierAccountState": "supplier_update_prices",
-          "tempData.pendingPriceUpdate": [],
-          "tempData.supplierAccountType": isService ? "service" : "product"
-        }
-      },
-      { upsert: true }
-    );
+ await UserSession.findOneAndUpdate(
+  { phone },
+  {
+    $set: {
+      "tempData.supplierAccountState": "supplier_update_prices",
+      "tempData.pendingPriceUpdate": [],
+      "tempData.supplierAccountType": isService ? "service" : "product"
+    },
+    $unset: {
+      "tempData.supplierSearchMode": "",
+      "tempData.supplierSearchProduct": "",
+      "tempData.supplierSearchCategory": "",
+      "tempData.searchResults": "",
+      "tempData.searchPage": "",
+      "tempData.lastSearchCity": ""
+    }
+  },
+  { upsert: true }
+);
   }
 
  
