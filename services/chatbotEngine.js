@@ -1008,6 +1008,10 @@ const allowedWithoutBiz =
   a === "sup_search_type_service" ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
+  a.startsWith("sup_catalog_page_") ||
+a.startsWith("sup_cart_view_") ||
+a.startsWith("sup_catalogue_search_") ||
+a === "sup_catalogue_search_cancel" ||
   a.startsWith("sup_search_cat_") ||
   a.startsWith("sup_search_city_") ||
   a.startsWith("sup_view_") ||
@@ -1283,7 +1287,43 @@ Save these ${isService ? "rates" : "prices"}?`,
   }
 }
 
+if (!isMetaAction) {
+  const sess = await UserSession.findOne({ phone });
+  const browseMode =
+    biz?.sessionData?.orderBrowseMode ??
+    sess?.tempData?.orderBrowseMode;
 
+  const supplierId =
+    biz?.sessionData?.orderSupplierId ??
+    sess?.tempData?.orderSupplierId;
+
+  if (browseMode === "catalogue_search" && supplierId) {
+    const supplier = await SupplierProfile.findById(supplierId).lean();
+    if (!supplier) return sendSuppliersMenu(from);
+
+    const searchTerm = text.trim();
+    const cart = await getCurrentOrderCart({ biz, phone });
+
+    if (!searchTerm) {
+      return sendText(from, "❌ Type a product name to search.");
+    }
+
+    await persistOrderFlowState({
+      biz,
+      phone,
+      patch: {
+        orderBrowseMode: "catalogue",
+        orderCatalogueSearch: searchTerm,
+        orderCataloguePage: 0
+      }
+    });
+
+    return _sendSupplierCatalogueBrowser(from, supplier, cart, {
+      page: 0,
+      searchTerm
+    });
+  }
+}
   // =========================
   // 🛒 BUYER ORDER FLOW (no-biz users via UserSession)
   // =========================
@@ -6077,10 +6117,167 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
-  return _sendSupplierCatalogueMenu(from, supplier, initialCart);
+ await persistOrderFlowState({
+  biz,
+  phone,
+  patch: {
+    orderSupplierId: String(supplier._id),
+    orderCart: initialCart,
+    orderIsService: isService,
+    orderBrowseMode: "catalogue",
+    orderCataloguePage: 0,
+    orderCatalogueSearch: ""
+  }
+});
+
+return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
+  page: 0,
+  searchTerm: ""
+});
+}
+
+if (a.startsWith("sup_catalog_page_open_")) {
+  const supplierId = a.replace("sup_catalog_page_open_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "catalogue",
+      orderSupplierId: supplierId,
+      orderCataloguePage: 0
+    }
+  });
+
+  const sess = await UserSession.findOne({ phone });
+  const searchTerm =
+    biz?.sessionData?.orderCatalogueSearch ??
+    sess?.tempData?.orderCatalogueSearch ??
+    "";
+
+  return _sendSupplierCatalogueBrowser(from, supplier, cart, {
+    page: 0,
+    searchTerm
+  });
+}
+
+if (a.startsWith("sup_catalog_page_next_") || a.startsWith("sup_catalog_page_prev_")) {
+  const isNext = a.startsWith("sup_catalog_page_next_");
+  const supplierId = a.replace(isNext ? "sup_catalog_page_next_" : "sup_catalog_page_prev_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  const currentPage =
+    Number(
+      biz?.sessionData?.orderCataloguePage ??
+      sess?.tempData?.orderCataloguePage ??
+      0
+    ) || 0;
+
+  const searchTerm =
+    biz?.sessionData?.orderCatalogueSearch ??
+    sess?.tempData?.orderCatalogueSearch ??
+    "";
+
+  const nextPage = Math.max(0, currentPage + (isNext ? 1 : -1));
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "catalogue",
+      orderSupplierId: supplierId,
+      orderCataloguePage: nextPage
+    }
+  });
+
+  return _sendSupplierCatalogueBrowser(from, supplier, cart, {
+    page: nextPage,
+    searchTerm
+  });
 }
 
 
+if (a.startsWith("sup_cart_view_")) {
+  const supplierId = a.replace("sup_cart_view_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "cart",
+      orderSupplierId: supplierId
+    }
+  });
+
+  return _sendSupplierCartMenu(from, supplier, cart);
+}
+
+
+if (a.startsWith("sup_catalogue_search_")) {
+  const supplierId = a.replace("sup_catalogue_search_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "catalogue_search",
+      orderSupplierId: supplierId
+    }
+  });
+
+  return sendButtons(from, {
+    text:
+      `🔎 *Search ${supplier.businessName} catalogue*\n\n` +
+      `Type part of the ${supplier.profileType === "service" ? "service" : "product"} name.\n\n` +
+      `Examples:\n` +
+      `${supplier.profileType === "service"
+        ? "• blocked drain\n• toilet installation"
+        : "• ball valve\n• tee 25mm\n• solvent cement"}`,
+    buttons: [{ id: "sup_catalogue_search_cancel", title: "⬅ Cancel" }]
+  });
+}
+
+if (a === "sup_catalogue_search_cancel") {
+  const sess = await UserSession.findOne({ phone });
+  const supplierId =
+    biz?.sessionData?.orderSupplierId ??
+    sess?.tempData?.orderSupplierId;
+
+  if (!supplierId) return sendSuppliersMenu(from);
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "catalogue",
+      orderCataloguePage: 0,
+      orderCatalogueSearch: ""
+    }
+  });
+
+  return _sendSupplierCatalogueBrowser(from, supplier, cart, {
+    page: 0,
+    searchTerm: ""
+  });
+}
 
 // ── Cart: buyer taps an item from catalogue ───────────────────────────────
 if (a.startsWith("sup_cart_add_")) {
@@ -6173,7 +6370,33 @@ const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerC
   }
 
   // Show updated catalogue with cart
-  return _sendSupplierCatalogueMenu(from, supplier, cart);
+ const sessAfterAdd = await UserSession.findOne({ phone });
+const pageAfterAdd =
+  biz?.sessionData?.orderCataloguePage ??
+  sessAfterAdd?.tempData?.orderCataloguePage ??
+  0;
+
+const searchAfterAdd =
+  biz?.sessionData?.orderCatalogueSearch ??
+  sessAfterAdd?.tempData?.orderCatalogueSearch ??
+  "";
+
+await persistOrderFlowState({
+  biz,
+  phone,
+  patch: {
+    orderBrowseMode: "catalogue",
+    orderCataloguePage: pageAfterAdd,
+    orderCatalogueSearch: searchAfterAdd,
+    orderSupplierId: String(supplier._id),
+    orderCart: cart
+  }
+});
+
+return _sendSupplierCatalogueBrowser(from, supplier, cart, {
+  page: pageAfterAdd,
+  searchTerm: searchAfterAdd
+});
 }
 
 // ── Cart: buyer confirms order from catalogue ─────────────────────────────
@@ -6315,7 +6538,17 @@ if (a.startsWith("sup_cart_clear_")) {
     { upsert: true }
   );
 
-  return _sendSupplierCatalogueMenu(from, supplier, []);
+  await persistOrderFlowState({
+  biz,
+  phone,
+  patch: {
+    orderBrowseMode: "cart",
+    orderSupplierId: supplierId,
+    orderCart: []
+  }
+});
+
+return _sendSupplierCartMenu(from, supplier, []);
 }
 
 
@@ -6361,7 +6594,17 @@ if (a.startsWith("sup_cart_remove_")) {
     { upsert: true }
   );
 
-  return _sendSupplierCatalogueMenu(from, supplier, cart);
+await persistOrderFlowState({
+  biz,
+  phone,
+  patch: {
+    orderBrowseMode: "cart",
+    orderSupplierId: supplierId,
+    orderCart: cart
+  }
+});
+
+return _sendSupplierCartMenu(from, supplier, cart);
 }
 // ── Cart: buyer wants to type a custom item not in catalogue ─────────────
 if (a.startsWith("sup_cart_custom_")) {
