@@ -4058,14 +4058,23 @@ if (a === "sup_update_prices") {
   // ── Send instruction message separately (always short) ───────────────────
   return sendText(from,
 `─────────────────
-*Enter prices in order, comma-separated:*
-_${products.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${products.length > 4 ? ", ..." : ""}_
+*Fastest way: update by item number*
 
-*Or name them:*
+*Examples:*
+_5x2.50_  → set item 5 to $2.50
+_7x8.00_  → set item 7 to $8.00
+${isService ? `_3x20/job_  → set service 3 to $20/job` : ""}
+
+*Update several at once:*
+_5x2.50, 7x8.00${isService ? ", 9x15/trip" : ""}_
+
+*Other options still work:*
+
+*Update ALL in order:*
+_${products.slice(0, 4).map((_, i) => (((i + 1) * 3) + 2).toFixed(2)).join(", ")}${products.length > 4 ? ", ..." : ""}_
+
+*Update selected items by name:*
 _${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
-
-*Or one per line:*
-_${products[0]}: 6.00_
 
 Type *cancel* to go back.`);
 }
