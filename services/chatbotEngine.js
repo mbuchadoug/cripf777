@@ -893,6 +893,7 @@ Reply *menu* to start.`);
   console.log("META INCOMING:", { from, action });
 
   const biz = await getBizForPhone(from);
+  const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
 
   // =========================
   // 🟢 ONBOARDING GATE
@@ -1091,7 +1092,7 @@ const pageResults = results.slice(0, 9);
 // =========================
 // 📦 NO-BIZ SUPPLIER REGISTRATION PRICE FLOW
 // =========================
-if (!biz && !isMetaAction) {
+if ((!biz || isGhostSupplierBiz) && !isMetaAction) {
   const sess = await UserSession.findOne({ phone });
   const regState = sess?.supplierRegState;
   const reg = sess?.supplierRegData || {};
@@ -1185,7 +1186,7 @@ Save these ${isService ? "rates" : "prices"}?`,
 // =========================
 // 🏪 NO-BIZ SUPPLIER ACCOUNT PRICE UPDATE FLOW
 // =========================
-if (!biz && !isMetaAction) {
+if ((!biz || isGhostSupplierBiz) && !isMetaAction) {
   const sess = await UserSession.findOne({ phone });
   const accountState = sess?.tempData?.supplierAccountState;
 
@@ -2756,7 +2757,14 @@ const shortcodeBlockedStates = supplierStates.filter(s =>
   s !== "supplier_order_enter_price" &&
    s !== "supplier_order_picking" 
 );
-if (!isMetaAction && biz && text.trim().length > 2 && !shortcodeBlockedStates.includes(biz.sessionState) && !settingsStates.includes(biz.sessionState)) {
+if (
+  !isMetaAction &&
+  biz &&
+  !isGhostSupplierBiz &&
+  text.trim().length > 2 &&
+  !shortcodeBlockedStates.includes(biz.sessionState) &&
+  !settingsStates.includes(biz.sessionState)
+) {
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
     if (shortcode.city) {
@@ -4163,16 +4171,39 @@ if (a === "sup_prices_edit") {
 
   const numbered = productList.map((p, i) => `${i + 1}. ${p}`).join("\n");
 
-  return sendText(from,
+return sendText(from,
 `✏️ *Re-enter Your ${isService ? "Rates" : "Prices"}*
 
 ${numbered}
 
-*Fastest:* Just the numbers in order:
-_${productList.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${productList.length > 4 ? ", ..." : ""}_
+─────────────────
+*Fastest way: update by item number*
 
-*Or name them:*
-_${productList.slice(0, 2).map(p => `${p}: 5.00`).join(", ")}_
+*Single item:*
+_${isService ? "1x20/job" : "1x5.50"}_
+_${isService ? "1 x 20/job" : "1 x 5.50"}_
+
+*Same ${isService ? "rate" : "price"} for selected items:*
+_${isService ? "1,3,5x20/job" : "1,3,5x5.50"}_
+_${isService ? "1,3,5 x 20/job" : "1,3,5 x 5.50"}_
+
+*Same ${isService ? "rate" : "price"} for a range:*
+_${isService ? "1-4x15/hr" : "1-4x5.50"}_
+_${isService ? "1-4 x 15/hr" : "1-4 x 5.50"}_
+
+*Mixed updates:*
+_${isService ? "1x20/job,2x15/trip,3x10/hr" : "1x5.50,2x8.00,3x12.00"}_
+_${isService ? "1 x 20/job, 2 x 15/trip, 3 x 10/hr" : "1 x 5.50, 2 x 8.00, 3 x 12.00"}_
+
+*Other options still work:*
+
+*Update ALL in order:*
+_${isService
+  ? productList.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")
+  : productList.slice(0, 4).map((_, i) => ((i + 1) * 3 + 2) + ".00").join(", ")}${productList.length > 4 ? ", ..." : ""}_
+
+*Update selected items by name:*
+_${productList.slice(0, 2).map(p => `${p}: ${isService ? "20/job" : "5.00"}`).join(", ")}_
 
 Type *skip* to skip pricing.`);
 }
@@ -4734,12 +4765,16 @@ if (a === "sup_update_prices") {
   const isService = supplier.profileType === "service";
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
 
-  if (biz && !biz.name?.startsWith("pending_supplier_")) {
-    biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true };
-    biz.sessionState = "supplier_update_prices";
-    await saveBizSafe(biz);
-  } else {
- await UserSession.findOneAndUpdate(
+ if (biz) {
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    updatingPrices: true
+  };
+  biz.sessionState = "supplier_update_prices";
+  await saveBizSafe(biz);
+}
+
+await UserSession.findOneAndUpdate(
   { phone },
   {
     $set: {
@@ -4758,7 +4793,6 @@ if (a === "sup_update_prices") {
   },
   { upsert: true }
 );
-  }
 
  
   if (!products.length) {
