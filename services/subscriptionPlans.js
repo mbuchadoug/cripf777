@@ -1,7 +1,7 @@
 // services/supplierPlans.js
 // ─── Supplier subscription plans ─────────────────────────────────────────────
 
-export const SUPPLIER_PLANS = {
+export const SUBSCRIPTION_PLANS = {
   basic: {
     name: "Basic",
     monthly: { price: 5,   currency: "USD", durationDays: 30  },
