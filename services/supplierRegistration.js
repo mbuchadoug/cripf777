@@ -6,46 +6,51 @@ import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
 
 // ── Category-specific product/service examples ────────────────────────────
 export const CATEGORY_PRODUCT_EXAMPLES = {
-  building_materials: ["cement", "river sand", "bricks", "roofing sheets", "steel bars"],
-  hardware_tools:     ["hammer", "nails", "padlock", "angle grinder", "drill bits"],
-  plumbing_supplies:  ["PVC pipe 20mm", "gate valve", "water tank 1000L", "geyser 100L", "toilet suite"],
-  electrical_supplies:["electrical cable 2.5mm", "DB board", "circuit breaker", "LED bulb", "plug socket"],
-  solar_energy:       ["solar panel 400W", "inverter 3kVA", "battery 100Ah", "solar geyser"],
-  groceries:          ["cooking oil", "rice", "sugar", "mealie meal", "flour"],
-  clothing:           ["t-shirts", "jeans", "sneakers", "school uniform"],
-  hardware:           ["cement", "roofing sheets", "steel bar"],  // legacy fallback
-  agriculture:        ["maize seed", "fertilizer", "pesticide", "irrigation pipe"],
-  electronics:        ["phone charger", "earphones", "LED bulb", "solar panel"],
-  cosmetics:          ["face cream", "hair relaxer", "body lotion"],
-  furniture:          ["sofa", "bed frame", "dining table"],
-  car_supplies:       ["car battery", "engine oil", "brake pads", "tyres"],
-  stationery:         ["pens", "notebooks", "printer paper", "toner"],
-  other_products:     ["product a", "product b", "product c"],
-  other:              ["product a", "product b", "product c"]  // legacy fallback
+  // ── New categories ─────────────────────────────────────────────────────────
+  building_materials:  ["Portland cement 50kg", "river sand", "face brick", "IBR roofing sheet 3m", "steel bar Y12"],
+  hardware_tools:      ["hammer", "nails 3 inch", "padlock 50mm", "angle grinder 115mm", "spirit level"],
+  plumbing_supplies:   ["PVC pipe 20mm", "gate valve 20mm", "water tank 1000L", "electric geyser 100L", "toilet suite"],
+  electrical_supplies: ["electrical cable 2.5mm", "DB board 8-way", "circuit breaker 16A", "LED downlight 10W", "double plug socket"],
+  solar_energy:        ["solar panel 400W", "inverter 3kVA", "battery 100Ah AGM", "solar geyser 200L", "charge controller 40A"],
+  stationery:          ["pens (box)", "A4 paper ream", "notebooks", "printer toner", "stapler"],
+  other_products:      ["product a", "product b", "product c"],
+  // ── Existing categories (keep for backward compat) ─────────────────────────
+  groceries:           ["cooking oil", "rice", "sugar", "mealie meal", "flour"],
+  clothing:            ["t-shirts", "jeans", "sneakers", "school uniform", "work boots"],
+  hardware:            ["cement", "roofing sheets", "steel bar"],
+  agriculture:         ["maize seed", "fertilizer AN 50kg", "pesticide", "irrigation pipe", "water pump"],
+  electronics:         ["phone charger", "earphones", "LED bulb", "inverter", "extension cord"],
+  crossborder:         ["solar panel", "generator", "power bank"],
+  cosmetics:           ["face cream", "hair relaxer", "body lotion", "perfume"],
+  furniture:           ["sofa", "bed frame", "dining table", "wardrobe"],
+  car_supplies:        ["car battery 45Ah", "engine oil 5L", "brake pads", "tyres", "shock absorber"],
+  health:              ["paracetamol", "vitamins", "blood pressure monitor", "first aid kit"],
+  other:               ["product a", "product b", "product c"]
 };
 
 export const CATEGORY_SERVICE_EXAMPLES = {
-  plumbing:             ["burst pipe repair", "geyser installation", "blocked drain", "toilet fitting"],
-  electrical:           ["house wiring", "DB board installation", "solar installation", "fault finding"],
-  construction:         ["bricklaying", "plastering", "roofing", "tiling", "house renovations"],
-  painting:             ["interior painting", "exterior painting", "roof painting", "texture coat"],
-  welding:              ["gate fabrication", "burglar bars", "steel door", "carport"],
-  carpentry:            ["door fitting", "kitchen units", "built-in cupboards", "window frames"],
-  cleaning:             ["office cleaning", "carpet cleaning", "deep clean", "window cleaning"],
-  transport:            ["car hire", "delivery", "airport transfers", "furniture removal"],
-  food_cooked:          ["catering", "wedding cake", "lunch boxes", "event catering"],
-  printing:             ["business cards", "banners", "flyers", "branded t-shirts"],
-  beauty:               ["hair braiding", "nails", "makeup", "massage"],
-  photography:          ["wedding photos", "passport photos", "events coverage", "drone footage"],
-  tutoring:             ["maths tutor", "O-Level prep", "A-Level tuition", "driving lessons"],
-  it_support:           ["laptop repair", "wifi setup", "CCTV installation", "phone repair"],
-  security:             ["security guard", "alarm installation", "access control", "electric fence"],
-  landscaping:          ["lawn mowing", "tree trimming", "garden design", "irrigation"],
-  other_services:       ["handyman", "deliveries", "odd jobs"],
-  services:             ["plumbing", "welding", "painting"],   // legacy fallback
-  other:                ["handyman", "deliveries", "odd jobs"]  // legacy fallback
+  // ── New categories ─────────────────────────────────────────────────────────
+  carpentry:       ["door fitting", "built-in cupboards", "kitchen units", "window frames", "decking"],
+  landscaping:     ["lawn mowing", "tree trimming", "garden design", "irrigation installation"],
+  other_services:  ["handyman", "deliveries", "odd jobs", "general maintenance"],
+  // ── Existing categories ────────────────────────────────────────────────────
+  plumbing:        ["burst pipe repair", "geyser installation", "blocked drain", "toilet fitting"],
+  electrical:      ["house wiring", "DB board installation", "solar installation", "fault finding"],
+  construction:    ["bricklaying", "plastering", "roofing", "tiling", "house renovations"],
+  painting:        ["interior painting", "exterior painting", "roof painting", "texture coat"],
+  welding:         ["gate fabrication", "burglar bars", "steel door", "carport"],
+  cleaning:        ["office cleaning", "carpet cleaning", "deep clean", "window cleaning"],
+  transport:       ["car hire", "delivery", "airport transfers", "furniture removal"],
+  food_cooked:     ["catering", "wedding cake", "lunch boxes", "event catering"],
+  printing:        ["business cards", "banners", "flyers", "branded t-shirts"],
+  beauty:          ["hair braiding", "nails", "makeup", "massage"],
+  photography:     ["wedding photos", "passport photos", "events coverage", "drone footage"],
+  tutoring:        ["maths tutor", "O-Level prep", "A-Level tuition", "driving lessons"],
+  it_support:      ["laptop repair", "wifi setup", "CCTV installation", "phone repair"],
+  security:        ["security guard", "alarm installation", "access control", "electric fence"],
+  services:        ["plumbing", "welding", "painting"],
+  other:           ["handyman", "deliveries", "odd jobs"]
 };
-
 function getCategoryExamples(categories = [], profileType = "product") {
   const map = profileType === "service" ? CATEGORY_SERVICE_EXAMPLES : CATEGORY_PRODUCT_EXAMPLES;
   // Try first matching category

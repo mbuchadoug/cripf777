@@ -9,7 +9,13 @@ import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
+import CategoryPreset from "../models/categoryPreset.js";
+import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
+import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
+
 const router = express.Router();
+
+router.use(express.json());
 
 const ADMIN_PASSWORD = process.env.SUPPLIER_ADMIN_PASSWORD || "zimquote_admin_2026";
 
@@ -1267,8 +1273,9 @@ function layout(title, content) {
   const nav = [
     { href: "/zq-admin", label: "📊 Dashboard", match: title === "Dashboard" },
     { href: "/zq-admin/suppliers", label: "🏪 Suppliers", match: title === "Suppliers" || title.includes("Edit") },
-    { href: "/zq-admin/orders", label: "📦 Orders", match: title === "Orders" },
+{ href: "/zq-admin/orders", label: "📦 Orders", match: title === "Orders" },
     { href: "/zq-admin/payments", label: "💳 Payments", match: title === "Payments" },
+    { href: "/zq-admin/presets", label: "🗂 Presets", match: title === "Presets" },
   ];
 
   return `<!DOCTYPE html>
@@ -1639,4 +1646,373 @@ router.get("/presets/:catId/json", isSupplierAdmin, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+// ─── PRESET MANAGEMENT ROUTES ─────────────────────────────────────────────────
+
+// ── GET /zq-admin/presets ────────────────────────────────────────────────────
+router.get("/presets", requireSupplierAdmin, async (req, res) => {
+  try {
+    const dbPresets = await CategoryPreset.find().lean();
+    const dbMap = Object.fromEntries(dbPresets.map(p => [p.catId, p]));
+    const staticPresets = getPresetCategories();
+    const staticMap = Object.fromEntries(staticPresets.map(p => [p.id, p]));
+
+    const allCats = SUPPLIER_CATEGORIES.map(cat => {
+      const db = dbMap[cat.id];
+      const stat = staticMap[cat.id];
+      return {
+        id: cat.id,
+        label: cat.label,
+        types: cat.types,
+        hasSubcats: !!(cat.subcats?.length),
+        hasPreset: !!(db?.isActive) || !!(stat),
+        source: db ? "database" : stat ? "static" : "none",
+        productCount: db ? db.products.length : (stat?.productCount || 0),
+        priceCount: db ? db.prices.length : (stat?.priceCount || 0),
+        isActive: db ? db.isActive : !!(stat),
+        adminNote: db?.adminNote || "",
+        updatedAt: db?.updatedAt || null,
+        updatedBy: db?.updatedBy || ""
+      };
+    });
+
+    const productCats = allCats.filter(c => c.types?.includes("product"));
+    const serviceCats = allCats.filter(c => c.types?.includes("service"));
+
+    const productRows = productCats.map(cat => `
+      <tr>
+        <td><strong>${esc(cat.label)}</strong><br><small style="color:#888">${esc(cat.id)}</small></td>
+        <td>${cat.hasSubcats ? "✅" : "—"}</td>
+        <td>${cat.productCount > 0 ? cat.productCount + " items" : "<em style='color:#aaa'>None</em>"}</td>
+        <td>${cat.priceCount > 0 ? cat.priceCount + " prices" : "<em style='color:#aaa'>None</em>"}</td>
+        <td>${badge(cat.source === "database" ? "DB" : cat.source === "static" ? "Static" : "None",
+               cat.source === "database" ? "blue" : cat.source === "static" ? "yellow" : "gray")}</td>
+        <td>${cat.hasPreset
+          ? badge(cat.isActive ? "✅ Active" : "⏸ Off", cat.isActive ? "green" : "gray")
+          : "<em style='color:#aaa'>No preset</em>"}</td>
+        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "—"}</small></td>
+        <td>
+          <a href="/zq-admin/presets/${esc(cat.id)}" class="btn-link">Edit →</a>
+          ${cat.hasPreset ? `&nbsp;<button onclick="togglePreset('${esc(cat.id)}')" class="btn-sm btn-${cat.isActive ? "orange" : "green"}">${cat.isActive ? "Disable" : "Enable"}</button>` : ""}
+        </td>
+      </tr>`).join("");
+
+    const serviceRows = serviceCats.map(cat => `
+      <tr>
+        <td><strong>${esc(cat.label)}</strong><br><small style="color:#888">${esc(cat.id)}</small></td>
+        <td>${cat.hasSubcats ? "✅" : "—"}</td>
+        <td>${cat.productCount > 0 ? cat.productCount + " services" : "<em style='color:#aaa'>None</em>"}</td>
+        <td>${cat.priceCount > 0 ? cat.priceCount + " rates" : "<em style='color:#aaa'>None</em>"}</td>
+        <td>${badge(cat.source === "database" ? "DB" : cat.source === "static" ? "Static" : "None",
+               cat.source === "database" ? "blue" : cat.source === "static" ? "yellow" : "gray")}</td>
+        <td>${cat.hasPreset
+          ? badge(cat.isActive ? "✅ Active" : "⏸ Off", cat.isActive ? "green" : "gray")
+          : "<em style='color:#aaa'>No preset</em>"}</td>
+        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "—"}</small></td>
+        <td>
+          <a href="/zq-admin/presets/${esc(cat.id)}" class="btn-link">Edit →</a>
+          ${cat.hasPreset ? `&nbsp;<button onclick="togglePreset('${esc(cat.id)}')" class="btn-sm btn-${cat.isActive ? "orange" : "green"}">${cat.isActive ? "Disable" : "Enable"}</button>` : ""}
+        </td>
+      </tr>`).join("");
+
+    res.send(layout("Presets", `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📦 Product Category Presets</h3>
+          <span style="font-size:12px;color:var(--muted)">Green = shown to suppliers during registration</span>
+        </div>
+        <table>
+          <thead><tr><th>Category</th><th>Sub-cats</th><th>Products</th><th>Prices</th><th>Source</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+          <tbody>${productRows}</tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>🔧 Service Category Presets</h3>
+        </div>
+        <table>
+          <thead><tr><th>Category</th><th>Sub-cats</th><th>Services</th><th>Rates</th><th>Source</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+          <tbody>${serviceRows}</tbody>
+        </table>
+      </div>
+
+      <script>
+        async function togglePreset(catId) {
+          const r = await fetch('/zq-admin/presets/' + catId + '/toggle', { method: 'PATCH' });
+          const d = await r.json();
+          if (d.success) location.reload();
+        }
+      </script>
+    `));
+  } catch (err) {
+    res.send(layout("Presets", `<div class="alert red">Error: ${err.message}</div>`));
+  }
+});
+
+// ── GET /zq-admin/presets/:catId ─────────────────────────────────────────────
+router.get("/presets/:catId", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { catId } = req.params;
+    const catDef = SUPPLIER_CATEGORIES.find(c => c.id === catId);
+    if (!catDef) return res.redirect("/zq-admin/presets");
+
+    let preset = await CategoryPreset.findOne({ catId }).lean();
+    let source = "database";
+
+    if (!preset) {
+      const staticTemplate = TEMPLATES[catId];
+      source = staticTemplate ? "static" : "none";
+      preset = {
+        catId,
+        label: catDef.label,
+        profileType: catDef.types[0],
+        products: staticTemplate?.products || [],
+        prices: staticTemplate?.prices || [],
+        subcatMap: staticTemplate?.subcatMap
+          ? Object.entries(staticTemplate.subcatMap).map(([lbl, prods]) => ({ label: lbl, products: prods }))
+          : [],
+        isActive: !!staticTemplate,
+        adminNote: staticTemplate?.adminNote || ""
+      };
+    }
+
+    const subcatDefs = catDef.subcats || [];
+    const productListText = (preset.products || []).join("\n");
+    const pricesJson = JSON.stringify(preset.prices || [], null, 2);
+
+    const subcatSections = subcatDefs.map(sub => {
+      const existing = (preset.subcatMap || []).find(s => s.label === sub.label);
+      const existing_products = existing ? existing.products.join("\n") : "";
+      return `
+        <div class="fg full" style="margin-bottom:14px">
+          <label>${esc(sub.label)}</label>
+          <textarea name="subcat_${esc(sub.id)}" rows="3" style="font-size:12px"
+            placeholder="Product names in this sub-cat, one per line">${esc(existing_products)}</textarea>
+        </div>`;
+    }).join("");
+
+    res.send(layout(`Preset: ${esc(catDef.label)}`, `
+      <a href="/zq-admin/presets" class="back-link">← Back to Presets</a>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Edit Preset — ${esc(catDef.label)}</h3>
+          <div style="font-size:12px;color:var(--muted)">
+            ID: <code>${esc(catId)}</code> &nbsp;|&nbsp;
+            Type: ${(catDef.types || []).join(", ")} &nbsp;|&nbsp;
+            Source: ${badge(source.toUpperCase(), source === "database" ? "blue" : source === "static" ? "yellow" : "gray")}
+          </div>
+        </div>
+
+        <div class="stats" style="display:flex;gap:12px;margin-bottom:20px">
+          <div class="stat" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center">
+            <div style="font-size:24px;font-weight:700" id="stat-products">${preset.products?.length || 0}</div>
+            <div style="font-size:12px;color:var(--muted)">Products</div>
+          </div>
+          <div class="stat" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center">
+            <div style="font-size:24px;font-weight:700" id="stat-prices">${preset.prices?.length || 0}</div>
+            <div style="font-size:12px;color:var(--muted)">With Prices</div>
+          </div>
+          <div class="stat" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 20px;text-align:center">
+            <div style="font-size:24px;font-weight:700">${subcatDefs.length}</div>
+            <div style="font-size:12px;color:var(--muted)">Sub-cats</div>
+          </div>
+        </div>
+
+        <form id="presetForm">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <input type="checkbox" id="isActive" ${preset.isActive ? "checked" : ""}>
+            <label for="isActive" style="margin:0;font-weight:600">Active — shown to suppliers during registration</label>
+          </div>
+
+          <div class="fg full" style="margin-bottom:14px">
+            <label>Admin Note (internal only)</label>
+            <input type="text" id="adminNote" value="${esc(preset.adminNote || "")}"
+              placeholder="e.g. Zimbabwe market prices Jan 2025"
+              style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%">
+          </div>
+
+          <div class="fg full" style="margin-bottom:14px">
+            <label>Products / Services (one per line)</label>
+            <small style="color:var(--muted);display:block;margin-bottom:6px">Each line = one item shown to the supplier in the preview</small>
+            <textarea id="productsArea" rows="20" style="font-family:monospace;font-size:12px;padding:10px;border:1px solid #ddd;border-radius:6px;width:100%">${esc(productListText)}</textarea>
+          </div>
+
+          <div class="fg full" style="margin-bottom:14px">
+            <label>Suggested Prices (JSON)</label>
+            <small style="color:var(--muted);display:block;margin-bottom:6px">
+              Format: <code>[{"product":"name","amount":5.50,"unit":"each"}, ...]</code>
+              Product name must match exactly what's in the list above.
+            </small>
+            <textarea id="pricesJson" rows="12" style="font-family:monospace;font-size:11px;padding:10px;border:1px solid #ddd;border-radius:6px;width:100%">${esc(pricesJson)}</textarea>
+          </div>
+
+          ${subcatDefs.length ? `
+          <div style="margin-bottom:14px">
+            <label style="font-weight:bold;display:block;margin-bottom:8px">Sub-category Grouping</label>
+            <small style="color:var(--muted);display:block;margin-bottom:10px">Assign products to sub-categories for admin display. Product names must match the list above.</small>
+            ${subcatSections}
+          </div>` : ""}
+
+          <div id="save-status" style="display:none;padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px"></div>
+
+          <div style="display:flex;gap:10px">
+            <button type="button" onclick="savePreset()" class="btn btn-blue">💾 Save Preset</button>
+            <a href="/zq-admin/presets" class="btn btn-gray">Cancel</a>
+            <button type="button" onclick="deletePreset()" class="btn btn-red" style="margin-left:auto">🗑 Delete Preset</button>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        const SUBCAT_IDS = ${JSON.stringify(subcatDefs.map(s => s.id))};
+        const SUBCAT_LABELS = ${JSON.stringify(subcatDefs.reduce((m, s) => { m[s.id] = s.label; return m; }, {}))};
+
+        async function savePreset() {
+          const status = document.getElementById('save-status');
+          const products = document.getElementById('productsArea').value;
+          let prices = [];
+          try { prices = JSON.parse(document.getElementById('pricesJson').value); }
+          catch(e) { showStatus('❌ Prices JSON is invalid: ' + e.message, false); return; }
+
+          const subcatMap = [];
+          SUBCAT_IDS.forEach(id => {
+            const el = document.querySelector('[name="subcat_' + id + '"]');
+            if (!el) return;
+            const prods = el.value.split('\\n').map(s=>s.trim()).filter(Boolean);
+            if (prods.length) subcatMap.push({ label: SUBCAT_LABELS[id], products: prods });
+          });
+
+          const payload = {
+            products,
+            prices,
+            subcatMap,
+            isActive: document.getElementById('isActive').checked,
+            adminNote: document.getElementById('adminNote').value,
+            profileType: '${esc(catDef.types[0])}'
+          };
+
+          try {
+            const r = await fetch(window.location.pathname, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const d = await r.json();
+            if (d.success) {
+              showStatus('✅ Saved! ' + d.productCount + ' products, ' + d.priceCount + ' prices.', true);
+              document.getElementById('stat-products').textContent = d.productCount;
+              document.getElementById('stat-prices').textContent = d.priceCount;
+            } else {
+              showStatus('❌ Error: ' + d.error, false);
+            }
+          } catch(e) {
+            showStatus('❌ Network error: ' + e.message, false);
+          }
+        }
+
+        async function deletePreset() {
+          if (!confirm('Delete this preset? Suppliers will no longer see "Use Preset List" for this category.')) return;
+          const r = await fetch(window.location.pathname, { method: 'DELETE' });
+          const d = await r.json();
+          if (d.success) window.location.href = '/zq-admin/presets';
+        }
+
+        function showStatus(msg, ok) {
+          const el = document.getElementById('save-status');
+          el.style.display = 'block';
+          el.style.background = ok ? '#d1fae5' : '#fee2e2';
+          el.style.color = ok ? '#065f46' : '#991b1b';
+          el.textContent = msg;
+        }
+      </script>
+    `));
+  } catch (err) {
+    res.send(layout("Presets", `<div class="alert red">Error: ${err.message}</div>`));
+  }
+});
+
+// ── POST /zq-admin/presets/:catId ────────────────────────────────────────────
+router.post("/presets/:catId", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { catId } = req.params;
+    const catDef = SUPPLIER_CATEGORIES.find(c => c.id === catId);
+    if (!catDef) return res.status(404).json({ error: "Category not found" });
+
+    // Products come as a newline-separated string
+    const rawProducts = (req.body.products || "")
+      .split(/\n/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    // Prices come as an already-parsed array (express.json() handles this)
+    const prices = Array.isArray(req.body.prices) ? req.body.prices : [];
+
+    // SubcatMap comes as array of {label, products[]}
+    const subcatMap = Array.isArray(req.body.subcatMap) ? req.body.subcatMap : [];
+
+    const updated = await CategoryPreset.findOneAndUpdate(
+      { catId },
+      {
+        $set: {
+          catId,
+          label: catDef.label,
+          profileType: req.body.profileType || catDef.types[0],
+          products: rawProducts,
+          prices,
+          subcatMap,
+          isActive: req.body.isActive === true || req.body.isActive === "true",
+          adminNote: (req.body.adminNote || "").trim(),
+          updatedBy: "admin",
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true, new: true }
+    );
+
+    // Update in-memory static templates immediately (no server restart needed)
+    setTemplateForCategory(catId, {
+      isAdminPreset: true,
+      adminNote: updated.adminNote,
+      products: updated.products,
+      prices: updated.prices,
+      subcatMap: updated.subcatMap?.length
+        ? Object.fromEntries(updated.subcatMap.map(s => [s.label, s.products]))
+        : null
+    });
+
+    res.json({ success: true, catId, productCount: rawProducts.length, priceCount: prices.length });
+  } catch (err) {
+    console.error("[Admin Preset Save]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /zq-admin/presets/:catId ──────────────────────────────────────────
+router.delete("/presets/:catId", requireSupplierAdmin, async (req, res) => {
+  try {
+    await CategoryPreset.deleteOne({ catId: req.params.catId });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /zq-admin/presets/:catId/toggle ────────────────────────────────────
+router.patch("/presets/:catId/toggle", requireSupplierAdmin, async (req, res) => {
+  try {
+    const preset = await CategoryPreset.findOne({ catId: req.params.catId });
+    if (!preset) return res.status(404).json({ error: "Preset not found in DB. Save it first before toggling." });
+    preset.isActive = !preset.isActive;
+    await preset.save();
+    res.json({ success: true, isActive: preset.isActive });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 export default router;

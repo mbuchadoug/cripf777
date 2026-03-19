@@ -161,14 +161,14 @@ export const SUPPLIER_CATEGORIES = [
 
   {
     id: "cosmetics",
-    label: "💄 Cosmetics & Beauty Products",
+   label: "💄 Cosmetics & Beauty",
     types: ["product"],
     presetKey: null
   },
 
   {
     id: "car_supplies",
-    label: "🚗 Auto Parts & Accessories",
+   label: "🚗 Auto Parts & Tyres",
     types: ["product"],
     presetKey: "car_supplies"
   },
@@ -229,7 +229,7 @@ export const SUPPLIER_CATEGORIES = [
 
   {
     id: "construction",
-    label: "🏗️ Construction & Building",
+  label: "🏗️ Construction",
     types: ["service"],
     subcats: [
       { id: "bricklaying",    label: "Bricklaying & Block Work" },

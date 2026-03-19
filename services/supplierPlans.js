@@ -45,7 +45,7 @@ export const SUPPLIER_CATEGORIES = [
 // ── SERVICE CATEGORIES ────────────────────────────────────────────────────
   { id: "plumbing",     label: "🚿 Plumbing",                    types: ["service"] },
   { id: "electrical",   label: "⚡ Electrical",                   types: ["service"] },
-  { id: "construction", label: "🏗️ Construction & Building",      types: ["service"] },
+  { id: "construction", label: "🏗️ Construction",    types: ["service"] },
   { id: "painting",     label: "🎨 Painting & Décor",             types: ["service"] },
   { id: "welding",      label: "🔩 Welding & Fabrication",        types: ["service"] },
   { id: "cleaning",     label: "🧹 Cleaning Services",            types: ["service"] },

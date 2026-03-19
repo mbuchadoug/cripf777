@@ -617,8 +617,42 @@ export function getPresetCategories() {
  * In production this writes to MongoDB (CategoryPreset model).
  * This in-memory version is the fallback / default.
  */
+/**
+ * Admin: update or create a preset for a category.
+ * Also updates in-memory TEMPLATES so changes are live immediately.
+ */
 export function setTemplateForCategory(catId, template) {
   TEMPLATES[catId] = template;
+}
+
+/**
+ * DB-aware async version of getTemplateForCategory.
+ * Checks MongoDB CategoryPreset collection first (admin-editable presets),
+ * then falls back to static TEMPLATES in this file.
+ *
+ * Use this in chatbotEngine.js and supplierRegistration.js
+ * wherever you call getTemplateForCategory().
+ */
+export async function getTemplateForCategoryWithDB(catId) {
+  try {
+    const { default: CategoryPreset } = await import("../models/categoryPreset.js");
+    const dbPreset = await CategoryPreset.findOne({ catId, isActive: true }).lean();
+    if (dbPreset && dbPreset.products?.length) {
+      return {
+        isAdminPreset: true,
+        adminNote: dbPreset.adminNote || "",
+        products: dbPreset.products,
+        prices: dbPreset.prices || [],
+        subcatMap: dbPreset.subcatMap?.length
+          ? Object.fromEntries(dbPreset.subcatMap.map(s => [s.label, s.products]))
+          : null
+      };
+    }
+  } catch (_err) {
+    // DB unavailable or CategoryPreset model not found — fall through to static
+  }
+  // Fallback: return static template from this file
+  return TEMPLATES[catId] || null;
 }
 
 export { TEMPLATES };
