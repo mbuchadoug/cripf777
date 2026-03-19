@@ -1117,35 +1117,41 @@ if ((!biz || isGhostSupplierBiz) && !isMetaAction) {
     if (!updated.length) {
       const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
 
-      await sendText(from,
+   await sendText(from,
 `❌ Couldn't read your ${isService ? "rates" : "prices"}.
 
 *Your items:*
 ${numbered}
 
-Try any of these:
+─────────────────
+*Fastest way: update by item number*
 
 *Single item:*
-_75 x 3.50_
-${isService ? `_3 x 20/job_` : ""}
+_${isService ? "1x20/job" : "1x5.50"}_
+_${isService ? "1 x 20/job" : "1 x 5.50"}_
 
-*Same price for selected items:*
-_5,7,9 x 3.50_
+*Same ${isService ? "rate" : "price"} for selected items:*
+_${isService ? "1,3,5x20/job" : "1,3,5x5.50"}_
+_${isService ? "1,3,5 x 20/job" : "1,3,5 x 5.50"}_
 
-*Same price for a range:*
-_20-30 x 1.25_
+*Same ${isService ? "rate" : "price"} for a range:*
+_${isService ? "1-4x15/hr" : "1-4x5.50"}_
+_${isService ? "1-4 x 15/hr" : "1-4 x 5.50"}_
 
 *Mixed updates:*
-_5 x 3.50, 7 x 4.20${isService ? ", 9 x 15/job" : ""}_
+_${isService ? "1x20/job,2x15/trip,3x10/hr" : "1x5.50,2x8.00,3x12.00"}_
+_${isService ? "1 x 20/job, 2 x 15/trip, 3 x 10/hr" : "1 x 5.50, 2 x 8.00, 3 x 12.00"}_
+
+*Other options still work:*
 
 *Update ALL in order:*
 _${products.slice(0, 3).map((_, i) => (((i + 1) * 4)).toFixed(2)).join(", ")}_
 
 *Update selected items by name:*
-_${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
+_${products.slice(0, 2).map(p => `${p}: ${isService ? "20/job" : "6.00"}`).join(", ")}_
 
 Type *skip* to add them later.`
-      );
+);
       return true;
     }
 
@@ -5330,51 +5336,11 @@ biz.sessionState = "supplier_order_enter_price";
     });
   }
 
-  // ── Confirm saved price update from account menu ──────────────────────────
-// ── Registration: skip prices/rates for no-biz supplier flow ───────────────
-if (a === "sup_skip_prices" && !biz) {
-  const sess = await UserSession.findOne({ phone });
-  const regState = sess?.supplierRegState;
-  const reg = sess?.supplierRegData || {};
-
-  if (regState === "supplier_reg_prices") {
-    const isService = reg.profileType === "service";
-
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "supplierRegData.prices": [],
-          "supplierRegData.rates": [],
-          supplierRegState: isService ? "supplier_reg_travel" : "supplier_reg_delivery"
-        }
-      },
-      { upsert: true }
-    );
-
-    if (isService) {
-      return sendButtons(from, {
-        text: "🚗 *Do you travel to clients?*",
-        buttons: [
-          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
-          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
-        ]
-      });
-    }
-
-    return sendButtons(from, {
-      text: "🚚 *Do you deliver?*",
-      buttons: [
-        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
-        { id: "sup_del_no", title: "🏠 Collection Only" }
-      ]
-    });
-  }
-}
 
 
 // ── Registration: confirm saved price update (no-biz supplier flow) ────────
-if (a === "sup_price_update_confirm" && !biz) {
+// ── Registration / supplier account: confirm saved price update ───────────
+if (a === "sup_price_update_confirm" && (!biz || isGhostSupplierBiz)) {
   const sess = await UserSession.findOne({ phone });
   const regState = sess?.supplierRegState;
   const reg = sess?.supplierRegData || {};
@@ -5425,12 +5391,13 @@ if (a === "sup_price_update_confirm" && !biz) {
     });
   }
 
-  // 2) No-biz supplier account update confirm
+  // 2) Supplier account price update confirm
   if (accountState === "supplier_update_prices") {
     const supplier = await SupplierProfile.findOne({ phone });
     if (!supplier) return sendSuppliersMenu(from);
 
     const pending = sess?.tempData?.pendingPriceUpdate || [];
+
     if (!pending.length) {
       await sendText(from, "❌ No pending prices found. Please re-enter.");
       return true;
@@ -5445,6 +5412,7 @@ if (a === "sup_price_update_confirm" && !biz) {
       supplier.prices = pending;
     }
 
+    supplier.priceUpdatedAt = new Date();
     await supplier.save();
 
     await UserSession.findOneAndUpdate(
@@ -5458,7 +5426,16 @@ if (a === "sup_price_update_confirm" && !biz) {
       }
     );
 
-    await sendText(from, `✅ Your ${supplier.profileType === "service" ? "rates" : "prices"} were updated.`);
+    if (biz && isGhostSupplierBiz) {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+    }
+
+    await sendText(
+      from,
+      `✅ Your ${supplier.profileType === "service" ? "rates" : "prices"} were updated.`
+    );
     return sendSupplierAccountMenu(from, supplier);
   }
 }
