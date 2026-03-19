@@ -3310,9 +3310,9 @@ if (a.startsWith("sup_cat_")) {
 
   // Get category-specific examples for either services or products
  // Get category-specific examples for either services or products
-  const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
-  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
-  const template = getTemplateForCategory(catId);
+const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
+  const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
+  const template = await getTemplateForCategoryWithDB(catId);
 
 if (profileType === "service") {
   const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b"];
@@ -3474,8 +3474,8 @@ if (a.startsWith("sup_load_preset_")) {
   if (!biz) return sendMainMenu(from);
 
   const catId = a.replace("sup_load_preset_", "");
-  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
-  const template = getTemplateForCategory(catId);
+const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
+  const template = await getTemplateForCategoryWithDB(catId);
 
   if (!template?.products?.length) {
     await sendText(from, "❌ No preset found for this category. Please type your products.");
@@ -3526,8 +3526,8 @@ if (a === "sup_preset_confirm") {
     return sendSuppliersMenu(from);
   }
 
-  const { getTemplateForCategory } = await import("./supplierProductTemplates.js");
-  const template = getTemplateForCategory(catId);
+  const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
+  const template = await getTemplateForCategoryWithDB(catId);
 
   if (!template?.products?.length) {
     await sendText(from, "❌ Could not load preset. Please type your products.");

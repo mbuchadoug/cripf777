@@ -29,7 +29,7 @@ export const SUPPLIER_CITIES = [
   "Harare", "Bulawayo", "Mutare",
   "Gweru", "Masvingo", "Kwekwe",
   "Kadoma", "Chinhoyi", "Victoria Falls"
-];
+];  
 
 export const SUPPLIER_CATEGORIES = [
   { id: "groceries",   label: "🛒 Groceries & Food",       types: ["product"] },
