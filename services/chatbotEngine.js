@@ -4037,6 +4037,7 @@ if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
     return;
   }
 
+ const isService = supplier.profileType === "service";
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
   const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
   const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
@@ -4309,7 +4310,11 @@ biz.sessionState = "supplier_order_enter_price";
     ...(biz.sessionData || {}),
     pricingOrderId: orderId
   };
-  await saveBiz(biz);
+  //await saveBiz(biz);
+
+  await saveBizSafe(biz);
+
+  // ── Clear any stale buyer/picking session state for this phone.
 
   // ── Clear any stale buyer/picking session state for this phone.
   // This prevents the supplier's typed price input (e.g. "12") from being
