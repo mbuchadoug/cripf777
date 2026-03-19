@@ -272,6 +272,116 @@ function parseQuickPriceUpdates(input = "", currentItems = [], isService = false
   };
 }
 
+
+
+function parseSupplierPriceInput(raw = "", products = [], isService = false) {
+  const parts = String(raw || "")
+    .split(/[,\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
+  const updated = [];
+  const failed = [];
+
+  // New quick syntax:
+  // 75 x 3.50
+  // 5,7,9 x 3.50
+  // 20-30 x 1.25
+  // 3 x 20/job
+  const quick = parseQuickPriceUpdates(raw, products, isService);
+
+  if (quick.matchedAny) {
+    quick.updates.forEach(u => {
+      updated.push({
+        product: u.product.toLowerCase(),
+        amount: u.amount,
+        unit: u.unit,
+        inStock: true
+      });
+    });
+    failed.push(...quick.failed);
+    return { updated, failed };
+  }
+
+  if (allNumbers) {
+    if (parts.length !== products.length) {
+      return {
+        updated: [],
+        failed: [`count_mismatch:${parts.length}:${products.length}`]
+      };
+    }
+
+    parts.forEach((numStr, i) => {
+      updated.push({
+        product: products[i].toLowerCase(),
+        amount: parseFloat(numStr),
+        unit: isService ? "job" : "each",
+        inStock: true
+      });
+    });
+
+    return { updated, failed };
+  }
+
+  // Named pricing / named rate parsing
+  for (const line of parts) {
+    const clean = line
+      .replace(/^[-•*►▪✓]\s*/, "")
+      .replace(/^\d+[.)]\s*/, "")
+      .replace(/\$/g, "")
+      .trim();
+
+    if (!clean) continue;
+
+    // number/unit only e.g. 20/job
+    const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
+    if (rateOnlyMatch) {
+      const posIdx = updated.length;
+      if (posIdx < products.length) {
+        updated.push({
+          product: products[posIdx].toLowerCase(),
+          amount: parseFloat(rateOnlyMatch[1]),
+          unit: rateOnlyMatch[2].toLowerCase(),
+          inStock: true
+        });
+      } else {
+        failed.push(line);
+      }
+      continue;
+    }
+
+    const match =
+      clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
+      clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
+
+    if (!match) {
+      failed.push(line);
+      continue;
+    }
+
+    const product = match[1].replace(/[$@\-:,]+$/, "").trim().toLowerCase();
+    const amount = parseFloat(match[2]);
+    const rawUnit = (match[3] || "").trim().toLowerCase();
+    const unit = rawUnit ? rawUnit.replace(/^\//, "") : (isService ? "job" : "each");
+
+    if (!product || isNaN(amount)) {
+      failed.push(line);
+      continue;
+    }
+
+    updated.push({
+      product,
+      amount,
+      unit,
+      inStock: true
+    });
+  }
+
+  return { updated, failed };
+}
+
+
 function parseQuickRenameCommand(input = "", currentItems = []) {
   const raw = String(input || "").trim();
 
@@ -967,7 +1077,98 @@ const pageResults = results.slice(0, 9);
 }
 
 
+// =========================
+// 📦 NO-BIZ SUPPLIER REGISTRATION PRICE FLOW
+// =========================
+if (!biz && !isMetaAction) {
+  const sess = await UserSession.findOne({ phone });
+  const regState = sess?.supplierRegState;
+  const reg = sess?.supplierRegData || {};
 
+  if (regState === "supplier_reg_prices") {
+    const raw = (text || "").trim();
+    const isService = reg.profileType === "service";
+    const products = (reg.products || []).filter(p => p !== "pending_upload");
+
+    if (!raw) {
+      await sendText(from, "❌ Please send your prices or rates, or tap Skip.");
+      return true;
+    }
+
+    if (!products.length) {
+      await sendText(from, "❌ No products/services found in registration. Please go back and add them first.");
+      return true;
+    }
+
+    const { updated, failed } = parseSupplierPriceInput(raw, products, isService);
+
+    if (!updated.length) {
+      const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
+
+      await sendText(from,
+`❌ Couldn't read your ${isService ? "rates" : "prices"}.
+
+*Your items:*
+${numbered}
+
+Try any of these:
+
+*Single item:*
+_75 x 3.50_
+${isService ? `_3 x 20/job_` : ""}
+
+*Same price for selected items:*
+_5,7,9 x 3.50_
+
+*Same price for a range:*
+_20-30 x 1.25_
+
+*Mixed updates:*
+_5 x 3.50, 7 x 4.20${isService ? ", 9 x 15/job" : ""}_
+
+*Update ALL in order:*
+_${products.slice(0, 3).map((_, i) => (((i + 1) * 4)).toFixed(2)).join(", ")}_
+
+*Update selected items by name:*
+_${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
+
+Type *skip* to add them later.`
+      );
+      return true;
+    }
+
+    const previewLines = updated
+      .map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`)
+      .join("\n");
+
+    const failNote = failed.length
+      ? `\n\n⚠️ Skipped ${failed.length}: _${failed.slice(0, 2).join(", ")}_`
+      : "";
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "supplierRegData.pendingPriceUpdate": updated
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendButtons(from, {
+      text:
+`💰 *${isService ? "Rate" : "Price"} Preview* (${updated.length} items)
+
+${previewLines}${failNote}
+
+Save these ${isService ? "rates" : "prices"}?`,
+      buttons: [
+        { id: "sup_price_update_confirm", title: "✅ Save" },
+        { id: "sup_skip_prices", title: "⏭ Skip For Now" }
+      ]
+    });
+  }
+}
   // =========================
   // 🛒 BUYER ORDER FLOW (no-biz users via UserSession)
   // =========================
@@ -4967,7 +5168,97 @@ biz.sessionState = "supplier_order_enter_price";
   }
 
   // ── Confirm saved price update from account menu ──────────────────────────
+// ── Registration: skip prices/rates for no-biz supplier flow ───────────────
+if (a === "sup_skip_prices" && !biz) {
+  const sess = await UserSession.findOne({ phone });
+  const regState = sess?.supplierRegState;
+  const reg = sess?.supplierRegData || {};
 
+  if (regState === "supplier_reg_prices") {
+    const isService = reg.profileType === "service";
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "supplierRegData.prices": [],
+          "supplierRegData.rates": [],
+          supplierRegState: isService ? "supplier_reg_travel" : "supplier_reg_delivery"
+        }
+      },
+      { upsert: true }
+    );
+
+    if (isService) {
+      return sendButtons(from, {
+        text: "🚗 *Do you travel to clients?*",
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+
+    return sendButtons(from, {
+      text: "🚚 *Do you deliver?*",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no", title: "🏠 Collection Only" }
+      ]
+    });
+  }
+}
+
+
+// ── Registration: confirm saved price update (no-biz supplier flow) ────────
+if (a === "sup_price_update_confirm" && !biz) {
+  const sess = await UserSession.findOne({ phone });
+  const regState = sess?.supplierRegState;
+  const reg = sess?.supplierRegData || {};
+  const pending = reg.pendingPriceUpdate || [];
+
+  if (regState === "supplier_reg_prices") {
+    if (!pending.length) {
+      await sendText(from, "❌ No pending prices found. Please re-enter.");
+      return true;
+    }
+
+    const isService = reg.profileType === "service";
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "supplierRegData.prices": isService ? [] : pending,
+          "supplierRegData.rates": isService
+            ? pending.map(u => ({ service: u.product, rate: `${u.amount}/${u.unit}` }))
+            : [],
+          "supplierRegData.pendingPriceUpdate": [],
+          supplierRegState: isService ? "supplier_reg_travel" : "supplier_reg_delivery"
+        }
+      },
+      { upsert: true }
+    );
+
+    if (isService) {
+      return sendButtons(from, {
+        text: "✅ *Rates saved!*\n\n🚗 *Do you travel to clients?*",
+        buttons: [
+          { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+          { id: "sup_travel_no", title: "🏠 Client Comes to Me" }
+        ]
+      });
+    }
+
+    return sendButtons(from, {
+      text: "✅ *Prices saved!*\n\n🚚 *Do you deliver?*",
+      buttons: [
+        { id: "sup_del_yes", title: "✅ Yes I Deliver" },
+        { id: "sup_del_no", title: "🏠 Collection Only" }
+      ]
+    });
+  }
+}
 
 // ── Confirm saved price update from account menu ──────────────────────────
 if (a === "sup_price_update_confirm") {

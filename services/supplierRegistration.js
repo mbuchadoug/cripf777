@@ -239,88 +239,109 @@ Just type them and send 👇`
   biz.sessionState = "supplier_reg_prices";
 
 if (isService) {
-    biz.sessionData.supplierReg.rates = [];
-    await saveBiz(biz);
+  biz.sessionData.supplierReg.rates = [];
+  await saveBiz(biz);
 
-    const savedProducts = biz.sessionData.supplierReg.products || [];
-    const numberedList = savedProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
+  const savedProducts = biz.sessionData.supplierReg.products || [];
+  const DISPLAY_MAX = 20;
+  const displayProducts = savedProducts.slice(0, DISPLAY_MAX);
+  const hiddenCount = savedProducts.length - DISPLAY_MAX;
 
-    const rateExampleMap = {
-      "car hire": "50/day", "delivery": "10/trip", "airport transfers": "25/trip",
-      "plumbing": "15/hr", "burst pipe repair": "20/job", "toilet installation": "30/job",
-      "electrical": "15/hr", "wiring": "20/hr", "light fitting": "10/job",
-      "bricklaying": "8/hr", "plastering": "12/hr", "roofing": "50/job",
-      "interior painting": "15/hr", "exterior painting": "20/hr",
-      "gate fabrication": "80/job", "burglar bars": "60/job",
-      "office cleaning": "20/job", "carpet cleaning": "15/job",
-      "lawn mowing": "10/job", "tree trimming": "15/job",
-      "catering": "50/event", "wedding cake": "80/job", "lunch boxes": "5/box",
-      "business cards": "15/job", "banners": "20/job",
-      "hair braiding": "10/job", "nails": "8/job", "makeup": "15/job",
-      "wedding photos": "100/event", "passport photos": "5/job",
-      "laptop repair": "20/job", "wifi setup": "15/job",
-      "security guard": "10/hr", "alarm installation": "50/job",
-      "maths tutor": "10/hr", "english lessons": "8/hr",
-      "primary school help": "8/hr", "o-level prep": "12/hr",
-    };
+  const numberedList = displayProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
+  const moreNote = hiddenCount > 0 ? `\n_...and ${hiddenCount} more services_` : "";
 
-    const exampleLines = savedProducts.slice(0, 3).map(svc => {
-      const key = Object.keys(rateExampleMap).find(k =>
-        svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
-      );
-      const rate = key ? rateExampleMap[key] : "10/hr";
-      return `${svc}: ${rate}`;
-    });
+  const serviceExampleNums = savedProducts
+    .slice(0, Math.min(3, savedProducts.length))
+    .map((_, i) => [10, 25, 50][i] ?? 10)
+    .join(", ");
 
-    const fastestExample = savedProducts.slice(0, 3).map(svc => {
-      const key = Object.keys(rateExampleMap).find(k =>
-        svc.toLowerCase().includes(k) || k.includes(svc.toLowerCase())
-      );
-      return key ? rateExampleMap[key] : "10/hr";
-    }).join(", ");
+  return sendButtons(from, {
+    text:
+`💰 *Set Your Rates (USD)*
 
-    return sendButtons(from, {
-      text:
-`💰 *Set Your Rates*
+You have *${savedProducts.length} service${savedProducts.length > 1 ? "s" : ""}*
 
-${numberedList}
+${numberedList}${moreNote}
 
-*Fastest - just rates in order:*
-_${fastestExample}_
+─────────────────
+*Fastest way: update by item number*
 
-*Or name them:*
-_${exampleLines.slice(0, 2).join(", ")}_
+*Single item:*
+_1 x 20/job_
+
+*Same rate for selected items:*
+_1,3,5 x 20/job_
+
+*Same rate for a range:*
+_1-4 x 15/hr_
+
+*Mixed updates:*
+_1 x 20/job, 2 x 15/trip, 3 x 10/hr_
+
+*Other options still work:*
+
+*Update ALL in order:*
+_${serviceExampleNums}_
+
+*Update selected items by name:*
+_${savedProducts.slice(0, 2).map(p => `${p}: 20/job`).join(", ")}_
 
 *Common units:* /hr, /job, /trip, /day, /event
 
-Type *skip* to add rates later.`,
-      buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
-    });
-  }
+Type your rates and send, or tap Skip 👇`,
+    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+  });
+}
 
-  biz.sessionData.supplierReg.prices = [];
-  await saveBiz(biz);
+ biz.sessionData.supplierReg.prices = [];
+await saveBiz(biz);
 
-const savedServices = biz.sessionData.supplierReg.products || [];
-const numberedServiceList = savedServices.map((s, i) => `${i + 1}. ${s}`).join("\n");
+const savedProducts = biz.sessionData.supplierReg.products || [];
+const DISPLAY_MAX = 20;
+const displayProducts = savedProducts.slice(0, DISPLAY_MAX);
+const hiddenCount = savedProducts.length - DISPLAY_MAX;
+
+const numberedList = displayProducts.map((p, i) => `${i + 1}. ${p}`).join("\n");
+const moreNote = hiddenCount > 0 ? `\n_...and ${hiddenCount} more products_` : "";
+
+const exampleNums = savedProducts
+  .slice(0, Math.min(4, savedProducts.length))
+  .map((_, i) => [5.50, 8.00, 1.20, 15.00][i] ?? 5.50)
+  .join(", ");
 
 return sendButtons(from, {
   text:
-`💰 *Set Your Rates*
+`💰 *Set Your Prices (USD)*
 
-${numberedServiceList}
+You have *${savedProducts.length} product${savedProducts.length > 1 ? "s" : ""}*
 
-*Fastest:* Reply with rates in order, comma-separated:
-_20, 50, 30_  ← just the numbers
+${numberedList}${moreNote}
 
-*Or with units:*
-_20/hr, 50/trip, 30/job_
+─────────────────
+*Fastest way: update by item number*
 
-*Or name them:*
-_plumbing 20/hr, delivery 50/trip_
+*Single item:*
+_1 x 5.50_
 
-Type *skip* to add rates later.`,
-  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Rates" }]
+*Same price for selected items:*
+_1,3,5 x 5.50_
+
+*Same price for a range:*
+_1-4 x 5.50_
+
+*Mixed updates:*
+_1 x 5.50, 2 x 8.00, 3 x 12.00_
+
+*Other options still work:*
+
+*Update ALL in order:*
+_${exampleNums}_
+
+*Update selected items by name:*
+_${savedProducts.slice(0, 2).map(p => `${p}: 5.50`).join(", ")}_
+
+Type your prices and send, or tap Skip 👇`,
+  buttons: [{ id: "sup_skip_prices", title: "⏭ Skip Prices" }]
 });
 }
   // ── Step 3b: Prices ────────────────────────────────────────────────────────
@@ -387,14 +408,102 @@ if (state === "supplier_reg_prices") {
         { id: "sup_del_no",  title: "🏠 Collection Only" }
       ]
     });
-  } else if (lowerInput !== "skip" && lowerInput !== "done") {
+   } else if (lowerInput !== "skip" && lowerInput !== "done") {
     // Supplier typed something that looks like prices - try to parse it
     const parts = rawInput.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
     const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
     const updated = [];
     const failed = [];
 
-    if (allNumbers) {
+    // New quick syntax:
+    // 1 x 5.50
+    // 1,3,5 x 5.50
+    // 1-4 x 5.50
+    // 2 x 20/job
+    const quickGroups = rawInput
+      .split(/[;\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    let quickMatchedAny = false;
+
+    for (const group of quickGroups) {
+      const grouped = group.match(
+        /^([\d,\-\s]+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+      );
+
+      if (grouped) {
+        quickMatchedAny = true;
+
+        const selector = grouped[1].trim();
+        const amount = Number(grouped[2]);
+        const unit = (grouped[3] || (isService ? "job" : "each")).toLowerCase();
+
+        const indexes = [];
+        const selectorParts = selector.split(",").map(s => s.trim()).filter(Boolean);
+
+        for (const token of selectorParts) {
+          if (/^\d+$/.test(token)) {
+            const idx = Number(token) - 1;
+            if (idx >= 0 && idx < products.length) indexes.push(idx);
+            continue;
+          }
+
+          const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
+          if (rangeMatch) {
+            const start = Number(rangeMatch[1]) - 1;
+            const end = Number(rangeMatch[2]) - 1;
+            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+              if (i >= 0 && i < products.length) indexes.push(i);
+            }
+          }
+        }
+
+        const uniqueIndexes = [...new Set(indexes)].sort((a, b) => a - b);
+
+        if (!uniqueIndexes.length) {
+          failed.push(group);
+          continue;
+        }
+
+        for (const idx of uniqueIndexes) {
+          updated.push({
+            product: products[idx].toLowerCase(),
+            amount,
+            unit,
+            inStock: true
+          });
+        }
+
+        continue;
+      }
+
+      const singles = group.split(",").map(s => s.trim()).filter(Boolean);
+      for (const single of singles) {
+        const matchQuick = single.match(
+          /^(\d+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+        );
+
+        if (!matchQuick) continue;
+
+        quickMatchedAny = true;
+
+        const idx = Number(matchQuick[1]) - 1;
+        if (idx < 0 || idx >= products.length) {
+          failed.push(single);
+          continue;
+        }
+
+        updated.push({
+          product: products[idx].toLowerCase(),
+          amount: Number(matchQuick[2]),
+          unit: (matchQuick[3] || (isService ? "job" : "each")).toLowerCase(),
+          inStock: true
+        });
+      }
+    }
+
+    if (!quickMatchedAny && allNumbers) {
       // Strategy 1: plain numbers in order e.g. "5,10,7,9,8"
       if (parts.length !== products.length) {
         await sendText(from,
@@ -407,6 +516,7 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
         );
         return true;
       }
+
       parts.forEach((numStr, i) => {
         updated.push({
           product: products[i].toLowerCase(),
@@ -416,7 +526,7 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
         });
       });
 
-    } else {
+    } else if (!quickMatchedAny) {
       // Strategy 2: named pricing e.g. "cement 5.50, sand 8" or "20/job, 50/hr"
       for (const line of parts) {
         const clean = line
@@ -427,7 +537,6 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
 
         if (!clean) continue;
 
-        // Strategy 2a: "NUMBER/UNIT" format e.g. "20/job", "50/hr" - assign positionally
         const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
         if (rateOnlyMatch) {
           const posIdx = updated.length;
@@ -444,7 +553,6 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
           continue;
         }
 
-        // Strategy 2b: "name: number" or "name number" format
         const match =
           clean.match(/^(.+?)\s*[:]\s*(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/) ||
           clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z/]*)$/);
@@ -462,7 +570,6 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
         updated.push({ product, amount, unit, inStock: true });
       }
     }
-
     // If we parsed prices successfully, save and advance
     if (updated.length > 0) {
       biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
@@ -523,13 +630,15 @@ ${previewLines}${failNote}
     }
 
     // Nothing parseable - fall through to show the form with an error hint
-    if (failed.length > 0 || parts.length > 0) {
+      if (failed.length > 0 || parts.length > 0) {
       await sendText(from,
 `❌ Couldn't read your ${rateLabel}.
 
+Try any of these:
+
 ${isService
-  ? `Enter rates like this:\n*${products.slice(0,3).map((_, i) => ((i+1)*10)).join(", ")}*  ← just numbers in order\n\nOr: *${products.slice(0,2).map(p => `${p}: 10/job`).join(", ")}*\n\nOr rate format: *20/job, 50/hr*`
-  : `Enter prices like this:\n*${products.slice(0,3).map((_, i) => ((i+1)*5+2)).join(", ")}*  ← just numbers in order\n\nOr: *${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}*`
+  ? `*Single item:*\n_1 x 20/job_\n\n*Same rate for selected items:*\n_1,3,5 x 20/job_\n\n*Same rate for a range:*\n_1-4 x 15/hr_\n\n*Mixed updates:*\n_1 x 20/job, 2 x 15/trip_\n\n*Or all in order:*\n_${products.slice(0,3).map((_, i) => ((i+1)*10)).join(", ")}_\n\n*Or by name:*\n_${products.slice(0,2).map(p => `${p}: 10/job`).join(", ")}_`
+  : `*Single item:*\n_1 x 5.50_\n\n*Same price for selected items:*\n_1,3,5 x 5.50_\n\n*Same price for a range:*\n_1-4 x 5.50_\n\n*Mixed updates:*\n_1 x 5.50, 2 x 8.00_\n\n*Or all in order:*\n_${products.slice(0,3).map((_, i) => ((i+1)*5+2)).join(", ")}_\n\n*Or by name:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_`
 }
 
 Type *skip* to add ${rateLabel} later.`
@@ -580,9 +689,11 @@ You have *${products.length} ${isService ? "service" : "product"}${products.leng
 ${numbered}${moreNote}
 
 ─────────────────
+*Fastest way: update by item number*
+
 ${isService
-  ? `*Fastest - numbers in order:*\n_${serviceExampleNums}_\n\n*Or with units:*\n_20/job, 50/hr, 15/trip_\n\n*Or name them:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
-  : `*Option 1 - Fastest ✅*\nNumbers in order:\n_${exampleNums}_\n\n*Option 2 - Name them:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_\n\n*Option 3 - With units:*\n_cement 5.50/bag, sand 8/load_`
+  ? `*Single item:*\n_1 x 20/job_\n\n*Same rate for selected items:*\n_1,3,5 x 20/job_\n\n*Same rate for a range:*\n_1-4 x 15/hr_\n\n*Mixed updates:*\n_1 x 20/job, 2 x 15/trip_\n\n*Other options still work:*\n\n*Update ALL in order:*\n_${serviceExampleNums}_\n\n*Update selected items by name:*\n_${products.slice(0,2).map(p => `${p}: 20/job`).join(", ")}_`
+  : `*Single item:*\n_1 x 5.50_\n\n*Same price for selected items:*\n_1,3,5 x 5.50_\n\n*Same price for a range:*\n_1-4 x 5.50_\n\n*Mixed updates:*\n_1 x 5.50, 2 x 8.00_\n\n*Other options still work:*\n\n*Update ALL in order:*\n_${exampleNums}_\n\n*Update selected items by name:*\n_${products.slice(0,2).map(p => `${p}: 5.50`).join(", ")}_`
 }
 ─────────────────
 Type your ${rateLabel} and send, or tap Skip 👇`
