@@ -9,9 +9,6 @@ import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
-import CategoryPreset from "../models/categoryPreset.js";
-import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
-import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
 const router = express.Router();
 
