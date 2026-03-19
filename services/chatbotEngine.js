@@ -3308,9 +3308,8 @@ if (a.startsWith("sup_cat_")) {
   biz.sessionState = "supplier_reg_products";
   await saveBizSafe(biz);
 
-  // Get category-specific examples for either services or products
- // Get category-specific examples for either services or products
-const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
+// Get category-specific examples for either services or products
+  const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
   const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
   const template = await getTemplateForCategoryWithDB(catId);
 
