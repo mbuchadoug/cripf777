@@ -809,7 +809,6 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   description: supplier.products?.[0] === "pending_upload"
     ? "⏳ Upload pending - tap to add"
     : `${productCount} listed · add / delete / replace` },
-{ id: "sup_quick_edit_products", title: "⚡ Quick Edit Products", description: "Rename / delete / add by item number" },
 { id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
   if (!products.length) return "No products listed yet";

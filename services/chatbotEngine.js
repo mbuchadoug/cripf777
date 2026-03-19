@@ -3159,13 +3159,14 @@ if (a === "sup_edit_products") {
     await saveBizSafe(biz);
   }
 
-  return sendList(from, `✏️ Manage ${label}`, [
-    { id: "sup_view_products", title: `📋 View Current ${label}` },
-    { id: "sup_add_products", title: `➕ Add ${isService ? "Services" : "Products"}` },
-    { id: "sup_delete_products", title: `🗑 Delete ${isService ? "Services" : "Products"}` },
-    { id: "sup_replace_products", title: `♻️ Replace Full ${label} List` },
-    { id: "my_supplier_account", title: "🏪 My Account" }
-  ]);
+return sendList(from, `✏️ Manage ${label}`, [
+  { id: "sup_view_products", title: `📋 View Current ${label}` },
+  { id: "sup_add_products", title: `➕ Add ${isService ? "Services" : "Products"}` },
+  { id: "sup_delete_products", title: `🗑 Delete ${isService ? "Services" : "Products"}` },
+  { id: "sup_quick_edit_products", title: `⚡ Quick Edit ${isService ? "Services" : "Products"}` },
+  { id: "sup_replace_products", title: `♻️ Replace Full ${label} List` },
+  { id: "my_supplier_account", title: "🏪 My Account" }
+]);
 }
 
 
