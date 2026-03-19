@@ -28,9 +28,7 @@ export const SUPPLIER_CITIES = [
   "Kwekwe",
   "Masvingo",
   "Chinhoyi",
-  "Bindura",
-  "Marondera",
-  "Chegutu"
+  "Bindura"
 ];
 
 // ─── Category taxonomy ────────────────────────────────────────────────────────

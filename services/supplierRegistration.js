@@ -150,9 +150,9 @@ export async function handleSupplierRegistrationStates({
     biz.sessionState = "supplier_reg_city";
     await saveBiz(biz);
 
-    return sendList(from, "📍 Where are you based?", [
+return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
       ...SUPPLIER_CITIES.map(c => ({ id: `sup_city_${c.toLowerCase()}`, title: c })),
-      { id: "sup_city_other", title: "📍 Other (type yours)" }
+      { id: "sup_city_other", title: "📍 Other City" }
     ]);
   }
 
