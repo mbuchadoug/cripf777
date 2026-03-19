@@ -3473,7 +3473,7 @@ if (a.startsWith("sup_load_preset_")) {
   if (!biz) return sendMainMenu(from);
 
   const catId = a.replace("sup_load_preset_", "");
-const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
+  const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
   const template = await getTemplateForCategoryWithDB(catId);
 
   if (!template?.products?.length) {
@@ -3488,29 +3488,39 @@ const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplate
   biz.sessionData.supplierReg.pendingPresetCatId = catId;
   await saveBizSafe(biz);
 
-  // Build full product preview grouped in rows of 4
   const allProducts = template.products;
+  const priceHint = template.prices?.length
+    ? `💰 Suggested prices included for ${template.prices.length} items\n\n`
+    : "";
+
+  // ── Send the full product list as a plain TEXT message (no 1024 char limit)
+  // then send a separate BUTTON message for the confirm/reject action
+  const PREVIEW_PER_ROW = 4;
   const rows = [];
-  for (let i = 0; i < allProducts.length; i += 4) {
-    rows.push(allProducts.slice(i, i + 4).map((p, j) => `${i + j + 1}. ${p}`).join("   "));
+  for (let i = 0; i < allProducts.length; i += PREVIEW_PER_ROW) {
+    rows.push(
+      allProducts.slice(i, i + PREVIEW_PER_ROW)
+        .map((p, j) => `${i + j + 1}. ${p}`)
+        .join("   ")
+    );
   }
   const productPreview = rows.join("\n");
 
-  // Show price preview if available
-  const priceHint = template.prices?.length
-    ? `\n💰 *Suggested prices included for ${template.prices.length} items*`
-    : "";
-
-  return sendButtons(from, {
-    text:
+  // Step 1: send the full list as a plain text message (limit = 4096, safe)
+  await sendText(from,
 `📦 *Preset Product List* (${allProducts.length} items)
 
-${productPreview}${priceHint}
+${productPreview}
 
-Load all these to your listing?`,
+${priceHint}Scroll up to review the full list 👆`
+  );
+
+  // Step 2: send confirm buttons as a SHORT separate message
+  return sendButtons(from, {
+    text: `Load all ${allProducts.length} products to your listing?`,
     buttons: [
-      { id: "sup_preset_confirm",      title: "✅ Yes, Load These" },
-      { id: "sup_enter_own_products",  title: "✍️ No, Type My Own" }
+      { id: "sup_preset_confirm",     title: "✅ Yes, Load These" },
+      { id: "sup_enter_own_products", title: "✍️ No, Type My Own" }
     ]
   });
 }
