@@ -190,40 +190,86 @@ function findSupplierItemIndexes(input = "", currentItems = []) {
 }
 
 function parseQuickPriceUpdates(input = "", currentItems = [], isService = false) {
-  const parts = String(input || "")
-    .split(/[,\n]+/)
+  const groups = String(input || "")
+    .split(/[;\n]+/)
     .map(s => s.trim())
     .filter(Boolean);
 
-  const updates = [];
+  const updatesMap = new Map();
   const failed = [];
+  let matchedAny = false;
 
-  for (const part of parts) {
-    // formats:
-    // 5x2.50
-    // 7x20/job
-    const m = part.match(/^(\d+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i);
-    if (!m) {
-      failed.push(part);
+  for (const group of groups) {
+    // Group format:
+    // 5,7,9 x 3.50
+    // 20-30 x 1.25
+    // 3 x 20/job
+    const grouped = group.match(
+      /^([\d,\-\s]+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+    );
+
+    if (grouped) {
+      matchedAny = true;
+
+      const selector = grouped[1].trim();
+      const amount = Number(grouped[2]);
+      const unit = (grouped[3] || (isService ? "job" : "each")).toLowerCase();
+      const indexes = findSupplierItemIndexes(selector, currentItems);
+
+      if (!indexes.length) {
+        failed.push(group);
+        continue;
+      }
+
+      for (const idx of indexes) {
+        updatesMap.set(idx, {
+          index: idx,
+          product: currentItems[idx],
+          amount,
+          unit,
+          inStock: true
+        });
+      }
       continue;
     }
 
-    const idx = Number(m[1]) - 1;
-    if (idx < 0 || idx >= currentItems.length) {
-      failed.push(part);
-      continue;
-    }
+    // Mixed single commands separated by commas:
+    // 5 x 3.50, 7 x 4.20
+    const parts = group.split(",").map(s => s.trim()).filter(Boolean);
 
-    updates.push({
-      index: idx,
-      product: currentItems[idx],
-      amount: Number(m[2]),
-      unit: (m[3] || (isService ? "job" : "each")).toLowerCase(),
-      inStock: true
-    });
+    for (const part of parts) {
+      const single = part.match(
+        /^(\d+)\s*x\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?$/i
+      );
+
+      if (!single) {
+        failed.push(part);
+        continue;
+      }
+
+      matchedAny = true;
+
+      const idx = Number(single[1]) - 1;
+      if (idx < 0 || idx >= currentItems.length) {
+        failed.push(part);
+        continue;
+      }
+
+      updatesMap.set(idx, {
+        index: idx,
+        product: currentItems[idx],
+        amount: Number(single[2]),
+        unit: (single[3] || (isService ? "job" : "each")).toLowerCase(),
+        inStock: true
+      });
+    }
   }
 
-  return { updates, failed };
+  return {
+    updates: [...updatesMap.values()].sort((a, b) => a.index - b.index),
+    failed,
+    matchedAny
+  };
 }
 
 function parseQuickRenameCommand(input = "", currentItems = []) {
@@ -292,6 +338,59 @@ async function sendSupplierItemsInChunks(from, items, heading = "📦 Current It
         : `${lines}${isLast ? "" : "\n_(continued...)_"}`
     );
   }
+}
+
+
+async function sendSupplierQuickEditHelp(from, isService = false) {
+  return sendText(
+    from,
+`Use these quick commands:
+
+*Rename one item:*
+_5=new name_
+
+*Delete items:*
+_del 5_
+_del 5,8,10_
+_del 20-30_
+
+*Add new items:*
+_add ${isService ? "geyser fitting" : "screw driver"}_
+_add ${isService ? "blocked drain, toilet installation" : "hammer, pliers"}_
+
+Type *cancel* to go back.`
+  );
+}
+
+async function sendSupplierQuickPriceHelp(from, products = [], isService = false) {
+  return sendText(
+    from,
+`─────────────────
+*Fastest way: update by item number*
+
+*Single item:*
+_75 x 3.50_
+${isService ? `_3 x 20/job_` : ""}
+
+*Same price for selected items:*
+_5,7,9 x 3.50_
+
+*Same price for a range:*
+_20-30 x 1.25_
+
+*Mixed updates:*
+_5 x 3.50, 7 x 4.20${isService ? ", 9 x 15/job" : ""}_
+
+*Other options still work:*
+
+*Update ALL in order:*
+_${products.slice(0, 4).map((_, i) => (((i + 1) * 3) + 2).toFixed(2)).join(", ")}${products.length > 4 ? ", ..." : ""}_
+
+*Update selected items by name:*
+_${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
+
+Type *cancel* to go back.`
+  );
 }
 
 function filterPricesForRemainingProducts(prices = [], remainingProducts = []) {
@@ -4304,30 +4403,14 @@ if (a === "sup_quick_edit_products") {
     await saveBizSafe(biz);
   }
 
-  await sendSupplierItemsInChunks(
+   await sendSupplierItemsInChunks(
     from,
     items,
     `⚡ Quick Edit ${isService ? "Services" : "Products"}`
   );
 
-  return sendText(
-    from,
-`Use these quick commands:
+  return sendSupplierQuickEditHelp(from, isService);
 
-*Rename one item:*
-_5=new name_
-
-*Delete items:*
-_del 5_
-_del 5,8,10_
-_del 20-30_
-
-*Add new items:*
-_add screw driver_
-_add hammer, pliers_
-
-Type *cancel* to go back.`
-  );
 }
   // ── Update supplier prices ─────────────────────────────────────────────────
 if (a === "sup_update_prices") {
@@ -4381,22 +4464,7 @@ if (a === "sup_update_prices") {
 
   // ── Send instruction message separately (always short) ───────────────────
    // ── Send instruction message separately (always short) ───────────────────
-  return sendText(from,
-`─────────────────
-*You can update ALL items or just SOME items.*
-
-*Option 1 - update ALL in order:*
-_${products.slice(0, 4).map((_, i) => (((i + 1) * 3) + 2).toFixed(2)).join(", ")}${products.length > 4 ? ", ..." : ""}_
-
-*Option 2 - update only selected items by name:*
-_${products.slice(0, 2).map(p => `${p}: 6.00`).join(", ")}_
-
-*Option 3 - one per line:*
-_${products[0]}: 6.00_${products[1] ? `\n_${products[1]}: 8.50_` : ""}
-
-${isService ? `*For services, units also work:*\n_plumbing: 20/job_\n_delivery: 15/trip_` : ""}
-
-Type *cancel* to go back.`);
+  return sendSupplierQuickPriceHelp(from, products, isService);
 }
 
 
@@ -4441,7 +4509,7 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
       });
     }
 
-    await supplier.save();
+       await supplier.save();
 
     await sendText(from, `✅ Renamed:\n• ${oldName}\n→ ${renameCmd.newName}`);
     await sendSupplierItemsInChunks(
@@ -4449,6 +4517,7 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
       supplier.products,
       `📋 Updated ${isService ? "Services" : "Products"}`
     );
+    await sendSupplierQuickEditHelp(from, isService);
     return true;
   }
 
@@ -4465,7 +4534,7 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
       supplier.prices = filterPricesForRemainingProducts(supplier.prices || [], remaining);
     }
 
-    await supplier.save();
+     await supplier.save();
 
     await sendText(
       from,
@@ -4478,8 +4547,12 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
         remaining,
         `📋 Remaining ${isService ? "Services" : "Products"}`
       );
+      await sendSupplierQuickEditHelp(from, isService);
+      return true;
     }
 
+    await sendText(from, `ℹ️ No ${isService ? "services" : "products"} left.`);
+    await sendSupplierQuickEditHelp(from, isService);
     return true;
   }
 
@@ -4489,7 +4562,7 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
     const merged = dedupeSupplierItems([...items, ...addItems]);
     const addedCount = merged.length - items.length;
 
-    supplier.products = merged;
+       supplier.products = merged;
     await supplier.save();
 
     await sendText(
@@ -4497,6 +4570,12 @@ if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
       `✅ Added *${addedCount}* ${isService ? "service" : "product"}${addedCount === 1 ? "" : "s"}.\n\nTotal now: *${merged.length}*`
     );
 
+    await sendSupplierItemsInChunks(
+      from,
+      merged,
+      `📋 Updated ${isService ? "Services" : "Products"}`
+    );
+    await sendSupplierQuickEditHelp(from, isService);
     return true;
   }
 
@@ -4524,24 +4603,24 @@ if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
     return;
   }
 
-  const isService = supplier.profileType === "service";
+    const isService = supplier.profileType === "service";
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
   const parts = raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
   const allNumbers = parts.length > 0 && parts.every(s => /^\d+(\.\d+)?$/.test(s));
   const updated = [];
   const failed = [];
 
-  // Quick indexed syntax:
-  // 5x2.50
-  // 7x20/job
-  // 5x2.50, 7x8.00
-  const quickIndexSyntaxUsed = parts.length > 0 && parts.every(s => /^\d+\s*x\s*\d+(\.\d+)?(\s*\/\s*[a-zA-Z]+)?$/i.test(s));
-
-
-
-  if (quickIndexSyntaxUsed) {
+  // Supports:
+  // 75 x 3.50
+  // 5,7,9 x 3.50
+  // 20-30 x 1.25
+  // 5 x 3.50, 7 x 4.20
+  // 3 x 20/job
   const quick = parseQuickPriceUpdates(raw, products, isService);
 
+
+
+ if (quick.matchedAny) {
   quick.updates.forEach(u => {
     updated.push({
       product: u.product.toLowerCase(),
@@ -4554,7 +4633,6 @@ if (biz?.sessionState === "supplier_update_prices" && !isMetaAction) {
   failed.push(...quick.failed);
 }
 else if (allNumbers) {
-
     // Strategy 1: numbers in order
     if (parts.length !== products.length) {
       const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
@@ -4626,7 +4704,7 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
     }
   }
 
-   if (!updated.length) {
+    if (!updated.length) {
     const numbered = products.map((p, i) => `${i + 1}. ${p}`).join("\n");
     await sendText(from,
 `❌ Couldn't read your prices.
@@ -4634,15 +4712,20 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
 *Your items:*
 ${numbered}
 
-You can send prices in any of these ways:
+Try any of these:
 
-*Quick by item number (fastest):*
-_5x2.50_
-_7x8.00_
-${isService ? `_3x20/job_` : ""}
+*Single item:*
+_75 x 3.50_
+${isService ? `_3 x 20/job_` : ""}
 
-*Update several at once:*
-_5x2.50, 7x8.00${isService ? ", 9x15/job" : ""}_
+*Same price for selected items:*
+_5,7,9 x 3.50_
+
+*Same price for a range:*
+_20-30 x 1.25_
+
+*Mixed updates:*
+_5 x 3.50, 7 x 4.20${isService ? ", 9 x 15/job" : ""}_
 
 *Update ALL in order:*
 _${products.slice(0, 3).map((_, i) => (((i + 1) * 4)).toFixed(2)).join(", ")}_
