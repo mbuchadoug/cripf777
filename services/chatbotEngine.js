@@ -1169,6 +1169,103 @@ Save these ${isService ? "rates" : "prices"}?`,
     });
   }
 }
+
+
+// =========================
+// 🏪 NO-BIZ SUPPLIER ACCOUNT PRICE UPDATE FLOW
+// =========================
+if (!biz && !isMetaAction) {
+  const sess = await UserSession.findOne({ phone });
+  const accountState = sess?.tempData?.supplierAccountState;
+
+  if (accountState === "supplier_update_prices") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.supplierAccountState": "", "tempData.pendingPriceUpdate": "" } }
+      );
+      return sendSuppliersMenu(from);
+    }
+
+    const raw = (text || "").trim();
+    const isService = supplier.profileType === "service";
+    const products = (supplier.products || []).filter(p => p !== "pending_upload");
+
+    if (!raw) {
+      await sendText(from, `❌ Please send your ${isService ? "rates" : "prices"}, or type *cancel*.`);
+      return true;
+    }
+
+    if (al === "cancel") {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.supplierAccountState": "", "tempData.pendingPriceUpdate": "", "tempData.supplierAccountType": "" } }
+      );
+      return sendSupplierAccountMenu(from, supplier);
+    }
+
+    if (!products.length) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.supplierAccountState": "", "tempData.pendingPriceUpdate": "", "tempData.supplierAccountType": "" } }
+      );
+      return sendButtons(from, {
+        text: `❌ No ${isService ? "services" : "products"} found. Add items first.`,
+        buttons: [{ id: "sup_edit_products", title: "✏️ Manage Items" }]
+      });
+    }
+
+    const { updated, failed } = parseSupplierPriceInput(raw, products, isService);
+
+    if (!updated.length) {
+      await sendSupplierItemsInChunks(
+        from,
+        products,
+        `💰 Update ${isService ? "Rates" : "Prices"}`
+      );
+      await sendSupplierQuickPriceHelp(from, products, isService);
+
+      return sendButtons(from, {
+        text: `❌ Couldn't read your ${isService ? "rates" : "prices"}.\n\nTry again or go back to your account.`,
+        buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+      });
+    }
+
+    const previewLines = updated
+      .map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`)
+      .join("\n");
+
+    const failNote = failed.length
+      ? `\n\n⚠️ Skipped ${failed.length}: _${failed.slice(0, 2).join(", ")}_`
+      : "";
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.pendingPriceUpdate": updated
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendButtons(from, {
+      text:
+`💰 *${isService ? "Rate" : "Price"} Preview* (${updated.length} items)
+
+${previewLines}${failNote}
+
+Save these ${isService ? "rates" : "prices"}?`,
+      buttons: [
+        { id: "sup_price_update_confirm", title: "✅ Save" },
+        { id: "my_supplier_account", title: "🏪 My Account" }
+      ]
+    });
+  }
+}
+
+
   // =========================
   // 🛒 BUYER ORDER FLOW (no-biz users via UserSession)
   // =========================
@@ -4623,15 +4720,28 @@ if (a === "sup_update_prices") {
     return sendSupplierUpgradeMenu(from, supplier.tier);
   }
 
-  if (biz) {
+  const isService = supplier.profileType === "service";
+  const products = (supplier.products || []).filter(p => p !== "pending_upload");
+
+  if (biz && !biz.name?.startsWith("pending_supplier_")) {
     biz.sessionData = { ...(biz.sessionData || {}), updatingPrices: true };
     biz.sessionState = "supplier_update_prices";
     await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.supplierAccountState": "supplier_update_prices",
+          "tempData.pendingPriceUpdate": [],
+          "tempData.supplierAccountType": isService ? "service" : "product"
+        }
+      },
+      { upsert: true }
+    );
   }
 
-  const products = (supplier.products || []).filter(p => p !== "pending_upload");
-  const isService = supplier.profileType === "service";
-
+ 
   if (!products.length) {
     return sendButtons(from, {
       text: "❌ Add your products first before setting prices.",
@@ -5215,9 +5325,12 @@ if (a === "sup_price_update_confirm" && !biz) {
   const sess = await UserSession.findOne({ phone });
   const regState = sess?.supplierRegState;
   const reg = sess?.supplierRegData || {};
-  const pending = reg.pendingPriceUpdate || [];
+  const accountState = sess?.tempData?.supplierAccountState;
 
+  // 1) Registration flow confirm
   if (regState === "supplier_reg_prices") {
+    const pending = reg.pendingPriceUpdate || [];
+
     if (!pending.length) {
       await sendText(from, "❌ No pending prices found. Please re-enter.");
       return true;
@@ -5257,6 +5370,43 @@ if (a === "sup_price_update_confirm" && !biz) {
         { id: "sup_del_no", title: "🏠 Collection Only" }
       ]
     });
+  }
+
+  // 2) No-biz supplier account update confirm
+  if (accountState === "supplier_update_prices") {
+    const supplier = await SupplierProfile.findOne({ phone });
+    if (!supplier) return sendSuppliersMenu(from);
+
+    const pending = sess?.tempData?.pendingPriceUpdate || [];
+    if (!pending.length) {
+      await sendText(from, "❌ No pending prices found. Please re-enter.");
+      return true;
+    }
+
+    if (supplier.profileType === "service") {
+      supplier.rates = pending.map(u => ({
+        service: u.product,
+        rate: `${u.amount}/${u.unit}`
+      }));
+    } else {
+      supplier.prices = pending;
+    }
+
+    await supplier.save();
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.supplierAccountState": "",
+          "tempData.pendingPriceUpdate": "",
+          "tempData.supplierAccountType": ""
+        }
+      }
+    );
+
+    await sendText(from, `✅ Your ${supplier.profileType === "service" ? "rates" : "prices"} were updated.`);
+    return sendSupplierAccountMenu(from, supplier);
   }
 }
 

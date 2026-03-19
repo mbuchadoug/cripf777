@@ -109,11 +109,12 @@ if (biz && biz.name.startsWith("pending_supplier_")) {
   if (supplier) {
     // Gate: not paid yet → push to activate
     if (!supplier.active) {
-      return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-        { id: "find_supplier",    title: "🔍 Find Suppliers" },
-        { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
-        { id: "onboard_business", title: "🧾 Run My Business" }
-      ]);
+return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+  { id: "find_supplier",       title: "🔍 Find Suppliers" },
+  { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+  { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
+  { id: "onboard_business",    title: "🧾 Run My Business" }
+]);
     }
     // Paid and active
     return sendList(to, "👋 *Welcome to ZimQuote!*", [
@@ -142,11 +143,12 @@ if (!biz) {
 if (supplier) {
   // Gate: not paid yet → push to activate, hide My Orders as buyer
   if (!supplier.active) {
-    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-      { id: "find_supplier",    title: "🔍 Find Suppliers" },
-      { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
-      { id: "onboard_business", title: "🧾 Run My Business" }
-    ]);
+   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+  { id: "find_supplier",       title: "🔍 Find Suppliers" },
+  { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+  { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
+  { id: "onboard_business",    title: "🧾 Run My Business" }
+]);
   }
   // Paid and active - show full menu including My Orders as buyer
   return sendList(to, "👋 *Welcome to ZimQuote!*", [
@@ -739,12 +741,14 @@ if (supplier?.active) {
 // FIND AND REPLACE the entire supplier && !supplier.active block:
 if (supplier && !supplier.active) {
   const complete = isSupplierRegistrationComplete(supplier);
-  return sendList(to,
-   complete
+  return sendList(
+    to,
+    complete
       ? `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
       : `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
-      { id: "find_supplier",   title: "🔍 Find Suppliers" },
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
+      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
       complete
         ? { id: "sup_upgrade_plan",  title: "💳 Activate My Listing" }
         : { id: "register_supplier", title: "⏳ Finish Registration" },
