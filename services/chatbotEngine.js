@@ -7627,10 +7627,19 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
 
     const isServiceSupplier = (await SupplierProfile.findOne({ phone: from }).lean())?.profileType === "service";
 
-    const raw = (text || "").trim();
+   const raw = (text || "").trim();
 
-    const missingIndexes = biz.sessionData?.pricingMissingIndexes || [];
+const missingIndexes = biz.sessionData?.pricingMissingIndexes || [];
 const pricingTargets = missingIndexes.map(idx => order.items[idx]).filter(Boolean);
+
+// Use one consistent display name everywhere in this pricing step
+const getPricingItemName = (item, idx) => {
+  const name = String(item?.product || "").trim();
+  if (name) return name;
+
+  // Better fallback than plain "Item"
+  return `Item #${idx + 1}`;
+};
 
     // ── Handle cancel ────────────────────────────────────────────────────────
     if (raw.toLowerCase() === "cancel") {
@@ -7657,13 +7666,13 @@ if (!raw) {
       .filter(v => !Number.isNaN(v) && v >= 0);
 
     if (!values.length) {
-      await sendText(from,
-        `❌ Couldn't read your prices. Use numbers only, separated by commas.\n\n` +
-        `Example for ${order.items.length} item${order.items.length > 1 ? "s" : ""}: ` +
-        `*${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
-      );
-      return;
-    }
+  await sendText(from,
+    `❌ Couldn't read your prices. Use numbers only, separated by commas.\n\n` +
+    `Example for ${pricingTargets.length} item${pricingTargets.length > 1 ? "s" : ""}: ` +
+    `*${pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+  );
+  return;
+}
 
     // ── Wrong count ───────────────────────────────────────────────────────────
 if (values.length !== pricingTargets.length) {
@@ -7673,7 +7682,7 @@ if (values.length !== pricingTargets.length) {
       ? item.unit
       : (isServiceSupplier ? "job" : "unit");
 
-    return `${i + 1}. ${item.product || "Item"} × ${qty} ${unitLabel}`;
+    return `${i + 1}. ${getPricingItemName(item, i)} × ${qty} ${unitLabel}`;
   }).join("\n");
 
   await sendText(from,
@@ -7684,20 +7693,20 @@ if (values.length !== pricingTargets.length) {
   );
   return;
 }
-
     // ── Build preview -show the supplier exactly what they entered and what it means ──
     // This is the key UX fix: show "per unit × qty = line total" BEFORE saving
-    let previewGrandTotal = 0;
-   const previewLines = pricingTargets.map((item, idx) => {
+  let previewGrandTotal = 0;
+const previewLines = pricingTargets.map((item, idx) => {
   const unitPrice = values[idx];
   const qty = Number(item.quantity) || 1;
   const lineTotal = unitPrice * qty;
   previewGrandTotal += lineTotal;
+
   const unitLabel = item.unit && item.unit !== "units"
     ? item.unit
     : (isServiceSupplier ? "job" : "unit");
 
-  return `${idx + 1}. *${item.product || "Item"}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
+  return `${idx + 1}. *${getPricingItemName(item, idx)}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
 }).join("\n\n");
 
     // ── Save preview to sessionData so the confirm handler can use it ─────────
