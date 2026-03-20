@@ -5524,28 +5524,31 @@ Save these prices?`,
       return sendSuppliersMenu(from);
     }
 
-    const supplier = await SupplierProfile.findOne({ phone: from }).lean();
-    const isServiceSupplier = supplier?.profileType === "service";
+  const supplier = await SupplierProfile.findOne({ phone: from }).lean();
+const isServiceSupplier = supplier?.profileType === "service";
+const missingIndexes = biz?.sessionData?.pricingMissingIndexes || [];
 
-    // Apply the prices
-    let grandTotal = 0;
-    order.items = order.items.map((item, idx) => {
-      const unitPrice = pendingPrices[idx];
-      const qty = Number(item.quantity) || 1;
-      const lineTotal = qty * unitPrice;
-      grandTotal += lineTotal;
-      return {
-        ...item.toObject?.() || item,
-        pricePerUnit: unitPrice,
-        total: lineTotal,
-        currency: "USD"
-      };
-    });
+// Apply prices only to missing items
+for (let i = 0; i < missingIndexes.length; i++) {
+  const idx = missingIndexes[i];
+  const item = order.items[idx];
+  const qty = Number(item.quantity) || 1;
+  const unitPrice = Number(pendingPrices[i]);
 
-    order.totalAmount = grandTotal;
-    order.currency = "USD";
-    order.status = "accepted";
-    await order.save();
+  order.items[idx] = {
+    ...item.toObject?.() || item,
+    pricePerUnit: unitPrice,
+    total: Number((qty * unitPrice).toFixed(2)),
+    currency: "USD"
+  };
+}
+
+const grandTotal = order.items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+order.totalAmount = Number(grandTotal.toFixed(2));
+order.currency = "USD";
+order.status = "accepted";
+await order.save();
 
     await SupplierProfile.findOneAndUpdate(
       { phone: from },
@@ -5653,14 +5656,21 @@ Save these prices?`,
     const isServiceSupplier = (await SupplierProfile.findOne({ phone: from }).lean())?.profileType === "service";
 
     // Reset to enter_price state, clear pending prices
-biz.sessionState = "supplier_order_enter_price";
-  biz.sessionData = {
-    ...(biz.sessionData || {}),
-    pricingOrderId: orderId
-  };
-  //await saveBiz(biz);
+const missingPriceIndexes = (order.items || [])
+  .map((item, idx) => (
+    typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit)
+      ? null
+      : idx
+  ))
+  .filter(idx => idx !== null);
 
-  await saveBizSafe(biz);
+biz.sessionState = "supplier_order_enter_price";
+biz.sessionData = {
+  ...(biz.sessionData || {}),
+  pricingOrderId: orderId,
+  pricingMissingIndexes: missingPriceIndexes
+};
+await saveBiz(biz);
 
   // ── Clear any stale buyer/picking session state for this phone.
 
@@ -5684,26 +5694,92 @@ biz.sessionState = "supplier_order_enter_price";
   // Build a numbered pricing form -each line shows exactly what needs a price
 
     // Show the pricing form again
-    const pricingLines = order.items.map((item, i) => {
+ const pricedItems = (order.items || []).filter(
+  item => typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit)
+);
+
+const pricingTargets = (order.items || []).filter(
+  item => !(typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit))
+);
+
+const pricingLines = pricingTargets.map((item, i) => {
+  const qty = Number(item.quantity) || 1;
+  const unitLabel = item.unit && item.unit !== "units"
+    ? item.unit
+    : (isServiceSupplier ? "job" : "unit");
+
+  return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
+}).join("\n\n");
+
+const alreadyPricedLines = pricedItems.length
+  ? pricedItems.map(item => {
       const qty = Number(item.quantity) || 1;
-      const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-      return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
-    }).join("\n\n");
+      const unitLabel = item.unit && item.unit !== "units"
+        ? item.unit
+        : (isServiceSupplier ? "job" : "unit");
+      const lineTotal =
+        typeof item.total === "number"
+          ? item.total
+          : qty * Number(item.pricePerUnit || 0);
 
-    const examplePrices = order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
+      return `✅ ${item.product} × ${qty} ${unitLabel} @ $${Number(item.pricePerUnit).toFixed(2)} = $${Number(lineTotal).toFixed(2)}`;
+    }).join("\n")
+  : "";
 
-    return sendButtons(from, {
-      text:
-        `✏️ *Re-enter Your Prices*\n` +
-        `_Buyer: ${order.buyerPhone}_\n\n` +
-        `─────────────────\n` +
-        `${pricingLines}\n\n` +
-        `─────────────────\n` +
-        `💡 Enter price *per unit* for each item, in order:\n\n` +
-        `Example: *${examplePrices}*\n` +
-        `_${order.items.length} price${order.items.length > 1 ? "s" : ""}, separated by commas_`,
-      buttons: [{ id: "suppliers_home", title: "⬅ Cancel" }]
-    });
+const firstItem = pricingTargets[0];
+const firstQty = Number(firstItem?.quantity) || 1;
+const firstUnit = firstItem?.unit && firstItem.unit !== "units"
+  ? firstItem.unit
+  : (isServiceSupplier ? "job" : "unit");
+
+let instructions;
+
+if (pricingTargets.length === 1) {
+  instructions =
+    `💡 *Enter the price only for the missing item.*\n\n` +
+    `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
+    `and the buyer wants *${firstQty}*, total = *$${12 * firstQty}*.\n\n` +
+    `So just type: *12*`;
+} else {
+  const examplePrices = pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
+  const exampleLines = pricingTargets.map((item, i) => {
+    const qty = Number(item.quantity) || 1;
+    const unitPrice = (i + 1) * 5 + 7;
+    const exUnit = item.unit && item.unit !== "units"
+      ? item.unit
+      : (isServiceSupplier ? "job" : "unit");
+    return `  ${i + 1}. ${item.product}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
+  }).join("\n");
+
+  instructions =
+    `💡 *Enter price per unit only for the missing items, in order, separated by commas.*\n\n` +
+    `Example: *${examplePrices}*\n` +
+    `That means:\n${exampleLines}\n\n` +
+    `_${pricingTargets.length} price${pricingTargets.length > 1 ? "s" : ""}, separated by commas_`;
+}
+
+const pricingDeliveryLine = order.delivery?.required
+  ? `🚚 *Deliver to:* ${order.delivery.address}`
+  : isServiceSupplier
+    ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+    : `🏠 *Collection* (buyer will pick up)`;
+
+return sendButtons(from, {
+  text:
+    `✏️ *Re-enter Your Prices*\n` +
+    `_Buyer: ${order.buyerPhone}_\n\n` +
+    `─────────────────\n` +
+    (alreadyPricedLines
+      ? `*Already priced:*\n${alreadyPricedLines}\n\n─────────────────\n`
+      : "") +
+    `*Still needs pricing:*\n\n` +
+    `${pricingLines}\n\n` +
+    `─────────────────\n` +
+    `${pricingDeliveryLine}\n\n` +
+    `─────────────────\n` +
+    `${instructions}`,
+  buttons: [{ id: "suppliers_home", title: "⬅ Cancel" }]
+});
   }
 
 

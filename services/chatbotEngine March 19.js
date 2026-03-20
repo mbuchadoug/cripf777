@@ -6014,92 +6014,125 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
       return sendSuppliersMenu(from);
     }
 
-    if (!raw) {
-      await sendText(from,
-        order.items.length === 1
-          ? `❌ Please enter the price per unit.\n\nExample: *12* (means $12 per unit)`
-          : `❌ Please enter ${order.items.length} prices separated by commas.\n\nExample: *12, 45, 0.08*`
-      );
-      return;
-    }
+ const missingIndexes = biz?.sessionData?.pricingMissingIndexes || [];
+const pricingTargets = missingIndexes.map(idx => order.items[idx]).filter(Boolean);
 
-    // ── Parse the entered values ─────────────────────────────────────────────
-    const values = raw
-      .split(",")
-      .map(v => Number(v.trim()))
-      .filter(v => !Number.isNaN(v) && v >= 0);
+if (!raw) {
+  await sendText(from,
+    pricingTargets.length === 1
+      ? `❌ Please enter the price for the missing item.\n\nExample: *12*`
+      : `❌ Please enter ${pricingTargets.length} prices separated by commas for the missing items only.\n\nExample: *${pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+  );
+  return;
+}
 
-    if (!values.length) {
-      await sendText(from,
-        `❌ Couldn't read your prices. Use numbers only, separated by commas.\n\n` +
-        `Example for ${order.items.length} item${order.items.length > 1 ? "s" : ""}: ` +
-        `*${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
-      );
-      return;
-    }
+// ── Parse entered values ────────────────────────────────────────────────
+const values = raw
+  .split(",")
+  .map(v => Number(v.trim()))
+  .filter(v => !Number.isNaN(v) && v >= 0);
 
-    // ── Wrong count ───────────────────────────────────────────────────────────
-    if (values.length !== order.items.length) {
-      const itemList = order.items.map((item, i) => {
-        const qty = Number(item.quantity) || 1;
-        const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-        return `${i + 1}. ${item.product} × ${qty} ${unitLabel}`;
-      }).join("\n");
+if (!values.length) {
+  await sendText(from,
+    `❌ Couldn't read your prices. Use numbers only, separated by commas.\n\n` +
+    `Example for ${pricingTargets.length} missing item${pricingTargets.length > 1 ? "s" : ""}: ` +
+    `*${pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+  );
+  return;
+}
 
-      await sendText(from,
-        `❌ You have *${order.items.length} item${order.items.length > 1 ? "s" : ""}* but sent *${values.length} price${values.length > 1 ? "s" : ""}*.\n\n` +
-        `Items to price:\n${itemList}\n\n` +
-        `Send exactly *${order.items.length}* price${order.items.length > 1 ? "s" : ""}, one per item, in order.\n` +
-        `Example: *${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
-      );
-      return;
-    }
+// ── Wrong count: compare against missing items only ─────────────────────
+if (values.length !== missingIndexes.length) {
+  const itemList = pricingTargets.map((item, i) => {
+    const qty = Number(item.quantity) || 1;
+    const unitLabel = item.unit && item.unit !== "units"
+      ? item.unit
+      : (isServiceSupplier ? "job" : "unit");
+    return `${i + 1}. ${item.product} × ${qty} ${unitLabel}`;
+  }).join("\n");
 
-    // ── Build preview -show the supplier exactly what they entered and what it means ──
-    // This is the key UX fix: show "per unit × qty = line total" BEFORE saving
-    let previewGrandTotal = 0;
-    const previewLines = order.items.map((item, idx) => {
-      const unitPrice = values[idx];
-      const qty = Number(item.quantity) || 1;
-      const lineTotal = unitPrice * qty;
-      previewGrandTotal += lineTotal;
-      const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-      return `${idx + 1}. *${item.product}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
-    }).join("\n\n");
+  await sendText(from,
+    `❌ You still need to price *${missingIndexes.length} item${missingIndexes.length > 1 ? "s" : ""}* but sent *${values.length} price${values.length > 1 ? "s" : ""}*.\n\n` +
+    `Missing items:\n${itemList}\n\n` +
+    `Send exactly *${missingIndexes.length}* price${missingIndexes.length > 1 ? "s" : ""}, one per missing item, in order.\n` +
+    `Example: *${pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+  );
+  return;
+}
 
-    // ── Save preview to sessionData so the confirm handler can use it ─────────
-    biz.sessionData = {
-      ...biz.sessionData,
-      pendingPrices: values,
-      pricingOrderId: orderId
-    };
-    biz.sessionState = "supplier_order_confirm_price";
-    await saveBizSafe(biz);
+// ── Build preview for missing items only, but total across full order ───
+let previewGrandTotal = 0;
 
- // ── Delivery line for price summary ───────────────────────────────────────
-    const previewDeliveryLine = order.delivery?.required
-      ? `🚚 *Deliver to:* ${order.delivery.address}`
-      : isServiceSupplier
-        ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
-        : `🏠 *Collection* (buyer will pick up)`;
+const alreadyPricedPreview = order.items
+  .filter(item => typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit))
+  .map(item => {
+    const qty = Number(item.quantity) || 1;
+    const lineTotal =
+      typeof item.total === "number"
+        ? Number(item.total)
+        : qty * Number(item.pricePerUnit || 0);
 
-    return sendButtons(from, {
-      text:
-        `💰 *Price Summary -Please Confirm*\n` +
-        `_Buyer: ${order.buyerPhone}_\n\n` +
-        `─────────────────\n` +
-        `${previewLines}\n\n` +
-        `─────────────────\n` +
-        `${previewDeliveryLine}\n` +
-        `💵 *Order Total: $${previewGrandTotal.toFixed(2)}*\n\n` +
-        `Does this look correct?\n` +
-        `_Tap ✅ Confirm to accept the order at these prices._`,
-      buttons: [
-        { id: "sup_price_confirm_yes", title: "✅ Confirm & Accept" },
-        { id: "sup_price_confirm_no",  title: "✏️ Re-enter Prices" },
-        { id: "suppliers_home",        title: "⬅ Cancel" }
-      ]
-    });
+    previewGrandTotal += lineTotal;
+
+    const unitLabel = item.unit && item.unit !== "units"
+      ? item.unit
+      : (isServiceSupplier ? "job" : "unit");
+
+    return `✅ *${item.product}*\n   $${Number(item.pricePerUnit).toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
+  })
+  .join("\n\n");
+
+const previewLines = pricingTargets.map((item, idx) => {
+  const unitPrice = values[idx];
+  const qty = Number(item.quantity) || 1;
+  const lineTotal = unitPrice * qty;
+  previewGrandTotal += lineTotal;
+
+  const unitLabel = item.unit && item.unit !== "units"
+    ? item.unit
+    : (isServiceSupplier ? "job" : "unit");
+
+  return `${idx + 1}. *${item.product}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
+}).join("\n\n");
+
+// ── Save preview session ────────────────────────────────────────────────
+biz.sessionData = {
+  ...biz.sessionData,
+  pendingPrices: values,
+  pricingOrderId: orderId,
+  pricingMissingIndexes: missingIndexes
+};
+biz.sessionState = "supplier_order_confirm_price";
+await saveBizSafe(biz);
+
+// ── Delivery line for price summary ─────────────────────────────────────
+const previewDeliveryLine = order.delivery?.required
+  ? `🚚 *Deliver to:* ${order.delivery.address}`
+  : isServiceSupplier
+    ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
+    : `🏠 *Collection* (buyer will pick up)`;
+
+return sendButtons(from, {
+  text:
+    `💰 *Price Summary - Please Confirm*\n` +
+    `_Buyer: ${order.buyerPhone}_\n\n` +
+    `─────────────────\n` +
+    (alreadyPricedPreview
+      ? `*Already priced:*\n${alreadyPricedPreview}\n\n─────────────────\n`
+      : "") +
+    `*Still needs pricing:*\n\n` +
+    `${previewLines}\n\n` +
+    `─────────────────\n` +
+    `${previewDeliveryLine}\n` +
+    `💵 *Order Total: $${previewGrandTotal.toFixed(2)}*\n\n` +
+    `Does this look correct?\n` +
+    `_Tap ✅ Confirm to accept the order at these prices._`,
+  buttons: [
+    { id: "sup_price_confirm_yes", title: "✅ Confirm & Accept" },
+    { id: "sup_price_confirm_no",  title: "✏️ Re-enter Prices" },
+    { id: "suppliers_home",        title: "⬅ Cancel" }
+  ]
+});
   }
   // ── ETA after accepting order ─────────────────────────────────────────────
   if (a.startsWith("sup_eta_")) {

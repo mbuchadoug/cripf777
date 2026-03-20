@@ -14,6 +14,56 @@ function formatOrderItems(items = []) {
   }).join("\n");
 }
 
+
+
+function isPricedOrderItem(item = {}) {
+  return typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit);
+}
+
+function getPricedOrderItems(items = []) {
+  return (items || []).filter(isPricedOrderItem);
+}
+
+function getUnpricedOrderItems(items = []) {
+  return (items || []).filter(i => !isPricedOrderItem(i));
+}
+
+function computeOrderTotals(items = []) {
+  const normalized = (items || []).map(item => {
+    const qty = Number(item.quantity) || 1;
+    const pricePerUnit =
+      typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit)
+        ? Number(item.pricePerUnit)
+        : null;
+
+    const total =
+      pricePerUnit !== null
+        ? Number((qty * pricePerUnit).toFixed(2))
+        : null;
+
+    return {
+      ...item,
+      quantity: qty,
+      pricePerUnit,
+      total
+    };
+  });
+
+  const pricedItems = normalized.filter(i => i.pricePerUnit !== null);
+  const unpricedItems = normalized.filter(i => i.pricePerUnit === null);
+  const totalAmount = pricedItems.reduce((sum, i) => sum + Number(i.total || 0), 0);
+
+  return {
+    items: normalized,
+    pricedItems,
+    unpricedItems,
+    totalAmount: Number(totalAmount.toFixed(2)),
+    fullyPriced: normalized.length > 0 && unpricedItems.length === 0,
+    partiallyPriced: pricedItems.length > 0 && unpricedItems.length > 0
+  };
+}
+
+
 export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, options = {}) {
   const { isBooking } = options;
 
@@ -47,14 +97,13 @@ const deliveryLine = order.delivery?.required
     ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
     : "🏠 Collection";
 
-const hasPricing =
-  Array.isArray(order.items) &&
-  order.items.length > 0 &&
-  order.items.every(i => typeof i.pricePerUnit === "number" && typeof i.total === "number");
+const totals = computeOrderTotals(order.items || []);
 
-const totalLine = hasPricing
-  ? `💵 Total: $${Number(order.totalAmount || 0).toFixed(2)}`
-  : `💵 Total: Pending - set your price when accepting`;
+const totalLine = totals.fullyPriced
+  ? `💵 Total: $${Number(totals.totalAmount || 0).toFixed(2)}`
+  : totals.partiallyPriced
+    ? `💵 Partial total: $${Number(totals.totalAmount || 0).toFixed(2)} • ${totals.unpricedItems.length} item${totals.unpricedItems.length === 1 ? "" : "s"} still need pricing`
+    : `💵 Total: Pending - set your price when accepting`;
 
 await sendButtons(supplierPhone, {
   text:
@@ -77,19 +126,19 @@ export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
     return;
   }
 
-  const hasPricing =
-    Array.isArray(order.items) &&
-    order.items.length > 0 &&
-    order.items.every(i => typeof i.pricePerUnit === "number" && typeof i.total === "number") &&
-    typeof order.totalAmount === "number" &&
-    order.totalAmount > 0;
+  const totals = computeOrderTotals(order.items || []);
+const hasPricing = totals.fullyPriced;
+const pricedItems = totals.pricedItems;
+const unpricedItems = totals.unpricedItems;
 
   const supplier = await SupplierProfile.findOne({ phone: from });
   const isServiceSupplier = supplier?.profileType === "service";
 
-  if (hasPricing) {
-    order.status = "accepted";
-    await order.save();
+ if (hasPricing) {
+  order.items = totals.items;
+  order.totalAmount = totals.totalAmount;
+  order.status = "accepted";
+  await order.save();
 
   // FIXED - also increments completedOrders
 await SupplierProfile.findOneAndUpdate(
@@ -189,53 +238,77 @@ await SupplierProfile.findOneAndUpdate(
   }
 
 biz.sessionState = "supplier_order_enter_price";
-  biz.sessionData = {
-    ...(biz.sessionData || {}),
-    pricingOrderId: orderId
-  };
+const missingPriceIndexes = (order.items || [])
+  .map((item, idx) => (!isPricedOrderItem(item) ? idx : null))
+  .filter(idx => idx !== null);
+
+biz.sessionData = {
+  ...(biz.sessionData || {}),
+  pricingOrderId: orderId,
+  pricingMissingIndexes: missingPriceIndexes
+};
   await saveBiz(biz);
 
   // Build a numbered pricing form -each line shows exactly what needs a price
   // Format: "1. cement × 10 bags → price per bag = ?"
-  const pricingLines = order.items.map((item, i) => {
-    const qty = Number(item.quantity) || 1;
-    const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-    return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
-  }).join("\n\n");
+// Build pricing form only for items still missing prices
+const pricingTargets = unpricedItems;
 
-  // Build a concrete example using the ACTUAL first item from the order
-  const firstItem = order.items[0];
-  const firstQty = Number(firstItem?.quantity) || 1;
-  const firstUnit = firstItem?.unit && firstItem.unit !== "units"
-    ? firstItem.unit
+const pricingLines = pricingTargets.map((item, i) => {
+  const qty = Number(item.quantity) || 1;
+  const unitLabel = item.unit && item.unit !== "units"
+    ? item.unit
     : (isServiceSupplier ? "job" : "unit");
 
-  let instructions;
-  if (order.items.length === 1) {
-    // Single item -very explicit
-    instructions =
-      `💡 *Enter the price per ${firstUnit}.*\n\n` +
-      `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
-      `and the buyer wants *${firstQty}*, total = *$${12 * firstQty}*.\n\n` +
-      `So just type: *12*\n\n` +
-      `_The system multiplies your unit price × quantity automatically._`;
-  } else {
-    // Multiple items -numbered, explicit per-unit
-    const examplePrices = order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
-    const exampleLines = order.items.map((item, i) => {
+  return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
+}).join("\n\n");
+
+const alreadyPricedLines = pricedItems.length
+  ? pricedItems.map(item => {
       const qty = Number(item.quantity) || 1;
-      const unitPrice = (i + 1) * 5 + 7;
-      const exUnit = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-      return `  ${i + 1}. ${item.product}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
-    }).join("\n");
+      const unitLabel = item.unit && item.unit !== "units"
+        ? item.unit
+        : (isServiceSupplier ? "job" : "unit");
 
-    instructions =
-      `💡 *Enter price per unit for each item, in order, separated by commas.*\n\n` +
-      `Example reply: *${examplePrices}*\n` +
-      `That means:\n${exampleLines}\n\n` +
-      `_Enter ${order.items.length} prices. The system calculates totals automatically._`;
-  }
+      return `✅ ${item.product} × ${qty} ${unitLabel} @ $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total || (qty * item.pricePerUnit)).toFixed(2)}`;
+    }).join("\n")
+  : "";
 
+  // Build a concrete example using the ACTUAL first item from the order
+ // Build instructions only for items still missing prices
+const firstItem = pricingTargets[0];
+const firstQty = Number(firstItem?.quantity) || 1;
+const firstUnit = firstItem?.unit && firstItem.unit !== "units"
+  ? firstItem.unit
+  : (isServiceSupplier ? "job" : "unit");
+
+let instructions;
+
+if (pricingTargets.length === 1) {
+  instructions =
+    `💡 *Enter the price only for the missing item.*\n\n` +
+    `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
+    `and the buyer wants *${firstQty}*, total = *$${12 * firstQty}*.\n\n` +
+    `So just type: *12*\n\n` +
+    `_The system multiplies your unit price × quantity automatically._`;
+} else {
+  const examplePrices = pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ");
+  const exampleLines = pricingTargets.map((item, i) => {
+    const qty = Number(item.quantity) || 1;
+    const unitPrice = (i + 1) * 5 + 7;
+    const exUnit = item.unit && item.unit !== "units"
+      ? item.unit
+      : (isServiceSupplier ? "job" : "unit");
+
+    return `  ${i + 1}. ${item.product}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
+  }).join("\n");
+
+  instructions =
+    `💡 *Enter price per unit only for the missing items, in order, separated by commas.*\n\n` +
+    `Example reply: *${examplePrices}*\n` +
+    `That means:\n${exampleLines}\n\n` +
+    `_Enter ${pricingTargets.length} prices. Already-priced items will stay unchanged._`;
+}
 // ── Delivery line for the pricing form ────────────────────────────────────
   const pricingDeliveryLine = order.delivery?.required
     ? `🚚 *Deliver to:* ${order.delivery.address}`
@@ -243,19 +316,22 @@ biz.sessionState = "supplier_order_enter_price";
       ? `📍 *Service location:* ${order.delivery?.address || "TBC"}`
       : `🏠 *Collection* (buyer will pick up)`;
 
-  return sendButtons(from, {
-    text:
-      `💰 *Price This ${isServiceSupplier ? "Booking" : "Order"}*\n` +
-      `_Buyer: ${order.buyerPhone}_\n\n` +
-      `─────────────────\n` +
-      `*What was ordered:*\n\n` +
-      `${pricingLines}\n\n` +
-      `─────────────────\n` +
-      `${pricingDeliveryLine}\n\n` +
-      `─────────────────\n` +
-      `${instructions}`,
-    buttons: [{ id: "suppliers_home", title: "⬅ Back" }]
-  });
+return sendButtons(from, {
+  text:
+    `💰 *Price This ${isServiceSupplier ? "Booking" : "Order"}*\n` +
+    `_Buyer: ${order.buyerPhone}_\n\n` +
+    `─────────────────\n` +
+    (alreadyPricedLines
+      ? `*Already priced:*\n${alreadyPricedLines}\n\n─────────────────\n`
+      : "") +
+    `*Still needs pricing:*\n\n` +
+    `${pricingLines}\n\n` +
+    `─────────────────\n` +
+    `${pricingDeliveryLine}\n\n` +
+    `─────────────────\n` +
+    `${instructions}`,
+  buttons: [{ id: "suppliers_home", title: "⬅ Back" }]
+});
 }
 
 export async function handleBookingAccepted(from, orderId) {
