@@ -4,9 +4,25 @@ import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
 
 export async function startSupplierSearch(from, biz, saveBiz) {
-  biz.sessionState = "supplier_search_category";
-  biz.sessionData = { supplierSearch: {} };
-  await saveBiz(biz);
+ biz.sessionState = "supplier_search_category";
+biz.sessionData = {
+  supplierSearch: {}
+};
+
+// hard reset any stale buyer order/search paging state
+delete biz.sessionData.orderSupplierId;
+delete biz.sessionData.orderCart;
+delete biz.sessionData.orderItems;
+delete biz.sessionData.orderProduct;
+delete biz.sessionData.orderQuantity;
+delete biz.sessionData.orderIsService;
+delete biz.sessionData.orderBrowseMode;
+delete biz.sessionData.orderCataloguePage;
+delete biz.sessionData.orderCatalogueSearch;
+delete biz.sessionData.searchResults;
+delete biz.sessionData.searchPage;
+
+await saveBiz(biz);
 
   const { SUPPLIER_CATEGORIES } = await import("./supplierPlans.js");
 

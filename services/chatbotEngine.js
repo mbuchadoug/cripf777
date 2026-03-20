@@ -768,6 +768,62 @@ async function persistOrderFlowState({ biz, phone, patch = {}, unset = {} }) {
   }
 }
 
+
+
+
+async function clearBuyerOrderContext({ biz, phone, keepSupplierSearch = true }) {
+  if (biz) {
+    const nextSessionData = { ...(biz.sessionData || {}) };
+
+    delete nextSessionData.orderSupplierId;
+    delete nextSessionData.orderCart;
+    delete nextSessionData.orderItems;
+    delete nextSessionData.orderProduct;
+    delete nextSessionData.orderQuantity;
+    delete nextSessionData.orderIsService;
+    delete nextSessionData.orderBrowseMode;
+    delete nextSessionData.orderCataloguePage;
+    delete nextSessionData.orderCatalogueSearch;
+
+    if (!keepSupplierSearch) {
+      delete nextSessionData.supplierSearch;
+      delete nextSessionData.searchResults;
+      delete nextSessionData.searchPage;
+    }
+
+    biz.sessionData = nextSessionData;
+
+    // only reset state if it was part of buyer ordering
+    if (
+      biz.sessionState === "supplier_order_picking" ||
+      biz.sessionState === "supplier_order_product" ||
+      biz.sessionState === "supplier_order_address"
+    ) {
+      biz.sessionState = "ready";
+    }
+
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.orderState": "",
+        "tempData.orderSupplierId": "",
+        "tempData.orderCart": "",
+        "tempData.orderItems": "",
+        "tempData.orderProduct": "",
+        "tempData.orderQuantity": "",
+        "tempData.orderIsService": "",
+        "tempData.orderBrowseMode": "",
+        "tempData.orderCataloguePage": "",
+        "tempData.orderCatalogueSearch": ""
+      }
+    },
+    { upsert: true }
+  );
+}
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
   const searchTerm = opts.searchTerm || "";
  const pageSize = opts.pageSize || 6;
@@ -6980,6 +7036,8 @@ isService
 }
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
+
+      await clearBuyerOrderContext({ biz, phone, keepSupplierSearch: true });
   let searchType = biz?.sessionData?.supplierSearch?.type || null;
 
   if (!searchType) {
@@ -7018,9 +7076,16 @@ isService
   });
 }
 
+
+
+
   // ── Buyer: free-text product search ──────────────────────────────────────
  if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
-    const productQuery = text.trim();
+
+  const rawQuery = text.trim();
+const cleanedQuery = rawQuery.replace(/^find\s+/i, "").trim();
+   // const productQuery = text.trim();
+   const productQuery = cleanedQuery;
     if (!productQuery || productQuery.length < 1) {
       return sendButtons(from, {
         text: "❌ Please type what you're looking for:\n\n_e.g. find cement, find plumber harare_",
