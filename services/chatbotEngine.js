@@ -6052,17 +6052,16 @@ const supplierId = biz?.sessionData?.orderSupplierId
     || [])];
 
   // ── Rebuild source items for numbered selection (Option C) ────────────────
-  const _catalogueItems = isService
-    ? (supplier.rates || []).map(r => ({ id: r.service, label: r.service, price: r.rate }))
-    : (supplier.prices || []).filter(p => p.inStock !== false).map(p => ({
-        id: p.product,
-        label: p.product,
-        price: `$${Number(p.amount).toFixed(2)}/${p.unit}`
-      }));
-  const _fallbackItems = (supplier.products || [])
-    .filter(p => p !== "pending_upload")
-    .map(p => ({ id: p, label: p, price: null }));
-  const sourceItems = _catalogueItems.length ? _catalogueItems : _fallbackItems;
+const currentSearchTerm =
+  biz?.sessionData?.orderCatalogueSearch ??
+  pickingStateSess?.tempData?.orderCatalogueSearch ??
+  "";
+
+const sourceItems = getFilteredSupplierCatalogueItems(supplier, currentSearchTerm).map(item => ({
+  id: item.name,
+  label: item.name,
+  price: item.priceLabel || null
+}));
 
   // ── NUMBERED ITEM SELECTION: "1x5, 3x2" or "1x5" or "1 x 5" ─────────────
   // Matches patterns like: 1x5  1x5,3x2  1x5, 3x2  1 x 5  1:5
@@ -6086,28 +6085,28 @@ if (numberedSelectionPattern.test(rawLower.trim())) {
       }
 
       const selectedItem = sourceItems[itemNum - 1];
-      const match = findMatchingSupplierPrice(supplier, selectedItem.id);
+const match = findMatchingSupplierPrice(supplier, selectedItem.id);
 
-      if (!match) {
-        errors.push(`❌ Item #${itemNum} (${selectedItem.label}) is not available for ordering`);
-        continue;
-      }
+const cartProduct = match?.product || selectedItem.id;
+const cartUnit = match?.unit || (isService ? "job" : "each");
+const cartPrice = typeof match?.amount === "number" ? match.amount : null;
 
-      const cartProduct = match.product;
-      const existing = cart.find(c => c.product.toLowerCase() === cartProduct.toLowerCase());
+const existing = cart.find(c => c.product.toLowerCase() === cartProduct.toLowerCase());
 
-      if (existing) {
-        existing.quantity += qty;
-        if (existing.pricePerUnit) existing.total = existing.quantity * existing.pricePerUnit;
-      } else {
-        cart.push({
-          product: cartProduct,
-          quantity: qty,
-          unit: match.unit || (isService ? "job" : "units"),
-          pricePerUnit: match.amount || null,
-          total: match.amount ? qty * match.amount : null
-        });
-      }
+if (existing) {
+  existing.quantity += qty;
+  if (existing.pricePerUnit !== null && existing.pricePerUnit !== undefined) {
+    existing.total = existing.quantity * existing.pricePerUnit;
+  }
+} else {
+  cart.push({
+    product: cartProduct,
+    quantity: qty,
+    unit: cartUnit,
+    pricePerUnit: cartPrice,
+    total: cartPrice !== null ? qty * cartPrice : null
+  });
+}
     }
 
     if (errors.length) {
@@ -6693,22 +6692,33 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
- await persistOrderFlowState({
+const seededSearchTerm =
+  initialCart.length > 0
+    ? initialCart[0].product
+    : (searchedProduct || "");
+
+await persistOrderFlowState({
   biz,
   phone,
   patch: {
     orderSupplierId: String(supplier._id),
     orderCart: initialCart,
     orderIsService: isService,
-    orderBrowseMode: "catalogue",
+    orderBrowseMode: initialCart.length ? "cart" : "catalogue",
     orderCataloguePage: 0,
-    orderCatalogueSearch: ""
+    orderCatalogueSearch: seededSearchTerm
   }
 });
 
+// If search already matched a real item, take buyer straight to cart
+if (initialCart.length) {
+  return _sendSupplierCartMenu(from, supplier, initialCart);
+}
+
+// Otherwise fall back to filtered catalogue
 return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
   page: 0,
-  searchTerm: ""
+  searchTerm: seededSearchTerm
 });
 }
 
@@ -7630,6 +7640,9 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
 
     const raw = (text || "").trim();
 
+    const missingIndexes = biz.sessionData?.pricingMissingIndexes || [];
+const pricingTargets = missingIndexes.map(idx => order.items[idx]).filter(Boolean);
+
     // ── Handle cancel ────────────────────────────────────────────────────────
     if (raw.toLowerCase() === "cancel") {
       biz.sessionState = "ready";
@@ -7639,14 +7652,14 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
       return sendSuppliersMenu(from);
     }
 
-    if (!raw) {
-      await sendText(from,
-        order.items.length === 1
-          ? `❌ Please enter the price per unit.\n\nExample: *12* (means $12 per unit)`
-          : `❌ Please enter ${order.items.length} prices separated by commas.\n\nExample: *12, 45, 0.08*`
-      );
-      return;
-    }
+  if (!raw) {
+  await sendText(from,
+    pricingTargets.length === 1
+      ? `❌ Please enter the price per unit.\n\nExample: *12* (means $12 per unit)`
+      : `❌ Please enter ${pricingTargets.length} prices separated by commas.\n\nExample: *12, 45, 0.08*`
+  );
+  return;
+}
 
     // ── Parse the entered values ─────────────────────────────────────────────
     const values = raw
@@ -7664,33 +7677,38 @@ if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
     }
 
     // ── Wrong count ───────────────────────────────────────────────────────────
-    if (values.length !== order.items.length) {
-      const itemList = order.items.map((item, i) => {
-        const qty = Number(item.quantity) || 1;
-        const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-        return `${i + 1}. ${item.product} × ${qty} ${unitLabel}`;
-      }).join("\n");
+ if (values.length !== pricingTargets.length) {
+  const itemList = pricingTargets.map((item, i) => {
+    const qty = Number(item.quantity) || 1;
+    const unitLabel = item.unit && item.unit !== "units"
+      ? item.unit
+      : (isServiceSupplier ? "job" : "unit");
+    return `${i + 1}. ${item.product || "Item"} × ${qty} ${unitLabel}`;
+  }).join("\n");
 
-      await sendText(from,
-        `❌ You have *${order.items.length} item${order.items.length > 1 ? "s" : ""}* but sent *${values.length} price${values.length > 1 ? "s" : ""}*.\n\n` +
-        `Items to price:\n${itemList}\n\n` +
-        `Send exactly *${order.items.length}* price${order.items.length > 1 ? "s" : ""}, one per item, in order.\n` +
-        `Example: *${order.items.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
-      );
-      return;
-    }
+  await sendText(from,
+    `❌ You still need to price *${pricingTargets.length} item${pricingTargets.length > 1 ? "s" : ""}* but sent *${values.length} price${values.length > 1 ? "s" : ""}*.\n\n` +
+    `Items to price:\n${itemList}\n\n` +
+    `Send exactly *${pricingTargets.length}* price${pricingTargets.length > 1 ? "s" : ""}, one per item, in order.\n` +
+    `Example: *${pricingTargets.map((_, i) => ((i + 1) * 5 + 7)).join(", ")}*`
+  );
+  return;
+}
 
     // ── Build preview -show the supplier exactly what they entered and what it means ──
     // This is the key UX fix: show "per unit × qty = line total" BEFORE saving
     let previewGrandTotal = 0;
-    const previewLines = order.items.map((item, idx) => {
-      const unitPrice = values[idx];
-      const qty = Number(item.quantity) || 1;
-      const lineTotal = unitPrice * qty;
-      previewGrandTotal += lineTotal;
-      const unitLabel = item.unit && item.unit !== "units" ? item.unit : (isServiceSupplier ? "job" : "unit");
-      return `${idx + 1}. *${item.product}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
-    }).join("\n\n");
+   const previewLines = pricingTargets.map((item, idx) => {
+  const unitPrice = values[idx];
+  const qty = Number(item.quantity) || 1;
+  const lineTotal = unitPrice * qty;
+  previewGrandTotal += lineTotal;
+  const unitLabel = item.unit && item.unit !== "units"
+    ? item.unit
+    : (isServiceSupplier ? "job" : "unit");
+
+  return `${idx + 1}. *${item.product || "Item"}*\n   $${unitPrice.toFixed(2)} per ${unitLabel} × ${qty} = *$${lineTotal.toFixed(2)}*`;
+}).join("\n\n");
 
     // ── Save preview to sessionData so the confirm handler can use it ─────────
     biz.sessionData = {

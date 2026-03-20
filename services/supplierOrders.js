@@ -260,7 +260,7 @@ const pricingLines = pricingTargets.map((item, i) => {
     ? item.unit
     : (isServiceSupplier ? "job" : "unit");
 
-  return `${i + 1}. *${item.product}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
+ return `${i + 1}. *${item.product || "Item"}* × ${qty} ${unitLabel}\n   → Your price per ${unitLabel}: ❓`;
 }).join("\n\n");
 
 const alreadyPricedLines = pricedItems.length
@@ -270,7 +270,7 @@ const alreadyPricedLines = pricedItems.length
         ? item.unit
         : (isServiceSupplier ? "job" : "unit");
 
-      return `✅ ${item.product} × ${qty} ${unitLabel} @ $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total || (qty * item.pricePerUnit)).toFixed(2)}`;
+   return `✅ ${item.product || "Item"} × ${qty} ${unitLabel} @ $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total || (qty * item.pricePerUnit)).toFixed(2)}`;
     }).join("\n")
   : "";
 
