@@ -4837,17 +4837,16 @@ const supplierId = biz?.sessionData?.orderSupplierId
     || [])];
 
   // ── Rebuild source items for numbered selection (Option C) ────────────────
-  const _catalogueItems = isService
-    ? (supplier.rates || []).map(r => ({ id: r.service, label: r.service, price: r.rate }))
-    : (supplier.prices || []).filter(p => p.inStock !== false).map(p => ({
-        id: p.product,
-        label: p.product,
-        price: `$${Number(p.amount).toFixed(2)}/${p.unit}`
-      }));
-  const _fallbackItems = (supplier.products || [])
-    .filter(p => p !== "pending_upload")
-    .map(p => ({ id: p, label: p, price: null }));
-  const sourceItems = _catalogueItems.length ? _catalogueItems : _fallbackItems;
+ const currentSearchTerm =
+  biz?.sessionData?.orderCatalogueSearch ??
+  pickingStateSess?.tempData?.orderCatalogueSearch ??
+  "";
+
+const sourceItems = getFilteredSupplierCatalogueItems(supplier, currentSearchTerm).map(item => ({
+  id: item.name,
+  label: item.name,
+  price: item.priceLabel || null
+}));
 
   // ── NUMBERED ITEM SELECTION: "1x5, 3x2" or "1x5" or "1 x 5" ─────────────
   // Matches patterns like: 1x5  1x5,3x2  1x5, 3x2  1 x 5  1:5

@@ -6084,7 +6084,7 @@ if (numberedSelectionPattern.test(rawLower.trim())) {
         continue;
       }
 
-      const selectedItem = sourceItems[itemNum - 1];
+   const selectedItem = sourceItems[itemNum - 1];
 const match = findMatchingSupplierPrice(supplier, selectedItem.id);
 
 const cartProduct = match?.product || selectedItem.id;
@@ -6692,11 +6692,6 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
-const seededSearchTerm =
-  initialCart.length > 0
-    ? initialCart[0].product
-    : (searchedProduct || "");
-
 await persistOrderFlowState({
   biz,
   phone,
@@ -6704,21 +6699,15 @@ await persistOrderFlowState({
     orderSupplierId: String(supplier._id),
     orderCart: initialCart,
     orderIsService: isService,
-    orderBrowseMode: initialCart.length ? "cart" : "catalogue",
+    orderBrowseMode: "catalogue",
     orderCataloguePage: 0,
-    orderCatalogueSearch: seededSearchTerm
+    orderCatalogueSearch: ""
   }
 });
 
-// If search already matched a real item, take buyer straight to cart
-if (initialCart.length) {
-  return _sendSupplierCartMenu(from, supplier, initialCart);
-}
-
-// Otherwise fall back to filtered catalogue
 return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
   page: 0,
-  searchTerm: seededSearchTerm
+  searchTerm: ""
 });
 }
 
@@ -7652,7 +7641,7 @@ const pricingTargets = missingIndexes.map(idx => order.items[idx]).filter(Boolea
       return sendSuppliersMenu(from);
     }
 
-  if (!raw) {
+if (!raw) {
   await sendText(from,
     pricingTargets.length === 1
       ? `❌ Please enter the price per unit.\n\nExample: *12* (means $12 per unit)`
@@ -7677,12 +7666,13 @@ const pricingTargets = missingIndexes.map(idx => order.items[idx]).filter(Boolea
     }
 
     // ── Wrong count ───────────────────────────────────────────────────────────
- if (values.length !== pricingTargets.length) {
+if (values.length !== pricingTargets.length) {
   const itemList = pricingTargets.map((item, i) => {
     const qty = Number(item.quantity) || 1;
     const unitLabel = item.unit && item.unit !== "units"
       ? item.unit
       : (isServiceSupplier ? "job" : "unit");
+
     return `${i + 1}. ${item.product || "Item"} × ${qty} ${unitLabel}`;
   }).join("\n");
 

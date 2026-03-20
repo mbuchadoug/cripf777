@@ -146,12 +146,13 @@ await SupplierProfile.findOneAndUpdate(
   { $inc: { monthlyOrders: 1, completedOrders: 1 } }
 );
 
-    const itemLines = order.items
-      .map(i => {
-        const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
-        return `• ${i.product} x${i.quantity}${unitSuffix} @ $${Number(i.pricePerUnit).toFixed(2)} = $${Number(i.total).toFixed(2)}`;
-      })
-      .join("\n");
+ const itemLines = order.items
+  .map(i => {
+    const name = i.product || "Item";
+    const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
+    return `• ${name} x${i.quantity}${unitSuffix} @ $${Number(i.pricePerUnit).toFixed(2)} = $${Number(i.total).toFixed(2)}`;
+  })
+  .join("\n");
 
     const deliveryLine = order.delivery?.required
       ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
@@ -287,7 +288,7 @@ let instructions;
 if (pricingTargets.length === 1) {
   instructions =
     `💡 *Enter the price only for the missing item.*\n\n` +
-    `Example: If *${firstItem?.product}* costs *$12* per ${firstUnit},\n` +
+    `Example: If *${firstItem?.product || "Item"}* costs *$12* per ${firstUnit},\n` +
     `and the buyer wants *${firstQty}*, total = *$${12 * firstQty}*.\n\n` +
     `So just type: *12*\n\n` +
     `_The system multiplies your unit price × quantity automatically._`;
@@ -300,7 +301,7 @@ if (pricingTargets.length === 1) {
       ? item.unit
       : (isServiceSupplier ? "job" : "unit");
 
-    return `  ${i + 1}. ${item.product}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
+  return `  ${i + 1}. ${item.product || "Item"}: $${unitPrice}/per ${exUnit} × ${qty} = $${unitPrice * qty}`;
   }).join("\n");
 
   instructions =
