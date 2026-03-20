@@ -5935,14 +5935,12 @@ const pickingStateSess = await (async () => {
 if (
   !isMetaAction &&
   (
-    biz?.sessionState === "supplier_order_picking" ||
-    pickingStateSess?.tempData?.orderState === "supplier_order_picking"
+    (biz && biz.sessionState === "supplier_order_picking") ||
+    (!biz && pickingStateSess?.tempData?.orderState === "supplier_order_picking")
   )
 ) {
 
-    if (biz?.sessionState === "supplier_search_product" || biz?.sessionState === "supplier_search_city") {
-    return false;
-  }
+
   const raw = text.trim();
   if (!raw || raw.length < 1) return;
 
@@ -7217,17 +7215,28 @@ isService
     searchType = sess?.tempData?.supplierSearchType || "product";
   }
 
-  if (biz) {
-    biz.sessionState = "supplier_search_product";
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: {
-        ...(biz.sessionData?.supplierSearch || {}),
-        type: searchType
-      }
-    };
-    await saveBizSafe(biz);
-  } else {
+if (biz) {
+  biz.sessionState = "supplier_search_product";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    supplierSearch: {
+      ...(biz.sessionData?.supplierSearch || {}),
+      type: searchType
+    }
+  };
+
+  delete biz.sessionData.orderSupplierId;
+  delete biz.sessionData.orderCart;
+  delete biz.sessionData.orderItems;
+  delete biz.sessionData.orderProduct;
+  delete biz.sessionData.orderQuantity;
+  delete biz.sessionData.orderIsService;
+  delete biz.sessionData.orderBrowseMode;
+  delete biz.sessionData.orderCataloguePage;
+  delete biz.sessionData.orderCatalogueSearch;
+
+  await saveBizSafe(biz);
+} else {
     await UserSession.findOneAndUpdate(
       { phone },
       {
