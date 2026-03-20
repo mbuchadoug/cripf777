@@ -30,10 +30,19 @@ function getUnpricedOrderItems(items = []) {
 
 function computeOrderTotals(items = []) {
   const normalized = (items || []).map(item => {
-    const qty = Number(item.quantity) || 1;
+    // CRITICAL FIX:
+    // order.items entries can be Mongoose subdocuments.
+    // Convert to plain object first so product/unit are preserved.
+    const plain =
+      typeof item?.toObject === "function"
+        ? item.toObject()
+        : { ...item };
+
+    const qty = Number(plain.quantity) || 1;
+
     const pricePerUnit =
-      typeof item.pricePerUnit === "number" && !Number.isNaN(item.pricePerUnit)
-        ? Number(item.pricePerUnit)
+      typeof plain.pricePerUnit === "number" && !Number.isNaN(plain.pricePerUnit)
+        ? Number(plain.pricePerUnit)
         : null;
 
     const total =
@@ -42,7 +51,9 @@ function computeOrderTotals(items = []) {
         : null;
 
     return {
-      ...item,
+      ...plain,
+      product: plain.product || plain.item || "Item",
+      unit: plain.unit || "units",
       quantity: qty,
       pricePerUnit,
       total
