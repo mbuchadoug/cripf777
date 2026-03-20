@@ -804,6 +804,7 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
  if (page > 0) {
   rows.push({ id: `sup_catalog_page_prev_${supplier._id}`, title: "⬅ Previous Products" });
 }
+
 if (page < totalPages - 1) {
   rows.push({ id: `sup_catalog_page_next_${supplier._id}`, title: "➡ More Products" });
 }
@@ -813,10 +814,9 @@ if (page === 0) {
 }
 
 rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
-rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order by Number" });
-rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
-rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
 
+// Safety guard: WhatsApp list rows must not exceed 10
+if (rows.length > 10) rows.splice(10);
   const header = formatCatalogueHeader({
     supplier,
     page,
@@ -923,7 +923,7 @@ async function _sendSupplierCartMenu(from, supplier, cart = []) {
     });
   }
 
-  const rows = cart.slice(0, 6).map(item => ({
+const rows = cart.slice(0, 5).map(item => ({
     id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(item.product)}`,
     title: `➖ Remove ${item.product}`.slice(0, 72),
     description:
@@ -948,6 +948,7 @@ async function _sendSupplierCartMenu(from, supplier, cart = []) {
     })
     .join("\n");
 
+    if (rows.length > 10) rows.splice(10);
   return sendList(
     from,
     `🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
