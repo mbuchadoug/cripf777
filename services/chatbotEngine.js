@@ -7140,12 +7140,6 @@ if (a.startsWith("sup_number_page_open_")) {
   if (!supplier) return sendText(from, "❌ Supplier not found.");
 
   const cart = await getCurrentOrderCart({ biz, phone });
-  const sess = await UserSession.findOne({ phone });
-
-  const searchTerm =
-    biz?.sessionData?.orderCatalogueSearch ??
-    sess?.tempData?.orderCatalogueSearch ??
-    "";
 
   await persistOrderFlowState({
     biz,
@@ -7153,13 +7147,14 @@ if (a.startsWith("sup_number_page_open_")) {
     patch: {
       orderBrowseMode: "numbered_catalogue",
       orderSupplierId: supplierId,
-      orderCataloguePage: 0
+      orderCataloguePage: 0,
+      orderCatalogueSearch: ""
     }
   });
 
   return _sendSupplierNumberedCatalogueText(from, supplier, cart, {
     page: 0,
-    searchTerm
+    searchTerm: ""
   });
 }
 
@@ -7239,19 +7234,14 @@ if (a.startsWith("sup_catalog_page_open_")) {
     patch: {
       orderBrowseMode: "catalogue",
       orderSupplierId: supplierId,
-      orderCataloguePage: 0
+      orderCataloguePage: 0,
+      orderCatalogueSearch: ""
     }
   });
 
-  const sess = await UserSession.findOne({ phone });
-  const searchTerm =
-    biz?.sessionData?.orderCatalogueSearch ??
-    sess?.tempData?.orderCatalogueSearch ??
-    "";
-
   return _sendSupplierCatalogueBrowser(from, supplier, cart, {
     page: 0,
-    searchTerm
+    searchTerm: ""
   });
 }
 
