@@ -696,40 +696,74 @@ const SUBURB_TO_CITY = {
   "mhangura": "Chinhoyi",
 };
 
+function normalizeLocationPart(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function toTitleCase(value = "") {
+  return String(value || "")
+    .split(" ")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
     "harare", "bulawayo", "mutare", "gweru", "masvingo",
     "kwekwe", "kadoma", "chinhoyi", "victoria falls"
   ];
 
-  const words = query.trim().split(/\s+/);
+  const normalizedQuery = normalizeLocationPart(query);
+  const words = normalizedQuery.split(/\s+/).filter(Boolean);
   let city = null;
   let area = null;
   let productWords = words;
 
-  // ── Step 1: Check last 1–3 words for a known CITY ────────────────────────
-  for (let len = 2; len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").toLowerCase();
+  // ── Step 1: Check last 2 → 1 words for a known CITY ──────────────────────
+  for (let len = Math.min(2, words.length); len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ");
     const matched = KNOWN_CITIES.find(c => c === candidate);
     if (matched) {
-      city = matched.charAt(0).toUpperCase() + matched.slice(1);
+      city = toTitleCase(matched);
       productWords = words.slice(0, -len);
-      if (productWords.length) return { product: productWords.join(" ").trim(), city, area: null };
+      if (productWords.length) {
+        return {
+          product: productWords.join(" ").trim(),
+          city,
+          area: null
+        };
+      }
       break;
     }
   }
 
-  // ── Step 2: Check last 1–3 words for a known SUBURB ──────────────────────
-  for (let len = 3; len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").toLowerCase();
-    if (SUBURB_TO_CITY[candidate]) {
-      city = SUBURB_TO_CITY[candidate];
-      area = candidate.charAt(0).toUpperCase() + candidate.slice(1);
+  // ── Step 2: Check last 3 → 1 words for a known SUBURB/AREA ───────────────
+  for (let len = Math.min(3, words.length); len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ");
+    const mappedCity = SUBURB_TO_CITY[candidate];
+    if (mappedCity) {
+      city = mappedCity;
+      area = toTitleCase(candidate);
       productWords = words.slice(0, -len);
-      if (productWords.length) return { product: productWords.join(" ").trim(), city, area };
+      if (productWords.length) {
+        return {
+          product: productWords.join(" ").trim(),
+          city,
+          area
+        };
+      }
       break;
     }
   }
 
-  return { product: query.trim(), city: null, area: null };
+  return {
+    product: normalizedQuery,
+    city: null,
+    area: null
+  };
 }

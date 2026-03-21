@@ -5324,8 +5324,81 @@ if (a.startsWith("sup_search_city_")) {
 
   const locationLabel = city || "All Cities";
 
-  // PRODUCT-FIRST SEARCH FLOW
+  // PRODUCT / BUSINESS SEARCH FLOW
   if (product) {
+    const supplierResults = await runSupplierSearch({
+      city,
+      category,
+      product,
+      profileType,
+      area: null
+    });
+
+    const normalizedQuery = normalizeProductName(product);
+    const directBusinessMatches = supplierResults.filter(s => {
+      const businessName = normalizeProductName(s.businessName || "");
+      return businessName === normalizedQuery || businessName.includes(normalizedQuery);
+    });
+
+    if (directBusinessMatches.length === 1) {
+      const supplier = directBusinessMatches[0];
+      const cart = await getCurrentOrderCart({ biz, phone });
+
+      await persistOrderFlowState({
+        biz,
+        phone,
+        patch: {
+          orderSupplierId: String(supplier._id),
+          orderBrowseMode: "catalogue",
+          orderCataloguePage: 0,
+          orderCatalogueSearch: ""
+        }
+      });
+
+      return _sendSupplierShoppingHub(from, supplier, cart);
+    }
+
+    if (directBusinessMatches.length > 1) {
+      if (biz) {
+        biz.sessionData = {
+          ...(biz.sessionData || {}),
+          supplierSearch: {
+            ...(biz.sessionData?.supplierSearch || {}),
+            city
+          },
+          searchResults: directBusinessMatches,
+          searchPage: 0,
+          searchResultMode: "suppliers"
+        };
+        await saveBizSafe(biz);
+      } else {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": directBusinessMatches,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "suppliers"
+            }
+          },
+          { upsert: true }
+        );
+      }
+
+      const pageResults = directBusinessMatches.slice(0, 9);
+      const rows = formatSupplierResults(pageResults, city, product);
+
+      if (directBusinessMatches.length > 9) {
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${directBusinessMatches.length - 9} more)` });
+      }
+
+      return sendList(
+        from,
+        `🏪 *Business matches for ${product}*${city ? ` in ${city}` : ""} - ${directBusinessMatches.length} found`,
+        rows
+      );
+    }
+
     const offerResults = await runSupplierOfferSearch({
       city,
       category,
@@ -5336,7 +5409,7 @@ if (a.startsWith("sup_search_city_")) {
 
     if (!offerResults.length) {
       return sendButtons(from, {
-        text: `😕 No matching products found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
+        text: `😕 No matching suppliers found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
           { id: "suppliers_home", title: "🏪 Suppliers" }
@@ -5372,62 +5445,18 @@ if (a.startsWith("sup_search_city_")) {
 
     const pageResults = offerResults.slice(0, 9);
     const rows = formatSupplierOfferResults(pageResults);
+
     if (offerResults.length > 9) {
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
     }
 
     return sendList(
       from,
-      `🔎 *${product}* - ${locationLabel}\n${offerResults.length} matching offer${offerResults.length === 1 ? "" : "s"} found`,
+      `🔍 *${product}* in ${locationLabel} - ${offerResults.length} found`,
       rows
     );
   }
-
-  // FALLBACK: CATEGORY / SUPPLIER-FIRST FLOW
-  const results = await runSupplierSearch({ city, category, product, profileType, area: null });
-  if (!results.length) {
-    return sendButtons(from, {
-      text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
-      buttons: [
-        { id: "find_supplier", title: "🔍 Search Again" },
-        { id: "suppliers_home", title: "🏪 Suppliers" }
-      ]
-    });
-  }
-
-  if (biz) {
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), city },
-      searchResults: results,
-      searchPage: 0,
-      searchResultMode: "suppliers"
-    };
-    await saveBizSafe(biz);
-  } else {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.searchResults": results,
-          "tempData.searchPage": 0,
-          "tempData.searchResultMode": "suppliers"
-        }
-      },
-      { upsert: true }
-    );
-  }
-
-  const pageResults = results.slice(0, 9);
-  const rows = formatSupplierResults(pageResults, city, category || product);
-
-  if (results.length > 9) {
-    rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
-  }
-
-  return sendList(from, `🔍 ${category || "Suppliers"} - ${locationLabel}\n${results.length} found`, rows);
 }
-
 
 if (a.startsWith("sup_offer_pick_")) {
   const raw = a.replace("sup_offer_pick_", "");
