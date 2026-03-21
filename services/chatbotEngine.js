@@ -7141,6 +7141,26 @@ if (a.startsWith("sup_number_page_open_")) {
 
   const cart = await getCurrentOrderCart({ biz, phone });
 
+  if (biz) {
+    biz.sessionState = "supplier_order_picking";
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      orderSupplierId: supplierId
+    };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.orderState": "supplier_order_picking",
+        "tempData.orderSupplierId": supplierId
+      }
+    },
+    { upsert: true }
+  );
+
   await persistOrderFlowState({
     biz,
     phone,
@@ -7157,7 +7177,6 @@ if (a.startsWith("sup_number_page_open_")) {
     searchTerm: ""
   });
 }
-
 if (a.startsWith("sup_number_page_next_") || a.startsWith("sup_number_page_prev_")) {
   const isNext = a.startsWith("sup_number_page_next_");
   const supplierId = a.replace(isNext ? "sup_number_page_next_" : "sup_number_page_prev_", "");
@@ -7179,6 +7198,26 @@ if (a.startsWith("sup_number_page_next_") || a.startsWith("sup_number_page_prev_
 
   const nextPage = Math.max(0, currentPage + (isNext ? 1 : -1));
   const cart = await getCurrentOrderCart({ biz, phone });
+
+  if (biz) {
+    biz.sessionState = "supplier_order_picking";
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      orderSupplierId: supplierId
+    };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.orderState": "supplier_order_picking",
+        "tempData.orderSupplierId": supplierId
+      }
+    },
+    { upsert: true }
+  );
 
   await persistOrderFlowState({
     biz,
