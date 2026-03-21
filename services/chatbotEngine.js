@@ -84,7 +84,9 @@ import {
 import {
   startSupplierSearch,
   runSupplierSearch,
+  runSupplierOfferSearch,
   formatSupplierResults,
+  formatSupplierOfferResults,
   parseShortcodeSearch
 } from "./supplierSearch.js";
 import {
@@ -770,7 +772,84 @@ function formatCatalogueHeader({
   );
 }
 
+function upsertCartItemToFront(cart = [], nextItem = {}) {
+  const nextCart = Array.isArray(cart) ? [...cart] : [];
+  const existingIndex = nextCart.findIndex(
+    item => String(item.product || "").toLowerCase() === String(nextItem.product || "").toLowerCase()
+  );
 
+  if (existingIndex >= 0) {
+    const existing = nextCart[existingIndex];
+    const merged = {
+      ...existing,
+      quantity: Number(existing.quantity || 0) + Number(nextItem.quantity || 1)
+    };
+
+    if (typeof merged.pricePerUnit === "number" && !Number.isNaN(merged.pricePerUnit)) {
+      merged.total = Number((merged.quantity * merged.pricePerUnit).toFixed(2));
+    }
+
+    nextCart.splice(existingIndex, 1);
+    nextCart.unshift(merged);
+    return nextCart;
+  }
+
+  const fresh = {
+    ...nextItem,
+    quantity: Number(nextItem.quantity || 1),
+    total:
+      typeof nextItem.pricePerUnit === "number" && !Number.isNaN(nextItem.pricePerUnit)
+        ? Number((Number(nextItem.quantity || 1) * nextItem.pricePerUnit).toFixed(2))
+        : null
+  };
+
+  nextCart.unshift(fresh);
+  return nextCart;
+}
+
+async function _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart = [], opts = {}) {
+  const isService = supplier?.profileType === "service";
+  const priceLine =
+    typeof selectedItem?.pricePerUnit === "number" && !Number.isNaN(selectedItem.pricePerUnit)
+      ? `💵 Price: $${Number(selectedItem.pricePerUnit).toFixed(2)}/${selectedItem.unit || (isService ? "job" : "each")}`
+      : `💵 Price: To be confirmed by supplier`;
+
+  const cartCount = Array.isArray(cart) ? cart.length : 0;
+  const moreMatchesId = opts.moreMatchesId || "find_supplier";
+  const fullCatalogueId = `sup_catalog_page_open_${supplier._id}`;
+
+  return sendList(
+    from,
+    `✅ *Selected ${isService ? "Service" : "Item"}*\n\n` +
+    `🏪 Supplier: ${supplier.businessName}\n` +
+    `${isService ? "🔧" : "📦"} ${selectedItem.product}\n` +
+    `${priceLine}\n` +
+    `🔢 Quantity: ${Number(selectedItem.quantity || 1)}\n` +
+    `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}`,
+    [
+      {
+        id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: "➕ Add to Cart"
+      },
+      {
+        id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: isService ? "⚡ Order This Now" : "⚡ Order This Now"
+      },
+      {
+        id: moreMatchesId,
+        title: "🔎 View More Similar"
+      },
+      {
+        id: fullCatalogueId,
+        title: "📚 View Full Catalogue"
+      },
+      {
+        id: `sup_cart_view_${supplier._id}`,
+        title: "🛒 View Cart"
+      }
+    ]
+  );
+}
 async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart = [], opts = {}) {
   const isService = supplier?.profileType === "service";
   const quantity = Number(opts.quantity || 1);
@@ -5081,26 +5160,36 @@ if (a.startsWith("sup_search_cat_")) {
 }
 
   // ── Supplier search: city selected ────────────────────────────────────────
- if (a.startsWith("sup_search_city_")) {
-   const cityRaw = a.replace("sup_search_city_", "");
-    const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
+if (a.startsWith("sup_search_city_")) {
+  const cityRaw = a.replace("sup_search_city_", "");
+  const city = cityRaw === "all" ? null : cityRaw.charAt(0).toUpperCase() + cityRaw.slice(1);
 
-    // Get category AND product from biz session or UserSession fallback
   let category = biz?.sessionData?.supplierSearch?.category || null;
-let product = biz?.sessionData?.supplierSearch?.product || null;
-let profileType = biz?.sessionData?.supplierSearch?.type || null;
+  let product = biz?.sessionData?.supplierSearch?.product || null;
+  let profileType = biz?.sessionData?.supplierSearch?.type || null;
 
-if (!category && !product && !profileType) {
-  const sess = await UserSession.findOne({ phone });
-  category = sess?.tempData?.supplierSearchCategory || null;
-  product = sess?.tempData?.supplierSearchProduct || null;
-  profileType = sess?.tempData?.supplierSearchType || null;
-}
+  if (!category && !product && !profileType) {
+    const sess = await UserSession.findOne({ phone });
+    category = sess?.tempData?.supplierSearchCategory || null;
+    product = sess?.tempData?.supplierSearchProduct || null;
+    profileType = sess?.tempData?.supplierSearchType || null;
+  }
 
-const results = await runSupplierSearch({ city, category, product, profileType, area: null });
-  if (!results.length) {
+  const locationLabel = city || "All Cities";
+
+  // PRODUCT-FIRST SEARCH FLOW
+  if (product) {
+    const offerResults = await runSupplierOfferSearch({
+      city,
+      category,
+      product,
+      profileType,
+      area: null
+    });
+
+    if (!offerResults.length) {
       return sendButtons(from, {
-        text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
+        text: `😕 No matching products found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
           { id: "suppliers_home", title: "🏪 Suppliers" }
@@ -5111,28 +5200,188 @@ const results = await runSupplierSearch({ city, category, product, profileType, 
     if (biz) {
       biz.sessionData = {
         ...(biz.sessionData || {}),
-        supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), city }
+        supplierSearch: {
+          ...(biz.sessionData?.supplierSearch || {}),
+          city
+        },
+        searchResults: offerResults,
+        searchPage: 0,
+        searchResultMode: "offers"
       };
       await saveBizSafe(biz);
+    } else {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.searchResults": offerResults,
+            "tempData.searchPage": 0,
+            "tempData.searchResultMode": "offers"
+          }
+        },
+        { upsert: true }
+      );
     }
-const pageResults = results.slice(0, 9);
-    const rows = formatSupplierResults(pageResults, city, category || product);
-    const locationLabel = city || "All Cities";
-    const searchLabel = category || product || "Suppliers";
-    const hasMore = results.length > 9;
-    if (hasMore) {
-      if (biz) {
-        biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
-        await saveBizSafe(biz);
-      } else {
-        await UserSession.findOneAndUpdate({ phone }, {
-          $set: { "tempData.searchResults": results, "tempData.searchPage": 0 }
-        }, { upsert: true });
-      }
-      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+
+    const pageResults = offerResults.slice(0, 9);
+    const rows = formatSupplierOfferResults(pageResults);
+    if (offerResults.length > 9) {
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
     }
-    return sendList(from, `🔍 ${searchLabel} - ${locationLabel}\n${results.length} found`, rows);
+
+    return sendList(
+      from,
+      `🔎 *${product}* - ${locationLabel}\n${offerResults.length} matching offer${offerResults.length === 1 ? "" : "s"} found`,
+      rows
+    );
   }
+
+  // FALLBACK: CATEGORY / SUPPLIER-FIRST FLOW
+  const results = await runSupplierSearch({ city, category, product, profileType, area: null });
+  if (!results.length) {
+    return sendButtons(from, {
+      text: `😕 No suppliers found for ${category || product || "your search"}${city ? ` in ${city}` : ""}.\n\nTry a different city or category.`,
+      buttons: [
+        { id: "find_supplier", title: "🔍 Search Again" },
+        { id: "suppliers_home", title: "🏪 Suppliers" }
+      ]
+    });
+  }
+
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), city },
+      searchResults: results,
+      searchPage: 0,
+      searchResultMode: "suppliers"
+    };
+    await saveBizSafe(biz);
+  } else {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.searchResults": results,
+          "tempData.searchPage": 0,
+          "tempData.searchResultMode": "suppliers"
+        }
+      },
+      { upsert: true }
+    );
+  }
+
+  const pageResults = results.slice(0, 9);
+  const rows = formatSupplierResults(pageResults, city, category || product);
+
+  if (results.length > 9) {
+    rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+  }
+
+  return sendList(from, `🔍 ${category || "Suppliers"} - ${locationLabel}\n${results.length} found`, rows);
+}
+
+
+if (a.startsWith("sup_offer_pick_")) {
+  const raw = a.replace("sup_offer_pick_", "");
+  const firstUnderscore = raw.indexOf("_");
+  const supplierId = raw.slice(0, firstUnderscore);
+  const productName = decodeURIComponent(raw.slice(firstUnderscore + 1));
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  let pricePerUnit = null;
+  let unit = supplier.profileType === "service" ? "job" : "each";
+
+  if (supplier.profileType === "service") {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (rate) {
+      const rawRate = String(rate.rate || "").trim();
+      const m = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+      pricePerUnit = m ? Number(m[1]) : null;
+      unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
+    }
+  } else {
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (price) {
+      pricePerUnit = typeof price.amount === "number" ? Number(price.amount) : null;
+      unit = price.unit || "each";
+    }
+  }
+
+  const selectedItem = {
+    product: productName,
+    quantity: 1,
+    unit,
+    pricePerUnit,
+    total: pricePerUnit !== null ? Number((1 * pricePerUnit).toFixed(2)) : null
+  };
+
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderIsService: supplier.profileType === "service",
+      orderBrowseMode: "selected_offer",
+      orderCatalogueSearch: productName,
+      selectedSupplierItem: selectedItem
+    }
+  });
+
+  return _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart, {
+    moreMatchesId: "sup_offer_results_back"
+  });
+}
+
+
+if (a === "sup_offer_results_back") {
+  let allResults = [];
+  let currentPage = 0;
+
+  if (biz) {
+    allResults = biz.sessionData?.searchResults || [];
+    currentPage = biz.sessionData?.searchPage || 0;
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    allResults = sess?.tempData?.searchResults || [];
+    currentPage = sess?.tempData?.searchPage || 0;
+  }
+
+  if (!allResults.length) {
+    return sendButtons(from, {
+      text: "❌ Search session expired. Please search again.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+    });
+  }
+
+  const PAGE_SIZE = 9;
+  const start = currentPage * PAGE_SIZE;
+  const pageResults = allResults.slice(start, start + PAGE_SIZE);
+  const rows = formatSupplierOfferResults(pageResults);
+
+  const hasMore = allResults.length > start + PAGE_SIZE;
+  const hasPrev = currentPage > 0;
+
+  if (hasPrev) rows.push({ id: "sup_search_prev_page", title: "⬅ Back" });
+  if (hasMore) rows.push({ id: "sup_search_next_page", title: `➡ More (${allResults.length - start - PAGE_SIZE} more)` });
+
+  if (rows.length > 10) rows.splice(10);
+
+  return sendList(
+    from,
+    `🔎 Matching products\nResults ${start + 1}-${Math.min(start + PAGE_SIZE, allResults.length)} of ${allResults.length}`,
+    rows
+  );
+}
+
 
   // ── View supplier detail ───────────────────────────────────────────────────
   if (a.startsWith("sup_view_")) {
@@ -6586,7 +6835,17 @@ if (a === "sup_search_next_page") {
     });
   }
 
-  const rows = formatSupplierResults(pageResults, null, null);
+  let resultMode = "suppliers";
+  if (biz) {
+    resultMode = biz.sessionData?.searchResultMode || "suppliers";
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    resultMode = sess?.tempData?.searchResultMode || "suppliers";
+  }
+
+  const rows = resultMode === "offers"
+    ? formatSupplierOfferResults(pageResults)
+    : formatSupplierResults(pageResults, null, null);
   const hasMore = allResults.length > start + PAGE_SIZE;
   const hasPrev = currentPage > 0;
 
@@ -6640,7 +6899,17 @@ if (a === "sup_search_prev_page") {
   const PAGE_SIZE = 9;
   const start = currentPage * PAGE_SIZE;
   const pageResults = allResults.slice(start, start + PAGE_SIZE);
-  const rows = formatSupplierResults(pageResults, null, null);
+  let resultMode = "suppliers";
+  if (biz) {
+    resultMode = biz.sessionData?.searchResultMode || "suppliers";
+  } else {
+    const sess = await UserSession.findOne({ phone });
+    resultMode = sess?.tempData?.searchResultMode || "suppliers";
+  }
+
+  const rows = resultMode === "offers"
+    ? formatSupplierOfferResults(pageResults)
+    : formatSupplierResults(pageResults, null, null);
   const hasMore = allResults.length > start + PAGE_SIZE;
   const hasPrev = currentPage > 0;
 
@@ -6669,9 +6938,9 @@ if (a.startsWith("sup_order_")) {
 
   const isService = supplier.profileType === "service";
 
-  const searchSess = await UserSession.findOne({ phone });
+  const sess = await UserSession.findOne({ phone });
   const searchedProduct =
-    searchSess?.tempData?.supplierSearchProduct ||
+    sess?.tempData?.supplierSearchProduct ||
     biz?.sessionData?.supplierSearch?.product ||
     "";
 
@@ -6710,14 +6979,14 @@ if (a.startsWith("sup_order_")) {
       orderIsService: isService,
       orderBrowseMode: searchedProduct ? "search_pick" : "catalogue",
       orderCataloguePage: 0,
-      orderCatalogueSearch: searchedProduct || "",
+      orderCatalogueSearch: searchedProduct,
       selectedSupplierItem: null
     }
   });
 
   return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
     page: 0,
-    searchTerm: searchedProduct || "",
+    searchTerm: searchedProduct,
     selectionMode: searchedProduct ? "search_pick" : "catalogue"
   });
 }
@@ -6945,14 +7214,27 @@ if (a.startsWith("sup_cart_add_")) {
   if (!supplier) return sendText(from, "❌ Supplier not found.");
 
   const sess = await UserSession.findOne({ phone });
-  const cart =
-    biz?.sessionData?.orderCart ||
-    sess?.tempData?.orderCart ||
-    [];
+
+  let cart = [];
+  if (biz) {
+    cart = biz.sessionData?.orderCart || [];
+  } else {
+    cart = sess?.tempData?.orderCart || [];
+  }
+
+  const currentBrowseMode =
+    biz?.sessionData?.orderBrowseMode ??
+    sess?.tempData?.orderBrowseMode ??
+    "catalogue";
+
+  const currentSearchTerm =
+    biz?.sessionData?.orderCatalogueSearch ??
+    sess?.tempData?.orderCatalogueSearch ??
+    "";
 
   const isService = supplier.profileType === "service";
-
   let priceInfo = null;
+
   if (isService) {
     const rate = (supplier.rates || []).find(r =>
       String(r.service || "").toLowerCase() === productName.toLowerCase()
@@ -6960,7 +7242,7 @@ if (a.startsWith("sup_cart_add_")) {
     if (rate) {
       priceInfo = {
         amount: parseSupplierRateValue(rate.rate),
-        unit: parseSupplierRateUnit(rate.rate) || "job"
+        unit: parseSupplierRateUnit(rate.rate)
       };
     }
   } else {
@@ -6980,29 +7262,164 @@ if (a.startsWith("sup_cart_add_")) {
     quantity: 1,
     unit: priceInfo?.unit || (isService ? "job" : "each"),
     pricePerUnit: typeof priceInfo?.amount === "number" ? priceInfo.amount : null,
-    total: typeof priceInfo?.amount === "number" ? priceInfo.amount : null
+    total: typeof priceInfo?.amount === "number" ? Number(priceInfo.amount.toFixed(2)) : null
   };
 
-  const currentSearchTerm =
-    biz?.sessionData?.orderCatalogueSearch ??
-    sess?.tempData?.orderCatalogueSearch ??
-    "";
+  // SEARCH-BASED PICK FLOW: preview first, do NOT auto-add
+  if (currentSearchTerm && currentBrowseMode !== "cart" && currentBrowseMode !== "numbered_catalogue") {
+    await persistOrderFlowState({
+      biz,
+      phone,
+      patch: {
+        orderSupplierId: String(supplier._id),
+        orderIsService: isService,
+        orderBrowseMode: "selected_offer",
+        selectedSupplierItem: selectedItem
+      }
+    });
+
+    return _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart, {
+      moreMatchesId: "sup_offer_results_back"
+    });
+  }
+
+  // NORMAL CATALOGUE FLOW: add directly
+  cart = upsertCartItemToFront(cart, selectedItem);
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "cart",
+      orderCataloguePage: 0,
+      orderCatalogueSearch: currentSearchTerm,
+      orderSupplierId: String(supplier._id),
+      orderCart: cart,
+      selectedSupplierItem: selectedItem
+    }
+  });
+
+  return _sendSupplierCartMenu(from, supplier, cart);
+}
+
+
+if (a.startsWith("sup_item_preview_add_")) {
+  const raw = a.replace("sup_item_preview_add_", "");
+  const firstUnderscore = raw.indexOf("_");
+  const supplierId = raw.slice(0, firstUnderscore);
+  const productName = decodeURIComponent(raw.slice(firstUnderscore + 1));
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  let cart = biz?.sessionData?.orderCart || sess?.tempData?.orderCart || [];
+
+  const storedSelected =
+    biz?.sessionData?.selectedSupplierItem ||
+    sess?.tempData?.selectedSupplierItem;
+
+  const itemToAdd = storedSelected?.product === productName
+    ? storedSelected
+    : {
+        product: productName,
+        quantity: 1,
+        unit: supplier.profileType === "service" ? "job" : "each",
+        pricePerUnit: null,
+        total: null
+      };
+
+  cart = upsertCartItemToFront(cart, itemToAdd);
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
 
   await persistOrderFlowState({
     biz,
     phone,
     patch: {
       orderSupplierId: String(supplier._id),
-      orderBrowseMode: "selected_item_preview",
-      orderCatalogueSearch: currentSearchTerm,
-      selectedSupplierItem: selectedItem
+      orderIsService: supplier.profileType === "service",
+      orderBrowseMode: "cart",
+      orderCart: cart,
+      selectedSupplierItem: itemToAdd
     }
   });
 
-  return _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart, {
-    quantity: 1,
-    searchTerm: currentSearchTerm
+  return _sendSupplierCartMenu(from, supplier, cart);
+}
+
+if (a.startsWith("sup_item_preview_order_")) {
+  const raw = a.replace("sup_item_preview_order_", "");
+  const firstUnderscore = raw.indexOf("_");
+  const supplierId = raw.slice(0, firstUnderscore);
+  const productName = decodeURIComponent(raw.slice(firstUnderscore + 1));
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  let cart = biz?.sessionData?.orderCart || sess?.tempData?.orderCart || [];
+
+  const storedSelected =
+    biz?.sessionData?.selectedSupplierItem ||
+    sess?.tempData?.selectedSupplierItem;
+
+  const itemToAdd = storedSelected?.product === productName
+    ? storedSelected
+    : {
+        product: productName,
+        quantity: 1,
+        unit: supplier.profileType === "service" ? "job" : "each",
+        pricePerUnit: null,
+        total: null
+      };
+
+  cart = upsertCartItemToFront(cart, itemToAdd);
+
+  if (biz) {
+    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $set: { "tempData.orderCart": cart } },
+    { upsert: true }
+  );
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderIsService: supplier.profileType === "service",
+      orderBrowseMode: "cart",
+      orderCart: cart,
+      selectedSupplierItem: itemToAdd
+    }
   });
+
+  return handleIncomingMessage({ from, action: `sup_cart_confirm_${supplierId}` });
 }
 
 
@@ -7216,10 +7633,20 @@ if (a.startsWith("sup_cart_confirm_")) {
 
   // Show order summary and ask for address
   const isService = supplier.profileType === "service";
+  const sess = await UserSession.findOne({ phone });
+  const selectedSupplierItem =
+    biz?.sessionData?.selectedSupplierItem ||
+    sess?.tempData?.selectedSupplierItem ||
+    null;
+
   const previewLines = cart.map(c => {
     const priceStr = c.pricePerUnit ? ` - $${Number(c.pricePerUnit).toFixed(2)}/${c.unit}` : "";
     return `• ${c.product} x${c.quantity}${priceStr}`;
   }).join("\n");
+
+  const selectedTopLine = selectedSupplierItem?.product
+    ? `🎯 *Selected Item:* ${selectedSupplierItem.product}\n\n`
+    : "";
 
   const knownTotal = cart
     .filter(c => c.pricePerUnit)
@@ -7275,11 +7702,15 @@ if (a.startsWith("sup_cart_confirm_")) {
     });
     await notifySupplierNewOrder(supplier.phone, order);
 
-    const itemSummary = finalItems.map(i => `• ${i.product} ×${i.quantity}`).join("\n");
+       const itemSummary = finalItems.map(i => `• ${i.product} ×${i.quantity}`).join("\n");
+
+    const selectedTopLine = selectedSupplierItem?.product
+      ? `🎯 *Selected Item:* ${selectedSupplierItem.product}\n\n`
+      : "";
     await sendText(from,
 `✅ *Order sent to ${supplier.businessName}!*
 
-${itemSummary}
+${selectedTopLine}${itemSummary}
 🏠 Collection only - you will pick up from the supplier
 ${pricedCount > 0 ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Supplier: ${supplier.phone}
 
@@ -7297,7 +7728,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     text:
 `${isService ? "📅" : "🛒"} *${isService ? "Booking Summary" : "Order Summary"}*
 
-${previewLines}${totalLine}
+${selectedTopLine}${previewLines}${totalLine}
 
 ─────────────────
 ⚠️ *Your order has NOT been sent yet.*
@@ -7336,14 +7767,17 @@ if (a.startsWith("sup_cart_clear_")) {
   );
 
   await persistOrderFlowState({
-  biz,
-  phone,
-  patch: {
-    orderBrowseMode: "cart",
-    orderSupplierId: supplierId,
-    orderCart: []
-  }
-});
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "cart",
+      orderSupplierId: supplierId,
+      orderCart: []
+    },
+    unset: {
+      selectedSupplierItem: ""
+    }
+  });s
 
 return _sendSupplierCartMenu(from, supplier, []);
 }

@@ -372,6 +372,172 @@ let results = await SupplierProfile.find(query)
 
 }
 
+
+function normalizeOfferSearch(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function productMatchesSearch(productName = "", searchTerm = "") {
+  const productNorm = normalizeOfferSearch(productName);
+  const searchNorm = normalizeOfferSearch(searchTerm);
+
+  if (!productNorm || !searchNorm) return false;
+
+  return productNorm.includes(searchNorm) || searchNorm.includes(productNorm);
+}
+
+function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
+  const offers = [];
+  const seen = new Set();
+
+  if (!supplier) return offers;
+
+  const pushOffer = ({ product, price, unit, matchSource }) => {
+    const cleanProduct = String(product || "").trim();
+    if (!cleanProduct) return;
+    if (!productMatchesSearch(cleanProduct, searchTerm)) return;
+
+    const dedupeKey = `${supplier._id}:${cleanProduct.toLowerCase()}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+
+    offers.push({
+      supplierId: String(supplier._id),
+      supplierName: supplier.businessName || "Supplier",
+      supplierPhone: supplier.phone || "",
+      supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+      supplierArea: supplier.location?.area || "",
+      supplierCity: supplier.location?.city || "",
+      supplierTier: supplier.tier || "",
+      supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
+      profileType: supplier.profileType || "product",
+      deliveryText:
+        supplier.profileType === "service"
+          ? (supplier.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider")
+          : (supplier.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only"),
+      product: cleanProduct,
+      pricePerUnit: typeof price === "number" && !Number.isNaN(price) ? Number(price) : null,
+      unit: unit || (supplier.profileType === "service" ? "job" : "each"),
+      matchSource: matchSource || "products"
+    });
+  };
+
+  if (supplier.profileType === "service") {
+    for (const rate of (supplier.rates || [])) {
+      const serviceName = rate?.service || "";
+      const rawRate = String(rate?.rate || "").trim();
+      const amountMatch = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+      const amount = amountMatch ? Number(amountMatch[1]) : null;
+      const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
+
+      pushOffer({
+        product: serviceName,
+        price: amount,
+        unit,
+        matchSource: "rates"
+      });
+    }
+
+    if (!offers.length) {
+      for (const service of (supplier.products || [])) {
+        pushOffer({
+          product: service,
+          price: null,
+          unit: "job",
+          matchSource: "products"
+        });
+      }
+    }
+
+    return offers;
+  }
+
+  for (const price of (supplier.prices || [])) {
+    if (price?.inStock === false) continue;
+
+    pushOffer({
+      product: price?.product || "",
+      price: typeof price?.amount === "number" ? Number(price.amount) : null,
+      unit: price?.unit || "each",
+      matchSource: "prices"
+    });
+  }
+
+  for (const product of (supplier.products || [])) {
+    if (!product || product === "pending_upload") continue;
+
+    const alreadyExists = offers.some(o =>
+      o.product.toLowerCase() === String(product).toLowerCase()
+    );
+
+    if (alreadyExists) continue;
+
+    pushOffer({
+      product,
+      price: null,
+      unit: "each",
+      matchSource: "products"
+    });
+  }
+
+  return offers;
+}
+
+export async function runSupplierOfferSearch({ city, category, product, profileType, area }) {
+  const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
+
+  const offers = suppliers.flatMap(supplier =>
+    buildProductSearchOffersFromSupplier(supplier, product || category || "")
+      .map((offer, idx) => ({
+        ...offer,
+        sortTierRank: typeof supplier.tierRank === "number" ? supplier.tierRank : 0,
+        sortCredibility: typeof supplier.credibilityScore === "number" ? supplier.credibilityScore : 0,
+        sortPosition: idx
+      }))
+  );
+
+  offers.sort((a, b) => {
+    const aHasPrice = a.pricePerUnit !== null ? 0 : 1;
+    const bHasPrice = b.pricePerUnit !== null ? 0 : 1;
+    if (aHasPrice !== bHasPrice) return aHasPrice - bHasPrice;
+
+    if (b.sortTierRank !== a.sortTierRank) return b.sortTierRank - a.sortTierRank;
+    if (b.sortCredibility !== a.sortCredibility) return b.sortCredibility - a.sortCredibility;
+    if (b.supplierRating !== a.supplierRating) return b.supplierRating - a.supplierRating;
+
+    return a.product.localeCompare(b.product);
+  });
+
+  return offers.slice(0, 50);
+}
+
+export function formatSupplierOfferResults(offers = []) {
+  return offers.map((offer) => {
+    const priceText =
+      offer.pricePerUnit !== null
+        ? `$${Number(offer.pricePerUnit).toFixed(2)}/${offer.unit || "each"}`
+        : "Price on request";
+
+    const locationText = [offer.supplierArea, offer.supplierCity].filter(Boolean).join(", ");
+    const desc = [
+      `🏪 ${offer.supplierName}`,
+      locationText ? `📍 ${locationText}` : "",
+      offer.deliveryText || ""
+    ].filter(Boolean).join(" · ");
+
+    return {
+      id: `sup_offer_pick_${offer.supplierId}_${encodeURIComponent(offer.product)}`,
+      title: `${offer.product}`.slice(0, 72),
+      description: `${priceText} · ${desc}`.slice(0, 72)
+    };
+  });
+}
+
+
 export function formatSupplierResults(suppliers, city, searchTerm) {
   if (!suppliers || !suppliers.length) return [];
 
