@@ -728,11 +728,45 @@ function getFilteredSupplierCatalogueItems(supplier, searchTerm = "") {
   });
 }
 
-function formatCatalogueHeader({ supplier, page, totalPages, totalItems, searchTerm = "", cartCount = 0 }) {
+function formatCatalogueHeader({
+  supplier,
+  page,
+  totalPages,
+  totalItems,
+  searchTerm = "",
+  cartCount = 0,
+  selectionMode = "catalogue"
+}) {
   const label = supplier?.businessName || "Supplier";
-  const searchLine = searchTerm ? `\n🔎 Search: *${searchTerm}*` : "";
-  const cartLine = cartCount > 0 ? `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` : "";
-  return `🛍 *${label} Catalogue*${searchLine}${cartLine}\n\nPage ${page + 1} of ${totalPages} • ${totalItems} item${totalItems === 1 ? "" : "s"}`;
+  const itemWord = supplier?.profileType === "service" ? "service" : "product";
+
+  const title =
+    selectionMode === "search_pick" && searchTerm
+      ? `🎯 *Choose exact ${itemWord} for: ${searchTerm}*`
+      : `🛍 *${label} Catalogue*`;
+
+  const supplierLine =
+    selectionMode === "search_pick" ? `\n🏪 ${label}` : "";
+
+  const searchLine =
+    searchTerm ? `\n🔎 Search: *${searchTerm}*` : "";
+
+  const cartLine =
+    cartCount > 0 ? `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` : "";
+
+  const helperLine =
+    selectionMode === "search_pick"
+      ? `\nTap the exact ${itemWord} you want before it is added to cart.`
+      : "";
+
+  return (
+    `${title}` +
+    `${supplierLine}` +
+    `${searchLine}` +
+    `${cartLine}` +
+    `${helperLine}\n\n` +
+    `Page ${page + 1} of ${totalPages} • ${totalItems} item${totalItems === 1 ? "" : "s"}`
+  );
 }
 
 async function getCurrentOrderCart({ biz, phone }) {
@@ -826,7 +860,8 @@ async function clearBuyerOrderContext({ biz, phone, keepSupplierSearch = true })
 }
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
   const searchTerm = opts.searchTerm || "";
- const pageSize = opts.pageSize || 6;
+  const pageSize = opts.pageSize || 6;
+  const selectionMode = opts.selectionMode || "catalogue";
 
   const allItems = getFilteredSupplierCatalogueItems(supplier, searchTerm);
   const totalItems = allItems.length;
@@ -838,8 +873,8 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
         (searchTerm ? ` for *${searchTerm}*.` : "."),
       buttons: [
         { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" },
-        { id: "suppliers_home", title: "⬅ Suppliers" }
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
+        { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
   }
@@ -849,37 +884,48 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
   const start = page * pageSize;
   const visible = allItems.slice(start, start + pageSize);
 
- 
-
   const rows = visible.map(item => ({
     id: `sup_cart_add_${supplier._id}_${encodeURIComponent(item.name)}`,
     title: item.name.slice(0, 72),
-    description: item.priceLabel || (supplier.profileType === "service" ? "Tap to add service" : "Tap to add item")
+    description:
+      item.priceLabel ||
+      (supplier.profileType === "service" ? "Tap to select this service" : "Tap to select this item")
   }));
 
- if (page > 0) {
-  rows.push({ id: `sup_catalog_page_prev_${supplier._id}`, title: "⬅ Previous Products" });
-}
+  if (page > 0) {
+    rows.push({
+      id: `sup_catalog_page_prev_${supplier._id}`,
+      title: selectionMode === "search_pick" ? "⬅ Previous Matches" : "⬅ Previous Products"
+    });
+  }
 
-if (page < totalPages - 1) {
-  rows.push({ id: `sup_catalog_page_next_${supplier._id}`, title: "➡ More Products" });
-}
+  if (page < totalPages - 1) {
+    rows.push({
+      id: `sup_catalog_page_next_${supplier._id}`,
+      title: selectionMode === "search_pick" ? "➡ More Matches" : "➡ More Products"
+    });
+  }
 
-if (page === 0) {
-  rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order by Number" });
-}
+  if (page === 0 && selectionMode === "search_pick") {
+    rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" });
+  }
 
-rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
+  if (page === 0) {
+    rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order by Number" });
+  }
 
-// Safety guard: WhatsApp list rows must not exceed 10
-if (rows.length > 10) rows.splice(10);
+  rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
+
+  if (rows.length > 10) rows.splice(10);
+
   const header = formatCatalogueHeader({
     supplier,
     page,
     totalPages,
     totalItems,
     searchTerm,
-    cartCount: cart.length
+    cartCount: cart.length,
+    selectionMode
   });
 
   return sendList(from, header, rows);
@@ -6576,108 +6622,29 @@ if (a.startsWith("sup_order_")) {
 
   const isService = supplier.profileType === "service";
 
-  // ── Recover the search term that led the buyer here ───────────────────
-// ── Recover the search term that led the buyer here ───────────────────
-  // ALWAYS check UserSession first — biz.sessionData can have stale product
-  // from a previous search (especially for ghost-biz supplier users who also buy)
-// ── Recover the search term that led the buyer here ───────────────────
-  // UserSession is updated on every search (biz and no-biz paths both write to it).
-  // biz.sessionData.supplierSearch.product can be stale from a previous search.
-  const _preSeedSess = await UserSession.findOne({ phone });
-  const _sessProduct = _preSeedSess?.tempData?.supplierSearchProduct || null;
-  const _bizProduct  = biz?.sessionData?.supplierSearch?.product || null;
-  // Prefer UserSession (always fresh); fall back to biz if UserSession is empty.
-  let searchedProduct = _sessProduct || _bizProduct || null;
-  // ── Pre-seed cart if we have a search term that matches a real item ───
-  let initialCart = [];
-  if (searchedProduct) {
-    const isServiceSupplier = isService;
-    let priceInfo = null;
+  // Recover the search term that led the buyer here.
+  // Prefer UserSession because it is updated on every buyer search.
+  const sess = await UserSession.findOne({ phone });
+  const searchedProduct =
+    sess?.tempData?.supplierSearchProduct ||
+    biz?.sessionData?.supplierSearch?.product ||
+    "";
 
-    if (isServiceSupplier) {
-      // Try to find matching rate
- 
-      const _wantedSvc = searchedProduct.toLowerCase();
-      const rate =
-        (supplier.rates || []).find(r => r.service?.toLowerCase() === _wantedSvc) ||
-        (supplier.rates || []).find(r => r.service?.toLowerCase().startsWith(_wantedSvc) || _wantedSvc.startsWith(r.service?.toLowerCase())) ||
-        (supplier.rates || []).find(r => r.service?.toLowerCase().includes(_wantedSvc)) ||
-        (supplier.rates || []).find(r => _wantedSvc.includes(r.service?.toLowerCase()) && r.service?.length >= 4);
-      if (rate) {
-        priceInfo = { amount: parseSupplierRateValue(rate.rate), unit: parseSupplierRateUnit(rate.rate) };
-        initialCart = [{
-          product: rate.service,
-          quantity: 1,
-          unit: priceInfo.unit || "job",
-          pricePerUnit: priceInfo.amount || null,
-          total: priceInfo.amount || null
-        }];
-      } else if (supplier.products?.length && !supplier.rates?.length) {
-        // Fallback: supplier has product list but no rates yet
-     const _wp = searchedProduct.toLowerCase();
-        const matchedProduct =
-          supplier.products.find(p => p?.toLowerCase() === _wp) ||
-          supplier.products.find(p => p?.toLowerCase().includes(_wp)) ||
-          supplier.products.find(p => _wp.includes(p?.toLowerCase()) && p?.length >= 4);
-        if (matchedProduct) {
-          initialCart = [{
-            product: matchedProduct,
-            quantity: 1,
-            unit: "job",
-            pricePerUnit: null,
-            total: null
-          }];
-        }
-      }
-    } else {
-      // Product supplier - find matching price
-    // Product supplier - find matching price
-      // Priority: exact → starts-with/ends-with → contains (both directions)
-      const _wanted = searchedProduct.toLowerCase();
-      const price =
-        (supplier.prices || []).find(p => p.product?.toLowerCase() === _wanted) ||
-        (supplier.prices || []).find(p => p.product?.toLowerCase().startsWith(_wanted) || _wanted.startsWith(p.product?.toLowerCase())) ||
-        (supplier.prices || []).find(p => p.product?.toLowerCase().includes(_wanted)) ||
-        (supplier.prices || []).find(p => _wanted.includes(p.product?.toLowerCase()) && p.product?.length >= 4);
-        // ↑ minimum 4 chars prevents "a", "ad" etc from matching "padlock"
-      if (price) {
-        priceInfo = { amount: Number(price.amount), unit: price.unit || "each" };
-        initialCart = [{
-          product: price.product,
-          quantity: 1,
-          unit: priceInfo.unit,
-          pricePerUnit: priceInfo.amount,
-          total: priceInfo.amount
-        }];
-      } else {
-        // No price match - try products list
-    const _wp2 = searchedProduct.toLowerCase();
-        const matchedProduct =
-          (supplier.products || []).find(p => p?.toLowerCase() === _wp2) ||
-          (supplier.products || []).find(p => p?.toLowerCase().includes(_wp2)) ||
-          (supplier.products || []).find(p => _wp2.includes(p?.toLowerCase()) && p?.length >= 4);
-        if (matchedProduct) {
-          initialCart = [{
-            product: matchedProduct,
-            quantity: 1,
-            unit: "each",
-            pricePerUnit: null,
-            total: null
-          }];
-        }
-      }
-    }
-  }
+  // IMPORTANT FIX:
+  // Do NOT pre-seed the cart from a guessed partial match.
+  // Buyer must explicitly choose the exact item first.
+  const initialCart = [];
 
-  // ── Store order state with pre-seeded cart ─────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
-    { $set: {
-      "tempData.orderSupplierId": supplierId,
-      "tempData.orderState": "supplier_order_picking",
-      "tempData.orderCart": initialCart,
-      "tempData.orderIsService": isService
-    }},
+    {
+      $set: {
+        "tempData.orderSupplierId": supplierId,
+        "tempData.orderState": "supplier_order_picking",
+        "tempData.orderCart": initialCart,
+        "tempData.orderIsService": isService
+      }
+    },
     { upsert: true }
   );
 
@@ -6692,25 +6659,27 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
-await persistOrderFlowState({
-  biz,
-  phone,
-  patch: {
-    orderSupplierId: String(supplier._id),
-    orderCart: initialCart,
-    orderIsService: isService,
-    orderBrowseMode: "catalogue",
-    orderCataloguePage: 0,
-    orderCatalogueSearch: ""
-  }
-});
+  const hasSearchTerm = Boolean(String(searchedProduct || "").trim());
 
-return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
-  page: 0,
-  searchTerm: ""
-});
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderCart: initialCart,
+      orderIsService: isService,
+      orderBrowseMode: "catalogue",
+      orderCataloguePage: 0,
+      orderCatalogueSearch: hasSearchTerm ? searchedProduct : ""
+    }
+  });
+
+  return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
+    page: 0,
+    searchTerm: hasSearchTerm ? searchedProduct : "",
+    selectionMode: hasSearchTerm ? "search_pick" : "catalogue"
+  });
 }
-
 
 
 if (a.startsWith("sup_number_page_open_")) {

@@ -324,12 +324,7 @@ function getFilteredSupplierCatalogueItems(supplier, searchTerm = "") {
   });
 }
 
-function formatCatalogueHeader({ supplier, page, totalPages, totalItems, searchTerm = "", cartCount = 0 }) {
-  const label = supplier?.businessName || "Supplier";
-  const searchLine = searchTerm ? `\n🔎 Search: *${searchTerm}*` : "";
-  const cartLine = cartCount > 0 ? `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` : "";
-  return `🛍 *${label} Catalogue*${searchLine}${cartLine}\n\nPage ${page + 1} of ${totalPages} • ${totalItems} item${totalItems === 1 ? "" : "s"}`;
-}
+
 
 async function getCurrentOrderCart({ biz, phone }) {
   if (biz) return biz.sessionData?.orderCart || [];
