@@ -728,6 +728,7 @@ function getFilteredSupplierCatalogueItems(supplier, searchTerm = "") {
   });
 }
 
+
 function formatCatalogueHeader({
   supplier,
   page,
@@ -768,6 +769,37 @@ function formatCatalogueHeader({
     `Page ${page + 1} of ${totalPages} • ${totalItems} item${totalItems === 1 ? "" : "s"}`
   );
 }
+
+
+async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart = [], opts = {}) {
+  const isService = supplier?.profileType === "service";
+  const quantity = Number(opts.quantity || 1);
+  const priceLine =
+    typeof selectedItem?.pricePerUnit === "number"
+      ? `💵 Price: $${Number(selectedItem.pricePerUnit).toFixed(2)}/${selectedItem.unit || (isService ? "job" : "each")}`
+      : `💵 Price: To be confirmed by supplier`;
+
+  const cartCount = Array.isArray(cart) ? cart.length : 0;
+  const searchTerm = opts.searchTerm || "";
+
+  return sendButtons(from, {
+    text:
+      `✅ *Selected ${isService ? "Service" : "Item"}*\n\n` +
+      `🏪 Supplier: ${supplier.businessName}\n` +
+      `${isService ? "🔧" : "📦"} ${selectedItem.product}\n` +
+      `${priceLine}\n` +
+      `🔢 Quantity: ${quantity}\n` +
+      `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` +
+      (searchTerm ? `\n🔎 Search: ${searchTerm}` : "") +
+      `\n\nWhat would you like to do next?`,
+    buttons: [
+      { id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: "➕ Add to Cart" },
+      { id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "⚡ Book This Now" : "⚡ Order This Now" },
+      { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
+    ]
+  });
+}
+
 
 async function getCurrentOrderCart({ biz, phone }) {
   if (biz) return biz.sessionData?.orderCart || [];
@@ -918,14 +950,14 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
 
   if (rows.length > 10) rows.splice(10);
 
-  const header = formatCatalogueHeader({
+   const header = formatCatalogueHeader({
     supplier,
     page,
     totalPages,
     totalItems,
     searchTerm,
     cartCount: cart.length,
-    selectionMode
+    selectionMode: opts.selectionMode || "catalogue"
   });
 
   return sendList(from, header, rows);
@@ -1013,7 +1045,16 @@ _12x2, 15x1, 18x6_`
     ]
   });
 }
+
+
+
 async function _sendSupplierCartMenu(from, supplier, cart = []) {
+  const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") });
+  const focusedItem =
+    biz?.sessionData?.selectedSupplierItem ||
+    sess?.tempData?.selectedSupplierItem ||
+    null;
+
   if (!cart.length) {
     return sendButtons(from, {
       text: "🛒 Your cart is empty.",
@@ -1025,12 +1066,14 @@ async function _sendSupplierCartMenu(from, supplier, cart = []) {
     });
   }
 
-const rows = cart.slice(0, 5).map(item => ({
+  const rows = cart.slice(0, 5).map(item => ({
     id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(item.product)}`,
     title: `➖ Remove ${item.product}`.slice(0, 72),
     description:
       `Qty ${item.quantity}` +
-      (typeof item.pricePerUnit === "number" ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}` : "")
+      (typeof item.pricePerUnit === "number"
+        ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}`
+        : "")
   }));
 
   rows.push({
@@ -1050,10 +1093,15 @@ const rows = cart.slice(0, 5).map(item => ({
     })
     .join("\n");
 
-    if (rows.length > 10) rows.splice(10);
+  const focusedLine = focusedItem?.product
+    ? `🎯 *Selected now:* ${focusedItem.product}\n\n`
+    : "";
+
+  if (rows.length > 10) rows.splice(10);
+
   return sendList(
     from,
-    `🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
+    `${focusedLine}🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
     rows
   );
 }
@@ -6622,17 +6670,12 @@ if (a.startsWith("sup_order_")) {
 
   const isService = supplier.profileType === "service";
 
-  // Recover the search term that led the buyer here.
-  // Prefer UserSession because it is updated on every buyer search.
-  const sess = await UserSession.findOne({ phone });
+  const searchSess = await UserSession.findOne({ phone });
   const searchedProduct =
-    sess?.tempData?.supplierSearchProduct ||
+    searchSess?.tempData?.supplierSearchProduct ||
     biz?.sessionData?.supplierSearch?.product ||
     "";
 
-  // IMPORTANT FIX:
-  // Do NOT pre-seed the cart from a guessed partial match.
-  // Buyer must explicitly choose the exact item first.
   const initialCart = [];
 
   await UserSession.findOneAndUpdate(
@@ -6659,8 +6702,6 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
-  const hasSearchTerm = Boolean(String(searchedProduct || "").trim());
-
   await persistOrderFlowState({
     biz,
     phone,
@@ -6668,16 +6709,17 @@ if (a.startsWith("sup_order_")) {
       orderSupplierId: String(supplier._id),
       orderCart: initialCart,
       orderIsService: isService,
-      orderBrowseMode: "catalogue",
+      orderBrowseMode: searchedProduct ? "search_pick" : "catalogue",
       orderCataloguePage: 0,
-      orderCatalogueSearch: hasSearchTerm ? searchedProduct : ""
+      orderCatalogueSearch: searchedProduct || "",
+      selectedSupplierItem: null
     }
   });
 
   return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
     page: 0,
-    searchTerm: hasSearchTerm ? searchedProduct : "",
-    selectionMode: hasSearchTerm ? "search_pick" : "catalogue"
+    searchTerm: searchedProduct || "",
+    selectionMode: searchedProduct ? "search_pick" : "catalogue"
   });
 }
 
@@ -6894,7 +6936,6 @@ if (a === "sup_catalogue_search_cancel") {
 
 // ── Cart: buyer taps an item from catalogue ───────────────────────────────
 if (a.startsWith("sup_cart_add_")) {
-  // format: sup_cart_add_{supplierId}_{encodedProductName}
   const withoutPrefix = a.replace("sup_cart_add_", "");
   const firstUnderscore = withoutPrefix.indexOf("_");
   const supplierId = withoutPrefix.slice(0, firstUnderscore);
@@ -6904,112 +6945,256 @@ if (a.startsWith("sup_cart_add_")) {
   const supplier = await SupplierProfile.findById(supplierId).lean();
   if (!supplier) return sendText(from, "❌ Supplier not found.");
 
-  // Get current cart
-  let cart = [];
-  if (biz) {
-    cart = biz.sessionData?.orderCart || [];
+  const sess = await UserSession.findOne({ phone });
+  const cart =
+    biz?.sessionData?.orderCart ||
+    sess?.tempData?.orderCart ||
+    [];
+
+  const isService = supplier.profileType === "service";
+
+  let priceInfo = null;
+  if (isService) {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (rate) {
+      priceInfo = {
+        amount: parseSupplierRateValue(rate.rate),
+        unit: parseSupplierRateUnit(rate.rate) || "job"
+      };
+    }
   } else {
-    const sess = await UserSession.findOne({ phone });
-    cart = sess?.tempData?.orderCart || [];
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (price) {
+      priceInfo = {
+        amount: Number(price.amount),
+        unit: price.unit || "each"
+      };
+    }
   }
 
-  // Check if item already in cart - increment qty
-const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
+  const selectedItem = {
+    product: productName,
+    quantity: 1,
+    unit: priceInfo?.unit || (isService ? "job" : "each"),
+    pricePerUnit: typeof priceInfo?.amount === "number" ? priceInfo.amount : null,
+    total: typeof priceInfo?.amount === "number" ? priceInfo.amount : null
+  };
+
+  const currentSearchTerm =
+    biz?.sessionData?.orderCatalogueSearch ??
+    sess?.tempData?.orderCatalogueSearch ??
+    "";
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderBrowseMode: "selected_item_preview",
+      orderCatalogueSearch: currentSearchTerm,
+      selectedSupplierItem: selectedItem
+    }
+  });
+
+  return _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart, {
+    quantity: 1,
+    searchTerm: currentSearchTerm
+  });
+}
+
+
+if (a.startsWith("sup_item_preview_add_")) {
+  const withoutPrefix = a.replace("sup_item_preview_add_", "");
+  const firstUnderscore = withoutPrefix.indexOf("_");
+  const supplierId = withoutPrefix.slice(0, firstUnderscore);
+  const encodedProduct = withoutPrefix.slice(firstUnderscore + 1);
+  const productName = decodeURIComponent(encodedProduct);
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  let cart = [
+    ...(biz?.sessionData?.orderCart || sess?.tempData?.orderCart || [])
+  ];
+
+  const isService = supplier.profileType === "service";
+
+  let priceInfo = null;
+  if (isService) {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (rate) {
+      priceInfo = {
+        amount: parseSupplierRateValue(rate.rate),
+        unit: parseSupplierRateUnit(rate.rate) || "job"
+      };
+    }
+  } else {
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (price) {
+      priceInfo = {
+        amount: Number(price.amount),
+        unit: price.unit || "each"
+      };
+    }
+  }
+
+  const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
+
   if (existing) {
     existing.quantity += 1;
-    // Recalculate total when increasing qty
-    if (existing.pricePerUnit) {
+    if (typeof existing.pricePerUnit === "number") {
       existing.total = existing.quantity * existing.pricePerUnit;
     }
   } else {
-    // Find price for this item
-    const isService = supplier.profileType === "service";
-    let priceInfo = null;
-    if (isService) {
-      const rate = (supplier.rates || []).find(r =>
-        r.service.toLowerCase() === productName.toLowerCase()
-      );
-      if (rate) priceInfo = { amount: parseSupplierRateValue(rate.rate), unit: parseSupplierRateUnit(rate.rate) };
-    } else {
-      const price = (supplier.prices || []).find(p =>
-        p.product.toLowerCase() === productName.toLowerCase()
-      );
-      if (price) priceInfo = { amount: Number(price.amount), unit: price.unit || "each" };
-    }
-
     cart.push({
       product: productName,
       quantity: 1,
-      unit: priceInfo?.unit || (isService ? "job" : "units"),
-      pricePerUnit: priceInfo?.amount || null,
-      total: priceInfo?.amount || null
+      unit: priceInfo?.unit || (isService ? "job" : "each"),
+      pricePerUnit: typeof priceInfo?.amount === "number" ? priceInfo.amount : null,
+      total: typeof priceInfo?.amount === "number" ? priceInfo.amount : null
     });
   }
 
-  // Save updated cart
   if (biz) {
-    biz.sessionData = { ...(biz.sessionData || {}), orderCart: cart };
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      orderCart: cart
+    };
     await saveBizSafe(biz);
   }
+
   await UserSession.findOneAndUpdate(
     { phone },
-    { $set: { "tempData.orderCart": cart } },
+    {
+      $set: {
+        "tempData.orderCart": cart
+      }
+    },
     { upsert: true }
   );
 
-  // Show updated catalogue with cart
-// ── After adding to cart: for services (and small catalogues with cart items),
-  // send a short confirmation nudge BEFORE the catalogue refresh.
-  // This tells the buyer "added ✓ - confirm or keep browsing".
-  const isServiceCart = supplier.profileType === "service";
-  const addedItem = existing ? `${productName} (×${existing.quantity} total)` : productName;
+  const currentSearchTerm =
+    biz?.sessionData?.orderCatalogueSearch ??
+    sess?.tempData?.orderCatalogueSearch ??
+    "";
 
-  if (isServiceCart) {
-    // For services: buyer added a service - tell them clearly what's next
-    await sendText(from,
-      `✅ *${addedItem}* added.\n\n_Tap ✅ Confirm Booking below to send your request, or add more services._`
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: currentSearchTerm ? "search_pick" : "catalogue",
+      orderSupplierId: String(supplier._id),
+      orderCart: cart,
+      selectedSupplierItem: {
+        product: productName,
+        quantity: existing ? existing.quantity : 1,
+        unit: priceInfo?.unit || (isService ? "job" : "each"),
+        pricePerUnit: typeof priceInfo?.amount === "number" ? priceInfo.amount : null,
+        total: typeof priceInfo?.amount === "number"
+          ? (existing ? (existing.quantity * existing.pricePerUnit) : priceInfo.amount)
+          : null
+      }
+    }
+  });
+
+  return _sendSupplierCartMenu(from, supplier, cart);
+}
+
+if (a.startsWith("sup_item_preview_order_")) {
+  const withoutPrefix = a.replace("sup_item_preview_order_", "");
+  const firstUnderscore = withoutPrefix.indexOf("_");
+  const supplierId = withoutPrefix.slice(0, firstUnderscore);
+  const encodedProduct = withoutPrefix.slice(firstUnderscore + 1);
+  const productName = decodeURIComponent(encodedProduct);
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  let cart = [
+    ...(biz?.sessionData?.orderCart || sess?.tempData?.orderCart || [])
+  ];
+
+  const isService = supplier.profileType === "service";
+
+  let priceInfo = null;
+  if (isService) {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
     );
-  }
-
-// ── After adding to cart: for services, send a brief confirmation nudge ──
-  // This tells the buyer what they added and what to do next.
-  if (supplier.profileType === "service" && cart.length > 0) {
-    const addedItem = existing
-      ? `${productName} ×${existing.quantity} total`
-      : productName;
-    await sendText(from,
-      `✅ *${addedItem}* added to your booking.\n\n_Tap ✅ Confirm Booking to send your request, or add more services below._`
+    if (rate) {
+      priceInfo = {
+        amount: parseSupplierRateValue(rate.rate),
+        unit: parseSupplierRateUnit(rate.rate) || "job"
+      };
+    }
+  } else {
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
     );
+    if (price) {
+      priceInfo = {
+        amount: Number(price.amount),
+        unit: price.unit || "each"
+      };
+    }
   }
 
-  // Show updated catalogue with cart
- const sessAfterAdd = await UserSession.findOne({ phone });
-const pageAfterAdd =
-  biz?.sessionData?.orderCataloguePage ??
-  sessAfterAdd?.tempData?.orderCataloguePage ??
-  0;
+  const existing = cart.find(c => c.product.toLowerCase() === productName.toLowerCase());
 
-const searchAfterAdd =
-  biz?.sessionData?.orderCatalogueSearch ??
-  sessAfterAdd?.tempData?.orderCatalogueSearch ??
-  "";
-
-await persistOrderFlowState({
-  biz,
-  phone,
-  patch: {
-    orderBrowseMode: "catalogue",
-    orderCataloguePage: pageAfterAdd,
-    orderCatalogueSearch: searchAfterAdd,
-    orderSupplierId: String(supplier._id),
-    orderCart: cart
+  if (existing) {
+    existing.quantity += 1;
+    if (typeof existing.pricePerUnit === "number") {
+      existing.total = existing.quantity * existing.pricePerUnit;
+    }
+  } else {
+    cart.push({
+      product: productName,
+      quantity: 1,
+      unit: priceInfo?.unit || (isService ? "job" : "each"),
+      pricePerUnit: typeof priceInfo?.amount === "number" ? priceInfo.amount : null,
+      total: typeof priceInfo?.amount === "number" ? priceInfo.amount : null
+    });
   }
-});
 
-return _sendSupplierCatalogueBrowser(from, supplier, cart, {
-  page: pageAfterAdd,
-  searchTerm: searchAfterAdd
-});
+  if (biz) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      orderCart: cart
+    };
+    await saveBizSafe(biz);
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.orderCart": cart
+      }
+    },
+    { upsert: true }
+  );
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderBrowseMode: "cart",
+      orderSupplierId: String(supplier._id),
+      orderCart: cart
+    }
+  });
+
+  return handleIncomingMessage({ from, action: `sup_cart_confirm_${supplierId}` });
 }
 
 // ── Cart: buyer confirms order from catalogue ─────────────────────────────

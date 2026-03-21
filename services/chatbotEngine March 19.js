@@ -384,14 +384,28 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
     description: item.priceLabel || (supplier.profileType === "service" ? "Tap to add service" : "Tap to add item")
   }));
 
-  if (page > 0) {
-    rows.push({ id: `sup_catalog_page_prev_${supplier._id}`, title: "⬅ Previous Products" });
-  }
-  if (page < totalPages - 1) {
-    rows.push({ id: `sup_catalog_page_next_${supplier._id}`, title: "➡ More Products" });
+   if (page > 0) {
+    rows.push({
+      id: `sup_catalog_page_prev_${supplier._id}`,
+      title: opts.selectionMode === "search_pick" ? "⬅ Previous Matches" : "⬅ Previous Products"
+    });
   }
 
-  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
+  if (page < totalPages - 1) {
+    rows.push({
+      id: `sup_catalog_page_next_${supplier._id}`,
+      title: opts.selectionMode === "search_pick" ? "➡ More Matches" : "➡ More Products"
+    });
+  }
+
+  if (page === 0 && opts.selectionMode === "search_pick") {
+    rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" });
+  }
+
+  if (page === 0) {
+    rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order by Number" });
+  }
+
   rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
 
   const header = formatCatalogueHeader({
