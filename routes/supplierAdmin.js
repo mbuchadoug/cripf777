@@ -274,29 +274,39 @@ router.get("/suppliers/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Registered</dt><dd>${new Date(supplier.createdAt).toDateString()}</dd>
             ${supplier.adminNote ? `<dt>Admin Note</dt><dd class="admin-note">${esc(supplier.adminNote)}</dd>` : ""}
           </dl>
-         <div class="action-row">
+<div class="action-row">
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-active" style="display:inline">
     <button class="btn ${supplier.active ? "btn-orange" : "btn-green"}">
       ${supplier.active ? "⏸ Deactivate" : "✅ Activate"}
     </button>
   </form>
+
   <form method="POST" action="/zq-admin/suppliers/${supplier._id}/toggle-suspend" style="display:inline">
     <button class="btn ${supplier.suspended ? "btn-green" : "btn-red"}">
       ${supplier.suspended ? "🔓 Unsuspend" : "⛔ Suspend"}
     </button>
   </form>
+
   <a href="/zq-admin/suppliers/${supplier._id}/activate" class="btn btn-green">
     🎁 Manual Activation
   </a>
+
   <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-blue">
     📦 Manage Products
+  </a>
+
+  <a href="/zq-admin/suppliers/${supplier._id}/live-items" class="btn btn-purple">
+    📌 Manage Live Items
   </a>
 </div>
         </div>
 
         <div>
           <div class="panel">
-            <h3>Products (${(supplier.products || []).length})</h3>
+            <h3>
+Products (${(supplier.products || []).length}) 
+• Live (${(supplier.listedProducts || []).length})
+</h3>
             <div class="tag-cloud">
               ${(supplier.products || []).length
                 ? supplier.products.map(p => `<span class="tag">${esc(p)}</span>`).join("")
@@ -1790,5 +1800,92 @@ router.patch("/presets/:catId/toggle", requireSupplierAdmin, async (req, res) =>
 });
 
 
+
+
+
+router.get("/suppliers/:id/live-items", requireSupplierAdmin, async (req, res) => {
+  const supplier = await SupplierProfile.findById(req.params.id).lean();
+  if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+
+  const uploaded = supplier.products || [];
+  const live = supplier.listedProducts || [];
+
+  res.send(layout("Manage Live Items", `
+    <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back</a>
+
+    <div class="panel">
+      <h3>${supplier.businessName}</h3>
+
+      <p><strong>Tier:</strong> ${supplier.tier || "basic"}</p>
+      <p><strong>Live:</strong> ${live.length} / ${cap}</p>
+      <p><strong>Uploaded:</strong> ${uploaded.length}</p>
+
+      ${uploaded.length ? `
+      <form method="POST" action="/zq-admin/suppliers/${supplier._id}/live-items">
+
+        <p><strong>Select up to ${cap} items:</strong></p>
+
+        <div style="max-height:400px;overflow:auto;border:1px solid #ddd;padding:10px;">
+          ${uploaded.map((p, i) => `
+            <label style="display:block;margin-bottom:6px;">
+              <input type="checkbox" name="items" value="${p}"
+                ${live.includes(p) ? "checked" : ""}>
+              ${i + 1}. ${p}
+            </label>
+          `).join("")}
+        </div>
+
+        <button type="submit" class="btn btn-blue" style="margin-top:12px;">
+          💾 Save Live Items
+        </button>
+      </form>
+      ` : `<em>No uploaded items</em>`}
+    </div>
+  `));
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.post("/suppliers/:id/live-items", requireSupplierAdmin, async (req, res) => {
+  const supplier = await SupplierProfile.findById(req.params.id);
+  if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+
+  let items = req.body.items || [];
+  if (!Array.isArray(items)) items = [items];
+
+  // clean + dedupe
+  const cleaned = [...new Set(items.map(i => String(i).trim()).filter(Boolean))];
+
+  if (cleaned.length > cap) {
+    return res.send("❌ Cannot exceed plan limit (" + cap + ")");
+  }
+
+  supplier.listedProducts = cleaned;
+  await supplier.save();
+
+  res.redirect(`/zq-admin/suppliers/${supplier._id}/live-items`);
+});
 
 export default router;
