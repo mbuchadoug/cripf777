@@ -4507,6 +4507,38 @@ if (biz?.sessionState === "supplier_replace_products" && !isMetaAction) {
   return sendSupplierAccountMenu(from, supplier);
 }
 
+
+if (biz?.sessionState === "supplier_replace_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return true;
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+
+  const indexes = findSupplierItemIndexes(text, uploaded);
+  if (!indexes.length) {
+    await sendText(from, "❌ Invalid selection. Example: 1,2,5");
+    return true;
+  }
+
+  const selected = indexes.slice(0, cap).map(i => uploaded[i]);
+
+  supplier.listedProducts = selected;
+  await supplier.save();
+
+  biz.sessionState = "ready";
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Updated. You now have *${selected.length}* live items.\n\nYou can add more later.`
+  );
+
+  return sendSupplierAccountMenu(from, supplier);
+}
+
 // ── Supplier confirms price they just entered ─────────────────────────────
   if (a === "sup_price_confirm_yes") {
     const orderId = biz?.sessionData?.pricingOrderId;

@@ -4340,27 +4340,62 @@ if (a === "sup_add_listed_products") {
 }
 
 
-
-if (a === "sup_replace_listed_products") {
+if (biz?.sessionState === "supplier_add_listed_products") {
   const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
+  if (!supplier) return true;
 
   const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
-  if (!uploaded.length) {
-    return sendText(from, "❌ No uploaded items found to choose from.");
-  }
-
-  if (biz) {
-    biz.sessionState = "supplier_replace_listed_products";
-    await saveBizSafe(biz);
-  }
-
-  await sendSupplierItemsInChunks(from, uploaded, "🔄 Choose Items for Your Live Listing");
 
   const capMap = { basic: 20, pro: 60, featured: 150 };
   const cap = capMap[supplier.tier] || 20;
 
-  return sendText(from, `Reply with up to *${cap}* item numbers to make live.\n\nExample:\n*1, 2, 5, 9*`);
+  const current = supplier.listedProducts || [];
+  const remainingSlots = cap - current.length;
+
+  const indexes = findSupplierItemIndexes(text, uploaded);
+  if (!indexes.length) {
+    await sendText(from, "❌ Invalid selection. Example: 1,2,5");
+    return true;
+  }
+
+  const selected = indexes.slice(0, remainingSlots).map(i => uploaded[i]);
+
+  supplier.listedProducts = [...current, ...selected].slice(0, cap);
+  await supplier.save();
+
+  biz.sessionState = "ready";
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Added *${selected.length}* items.\n\nYou now have *${supplier.listedProducts.length}/${cap}* live items.`
+  );
+
+  return sendSupplierAccountMenu(from, supplier);
+}
+
+
+if (a === "sup_replace_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+
+  biz.sessionState = "supplier_replace_listed_products";
+  await saveBizSafe(biz);
+
+  const preview = uploaded.map((p, i) => `${i + 1}. ${p}`).join("\n");
+
+  return sendText(
+    from,
+    `♻️ *Replace Live Items*\n\n` +
+    `Choose *up to ${cap}* items to keep live.\n` +
+    `_You don't need to fill all slots now._\n\n` +
+    `${preview}\n\nExample: *1,2,5*`
+  );
 }
 
 if (a === "sup_manage_listed_products") {

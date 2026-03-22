@@ -921,8 +921,10 @@ Expires: *${expiresAt.toDateString()}*
 You uploaded *${uploaded.length}* items.
 Your plan allows *${cap}* live items.
 
-Reply with the numbers of the items you want listed now.
-Example: *1,2,5,7*`
+Reply with the numbers of the items you want listed now *(choose up to ${cap})*.
+You can add more later from your account.
+
+Example: *1,2,5*`
                 );
 
                 const DISPLAY_MAX = 100;
@@ -932,7 +934,7 @@ Example: *1,2,5,7*`
 
                 await sendText(
                   from,
-                  `📋 Choose up to ${cap} live items:\n\n${preview}${uploaded.length > DISPLAY_MAX ? `\n_...and ${uploaded.length - DISPLAY_MAX} more_` : ""}`
+                 `📋 Choose *up to ${cap}* items to go live now:\n\n${preview}\n\n_You can add more later anytime._${uploaded.length > DISPLAY_MAX ? `\n_...and ${uploaded.length - DISPLAY_MAX} more_` : ""}`
                 );
 
                 return true;
