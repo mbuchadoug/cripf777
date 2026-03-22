@@ -5324,7 +5324,7 @@ if (a.startsWith("sup_search_city_")) {
 
   const locationLabel = city || "All Cities";
 
-  // PRODUCT / BUSINESS SEARCH FLOW
+  // OFFER-FIRST SEARCH FLOW (products + services)
   if (product) {
     const supplierResults = await runSupplierSearch({
       city,
@@ -5340,6 +5340,7 @@ if (a.startsWith("sup_search_city_")) {
       return businessName === normalizedQuery || businessName.includes(normalizedQuery);
     });
 
+    // Only direct-open when there is one clear business-name hit
     if (directBusinessMatches.length === 1) {
       const supplier = directBusinessMatches[0];
       const cart = await getCurrentOrderCart({ biz, phone });
@@ -5358,6 +5359,57 @@ if (a.startsWith("sup_search_city_")) {
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
 
+    const offerResults = await runSupplierOfferSearch({
+      city,
+      category,
+      product,
+      profileType,
+      area: null
+    });
+
+    // Use offer-level results first for normal product/service searches
+    if (offerResults.length) {
+      if (biz) {
+        biz.sessionData = {
+          ...(biz.sessionData || {}),
+          supplierSearch: {
+            ...(biz.sessionData?.supplierSearch || {}),
+            city
+          },
+          searchResults: offerResults,
+          searchPage: 0,
+          searchResultMode: "offers"
+        };
+        await saveBizSafe(biz);
+      } else {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": offerResults,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "offers"
+            }
+          },
+          { upsert: true }
+        );
+      }
+
+      const pageResults = offerResults.slice(0, 9);
+      const rows = formatSupplierOfferResults(pageResults);
+
+      if (offerResults.length > 9) {
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+      }
+
+      return sendList(
+        from,
+        `🔍 *${product}* in ${locationLabel} - ${offerResults.length} found`,
+        rows
+      );
+    }
+
+    // If there are no offer-level matches, then fall back to supplier-level business matches
     if (directBusinessMatches.length > 1) {
       if (biz) {
         biz.sessionData = {
@@ -5399,62 +5451,13 @@ if (a.startsWith("sup_search_city_")) {
       );
     }
 
-    const offerResults = await runSupplierOfferSearch({
-      city,
-      category,
-      product,
-      profileType,
-      area: null
+    return sendButtons(from, {
+      text: `😕 No matching offers found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
+      buttons: [
+        { id: "find_supplier", title: "🔍 Search Again" },
+        { id: "suppliers_home", title: "🏪 Suppliers" }
+      ]
     });
-
-    if (!offerResults.length) {
-      return sendButtons(from, {
-        text: `😕 No matching suppliers found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
-        buttons: [
-          { id: "find_supplier", title: "🔍 Search Again" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
-        ]
-      });
-    }
-
-    if (biz) {
-      biz.sessionData = {
-        ...(biz.sessionData || {}),
-        supplierSearch: {
-          ...(biz.sessionData?.supplierSearch || {}),
-          city
-        },
-        searchResults: offerResults,
-        searchPage: 0,
-        searchResultMode: "offers"
-      };
-      await saveBizSafe(biz);
-    } else {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.searchResults": offerResults,
-            "tempData.searchPage": 0,
-            "tempData.searchResultMode": "offers"
-          }
-        },
-        { upsert: true }
-      );
-    }
-
-    const pageResults = offerResults.slice(0, 9);
-    const rows = formatSupplierOfferResults(pageResults);
-
-    if (offerResults.length > 9) {
-      rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
-    }
-
-    return sendList(
-      from,
-      `🔍 *${product}* in ${locationLabel} - ${offerResults.length} found`,
-      rows
-    );
   }
 }
 
