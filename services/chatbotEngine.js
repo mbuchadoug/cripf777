@@ -5448,9 +5448,9 @@ To go live and start receiving orders, you need to choose a plan and pay. It's l
 
 💳 *Choose a plan below to activate your listing:*`,
       [
-        { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 10 orders/month. Good to start." },
+        { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 20 live items. Good to start." },
         { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year (save $10)", description: "Pay once for the whole year" },
-        { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Unlimited orders + higher placement" },
+        { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
         { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year (save $24)", description: "Most popular choice" },
         { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Top of search - buyers see you first" }
       ]
