@@ -65,6 +65,7 @@ import {
   sendSuppliersMenu,
   sendSupplierUpgradeMenu,
   sendSupplierAccountMenu,
+  sendSupplierMoreOptionsMenu,
 } from "./metaMenus.js";
 
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
@@ -1065,6 +1066,110 @@ async function clearBuyerOrderContext({ biz, phone, keepSupplierSearch = true })
     { upsert: true }
   );
 }
+
+if (biz?.sessionState === "supplier_select_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) {
+    await sendText(from, "❌ Supplier profile not found.");
+    return true;
+  }
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap =
+    Number(biz?.sessionData?.listedSelectionCap) ||
+    capMap[supplier.tier] ||
+    20;
+
+  const indexes = findSupplierItemIndexes(text, uploaded);
+
+  if (!indexes.length) {
+    await sendText(
+      from,
+      `❌ Invalid selection.\n\nReply with item numbers only, up to *${cap}* items.\nExample: *1,2,5,7*`
+    );
+    return true;
+  }
+
+  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
+
+  if (!selected.length) {
+    await sendText(from, "❌ No valid items selected.");
+    return true;
+  }
+
+  supplier.listedProducts = selected;
+  await supplier.save();
+
+  biz.sessionState = "ready";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    listedSelectionCap: undefined
+  };
+  delete biz.sessionData.listedSelectionCap;
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ *${selected.length} item${selected.length === 1 ? "" : "s"} now live!*\n\nCustomers can now find and order them.`
+  );
+
+  return sendSupplierAccountMenu(from, supplier);
+}
+
+
+if (biz?.sessionState === "supplier_select_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) {
+    await sendText(from, "❌ Supplier profile not found.");
+    return true;
+  }
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap =
+    Number(biz?.sessionData?.listedSelectionCap) ||
+    capMap[supplier.tier] ||
+    20;
+
+  const indexes = findSupplierItemIndexes(text, uploaded);
+
+  if (!indexes.length) {
+    await sendText(
+      from,
+      `❌ Invalid selection.\n\nReply with item numbers only, up to *${cap}* items.\nExample: *1,2,5,7*`
+    );
+    return true;
+  }
+
+  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
+
+  if (!selected.length) {
+    await sendText(from, "❌ No valid items selected.");
+    return true;
+  }
+
+  supplier.listedProducts = selected;
+  await supplier.save();
+
+  biz.sessionState = "ready";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    listedSelectionCap: undefined
+  };
+  delete biz.sessionData.listedSelectionCap;
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ *${selected.length} item${selected.length === 1 ? "" : "s"} now live!*\n\n` +
+    `Customers can now find and order them.`
+  );
+
+  return sendSupplierAccountMenu(from, supplier);
+}
+
+
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
   const searchTerm = opts.searchTerm || "";
   const pageSize = opts.pageSize || 6;
@@ -4201,6 +4306,12 @@ Your profile is saved but buyers cannot find you yet. Choose a plan to go live a
 }
 
 
+if (a === "sup_more_options") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  return sendSupplierMoreOptionsMenu(from, supplier);
+}
+
+
 if (a === "sup_view_listed_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
@@ -4328,6 +4439,9 @@ if (a === "sup_manage_listed_products") {
     ]
   );
 }
+
+
+
 
 
   // ── Buyer: My Orders list ─────────────────────────────────────────────────
@@ -4716,13 +4830,13 @@ if (a === "sup_my_reviews") {
 
 if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
     return sendList(from,
-      `💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Product listing\n\nPick a plan to continue:`,
+      `💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in search\n✅ Phone number visible\n✅ Unlimited uploads\n✅ Unlimited orders\n\nPick a plan to continue:`,
       [
-        { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 10 orders/month" },
-        { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year", description: "Save $10 - pay once yearly" },
-        { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Unlimited orders + buyer requests" },
-        { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year", description: "Save $24 - most popular" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Top placement + featured badge" }
+        { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 20 live items" },
+        { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year", description: "Up to 20 live items · save $10" },
+        { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
+        { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year", description: "Up to 60 live items · save $24" },
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Up to 150 live items + featured badge" }
       ]
     );
   }

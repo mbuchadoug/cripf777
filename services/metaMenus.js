@@ -767,16 +767,15 @@ return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
 }
 
 export async function sendSupplierUpgradeMenu(to, currentTier) {
-  return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}`, [
-    { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/mo" },
-    { id: "sup_plan_basic_annual", title: "✅ Basic - $50/yr (save $10)" },
-    { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/mo" },
-    { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/yr (save $24)" },
-    { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/mo" },
+  return sendList(to, `⭐ Upgrade Your Listing\nCurrent: ${(currentTier || "basic").toUpperCase()}\n\nAll plans include unlimited uploads and unlimited orders.`, [
+    { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/mo", description: "Up to 20 live items" },
+    { id: "sup_plan_basic_annual", title: "✅ Basic - $50/yr (save $10)", description: "Up to 20 live items" },
+    { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/mo", description: "Up to 60 live items" },
+    { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/yr (save $24)", description: "Up to 60 live items" },
+    { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/mo", description: "Up to 150 live items" },
     { id: "back", title: "⬅ Back" }
   ]);
 }
-
 
 
 
@@ -786,66 +785,57 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   const supplier = supplierDoc || await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(to);
 
+  const isService = supplier.profileType === "service";
   const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo" }[supplier.tier] || supplier.tier || "None";
   const statusIcon = supplier.active ? "🟢" : "🔴";
-  const renewDate = supplier.subscriptionEndsAt
-    ? new Date(supplier.subscriptionExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-    : "-";
+ const renewDate = supplier.subscriptionEndsAt
+  ? new Date(supplier.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  : "-";
 
-  const priceCount = supplier.prices?.length || 0;
-  const productCount = supplier.products?.length || 0;
+  const priceCount = supplier.prices?.length || supplier.rates?.length || 0;
+  const productCount = (supplier.products || []).filter(p => p !== "pending_upload").length;
+  const liveCount = (supplier.listedProducts || []).filter(Boolean).length;
   const score = (supplier.credibilityScore || 0).toFixed(0);
   const badge = (supplier.credibilityScore || 0) >= 70 && (supplier.completedOrders || 0) >= 10 ? " 🏅" : "";
 
-  return sendList(to, {
-    text: `🏪 *${supplier.businessName}*${badge}\n` +
-          `${statusIcon} ${supplier.active ? "Active" : "Inactive"} · 📦 ${supplier.tier ? tierLabel : "No Plan"}\n` +
-          `📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}\n` +
-          `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews) · Score: ${score}\n` +
-          `🗓 Renews: ${renewDate}\n\n` +
-             `Products: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Live: ${supplier.listedProducts?.length || 0} · Prices: ${priceCount}\n` +
-      `👀 Views this month: ${supplier.monthlyViews || 0} · 🛒 Orders this month: ${supplier.monthlyOrders || 0}`,
-    buttonLabel: "Manage Account",
-    sections: [
-      {
-        title: "📋 My Listing",
-        rows: [
-   { id: "sup_edit_products", title: "✏️ Manage Products", 
-  description: supplier.products?.[0] === "pending_upload"
-    ? "⏳ Upload pending - tap to add"
-    : `${productCount} listed · add / delete / replace` },
-    { id: "sup_manage_listed_products", title: "📋 Manage Listed Products",
-  description: `${supplier.listedProducts?.length || 0} live · choose what buyers can see` },
-{ id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
-  const products = (supplier.products || []).filter(p => p !== "pending_upload");
-  if (!products.length) return "No products listed yet";
-  const priced = products.filter(p =>
-    (supplier.prices || []).some(pr => pr.product?.toLowerCase() === p.toLowerCase())
-  ).length;
-  if (priced === 0) return `⚠️ ${products.length} items - no prices set`;
-  if (priced < products.length) return `${priced}/${products.length} items priced · partial updates supported`;
-  return `✅ All ${priced} items priced`;
-})() },
-          { id: "sup_edit_area", title: "📍 Edit Location", description: `${supplier.location?.area || "Not set"}, ${supplier.location?.city || ""}` },
-          { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery", description: supplier.delivery?.available ? "Currently: Delivering" : "Currently: Collection only" },
-          { id: "sup_toggle_active", title: statusIcon + (supplier.active ? " Deactivate Listing" : " Activate Listing"), description: supplier.active ? "Hide from search results" : "Show in search results" }
-        ]
-      },
-      {
-        title: "📊 Orders & Stats",
-        rows: [
-          { id: "sup_my_orders", title: "📦 My Orders", description: `${supplier.completedOrders || 0} completed` },
-          { id: "sup_my_earnings", title: "💵 Earnings Summary", description: "View order history" },
-          { id: "sup_my_reviews", title: "⭐ My Reviews", description: `${supplier.reviewCount || 0} reviews` }
-        ]
-      },
-      {
-        title: "💳 Subscription",
-        rows: [
-          { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan", description: `Current: ${tierLabel}` },
-          { id: "sup_renew_plan", title: "🔄 Renew Subscription", description: `Expires: ${renewDate}` }
-        ]
-      }
+  return sendList(
+    to,
+    `🏪 *${supplier.businessName}*${badge}\n` +
+    `${statusIcon} ${supplier.active ? "Active" : "Inactive"} · 📦 ${supplier.tier ? tierLabel : "No Plan"}\n` +
+    `📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}\n` +
+    `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews) · Score: ${score}\n` +
+    `🗓 Renews: ${renewDate}\n\n` +
+    `${isService ? "Services" : "Products"}: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Live: ${liveCount} · ${isService ? "Rates" : "Prices"}: ${priceCount}\n` +
+    `👀 Views this month: ${supplier.monthlyViews || 0} · 🛒 Orders this month: ${supplier.monthlyOrders || 0}`,
+    [
+      { id: "sup_edit_products", title: isService ? "✏️ Manage Services" : "✏️ Manage Products" },
+      { id: "sup_manage_listed_products", title: "📋 Manage Listed Items" },
+      { id: "sup_update_prices", title: isService ? "💰 Update Rates" : "💰 Update Prices" },
+      { id: "sup_my_orders", title: "📦 My Orders" },
+      { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
+      { id: "sup_more_options", title: "⚙️ More Options" },
+      { id: "suppliers_home", title: "⬅ Back" }
     ]
-  });
+  );
+}
+
+
+
+export async function sendSupplierMoreOptionsMenu(to, supplierDoc) {
+  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const phone = to.replace(/\D+/g, "");
+  const supplier = supplierDoc || await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(to);
+
+  const statusIcon = supplier.active ? "🟢" : "🔴";
+
+  return sendList(to, "⚙️ More Supplier Options", [
+    { id: "sup_edit_area", title: "📍 Edit Location" },
+    { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery" },
+    { id: "sup_toggle_active", title: statusIcon + (supplier.active ? " Deactivate Listing" : " Activate Listing") },
+    { id: "sup_my_earnings", title: "💵 Earnings Summary" },
+    { id: "sup_my_reviews", title: "⭐ My Reviews" },
+    { id: "sup_renew_plan", title: "🔄 Renew Subscription" },
+    { id: "my_supplier_account", title: "⬅ Back" }
+  ]);
 }

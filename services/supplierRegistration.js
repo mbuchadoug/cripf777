@@ -846,29 +846,32 @@ We will activate your listing automatically once payment is confirmed. ✅`
               const now = new Date();
               const expiresAt = new Date(now.getTime() + planDetails.durationDays * 24 * 60 * 60 * 1000);
 
-              supplier.tier = supplierPayment.tier;
-              supplier.active = true;
-              supplier.subscriptionStatus = "active";
-              supplier.subscriptionStartedAt = now;
-              supplier.subscriptionExpiresAt = expiresAt;
-await supplier.save();
+   supplier.tier = supplierPayment.tier;
+supplier.active = true;
+supplier.subscriptionStatus = "active";
+supplier.subscriptionStartedAt = now;
+supplier.subscriptionEndsAt = expiresAt;
 
-// ── AUTO LIST FIRST N PRODUCTS BASED ON PLAN ─────────────────
 const capMap = { basic: 20, pro: 60, featured: 150 };
 const cap = capMap[supplier.tier] || 20;
-
 const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
 
-// Only set if not already set (prevents overwriting later edits)
-if (!Array.isArray(supplier.listedProducts) || supplier.listedProducts.length === 0) {
-  supplier.listedProducts = uploaded.slice(0, cap);
-  await supplier.save();
+if (!Array.isArray(supplier.listedProducts)) {
+  supplier.listedProducts = [];
 }
+
+if (uploaded.length <= cap) {
+  supplier.listedProducts = uploaded;
+} else if (!supplier.listedProducts.length) {
+  supplier.listedProducts = [];
+}
+
+await supplier.save();
 
               // Update payment record
               await SupplierSubscriptionPayment.findOneAndUpdate(
                 { reference },
-                { status: "paid", paidAt: now }
+                { status: "paid", paidAt: now, endsAt: expiresAt }
               );
 
               // Generate receipt PDF
@@ -901,6 +904,40 @@ if (!Array.isArray(supplier.listedProducts) || supplier.listedProducts.length ==
                 console.error("[Supplier Payment] PDF generation failed:", pdfErr.message);
               }
 
+              if (uploaded.length > cap) {
+                freshBiz.sessionState = "supplier_select_listed_products";
+                freshBiz.sessionData = {
+                  ...(freshBiz.sessionData || {}),
+                  listedSelectionCap: cap
+                };
+                await freshBiz.save();
+
+                await sendText(from,
+`✅ *Payment Confirmed! You are now LIVE!*
+
+Plan: *${SUPPLIER_PLANS[supplierPayment.tier].name}*
+Expires: *${expiresAt.toDateString()}*
+
+You uploaded *${uploaded.length}* items.
+Your plan allows *${cap}* live items.
+
+Reply with the numbers of the items you want listed now.
+Example: *1,2,5,7*`
+                );
+
+                const DISPLAY_MAX = 100;
+                const preview = uploaded.slice(0, DISPLAY_MAX)
+                  .map((item, i) => `${i + 1}. ${item}`)
+                  .join("\n");
+
+                await sendText(
+                  from,
+                  `📋 Choose up to ${cap} live items:\n\n${preview}${uploaded.length > DISPLAY_MAX ? `\n_...and ${uploaded.length - DISPLAY_MAX} more_` : ""}`
+                );
+
+                return true;
+              }
+
               freshBiz.sessionState = "ready";
               freshBiz.sessionData = {};
               await freshBiz.save();
@@ -914,7 +951,7 @@ Your listing is now *active*. Buyers in your area can find you when they search.
 Plan: *${SUPPLIER_PLANS[supplierPayment.tier].name}*
 Expires: *${expiresAt.toDateString()}*
 
-Start receiving orders! 🎉`
+✅ *${uploaded.length} item${uploaded.length === 1 ? "" : "s"} listed live now.*`
               );
               return sendSupplierAccountMenu(from, supplier);
             }

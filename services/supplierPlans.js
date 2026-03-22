@@ -18,6 +18,32 @@ export const SUPPLIER_PLANS = {
   }
 };
 
+
+
+
+
+
+export const SUPPLIER_PLAN_FEATURES = {
+  basic: [
+    "Up to 20 live items",
+    "Unlimited uploads",
+    "Unlimited orders",
+    "Upgrade anytime"
+  ],
+  pro: [
+    "Up to 60 live items",
+    "Unlimited uploads",
+    "Unlimited orders",
+    "Upgrade anytime"
+  ],
+  featured: [
+    "Up to 150 live items",
+    "Unlimited uploads",
+    "Unlimited orders",
+    "Upgrade anytime"
+  ]
+};
+
 // ─── Cities ──────────────────────────────────────────────────────────────────
 
 export const SUPPLIER_CITIES = [
