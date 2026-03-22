@@ -5459,6 +5459,75 @@ if (a.startsWith("sup_search_city_")) {
       ]
     });
   }
+
+  // CATEGORY-BROWSE FLOW (category + type, no typed product)
+  if (category && profileType) {
+    const supplierResults = await runSupplierSearch({
+      city,
+      category,
+      product: null,
+      profileType,
+      area: null
+    });
+
+    if (!supplierResults.length) {
+      const label = category.replace(/_/g, " ");
+      return sendButtons(from, {
+        text: `😕 No matching ${profileType === "service" ? "providers" : "suppliers"} found for *${label}*${city ? ` in ${city}` : ""}.\n\nTry another city or category.`,
+        buttons: [
+          { id: "find_supplier", title: "🔍 Search Again" },
+          { id: "suppliers_home", title: "🏪 Suppliers" }
+        ]
+      });
+    }
+
+    if (biz) {
+      biz.sessionData = {
+        ...(biz.sessionData || {}),
+        supplierSearch: {
+          ...(biz.sessionData?.supplierSearch || {}),
+          city
+        },
+        searchResults: supplierResults,
+        searchPage: 0,
+        searchResultMode: "suppliers"
+      };
+      await saveBizSafe(biz);
+    } else {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.searchResults": supplierResults,
+            "tempData.searchPage": 0,
+            "tempData.searchResultMode": "suppliers"
+          }
+        },
+        { upsert: true }
+      );
+    }
+
+    const pageResults = supplierResults.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, city, null);
+
+    if (supplierResults.length > 9) {
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${supplierResults.length - 9} more)` });
+    }
+
+    return sendList(
+      from,
+      `📂 *${category.replace(/_/g, " ")}* in ${locationLabel} - ${supplierResults.length} found`,
+      rows
+    );
+  }
+
+  return sendButtons(from, {
+    text: "❌ Search session expired. Please start again.",
+    buttons: [
+      { id: "find_supplier", title: "🔍 Search Again" },
+      { id: "suppliers_home", title: "🏪 Suppliers" }
+    ]
+  });
 }
 
 if (a.startsWith("sup_offer_pick_")) {
