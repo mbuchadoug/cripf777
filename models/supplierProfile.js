@@ -10,6 +10,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   },
   categories: [{ type: String }],
   products: [{ type: String }],
+  listedProducts: [{ type: String }],
   prices: [{
     product: { type: String, required: true },
     amount: { type: Number, required: true },

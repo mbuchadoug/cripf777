@@ -788,7 +788,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
 
   const tierLabel = { basic: "Basic $5/mo", pro: "Pro $12/mo", featured: "Featured $25/mo" }[supplier.tier] || supplier.tier || "None";
   const statusIcon = supplier.active ? "🟢" : "🔴";
-  const renewDate = supplier.subscriptionExpiresAt
+  const renewDate = supplier.subscriptionEndsAt
     ? new Date(supplier.subscriptionExpiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     : "-";
 
@@ -803,7 +803,8 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
           `📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}\n` +
           `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews) · Score: ${score}\n` +
           `🗓 Renews: ${renewDate}\n\n` +
-        `Products: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Prices: ${priceCount}`,
+             `Products: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Live: ${supplier.listedProducts?.length || 0} · Prices: ${priceCount}\n` +
+      `👀 Views this month: ${supplier.monthlyViews || 0} · 🛒 Orders this month: ${supplier.monthlyOrders || 0}`,
     buttonLabel: "Manage Account",
     sections: [
       {
@@ -813,6 +814,8 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
   description: supplier.products?.[0] === "pending_upload"
     ? "⏳ Upload pending - tap to add"
     : `${productCount} listed · add / delete / replace` },
+    { id: "sup_manage_listed_products", title: "📋 Manage Listed Products",
+  description: `${supplier.listedProducts?.length || 0} live · choose what buyers can see` },
 { id: "sup_update_prices", title: "💰 Update Prices", description: (() => {
   const products = (supplier.products || []).filter(p => p !== "pending_upload");
   if (!products.length) return "No products listed yet";

@@ -851,7 +851,19 @@ We will activate your listing automatically once payment is confirmed. ✅`
               supplier.subscriptionStatus = "active";
               supplier.subscriptionStartedAt = now;
               supplier.subscriptionExpiresAt = expiresAt;
-              await supplier.save();
+await supplier.save();
+
+// ── AUTO LIST FIRST N PRODUCTS BASED ON PLAN ─────────────────
+const capMap = { basic: 20, pro: 60, featured: 150 };
+const cap = capMap[supplier.tier] || 20;
+
+const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+
+// Only set if not already set (prevents overwriting later edits)
+if (!Array.isArray(supplier.listedProducts) || supplier.listedProducts.length === 0) {
+  supplier.listedProducts = uploaded.slice(0, cap);
+  await supplier.save();
+}
 
               // Update payment record
               await SupplierSubscriptionPayment.findOneAndUpdate(

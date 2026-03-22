@@ -103,6 +103,13 @@ function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function round2(n) { return Math.round(n * 100) / 100; }
 
+
+function calculateUpgradeCost(currentPrice, nextPrice, daysRemaining, totalDays) {
+  if (nextPrice <= currentPrice) return 0;
+  if (daysRemaining <= 0 || totalDays <= 0) return round2(nextPrice - currentPrice);
+  return round2((nextPrice - currentPrice) * (daysRemaining / totalDays));
+}
+
 function currencySymbol(cur) {
   const c = (cur || "").toUpperCase();
   if (c === "USD") return "$";
@@ -703,7 +710,11 @@ function getSupplierCatalogueSourceItems(supplier) {
     pricedMap.set(normalizeProductName(p.product), p);
   }
 
-  const allProducts = Array.isArray(supplier.products) ? supplier.products : [];
+const sourceProducts = Array.isArray(supplier.listedProducts) && supplier.listedProducts.length
+  ? supplier.listedProducts
+  : supplier.products || [];
+
+const allProducts = sourceProducts;
   return allProducts
     .filter(Boolean)
     .filter(p => p !== "pending_upload")
@@ -4187,6 +4198,135 @@ Your profile is saved but buyers cannot find you yet. Choose a plan to go live a
   }
 
   return sendSupplierAccountMenu(from, supplier);
+}
+
+
+if (a === "sup_view_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const isService = supplier.profileType === "service";
+  const listed = (supplier.listedProducts || []).filter(Boolean);
+
+  if (!listed.length) {
+    return sendButtons(from, {
+      text: `📋 No listed ${isService ? "services" : "products"} yet.`,
+      buttons: [
+        { id: "sup_manage_listed_products", title: "⬅ Back" }
+      ]
+    });
+  }
+
+  await sendSupplierItemsInChunks(
+    from,
+    listed,
+    `📋 Current Listed ${isService ? "Services" : "Products"}`
+  );
+
+  return sendButtons(from, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "sup_add_listed_products", title: "➕ Add More" },
+      { id: "sup_remove_listed_products", title: "🗑 Remove" },
+      { id: "sup_replace_listed_products", title: "🔄 Replace" }
+    ]
+  });
+}
+
+
+
+if (a === "sup_add_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+  const listed = supplier.listedProducts || [];
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+
+  const available = uploaded.filter(p =>
+    !listed.some(lp => normalizeProductName(lp) === normalizeProductName(p))
+  );
+
+  const slotsLeft = cap - listed.length;
+  if (slotsLeft <= 0) {
+    return sendButtons(from, {
+      text: `❌ You have reached your listing limit (${listed.length}/${cap}). Upgrade or replace some listed items first.`,
+      buttons: [
+        { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
+        { id: "sup_manage_listed_products", title: "⬅ Back" }
+      ]
+    });
+  }
+
+  if (!available.length) {
+    return sendButtons(from, {
+      text: "✅ All uploaded items are already listed.",
+      buttons: [
+        { id: "sup_manage_listed_products", title: "⬅ Back" }
+      ]
+    });
+  }
+
+  if (biz) {
+    biz.sessionState = "supplier_add_listed_products";
+    await saveBizSafe(biz);
+  }
+
+  await sendSupplierItemsInChunks(
+    from,
+    available,
+    `➕ Choose Items to Add (${slotsLeft} slot${slotsLeft === 1 ? "" : "s"} left)`
+  );
+
+  return sendText(from, `Reply with the numbers you want to add to your live listing.\n\nExample:\n*2, 5, 8*`);
+}
+
+
+
+if (a === "sup_replace_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+  if (!uploaded.length) {
+    return sendText(from, "❌ No uploaded items found to choose from.");
+  }
+
+  if (biz) {
+    biz.sessionState = "supplier_replace_listed_products";
+    await saveBizSafe(biz);
+  }
+
+  await sendSupplierItemsInChunks(from, uploaded, "🔄 Choose Items for Your Live Listing");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+
+  return sendText(from, `Reply with up to *${cap}* item numbers to make live.\n\nExample:\n*1, 2, 5, 9*`);
+}
+
+if (a === "sup_manage_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) return sendSuppliersMenu(from);
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
+  const listed = (supplier.listedProducts || []).filter(Boolean);
+  const isService = supplier.profileType === "service";
+
+  return sendList(
+    from,
+    `📋 *Manage Listed ${isService ? "Services" : "Products"}*\n\n` +
+    `Live now: ${listed.length}/${cap}\n\nWhat would you like to do?`,
+    [
+      { id: "sup_view_listed_products", title: `👀 View Listed ${isService ? "Services" : "Products"}` },
+      { id: "sup_add_listed_products", title: `➕ Add More Listed ${isService ? "Items" : "Products"}` },
+      { id: "sup_remove_listed_products", title: `🗑 Remove Listed ${isService ? "Items" : "Products"}` },
+      { id: "sup_replace_listed_products", title: `🔄 Replace Listed ${isService ? "Items" : "Products"}` },
+      { id: "my_supplier_account", title: "🏪 My Account" }
+    ]
+  );
 }
 
 

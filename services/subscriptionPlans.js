@@ -340,3 +340,12 @@ export const SUPPLIER_CATEGORIES = [
     presetKey: null
   }
 ];
+
+
+
+// ── Listing caps ─────────────────────────────────────────────
+export const SUPPLIER_LISTING_CAPS = {
+  basic: 20,
+  pro: 60,
+  featured: 150
+};
