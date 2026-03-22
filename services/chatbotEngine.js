@@ -1067,107 +1067,10 @@ async function clearBuyerOrderContext({ biz, phone, keepSupplierSearch = true })
   );
 }
 
-if (biz?.sessionState === "supplier_select_listed_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) {
-    await sendText(from, "❌ Supplier profile not found.");
-    return true;
-  }
-
-  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
-  const capMap = { basic: 20, pro: 60, featured: 150 };
-  const cap =
-    Number(biz?.sessionData?.listedSelectionCap) ||
-    capMap[supplier.tier] ||
-    20;
-
-  const indexes = findSupplierItemIndexes(text, uploaded);
-
-  if (!indexes.length) {
-    await sendText(
-      from,
-      `❌ Invalid selection.\n\nReply with item numbers only, up to *${cap}* items.\nExample: *1,2,5,7*`
-    );
-    return true;
-  }
-
-  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
-
-  if (!selected.length) {
-    await sendText(from, "❌ No valid items selected.");
-    return true;
-  }
-
-  supplier.listedProducts = selected;
-  await supplier.save();
-
-  biz.sessionState = "ready";
-  biz.sessionData = {
-    ...(biz.sessionData || {}),
-    listedSelectionCap: undefined
-  };
-  delete biz.sessionData.listedSelectionCap;
-  await saveBizSafe(biz);
-
-  await sendText(
-    from,
-    `✅ *${selected.length} item${selected.length === 1 ? "" : "s"} now live!*\n\nCustomers can now find and order them.`
-  );
-
-  return sendSupplierAccountMenu(from, supplier);
-}
 
 
-if (biz?.sessionState === "supplier_select_listed_products") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) {
-    await sendText(from, "❌ Supplier profile not found.");
-    return true;
-  }
 
-  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
-  const capMap = { basic: 20, pro: 60, featured: 150 };
-  const cap =
-    Number(biz?.sessionData?.listedSelectionCap) ||
-    capMap[supplier.tier] ||
-    20;
 
-  const indexes = findSupplierItemIndexes(text, uploaded);
-
-  if (!indexes.length) {
-    await sendText(
-      from,
-      `❌ Invalid selection.\n\nReply with item numbers only, up to *${cap}* items.\nExample: *1,2,5,7*`
-    );
-    return true;
-  }
-
-  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
-
-  if (!selected.length) {
-    await sendText(from, "❌ No valid items selected.");
-    return true;
-  }
-
-  supplier.listedProducts = selected;
-  await supplier.save();
-
-  biz.sessionState = "ready";
-  biz.sessionData = {
-    ...(biz.sessionData || {}),
-    listedSelectionCap: undefined
-  };
-  delete biz.sessionData.listedSelectionCap;
-  await saveBizSafe(biz);
-
-  await sendText(
-    from,
-    `✅ *${selected.length} item${selected.length === 1 ? "" : "s"} now live!*\n\n` +
-    `Customers can now find and order them.`
-  );
-
-  return sendSupplierAccountMenu(from, supplier);
-}
 
 
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
@@ -4104,6 +4007,49 @@ Or type *same* to use this WhatsApp number.`);
   if (a === "onboard_business") {
     return startOnboarding(from, phone);
   }
+
+  // ── HANDLE SUPPLIER LISTED PRODUCT SELECTION ──
+if (biz?.sessionState === "supplier_select_listed_products") {
+  const supplier = await SupplierProfile.findOne({ phone });
+  if (!supplier) {
+    await sendText(from, "❌ Supplier profile not found.");
+    return true;
+  }
+
+  const uploaded = (supplier.products || []).filter(p => p && p !== "pending_upload");
+
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap =
+    Number(biz?.sessionData?.listedSelectionCap) ||
+    capMap[supplier.tier] ||
+    20;
+
+  const indexes = findSupplierItemIndexes(text, uploaded);
+
+  if (!indexes.length) {
+    await sendText(
+      from,
+      `❌ Invalid selection.\n\nReply with item numbers only.\nExample: *1,2,5*`
+    );
+    return true;
+  }
+
+  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
+
+  supplier.listedProducts = selected;
+  await supplier.save();
+
+  biz.sessionState = "ready";
+  delete biz.sessionData.listedSelectionCap;
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ *${selected.length} items now live!*`
+  );
+
+  return sendSupplierAccountMenu(from, supplier);
+}
 
   // ── Welcome screen: Find Suppliers or register ────────────────────────────
 if (a === "find_supplier") {
