@@ -26,12 +26,12 @@ await saveBiz(biz);
 
   const { SUPPLIER_CATEGORIES } = await import("./supplierPlans.js");
 
-  return sendList(from, "🔍 What are you looking for?", [
+   return sendList(from, "🔍 What are you looking for?", [
     ...SUPPLIER_CATEGORIES.map(c => ({
       id: `sup_search_cat_${c.id}`,
       title: c.label
     })),
-    { id: "sup_search_all", title: "🔍 Search by product name" }
+    { id: "sup_search_all", title: "🔍 Search by product or service name" }
   ]);
 }
 

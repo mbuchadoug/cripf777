@@ -78,56 +78,37 @@ function computeOrderTotals(items = []) {
 export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, options = {}) {
   const { isBooking } = options;
 
-  // ── Booking notification (service providers) ──────────────────────────────
-  if (isBooking) {
-    const service  = order.items?.[0]?.product || "Service";
-    const location = order.delivery?.address   || "Not specified";
-    const when     = order.supplierNote        || "Not specified";
-    return sendButtons(supplierPhone, {
-      text:
-        `📅 *New Booking Request!*\n\n` +
-        `🔧 Service: ${service}\n` +
-        `📍 Location: ${location}\n` +
-        `🗓 When: ${when}\n` +
-        `📞 Buyer: ${buyerPhone || order.buyerPhone}`,
-      buttons: [
-        { id: `sup_book_confirm_${order._id}`, title: "✅ Accept Booking" },
-        { id: `sup_decline_${order._id}`,      title: "❌ Decline" }
-      ]
-    });
-  }
+  const itemLines = formatOrderItems(order.items);
 
- const itemLines = formatOrderItems(order.items);
+  const supplier = await SupplierProfile.findOne({ phone: supplierPhone }).lean();
+  const isServiceSupplier = supplier?.profileType === "service" || Boolean(isBooking);
 
-const supplier = await SupplierProfile.findOne({ phone: supplierPhone }).lean();
-const isServiceSupplier = supplier?.profileType === "service";
+  const deliveryLine = order.delivery?.required
+    ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
+    : isServiceSupplier
+      ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
+      : "🏠 Collection";
 
-const deliveryLine = order.delivery?.required
-  ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
-  : isServiceSupplier
-    ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
-    : "🏠 Collection";
+  const totals = computeOrderTotals(order.items || []);
 
-const totals = computeOrderTotals(order.items || []);
+  const totalLine = totals.fullyPriced
+    ? `💵 Total: $${Number(totals.totalAmount || 0).toFixed(2)}`
+    : totals.partiallyPriced
+      ? `💵 Partial total: $${Number(totals.totalAmount || 0).toFixed(2)} • ${totals.unpricedItems.length} item${totals.unpricedItems.length === 1 ? "" : "s"} still need pricing`
+      : `💵 Total: Pending - set your price when accepting`;
 
-const totalLine = totals.fullyPriced
-  ? `💵 Total: $${Number(totals.totalAmount || 0).toFixed(2)}`
-  : totals.partiallyPriced
-    ? `💵 Partial total: $${Number(totals.totalAmount || 0).toFixed(2)} • ${totals.unpricedItems.length} item${totals.unpricedItems.length === 1 ? "" : "s"} still need pricing`
-    : `💵 Total: Pending - set your price when accepting`;
-
-await sendButtons(supplierPhone, {
-  text:
-    `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "New Booking Request!" : "New Order!"}*\n\n` +
-    `${itemLines}\n\n` +
-    `${totalLine}\n` +
-    `${deliveryLine}\n` +
-    `📞 Buyer: ${order.buyerPhone}`,
-  buttons: [
-    { id: `sup_accept_${order._id}`, title: "✅ Accept" },
-    { id: `sup_decline_${order._id}`, title: "❌ Decline" }
-  ]
-});
+  await sendButtons(supplierPhone, {
+    text:
+      `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "New Booking Request!" : "New Order!"}*\n\n` +
+      `${itemLines}\n\n` +
+      `${totalLine}\n` +
+      `${deliveryLine}\n` +
+      `📞 Buyer: ${buyerPhone || order.buyerPhone}`,
+    buttons: [
+      { id: `sup_accept_${order._id}`, title: isServiceSupplier ? "✅ Accept Booking" : "✅ Accept" },
+      { id: `sup_decline_${order._id}`, title: "❌ Decline" }
+    ]
+  });
 }
 
 export async function handleOrderAccepted(from, orderId, biz, saveBiz) {
@@ -346,51 +327,8 @@ return sendButtons(from, {
 });
 }
 
-export async function handleBookingAccepted(from, orderId) {
-  const order = await SupplierOrder.findById(orderId);
-  if (!order) {
-    await sendText(from, "❌ Booking not found.");
-    return;
-  }
-
-  order.status = "accepted";
-  await order.save();
-
-// FIXED - also increments completedOrders
-await SupplierProfile.findOneAndUpdate(
-  { phone: from },
-  { $inc: { monthlyOrders: 1, completedOrders: 1 } }
-);
-
-  const supplier = await SupplierProfile.findOne({ phone: from });
-
-  // Notify buyer
-  try {
-    await sendButtons(order.buyerPhone, {
-      text:
-        `✅ *Booking Accepted!*\n\n` +
-        `*${supplier?.businessName || from}* has accepted your booking.\n\n` +
-        `🔧 ${order.items?.[0]?.product || "Service"}\n` +
-        `📍 ${order.delivery?.address || "Location TBC"}\n` +
-        `🗓 ${order.supplierNote || "Time TBC"}\n\n` +
-        `📞 Contact: ${from}\n\n` +
-        `They will be in touch to confirm details.`,
-      buttons: [
-        { id: `rate_order_${order._id}`, title: "⭐ Rate Service" },
-        { id: "suppliers_home",           title: "🏪 Suppliers" }
-      ]
-    });
-  } catch (err) {
-    console.error("[BOOKING ACCEPT → BUYER NOTIFY FAILED]", err?.response?.data || err.message);
-  }
-
-  return sendButtons(from, {
-    text: `✅ *Booking confirmed!*\n\nThe buyer has been notified. Contact them at ${order.buyerPhone} to arrange the job.`,
-    buttons: [
-    { id: "sup_my_orders",   title: "📦 Orders From Buyers" },
-      { id: "suppliers_home",  title: "🏪 Suppliers" }
-    ]
-  });
+export async function handleBookingAccepted(from, orderId, biz, saveBiz) {
+  return handleOrderAccepted(from, orderId, biz, saveBiz);
 }
 
 
