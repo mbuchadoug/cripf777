@@ -2392,13 +2392,24 @@ return sendButtons(from, {
     return;
   }
 
-  if (a === "inv_item_catalogue") {
+if (a === "inv_item_catalogue") {
     if (!biz) return sendMainMenu(from);
     const query = { businessId: biz._id, isActive: true };
+    let branchFilter = null;
+
     if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
-      query.branchId = caller.branchId;
+      branchFilter = caller.branchId;
     } else if (caller?.role === "owner" && biz.sessionData?.targetBranchId) {
-      query.branchId = biz.sessionData.targetBranchId;
+      branchFilter = biz.sessionData.targetBranchId;
+    }
+
+    if (branchFilter) {
+      // Include products that belong to this branch OR have no branch set (supplier-synced)
+      query.$or = [
+        { branchId: branchFilter },
+        { branchId: null },
+        { branchId: { $exists: false } }
+      ];
     }
 
     const products = await Product.find(query).limit(20);
