@@ -3464,6 +3464,7 @@ const supplierStates = [
   "supplier_order_enter_price",
     "supplier_order_confirm_price",  // ← ADD THIS
   "supplier_order_picking",
+  "supplier_reg_biz_currency"
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
@@ -4934,9 +4935,16 @@ if (a === "sup_travel_yes") {
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.travelAvailable = true;
     biz.sessionData.supplierReg.minOrder = 0;
-    biz.sessionState = "supplier_reg_confirm";
+    biz.sessionState = "supplier_reg_biz_currency";
     await saveBizSafe(biz);
-    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
+    return sendButtons(from, {
+      text: "💱 *Almost done! What currency does your business use?*\n\nThis will be your default for invoices and quotes.",
+      buttons: [
+        { id: "sup_biz_cur_USD", title: "💵 USD ($)" },
+        { id: "sup_biz_cur_ZWL", title: "🇿🇼 ZWL (Z$)" },
+        { id: "sup_biz_cur_ZAR", title: "🇿🇦 ZAR (R)" }
+      ]
+    });
   }
 
 
@@ -4945,9 +4953,16 @@ if (a === "sup_travel_no") {
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.travelAvailable = false;
     biz.sessionData.supplierReg.minOrder = 0;
-    biz.sessionState = "supplier_reg_confirm";
+    biz.sessionState = "supplier_reg_biz_currency";
     await saveBizSafe(biz);
-    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
+    return sendButtons(from, {
+      text: "💱 *Almost done! What currency does your business use?*\n\nThis will be your default for invoices and quotes.",
+      buttons: [
+        { id: "sup_biz_cur_USD", title: "💵 USD ($)" },
+        { id: "sup_biz_cur_ZWL", title: "🇿🇼 ZWL (Z$)" },
+        { id: "sup_biz_cur_ZAR", title: "🇿🇦 ZAR (R)" }
+      ]
+    });
   }
   // ── Supplier category selected during registration ────────────────────────
 if (a.startsWith("sup_cat_")) {
@@ -5434,11 +5449,16 @@ if (a === "sup_del_yes") {
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.delivery = { available: true, range: "city_wide" };
     biz.sessionData.supplierReg.minOrder = 0;
-    biz.sessionState = "supplier_reg_confirm";
+    biz.sessionState = "supplier_reg_biz_currency";
     await saveBizSafe(biz);
-    // Use the local helper _sendSupplierConfirmPrompt - buildSupplierConfirmText
-    // is not exported from supplierRegistration.js
-    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
+    return sendButtons(from, {
+      text: "💱 *Almost done! What currency does your business use?*\n\nThis will be your default for invoices and quotes.",
+      buttons: [
+        { id: "sup_biz_cur_USD", title: "💵 USD ($)" },
+        { id: "sup_biz_cur_ZWL", title: "🇿🇼 ZWL (Z$)" },
+        { id: "sup_biz_cur_ZAR", title: "🇿🇦 ZAR (R)" }
+      ]
+    });
   }
 
 if (a === "sup_del_no") {
@@ -5446,11 +5466,41 @@ if (a === "sup_del_no") {
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.delivery = { available: false };
     biz.sessionData.supplierReg.minOrder = 0;
-    biz.sessionState = "supplier_reg_confirm";
+    biz.sessionState = "supplier_reg_biz_currency";
     await saveBizSafe(biz);
-    return _sendSupplierConfirmPrompt(from, biz.sessionData.supplierReg);
+    return sendButtons(from, {
+      text: "💱 *Almost done! What currency does your business use?*\n\nThis will be your default for invoices and quotes.",
+      buttons: [
+        { id: "sup_biz_cur_USD", title: "💵 USD ($)" },
+        { id: "sup_biz_cur_ZWL", title: "🇿🇼 ZWL (Z$)" },
+        { id: "sup_biz_cur_ZAR", title: "🇿🇦 ZAR (R)" }
+      ]
+    });
   }
 
+
+
+  // ── Supplier registration: currency selected → show confirm ──────────────
+if (a.startsWith("sup_biz_cur_")) {
+  const currency = a.replace("sup_biz_cur_", "").toUpperCase();
+  if (!["USD", "ZWL", "ZAR"].includes(currency)) return true;
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.currency = currency;
+
+  // Pre-fill business name and currency onto the Business record now
+  const reg = biz.sessionData.supplierReg;
+  if (reg.businessName && (!biz.name || biz.name.startsWith("pending_"))) {
+    biz.name = reg.businessName;
+  }
+  biz.currency = currency;
+  biz.isSupplier = true;
+  biz.sessionState = "supplier_reg_confirm";
+  await saveBizSafe(biz);
+
+  return _sendSupplierConfirmPrompt(from, reg);
+}
   // ── Supplier confirms listing → save + show plan picker ──────────────────
   if (a === "sup_confirm_yes") {
     if (!biz) return sendMainMenu(from);
@@ -5461,24 +5511,31 @@ if (a === "sup_del_no") {
       return startSupplierRegistration(from, biz);
     }
 
-    // Create inactive supplier profile
+// Create inactive supplier profile
 const supplier = await SupplierProfile.create({
       phone,
       businessName: reg.businessName,
+      businessId: biz._id,                         // ← LINK TO BUSINESS
       location: { city: reg.city || "Harare", area: reg.area || "" },
       categories: reg.categories || [],
       products: reg.products || [],
       prices: reg.prices || [],
       delivery: reg.delivery || { available: false },
       minOrder: reg.minOrder || 0,
-      profileType: reg.profileType || "product",   // ← ADD
-      rates: reg.rates || null,                     // ← ADD
-      travelAvailable: reg.travelAvailable ?? null, // ← ADD
+      profileType: reg.profileType || "product",
+      rates: reg.rates || null,
+      travelAvailable: reg.travelAvailable ?? null,
       active: false,
       subscriptionStatus: "pending",
       priceUpdatedAt: reg.prices?.length ? new Date() : null
     });
 
+    // Link the supplier profile back onto the Business record
+    biz.supplierProfileId = supplier._id;
+    biz.isSupplier = true;
+    if (reg.businessName && (!biz.name || biz.name.startsWith("pending_"))) {
+      biz.name = reg.businessName;
+    }
     biz.sessionData.pendingSupplierId = supplier._id.toString();
     biz.sessionState = "supplier_reg_choose_plan";
     await saveBizSafe(biz);
@@ -8634,6 +8691,37 @@ return sendButtons(from, {
     return handleOrderDeclined(from, orderId, biz, saveBizSafe);
   }
 
+
+  if (a.startsWith("sup_biz_cur_")) {
+  const currency = a.replace("sup_biz_cur_", "").toUpperCase();
+  if (!["USD", "ZWL", "ZAR"].includes(currency)) return true;
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.currency = currency;
+
+  // Pre-fill the Business name and currency from supplier reg data
+  const reg = biz.sessionData.supplierReg;
+  if (reg.businessName && !biz.name) {
+    biz.name = reg.businessName;
+  }
+  biz.currency = currency;
+  biz.isSupplier = true;
+  biz.sessionState = "supplier_reg_confirm";
+  await saveBizSafe(biz);
+
+  const isService = reg.profileType === "service";
+  const itemCount = (reg.products || []).filter(p => p && p !== "pending_upload").length;
+
+  return sendButtons(from, {
+    text:
+`📋 *Confirm your listing*\n\n🏢 *${reg.businessName}*\n📍 ${reg.city || "—"}, ${reg.area || "—"}\n📦 Type: ${isService ? "Services" : "Products"} (${itemCount} items)\n💱 Currency: *${currency}*\n\n✅ Once you pay, your business listing goes live AND your invoicing/quoting tools unlock automatically.\n\nIs everything correct?`,
+    buttons: [
+      { id: "sup_confirm_yes", title: "✅ Confirm & Continue" },
+      { id: "sup_confirm_no",  title: "✏️ Edit Details" }
+    ]
+  });
+}
 
 if (biz?.sessionState === "supplier_order_enter_price" && !isMetaAction) {
     const orderId = biz.sessionData?.pricingOrderId;

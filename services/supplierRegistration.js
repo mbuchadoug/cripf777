@@ -708,7 +708,11 @@ Type your ${rateLabel} and send, or tap Skip 👇`
 }
   // ── Step 4: Minimum Order ──────────────────────────────
 
-
+// ── Step: Business currency (injected between delivery/travel and confirm) ──
+if (state === "supplier_reg_biz_currency") {
+  // handled via button in chatbotEngine — this state is a passthrough guard
+  return true;
+}
 // ── Step 5: EcoCash Number Entry ──────────────────────────────────────────
   if (state === "supplier_reg_enter_ecocash") {
     const raw = (text || "").trim();
@@ -867,6 +871,75 @@ if (uploaded.length <= cap) {
 }
 
 await supplier.save();
+
+
+// ── SYNC supplier products/services → Product model ──────────────────────
+try {
+  const Product = (await import("../models/product.js")).default;
+  const Business = (await import("../models/business.js")).default;
+
+  const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
+  const bizPackage = TIER_TO_PACKAGE[supplierPayment.tier] || "bronze";
+
+  // Upgrade the linked Business package
+  const linkedBiz = await Business.findById(supplier.businessId);
+  if (linkedBiz) {
+    linkedBiz.package = bizPackage;
+    linkedBiz.subscriptionStatus = "active";
+    linkedBiz.subscriptionStartedAt = now;
+    linkedBiz.subscriptionEndsAt = expiresAt;
+    linkedBiz.isSupplier = true;
+    linkedBiz.supplierProfileId = supplier._id;
+
+    // Ensure business name is set from supplier reg if not already
+    if (!linkedBiz.name || linkedBiz.name.startsWith("pending_")) {
+      linkedBiz.name = supplier.businessName;
+    }
+
+    await linkedBiz.save();
+
+    // Ensure main branch exists for invoicing
+    const Branch = (await import("../models/branch.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+    const existingBranch = await Branch.findOne({ businessId: linkedBiz._id, isDefault: true });
+    if (!existingBranch) {
+      const mainBranch = await Branch.create({
+        businessId: linkedBiz._id,
+        name: "Main Branch",
+        isDefault: true
+      });
+      await UserRole.findOneAndUpdate(
+        { businessId: linkedBiz._id, role: "owner" },
+        { branchId: mainBranch._id }
+      );
+    }
+  }
+
+  // Sync items into Product model (upsert by name to avoid duplication on re-activation)
+  const itemsToSync = uploaded.slice(0, cap); // only sync listed items
+  for (const itemName of itemsToSync) {
+    const priceEntry = (supplier.prices || []).find(
+      p => p.product?.toLowerCase() === itemName.toLowerCase()
+    );
+    const rateEntry = (supplier.rates || []).find(
+      r => r.service?.toLowerCase() === itemName.toLowerCase()
+    );
+    const unitPrice = priceEntry?.amount || 0;
+    const description = rateEntry?.rate || null;
+
+    await Product.findOneAndUpdate(
+      { businessId: supplier.businessId, name: itemName },
+      {
+        $setOnInsert: { businessId: supplier.businessId, branchId: null },
+        $set: { unitPrice, description, isActive: true }
+      },
+      { upsert: true }
+    );
+  }
+} catch (syncErr) {
+  console.error("[Supplier Payment] Product sync failed:", syncErr.message);
+}
+// ── END SYNC ─────────────────────────────────────────────────────────────
 
               // Update payment record
               await SupplierSubscriptionPayment.findOneAndUpdate(

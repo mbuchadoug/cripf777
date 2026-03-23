@@ -38,6 +38,17 @@ subscriptionStatus: {
   default: "inactive"
 },
 
+// ADD after subscriptionEndsAt
+supplierProfileId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "SupplierProfile",
+  default: null
+},
+
+isSupplier: {
+  type: Boolean,
+  default: false
+},
 
   // 🧪 TRIAL CONTROL (1 DAY)
   trialStartedAt: {

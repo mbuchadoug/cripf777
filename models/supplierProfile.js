@@ -3,6 +3,12 @@ import mongoose from "mongoose";
 
 const SupplierProfileSchema = new mongoose.Schema({
   phone: { type: String, required: true, index: true },
+  // ADD after phone field
+businessId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Business",
+  default: null
+},
   businessName: { type: String, required: true },
   location: {
     city: { type: String, required: true },
