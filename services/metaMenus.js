@@ -144,6 +144,26 @@ export async function sendMainMenu(to) {
     { id: "my_orders",         title: "📋 My Orders" },
   ]);
 }
+
+
+/* =============================================================================
+   BUSINESS TOOLS MENU (for suppliers accessing invoicing features)
+============================================================================= */
+export async function sendBusinessToolsMenu(to, biz) {
+  const items = [
+    { id: ACTIONS.SALES_MENU,         title: "🧾 Sales" },
+    { id: ACTIONS.CLIENTS_MENU,       title: "👥 Clients" },
+    { id: ACTIONS.PRODUCTS_MENU,      title: "📦 Products & Services" },
+    { id: ACTIONS.PAYMENTS_MENU,      title: "💰 Payments" },
+    { id: ACTIONS.REPORTS_MENU,       title: "📈 Reports" },
+    { id: ACTIONS.SETTINGS_MENU,      title: "⚙ Settings" },
+    { id: "my_supplier_account",      title: "🏪 My Business" },
+    { id: ACTIONS.BACK,               title: "⬅ Back" }
+  ];
+
+  const filtered = await filterMenuByRole({ from: to, biz, items });
+  return sendList(to, "📊 *Business Tools*", filtered);
+}
 /* =============================================================================
    SALES MENU
 ============================================================================= */

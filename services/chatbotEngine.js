@@ -1455,6 +1455,8 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_upgrade_plan" ||
       a === "sup_renew_plan" ||
       a === "onboard_business" ||
+         a === "main_menu_back" ||
+      a === "biz_tools_menu" ||
       a === "suppliers_home" ||
       a === "back" ||
       a === "suppliers_home" ||
@@ -4261,9 +4263,14 @@ if (a === "register_supplier") {
 }
 
 // ── Business tools menu (for active suppliers wanting invoicing etc.) ────
+// ── Business tools menu (for active suppliers wanting invoicing etc.) ────
 if (a === "biz_tools_menu") {
-  if (!biz) return sendMainMenu(from);
-  return sendMainMenu(from); // falls into the biz owner items path
+  if (!biz) {
+    await sendText(from, "❌ No business account found. Please register first.");
+    return sendMainMenu(from);
+  }
+  const { sendBusinessToolsMenu } = await import("./metaMenus.js");
+  return sendBusinessToolsMenu(from, biz);
 }
 
 
