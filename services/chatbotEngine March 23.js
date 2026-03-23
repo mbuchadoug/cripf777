@@ -568,89 +568,81 @@ function formatSupplierRateDisplay(rate = "") {
   return raw;
 }
 function findMatchingSupplierPrice(supplier, requestedProduct) {
-  if (!requestedProduct || !supplier) return null;
+  if (!requestedProduct) return null;
 
   const wanted = normalizeProductName(requestedProduct);
   const isServiceSupplier = supplier?.profileType === "service";
 
+  // SERVICES: only use rates
   if (isServiceSupplier) {
-    const validRates = (supplier.rates || []).filter(r => {
-      const serviceName = normalizeProductName(r?.service || "");
-      return serviceName;
-    });
+    if (Array.isArray(supplier?.rates) && supplier.rates.length) {
+      let match = supplier.rates.find(r =>
+        normalizeProductName(r.service) === wanted
+      );
 
-    let match = validRates.find(r =>
-      normalizeProductName(r.service) === wanted
-    );
+      if (match) {
+        return {
+          product: match.service,
+          amount: parseSupplierRateValue(match.rate),
+          unit: parseSupplierRateUnit(match.rate),
+          source: "rates"
+        };
+      }
 
-    if (match) {
-      return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
-        source: "rates"
-      };
-    }
+      match = supplier.rates.find(r => {
+        if (!r?.service) return false;
+        const candidate = normalizeProductName(r.service);
+        return candidate.includes(wanted) || wanted.includes(candidate);
+      });
 
-    match = validRates.find(r => {
-      const candidate = normalizeProductName(r.service);
-      return candidate.includes(wanted) || wanted.includes(candidate);
-    });
-
-    if (match) {
-      return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
-        source: "rates"
-      };
+      if (match) {
+        return {
+          product: match.service,
+          amount: parseSupplierRateValue(match.rate),
+          unit: parseSupplierRateUnit(match.rate),
+          source: "rates"
+        };
+      }
     }
 
     return null;
   }
 
-  const allowedNames = new Set(
-    (supplier.listedProducts || [])
-      .map(name => normalizeProductName(name))
-      .filter(Boolean)
-  );
+  // PRODUCTS: only use prices
+  if (Array.isArray(supplier?.prices) && supplier.prices.length) {
+    let match = supplier.prices.find(p =>
+      p?.inStock !== false &&
+      normalizeProductName(p.product) === wanted
+    );
 
-  if (!allowedNames.size) return null;
+    if (match) {
+      return {
+        product: match.product,
+        amount: Number(match.amount),
+        unit: match.unit || "each",
+        source: "prices"
+      };
+    }
 
-  const validPrices = (supplier.prices || []).filter(p => {
-    const productName = normalizeProductName(p?.product || "");
-    return productName && p?.inStock !== false && allowedNames.has(productName);
-  });
+    match = supplier.prices.find(p => {
+      if (p?.inStock === false || !p?.product) return false;
+      const candidate = normalizeProductName(p.product);
+      return candidate.includes(wanted) || wanted.includes(candidate);
+    });
 
-  let match = validPrices.find(p =>
-    normalizeProductName(p.product) === wanted
-  );
-
-  if (match) {
-    return {
-      product: match.product,
-      amount: Number(match.amount),
-      unit: match.unit || "each",
-      source: "prices"
-    };
-  }
-
-  match = validPrices.find(p => {
-    const candidate = normalizeProductName(p.product);
-    return candidate.includes(wanted) || wanted.includes(candidate);
-  });
-
-  if (match) {
-    return {
-      product: match.product,
-      amount: Number(match.amount),
-      unit: match.unit || "each",
-      source: "prices"
-    };
+    if (match) {
+      return {
+        product: match.product,
+        amount: Number(match.amount),
+        unit: match.unit || "each",
+        source: "prices"
+      };
+    }
   }
 
   return null;
 }
+
 
 function parseBulkOrderInput(text = "") {
   const raw = String(text).trim();
@@ -704,7 +696,7 @@ function getSupplierCatalogueSourceItems(supplier) {
 
   if (supplier.profileType === "service") {
     return (supplier.rates || [])
-      .filter(r => normalizeProductName(r?.service || ""))
+      .filter(r => r?.service)
       .map(r => ({
         name: String(r.service).trim(),
         priceLabel: formatSupplierRateDisplay(r.rate || ""),
@@ -713,29 +705,29 @@ function getSupplierCatalogueSourceItems(supplier) {
       }));
   }
 
-  const listedProducts = (supplier.listedProducts || [])
-    .filter(p => p && p !== "pending_upload")
-    .filter(p => normalizeProductName(p));
-
-  if (!listedProducts.length) return [];
-
   const pricedMap = new Map();
   for (const p of (supplier.prices || [])) {
-    const key = normalizeProductName(p?.product || "");
-    if (!key) continue;
-    if (p?.inStock === false) continue;
-    pricedMap.set(key, p);
+    if (!p?.product) continue;
+    pricedMap.set(normalizeProductName(p.product), p);
   }
 
-  return listedProducts.map(name => {
-    const match = pricedMap.get(normalizeProductName(name));
-    return {
-      name: String(name).trim(),
-      priceLabel: match ? `$${Number(match.amount).toFixed(2)}/${match.unit || "each"}` : "",
-      rawPrice: match ? Number(match.amount) : null,
-      unit: match?.unit || "each"
-    };
-  });
+const sourceProducts = Array.isArray(supplier.listedProducts) && supplier.listedProducts.length
+  ? supplier.listedProducts
+  : supplier.products || [];
+
+const allProducts = sourceProducts;
+  return allProducts
+    .filter(Boolean)
+    .filter(p => p !== "pending_upload")
+    .map(name => {
+      const match = pricedMap.get(normalizeProductName(name));
+      return {
+        name: String(name).trim(),
+        priceLabel: match ? `$${Number(match.amount).toFixed(2)}/${match.unit || "each"}` : "",
+        rawPrice: match ? Number(match.amount) : null,
+        unit: match?.unit || "each"
+      };
+    });
 }
 
 function getFilteredSupplierCatalogueItems(supplier, searchTerm = "") {
@@ -5782,10 +5774,28 @@ if (a.startsWith("sup_offer_pick_")) {
   const supplier = await SupplierProfile.findById(supplierId).lean();
   if (!supplier) return sendText(from, "❌ Supplier not found.");
 
-   const matched = findMatchingSupplierPrice(supplier, productName);
+  let pricePerUnit = null;
+  let unit = supplier.profileType === "service" ? "job" : "each";
 
-  let pricePerUnit = typeof matched?.amount === "number" ? matched.amount : null;
-  let unit = matched?.unit || (supplier.profileType === "service" ? "job" : "each");
+  if (supplier.profileType === "service") {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (rate) {
+      const rawRate = String(rate.rate || "").trim();
+      const m = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+      pricePerUnit = m ? Number(m[1]) : null;
+      unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
+    }
+  } else {
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (price) {
+      pricePerUnit = typeof price.amount === "number" ? Number(price.amount) : null;
+      unit = price.unit || "each";
+    }
+  }
 
   const selectedItem = {
     product: productName,
@@ -5878,10 +5888,13 @@ if (a.startsWith("sup_view_")) {
   const badge = supplier.topSupplierBadge ? "\n🏅 Top Supplier" : "";
   const tierBadge = supplier.tier === "featured" ? " 🔥" : supplier.tier === "pro" ? " ⭐" : "";
   const offeringLabel = supplier.profileType === "service" ? "🔧" : "📦";
-    const offeringText = getSupplierCatalogueSourceItems(supplier)
-    .slice(0, 5)
-    .map(item => item.priceLabel ? `${item.name} (${item.priceLabel})` : item.name)
-    .join(", ");
+  const offeringText = supplier.profileType === "service"
+    ? (supplier.rates?.length
+        ? supplier.rates.slice(0, 5).map(r => `${r.service} (${formatSupplierRateDisplay(r.rate)})`).join(", ")
+        : (supplier.products || []).slice(0, 5).join(", "))
+    : (supplier.prices?.length
+        ? supplier.prices.slice(0, 5).map(p => `${p.product} ($${p.amount}/${p.unit})`).join(", ")
+        : (supplier.products || []).slice(0, 5).join(", "));
 
   if (fromCategoryBrowse) {
     await persistOrderFlowState({
@@ -7835,15 +7848,30 @@ if (a.startsWith("sup_cart_add_")) {
     sess?.tempData?.orderCatalogueSearch ??
     "";
 
-   const isService = supplier.profileType === "service";
-  const matched = findMatchingSupplierPrice(supplier, productName);
+  const isService = supplier.profileType === "service";
+  let priceInfo = null;
 
-  const priceInfo = matched
-    ? {
-        amount: matched.amount,
-        unit: matched.unit
-      }
-    : null;
+  if (isService) {
+    const rate = (supplier.rates || []).find(r =>
+      String(r.service || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (rate) {
+      priceInfo = {
+        amount: parseSupplierRateValue(rate.rate),
+        unit: parseSupplierRateUnit(rate.rate)
+      };
+    }
+  } else {
+    const price = (supplier.prices || []).find(p =>
+      String(p.product || "").toLowerCase() === productName.toLowerCase()
+    );
+    if (price) {
+      priceInfo = {
+        amount: Number(price.amount),
+        unit: price.unit || "each"
+      };
+    }
+  }
 
   const selectedItem = {
     product: productName,
@@ -9411,11 +9439,26 @@ async function _sendSupplierCatalogueMenu(from, supplier, cart = []) {
   const isService = supplier.profileType === "service";
   const phone = from.replace(/\D+/g, "");
 
-   const sourceItems = getSupplierCatalogueSourceItems(supplier).map(item => ({
-    id: item.name,
-    label: item.name,
-    price: item.priceLabel || null
-  }));
+  const items = isService
+    ? (supplier.rates || []).map(r => ({
+        id: r.service,
+        label: r.service,
+        price: r.rate
+      }))
+    : (supplier.prices || [])
+        .filter(p => p.inStock !== false)
+        .map(p => ({
+          id: p.product,
+          label: p.product,
+          price: `$${Number(p.amount).toFixed(2)}/${p.unit}`
+        }));
+
+  const fallbackItems = (supplier.products || [])
+    .filter(p => p !== "pending_upload")
+    .map(p => ({ id: p, label: p, price: null }));
+
+  const sourceItems = items.length ? items : fallbackItems;
+
   // ── No products at all ────────────────────────────────────────────────────
   if (!sourceItems.length) {
     if (biz) {

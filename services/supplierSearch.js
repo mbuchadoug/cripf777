@@ -330,50 +330,54 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
   if (profileType) query.profileType = profileType;
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
-  
-  // ── Area/suburb filter: boost results from that suburb ────────────────────
-  // We don't hard-filter by area (too restrictive -supplier may serve whole city)
-  // Instead we add it as a soft OR condition alongside the product search below
   if (category) query.categories = category;
 
-  // Product/service free-text search - uses synonym expansion so "teacher" finds "tutoring" etc
-if (product) {
+  if (product) {
     const searchTerms = expandSearchTerms(product);
 
     const productOr = searchTerms.flatMap(term => [
-      { products: { $regex: term, $options: "i" } },
+      { listedProducts: { $regex: term, $options: "i" } },
       { "rates.service": { $regex: term, $options: "i" } },
-      { categories: { $regex: term, $options: "i" } },
-      { "prices.product": { $regex: term, $options: "i" } },
       { businessName: { $regex: term, $options: "i" } }
     ]);
 
     query.$and.push({ $or: productOr });
   }
 
-let results = await SupplierProfile.find(query)
+  let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
-    .limit(50)   // fetch more -pagination will slice to 9 per page
+    .limit(50)
     .lean();
 
-  // ── Area boost: float suppliers in the searched suburb to the top ─────────
+  results = results.filter((supplier) => {
+    if (supplier?.profileType === "service") {
+      return (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
+    }
+
+    return (supplier.listedProducts || []).some(p =>
+      p && p !== "pending_upload" && normalizeProductName(p)
+    );
+  });
+
   if (area && results.length > 1) {
     const areaLower = area.toLowerCase();
     results.sort((a, b) => {
       const aInArea = (a.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
       const bInArea = (b.location?.area || "").toLowerCase().includes(areaLower) ? 0 : 1;
       if (aInArea !== bInArea) return aInArea - bInArea;
-      // Preserve original sort within each group
       return (b.tierRank || 0) - (a.tierRank || 0);
     });
   }
 
   return results.slice(0, 20);
-
 }
 
 
-function normalizeOfferSearch(value = "") {
+
+
+
+
+function normalizeProductName(value = "") {
   return String(value || "")
     .toLowerCase()
     .trim()
@@ -382,8 +386,8 @@ function normalizeOfferSearch(value = "") {
 }
 
 function productMatchesSearch(productName = "", searchTerm = "") {
-  const productNorm = normalizeOfferSearch(productName);
-  const searchNorm = normalizeOfferSearch(searchTerm);
+  const productNorm = normalizeProductName(productName);
+  const searchNorm = normalizeProductName(searchTerm);
 
   if (!productNorm || !searchNorm) return false;
 
@@ -398,10 +402,12 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 
   const pushOffer = ({ product, price, unit, matchSource }) => {
     const cleanProduct = String(product || "").trim();
-    if (!cleanProduct) return;
+    const normalizedProduct = normalizeProductName(cleanProduct);
+
+    if (!cleanProduct || !normalizedProduct) return;
     if (!productMatchesSearch(cleanProduct, searchTerm)) return;
 
-    const dedupeKey = `${supplier._id}:${cleanProduct.toLowerCase()}`;
+    const dedupeKey = `${supplier._id}:${normalizedProduct}`;
     if (seen.has(dedupeKey)) return;
     seen.add(dedupeKey);
 
@@ -422,14 +428,16 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       product: cleanProduct,
       pricePerUnit: typeof price === "number" && !Number.isNaN(price) ? Number(price) : null,
       unit: unit || (supplier.profileType === "service" ? "job" : "each"),
-      matchSource: matchSource || "products"
+      matchSource: matchSource || "listedProducts"
     });
   };
 
   if (supplier.profileType === "service") {
     for (const rate of (supplier.rates || [])) {
-      const serviceName = rate?.service || "";
+      const serviceName = String(rate?.service || "").trim();
       const rawRate = String(rate?.rate || "").trim();
+      if (!normalizeProductName(serviceName)) continue;
+
       const amountMatch = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
       const amount = amountMatch ? Number(amountMatch[1]) : null;
       const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
@@ -442,22 +450,21 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       });
     }
 
-    if (!offers.length) {
-      for (const service of (supplier.products || [])) {
-        pushOffer({
-          product: service,
-          price: null,
-          unit: "job",
-          matchSource: "products"
-        });
-      }
-    }
-
     return offers;
   }
 
+  const allowedNames = new Set(
+    (supplier.listedProducts || [])
+      .filter(p => p && p !== "pending_upload")
+      .map(p => normalizeProductName(p))
+      .filter(Boolean)
+  );
+
   for (const price of (supplier.prices || [])) {
+    const normalizedPriceProduct = normalizeProductName(price?.product || "");
+    if (!normalizedPriceProduct) continue;
     if (price?.inStock === false) continue;
+    if (!allowedNames.has(normalizedPriceProduct)) continue;
 
     pushOffer({
       product: price?.product || "",
@@ -467,11 +474,13 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     });
   }
 
-  for (const product of (supplier.products || [])) {
-    if (!product || product === "pending_upload") continue;
+  for (const product of (supplier.listedProducts || [])) {
+    const normalizedListedProduct = normalizeProductName(product);
+    if (!normalizedListedProduct) continue;
+    if (product === "pending_upload") continue;
 
     const alreadyExists = offers.some(o =>
-      o.product.toLowerCase() === String(product).toLowerCase()
+      normalizeProductName(o.product) === normalizedListedProduct
     );
 
     if (alreadyExists) continue;
@@ -480,7 +489,7 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       product,
       price: null,
       unit: "each",
-      matchSource: "products"
+      matchSource: "listedProducts"
     });
   }
 
@@ -541,6 +550,8 @@ export function formatSupplierOfferResults(offers = []) {
 export function formatSupplierResults(suppliers, city, searchTerm) {
   if (!suppliers || !suppliers.length) return [];
 
+  const normalizedSearchTerm = normalizeProductName(searchTerm || "");
+
   return suppliers.map((s) => {
     const badge = s.tier === "featured" ? "🔥 "
       : s.tier === "pro" ? "⭐ " : "";
@@ -553,15 +564,27 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
 
     let matchHint = "";
-    if (searchTerm && s.profileType === "service" && s.rates?.length) {
-      const match = s.rates.find(r =>
-        r.service?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
+      const match = s.rates.find(r => {
+        const serviceName = normalizeProductName(r?.service || "");
+        return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
+      });
       if (match) matchHint = ` · ${match.service} ${match.rate}`;
-    } else if (searchTerm && s.prices?.length) {
-      const match = s.prices.find(p =>
-        p.product?.toLowerCase().includes(searchTerm.toLowerCase())
+    } else if (normalizedSearchTerm) {
+      const allowedNames = new Set(
+        (s.listedProducts || [])
+          .map(p => normalizeProductName(p))
+          .filter(Boolean)
       );
+
+      const match = (s.prices || []).find(p => {
+        const productName = normalizeProductName(p?.product || "");
+        return productName &&
+          p?.inStock !== false &&
+          allowedNames.has(productName) &&
+          (productName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(productName));
+      });
+
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
     }
 
