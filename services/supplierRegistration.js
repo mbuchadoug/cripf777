@@ -904,7 +904,7 @@ await supplier.save();
                 console.error("[Supplier Payment] PDF generation failed:", pdfErr.message);
               }
 
-              if (uploaded.length > cap) {
+                    if (uploaded.length > cap) {
                 freshBiz.sessionState = "supplier_select_listed_products";
                 freshBiz.sessionData = {
                   ...(freshBiz.sessionData || {}),

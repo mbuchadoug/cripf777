@@ -3590,18 +3590,19 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
   
    // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
-    if (!biz.name?.startsWith("pending_supplier_")) {
+      if (!biz.name?.startsWith("pending_supplier_")) {
       const handled = await continueTwilioFlow({ from, text });
       if (handled) return;
     } else {
-      // ── If ghost biz user is mid-order, let order handlers below process it ──
+      // ── If ghost biz user is mid-order or mid-listed-selection, let handlers below process it ──
       if (
         biz.sessionState === "supplier_order_product" ||
         biz.sessionState === "supplier_order_address" ||
         biz.sessionState === "supplier_order_enter_price" ||
-          biz.sessionState === "supplier_order_picking"   // ← ADD
+        biz.sessionState === "supplier_order_picking" ||
+        biz.sessionState === "supplier_select_listed_products"
       ) {
-        // Do nothing here - fall through to the order state handlers below
+        // Do nothing here - fall through to the state handlers below
       } else {
         // Ghost biz user typed something unrecognised - try as a search first
         const shortcode = parseShortcodeSearch(text);
@@ -3631,7 +3632,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         });
       }
     }
-  
   }
 
   if (
@@ -4042,18 +4042,19 @@ if (biz?.sessionState === "supplier_select_listed_products") {
     return true;
   }
 
-  const selected = indexes.slice(0, cap).map(i => uploaded[i]).filter(Boolean);
+  const uniqueIndexes = [...new Set(indexes)].slice(0, cap);
+  const selected = uniqueIndexes.map(i => uploaded[i]).filter(Boolean);
 
   supplier.listedProducts = selected;
   await supplier.save();
 
   biz.sessionState = "ready";
-  delete biz.sessionData.listedSelectionCap;
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
   await sendText(
     from,
-    `✅ *${selected.length} items now live!*`
+    `✅ *${selected.length} item${selected.length === 1 ? "" : "s"} listed live now.*`
   );
 
   return sendSupplierAccountMenu(from, supplier);
