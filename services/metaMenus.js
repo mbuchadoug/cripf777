@@ -99,89 +99,50 @@ const { branches } = await ensureDefaultBranch(biz._id);
 ============================================================================= */
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-
-  // ── Ghost business (pending_supplier_) = treat as no-biz user ────────────
-if (biz && biz.name.startsWith("pending_supplier_")) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  if (supplier) {
-    // Gate: not paid yet → push to activate
-    if (!supplier.active) {
-return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-  { id: "find_supplier",       title: "🔍 Find Suppliers" },
-  { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-  { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
-  { id: "onboard_business",    title: "🧾 Run My Business" }
-]);
-    }
-    // Paid and active
-    return sendList(to, "👋 *Welcome to ZimQuote!*", [
+  // ── Case 1: Active supplier (paid) — may also have full biz tools ─────────
+  if (supplier?.active) {
+    const items = [
+      { id: "my_supplier_account", title: "🏪 My Business" },      // ← TOP, renamed
       { id: "find_supplier",       title: "🔍 Find Suppliers" },
       { id: "my_orders",           title: "📋 My Orders (Buyer)" },
-      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-      { id: "onboard_business",    title: "🧾 Run My Business" }
+    ];
+    // If their biz package is bronze+ show business tools option
+    if (biz && biz.package !== "trial") {
+      items.push({ id: "biz_tools_menu", title: "📊 Business Tools" });
+    }
+    return sendList(to, "👋 *Welcome to ZimQuote!*", items);
+  }
+
+  // ── Case 2: Registered supplier but not yet paid ──────────────────────────
+  if (supplier && !supplier.active) {
+    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+      { id: "my_supplier_account", title: "🏪 My Business" },      // ← TOP, renamed
+      { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
     ]);
   }
 
-// FIXED
-return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-  { id: "find_supplier",    title: "🔍 Find Suppliers" },
-  { id: "my_orders",        title: "📋 My Orders" },
-  { id: "register_supplier", title: "📦 List My Business" },
-  { id: "onboard_business", title: "🧾 Run My Business" }
-]);
-}
-
-  // ── No business: never show business owner menu ───────────────────────────
-if (!biz) {
-  const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-  const phone = to.replace(/\D+/g, "");
-  const supplier = await SupplierProfile.findOne({ phone });
-
-if (supplier) {
-  // Gate: not paid yet → push to activate, hide My Orders as buyer
-  if (!supplier.active) {
-   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-  { id: "find_supplier",       title: "🔍 Find Suppliers" },
-  { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-  { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
-  { id: "onboard_business",    title: "🧾 Run My Business" }
-]);
+  // ── Case 3: Has a business but no supplier profile ────────────────────────
+  if (biz && !biz.name?.startsWith("pending_supplier_")) {
+    const items = [
+      { id: "my_supplier_account", title: "🏪 My Business" },      // ← unified entry
+      { id: "find_supplier",       title: "🔍 Find Suppliers" },
+      { id: "my_orders",           title: "📋 My Orders" },
+    ];
+    const filtered = await filterMenuByRole({ from: to, biz, items });
+    return sendList(to, "📊 Main Menu", filtered);
   }
-  // Paid and active - show full menu including My Orders as buyer
-  return sendList(to, "👋 *Welcome to ZimQuote!*", [
-    { id: "find_supplier",       title: "🔍 Find Suppliers" },
-    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
-    { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-    { id: "onboard_business",    title: "🧾 Run My Business" }
-  ]);
-}
 
+  // ── Case 4: Brand new user — no biz, no supplier ──────────────────────────
   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-    { id: "find_supplier",   title: "🔍 Find Suppliers" },
-    { id: "my_orders",       title: "📋 My Orders" },
-    { id: "register_supplier", title: "📦 List My Business" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    { id: "register_supplier", title: "🏪 Start My Business" },    // ← entry point
+    { id: "find_supplier",     title: "🔍 Find Suppliers" },
+    { id: "my_orders",         title: "📋 My Orders" },
   ]);
-}
-
-const items = [
-    { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
-    { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
-    { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
-    { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments", section: "payments" },
-    { id: ACTIONS.SUPPLIERS_MENU, title: "🏪 Suppliers" },
-    { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
-    { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
-    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
-    { id: ACTIONS.SUBSCRIPTION_MENU, title: "💳 Subscription", section: "owner_only" },
-    { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package", section: "owner_only" },
-  ];
-
-  const filtered = await filterMenuByRole({ from: to, biz, items });
-  return sendList(to, "📊 Main Menu", filtered);
 }
 /* =============================================================================
    SALES MENU
@@ -814,7 +775,7 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
       { id: "sup_my_orders", title: "📦 My Orders" },
       { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
       { id: "sup_more_options", title: "⚙️ More Options" },
-      { id: "suppliers_home", title: "⬅ Back" }
+  { id: "main_menu_back", title: "⬅ Main Menu" }
     ]
   );
 }

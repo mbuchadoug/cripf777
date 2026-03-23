@@ -112,7 +112,7 @@ if (biz && biz.name.startsWith("pending_supplier_")) {
       return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
         { id: "find_supplier",    title: "🔍 Find Suppliers" },
         { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
-        { id: "onboard_business", title: "🧾 Run My Business" }
+        
       ]);
     }
     // Paid and active
@@ -129,7 +129,7 @@ return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform
   { id: "find_supplier",    title: "🔍 Find Suppliers" },
   { id: "my_orders",        title: "📋 My Orders" },
   { id: "register_supplier", title: "📦 List My Business" },
-  { id: "onboard_business", title: "🧾 Run My Business" }
+  
 ]);
 }
 
@@ -145,7 +145,7 @@ if (supplier) {
     return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
       { id: "find_supplier",    title: "🔍 Find Suppliers" },
       { id: "sup_upgrade_plan", title: "💳 Activate My Listing" },
-      { id: "onboard_business", title: "🧾 Run My Business" }
+      
     ]);
   }
   // Paid and active - show full menu including My Orders as buyer
@@ -161,7 +161,7 @@ if (supplier) {
     { id: "find_supplier",   title: "🔍 Find Suppliers" },
     { id: "my_orders",       title: "📋 My Orders" },
     { id: "register_supplier", title: "📦 List My Business" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]);
 }
 

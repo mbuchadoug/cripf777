@@ -1760,7 +1760,7 @@ if (!isMetaAction && text.trim().length > 2) {
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: "register_supplier", title: "📦 List My Business" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]);
 }
 }
@@ -2027,7 +2027,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 }
@@ -2113,7 +2113,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
       buttons: [
         { id: "find_supplier", title: "🔍 Find Suppliers" },
         { id: "my_orders", title: "📋 My Orders" },
-        { id: "onboard_business", title: "🧾 Run My Business" }
+        
       ]
     });
   }
@@ -2186,7 +2186,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 
@@ -2310,7 +2310,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 
@@ -3651,7 +3651,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 }
@@ -4201,15 +4201,16 @@ if (a === "register_supplier") {
 
   // No supplier profile yet - create pending business and start registration
   if (!biz) {
-    const newBiz = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      sessionState: "supplier_reg_name",
-      sessionData: {},
-      ownerPhone: phone
-    });
+  const newBiz = await Business.create({
+  name: "pending_supplier_" + phone,
+  currency: "USD",
+  package: "trial",
+  subscriptionStatus: "inactive",
+  isSupplier: false,         // ← will become true after payment
+  sessionState: "supplier_reg_name",
+  sessionData: {},
+  ownerPhone: phone
+});
 
     await UserRole.create({
       phone,
@@ -4230,35 +4231,39 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
- if (a === "my_supplier_account") {
+ if (a === "my_supplier_account" || a === "main_menu_back") {
+  // Smart router: one button, correct destination based on account state
   const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
 
-  // Gate: must have paid to access account features
+  if (!supplier) {
+    // No supplier profile at all → send to registration
+    return startSupplierRegistration(from, biz);
+  }
+
   if (!supplier.active) {
     const isComplete = Boolean(
       supplier.businessName &&
       supplier.products?.length > 0
     );
-
     if (!isComplete) {
       await sendText(from,
-`⚠️ *Your registration is incomplete.*
-
-Let's finish setting up your listing first.`
+`⚠️ *Your registration is incomplete.*\n\nLet's finish setting up your listing first.`
       );
       return startSupplierRegistration(from, biz);
     }
-
     await sendText(from,
-`🔒 *Listing not yet active.*
-
-Your profile is saved but buyers cannot find you yet. Choose a plan to go live and unlock your full account.`
+`🔒 *Listing not yet active.*\n\nYour profile is saved but buyers cannot find you yet. Choose a plan to go live and unlock invoicing, quotes and more.`
     );
     return sendSupplierUpgradeMenu(from, supplier.tier);
   }
 
   return sendSupplierAccountMenu(from, supplier);
+}
+
+// ── Business tools menu (for active suppliers wanting invoicing etc.) ────
+if (a === "biz_tools_menu") {
+  if (!biz) return sendMainMenu(from);
+  return sendMainMenu(from); // falls into the biz owner items path
 }
 
 

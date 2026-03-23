@@ -9,6 +9,11 @@ businessId: {
   ref: "Business",
   default: null
 },
+mainBranchId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Branch",
+  default: null
+},
   businessName: { type: String, required: true },
   location: {
     city: { type: String, required: true },

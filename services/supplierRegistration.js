@@ -902,17 +902,25 @@ try {
     const Branch = (await import("../models/branch.js")).default;
     const UserRole = (await import("../models/userRole.js")).default;
     const existingBranch = await Branch.findOne({ businessId: linkedBiz._id, isDefault: true });
-    if (!existingBranch) {
-      const mainBranch = await Branch.create({
-        businessId: linkedBiz._id,
-        name: "Main Branch",
-        isDefault: true
-      });
-      await UserRole.findOneAndUpdate(
-        { businessId: linkedBiz._id, role: "owner" },
-        { branchId: mainBranch._id }
-      );
-    }
+  let mainBranchId;
+if (!existingBranch) {
+  const mainBranch = await Branch.create({
+    businessId: linkedBiz._id,
+    name: "Main Branch",
+    isDefault: true
+  });
+  await UserRole.findOneAndUpdate(
+    { businessId: linkedBiz._id, role: "owner" },
+    { branchId: mainBranch._id }
+  );
+  mainBranchId = mainBranch._id;
+} else {
+  mainBranchId = existingBranch._id;
+}
+
+// Store mainBranchId on supplier for fast lookup later
+supplier.mainBranchId = mainBranchId;
+await supplier.save();
   }
 
   // Sync items into Product model (upsert by name to avoid duplication on re-activation)
@@ -927,14 +935,18 @@ try {
     const unitPrice = priceEntry?.amount || 0;
     const description = rateEntry?.rate || null;
 
-    await Product.findOneAndUpdate(
-      { businessId: supplier.businessId, name: itemName },
-      {
-        $setOnInsert: { businessId: supplier.businessId, branchId: null },
-        $set: { unitPrice, description, isActive: true }
-      },
-      { upsert: true }
-    );
+   // Resolve the main branch for this business
+const mainBranchDoc = await Branch.findOne({ businessId: supplier.businessId, isDefault: true });
+const mainBranchId = mainBranchDoc?._id || null;
+
+await Product.findOneAndUpdate(
+  { businessId: supplier.businessId, name: itemName },
+  {
+    $setOnInsert: { businessId: supplier.businessId, branchId: mainBranchId },
+    $set: { unitPrice, description, isActive: true }
+  },
+  { upsert: true }
+);
   }
 } catch (syncErr) {
   console.error("[Supplier Payment] Product sync failed:", syncErr.message);

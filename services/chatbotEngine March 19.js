@@ -868,7 +868,7 @@ const pageResults = results.slice(0, 9);
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: "register_supplier", title: "📦 List My Business" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]);
 }
 }
@@ -905,7 +905,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 }
@@ -991,7 +991,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
       buttons: [
         { id: "find_supplier", title: "🔍 Find Suppliers" },
         { id: "my_orders", title: "📋 My Orders" },
-        { id: "onboard_business", title: "🧾 Run My Business" }
+        
       ]
     });
   }
@@ -1064,7 +1064,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 
@@ -1188,7 +1188,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 
@@ -2521,7 +2521,7 @@ return sendButtons(from, {
   buttons: [
     { id: "find_supplier", title: "🔍 Find Suppliers" },
     { id: "my_orders", title: "📋 My Orders" },
-    { id: "onboard_business", title: "🧾 Run My Business" }
+    
   ]
 });
 }
