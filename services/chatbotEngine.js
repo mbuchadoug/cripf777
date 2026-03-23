@@ -1645,9 +1645,11 @@ const allowedWithoutBiz =
   a.startsWith("sup_cart_clear_") ||
   a.startsWith("sup_cart_remove_") ||
   a.startsWith("sup_cart_custom_") ||
-  a === "sup_search_next_page" ||
+a === "sup_search_next_page" ||
   a === "sup_search_prev_page" ||
-  a === "my_supplier_account";
+  a === "my_supplier_account" ||
+  a === "main_menu_back" ||
+  a === "biz_tools_menu";
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
 if (!isMetaAction && text.trim().length > 2) {
@@ -4233,7 +4235,12 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
- if (a === "my_supplier_account" || a === "main_menu_back") {
+// ── Main Menu back button — always goes to start menu ────────────────────
+if (a === "main_menu_back") {
+  return sendMainMenu(from);
+}
+
+if (a === "my_supplier_account") {
   // Smart router: one button, correct destination based on account state
   const supplier = await SupplierProfile.findOne({ phone });
 
