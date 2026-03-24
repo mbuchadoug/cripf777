@@ -33,6 +33,47 @@ function formatMoney(amount, currency) {
   return `${sym}${n.toFixed(2)}`;
 }
 
+// ── Invoice/quote/receipt full preview ────────────────────────────────────
+async function sendInvoicePreview(from, biz, extraNote = "") {
+  const items = biz.sessionData.items || [];
+  const currency = biz.currency || "USD";
+  const docType = biz.sessionData.docType || "invoice";
+  const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+
+  const discountPercent = Number(biz.sessionData.discountPercent || 0);
+  const vatPercent      = Number(biz.sessionData.vatPercent || 0);
+
+  const subtotal      = items.reduce((s, i) => s + Number(i.qty) * Number(i.unit), 0);
+  const discountAmt   = subtotal * (discountPercent / 100);
+  const vatAmt        = (subtotal - discountAmt) * (vatPercent / 100);
+  const total         = subtotal - discountAmt + vatAmt;
+
+  const itemLines = items
+    .map((i, idx) =>
+      `${idx + 1}. ${i.item} × ${i.qty} @ ${formatMoney(i.unit, currency)} = *${formatMoney(Number(i.qty) * Number(i.unit), currency)}*`
+    )
+    .join("\n");
+
+  const discountLine = discountPercent > 0
+    ? `\n💸 Discount ${discountPercent}%: -${formatMoney(discountAmt, currency)}`
+    : "";
+  const vatLine = vatPercent > 0
+    ? `\n🧾 VAT ${vatPercent}%: +${formatMoney(vatAmt, currency)}`
+    : "";
+
+  const preview =
+`🧾 *${label} Preview*${extraNote ? "\n" + extraNote : ""}
+
+${itemLines}
+─────────────────
+Subtotal: ${formatMoney(subtotal, currency)}${discountLine}${vatLine}
+*TOTAL: ${formatMoney(total, currency)}*
+
+Tap *Select* to generate PDF or add more items.`;
+
+  return sendInvoiceConfirmMenu(from, preview);
+}
+
 
 
 async function saveBizSafe(biz) {
@@ -936,8 +977,7 @@ They must click it to join.`);
 // ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
 // ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
 if (state === "creating_invoice_pick_product") {
-  const raw = trimmed;
-  const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
+  const entries = trimmed.split(",").map(s => s.trim()).filter(Boolean);
   const picked = [];
   const errors = [];
   const catalogue = biz.sessionData?.catalogueProducts || [];
@@ -950,11 +990,11 @@ if (state === "creating_invoice_pick_product") {
     const qty = parseFloat(match[2]);
 
     if (itemNum < 1 || itemNum > catalogue.length) {
-      errors.push(`#${itemNum} (out of range)`);
+      errors.push(`#${itemNum} out of range`);
       continue;
     }
     if (isNaN(qty) || qty <= 0) {
-      errors.push(`qty for #${itemNum}`);
+      errors.push(`bad qty for #${itemNum}`);
       continue;
     }
 
@@ -969,65 +1009,148 @@ if (state === "creating_invoice_pick_product") {
 
   if (!picked.length) {
     await sendText(from,
-`❌ Couldn't read that.
+`❌ Couldn't read that. Use *number × quantity*
 
-Format: *number × quantity*
 Examples:
-_3x2_ — item 3, qty 2
-_3x2, 7x1, 12x5_ — multiple items
+_3x2_ → item 3, qty 2
+_3x2, 7x1, 12x5_ → multiple items
 
-Or type *cancel* to go back.`
+Type *cancel* to go back.`
     );
     return true;
   }
 
-  // Merge into existing items list
   biz.sessionData.items = [...(biz.sessionData.items || []), ...picked];
 
   const errorNote = errors.length
-    ? `\n\n⚠️ Skipped ${errors.length} unreadable entr${errors.length === 1 ? "y" : "ies"}: ${errors.join(", ")}`
+    ? `\n⚠️ Skipped: ${errors.join(", ")}`
     : "";
 
-  // ── Check for zero-price items — must enter price before confirming ───────
+  // Find items with no price (unit = 0)
   const unpricedIndexes = biz.sessionData.items
-    .map((item, idx) => (item.unit === 0 || item.unit === null ? idx : null))
+    .map((item, idx) => (Number(item.unit) === 0 ? idx : null))
     .filter(idx => idx !== null);
 
   if (unpricedIndexes.length > 0) {
-    // Store which items need pricing and start at the first one
     biz.sessionData.unpricedIndexes = unpricedIndexes;
-    biz.sessionData.unpricedCursor = 0;
     biz.sessionState = "creating_invoice_enter_catalogue_prices";
     await saveBizSafe(biz);
 
-    const firstIdx = unpricedIndexes[0];
-    const firstItem = biz.sessionData.items[firstIdx];
-    const remaining = unpricedIndexes.length;
+    // Build numbered list of ONLY unpriced items clearly showing name + qty
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
 
-    await sendText(from,
-`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
-
-⚠️ *${remaining} item${remaining === 1 ? "" : "s"} need${remaining === 1 ? "s" : ""} a price.*
-
-Enter prices one by one:`
-    );
+    // Example: "1.50, 3, 12.50"
+    const examplePrices = unpricedIndexes
+      .map((_, i) => ((i + 1) * 3 + 1.5).toFixed(2))
+      .join(", ");
 
     return sendButtons(from, {
       text:
-`💰 *Price for item ${unpricedCursor(0) + 1} of ${remaining}:*
+`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
 
-${firstIdx + 1}. *${firstItem.item}* × ${firstItem.qty}
+💰 *${unpricedIndexes.length} item${unpricedIndexes.length === 1 ? " needs" : "s need"} a unit price:*
 
-Enter unit price (e.g. 5.50):`,
+${unpricedLines}
+
+─────────────────
+Enter *all prices in order*, separated by commas:
+
+_Example:_ *${examplePrices}*
+
+That means:
+${unpricedIndexes.map((itemIdx, i) => {
+  const it = biz.sessionData.items[itemIdx];
+  const exPrice = ((i + 1) * 3 + 1.5).toFixed(2);
+  return `  ${i + 1}. ${it.item} → $${exPrice} each × ${it.qty} = $${(Number(exPrice) * it.qty).toFixed(2)}`;
+}).join("\n")}
+
+_Or enter one price to apply to ALL ${unpricedIndexes.length} items._`,
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
 
-  // All items have prices — go straight to preview
+  // All priced — go straight to preview
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
+  return sendInvoicePreview(from, biz, errorNote);
+}
 
-  return _sendInvoicePreview(from, biz, errorNote);
+// ── Enter prices for zero-price catalogue items ───────────────────────────
+if (state === "creating_invoice_enter_catalogue_prices") {
+  const unpricedIndexes = biz.sessionData.unpricedIndexes || [];
+
+  if (!unpricedIndexes.length) {
+    biz.sessionState = "creating_invoice_confirm";
+    await saveBizSafe(biz);
+    return sendInvoicePreview(from, biz, "");
+  }
+
+  // Parse input — accept: "5.50, 3, 12.50" OR single value "5.50" for all
+  const parts = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  const allValid = parts.every(p => !isNaN(Number(p)) && Number(p) >= 0);
+
+  if (!allValid || parts.length === 0) {
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
+    await sendText(from,
+`❌ Invalid prices. Enter numbers only, separated by commas.
+
+Items needing prices:
+${unpricedLines}
+
+Example: *5.50, 3.00, 12.50*
+Or one price for all: *5.50*`
+    );
+    return true;
+  }
+
+  // Apply prices: either one price for all, or one per item in order
+  if (parts.length === 1) {
+    // Single price → apply to ALL unpriced items
+    const price = Number(parts[0]);
+    for (const itemIdx of unpricedIndexes) {
+      biz.sessionData.items[itemIdx].unit = price;
+    }
+  } else if (parts.length === unpricedIndexes.length) {
+    // One price per item in order
+    unpricedIndexes.forEach((itemIdx, i) => {
+      biz.sessionData.items[itemIdx].unit = Number(parts[i]);
+    });
+  } else {
+    // Wrong count — show clear error
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
+    await sendText(from,
+`❌ You sent *${parts.length} price${parts.length === 1 ? "" : "s"}* but there ${unpricedIndexes.length === 1 ? "is" : "are"} *${unpricedIndexes.length} item${unpricedIndexes.length === 1 ? "" : "s"}* needing prices.
+
+Send *${unpricedIndexes.length} prices* in order:
+${unpricedLines}
+
+Example: *${unpricedIndexes.map((_, i) => ((i + 1) * 3 + 1.5).toFixed(2)).join(", ")}*
+
+Or send *one price* to apply it to all ${unpricedIndexes.length} items.`
+    );
+    return true;
+  }
+
+  // All prices saved — clear state and go to preview
+  biz.sessionData.unpricedIndexes = [];
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+  return sendInvoicePreview(from, biz, "");
 }
 
 // ── Enter prices for zero-price catalogue items ───────────────────────────
