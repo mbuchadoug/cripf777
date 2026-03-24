@@ -113,7 +113,7 @@ ${invoices.length} invoices · ${payments.length} payments · ${receipts.length}
 }
 
 // ─── Resolve caller and branch ────────────────────────────────────────────────
-async function resolveCallerAndBranch(biz, from) {
+export async function resolveCallerAndBranch(biz, from) {
   const UserRole = (await import("../models/userRole.js")).default;
   const { normalizePhone } = await import("./phone.js");
 
@@ -143,7 +143,7 @@ async function resolveCallerAndBranch(biz, from) {
 }
 
 // ─── Send the report: WhatsApp text + HTML report PDF ─────────────────────────
-async function sendReport({ biz, from, label, periodLabel, branchName, branchId, data, totals, prevTotals, weeks }) {
+export async function sendReport({ biz, from, label, periodLabel, branchName, branchId, data, totals, prevTotals, weeks }) {
   const cur = biz.currency || "USD";
 
   // 1. Send WhatsApp text summary immediately
