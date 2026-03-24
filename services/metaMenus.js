@@ -333,17 +333,7 @@ export async function sendBranchReportsMenu(to, isGold = false, isSilver = false
   return sendList(to, "🏢 Branch Reports", items);
 }
 
-export async function sendBranchReportsMenu(to, isGold = false) {
-  const items = [
-    { id: "branch_daily", title: "📅 Daily Report" },
-    ...(isGold ? [
-      { id: "branch_weekly", title: "📊 Weekly Report" },
-      { id: "branch_monthly", title: "📆 Monthly Report" }
-    ] : []),
-    { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
-  ];
-  return sendList(to, "🏢 Branch Reports", items);
-}
+
 
 /* =============================================================================
    USERS MENU
