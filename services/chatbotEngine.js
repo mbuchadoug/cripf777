@@ -1405,7 +1405,7 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, se
     }
   }
 
-  // ── Text search — invoice number or client name ───────────────────────────
+  // ── Text search - invoice number or client name ───────────────────────────
   if (search) {
     const Client       = (await import("../models/client.js")).default;
     const matchClients = await Client.find({
@@ -1444,15 +1444,15 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, se
   const Client    = (await import("../models/client.js")).default;
   const clientIds = [...new Set(docs.map(d => d.clientId?.toString()).filter(Boolean))];
   const clients   = await Client.find({ _id: { $in: clientIds } }).lean();
-  const clientMap = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "—"]));
+  const clientMap = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "-"]));
 
   // Build header
   let header = `📄 ${type[0].toUpperCase() + type.slice(1)}s`;
   if (ownerBranchId && caller?.role === "owner") {
     const branch = await Branch.findById(ownerBranchId);
-    if (branch) header += ` — ${branch.name}`;
+    if (branch) header += ` - ${branch.name}`;
   } else if (caller?.role === "owner" && ownerBranchId === null) {
-    header += ` — All`;
+    header += ` - All`;
   }
   if (dateFilter === "this_month") header += " · This Month";
   else if (dateFilter === "last_month") header += " · Last Month";
@@ -1478,7 +1478,7 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, se
   };
   await saveBizSafe(biz);
 
-  // Numbered text list — no WhatsApp row limits
+  // Numbered text list - no WhatsApp row limits
   let msg = `${header}\nPage ${safePage + 1}/${totalPages} · ${total} total\n\n`;
   docs.forEach((d, i) => {
     const statusIcon = d.status === "paid" ? "✅" : d.status === "partial" ? "⏳" : "🔴";
@@ -1501,7 +1501,7 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, se
   if (safePage < totalPages - 1)
     navBtns.push({ id: `vdoc_next_${typeCode}_${branchCode}_${safePage}_${filterCode}_${searchCode}`, title: "➡ Next" });
 
-  // Filter button — show most useful one based on current state
+  // Filter button - show most useful one based on current state
   if (!dateFilter && !search)
     navBtns.push({ id: `vdoc_filter_${typeCode}_${branchCode}`, title: "📅 Filter by Date" });
   else
@@ -2526,7 +2526,7 @@ return sendButtons(from, {
     if (!invoice) return sendText(from, "Invoice not found.");
 
     if (isFullPay) {
-      // Skip amount entry — go straight to method
+      // Skip amount entry - go straight to method
       biz.sessionState = "payment_method";
       biz.sessionData = { invoiceId: invoice._id, amount: invoice.balance };
       await saveBizSafe(biz);
@@ -2544,7 +2544,7 @@ How was it paid?`,
       });
     }
 
-    // Normal flow — show balance and ask for amount with "Pay Full" shortcut
+    // Normal flow - show balance and ask for amount with "Pay Full" shortcut
     biz.sessionState = "payment_amount";
     biz.sessionData = { invoiceId: invoice._id };
     await saveBizSafe(biz);
@@ -2590,7 +2590,7 @@ Type amount or tap Full:`,
     });
   }
 
-  // ── Doc search result — triggered after user types search term ────────────
+  // ── Doc search result - triggered after user types search term ────────────
   if (biz?.sessionState === "sales_doc_search_ready") {
     const docType    = biz.sessionData?.docSearchType   || "invoice";
     const branchRaw  = biz.sessionData?.docSearchBranch;
@@ -2683,7 +2683,7 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
 
     // Build numbered text list
     const numbered = visible
-      .map((p, i) => `${start + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}`)
+      .map((p, i) => `${start + i + 1}. *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}`)
       .join("\n");
 
     await sendText(from,
@@ -3001,7 +3001,7 @@ if (a.startsWith("expense_branch_")) {
       text:
 `💸 *Record Expenses*
 
-Type one or many — same format either way:
+Type one or many - same format either way:
 
 Single:  _fuel 30_
 Many:  _fuel 30, lunch 15, zesa 50, rent 500_
@@ -3114,7 +3114,7 @@ if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
   }
 
   // ── Doc list: search trigger ────────────────────────────────────────────────
-// ── Filter by date — show date picker buttons ──────────────────────────────
+// ── Filter by date - show date picker buttons ──────────────────────────────
   if (a.startsWith("vdoc_filter_")) {
     if (!biz) return sendMainMenu(from);
     const parts   = a.replace("vdoc_filter_", "").split("_");
@@ -4358,7 +4358,7 @@ Type: ${doc.type} | ${statusEmoji} ${doc.status}
 Total: $${Number(doc.total || 0).toFixed(2)} ${cur}
 Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}`;
 
-    // Max 3 buttons — priority: View PDF, Delete (managers only), Back
+    // Max 3 buttons - priority: View PDF, Delete (managers only), Back
     if (isManager) {
       return sendButtons(from, {
         text: docText,
@@ -4519,7 +4519,7 @@ if (a === "find_supplier") {
     biz.sessionState = "supplier_search_product";
     await saveBizSafe(biz);
   }
-  // Always clear UserSession — covers ghost-biz users who have biz but also buy
+  // Always clear UserSession - covers ghost-biz users who have biz but also buy
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -4678,7 +4678,7 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
-// ── Main Menu back button — always goes to start menu ────────────────────
+// ── Main Menu back button - always goes to start menu ────────────────────
 if (a === "main_menu_back") {
   return sendMainMenu(from);
 }
@@ -5066,7 +5066,7 @@ Examples:
 *5-8*
 *basin mixer, shower trap*
 
-You can delete just a few items — you do NOT need to resend the whole list.
+You can delete just a few items - you do NOT need to resend the whole list.
 
 Type *cancel* to go back.`
   );
@@ -8628,7 +8628,7 @@ if (a.startsWith("sup_cart_confirm_")) {
     { upsert: true }
   );
 
-// For collection-only product suppliers, no address needed — use a placeholder
+// For collection-only product suppliers, no address needed - use a placeholder
   const needsAddress = isService || supplier.delivery?.available;
 
   if (!needsAddress) {
@@ -9177,7 +9177,7 @@ return sendButtons(from, {
 
   return sendButtons(from, {
     text:
-`📋 *Confirm your listing*\n\n🏢 *${reg.businessName}*\n📍 ${reg.city || "—"}, ${reg.area || "—"}\n📦 Type: ${isService ? "Services" : "Products"} (${itemCount} items)\n💱 Currency: *${currency}*\n\n✅ Once you pay, your business listing goes live AND your invoicing/quoting tools unlock automatically.\n\nIs everything correct?`,
+`📋 *Confirm your listing*\n\n🏢 *${reg.businessName}*\n📍 ${reg.city || "-"}, ${reg.area || "-"}\n📦 Type: ${isService ? "Services" : "Products"} (${itemCount} items)\n💱 Currency: *${currency}*\n\n✅ Once you pay, your business listing goes live AND your invoicing/quoting tools unlock automatically.\n\nIs everything correct?`,
     buttons: [
       { id: "sup_confirm_yes", title: "✅ Confirm & Continue" },
       { id: "sup_confirm_no",  title: "✏️ Edit Details" }
@@ -9900,8 +9900,8 @@ if (a === "view_all_products" || a.startsWith("view_all_products_page_")) {
         const page = a.startsWith("view_all_products_page_") ? parseInt(a.replace("view_all_products_page_", ""), 10) || 0 : 0;
         const totalPages = Math.ceil(products.length / PAGE);
         const slice = products.slice(page * PAGE, page * PAGE + PAGE);
-        let msg = `📦 *All Products* — Page ${page + 1}/${totalPages} (${products.length} total)\n\n`;
-        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        let msg = `📦 *All Products* - Page ${page + 1}/${totalPages} (${products.length} total)\n\n`;
+        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         const navBtns = [];
         if (page > 0)              navBtns.push({ id: `view_all_products_page_${page - 1}`, title: "⬅ Prev" });
@@ -9922,8 +9922,8 @@ if (a === "view_all_products" || a.startsWith("view_all_products_page_")) {
         const PAGE = 25;
         const totalPages = Math.ceil(products.length / PAGE);
         const slice = products.slice(page * PAGE, page * PAGE + PAGE);
-        let msg = `📦 *${branch?.name || "Branch"} Products* — Page ${page + 1}/${totalPages}\n\n`;
-        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        let msg = `📦 *${branch?.name || "Branch"} Products* - Page ${page + 1}/${totalPages}\n\n`;
+        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
         const navBtns = [];
         if (page > 0)              navBtns.push({ id: `view_products_branch_${branchId}_page_${page - 1}`, title: "⬅ Prev" });

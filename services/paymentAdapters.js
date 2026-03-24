@@ -57,10 +57,10 @@ export async function showUnpaidInvoices(from, branchId = null, page = 0, search
       ? "💰 Unpaid Invoices (Your Branch)"
       : "💰 Unpaid Invoices";
 
-  // Always use numbered text list — avoids sendList row limits
+  // Always use numbered text list - avoids sendList row limits
   let msg = `${header}\nPage ${safePage + 1}/${totalPages} · ${total} unpaid\n\n`;
   unpaid.forEach((inv, i) => {
-    msg += `${safePage * PAGE_SIZE + i + 1}. *${inv.number}* — $${Number(inv.balance || 0).toFixed(2)} ${inv.currency || ""}\n`;
+    msg += `${safePage * PAGE_SIZE + i + 1}. *${inv.number}* - $${Number(inv.balance || 0).toFixed(2)} ${inv.currency || ""}\n`;
   });
   msg += `\nType the *number* to select an invoice to pay.`;
 

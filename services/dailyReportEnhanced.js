@@ -84,9 +84,9 @@ export function buildWhatsAppSummary({ biz, label, periodLabel, data, totals, br
   // Unpaid invoices (top 3)
   const unpaid = invoices.filter(i => (i.balance || 0) > 0)
     .sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 3)
-    .map(i => `  ${i.number} — ${fmt(i.balance, cur)}`).join("\n");
+    .map(i => `  ${i.number} - ${fmt(i.balance, cur)}`).join("\n");
 
-  return `📊 *${biz.name?.toUpperCase()}*  —  ${label}
+  return `📊 *${biz.name?.toUpperCase()}*  -  ${label}
 ${periodLabel}
 ${branch}
 ━━━━━━━━━━━━━━━━━━━━

@@ -2898,7 +2898,7 @@ if (a === "find_supplier") {
     biz.sessionState = "supplier_search_product";
     await saveBizSafe(biz);
   }
-  // Always clear UserSession — covers ghost-biz users who have biz but also buy
+  // Always clear UserSession - covers ghost-biz users who have biz but also buy
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -5233,7 +5233,7 @@ if (a.startsWith("sup_order_")) {
 
   // ── Recover the search term that led the buyer here ───────────────────
 // ── Recover the search term that led the buyer here ───────────────────
-  // ALWAYS check UserSession first — biz.sessionData can have stale product
+  // ALWAYS check UserSession first - biz.sessionData can have stale product
   // from a previous search (especially for ghost-biz supplier users who also buy)
 // ── Recover the search term that led the buyer here ───────────────────
   // UserSession is updated on every search (biz and no-biz paths both write to it).
@@ -5490,7 +5490,7 @@ if (a.startsWith("sup_cart_confirm_")) {
     { upsert: true }
   );
 
-// For collection-only product suppliers, no address needed — use a placeholder
+// For collection-only product suppliers, no address needed - use a placeholder
   const needsAddress = isService || supplier.delivery?.available;
 
   if (!needsAddress) {

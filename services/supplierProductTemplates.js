@@ -649,7 +649,7 @@ export async function getTemplateForCategoryWithDB(catId) {
       };
     }
   } catch (_err) {
-    // DB unavailable or CategoryPreset model not found — fall through to static
+    // DB unavailable or CategoryPreset model not found - fall through to static
   }
   // Fallback: return static template from this file
   return TEMPLATES[catId] || null;

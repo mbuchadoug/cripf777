@@ -1469,7 +1469,7 @@ router.get("/presets", requireSupplierAdmin, async (req, res) => {
     const productRows = productCats.map(cat => `
       <tr>
         <td><strong>${esc(cat.label)}</strong><br><small style="color:#888">${esc(cat.id)}</small></td>
-        <td>${cat.hasSubcats ? "✅" : "—"}</td>
+        <td>${cat.hasSubcats ? "✅" : "-"}</td>
         <td>${cat.productCount > 0 ? cat.productCount + " items" : "<em style='color:#aaa'>None</em>"}</td>
         <td>${cat.priceCount > 0 ? cat.priceCount + " prices" : "<em style='color:#aaa'>None</em>"}</td>
         <td>${badge(cat.source === "database" ? "DB" : cat.source === "static" ? "Static" : "None",
@@ -1477,7 +1477,7 @@ router.get("/presets", requireSupplierAdmin, async (req, res) => {
         <td>${cat.hasPreset
           ? badge(cat.isActive ? "✅ Active" : "⏸ Off", cat.isActive ? "green" : "gray")
           : "<em style='color:#aaa'>No preset</em>"}</td>
-        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "—"}</small></td>
+        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "-"}</small></td>
         <td>
           <a href="/zq-admin/presets/${esc(cat.id)}" class="btn-link">Edit →</a>
           ${cat.hasPreset ? `&nbsp;<button onclick="togglePreset('${esc(cat.id)}')" class="btn-sm btn-${cat.isActive ? "orange" : "green"}">${cat.isActive ? "Disable" : "Enable"}</button>` : ""}
@@ -1487,7 +1487,7 @@ router.get("/presets", requireSupplierAdmin, async (req, res) => {
     const serviceRows = serviceCats.map(cat => `
       <tr>
         <td><strong>${esc(cat.label)}</strong><br><small style="color:#888">${esc(cat.id)}</small></td>
-        <td>${cat.hasSubcats ? "✅" : "—"}</td>
+        <td>${cat.hasSubcats ? "✅" : "-"}</td>
         <td>${cat.productCount > 0 ? cat.productCount + " services" : "<em style='color:#aaa'>None</em>"}</td>
         <td>${cat.priceCount > 0 ? cat.priceCount + " rates" : "<em style='color:#aaa'>None</em>"}</td>
         <td>${badge(cat.source === "database" ? "DB" : cat.source === "static" ? "Static" : "None",
@@ -1495,7 +1495,7 @@ router.get("/presets", requireSupplierAdmin, async (req, res) => {
         <td>${cat.hasPreset
           ? badge(cat.isActive ? "✅ Active" : "⏸ Off", cat.isActive ? "green" : "gray")
           : "<em style='color:#aaa'>No preset</em>"}</td>
-        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "—"}</small></td>
+        <td><small>${cat.updatedAt ? new Date(cat.updatedAt).toLocaleDateString() : "-"}</small></td>
         <td>
           <a href="/zq-admin/presets/${esc(cat.id)}" class="btn-link">Edit →</a>
           ${cat.hasPreset ? `&nbsp;<button onclick="togglePreset('${esc(cat.id)}')" class="btn-sm btn-${cat.isActive ? "orange" : "green"}">${cat.isActive ? "Disable" : "Enable"}</button>` : ""}
@@ -1584,7 +1584,7 @@ router.get("/presets/:catId", requireSupplierAdmin, async (req, res) => {
 
       <div class="panel">
         <div class="panel-head">
-          <h3>Edit Preset — ${esc(catDef.label)}</h3>
+          <h3>Edit Preset - ${esc(catDef.label)}</h3>
           <div style="font-size:12px;color:var(--muted)">
             ID: <code>${esc(catId)}</code> &nbsp;|&nbsp;
             Type: ${(catDef.types || []).join(", ")} &nbsp;|&nbsp;
@@ -1610,7 +1610,7 @@ router.get("/presets/:catId", requireSupplierAdmin, async (req, res) => {
         <form id="presetForm">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
             <input type="checkbox" id="isActive" ${preset.isActive ? "checked" : ""}>
-            <label for="isActive" style="margin:0;font-weight:600">Active — shown to suppliers during registration</label>
+            <label for="isActive" style="margin:0;font-weight:600">Active - shown to suppliers during registration</label>
           </div>
 
           <div class="fg full" style="margin-bottom:14px">

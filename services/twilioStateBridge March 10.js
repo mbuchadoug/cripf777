@@ -676,7 +676,7 @@ if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
     const { filename } = await generatePDF({
       type: "receipt", number: receiptNumber, date: new Date(),
       billingTo: "Expense Record",
-      items: [{ item: `${expense.category} — ${expense.description}`, qty: 1, unit: expense.amount, total: expense.amount }],
+      items: [{ item: `${expense.category} - ${expense.description}`, qty: 1, unit: expense.amount, total: expense.amount }],
       bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
     });
     const site = (process.env.SITE_URL || "").replace(/\/$/, "");
@@ -686,7 +686,7 @@ if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
   }
 
   await sendText(from,
-`✅ *Saved*  ${expense.category} — ${formatMoney(expense.amount, biz.currency)} (${method})`
+`✅ *Saved*  ${expense.category} - ${formatMoney(expense.amount, biz.currency)} (${method})`
   );
 
   const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");

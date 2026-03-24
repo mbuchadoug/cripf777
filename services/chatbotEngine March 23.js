@@ -4062,7 +4062,7 @@ if (a === "find_supplier") {
     biz.sessionState = "supplier_search_product";
     await saveBizSafe(biz);
   }
-  // Always clear UserSession — covers ghost-biz users who have biz but also buy
+  // Always clear UserSession - covers ghost-biz users who have biz but also buy
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -4594,7 +4594,7 @@ Examples:
 *5-8*
 *basin mixer, shower trap*
 
-You can delete just a few items — you do NOT need to resend the whole list.
+You can delete just a few items - you do NOT need to resend the whole list.
 
 Type *cancel* to go back.`
   );
@@ -8136,7 +8136,7 @@ if (a.startsWith("sup_cart_confirm_")) {
     { upsert: true }
   );
 
-// For collection-only product suppliers, no address needed — use a placeholder
+// For collection-only product suppliers, no address needed - use a placeholder
   const needsAddress = isService || supplier.delivery?.available;
 
   if (!needsAddress) {

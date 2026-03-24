@@ -3,7 +3,7 @@
  * Generates a professional, styled HTML Business Report
  * Saved to /docs/generated/reports/ and sent as a WhatsApp document
  *
- * Works independently of twilio_biz.js — no receipt template used.
+ * Works independently of twilio_biz.js - no receipt template used.
  */
 
 import fs   from "fs";
@@ -101,7 +101,7 @@ function buildOwedRows(invoices, cur) {
 function buildWeekRows(weeks, cur) {
   return weeks.map((w, i) => `
     <div class="week-row ${w.profit >= 0 ? "week-profit" : "week-loss"}">
-      <span class="week-label">Week ${i + 1} — ${w.label}</span>
+      <span class="week-label">Week ${i + 1} - ${w.label}</span>
       <span class="week-in">In: ${money(w.in, cur)}</span>
       <span class="week-out">Out: ${money(w.out, cur)}</span>
       <span class="week-profit-val ${w.profit >= 0 ? "pos" : "neg"}">${w.profit >= 0 ? "+" : ""}${money(w.profit, cur)}</span>
@@ -173,7 +173,7 @@ function buildHTML({ biz, reportType, periodLabel, branchName, data, totals, pre
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${reportType} — ${biz.name}</title>
+  <title>${reportType} - ${biz.name}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -466,11 +466,11 @@ function buildHTML({ biz, reportType, periodLabel, branchName, data, totals, pre
       <div class="section-title">Money Flow</div>
 
       <div class="data-row">
-        <span class="row-label">💚 Invoice Payments Received</span>
+        <span class="row-label"> Invoice Payments Received</span>
         <span class="row-value pos">${money(invoicePayments, cur)} <span class="row-sublabel">(${payments.length})</span></span>
       </div>
       <div class="data-row">
-        <span class="row-label">💚 Direct Cash Sales</span>
+        <span class="row-label"> Direct Cash Sales</span>
         <span class="row-value pos">${money(cashSales, cur)} <span class="row-sublabel">(${receipts.length})</span></span>
       </div>
       <div class="data-row row-indent">

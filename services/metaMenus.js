@@ -103,7 +103,7 @@ export async function sendMainMenu(to) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  // ── Case 1: Active supplier (paid) — may also have full biz tools ─────────
+  // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
   if (supplier?.active) {
     const items = [
       { id: "my_supplier_account", title: "🏪 My Business" },      // ← TOP, renamed
@@ -137,7 +137,7 @@ export async function sendMainMenu(to) {
     return sendList(to, "📊 Main Menu", filtered);
   }
 
-  // ── Case 4: Brand new user — no biz, no supplier ──────────────────────────
+  // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
     { id: "register_supplier", title: "🏪 Start My Business" },    // ← entry point
     { id: "find_supplier",     title: "🔍 Find Suppliers" },

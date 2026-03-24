@@ -348,7 +348,7 @@ const restrictedStateMap = {
 
 
 /* ===========================
-   SALES DOC LIST — type a number to open
+   SALES DOC LIST - type a number to open
    e.g. user sees numbered list and types "3"
 =========================== */
 if (state === "sales_doc_list") {
@@ -396,16 +396,16 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
     }
   }
 
-  // Not a valid number — remind user
+  // Not a valid number - remind user
   await sendText(from, `❌ Type the item number from the list (1–${ids.length + offset}) to open it, or use the buttons below.`);
   return true;
 }
 
 /* ===========================
-   SALES DOC SEARCH — user typed a search term
+   SALES DOC SEARCH - user typed a search term
 =========================== */
 /* ===========================
-   SALES DOC SEARCH — user typed a search term
+   SALES DOC SEARCH - user typed a search term
 =========================== */
 if (state === "sales_doc_search") {
   const searchTerm = trimmed;
@@ -424,7 +424,7 @@ if (state === "sales_doc_search") {
   await saveBizSafe(biz);
 
   // Dynamically import showSalesDocs from chatbotEngine
-  // (it's not exported, so we trigger via the session flag approach — but that breaks)
+  // (it's not exported, so we trigger via the session flag approach - but that breaks)
   // Instead: do the search query RIGHT HERE and build the list
   const Invoice = (await import("../models/invoice.js")).default;
   const Client  = (await import("../models/client.js")).default;
@@ -458,7 +458,7 @@ if (state === "sales_doc_search") {
 
   const clientIds  = [...new Set(docs.map(d => d.clientId?.toString()).filter(Boolean))];
   const clients    = await Client.find({ _id: { $in: clientIds } }).lean();
-  const clientMap  = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "—"]));
+  const clientMap  = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "-"]));
 
   let msg = `📄 *${docType[0].toUpperCase() + docType.slice(1)}s* 🔍 "${searchTerm}"\n${total} result(s)\n\n`;
   docs.forEach((d, i) => {
@@ -851,7 +851,7 @@ They must click it to join.`);
      supplies, 45.50, bank, office paper and pens
 =========================== */
 /* ===========================
-   EXPENSE STEP 1 — CATEGORY TAPPED
+   EXPENSE STEP 1 - CATEGORY TAPPED
    User taps from category list → ask for amount only
 =========================== */
 if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
@@ -879,7 +879,7 @@ if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
 }
 
 /* ===========================
-   EXPENSE STEP 2 — AMOUNT TYPED
+   EXPENSE STEP 2 - AMOUNT TYPED
    "150"  or  "150 school fees"
    → shows Cash / EcoCash / Bank buttons immediately
 =========================== */
@@ -902,7 +902,7 @@ if (state === "expense_amount") {
   const desc = biz.sessionData.description || cat;
 
   return sendButtons(from, {
-    text: `${cat} — *${formatMoney(amt, biz.currency)}*\n_${desc}_\n\n💳 How was it paid?`,
+    text: `${cat} - *${formatMoney(amt, biz.currency)}*\n_${desc}_\n\n💳 How was it paid?`,
     buttons: [
       { id: "exp_method_cash",    title: "💵 Cash" },
       { id: "exp_method_ecocash", title: "📱 EcoCash" },
@@ -912,7 +912,7 @@ if (state === "expense_amount") {
 }
 
 /* ===========================
-   EXPENSE STEP 3 — METHOD TAPPED → SAVE + PDF
+   EXPENSE STEP 3 - METHOD TAPPED → SAVE + PDF
    Saves immediately, no confirm screen
 =========================== */
 if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
@@ -953,7 +953,7 @@ if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
   await saveBizSafe(biz);
 
   await sendText(from,
-    `✅ *${expense.category}* — ${formatMoney(expense.amount, biz.currency)} (${method})`
+    `✅ *${expense.category}* - ${formatMoney(expense.amount, biz.currency)} (${method})`
   );
 
   const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
@@ -962,7 +962,7 @@ if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
 }
 
 /* =====================================================
-   SMART BULK ENTRY — "fuel 30, lunch 15, zesa 50"
+   SMART BULK ENTRY - "fuel 30, lunch 15, zesa 50"
    State: expense_smart_entry
    User keeps typing expenses until they type "done"
    Single item → immediate Save/Add More choice
@@ -997,7 +997,7 @@ if (state === "expense_smart_entry") {
     const count = biz.sessionData?.bulkExpenses?.length || 0;
     biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
-    await sendText(from, count > 0 ? `❌ Cancelled — ${count} item(s) discarded.` : "❌ Cancelled.");
+    await sendText(from, count > 0 ? `❌ Cancelled - ${count} item(s) discarded.` : "❌ Cancelled.");
     await sendMainMenu(from);
     return true;
   }
@@ -1013,7 +1013,7 @@ if (state === "expense_smart_entry") {
     }
     const total = items.reduce((s, e) => s + e.amount, 0);
     const lines = items.map((e, i) =>
-      `${i + 1}. ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`
+      `${i + 1}. ${e.description} - ${formatMoney(e.amount, biz.currency)} (${e.method})`
     ).join("\n");
     biz.sessionState = "expense_bulk_confirm";
     await saveBizSafe(biz);
@@ -1045,7 +1045,7 @@ ${lines}
     await saveBizSafe(biz);
     const total = items.reduce((s, e) => s + e.amount, 0);
     return sendButtons(from, {
-      text: `✅ Removed: *${removed.description}* — ${formatMoney(removed.amount, biz.currency)}\n${items.length} item(s) remaining — ${formatMoney(total, biz.currency)}`,
+      text: `✅ Removed: *${removed.description}* - ${formatMoney(removed.amount, biz.currency)}\n${items.length} item(s) remaining - ${formatMoney(total, biz.currency)}`,
       buttons: items.length
         ? [
             { id: "exp_bulk_confirm_yes", title: "✅ Save All" },
@@ -1067,7 +1067,7 @@ ${lines}
     }
     const total = items.reduce((s, e) => s + e.amount, 0);
     const lines = items.map((e, i) =>
-      `${i + 1}. ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`
+      `${i + 1}. ${e.description} - ${formatMoney(e.amount, biz.currency)} (${e.method})`
     ).join("\n");
     biz.sessionState = "expense_bulk_confirm";
     await saveBizSafe(biz);
@@ -1139,11 +1139,11 @@ _fuel 30 ecocash, rent 500 bank_`,
   const allItems = biz.sessionData.bulkExpenses;
   const runTotal = allItems.reduce((s, e) => s + e.amount, 0);
   const newLines = parsed
-    .map(e => `• ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`)
+    .map(e => `• ${e.description} - ${formatMoney(e.amount, biz.currency)} (${e.method})`)
     .join("\n");
   const failNote = failed.length ? `\n⚠️ Skipped: ${failed.join(", ")}` : "";
 
-  // Always show buttons — never ask them to type "done"
+  // Always show buttons - never ask them to type "done"
  // Set state to expense_bulk_confirm BEFORE showing Save All button
   // so that tapping Save All routes correctly
   biz.sessionState = "expense_bulk_confirm";
@@ -1175,7 +1175,7 @@ if (state === "expense_bulk_confirm") {
     const items    = biz.sessionData?.bulkExpenses || [];
     const runTotal = items.reduce((s, e) => s + e.amount, 0);
     return sendButtons(from, {
-      text: `➕ *${items.length} item(s) so far — ${formatMoney(runTotal, biz.currency)}*\n\nType more expenses:\n_fuel 30, lunch 15_`,
+      text: `➕ *${items.length} item(s) so far - ${formatMoney(runTotal, biz.currency)}*\n\nType more expenses:\n_fuel 30, lunch 15_`,
       buttons: [
         { id: "exp_bulk_confirm_yes", title: "✅ Save All" },
         { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
@@ -1190,7 +1190,7 @@ if (state === "expense_bulk_confirm") {
     const items    = biz.sessionData?.bulkExpenses || [];
     const runTotal = items.reduce((s, e) => s + e.amount, 0);
     return sendButtons(from, {
-      text: `✏️ *${items.length} item(s) so far — ${formatMoney(runTotal, biz.currency)}*\n\nKeep typing expenses:`,
+      text: `✏️ *${items.length} item(s) so far - ${formatMoney(runTotal, biz.currency)}*\n\nKeep typing expenses:`,
       buttons: [
         { id: "exp_bulk_confirm_yes", title: "✅ Save All" },
         { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
@@ -1200,7 +1200,7 @@ if (state === "expense_bulk_confirm") {
 
   // ── "Save All" button ─────────────────────────────────────────────────────
   if (text !== "exp_bulk_confirm_yes") {
-    // user typed something while in confirm state — treat as more expenses
+    // user typed something while in confirm state - treat as more expenses
     biz.sessionState = "expense_smart_entry";
     await saveBizSafe(biz);
     // re-process as new expense entry (fall through won't work so redirect)
@@ -1245,7 +1245,7 @@ if (state === "expense_bulk_confirm") {
   const total         = items.reduce((s, e) => s + e.amount, 0);
   const savedBranchId = biz.sessionData.targetBranchId;
   const lines         = items
-    .map(e => `• ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`)
+    .map(e => `• ${e.description} - ${formatMoney(e.amount, biz.currency)} (${e.method})`)
     .join("\n");
 
   // Clear session BEFORE sending PDF so any error doesn't leave dirty state
@@ -1262,14 +1262,14 @@ ${lines}
 Total: *${formatMoney(total, biz.currency)}*`
   );
 
-  // Generate PDF receipt — runs after confirmation so user doesn't wait
+  // Generate PDF receipt - runs after confirmation so user doesn't wait
   try {
     const receiptNum = `EXP-${Date.now()}`;
     const { filename } = await generatePDF({
       type: "receipt", number: receiptNum, date: new Date(),
       billingTo: "Expense Record",
       items: items.map(e => ({
-        item:  `${e.category} — ${e.description}`,
+        item:  `${e.category} - ${e.description}`,
         qty:   1,
         unit:  e.amount,
         total: e.amount
@@ -1424,7 +1424,7 @@ if (state === "payment_method") {
   await saveBizSafe(biz);
 
   await sendText(from,
-`✅ *Payment saved*  ${invoice.number} — ${formatMoney(amount, invoice.currency)} (${method})
+`✅ *Payment saved*  ${invoice.number} - ${formatMoney(amount, invoice.currency)} (${method})
 ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice.balance, invoice.currency)}`}`
   );
   await sendMainMenu(from);
@@ -1730,7 +1730,7 @@ _Or enter one price to apply to ALL ${unpricedIndexes.length} items._`,
     });
   }
 
-  // All priced — go straight to preview
+  // All priced - go straight to preview
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
   return sendInvoicePreview(from, biz, errorNote);
@@ -1746,7 +1746,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
     return sendInvoicePreview(from, biz, "");
   }
 
-  // Parse input — accept: "5.50, 3, 12.50" OR single value "5.50" for all
+  // Parse input - accept: "5.50, 3, 12.50" OR single value "5.50" for all
   const parts = trimmed.split(",").map(s => s.trim()).filter(Boolean);
   const allValid = parts.every(p => !isNaN(Number(p)) && Number(p) >= 0);
 
@@ -1782,7 +1782,7 @@ Or one price for all: *5.50*`
       biz.sessionData.items[itemIdx].unit = Number(parts[i]);
     });
   } else {
-    // Wrong count — show clear error
+    // Wrong count - show clear error
     const unpricedLines = unpricedIndexes
       .map((itemIdx, i) => {
         const it = biz.sessionData.items[itemIdx];
@@ -1802,7 +1802,7 @@ Or send *one price* to apply it to all ${unpricedIndexes.length} items.`
     return true;
   }
 
-  // All prices saved — clear state and go to preview
+  // All prices saved - clear state and go to preview
   biz.sessionData.unpricedIndexes = [];
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
@@ -1845,7 +1845,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       text:
 `✅ Saved $${price.toFixed(2)}
 
-💰 *Next — ${remaining} item${remaining === 1 ? "" : "s"} left:*
+💰 *Next - ${remaining} item${remaining === 1 ? "" : "s"} left:*
 
 ${nextIdx + 1}. *${nextItem.item}* × ${nextItem.qty}
 
@@ -1854,7 +1854,7 @@ Enter unit price:`,
     });
   }
 
-  // All prices entered — go to preview
+  // All prices entered - go to preview
   biz.sessionData.unpricedIndexes = [];
   biz.sessionData.unpricedCursor = 0;
   biz.sessionState = "creating_invoice_confirm";

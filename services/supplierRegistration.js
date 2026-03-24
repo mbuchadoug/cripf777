@@ -590,7 +590,7 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
 
       // Build preview lines
     // At this point, updated[] items always have shape { product, amount, unit }
-      // regardless of isService — the conversion to { service, rate } happens below
+      // regardless of isService - the conversion to { service, rate } happens below
       // when saving to reg.rates. So always read u.product for the preview.
       const previewLines = updated
         .map(u => `• ${u.product} - $${Number(u.amount).toFixed(2)}/${u.unit}`)
@@ -710,7 +710,7 @@ Type your ${rateLabel} and send, or tap Skip 👇`
 
 // ── Step: Business currency (injected between delivery/travel and confirm) ──
 if (state === "supplier_reg_biz_currency") {
-  // handled via button in chatbotEngine — this state is a passthrough guard
+  // handled via button in chatbotEngine - this state is a passthrough guard
   return true;
 }
 // ── Step 5: EcoCash Number Entry ──────────────────────────────────────────
