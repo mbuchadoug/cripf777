@@ -41,12 +41,15 @@ async function filterMenuByRole({ from, biz, items }) {
   let phone = normalizePhone(from);
   if (phone.startsWith("0")) phone = "263" + phone.slice(1);
 
-  // No business yet (onboarding): show clerk-level defaults
   if (!biz) {
     return items.filter(item => !item.section || canAccessSection("clerk", item.section));
   }
 
-  const user = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+  // Look up by biz._id first; fall back to phone-only (handles UserRole businessId mismatch)
+  let user = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+  if (!user) {
+    user = await UserRole.findOne({ phone, pending: false });
+  }
 
   if (user?.role === "owner") return items;
   if (!user) return items.filter(item => !item.section || canAccessSection("clerk", item.section));
@@ -104,17 +107,18 @@ export async function sendMainMenu(to) {
   const supplier = await SupplierProfile.findOne({ phone });
 
   // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
-  if (supplier?.active) {
+if (supplier?.active) {
     const items = [
-      { id: "my_supplier_account", title: "🏪 My Business" },      // ← TOP, renamed
+      { id: "my_supplier_account", title: "🏪 My Business" },
+      { id: "biz_tools_menu",      title: "📊 Business Tools" },
       { id: "find_supplier",       title: "🔍 Find Suppliers" },
       { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     ];
-    // If their biz package is bronze+ show business tools option
-    if (biz && biz.package !== "trial") {
-      items.push({ id: "biz_tools_menu", title: "📊 Business Tools" });
-    }
-    return sendList(to, "👋 *Welcome to ZimQuote!*", items);
+    // Hide Business Tools for trial users
+    const filtered = (biz && biz.package === "trial")
+      ? items.filter(i => i.id !== "biz_tools_menu")
+      : items;
+    return sendList(to, "👋 *Welcome to ZimQuote!*", filtered);
   }
 
   // ── Case 2: Registered supplier but not yet paid ──────────────────────────
@@ -150,15 +154,26 @@ export async function sendMainMenu(to) {
    BUSINESS TOOLS MENU (for suppliers accessing invoicing features)
 ============================================================================= */
 export async function sendBusinessToolsMenu(to, biz) {
+  const pkg = biz?.package || "trial";
+  const PAID = ["bronze", "silver", "gold", "enterprise"];
+  const isPaid = PAID.includes(pkg);
+
   const items = [
-    { id: ACTIONS.SALES_MENU,         title: "🧾 Sales" },
-    { id: ACTIONS.CLIENTS_MENU,       title: "👥 Clients" },
-    { id: ACTIONS.PRODUCTS_MENU,      title: "📦 Products & Services" },
-    { id: ACTIONS.PAYMENTS_MENU,      title: "💰 Payments" },
-    { id: ACTIONS.REPORTS_MENU,       title: "📈 Reports" },
-    { id: ACTIONS.SETTINGS_MENU,      title: "⚙ Settings" },
-    { id: "my_supplier_account",      title: "🏪 My Business" },
-    { id: ACTIONS.BACK,               title: "⬅ Back" }
+    { id: ACTIONS.SALES_MENU,    title: "🧾 Sales" },
+    { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments" },
+    { id: ACTIONS.CLIENTS_MENU,  title: "👥 Clients" },
+    { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
+    { id: ACTIONS.REPORTS_MENU,  title: "📈 Reports" },
+    // Branches & Users — only show for silver+ (multi-branch packages)
+    ...(isPaid && ["silver", "gold", "enterprise"].includes(pkg)
+      ? [
+          { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches", section: "branches" },
+          { id: ACTIONS.USERS_MENU,    title: "👥 Users",    section: "users" }
+        ]
+      : []),
+    { id: ACTIONS.SETTINGS_MENU,  title: "⚙ Settings" },
+    { id: "my_supplier_account",  title: "🏪 My Business" },
+    { id: ACTIONS.BACK,           title: "⬅ Back" }
   ];
 
   const filtered = await filterMenuByRole({ from: to, biz, items });

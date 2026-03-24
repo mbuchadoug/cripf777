@@ -601,17 +601,21 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
 export function parseShortcodeSearch(text = "") {
   const raw = text.trim().toLowerCase();
 
-  const patterns = [
-    /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i,
-  ];
-
-  for (const p of patterns) {
-    const m = raw.match(p);
-    if (m) {
-      const query = m[1].trim();
-      return parseQueryWithCity(query);
-    }
+  // ── Pattern 1: explicit prefix (find/search/s/buy etc.) ──────────────────
+  const prefixPattern = /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i;
+  const m = raw.match(prefixPattern);
+  if (m) {
+    return parseQueryWithCity(m[1].trim());
   }
+
+  // ── Pattern 2: plain "product city" — only treat as shortcode if a known
+  //    city or suburb appears in the text (avoids hijacking normal messages)
+  const plain = parseQueryWithCity(raw);
+  if (plain && plain.city) {
+    // City was detected → treat as shortcode
+    return plain;
+  }
+
   return null;
 }
 
