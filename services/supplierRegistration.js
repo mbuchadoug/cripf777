@@ -874,14 +874,17 @@ await supplier.save();
 
 
 // ── SYNC supplier products/services → Product model ──────────────────────
+// ── SYNC supplier products/services → Product model ──────────────────────
 try {
-  const Product = (await import("../models/product.js")).default;
-  const Business = (await import("../models/business.js")).default;
+  const Product   = (await import("../models/product.js")).default;
+  const Business  = (await import("../models/business.js")).default;
+  const Branch    = (await import("../models/branch.js")).default;    // ← MOVED UP: in scope for entire try block
+  const UserRole  = (await import("../models/userRole.js")).default;  // ← MOVED UP
 
   const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
   const bizPackage = TIER_TO_PACKAGE[supplierPayment.tier] || "bronze";
 
-  // Upgrade the linked Business package
+  // ── 1. Upgrade the linked Business package ────────────────────────────
   const linkedBiz = await Business.findById(supplier.businessId);
   if (linkedBiz) {
     linkedBiz.package = bizPackage;
@@ -890,41 +893,36 @@ try {
     linkedBiz.subscriptionEndsAt = expiresAt;
     linkedBiz.isSupplier = true;
     linkedBiz.supplierProfileId = supplier._id;
-
-    // Ensure business name is set from supplier reg if not already
     if (!linkedBiz.name || linkedBiz.name.startsWith("pending_")) {
       linkedBiz.name = supplier.businessName;
     }
-
     await linkedBiz.save();
-
-    // Ensure main branch exists for invoicing
-    const Branch = (await import("../models/branch.js")).default;
-    const UserRole = (await import("../models/userRole.js")).default;
-    const existingBranch = await Branch.findOne({ businessId: linkedBiz._id, isDefault: true });
-  let mainBranchId;
-if (!existingBranch) {
-  const mainBranch = await Branch.create({
-    businessId: linkedBiz._id,
-    name: "Main Branch",
-    isDefault: true
-  });
-  await UserRole.findOneAndUpdate(
-    { businessId: linkedBiz._id, role: "owner" },
-    { branchId: mainBranch._id }
-  );
-  mainBranchId = mainBranch._id;
-} else {
-  mainBranchId = existingBranch._id;
-}
-
-// Store mainBranchId on supplier for fast lookup later
-supplier.mainBranchId = mainBranchId;
-await supplier.save();
   }
 
-  // Sync items into Product model (upsert by name to avoid duplication on re-activation)
-  const itemsToSync = uploaded.slice(0, cap); // only sync listed items
+  // ── 2. Ensure main branch exists ──────────────────────────────────────
+  let mainBranchId;
+  const existingBranch = await Branch.findOne({ businessId: supplier.businessId, isDefault: true });
+  if (!existingBranch) {
+    const mainBranch = await Branch.create({
+      businessId: supplier.businessId,
+      name: "Main Branch",
+      isDefault: true
+    });
+    await UserRole.findOneAndUpdate(
+      { businessId: supplier.businessId, role: "owner" },
+      { branchId: mainBranch._id }
+    );
+    mainBranchId = mainBranch._id;
+  } else {
+    mainBranchId = existingBranch._id;
+  }
+
+  // Store on supplier for fast lookup later
+  supplier.mainBranchId = mainBranchId;
+  await supplier.save();
+
+  // ── 3. Sync listed items → Product model ─────────────────────────────
+  const itemsToSync = uploaded.slice(0, cap);
   for (const itemName of itemsToSync) {
     const priceEntry = (supplier.prices || []).find(
       p => p.product?.toLowerCase() === itemName.toLowerCase()
@@ -935,22 +933,24 @@ await supplier.save();
     const unitPrice = priceEntry?.amount || 0;
     const description = rateEntry?.rate || null;
 
-   // Resolve the main branch for this business
-const mainBranchDoc = await Branch.findOne({ businessId: supplier.businessId, isDefault: true });
-const mainBranchId = mainBranchDoc?._id || null;
-
-await Product.findOneAndUpdate(
-  { businessId: supplier.businessId, name: itemName },
-  {
-    $setOnInsert: { businessId: supplier.businessId, branchId: mainBranchId },
-    $set: { unitPrice, description, isActive: true }
-  },
-  { upsert: true }
-);
+    await Product.findOneAndUpdate(
+      { businessId: supplier.businessId, name: itemName },
+      {
+        $set: {                                    // ← $set not $setOnInsert: always update branchId
+          businessId: supplier.businessId,
+          branchId: mainBranchId,
+          unitPrice,
+          description,
+          isActive: true
+        }
+      },
+      { upsert: true }
+    );
   }
 } catch (syncErr) {
   console.error("[Supplier Payment] Product sync failed:", syncErr.message);
 }
+
 // ── END SYNC ─────────────────────────────────────────────────────────────
 
               // Update payment record

@@ -2404,7 +2404,7 @@ if (a === "inv_item_catalogue") {
     }
 
     if (branchFilter) {
-      // Include products that belong to this branch OR have no branch set (supplier-synced)
+      // Match branch-scoped products OR unscoped (branchId null) — catches supplier-synced products
       query.$or = [
         { branchId: branchFilter },
         { branchId: null },
