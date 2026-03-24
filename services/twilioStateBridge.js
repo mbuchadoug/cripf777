@@ -635,294 +635,399 @@ They must click it to join.`);
      transport, 30, ecocash
      supplies, 45.50, bank, office paper and pens
 =========================== */
-if (
-  state === ACTIONS.EXPENSE_CATEGORY ||
-  state === "expense_category" ||
-  state === "expense_quick_entry"
-) {
-  const CATS = {
-    rent: "🏢 Rent", utilities: "💡 Utilities", transport: "🚗 Transport",
-    supplies: "📦 Supplies", salaries: "👷 Salaries", maintenance: "🔧 Maintenance",
-    other: "📝 Other"
+/* ===========================
+   EXPENSE STEP 1 — CATEGORY TAPPED
+   User taps from category list → ask for amount only
+=========================== */
+if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
+  const CAT_MAP = {
+    exp_cat_rent:        "Rent",
+    exp_cat_utilities:   "Utilities",
+    exp_cat_transport:   "Transport",
+    exp_cat_supplies:    "Supplies",
+    exp_cat_salaries:    "Salaries",
+    exp_cat_maintenance: "Maintenance",
+    exp_cat_other:       "Other"
   };
-  const METHODS = { cash: "Cash", bank: "Bank", ecocash: "EcoCash", other: "Other" };
+  const category = CAT_MAP[text];
+  if (!category) { await sendText(from, "❌ Please select a category from the list."); return true; }
 
-  // If text is a raw button ID (user came from old category list), 
-  // transition them to the new quick-entry state instead
-  if (text.startsWith("exp_cat_")) {
-    biz.sessionState = "expense_quick_entry";
-    const oldCat = text.replace("exp_cat_", "");
-    biz.sessionData.prefillCategory = oldCat;
-    await saveBizSafe(biz);
-    await sendText(from,
-`📝 *Quick Expense Entry*
-
-Type: *category, amount, method, description*
-
-Categories: rent, utilities, transport, supplies, salaries, maintenance, other
-Methods: cash, bank, ecocash
-
-Examples:
-_rent, 150, cash, monthly rent_
-_transport, 30, ecocash_
-_supplies, 45.50, bank, office paper_
-
-You can also type multiple expenses, one per line.`
-    );
-    return true;
-  }
-
-  // Parse the input — one expense per line
-  const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean);
-  const parsed = [];
-  const failed = [];
-
-  for (const line of lines) {
-    const parts = line.split(",").map(p => p.trim());
-    if (parts.length < 2) { failed.push(line); continue; }
-
-    const catRaw  = parts[0].toLowerCase();
-    const amtRaw  = parts[1];
-    const methRaw = (parts[2] || "cash").toLowerCase();
-    const desc    = parts.slice(3).join(", ").trim() || parts[0];
-
-    const amount  = Number(amtRaw);
-    if (isNaN(amount) || amount <= 0) { failed.push(line); continue; }
-
-    // Fuzzy match category
-    const cat = Object.keys(CATS).find(k => catRaw.startsWith(k) || k.startsWith(catRaw)) || "other";
-    // Fuzzy match method
-    const method = Object.keys(METHODS).find(k => methRaw.startsWith(k) || k.startsWith(methRaw)) || "cash";
-
-    parsed.push({ category: CATS[cat], amount, method: METHODS[method], description: desc });
-  }
-
-  if (!parsed.length) {
-    await sendText(from,
-`❌ Couldn't read that.
-
-Format: *category, amount, method, description*
-Example: *rent, 150, cash, monthly rent*
-
-Categories: rent, utilities, transport, supplies, salaries, maintenance, other
-Methods: cash, bank, ecocash`
-    );
-    return true;
-  }
-
-  // Store parsed expenses for preview
-  biz.sessionData.pendingExpenses = parsed;
-  biz.sessionState = "expense_confirm";
+  biz.sessionData.prefillCat   = category;
+  biz.sessionData.description  = category;
+  biz.sessionState = "expense_amount";
   await saveBizSafe(biz);
 
-  // Build preview
-  const total = parsed.reduce((s, e) => s + e.amount, 0);
-  const lines_preview = parsed
-    .map((e, i) => `${i + 1}. *${e.category}* — ${formatMoney(e.amount, biz.currency)} (${e.method})\n   _${e.description}_`)
-    .join("\n");
+  return sendButtons(from, {
+    text: `${category}\n\n💵 Enter amount:\n_e.g.  150  or  150 school fees_`,
+    buttons: [{ id: ACTIONS.MAIN_MENU, title: "❌ Cancel" }]
+  });
+}
 
-  const failNote = failed.length
-    ? `\n\n⚠️ Skipped ${failed.length} unreadable line${failed.length === 1 ? "" : "s"}.`
-    : "";
+/* ===========================
+   EXPENSE STEP 2 — AMOUNT TYPED
+   "150"  or  "150 school fees"
+   → shows Cash / EcoCash / Bank buttons immediately
+=========================== */
+if (state === "expense_amount") {
+  const sp    = trimmed.indexOf(" ");
+  const amt   = Number(sp > 0 ? trimmed.slice(0, sp) : trimmed);
+  const note  = sp > 0 ? trimmed.slice(sp + 1).trim() : "";
+
+  if (isNaN(amt) || amt <= 0) {
+    await sendText(from, "❌ Enter the amount.\n\nExamples:\n*150*\n*150 school fees*");
+    return true;
+  }
+
+  biz.sessionData.amount = amt;
+  if (note) biz.sessionData.description = note;
+  biz.sessionState = "expense_method";
+  await saveBizSafe(biz);
+
+  const cat  = biz.sessionData.prefillCat  || "Expense";
+  const desc = biz.sessionData.description || cat;
 
   return sendButtons(from, {
-    text:
-`📋 *Expense Preview*${failNote}
-
-${lines_preview}
-
-─────────────────
-*Total: ${formatMoney(total, biz.currency)}*
-
-Confirm to save, or edit and resend.`,
+    text: `${cat} — *${formatMoney(amt, biz.currency)}*\n_${desc}_\n\n💳 How was it paid?`,
     buttons: [
-      { id: "expense_confirm_yes", title: "✅ Confirm & Save" },
-      { id: "expense_edit",        title: "✏️ Edit" },
-      { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
+      { id: "exp_method_cash",    title: "💵 Cash" },
+      { id: "exp_method_ecocash", title: "📱 EcoCash" },
+      { id: "exp_method_bank",    title: "🏦 Bank" }
     ]
   });
 }
 
 /* ===========================
-   EXPENSE: CONFIRM → SAVE
+   EXPENSE STEP 3 — METHOD TAPPED → SAVE + PDF
+   Saves immediately, no confirm screen
 =========================== */
-if (state === "expense_confirm") {
-  // "expense_edit" button → go back to entry
-  if (text === "expense_edit") {
-    biz.sessionState = "expense_quick_entry";
-    await saveBizSafe(biz);
-    const existing = (biz.sessionData.pendingExpenses || [])
-      .map(e => `${e.category.split(" ")[1] || "other"}, ${e.amount}, ${e.method.toLowerCase()}, ${e.description}`)
-      .join("\n");
-    await sendText(from, `✏️ *Edit your expenses below and resend:*\n\n${existing}`);
-    return true;
-  }
+if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
+  const methodMap = {
+    exp_method_cash:    "Cash",
+    exp_method_bank:    "Bank",
+    exp_method_ecocash: "EcoCash",
+    exp_method_other:   "Other"
+  };
+  const method = methodMap[text];
 
-  if (text !== "expense_confirm_yes") {
-    // Any other text while in confirm state → treat as a new entry
-    biz.sessionState = "expense_quick_entry";
-    await saveBizSafe(biz);
-    // Re-run with new text by falling through... but we can't fall through, so re-trigger:
-    await sendText(from, "ℹ️ Tap *Confirm & Save* or resend your expenses.");
-    return true;
-  }
-
-  const expenses = biz.sessionData.pendingExpenses || [];
-  if (!expenses.length) {
-    biz.sessionState = "ready"; biz.sessionData = {};
-    await saveBizSafe(biz);
-    await sendText(from, "❌ No expenses to save.");
-    await sendMainMenu(from);
+  if (!method) {
+    await sendButtons(from, {
+      text: "💳 How was it paid?",
+      buttons: [
+        { id: "exp_method_cash",    title: "💵 Cash" },
+        { id: "exp_method_ecocash", title: "📱 EcoCash" },
+        { id: "exp_method_bank",    title: "🏦 Bank" }
+      ]
+    });
     return true;
   }
 
   const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-  const saved = [];
+  const expense = await Expense.create({
+    businessId:  biz._id,
+    branchId:    effectiveBranchId,
+    amount:      biz.sessionData.amount,
+    category:    biz.sessionData.prefillCat    || "Other",
+    description: biz.sessionData.description  || biz.sessionData.prefillCat || "Other",
+    method,
+    createdBy:   phone
+  });
 
-  for (const e of expenses) {
-    const expense = await Expense.create({
-      businessId: biz._id,
-      branchId: effectiveBranchId,
-      amount: e.amount,
-      category: e.category,
-      description: e.description,
-      method: e.method,
-      createdBy: phone
-    });
-    saved.push(expense);
-  }
-
-  const total = saved.reduce((s, e) => s + e.amount, 0);
   const savedBranchId = biz.sessionData.targetBranchId;
-
-  biz.sessionData = { targetBranchId: savedBranchId, lastExpenseTotal: total };
+  biz.sessionData  = { targetBranchId: savedBranchId };
   biz.sessionState = "expense_add_another_menu";
   await saveBizSafe(biz);
 
-  const lines_saved = saved
-    .map(e => `• *${e.category}* ${formatMoney(e.amount, biz.currency)} — ${e.method}`)
-    .join("\n");
-
   await sendText(from,
-`✅ *${saved.length} expense${saved.length === 1 ? "" : "s"} saved!*
-
-${lines_saved}
-─────────────────
-Total: *${formatMoney(total, biz.currency)}*`
+    `✅ *${expense.category}* — ${formatMoney(expense.amount, biz.currency)} (${method})`
   );
-
-  // Generate receipt for the batch
-  try {
-    const receiptNumber = `EXP-${Date.now()}`;
-    const { filename } = await generatePDF({
-      type: "receipt", number: receiptNumber, date: new Date(),
-      billingTo: "Expense Record",
-      items: saved.map(e => ({ item: `${e.category} — ${e.description}`, qty: 1, unit: e.amount, total: e.amount })),
-      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
-    });
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
-  } catch (pdfErr) {
-    console.error("[EXPENSE RECEIPT PDF]", pdfErr.message);
-  }
 
   const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
   await sendExpenseAddAnotherMenu(from);
   return true;
 }
 
-  /* ===========================
-     EXPENSE: DESCRIPTION
-  =========================== */
-  if (state === "expense_description") {
-    const description = trimmed;
-    if (!description || description.length < 2) { await sendPromptWithMenu(from, "❌ Please enter a valid description:"); return true; }
-    biz.sessionData.description = description;
-    biz.sessionState = "expense_amount";
+/* =====================================================
+   SMART BULK ENTRY — "fuel 30, lunch 15, zesa 50"
+   State: expense_smart_entry
+   User keeps typing expenses until they type "done"
+   Single item → immediate Save/Add More choice
+   Multiple → running total, type done when finished
+===================================================== */
+if (state === "expense_smart_entry") {
+  const KEYWORD_CAT = {
+    zesa:"Utilities", electricity:"Utilities", prepaid:"Utilities",
+    water:"Utilities", airtime:"Utilities", wifi:"Utilities",
+    internet:"Utilities", netone:"Utilities", econet:"Utilities", telecel:"Utilities",
+    fuel:"Transport", petrol:"Transport", diesel:"Transport",
+    transport:"Transport", commuter:"Transport", kombi:"Transport",
+    taxi:"Transport", uber:"Transport", bus:"Transport",
+    rent:"Rent", lease:"Rent", rental:"Rent",
+    salaries:"Salaries", salary:"Salaries", wages:"Salaries",
+    wage:"Salaries", staff:"Salaries", workers:"Salaries",
+    supplies:"Supplies", stationery:"Supplies", paper:"Supplies",
+    toner:"Supplies", printing:"Supplies",
+    maintenance:"Maintenance", repair:"Maintenance", service:"Maintenance",
+    lunch:"Supplies", tea:"Supplies", food:"Supplies"
+  };
+  const METHOD_MAP = {
+    cash:"Cash", ecocash:"EcoCash", eco:"EcoCash",
+    bank:"Bank", transfer:"Bank", swipe:"Bank"
+  };
+
+  const raw   = trimmed;
+  const lower = raw.toLowerCase();
+
+  // ── Commands ────────────────────────────────────────────────────────────
+  if (lower === "cancel" || lower === "stop") {
+    const count = biz.sessionData?.bulkExpenses?.length || 0;
+    biz.sessionState = "ready"; biz.sessionData = {};
     await saveBizSafe(biz);
-    await sendPromptWithMenu(from, "💵 *Enter expense amount:*");
+    await sendText(from, count > 0 ? `❌ Cancelled — ${count} item(s) discarded.` : "❌ Cancelled.");
+    await sendMainMenu(from);
     return true;
   }
 
-  /* ===========================
-     EXPENSE: ENTER AMOUNT
-  =========================== */
- /* ===========================
-     EXPENSE: ENTER AMOUNT
-  =========================== */
-  if (state === "expense_amount") {
-    const amount = Number(trimmed);
-    if (isNaN(amount) || amount <= 0) { await sendPromptWithMenu(from, "❌ Invalid amount. Enter a valid number:"); return true; }
-
-    biz.sessionData.amount = amount;
-    biz.sessionState = ACTIONS.EXPENSE_METHOD;
-    await saveBizSafe(biz);
-
-    // ✅ FIXED: Use sendList instead of sendButtons (WhatsApp max 3 buttons)
-    await sendList(
-      from,
-      "💳 Select payment method",
-      [
-        { id: "exp_method_cash", title: "💵 Cash" },
-        { id: "exp_method_bank", title: "🏦 Bank" },
-        { id: "exp_method_ecocash", title: "📱 EcoCash" },
-        { id: "exp_method_other", title: "💳 Other" }
-      ]
+  if (lower === "list" || lower === "show") {
+    const items = biz.sessionData?.bulkExpenses || [];
+    if (!items.length) {
+      await sendText(from, "📝 Nothing added yet.\n\nType: *fuel 30, lunch 15, zesa 50*");
+      return true;
+    }
+    const total = items.reduce((s, e) => s + e.amount, 0);
+    const lines = items.map((e, i) =>
+      `${i + 1}. ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`
+    ).join("\n");
+    await sendText(from,
+      `📋 *${items.length} expense(s)*\n\n${lines}\n─────────────────\n*Total: ${formatMoney(total, biz.currency)}*\n\nType more or *done* to save.`
     );
     return true;
   }
 
-/* ===========================
-     EXPENSE: METHOD → SAVE + SHOW "ADD ANOTHER" MENU
-  =========================== */
-  if (state === ACTIONS.EXPENSE_METHOD) {
-    const methodMap = {
-      exp_method_cash: "Cash", exp_method_bank: "Bank",
-      exp_method_ecocash: "EcoCash", exp_method_other: "Other"
-    };
-
-    const method = methodMap[text];
-    if (!method) { await sendText(from, "❌ Invalid method selected."); return true; }
-
-    // ✅ Use targetBranchId for owner, caller.branchId for clerk/manager
-    const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-
-    const expense = await Expense.create({
-      businessId: biz._id,
-      amount: biz.sessionData.amount,
-      branchId: effectiveBranchId,
-      category: biz.sessionData.category,
-      description: biz.sessionData.description,
-      method,
-      createdBy: phone
-    });
-
-    // ✅ Store expense details for potential receipt generation
-    biz.sessionData.lastExpense = {
-      id: expense._id,
-      category: expense.category,
-      description: expense.description,
-      amount: expense.amount,
-      method: expense.method,
-      date: expense.createdAt
-    };
-
-    // Preserve targetBranchId for "Add another expense"
-    const savedBranchId = biz.sessionData.targetBranchId;
-    
-    biz.sessionState = "expense_add_another_menu";
-    biz.sessionData.targetBranchId = savedBranchId; // Keep branch context
+  const removeMatch = lower.match(/^(?:remove|delete)\s+(\d+)$/);
+  if (removeMatch) {
+    const idx   = parseInt(removeMatch[1]) - 1;
+    const items = biz.sessionData?.bulkExpenses || [];
+    if (idx < 0 || idx >= items.length) {
+      await sendText(from, `❌ Item ${idx + 1} not found. Type *list* to see all.`);
+      return true;
+    }
+    const removed = items.splice(idx, 1)[0];
+    biz.markModified("sessionData");
     await saveBizSafe(biz);
-
-    await sendText(from, "✅ Expense recorded successfully!");
-
-    // Import the menu function
-    const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
-    await sendExpenseAddAnotherMenu(from);
-
+    await sendText(from,
+      `✅ Removed: ${removed.description} — ${formatMoney(removed.amount, biz.currency)}\n${items.length} item(s) remaining.`
+    );
     return true;
   }
 
+  if (lower === "done" || lower === "save" || lower === "finish") {
+    const items = biz.sessionData?.bulkExpenses || [];
+    if (!items.length) {
+      biz.sessionState = "ready"; biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Nothing to save.");
+      await sendMainMenu(from);
+      return true;
+    }
+    const total = items.reduce((s, e) => s + e.amount, 0);
+    const lines = items.map((e, i) =>
+      `${i + 1}. ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`
+    ).join("\n");
+    biz.sessionState = "expense_bulk_confirm";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text:
+`📋 *Save ${items.length} expense(s)?*
+
+${lines}
+─────────────────
+*Total: ${formatMoney(total, biz.currency)}*`,
+      buttons: [
+        { id: "exp_bulk_confirm_yes", title: "✅ Save All" },
+        { id: "exp_bulk_confirm_no",  title: "✏️ Keep Editing" }
+      ]
+    });
+  }
+
+  // ── PARSE: "description amount [method], ..." ───────────────────────────
+  const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
+  const parsed  = [];
+  const failed  = [];
+
+  for (const entry of entries) {
+    const words  = entry.trim().split(/\s+/);
+    if (words.length < 2) { failed.push(entry); continue; }
+
+    const lastW  = words[words.length - 1].toLowerCase();
+    const method = METHOD_MAP[lastW] || null;
+    const amtIdx = method ? words.length - 2 : words.length - 1;
+    const amt    = Number(words[amtIdx]);
+
+    if (isNaN(amt) || amt <= 0) { failed.push(entry); continue; }
+
+    const descWords = words.slice(0, amtIdx);
+    let cat = "Other";
+    for (const w of descWords) {
+      if (KEYWORD_CAT[w.toLowerCase()]) { cat = KEYWORD_CAT[w.toLowerCase()]; break; }
+    }
+
+    parsed.push({
+      description: descWords.join(" "),
+      amount:      amt,
+      category:    cat,
+      method:      method || "Cash"
+    });
+  }
+
+  if (!parsed.length) {
+    await sendText(from,
+`❌ Couldn't read that.
+
+Format: *item amount* or *item amount method*
+
+Examples:
+_fuel 30_
+_fuel 30, lunch 15, zesa 50_
+_fuel 30 ecocash, rent 500 bank_
+_salaries 850 bank_
+
+Type *list* to see added · *done* to save`
+    );
+    return true;
+  }
+
+  if (!Array.isArray(biz.sessionData.bulkExpenses)) biz.sessionData.bulkExpenses = [];
+  biz.sessionData.bulkExpenses.push(...parsed);
+  biz.markModified("sessionData");
+  await saveBizSafe(biz);
+
+  const allItems = biz.sessionData.bulkExpenses;
+  const runTotal = allItems.reduce((s, e) => s + e.amount, 0);
+  const newLines = parsed
+    .map(e => `• ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`)
+    .join("\n");
+  const failNote = failed.length ? `\n⚠️ Skipped: ${failed.join(", ")}` : "";
+
+  // Single item with no prior items → offer instant save
+  if (allItems.length === 1 && parsed.length === 1) {
+    biz.sessionState = "expense_bulk_confirm";
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text:
+`✅ *${parsed[0].description}* — ${formatMoney(parsed[0].amount, biz.currency)} (${parsed[0].method})${failNote}
+
+Save now or add more expenses?`,
+      buttons: [
+        { id: "exp_bulk_confirm_yes", title: "✅ Save" },
+        { id: "exp_bulk_keep_adding", title: "➕ Add More" }
+      ]
+    });
+  }
+
+  await sendText(from,
+`✅ *${parsed.length} added*${failNote}
+
+${newLines}
+─────────────────
+Running total: *${formatMoney(runTotal, biz.currency)}* (${allItems.length} items)
+
+Type more, *list* to review, or *done* to save`
+  );
+  return true;
+}
+
+/* =====================================================
+   BULK CONFIRM → SAVE ALL TO DB + PDF
+===================================================== */
+if (state === "expense_bulk_confirm") {
+  if (text === "exp_bulk_keep_adding") {
+    biz.sessionState = "expense_smart_entry";
+    await saveBizSafe(biz);
+    const items    = biz.sessionData?.bulkExpenses || [];
+    const runTotal = items.reduce((s, e) => s + e.amount, 0);
+    await sendText(from,
+      `➕ ${items.length} item(s) so far — ${formatMoney(runTotal, biz.currency)}\n\nKeep typing. *done* when finished.`
+    );
+    return true;
+  }
+
+  if (text === "exp_bulk_confirm_no") {
+    biz.sessionState = "expense_smart_entry";
+    await saveBizSafe(biz);
+    await sendText(from, "✏️ Keep adding. Type *done* when finished.");
+    return true;
+  }
+
+  if (text !== "exp_bulk_confirm_yes") {
+    await sendText(from, "Tap *Save All* to confirm or keep typing expenses.");
+    return true;
+  }
+
+  const items = biz.sessionData?.bulkExpenses || [];
+  if (!items.length) {
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+  await Expense.insertMany(items.map(e => ({
+    businessId:  biz._id,
+    branchId:    effectiveBranchId,
+    amount:      e.amount,
+    description: e.description,
+    category:    e.category,
+    method:      e.method || "Cash",
+    createdBy:   phone
+  })));
+
+  const total         = items.reduce((s, e) => s + e.amount, 0);
+  const savedBranchId = biz.sessionData.targetBranchId;
+  const lines         = items
+    .map(e => `• ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`)
+    .join("\n");
+
+  try {
+    const receiptNum = `EXP-${Date.now()}`;
+    const { filename } = await generatePDF({
+      type: "receipt", number: receiptNum, date: new Date(),
+      billingTo: "Expense Record",
+      items: items.map(e => ({ item: `${e.category} — ${e.description}`, qty: 1, unit: e.amount, total: e.amount })),
+      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
+    });
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+  } catch (e) { console.error("[BULK EXP PDF]", e.message); }
+
+  biz.sessionData  = { targetBranchId: savedBranchId };
+  biz.sessionState = "expense_add_another_menu";
+  await saveBizSafe(biz);
+
+  await sendText(from,
+`✅ *${items.length} expense(s) saved*
+
+${lines}
+─────────────────
+Total: *${formatMoney(total, biz.currency)}*`
+  );
+
+  const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
+  await sendExpenseAddAnotherMenu(from);
+  return true;
+}
+
+// Guard: clean up stale states from old flow
+if (state === "expense_description" || state === "expense_quick_entry" || state === "expense_confirm") {
+  biz.sessionState = "ready"; biz.sessionData = {};
+  await saveBizSafe(biz);
+  await sendText(from, "Session reset. Please start again from the Payments menu.");
+  await sendMainMenu(from);
+  return true;
+}
+
+  /* ===========================
+     PAYMENT: ENTER AMOUNT
   /* ===========================
      PAYMENT: ENTER AMOUNT
   =========================== */

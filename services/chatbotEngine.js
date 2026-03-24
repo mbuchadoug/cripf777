@@ -1484,6 +1484,8 @@ a === "find_supplier" ||
       a.startsWith("order_detail_") ||
       a.startsWith("sup_book_") ||
       a.startsWith("sup_book_confirm_") ||
+      a === "exp_show_categories" ||
+      a.startsWith("exp_quick_save_") ||
       a === "reg_type_product" ||
       a === "reg_type_service" ||
       a === "sup_travel_yes" ||
@@ -1540,8 +1542,12 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("view_payment_history_branch_") ||
       a.startsWith("view_clients_branch_") ||
      a.startsWith("cashbal_branch_") ||
-      a === "sup_search_next_page" ||
-      a === "sup_search_prev_page"
+  a === "sup_search_next_page" ||
+      a === "sup_search_prev_page" ||
+      a === "exp_show_categories" ||
+      a === "exp_bulk_confirm_yes" ||
+      a === "exp_bulk_confirm_no" ||
+      a === "exp_bulk_keep_adding"
     
     );
 
@@ -2574,24 +2580,45 @@ _Add all prices automatically_`
     });
   }
 
-  if (a === "add_another_expense") {
+if (a === "add_another_expense") {
     if (!biz) return sendMainMenu(from);
-    biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-    biz.sessionData = { targetBranchId: biz.sessionData?.targetBranchId };
+    biz.sessionState = "expense_smart_entry";
+    biz.sessionData  = { targetBranchId: biz.sessionData?.targetBranchId, bulkExpenses: [] };
     await saveBizSafe(biz);
-    return sendList(from, "📂 Select Expense Category", [
-      { id: "exp_cat_rent", title: "🏢 Rent" },
-      { id: "exp_cat_utilities", title: "💡 Utilities" },
-      { id: "exp_cat_transport", title: "🚗 Transport" },
-      { id: "exp_cat_supplies", title: "📦 Supplies" },
-            { id: "exp_cat_salaries",     title: "👷 Salaries" },
-      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
-      { id: "exp_cat_other",        title: "📝 Other" }
+    return sendButtons(from, {
+      text:
+`💸 *Add More Expenses*
 
-    ]);
+_fuel 30, lunch 15, zesa 50_
+
+Or tap to pick a category:`,
+      buttons: [
+        { id: "exp_show_categories", title: "📂 Pick by Category" },
+        { id: ACTIONS.MAIN_MENU,     title: "🏠 Done" }
+      ]
+    });
   }
 
-
+// "Pick by Category" button from smart entry → show category list
+  if (a === "exp_show_categories") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
+    // preserve branch context
+    biz.sessionData = {
+      targetBranchId: biz.sessionData?.targetBranchId,
+      bulkExpenses:   biz.sessionData?.bulkExpenses || []
+    };
+    await saveBizSafe(biz);
+    return sendList(from, "📂 Select Category", [
+      { id: "exp_cat_rent",        title: "🏢 Rent" },
+      { id: "exp_cat_utilities",   title: "💡 Utilities (ZESA, water, airtime)" },
+      { id: "exp_cat_transport",   title: "🚗 Transport & Fuel" },
+      { id: "exp_cat_supplies",    title: "📦 Supplies & Stock" },
+      { id: "exp_cat_salaries",    title: "👷 Salaries & Wages" },
+      { id: "exp_cat_maintenance", title: "🔧 Maintenance & Repairs" },
+      { id: "exp_cat_other",       title: "📝 Other" }
+    ]);
+  }
   // ✅ ADD THIS BLOCK immediately after the add_another_expense block
 if (a === "expense_generate_receipt") {
   if (!biz) return sendMainMenu(from);
@@ -2821,24 +2848,30 @@ if (a === "expense_generate_receipt") {
   }
 
   // ── Owner picks branch for Expense (OUT) ─────────────────────────────────
-  if (a.startsWith("expense_branch_")) {
+if (a.startsWith("expense_branch_")) {
     if (!biz) return sendMainMenu(from);
     const branchId = a.replace("expense_branch_", "");
-    biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-    biz.sessionData = { targetBranchId: branchId };
+    biz.sessionState = "expense_smart_entry";
+    biz.sessionData  = { targetBranchId: branchId, bulkExpenses: [] };
     await saveBizSafe(biz);
-    return sendList(from, "📂 Select Expense Category", [
-      { id: "exp_cat_rent", title: "🏢 Rent" },
-      { id: "exp_cat_utilities", title: "💡 Utilities" },
-      { id: "exp_cat_transport", title: "🚗 Transport" },
-      { id: "exp_cat_supplies", title: "📦 Supplies" },
-          { id: "exp_cat_salaries",     title: "👷 Salaries" },
-      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
-      { id: "exp_cat_other",        title: "📝 Other" }
+    return sendButtons(from, {
+      text:
+`💸 *Record Expenses*
 
-    ]);
+Type one or many — same format either way:
+
+Single:  _fuel 30_
+Many:  _fuel 30, lunch 15, zesa 50, rent 500_
+With method:  _salary 850 bank, fuel 30 ecocash_
+
+─────────────────
+Type *list* to review  ·  *done* to save  ·  *cancel* to quit`,
+      buttons: [
+        { id: "exp_show_categories", title: "📂 Pick by Category" },
+        { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
+      ]
+    });
   }
-
   // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
 
  // ── Owner picks branch for Bulk Expenses ─────────────────────────────────
@@ -2964,23 +2997,26 @@ Categories auto-detected ✨
 
   // ── Payments / Expenses ────────────────────────────────────────────────────
 
-  if (a === ACTIONS.RECORD_EXPENSE) {
+if (a === ACTIONS.RECORD_EXPENSE) {
     if (!biz) return sendMainMenu(from);
-    // Owner: pick branch first
     if (caller?.role === "owner") return sendBranchSelectorExpense(from);
-    biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-    biz.sessionData = {};
+    biz.sessionState = "expense_smart_entry";
+    biz.sessionData  = { bulkExpenses: [] };
     await saveBizSafe(biz);
-    return sendList(from, "📂 Select Expense Category", [
-      { id: "exp_cat_rent", title: "🏢 Rent" },
-      { id: "exp_cat_utilities", title: "💡 Utilities" },
-      { id: "exp_cat_transport", title: "🚗 Transport" },
-      { id: "exp_cat_supplies", title: "📦 Supplies" },
-           { id: "exp_cat_salaries",     title: "👷 Salaries" },
-      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
-      { id: "exp_cat_other",        title: "📝 Other" }
+    return sendButtons(from, {
+      text:
+`💸 *Record Expenses*
 
-    ]);
+Single:  _fuel 30_
+Many:  _fuel 30, lunch 15, zesa 50_
+With method:  _salary 850 bank_
+
+Type *done* to save`,
+      buttons: [
+        { id: "exp_show_categories", title: "📂 Pick by Category" },
+        { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
+      ]
+    });
   }
 
   // ── Reports ────────────────────────────────────────────────────────────────
@@ -9331,21 +9367,26 @@ _Type *cancel* to go back._`
       return;
     }
 
-    case ACTIONS.PAYMENT_OUT: {
+case ACTIONS.PAYMENT_OUT: {
       if (!biz) return sendMainMenu(from);
-      // Owner: pick branch first
       if (caller?.role === "owner") return sendBranchSelectorExpense(from);
-      biz.sessionState = ACTIONS.EXPENSE_CATEGORY; biz.sessionData = {}; await saveBizSafe(biz);
-      return sendList(from, "📂 Select Expense Category", [
-        { id: "exp_cat_rent", title: "🏢 Rent" },
-        { id: "exp_cat_utilities", title: "💡 Utilities" },
-        { id: "exp_cat_transport", title: "🚗 Transport" },
-        { id: "exp_cat_supplies", title: "📦 Supplies" },
-            { id: "exp_cat_salaries",     title: "👷 Salaries" },
-      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
-      { id: "exp_cat_other",        title: "📝 Other" }
+      biz.sessionState = "expense_smart_entry";
+      biz.sessionData  = { bulkExpenses: [] };
+      await saveBizSafe(biz);
+      return sendButtons(from, {
+        text:
+`💸 *Record Expenses*
 
-      ]);
+Single:  _fuel 30_
+Many:  _fuel 30, lunch 15, zesa 50_
+With method:  _salary 850 bank_
+
+Type *done* to save  ·  *cancel* to quit`,
+        buttons: [
+          { id: "exp_show_categories", title: "📂 Pick by Category" },
+          { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
+        ]
+      });
     }
 
     case ACTIONS.BUSINESS_MENU: {
