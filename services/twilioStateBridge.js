@@ -18,11 +18,30 @@ import { runWeeklyReportMetaEnhanced } from "./weeklyReportEnhanced.js";
 import { runMonthlyReportMetaEnhanced } from "./monthlyReportEnhanced.js";
 
 
+function currencySymbol(cur) {
+  const c = (cur || "").toUpperCase();
+  if (c === "USD") return "$";
+  if (c === "ZWL") return "Z$";
+  if (c === "ZAR") return "R";
+  return c ? c + " " : "";
+}
+
+function formatMoney(amount, currency) {
+  const sym = currencySymbol(currency);
+  const n = Number(amount);
+  if (Number.isNaN(n)) return `${sym}${amount}`;
+  return `${sym}${n.toFixed(2)}`;
+}
+
+
+
 async function saveBizSafe(biz) {
   if (!biz) return;
   biz.markModified("sessionData");
   return biz.save();
 }
+
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -915,14 +934,12 @@ They must click it to join.`);
 
 
 // ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
+// ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
 if (state === "creating_invoice_pick_product") {
   const raw = trimmed;
-
-  // Parse "NxQTY" or "N x QTY" entries separated by commas
   const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
   const picked = [];
   const errors = [];
-
   const catalogue = biz.sessionData?.catalogueProducts || [];
 
   for (const entry of entries) {
@@ -945,7 +962,7 @@ if (state === "creating_invoice_pick_product") {
     picked.push({
       item: product.name,
       qty,
-      unit: product.unitPrice,
+      unit: product.unitPrice || 0,
       source: "catalogue"
     });
   }
@@ -964,36 +981,107 @@ Or type *cancel* to go back.`
     return true;
   }
 
-  // Add all picked items to invoice
+  // Merge into existing items list
   biz.sessionData.items = [...(biz.sessionData.items || []), ...picked];
 
   const errorNote = errors.length
     ? `\n\n⚠️ Skipped ${errors.length} unreadable entr${errors.length === 1 ? "y" : "ies"}: ${errors.join(", ")}`
     : "";
 
-  const summary = picked
-    .map(p => `• ${p.item} x${p.qty} @ ${formatMoney(p.unit, biz.currency)} = ${formatMoney(p.unit * p.qty, biz.currency)}`)
-    .join("\n");
+  // ── Check for zero-price items — must enter price before confirming ───────
+  const unpricedIndexes = biz.sessionData.items
+    .map((item, idx) => (item.unit === 0 || item.unit === null ? idx : null))
+    .filter(idx => idx !== null);
 
-  const totalAdded = picked.reduce((sum, p) => sum + p.unit * p.qty, 0);
+  if (unpricedIndexes.length > 0) {
+    // Store which items need pricing and start at the first one
+    biz.sessionData.unpricedIndexes = unpricedIndexes;
+    biz.sessionData.unpricedCursor = 0;
+    biz.sessionState = "creating_invoice_enter_catalogue_prices";
+    await saveBizSafe(biz);
 
+    const firstIdx = unpricedIndexes[0];
+    const firstItem = biz.sessionData.items[firstIdx];
+    const remaining = unpricedIndexes.length;
+
+    await sendText(from,
+`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
+
+⚠️ *${remaining} item${remaining === 1 ? "" : "s"} need${remaining === 1 ? "s" : ""} a price.*
+
+Enter prices one by one:`
+    );
+
+    return sendButtons(from, {
+      text:
+`💰 *Price for item ${unpricedCursor(0) + 1} of ${remaining}:*
+
+${firstIdx + 1}. *${firstItem.item}* × ${firstItem.qty}
+
+Enter unit price (e.g. 5.50):`,
+      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+    });
+  }
+
+  // All items have prices — go straight to preview
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
 
-  const allItems = biz.sessionData.items;
-  const fullSummary = allItems
-    .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${formatMoney(i.unit, biz.currency)}`)
-    .join("\n");
+  return _sendInvoicePreview(from, biz, errorNote);
+}
 
-  return sendInvoiceConfirmMenu(from,
-`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
+// ── Enter prices for zero-price catalogue items ───────────────────────────
+if (state === "creating_invoice_enter_catalogue_prices") {
+  const price = Number(trimmed);
+  if (isNaN(price) || price < 0) {
+    await sendText(from, "❌ Invalid price. Enter a number like *5.50*:");
+    return true;
+  }
 
-${summary}
+  const unpricedIndexes = biz.sessionData.unpricedIndexes || [];
+  const cursor = biz.sessionData.unpricedCursor || 0;
+  const targetIdx = unpricedIndexes[cursor];
 
-─────────────────
-*Invoice so far (${allItems.length} item${allItems.length === 1 ? "" : "s"}):*
-${fullSummary}`
-  );
+  if (targetIdx === undefined) {
+    // Shouldn't happen but guard it
+    biz.sessionState = "creating_invoice_confirm";
+    await saveBizSafe(biz);
+    return _sendInvoicePreview(from, biz, "");
+  }
+
+  // Save the price
+  biz.sessionData.items[targetIdx].unit = price;
+  const nextCursor = cursor + 1;
+
+  if (nextCursor < unpricedIndexes.length) {
+    // More prices needed
+    biz.sessionData.unpricedCursor = nextCursor;
+    await saveBizSafe(biz);
+
+    const nextIdx = unpricedIndexes[nextCursor];
+    const nextItem = biz.sessionData.items[nextIdx];
+    const remaining = unpricedIndexes.length - nextCursor;
+
+    return sendButtons(from, {
+      text:
+`✅ Saved $${price.toFixed(2)}
+
+💰 *Next — ${remaining} item${remaining === 1 ? "" : "s"} left:*
+
+${nextIdx + 1}. *${nextItem.item}* × ${nextItem.qty}
+
+Enter unit price:`,
+      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+    });
+  }
+
+  // All prices entered — go to preview
+  biz.sessionData.unpricedIndexes = [];
+  biz.sessionData.unpricedCursor = 0;
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return _sendInvoicePreview(from, biz, "");
 }
 
 

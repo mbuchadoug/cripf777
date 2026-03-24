@@ -126,6 +126,44 @@ function formatMoney(amount, currency) {
   return `${sym}${n}`;
 }
 
+
+
+// ── Invoice/quote/receipt preview with edit option ────────────────────────
+async function _sendInvoicePreview(from, biz, extraNote = "") {
+  const items = biz.sessionData.items || [];
+  const currency = biz.currency || "USD";
+  const docType = biz.sessionData.docType || "invoice";
+  const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+
+  const discountPercent = Number(biz.sessionData.discountPercent || 0);
+  const vatPercent = Number(biz.sessionData.vatPercent || 0);
+
+  const subtotal = items.reduce((s, i) => s + (Number(i.qty) * Number(i.unit)), 0);
+  const discountAmount = subtotal * (discountPercent / 100);
+  const vatAmount = (subtotal - discountAmount) * (vatPercent / 100);
+  const total = subtotal - discountAmount + vatAmount;
+
+  const itemLines = items
+    .map((i, idx) =>
+      `${idx + 1}. *${i.item}* × ${i.qty} @ ${formatMoney(i.unit, currency)} = *${formatMoney(i.qty * i.unit, currency)}*`
+    )
+    .join("\n");
+
+  const discountLine = discountPercent > 0 ? `\n💸 Discount: ${discountPercent}% = -${formatMoney(discountAmount, currency)}` : "";
+  const vatLine = vatPercent > 0 ? `\n🧾 VAT: ${vatPercent}% = +${formatMoney(vatAmount, currency)}` : "";
+
+  const preview =
+`🧾 *${label} Preview*${extraNote}
+
+${itemLines}
+─────────────────
+Subtotal: ${formatMoney(subtotal, currency)}${discountLine}${vatLine}
+*Total: ${formatMoney(total, currency)}*`;
+
+  return sendInvoiceConfirmMenu(from, preview);
+}
+
+function unpricedCursor(n) { return n; } // tiny helper to avoid inline confusion
 function normalizeProductName(value = "") {
   return String(value)
     .toLowerCase()
