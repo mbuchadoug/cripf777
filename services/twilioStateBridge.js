@@ -311,7 +311,10 @@ const restrictedStateMap = {
     cash_set_opening_balance: "payments",
     cash_payout_amount: "payments",
     cash_payout_reason: "payments",
-    invite_user_phone: "users"
+  invite_user_phone: "users",
+    sales_doc_search: "sales",
+    sales_doc_list: "sales",
+    sales_doc_filter: "sales"
     // Supplier states are intentionally NOT restricted -
     // any role (owner, clerk, manager) can access the supplier marketplace
   };
@@ -407,22 +410,97 @@ Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balanc
 if (state === "sales_doc_search") {
   const searchTerm = trimmed;
   if (!searchTerm || searchTerm.length < 1) {
-    await sendText(from, "❌ Enter something to search for.");
+    await sendText(from, "❌ Type something to search for.");
     return true;
   }
-  const docType   = biz.sessionData?.docSearchType   || "invoice";
-  const branchRaw = biz.sessionData?.docSearchBranch ?? undefined;
 
-  // Store search result trigger in session, let chatbotEngine pick it up
-  biz.sessionState = "sales_doc_search_ready";
-  biz.sessionData  = {
-    docSearchType:   docType,
-    docSearchBranch: branchRaw,
-    docSearchTerm:   searchTerm
-  };
+  const docType    = biz.sessionData?.docSearchType   || "invoice";
+  const branchRaw  = biz.sessionData?.docSearchBranch ?? undefined;
+  const branchId   = branchRaw === undefined ? undefined : (branchRaw || null);
+
+  // Clear state before calling showSalesDocs
+  biz.sessionState = "ready";
+  biz.sessionData  = {};
   await saveBizSafe(biz);
-  return false; // return false so chatbotEngine continues processing
+
+  // Dynamically import showSalesDocs from chatbotEngine
+  // (it's not exported, so we trigger via the session flag approach — but that breaks)
+  // Instead: do the search query RIGHT HERE and build the list
+  const Invoice = (await import("../models/invoice.js")).default;
+  const Client  = (await import("../models/client.js")).default;
+  const Branch  = (await import("../models/branch.js")).default;
+  const Business = (await import("../models/business.js")).default;
+
+  const query = { businessId: biz._id, type: docType };
+  if (branchId !== undefined && branchId !== null) query.branchId = branchId;
+
+  // Search by number or client name
+  const matchedClients = await Client.find({
+    businessId: biz._id,
+    name: { $regex: searchTerm, $options: "i" }
+  }).distinct("_id");
+
+  query.$or = [
+    { number: { $regex: searchTerm, $options: "i" } },
+    ...(matchedClients.length ? [{ clientId: { $in: matchedClients } }] : [])
+  ];
+
+  const PAGE_SIZE = 8;
+  const total     = await Invoice.countDocuments(query);
+
+  if (!total) {
+    await sendText(from, `📄 No ${docType}s found for "*${searchTerm}*".`);
+    const { sendSalesMenu } = await import("./metaMenus.js");
+    return sendSalesMenu(from);
+  }
+
+  const docs = await Invoice.find(query).sort({ createdAt: -1 }).limit(PAGE_SIZE).lean();
+
+  const clientIds  = [...new Set(docs.map(d => d.clientId?.toString()).filter(Boolean))];
+  const clients    = await Client.find({ _id: { $in: clientIds } }).lean();
+  const clientMap  = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "—"]));
+
+  let msg = `📄 *${docType[0].toUpperCase() + docType.slice(1)}s* 🔍 "${searchTerm}"\n${total} result(s)\n\n`;
+  docs.forEach((d, i) => {
+    const statusIcon = d.status === "paid" ? "✅" : d.status === "partial" ? "⏳" : "🔴";
+    const clientName = clientMap[d.clientId?.toString()] || "";
+    const dateStr    = d.createdAt ? new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+    msg += `${i + 1}. *${d.number}* ${statusIcon}\n`;
+    msg += `   $${Number(d.total || 0).toFixed(2)} ${d.currency || ""}`;
+    if (clientName) msg += ` · ${clientName}`;
+    if (dateStr)    msg += ` · ${dateStr}`;
+    msg += "\n";
+  });
+  msg += `\nType a number to open it.`;
+
+  // Store in session for number selection
+  const bizDoc = await Business.findById(biz._id);
+  bizDoc.sessionState = "sales_doc_list";
+  bizDoc.sessionData  = {
+    docListType:   docType,
+    docListPage:   0,
+    docListBranch: branchId,
+    docListSearch: searchTerm,
+    docListFilter: null,
+    docListIds:    docs.map(d => d._id.toString()),
+    docListOffset: 0
+  };
+  bizDoc.markModified("sessionData");
+  await bizDoc.save();
+
+  await sendText(from, msg);
+
+  const typeCode = docType === "invoice" ? "inv" : docType === "quote" ? "qt" : "rct";
+  const bCode    = branchId || "all";
+  return sendButtons(from, {
+    text: "Open by number or change filter:",
+    buttons: [
+      { id: `vdoc_filter_${typeCode}_${bCode}`, title: "📅 Filter by Date" },
+      { id: ACTIONS.SALES_MENU,                 title: "⬅ Back" }
+    ]
+  });
 }
+
 
 /* ===========================
    PAYMENT: SELECT INVOICE BY NUMBER

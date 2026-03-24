@@ -1374,106 +1374,141 @@ async function startOnboarding(from, phone) {
   await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
 }
 
-async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, search = null) {
+async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, search = null, dateFilter = null) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  const phone = from.replace(/\D+/g, "");
+  const phone  = from.replace(/\D+/g, "");
   const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
+  const query  = { businessId: biz._id, type };
 
-  const query = { businessId: biz._id, type };
   if (caller?.role === "owner" && ownerBranchId !== undefined) {
     if (ownerBranchId !== null) query.branchId = ownerBranchId;
   } else if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
     query.branchId = caller.branchId;
   }
 
-  // Search filter — match invoice number or client name
-  if (search) {
-    query.$or = [
-      { number: { $regex: search, $options: "i" } }
-    ];
-    // Also try to match by client name via lookup
-    const Client = (await import("../models/client.js")).default;
-    const matchedClients = await Client.find({
-      businessId: biz._id,
-      name: { $regex: search, $options: "i" }
-    }).distinct("_id");
-    if (matchedClients.length) {
-      query.$or.push({ clientId: { $in: matchedClients } });
+  // ── Date filter ───────────────────────────────────────────────────────────
+  if (dateFilter) {
+    const now   = new Date();
+    const year  = now.getFullYear();
+    const month = now.getMonth();
+    if (dateFilter === "this_month") {
+      query.createdAt = { $gte: new Date(year, month, 1), $lt: new Date(year, month + 1, 1) };
+    } else if (dateFilter === "last_month") {
+      query.createdAt = { $gte: new Date(year, month - 1, 1), $lt: new Date(year, month, 1) };
+    } else if (dateFilter === "this_year") {
+      query.createdAt = { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) };
+    } else if (dateFilter === "last_7") {
+      const d = new Date(); d.setDate(d.getDate() - 7);
+      query.createdAt = { $gte: d };
     }
   }
 
-  const PAGE_SIZE = 8;
-  const total = await Invoice.countDocuments(query);
+  // ── Text search — invoice number or client name ───────────────────────────
+  if (search) {
+    const Client       = (await import("../models/client.js")).default;
+    const matchClients = await Client.find({
+      businessId: biz._id,
+      name: { $regex: search, $options: "i" }
+    }).distinct("_id");
+
+    query.$or = [
+      { number: { $regex: search, $options: "i" } },
+      ...(matchClients.length ? [{ clientId: { $in: matchClients } }] : [])
+    ];
+  }
+
+  const PAGE_SIZE  = 8;
+  const total      = await Invoice.countDocuments(query);
 
   if (!total) {
-    const msg = search
-      ? `📄 No ${type}s found matching "*${search}*".`
-      : `📄 No ${type}s found.`;
-    await sendText(from, msg);
+    const label = dateFilter === "this_month" ? "this month"
+                : dateFilter === "last_month" ? "last month"
+                : dateFilter === "this_year"  ? "this year"
+                : dateFilter === "last_7"     ? "last 7 days"
+                : search ? `"${search}"` : "";
+    await sendText(from, `📄 No ${type}s found${label ? ` for ${label}` : ""}.`);
     return sendSalesMenu(from);
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const safePage   = Math.min(page, totalPages - 1);
-  const docs = await Invoice.find(query)
+  const docs       = await Invoice.find(query)
     .sort({ createdAt: -1 })
     .skip(safePage * PAGE_SIZE)
     .limit(PAGE_SIZE)
     .lean();
 
-  // Load client names for display
-  const Client = (await import("../models/client.js")).default;
+  // Load client names
+  const Client    = (await import("../models/client.js")).default;
   const clientIds = [...new Set(docs.map(d => d.clientId?.toString()).filter(Boolean))];
   const clients   = await Client.find({ _id: { $in: clientIds } }).lean();
   const clientMap = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "—"]));
 
+  // Build header
   let header = `📄 ${type[0].toUpperCase() + type.slice(1)}s`;
   if (ownerBranchId && caller?.role === "owner") {
     const branch = await Branch.findById(ownerBranchId);
     if (branch) header += ` — ${branch.name}`;
   } else if (caller?.role === "owner" && ownerBranchId === null) {
-    header += ` — All Branches`;
+    header += ` — All`;
   }
+  if (dateFilter === "this_month") header += " · This Month";
+  else if (dateFilter === "last_month") header += " · Last Month";
+  else if (dateFilter === "this_year")  header += " · This Year";
+  else if (dateFilter === "last_7")     header += " · Last 7 Days";
   if (search) header += ` 🔍 "${search}"`;
 
-  const typeCode   = type === "invoice" ? "inv" : type === "quote" ? "qt" : "rct";
-  const branchCode = ownerBranchId || "all";
-  const searchCode = search ? encodeURIComponent(search) : "0";
+  // Store in session so user can type number to open
+  const typeCode    = type === "invoice" ? "inv" : type === "quote" ? "qt" : "rct";
+  const branchCode  = ownerBranchId || "all";
+  const filterCode  = dateFilter  || "none";
+  const searchCode  = search ? encodeURIComponent(search).slice(0, 30) : "0";
 
-  // Build numbered text list — always use text (not sendList) to avoid row limits
-  let msg = `${header}\nPage ${safePage + 1}/${totalPages} · ${total} total\n\n`;
-  docs.forEach((d, i) => {
-    const statusIcon = d.status === "paid" ? "✅" : d.status === "partial" ? "⏳" : "🔴";
-    const clientName = clientMap[d.clientId?.toString()] || "";
-    const clientPart = clientName ? ` · ${clientName}` : "";
-    msg += `${safePage * PAGE_SIZE + i + 1}. *${d.number}*${clientPart}\n   $${Number(d.total || 0).toFixed(2)} ${d.currency || ""} ${statusIcon}\n`;
-  });
-  msg += `\nTap a number to open it, or use the buttons below.`;
-
-  // Store doc list in session so user can type a number to open
   biz.sessionState = "sales_doc_list";
   biz.sessionData  = {
     docListType:    type,
     docListPage:    safePage,
     docListBranch:  ownerBranchId,
     docListSearch:  search,
+    docListFilter:  dateFilter,
     docListIds:     docs.map(d => d._id.toString()),
     docListOffset:  safePage * PAGE_SIZE
   };
   await saveBizSafe(biz);
 
+  // Numbered text list — no WhatsApp row limits
+  let msg = `${header}\nPage ${safePage + 1}/${totalPages} · ${total} total\n\n`;
+  docs.forEach((d, i) => {
+    const statusIcon = d.status === "paid" ? "✅" : d.status === "partial" ? "⏳" : "🔴";
+    const clientName = clientMap[d.clientId?.toString()] || "";
+    const dateStr    = d.createdAt ? new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+    msg += `${safePage * PAGE_SIZE + i + 1}. *${d.number}* ${statusIcon}\n`;
+    msg += `   $${Number(d.total || 0).toFixed(2)} ${d.currency || ""}`;
+    if (clientName) msg += ` · ${clientName}`;
+    if (dateStr)    msg += ` · ${dateStr}`;
+    msg += "\n";
+  });
+  msg += `\nType a number (1–${docs.length}) to open it.`;
+
   await sendText(from, msg);
 
-  // Navigation buttons (max 3)
+  // Build 3 navigation/filter buttons
   const navBtns = [];
-  if (safePage > 0)              navBtns.push({ id: `vdoc_prev_${typeCode}_${branchCode}_${safePage}_${searchCode}`, title: "⬅ Prev" });
-  if (safePage < totalPages - 1) navBtns.push({ id: `vdoc_next_${typeCode}_${branchCode}_${safePage}_${searchCode}`, title: "➡ Next" });
-  navBtns.push({ id: `vdoc_search_${typeCode}_${branchCode}`, title: "🔍 Search" });
+  if (safePage > 0)
+    navBtns.push({ id: `vdoc_prev_${typeCode}_${branchCode}_${safePage}_${filterCode}_${searchCode}`, title: "⬅ Prev" });
+  if (safePage < totalPages - 1)
+    navBtns.push({ id: `vdoc_next_${typeCode}_${branchCode}_${safePage}_${filterCode}_${searchCode}`, title: "➡ Next" });
+
+  // Filter button — show most useful one based on current state
+  if (!dateFilter && !search)
+    navBtns.push({ id: `vdoc_filter_${typeCode}_${branchCode}`, title: "📅 Filter by Date" });
+  else
+    navBtns.push({ id: `vdoc_filter_${typeCode}_${branchCode}`, title: "🔄 Change Filter" });
 
   return sendButtons(from, {
-    text: navBtns.length > 1 ? "Navigate or search:" : "Search by number or client name:",
+    text: "Open by number, filter, or search:",
     buttons: navBtns.slice(0, 3)
   });
 }
@@ -1589,9 +1624,11 @@ a.startsWith("sup_load_preset_") ||
      a.startsWith("cashbal_branch_") ||
   a === "sup_search_next_page" ||
       a === "sup_search_prev_page" ||
-      a.startsWith("vdoc_prev_") ||
+ a.startsWith("vdoc_prev_") ||
       a.startsWith("vdoc_next_") ||
       a.startsWith("vdoc_search_") ||
+      a.startsWith("vdoc_filter_") ||
+      a.startsWith("vdoc_date_") ||
     a === "exp_show_categories" ||
       a === "exp_bulk_confirm_yes" ||
       a === "exp_bulk_confirm_no" ||
@@ -1601,7 +1638,6 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("paylist_search_")
     
     );
-
   // =========================
   // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
   // =========================
@@ -3060,34 +3096,79 @@ Categories auto-detected ✨
 
 
   // ── Doc list: prev/next page navigation ───────────────────────────────────
-  if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
+if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
     if (!biz) return sendMainMenu(from);
-    // format: vdoc_prev_inv_all_2_0  or  vdoc_next_qt_branchId_0_searchterm
-    const parts     = a.replace("vdoc_prev_", "").replace("vdoc_next_", "").split("_");
-    const typeMap   = { inv: "invoice", qt: "quote", rct: "receipt" };
-    const docType   = typeMap[parts[0]] || "invoice";
-    const branchRaw = parts[1] === "all" ? null : parts[1];
-    const curPage   = parseInt(parts[2]) || 0;
-    const searchRaw = parts.slice(3).join("_");
-    const search    = searchRaw === "0" ? null : decodeURIComponent(searchRaw);
-    const newPage   = a.startsWith("vdoc_prev_") ? curPage - 1 : curPage + 1;
-    return showSalesDocs(from, docType, branchRaw ?? undefined, Math.max(0, newPage), search);
+    // format: vdoc_prev_inv_all_2_none_0
+    const raw    = a.replace("vdoc_prev_", "").replace("vdoc_next_", "");
+    const parts  = raw.split("_");
+    const typeMap = { inv: "invoice", qt: "quote", rct: "receipt" };
+    const docType    = typeMap[parts[0]] || "invoice";
+    const branchRaw  = parts[1] === "all" ? null : parts[1];
+    const curPage    = parseInt(parts[2]) || 0;
+    const filterCode = parts[3] || "none";
+    const searchRaw  = parts.slice(4).join("_");
+    const dateFilter = filterCode === "none" ? null : filterCode;
+    const search     = searchRaw === "0" ? null : decodeURIComponent(searchRaw);
+    const newPage    = a.startsWith("vdoc_prev_") ? curPage - 1 : curPage + 1;
+    return showSalesDocs(from, docType, branchRaw ?? undefined, Math.max(0, newPage), search, dateFilter);
   }
 
   // ── Doc list: search trigger ────────────────────────────────────────────────
+// ── Filter by date — show date picker buttons ──────────────────────────────
+  if (a.startsWith("vdoc_filter_")) {
+    if (!biz) return sendMainMenu(from);
+    const parts   = a.replace("vdoc_filter_", "").split("_");
+    const typeMap = { inv: "invoice", qt: "quote", rct: "receipt" };
+    const docType = typeMap[parts[0]] || "invoice";
+    const branchCode = parts[1] || "all";
+
+    // Store context for date selection
+    biz.sessionState = "sales_doc_filter";
+    biz.sessionData  = { docFilterType: docType, docFilterBranch: branchCode === "all" ? null : branchCode };
+    await saveBizSafe(biz);
+
+    const typeLabel = docType[0].toUpperCase() + docType.slice(1);
+    return sendList(from, `📅 *Filter ${typeLabel}s*\n\nChoose a time period:`, [
+      { id: `vdoc_date_${docType}_${branchCode}_this_month`, title: "📅 This Month" },
+      { id: `vdoc_date_${docType}_${branchCode}_last_month`, title: "📅 Last Month" },
+      { id: `vdoc_date_${docType}_${branchCode}_last_7`,     title: "📅 Last 7 Days" },
+      { id: `vdoc_date_${docType}_${branchCode}_this_year`,  title: "📅 This Year" },
+      { id: `vdoc_date_${docType}_${branchCode}_none`,       title: "📋 All Time" },
+      { id: `vdoc_search_${docType}_${branchCode}`,         title: "🔍 Search by Name/Number" }
+    ]);
+  }
+
+  // ── Date filter selected ──────────────────────────────────────────────────
+  if (a.startsWith("vdoc_date_")) {
+    if (!biz) return sendMainMenu(from);
+    const raw    = a.replace("vdoc_date_", "");
+    // format: vdoc_date_invoice_all_this_month
+    const parts  = raw.split("_");
+    const typeMap = { invoice: "invoice", quote: "quote", receipt: "receipt" };
+    const docType    = typeMap[parts[0]] || "invoice";
+    const branchCode = parts[1] || "all";
+    const filterKey  = parts.slice(2).join("_"); // this_month, last_month, etc
+    const dateFilter = filterKey === "none" ? null : filterKey;
+    const branchId   = branchCode === "all" ? null : branchCode;
+    return showSalesDocs(from, docType, branchId ?? undefined, 0, null, dateFilter);
+  }
+
+  // ── Search by text ────────────────────────────────────────────────────────
   if (a.startsWith("vdoc_search_")) {
     if (!biz) return sendMainMenu(from);
     const parts   = a.replace("vdoc_search_", "").split("_");
-    const typeMap = { inv: "invoice", qt: "quote", rct: "receipt" };
-    const docType = typeMap[parts[0]] || "invoice";
+    const typeMap = { inv: "invoice", qt: "quote", rct: "receipt",
+                      invoice: "invoice", quote: "quote", receipt: "receipt" };
+    const docType    = typeMap[parts[0]] || "invoice";
+    const branchCode = parts[1] || "all";
     biz.sessionState = "sales_doc_search";
     biz.sessionData  = {
       docSearchType:   docType,
-      docSearchBranch: parts[1] === "all" ? null : parts[1]
+      docSearchBranch: branchCode === "all" ? null : branchCode
     };
     await saveBizSafe(biz);
     return sendButtons(from, {
-      text: `🔍 *Search ${docType}s*\n\nType invoice number or client name:\n_e.g. INV-000001 or John_`,
+      text: `🔍 *Search ${docType[0].toUpperCase() + docType.slice(1)}s*\n\nType client name or part of invoice number:\n_e.g.  John  or  INV-0003_`,
       buttons: [{ id: ACTIONS.SALES_MENU, title: "❌ Cancel" }]
     });
   }
