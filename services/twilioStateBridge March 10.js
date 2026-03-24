@@ -568,23 +568,131 @@ They must click it to join.`);
   /* ===========================
      EXPENSE: CATEGORY
   =========================== */
-  if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
-    const categoryMap = {
-      exp_cat_rent: "Rent", exp_cat_utilities: "Utilities",
-      exp_cat_transport: "Transport", exp_cat_supplies: "Supplies",
-      exp_cat_other: "Other"
-    };
+ /* ===========================
+   EXPENSE: AMOUNT ENTRY
+   (category already set via button tap)
+   User just types a number: "150"
+   Optionally with note: "150 fuel"
+=========================== */
+if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
+  const categoryMap = {
+    exp_cat_rent: "Rent", exp_cat_utilities: "Utilities",
+    exp_cat_transport: "Transport", exp_cat_supplies: "Supplies",
+    exp_cat_salaries: "Salaries", exp_cat_maintenance: "Maintenance",
+    exp_cat_other: "Other"
+  };
+  const category = categoryMap[text];
+  if (!category) { await sendText(from, "❌ Please select a category from the list."); return true; }
 
-    const category = categoryMap[text];
-    if (!category) { await sendText(from, "❌ Please select a category from the list."); return true; }
+  biz.sessionData.category = category;
+  biz.sessionData.description = category; // default description = category name
+  biz.sessionState = "expense_amount";
+  await saveBizSafe(biz);
 
-    biz.sessionData.category = category;
-    biz.sessionState = "expense_description";
-    await saveBizSafe(biz);
+  return sendButtons(from, {
+    text: `${category} expense\n\n💵 Enter amount:`,
+    buttons: [{ id: ACTIONS.MAIN_MENU, title: "❌ Cancel" }]
+  });
+}
 
-    await sendPromptWithMenu(from, "📝 *Enter expense description*\n\nE.g. Fuel for delivery, Office stationery:");
+/* ===========================
+   EXPENSE: ENTER AMOUNT → INSTANTLY SHOW METHOD BUTTONS
+   Accepts: "150"  or  "150 fuel"  or  "150 monthly rent"
+=========================== */
+if (state === "expense_amount") {
+  // Split on first space: "150 fuel for delivery"
+  const spaceIdx = trimmed.indexOf(" ");
+  const amtStr = spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed;
+  const note   = spaceIdx > 0 ? trimmed.slice(spaceIdx + 1).trim() : "";
+
+  const amount = Number(amtStr);
+  if (isNaN(amount) || amount <= 0) {
+    await sendText(from, "❌ Enter the amount. Example: *150* or *150 fuel*");
     return true;
   }
+
+  biz.sessionData.amount = amount;
+  if (note) biz.sessionData.description = note;
+  biz.sessionState = "expense_method";
+  await saveBizSafe(biz);
+
+  const cat  = biz.sessionData.category || "Expense";
+  const desc = biz.sessionData.description || cat;
+
+  return sendButtons(from, {
+    text:
+`${cat}: *${formatMoney(amount, biz.currency)}*
+_${desc}_
+
+💳 How was it paid?`,
+    buttons: [
+      { id: "exp_method_cash",    title: "💵 Cash" },
+      { id: "exp_method_ecocash", title: "📱 EcoCash" },
+      { id: "exp_method_bank",    title: "🏦 Bank" }
+    ]
+  });
+}
+
+/* ===========================
+   EXPENSE: METHOD → SAVE IMMEDIATELY (no extra confirm step)
+=========================== */
+if (state === "expense_method" || state === ACTIONS.EXPENSE_METHOD) {
+  const methodMap = {
+    exp_method_cash: "Cash", exp_method_bank: "Bank",
+    exp_method_ecocash: "EcoCash", exp_method_other: "Other"
+  };
+  const method = methodMap[text];
+  if (!method) {
+    await sendButtons(from, {
+      text: "💳 How was it paid?",
+      buttons: [
+        { id: "exp_method_cash",    title: "💵 Cash" },
+        { id: "exp_method_ecocash", title: "📱 EcoCash" },
+        { id: "exp_method_bank",    title: "🏦 Bank" }
+      ]
+    });
+    return true;
+  }
+
+  const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+  const expense = await Expense.create({
+    businessId: biz._id,
+    branchId: effectiveBranchId,
+    amount: biz.sessionData.amount,
+    category: biz.sessionData.category,
+    description: biz.sessionData.description || biz.sessionData.category,
+    method,
+    createdBy: phone
+  });
+
+  const savedBranchId = biz.sessionData.targetBranchId;
+  biz.sessionData = { targetBranchId: savedBranchId };
+  biz.sessionState = "expense_add_another_menu";
+  await saveBizSafe(biz);
+
+  // Generate receipt PDF in background
+  try {
+    const receiptNumber = `EXP-${Date.now()}`;
+    const { filename } = await generatePDF({
+      type: "receipt", number: receiptNumber, date: new Date(),
+      billingTo: "Expense Record",
+      items: [{ item: `${expense.category} — ${expense.description}`, qty: 1, unit: expense.amount, total: expense.amount }],
+      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
+    });
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+  } catch (pdfErr) {
+    console.error("[EXPENSE PDF]", pdfErr.message);
+  }
+
+  await sendText(from,
+`✅ *Saved*  ${expense.category} — ${formatMoney(expense.amount, biz.currency)} (${method})`
+  );
+
+  const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
+  await sendExpenseAddAnotherMenu(from);
+  return true;
+}
 
   /* ===========================
      EXPENSE: DESCRIPTION

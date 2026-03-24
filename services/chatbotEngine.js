@@ -1517,7 +1517,8 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_upgrade_plan" ||
       a === "sup_renew_plan" ||
       a === "onboard_business" ||
-         a === "main_menu_back" ||
+        a === "main_menu_back" ||
+      a.startsWith("payinv_full_") ||
       a === "biz_tools_menu" ||
        a.startsWith("inv_cat_page_") ||
 
@@ -1717,6 +1718,7 @@ a === "sup_search_next_page" ||
   a === "sup_search_prev_page" ||
   a === "my_supplier_account" ||
   a === "main_menu_back" ||
+      a.startsWith("payinv_full_") ||
   a === "biz_tools_menu";
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
@@ -2416,21 +2418,54 @@ return sendButtons(from, {
     return;
   }
 
-  if (a.startsWith("payinv_")) {
-    const invoiceId = a.replace("payinv_", "");
+ if (a.startsWith("payinv_")) {
     if (!biz) return sendMainMenu(from);
+    // Handle "Pay Full Balance" shortcut button: payinv_full_{id}
+    const isFullPay = a.startsWith("payinv_full_");
+    const invoiceId = isFullPay
+      ? a.replace("payinv_full_", "")
+      : a.replace("payinv_", "");
+
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) return sendText(from, "Invoice not found.");
 
+    if (isFullPay) {
+      // Skip amount entry — go straight to method
+      biz.sessionState = "payment_method";
+      biz.sessionData = { invoiceId: invoice._id, amount: invoice.balance };
+      await saveBizSafe(biz);
+      return sendButtons(from, {
+        text:
+`💳 *${invoice.number}*
+Paying full balance: *${formatMoney(invoice.balance, invoice.currency)}*
+
+How was it paid?`,
+        buttons: [
+          { id: "pay_method_cash",    title: "💵 Cash" },
+          { id: "pay_method_ecocash", title: "📱 EcoCash" },
+          { id: "pay_method_bank",    title: "🏦 Bank" }
+        ]
+      });
+    }
+
+    // Normal flow — show balance and ask for amount with "Pay Full" shortcut
     biz.sessionState = "payment_amount";
     biz.sessionData = { invoiceId: invoice._id };
     await saveBizSafe(biz);
 
-    await sendButtons(from, {
-      text: `💳 *Invoice ${invoice.number}*\n\nTotal: *${invoice.total} ${invoice.currency}*\nPaid: ${invoice.amountPaid} ${invoice.currency}\nBalance: *${invoice.balance} ${invoice.currency}*\n\nEnter amount paid:`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    return sendButtons(from, {
+      text:
+`💳 *${invoice.number}*
+Total:   ${formatMoney(invoice.total, invoice.currency)}
+Paid:    ${formatMoney(invoice.amountPaid, invoice.currency)}
+Balance: *${formatMoney(invoice.balance, invoice.currency)}*
+
+Type amount or tap Full:`,
+      buttons: [
+        { id: `payinv_full_${invoice._id}`, title: "✅ Pay Full Balance" },
+        { id: ACTIONS.MAIN_MENU,            title: "❌ Cancel" }
+      ]
     });
-    return;
   }
 
   // ── Invoice confirm actions ────────────────────────────────────────────────
@@ -2549,7 +2584,10 @@ _Add all prices automatically_`
       { id: "exp_cat_utilities", title: "💡 Utilities" },
       { id: "exp_cat_transport", title: "🚗 Transport" },
       { id: "exp_cat_supplies", title: "📦 Supplies" },
-      { id: "exp_cat_other", title: "📝 Other" }
+            { id: "exp_cat_salaries",     title: "👷 Salaries" },
+      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
+      { id: "exp_cat_other",        title: "📝 Other" }
+
     ]);
   }
 
@@ -2794,7 +2832,10 @@ if (a === "expense_generate_receipt") {
       { id: "exp_cat_utilities", title: "💡 Utilities" },
       { id: "exp_cat_transport", title: "🚗 Transport" },
       { id: "exp_cat_supplies", title: "📦 Supplies" },
-      { id: "exp_cat_other", title: "📝 Other" }
+          { id: "exp_cat_salaries",     title: "👷 Salaries" },
+      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
+      { id: "exp_cat_other",        title: "📝 Other" }
+
     ]);
   }
 
@@ -2935,7 +2976,10 @@ Categories auto-detected ✨
       { id: "exp_cat_utilities", title: "💡 Utilities" },
       { id: "exp_cat_transport", title: "🚗 Transport" },
       { id: "exp_cat_supplies", title: "📦 Supplies" },
-      { id: "exp_cat_other", title: "📝 Other" }
+           { id: "exp_cat_salaries",     title: "👷 Salaries" },
+      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
+      { id: "exp_cat_other",        title: "📝 Other" }
+
     ]);
   }
 
@@ -9297,7 +9341,10 @@ _Type *cancel* to go back._`
         { id: "exp_cat_utilities", title: "💡 Utilities" },
         { id: "exp_cat_transport", title: "🚗 Transport" },
         { id: "exp_cat_supplies", title: "📦 Supplies" },
-        { id: "exp_cat_other", title: "📝 Other" }
+            { id: "exp_cat_salaries",     title: "👷 Salaries" },
+      { id: "exp_cat_maintenance",  title: "🔧 Maintenance" },
+      { id: "exp_cat_other",        title: "📝 Other" }
+
       ]);
     }
 

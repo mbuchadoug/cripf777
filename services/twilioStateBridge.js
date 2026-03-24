@@ -627,23 +627,209 @@ They must click it to join.`);
   /* ===========================
      EXPENSE: CATEGORY
   =========================== */
-  if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
-    const categoryMap = {
-      exp_cat_rent: "Rent", exp_cat_utilities: "Utilities",
-      exp_cat_transport: "Transport", exp_cat_supplies: "Supplies",
-      exp_cat_other: "Other"
-    };
+ /* ===========================
+   EXPENSE: QUICK ENTRY
+   Format: "category, amount, method, description"
+   Examples:
+     rent, 150, cash, monthly rent
+     transport, 30, ecocash
+     supplies, 45.50, bank, office paper and pens
+=========================== */
+if (
+  state === ACTIONS.EXPENSE_CATEGORY ||
+  state === "expense_category" ||
+  state === "expense_quick_entry"
+) {
+  const CATS = {
+    rent: "🏢 Rent", utilities: "💡 Utilities", transport: "🚗 Transport",
+    supplies: "📦 Supplies", salaries: "👷 Salaries", maintenance: "🔧 Maintenance",
+    other: "📝 Other"
+  };
+  const METHODS = { cash: "Cash", bank: "Bank", ecocash: "EcoCash", other: "Other" };
 
-    const category = categoryMap[text];
-    if (!category) { await sendText(from, "❌ Please select a category from the list."); return true; }
-
-    biz.sessionData.category = category;
-    biz.sessionState = "expense_description";
+  // If text is a raw button ID (user came from old category list), 
+  // transition them to the new quick-entry state instead
+  if (text.startsWith("exp_cat_")) {
+    biz.sessionState = "expense_quick_entry";
+    const oldCat = text.replace("exp_cat_", "");
+    biz.sessionData.prefillCategory = oldCat;
     await saveBizSafe(biz);
+    await sendText(from,
+`📝 *Quick Expense Entry*
 
-    await sendPromptWithMenu(from, "📝 *Enter expense description*\n\nE.g. Fuel for delivery, Office stationery:");
+Type: *category, amount, method, description*
+
+Categories: rent, utilities, transport, supplies, salaries, maintenance, other
+Methods: cash, bank, ecocash
+
+Examples:
+_rent, 150, cash, monthly rent_
+_transport, 30, ecocash_
+_supplies, 45.50, bank, office paper_
+
+You can also type multiple expenses, one per line.`
+    );
     return true;
   }
+
+  // Parse the input — one expense per line
+  const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const parsed = [];
+  const failed = [];
+
+  for (const line of lines) {
+    const parts = line.split(",").map(p => p.trim());
+    if (parts.length < 2) { failed.push(line); continue; }
+
+    const catRaw  = parts[0].toLowerCase();
+    const amtRaw  = parts[1];
+    const methRaw = (parts[2] || "cash").toLowerCase();
+    const desc    = parts.slice(3).join(", ").trim() || parts[0];
+
+    const amount  = Number(amtRaw);
+    if (isNaN(amount) || amount <= 0) { failed.push(line); continue; }
+
+    // Fuzzy match category
+    const cat = Object.keys(CATS).find(k => catRaw.startsWith(k) || k.startsWith(catRaw)) || "other";
+    // Fuzzy match method
+    const method = Object.keys(METHODS).find(k => methRaw.startsWith(k) || k.startsWith(methRaw)) || "cash";
+
+    parsed.push({ category: CATS[cat], amount, method: METHODS[method], description: desc });
+  }
+
+  if (!parsed.length) {
+    await sendText(from,
+`❌ Couldn't read that.
+
+Format: *category, amount, method, description*
+Example: *rent, 150, cash, monthly rent*
+
+Categories: rent, utilities, transport, supplies, salaries, maintenance, other
+Methods: cash, bank, ecocash`
+    );
+    return true;
+  }
+
+  // Store parsed expenses for preview
+  biz.sessionData.pendingExpenses = parsed;
+  biz.sessionState = "expense_confirm";
+  await saveBizSafe(biz);
+
+  // Build preview
+  const total = parsed.reduce((s, e) => s + e.amount, 0);
+  const lines_preview = parsed
+    .map((e, i) => `${i + 1}. *${e.category}* — ${formatMoney(e.amount, biz.currency)} (${e.method})\n   _${e.description}_`)
+    .join("\n");
+
+  const failNote = failed.length
+    ? `\n\n⚠️ Skipped ${failed.length} unreadable line${failed.length === 1 ? "" : "s"}.`
+    : "";
+
+  return sendButtons(from, {
+    text:
+`📋 *Expense Preview*${failNote}
+
+${lines_preview}
+
+─────────────────
+*Total: ${formatMoney(total, biz.currency)}*
+
+Confirm to save, or edit and resend.`,
+    buttons: [
+      { id: "expense_confirm_yes", title: "✅ Confirm & Save" },
+      { id: "expense_edit",        title: "✏️ Edit" },
+      { id: ACTIONS.MAIN_MENU,     title: "❌ Cancel" }
+    ]
+  });
+}
+
+/* ===========================
+   EXPENSE: CONFIRM → SAVE
+=========================== */
+if (state === "expense_confirm") {
+  // "expense_edit" button → go back to entry
+  if (text === "expense_edit") {
+    biz.sessionState = "expense_quick_entry";
+    await saveBizSafe(biz);
+    const existing = (biz.sessionData.pendingExpenses || [])
+      .map(e => `${e.category.split(" ")[1] || "other"}, ${e.amount}, ${e.method.toLowerCase()}, ${e.description}`)
+      .join("\n");
+    await sendText(from, `✏️ *Edit your expenses below and resend:*\n\n${existing}`);
+    return true;
+  }
+
+  if (text !== "expense_confirm_yes") {
+    // Any other text while in confirm state → treat as a new entry
+    biz.sessionState = "expense_quick_entry";
+    await saveBizSafe(biz);
+    // Re-run with new text by falling through... but we can't fall through, so re-trigger:
+    await sendText(from, "ℹ️ Tap *Confirm & Save* or resend your expenses.");
+    return true;
+  }
+
+  const expenses = biz.sessionData.pendingExpenses || [];
+  if (!expenses.length) {
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ No expenses to save.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+  const saved = [];
+
+  for (const e of expenses) {
+    const expense = await Expense.create({
+      businessId: biz._id,
+      branchId: effectiveBranchId,
+      amount: e.amount,
+      category: e.category,
+      description: e.description,
+      method: e.method,
+      createdBy: phone
+    });
+    saved.push(expense);
+  }
+
+  const total = saved.reduce((s, e) => s + e.amount, 0);
+  const savedBranchId = biz.sessionData.targetBranchId;
+
+  biz.sessionData = { targetBranchId: savedBranchId, lastExpenseTotal: total };
+  biz.sessionState = "expense_add_another_menu";
+  await saveBizSafe(biz);
+
+  const lines_saved = saved
+    .map(e => `• *${e.category}* ${formatMoney(e.amount, biz.currency)} — ${e.method}`)
+    .join("\n");
+
+  await sendText(from,
+`✅ *${saved.length} expense${saved.length === 1 ? "" : "s"} saved!*
+
+${lines_saved}
+─────────────────
+Total: *${formatMoney(total, biz.currency)}*`
+  );
+
+  // Generate receipt for the batch
+  try {
+    const receiptNumber = `EXP-${Date.now()}`;
+    const { filename } = await generatePDF({
+      type: "receipt", number: receiptNumber, date: new Date(),
+      billingTo: "Expense Record",
+      items: saved.map(e => ({ item: `${e.category} — ${e.description}`, qty: 1, unit: e.amount, total: e.amount })),
+      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
+    });
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+  } catch (pdfErr) {
+    console.error("[EXPENSE RECEIPT PDF]", pdfErr.message);
+  }
+
+  const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
+  await sendExpenseAddAnotherMenu(from);
+  return true;
+}
 
   /* ===========================
      EXPENSE: DESCRIPTION
@@ -740,40 +926,127 @@ They must click it to join.`);
   /* ===========================
      PAYMENT: ENTER AMOUNT
   =========================== */
-  if (state === "payment_amount") {
-    const amount = Number(trimmed);
-    if (isNaN(amount) || amount <= 0) {
-      await sendPromptWithMenu(from, "❌ Invalid amount. Enter a number greater than 0:");
-      return true;
-    }
+/* ===========================
+   PAYMENT IN: ENTER AMOUNT
+   User types just a number: "150"
+   Or "full" to pay full balance
+=========================== */
+if (state === "payment_amount") {
+  const invoice = await Invoice.findById(biz.sessionData.invoiceId);
+  if (!invoice) {
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await sendText(from, "❌ Invoice not found.");
+    await sendMainMenu(from);
+    return true;
+  }
 
-    const invoice = await Invoice.findById(biz.sessionData.invoiceId);
-    if (!invoice) {
-      biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-      await sendText(from, "❌ Invoice not found. Returning to menu.");
-      await sendMainMenu(from);
-      return true;
-    }
+  // "full" shortcut pays entire balance
+  const isFullPay = trimmed.toLowerCase() === "full";
+  const amount = isFullPay ? invoice.balance : Number(trimmed);
 
-    if (amount > invoice.balance) {
-      await sendPromptWithMenu(from, `❌ Amount exceeds balance.\n*Balance:* ${invoice.balance} ${invoice.currency}\n\nEnter a valid amount:`);
-      return true;
-    }
-
-    biz.sessionData.amount = amount;
-    biz.sessionState = "payment_method";
-    await saveBizSafe(biz);
-
+  if (isNaN(amount) || amount <= 0) {
     await sendButtons(from, {
-      text: "💳 Select payment method:",
+      text:
+`💳 *${invoice.number}*
+Balance: *${formatMoney(invoice.balance, invoice.currency)}*
+
+Type amount or tap Full:`,
       buttons: [
-        { id: "pay_method_cash", title: "💵 Cash" },
-        { id: "pay_method_bank", title: "🏦 Bank" },
-        { id: "pay_method_ecocash", title: "📱 EcoCash" }
+        { id: `payinv_full_${invoice._id}`, title: "✅ Pay Full Balance" },
+        { id: ACTIONS.MAIN_MENU,            title: "❌ Cancel" }
       ]
     });
     return true;
   }
+
+  if (amount > invoice.balance + 0.01) {
+    await sendText(from,
+`❌ Exceeds balance of ${formatMoney(invoice.balance, invoice.currency)}.
+Type a smaller amount or *full*:`
+    );
+    return true;
+  }
+
+  biz.sessionData.amount = amount;
+  biz.sessionState = "payment_method";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text:
+`💳 *${invoice.number}*
+Paying: *${formatMoney(amount, invoice.currency)}*
+
+How was it paid?`,
+    buttons: [
+      { id: "pay_method_cash",    title: "💵 Cash" },
+      { id: "pay_method_ecocash", title: "📱 EcoCash" },
+      { id: "pay_method_bank",    title: "🏦 Bank" }
+    ]
+  });
+}
+
+/* ===========================
+   PAYMENT IN: METHOD → SAVE + PDF
+=========================== */
+if (state === "payment_method") {
+  const methodMap = {
+    "pay_method_cash": "Cash", "pay_method_bank": "Bank",
+    "pay_method_ecocash": "EcoCash", "pay_method_other": "Other"
+  };
+  const method = methodMap[text];
+  if (!method) {
+    await sendButtons(from, {
+      text: "💳 How was it paid?",
+      buttons: [
+        { id: "pay_method_cash",    title: "💵 Cash" },
+        { id: "pay_method_ecocash", title: "📱 EcoCash" },
+        { id: "pay_method_bank",    title: "🏦 Bank" }
+      ]
+    });
+    return true;
+  }
+
+  const invoice = await Invoice.findById(biz.sessionData.invoiceId);
+  if (!invoice) {
+    biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
+    await sendText(from, "❌ Invoice not found."); await sendMainMenu(from);
+    return true;
+  }
+
+  const amount = biz.sessionData.amount;
+  invoice.amountPaid = (invoice.amountPaid || 0) + amount;
+  invoice.balance    = Math.max(0, (invoice.balance || 0) - amount);
+  invoice.status     = invoice.balance <= 0 ? "paid" : "partial";
+  await invoice.save();
+
+  const receiptNumber = `RCPT-${Date.now()}`;
+  await InvoicePayment.create({
+    businessId: biz._id, clientId: invoice.clientId,
+    branchId: invoice.branchId || getEffectiveBranchId(caller, biz.sessionData) || null,
+    invoiceId: invoice._id, amount, method, receiptNumber, createdBy: phone
+  });
+
+  try {
+    const { filename } = await generatePDF({
+      type: "receipt", number: receiptNumber, date: new Date(),
+      billingTo: invoice.number,
+      items: [{ item: `Payment received (${method})`, qty: 1, unit: amount, total: amount }],
+      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: invoice.status }
+    });
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+  } catch (pdfErr) { console.error("[PAYMENT PDF]", pdfErr.message); }
+
+  biz.sessionState = "ready"; biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from,
+`✅ *Payment saved*  ${invoice.number} — ${formatMoney(amount, invoice.currency)} (${method})
+${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice.balance, invoice.currency)}`}`
+  );
+  await sendMainMenu(from);
+  return true;
+}
 
   /* ===========================
      PAYMENT: METHOD → SAVE + RECEIPT
