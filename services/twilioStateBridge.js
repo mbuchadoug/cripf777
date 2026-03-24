@@ -929,6 +929,11 @@ _fuel 30 ecocash, rent 500 bank_`,
   const failNote = failed.length ? `\n⚠️ Skipped: ${failed.join(", ")}` : "";
 
   // Always show buttons — never ask them to type "done"
+ // Set state to expense_bulk_confirm BEFORE showing Save All button
+  // so that tapping Save All routes correctly
+  biz.sessionState = "expense_bulk_confirm";
+  await saveBizSafe(biz);
+
   return sendButtons(from, {
     text:
 `✅ *${parsed.length} added*${failNote}
@@ -944,7 +949,6 @@ Add more or save?`,
     ]
   });
 }
-
 /* =====================================================
    BULK CONFIRM → SAVE ALL TO DB + PDF
 ===================================================== */
@@ -1075,83 +1079,6 @@ Total: *${formatMoney(total, biz.currency)}*`
 /* =====================================================
    BULK CONFIRM → SAVE ALL TO DB + PDF
 ===================================================== */
-if (state === "expense_bulk_confirm") {
-  if (text === "exp_bulk_keep_adding") {
-    biz.sessionState = "expense_smart_entry";
-    await saveBizSafe(biz);
-    const items    = biz.sessionData?.bulkExpenses || [];
-    const runTotal = items.reduce((s, e) => s + e.amount, 0);
-    await sendText(from,
-      `➕ ${items.length} item(s) so far — ${formatMoney(runTotal, biz.currency)}\n\nKeep typing. *done* when finished.`
-    );
-    return true;
-  }
-
-  if (text === "exp_bulk_confirm_no") {
-    biz.sessionState = "expense_smart_entry";
-    await saveBizSafe(biz);
-    await sendText(from, "✏️ Keep adding. Type *done* when finished.");
-    return true;
-  }
-
-  if (text !== "exp_bulk_confirm_yes") {
-    await sendText(from, "Tap *Save All* to confirm or keep typing expenses.");
-    return true;
-  }
-
-  const items = biz.sessionData?.bulkExpenses || [];
-  if (!items.length) {
-    biz.sessionState = "ready"; biz.sessionData = {};
-    await saveBizSafe(biz);
-    await sendMainMenu(from);
-    return true;
-  }
-
-  const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-  await Expense.insertMany(items.map(e => ({
-    businessId:  biz._id,
-    branchId:    effectiveBranchId,
-    amount:      e.amount,
-    description: e.description,
-    category:    e.category,
-    method:      e.method || "Cash",
-    createdBy:   phone
-  })));
-
-  const total         = items.reduce((s, e) => s + e.amount, 0);
-  const savedBranchId = biz.sessionData.targetBranchId;
-  const lines         = items
-    .map(e => `• ${e.description} — ${formatMoney(e.amount, biz.currency)} (${e.method})`)
-    .join("\n");
-
-  try {
-    const receiptNum = `EXP-${Date.now()}`;
-    const { filename } = await generatePDF({
-      type: "receipt", number: receiptNum, date: new Date(),
-      billingTo: "Expense Record",
-      items: items.map(e => ({ item: `${e.category} — ${e.description}`, qty: 1, unit: e.amount, total: e.amount })),
-      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: "paid" }
-    });
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
-  } catch (e) { console.error("[BULK EXP PDF]", e.message); }
-
-  biz.sessionData  = { targetBranchId: savedBranchId };
-  biz.sessionState = "expense_add_another_menu";
-  await saveBizSafe(biz);
-
-  await sendText(from,
-`✅ *${items.length} expense(s) saved*
-
-${lines}
-─────────────────
-Total: *${formatMoney(total, biz.currency)}*`
-  );
-
-  const { sendExpenseAddAnotherMenu } = await import("./metaMenus.js");
-  await sendExpenseAddAnotherMenu(from);
-  return true;
-}
 
 // Guard: clean up stale states from old flow
 if (state === "expense_description" || state === "expense_quick_entry" || state === "expense_confirm") {
