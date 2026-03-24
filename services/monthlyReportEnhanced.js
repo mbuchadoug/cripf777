@@ -1,410 +1,132 @@
-/**
- * ═══════════════════════════════════════════════════════════════
- * ENHANCED MONTHLY REPORT - COMPLETE IMPLEMENTATION
- * ═══════════════════════════════════════════════════════════════
- * 
- * Includes all weekly features PLUS:
- * - Month-over-month comparison
- * - Top customers analysis
- * - Best/worst performing days
- * - Monthly targets tracking
- */
-
+import { sendText } from "./metaSender.js";
+import { sendDocument } from "./metaSender.js";
+import { sendMainMenu } from "./metaMenus.js";
 import {
-  buildProductSummary,
-  buildPaymentStatus,
-  buildOverdueAnalysis,
-  calculateKeyMetrics,
-  generateInsights,
-  generateActionItems,
-  formatProductList,
-  formatOverdueList,
-  formatCurrentList,
-  formatInsightsList,
-  formatActionsList
-} from "./reportHelpers.js";
+  fetchReportData, calcTotals, buildReportMessage, buildPDFItems, fmt, pct
+} from "./dailyReportEnhanced.js";
 
 export async function runMonthlyReportMetaEnhanced({ biz, from }) {
   const UserRole = (await import("../models/userRole.js")).default;
+  const { normalizePhone } = await import("./phone.js");
+  const { generatePDF } = await import("../routes/twilio_biz.js");
+
+  let phone = normalizePhone(from);
+  if (phone.startsWith("0")) phone = "263" + phone.slice(1);
+  const caller = await UserRole.findOne({ phone, pending: false });
+
+  const sessionBranchId = biz.sessionData?.reportBranchId || null;
+  if (sessionBranchId) { delete biz.sessionData.reportBranchId; await biz.save(); }
+
+  const branchId = sessionBranchId || (caller?.role !== "owner" ? caller?.branchId : null);
+  let branchName = null;
+  if (branchId) {
+    const Branch = (await import("../models/branch.js")).default;
+    const br = await Branch.findById(branchId).lean();
+    branchName = br?.name || null;
+  }
+
+  const now        = new Date();
+  const start      = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end        = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  // Previous month
+  const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+  const [data, prevData] = await Promise.all([
+    fetchReportData({ biz, start, end, branchId }),
+    fetchReportData({ biz, start: prevStart, end: prevEnd, branchId })
+  ]);
+
+  const totals     = calcTotals(data);
+  const prevTotals = calcTotals(prevData);
+  const cur        = biz.currency || "USD";
+
+  // Week-by-week breakdown within the month
+  const Invoice        = (await import("../models/invoice.js")).default;
   const InvoicePayment = (await import("../models/invoicePayment.js")).default;
-  const Invoice = (await import("../models/invoice.js")).default;
-  const Expense = (await import("../models/expense.js")).default;
-  const Client = (await import("../models/client.js")).default;
-  const { sendText } = await import("./metaSender.js");
-  const { sendMainMenu } = await import("./metaMenus.js");
+  const Expense        = (await import("../models/expense.js")).default;
 
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
+  const weeks = [];
+  let wStart = new Date(start);
+  while (wStart <= end) {
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wEnd.getDate() + 6);
+    if (wEnd > end) wEnd.setTime(end.getTime());
 
+    const wQ = { businessId: biz._id, createdAt: { $gte: wStart, $lte: wEnd }, ...(branchId ? { branchId } : {}) };
+    const [wPay, wRcpt, wExp] = await Promise.all([
+      InvoicePayment.aggregate([{ $match: wQ }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Invoice.aggregate([{ $match: { ...wQ, type: "receipt" } }, { $group: { _id: null, total: { $sum: "$total" } } }]),
+      Expense.aggregate([{ $match: wQ }, { $group: { _id: null, total: { $sum: "$amount" } } }])
+    ]);
 
-  // ✅ CHECK FOR BRANCH FILTER FROM SESSION (Owner branch report)
-const sessionBranchId = biz.sessionData?.reportBranchId;
+    const wIn  = (wPay[0]?.total || 0) + (wRcpt[0]?.total || 0);
+    const wOut = wExp[0]?.total || 0;
+    weeks.push({
+      label: `${wStart.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+      in: wIn, out: wOut, profit: wIn - wOut
+    });
 
-if (sessionBranchId) {
-  delete biz.sessionData.reportBranchId;
-  biz.sessionState = "ready";
-  await biz.save();
-}
+    wStart = new Date(wEnd);
+    wStart.setDate(wStart.getDate() + 1);
+    wStart.setHours(0, 0, 0, 0);
+  }
 
-const effectiveCaller = sessionBranchId && caller?.role === "owner"
-  ? { role: "manager", branchId: sessionBranchId }
-  : caller;
-  // Current month
-  const start = new Date();
-  start.setDate(1);
-  start.setHours(0, 0, 0, 0);
+  const weekBreakdown = weeks.map((w, i) =>
+    `  Wk${i + 1} ${w.label.padEnd(8)} In: ${fmt(w.in, cur).padEnd(10)} Out: ${fmt(w.out, cur).padEnd(10)} ${w.profit >= 0 ? "✅" : "❌"} ${fmt(w.profit, cur)}`
+  ).join("\n");
 
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-  // Previous month (for comparison)
-  const prevStart = new Date(start);
-  prevStart.setMonth(prevStart.getMonth() - 1);
-
-  const prevEnd = new Date(start);
-  prevEnd.setSeconds(prevEnd.getSeconds() - 1);
-
-  const query = {
-    businessId: biz._id,
-    createdAt: { $gte: start, $lte: end }
+  const growth = (curr, prev) => {
+    if (prev === 0) return curr > 0 ? "▲ New" : "";
+    const p = Math.round(((curr - prev) / prev) * 100);
+    return p > 0 ? `▲ +${p}%` : p < 0 ? `▼ ${p}%` : "→ 0%";
   };
 
-  const prevQuery = {
-    businessId: biz._id,
-    createdAt: { $gte: prevStart, $lte: prevEnd }
-  };
+  const monthName = start.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const prevMonthName = prevStart.toLocaleDateString("en-GB", { month: "long" });
 
- // Managers AND Clerks see branch-restricted reports
-if (effectiveCaller?.role === "manager" || effectiveCaller?.role === "clerk") {
-  if (effectiveCaller.branchId) {
-    query.branchId = effectiveCaller.branchId;
-    prevQuery.branchId = effectiveCaller.branchId;
-  }
-}
-
-  // ═══════════════════════════════════════════════════════════════
-  // FETCH CURRENT MONTH DATA
-  // ═══════════════════════════════════════════════════════════════
-
-  const invoices = await Invoice.find({
-    ...query,
-    type: "invoice"
-  }).lean();
-  
-  const receipts = await Invoice.find({
-    ...query,
-    type: "receipt"
-  }).lean();
-  
-  const payments = await InvoicePayment.find(query).lean();
-  const expenses = await Expense.find(query).lean();
-
-  // ═══════════════════════════════════════════════════════════════
-  // FETCH PREVIOUS MONTH DATA (for comparison)
-  // ═══════════════════════════════════════════════════════════════
-
-  const prevInvoices = await Invoice.find({
-    ...prevQuery,
-    type: "invoice"
-  }).lean();
-
-  const prevReceipts = await Invoice.find({
-    ...prevQuery,
-    type: "receipt"
-  }).lean();
-
-  const prevPayments = await InvoicePayment.find(prevQuery).lean();
-  const prevExpenses = await Expense.find(prevQuery).lean();
-
-  // ═══════════════════════════════════════════════════════════════
-  // CURRENT MONTH CALCULATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const paymentCash = payments.reduce((s, p) => s + (p.amount || 0), 0);
-  const receiptCash = receipts.reduce((s, r) => s + (r.total || 0), 0);
-  const cashReceived = paymentCash + receiptCash;
-  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-
-  // ═══════════════════════════════════════════════════════════════
-  // PREVIOUS MONTH CALCULATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  const prevInvoiced = prevInvoices.reduce((s, i) => s + (i.total || 0), 0);
-  const prevPaymentCash = prevPayments.reduce((s, p) => s + (p.amount || 0), 0);
-  const prevReceiptCash = prevReceipts.reduce((s, r) => s + (r.total || 0), 0);
-  const prevCashReceived = prevPaymentCash + prevReceiptCash;
-  const prevSpent = prevExpenses.reduce((s, e) => s + (e.amount || 0), 0);
-  const prevProfit = prevCashReceived - prevSpent;
-
-  // ═══════════════════════════════════════════════════════════════
-  // CALCULATE GROWTH RATES
-  // ═══════════════════════════════════════════════════════════════
-
-  function calculateGrowth(current, previous) {
-    if (previous === 0) {
-      return current > 0 ? 100 : 0;
-    }
-    return Math.round(((current - previous) / previous) * 100);
-  }
-
-  const revenueGrowth = calculateGrowth(invoiced, prevInvoiced);
-  const cashGrowth = calculateGrowth(cashReceived, prevCashReceived);
-  const expenseGrowth = calculateGrowth(spent, prevSpent);
-  const profit = cashReceived - spent;
-  const profitGrowth = calculateGrowth(profit, prevProfit);
-
-  // ═══════════════════════════════════════════════════════════════
-  // TOP CUSTOMERS ANALYSIS
-  // ═══════════════════════════════════════════════════════════════
-
-  const customerSpending = {};
-
-  // Aggregate from invoices
-  invoices.forEach(inv => {
-    const clientId = String(inv.clientId);
-    if (!customerSpending[clientId]) {
-      customerSpending[clientId] = 0;
-    }
-    customerSpending[clientId] += inv.total || 0;
+  const baseMsg = buildReportMessage({
+    biz, label: "Monthly Report",
+    periodLabel: monthName, data, totals, branchName
   });
 
-  // Aggregate from receipts
-  receipts.forEach(rec => {
-    const clientId = String(rec.clientId);
-    if (!customerSpending[clientId]) {
-      customerSpending[clientId] = 0;
-    }
-    customerSpending[clientId] += rec.total || 0;
-  });
-
-  // Get top 5 customers
-  const topCustomers = await Promise.all(
-    Object.entries(customerSpending)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(async ([clientId, amount]) => {
-        try {
-          const client = await Client.findById(clientId).lean();
-          return {
-            name: client?.name || client?.phone || "Unknown",
-            amount
-          };
-        } catch (err) {
-          return {
-            name: "Unknown",
-            amount
-          };
-        }
-      })
-  );
-
-  // ═══════════════════════════════════════════════════════════════
-  // BEST/WORST PERFORMING DAYS
-  // ═══════════════════════════════════════════════════════════════
-
-  const dailySales = {};
-
-  // Aggregate sales by day
-  [...invoices, ...receipts].forEach(doc => {
-    const day = new Date(doc.createdAt).toISOString().slice(0, 10);
-    if (!dailySales[day]) {
-      dailySales[day] = 0;
-    }
-    dailySales[day] += doc.total || 0;
-  });
-
-  const sortedDays = Object.entries(dailySales).sort((a, b) => b[1] - a[1]);
-  const bestDay = sortedDays[0] || null;
-  const worstDay = sortedDays[sortedDays.length - 1] || null;
-
-  // ═══════════════════════════════════════════════════════════════
-  // TOP INVOICES (Largest)
-  // ═══════════════════════════════════════════════════════════════
-
-  const topInvoices = invoices
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5);
-
-  let topInvoicesList = "";
-  topInvoices.forEach(inv => {
-    topInvoicesList += `  ${inv.number}: ${inv.total} ${biz.currency}\n`;
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // ENHANCED ANALYTICS
-  // ═══════════════════════════════════════════════════════════════
-
-  const productData = await buildProductSummary(invoices, receipts);
-  const paymentStatus = await buildPaymentStatus(invoices);
-  const metrics = calculateKeyMetrics({
-    invoiced,
-    cashReceived,
-    spent,
-    invoiceCount: invoices.length,
-    receiptCount: receipts.length
-  });
-  const overdueData = await buildOverdueAnalysis(invoices, biz);
-
-  // Expense breakdown
-  const expensesByCategory = {};
-  expenses.forEach(e => {
-    const cat = e.category || "Other";
-    if (!expensesByCategory[cat]) {
-      expensesByCategory[cat] = [];
-    }
-    expensesByCategory[cat].push({
-      desc: e.description || cat,
-      amount: e.amount
-    });
-  });
-
-  let expenseDetails = "";
-  Object.keys(expensesByCategory).forEach(cat => {
-    const items = expensesByCategory[cat];
-    const total = items.reduce((s, i) => s + i.amount, 0);
-    
-    expenseDetails += `${cat} (${total} ${biz.currency}):\n`;
-    
-    const grouped = {};
-    items.forEach(item => {
-      if (!grouped[item.desc]) {
-        grouped[item.desc] = { count: 0, total: 0 };
-      }
-      grouped[item.desc].count++;
-      grouped[item.desc].total += item.amount;
-    });
-    
-    Object.keys(grouped).forEach(desc => {
-      const g = grouped[desc];
-      if (g.count > 1) {
-        expenseDetails += `  • ${desc} (×${g.count}): ${g.total} ${biz.currency}\n`;
-      } else {
-        expenseDetails += `  • ${desc}: ${g.total} ${biz.currency}\n`;
-      }
-    });
-  });
-
-  const insights = generateInsights({
-    profitMargin: metrics.profitMargin,
-    collectionRate: metrics.collectionRate,
-    topProduct: productData.topProducts[0],
-    overdueCount: overdueData.overdue.length,
-    overdueAmount: overdueData.totalOverdue,
-    netProfit: metrics.netProfit,
-    currency: biz.currency
-  });
-
-  const actions = generateActionItems({
-    overdueInvoices: overdueData.overdue,
-    currentOutstanding: overdueData.current,
-    collectionRate: metrics.collectionRate,
-    profitMargin: metrics.profitMargin
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // FORMAT GROWTH INDICATORS
-  // ═══════════════════════════════════════════════════════════════
-
-  function formatGrowth(growth) {
-    if (growth > 0) return `📈 +${growth}%`;
-    if (growth < 0) return `📉 ${growth}%`;
-    return `━ 0%`;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD REPORT MESSAGE
-  // ═══════════════════════════════════════════════════════════════
-
- const msg = `📊 Monthly Report (${start.toISOString().slice(0,7)})
+  const extraSections =
+`
+━━━━━━━━━━━━━━━━━━━━
+WEEK BY WEEK
+${weekBreakdown}
 
 ━━━━━━━━━━━━━━━━━━━━
+VS ${prevMonthName.toUpperCase()}
+  Money In:   ${fmt(prevTotals.moneyIn, cur)} → ${fmt(totals.moneyIn, cur)}  ${growth(totals.moneyIn, prevTotals.moneyIn)}
+  Money Out:  ${fmt(prevTotals.moneyOut, cur)} → ${fmt(totals.moneyOut, cur)}  ${growth(totals.moneyOut, prevTotals.moneyOut)}
+  Profit:     ${fmt(prevTotals.profit, cur)} → ${fmt(totals.profit, cur)}  ${growth(totals.profit, prevTotals.profit)}
+`;
 
-💰 YOUR MONEY THIS MONTH
-Total Sales: ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
-Money In: ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
-Money Out: ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
-📈 PROFIT: ${profit >= 0 ? '+' : ''}${profit} ${biz.currency} ${formatGrowth(profitGrowth)}
+  const msg = baseMsg + extraSections;
 
-⚡ QUICK STATS
-Avg Sale: ${metrics.avgSale} ${biz.currency}
-${metrics.collectionRate}% Paid
-${metrics.profitMargin}% Profit
-
-━━━━━━━━━━━━━━━━━━━━
-
-📊 COMPARED TO LAST MONTH
-Sales: ${prevInvoiced} → ${invoiced} ${biz.currency} ${formatGrowth(revenueGrowth)}
-Money In: ${prevCashReceived} → ${cashReceived} ${biz.currency} ${formatGrowth(cashGrowth)}
-Costs: ${prevSpent} → ${spent} ${biz.currency} ${formatGrowth(expenseGrowth)}
-Profit: ${prevProfit >= 0 ? '+' : ''}${prevProfit} → ${profit >= 0 ? '+' : ''}${profit} ${biz.currency} ${formatGrowth(profitGrowth)}
-
-━━━━━━━━━━━━━━━━━━━━
-
-💵 WHERE MONEY CAME FROM
-Total Sales: ${invoiced} ${biz.currency}
-
-Cash Received:
-├─ From Invoices: ${paymentCash} ${biz.currency} (${payments.length} payments)
-└─ Direct Sales: ${receiptCash} ${biz.currency} (${receipts.length} sales)
-
-Invoice Status:
-├─ ✅ Fully Paid: ${paymentStatus.paid.count} invoices
-├─ 🟡 Partly Paid: ${paymentStatus.partial.count} invoices
-└─ ⚠️ Not Paid Yet: ${paymentStatus.unpaid.count} invoices
-
-━━━━━━━━━━━━━━━━━━━━
-
-📦 WHAT WAS SOLD
-${formatProductList(productData.topProducts, biz.currency)}
-💡 Sold ${productData.totalUnits} items (${productData.uniqueProducts} different products)
-
-━━━━━━━━━━━━━━━━━━━━
-
-👥 BEST CUSTOMERS THIS MONTH
-${topCustomers.map((c, i) => `${i + 1}. ${c.name} - ${c.amount} ${biz.currency}`).join('\n') || '  No customer data'}
-
-━━━━━━━━━━━━━━━━━━━━
-
-📅 BEST & WORST DAYS
-${bestDay ? `Best Day: ${bestDay[0]} (${bestDay[1]} ${biz.currency})` : 'No sales data'}
-${worstDay && worstDay !== bestDay ? `Slowest Day: ${worstDay[0]} (${worstDay[1]} ${biz.currency})` : ''}
-
-━━━━━━━━━━━━━━━━━━━━
-
-🔝 BIGGEST INVOICES
-${topInvoicesList || "  None\n"}
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ CUSTOMERS OWE YOU (${outstanding} ${biz.currency})
-
-Late Payments (more than ${biz.paymentTermsDays || 30} days):
-${formatOverdueList(overdueData.overdue, biz.currency)}
-Recent (less than ${biz.paymentTermsDays || 30} days):
-${formatCurrentList(overdueData.current, biz.currency)}
-━━━━━━━━━━━━━━━━━━━━
-
-💸 WHAT YOU SPENT (${spent} ${biz.currency})
-${expenseDetails || "  Nothing spent\n"}
-━━━━━━━━━━━━━━━━━━━━
-
-💡 WHAT THIS MEANS
-${formatInsightsList(insights)}
-🎯 WHAT TO DO NEXT
-${formatActionsList(actions)}
-━━━━━━━━━━━━━━━━━━━━
-
-📋 ${invoices.length} invoices | ${payments.length} payments | ${receipts.length} direct sales | ${expenses.length} expenses`;
-
-  biz.sessionState = "ready";
-  biz.sessionData = {};
+  biz.sessionState = "ready"; biz.sessionData = {};
   await biz.save();
 
   await sendText(from, msg);
+
+  try {
+    const reportNum = `RPT-M-${Date.now()}`;
+    const { filename } = await generatePDF({
+      type: "receipt", number: reportNum, date: start,
+      billingTo: `Monthly Report — ${monthName}${branchName ? ` (${branchName})` : ""}`,
+      items: [
+        ...buildPDFItems(totals, data.expenses, cur),
+        { item: "─────────────────", qty: 0, unit: 0, total: 0 },
+        ...weeks.map((w, i) => ({ item: `Week ${i + 1} (${w.label})`, qty: 1, unit: w.in, total: w.profit }))
+      ],
+      bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", _id: biz._id.toString(), status: totals.profit >= 0 ? "profit" : "loss" }
+    });
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+  } catch (e) { console.error("[MONTHLY REPORT PDF]", e.message); }
+
   await sendMainMenu(from);
   return true;
 }
