@@ -9,7 +9,7 @@ export const SUPPLIER_PLANS = {
   },
   pro: {
     name: "Pro",
-    monthly: { price: 12,  currency: "USD", durationDays: 30  },
+    monthly: { price: 0.05,  currency: "USD", durationDays: 30  },
     annual:  { price: 120, currency: "USD", durationDays: 365 }
   },
   featured: {
