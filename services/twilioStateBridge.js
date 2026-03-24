@@ -911,6 +911,93 @@ They must click it to join.`);
   /* ===========================
      ITEM ADDING
   ============================ */
+
+
+
+// ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
+if (state === "creating_invoice_pick_product") {
+  const raw = trimmed;
+
+  // Parse "NxQTY" or "N x QTY" entries separated by commas
+  const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
+  const picked = [];
+  const errors = [];
+
+  const catalogue = biz.sessionData?.catalogueProducts || [];
+
+  for (const entry of entries) {
+    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)$/);
+    if (!match) { errors.push(entry); continue; }
+
+    const itemNum = parseInt(match[1], 10);
+    const qty = parseFloat(match[2]);
+
+    if (itemNum < 1 || itemNum > catalogue.length) {
+      errors.push(`#${itemNum} (out of range)`);
+      continue;
+    }
+    if (isNaN(qty) || qty <= 0) {
+      errors.push(`qty for #${itemNum}`);
+      continue;
+    }
+
+    const product = catalogue[itemNum - 1];
+    picked.push({
+      item: product.name,
+      qty,
+      unit: product.unitPrice,
+      source: "catalogue"
+    });
+  }
+
+  if (!picked.length) {
+    await sendText(from,
+`❌ Couldn't read that.
+
+Format: *number × quantity*
+Examples:
+_3x2_ — item 3, qty 2
+_3x2, 7x1, 12x5_ — multiple items
+
+Or type *cancel* to go back.`
+    );
+    return true;
+  }
+
+  // Add all picked items to invoice
+  biz.sessionData.items = [...(biz.sessionData.items || []), ...picked];
+
+  const errorNote = errors.length
+    ? `\n\n⚠️ Skipped ${errors.length} unreadable entr${errors.length === 1 ? "y" : "ies"}: ${errors.join(", ")}`
+    : "";
+
+  const summary = picked
+    .map(p => `• ${p.item} x${p.qty} @ ${formatMoney(p.unit, biz.currency)} = ${formatMoney(p.unit * p.qty, biz.currency)}`)
+    .join("\n");
+
+  const totalAdded = picked.reduce((sum, p) => sum + p.unit * p.qty, 0);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  const allItems = biz.sessionData.items;
+  const fullSummary = allItems
+    .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${formatMoney(i.unit, biz.currency)}`)
+    .join("\n");
+
+  return sendInvoiceConfirmMenu(from,
+`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
+
+${summary}
+
+─────────────────
+*Invoice so far (${allItems.length} item${allItems.length === 1 ? "" : "s"}):*
+${fullSummary}`
+  );
+}
+
+
+
   if (state === "creating_invoice_add_items") {
 
     if (biz.sessionData.itemMode === null && !biz.sessionData.lastItem && !biz.sessionData.expectingQty) {

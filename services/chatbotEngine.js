@@ -1336,13 +1336,12 @@ async function startOnboarding(from, phone) {
   await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
 }
 
-async function showSalesDocs(from, type, ownerBranchId = undefined) {
+async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const phone = from.replace(/\D+/g, "");
   const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
-
   const query = { businessId: biz._id, type };
 
   if (caller?.role === "owner" && ownerBranchId !== undefined) {
@@ -1351,24 +1350,49 @@ async function showSalesDocs(from, type, ownerBranchId = undefined) {
     query.branchId = caller.branchId;
   }
 
-  const docs = await Invoice.find(query).sort({ createdAt: -1 }).limit(10).lean();
+  const PAGE_SIZE = 8;
+  const total = await Invoice.countDocuments(query);
 
-  if (!docs.length) {
-    await sendText(from, `No ${type}s found.`);
+  if (!total) {
+    await sendText(from, `📄 No ${type}s found.`);
     return sendSalesMenu(from);
   }
 
-  let header = `📄 Select ${type}`;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const docs = await Invoice.find(query).sort({ createdAt: -1 }).skip(page * PAGE_SIZE).limit(PAGE_SIZE).lean();
+
+  let header = `📄 ${type[0].toUpperCase() + type.slice(1)}s`;
   if (ownerBranchId && caller?.role === "owner") {
     const branch = await Branch.findById(ownerBranchId);
-    if (branch) header = `📄 ${type}s - ${branch.name}`;
+    if (branch) header += ` — ${branch.name}`;
   } else if (caller?.role === "owner" && ownerBranchId === null) {
-    header = `📄 ${type}s - All Branches`;
+    header += ` — All Branches`;
   }
 
-  return sendList(from, header,
-    docs.map(d => ({ id: `doc_${d._id}`, title: `${d.number} - ${d.total} ${d.currency}` }))
-  );
+  // Use sendList only if ≤9 items (WhatsApp safe limit), else paginated text
+  if (docs.length <= 9) {
+    const rows = docs.map(d => ({
+      id: `doc_${d._id}`,
+      title: `${d.number} — $${Number(d.total || 0).toFixed(2)}`
+    }));
+    if (page < totalPages - 1) {
+      rows.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page + 1}`, title: "➡ More" });
+    }
+    return sendList(from, `${header} (${total} total, pg ${page + 1}/${totalPages})`, rows);
+  }
+
+  // Paginated text fallback for larger sets
+  let msg = `${header}\nPage ${page + 1}/${totalPages} · ${total} total\n\n`;
+  docs.forEach((d, i) => {
+    msg += `${page * PAGE_SIZE + i + 1}. *${d.number}* — $${Number(d.total || 0).toFixed(2)} ${d.currency || ""}\n`;
+  });
+  await sendText(from, msg);
+
+  const navBtns = [];
+  if (page > 0)              navBtns.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page - 1}`, title: "⬅ Prev" });
+  if (page < totalPages - 1) navBtns.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page + 1}`, title: "➡ Next" });
+  navBtns.push({ id: ACTIONS.SALES_MENU, title: "⬅ Back" });
+  return sendButtons(from, { text: "Navigate:", buttons: navBtns.slice(0, 3) });
 }
 
 // ─── Client list helper ───────────────────────────────────────────────────────
@@ -1457,6 +1481,12 @@ a.startsWith("sup_load_preset_") ||
       a === "onboard_business" ||
          a === "main_menu_back" ||
       a === "biz_tools_menu" ||
+       a.startsWith("inv_cat_page_") ||
+
+        a.startsWith("view_invoices_page_") ||
+      a.startsWith("view_quotes_page_") ||
+        a.startsWith("view_receipts_page_") ||
+      a.startsWith("view_all_products_page_") ||
       a === "suppliers_home" ||
       a === "back" ||
       a === "suppliers_home" ||
@@ -2392,19 +2422,17 @@ return sendButtons(from, {
     return;
   }
 
-if (a === "inv_item_catalogue") {
+if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
     if (!biz) return sendMainMenu(from);
+
     const query = { businessId: biz._id, isActive: true };
     let branchFilter = null;
-
     if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
       branchFilter = caller.branchId;
     } else if (caller?.role === "owner" && biz.sessionData?.targetBranchId) {
       branchFilter = biz.sessionData.targetBranchId;
     }
-
     if (branchFilter) {
-      // Match branch-scoped products OR unscoped (branchId null) — catches supplier-synced products
       query.$or = [
         { branchId: branchFilter },
         { branchId: null },
@@ -2412,9 +2440,9 @@ if (a === "inv_item_catalogue") {
       ];
     }
 
-    const products = await Product.find(query).limit(20);
+    const allProducts = await Product.find(query).sort({ name: 1 }).lean();
 
-    if (!products.length) {
+    if (!allProducts.length) {
       biz.sessionState = "creating_invoice_add_items";
       biz.sessionData.itemMode = "choose_catalogue_or_custom";
       await saveBizSafe(biz);
@@ -2422,24 +2450,55 @@ if (a === "inv_item_catalogue") {
         text: "📦 No items in catalogue yet.\n\nWhat would you like to do?",
         buttons: [
           { id: "inv_add_new_product", title: "➕ Add new product" },
-          { id: "inv_item_custom", title: "✍️ Custom item" }
+          { id: "inv_item_custom",     title: "✍️ Custom item" }
         ]
       });
     }
 
+    const PAGE_SIZE = 20;
+    const page = a.startsWith("inv_cat_page_") ? parseInt(a.replace("inv_cat_page_", ""), 10) || 0 : 0;
+    const totalPages = Math.ceil(allProducts.length / PAGE_SIZE);
+    const start = page * PAGE_SIZE;
+    const visible = allProducts.slice(start, start + PAGE_SIZE);
+
+    // Store full product list in session for quick-pick lookup by number
     biz.sessionState = "creating_invoice_pick_product";
+    biz.sessionData.catalogueProducts = allProducts.map(p => ({
+      _id: p._id.toString(),
+      name: p.name,
+      unitPrice: p.unitPrice
+    }));
+    biz.sessionData.cataloguePage = page;
     await saveBizSafe(biz);
 
-    const productList = products.map(p => ({
-      id: `prod_${p._id}`,
-      title: `${p.name} (${formatMoney(p.unitPrice, biz.currency)})`
-    }));
-    productList.push(
-      { id: "inv_add_new_product", title: "➕ Add new product" },
-      { id: "inv_item_custom", title: "✍️ Enter custom item" }
+    // Build numbered text list
+    const numbered = visible
+      .map((p, i) => `${start + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}`)
+      .join("\n");
+
+    await sendText(from,
+`📦 *Product Catalogue*
+Page ${page + 1} of ${totalPages} · ${allProducts.length} item${allProducts.length === 1 ? "" : "s"}
+
+${numbered}
+
+─────────────────
+*Quick-pick: type number × quantity*
+_One item:_  3x2
+_Multiple:_  3x2, 7x1, 12x5
+_Add all prices automatically_`
     );
 
-    return sendList(from, "📦 Select item", productList);
+    // Navigation + action buttons
+    const navBtns = [];
+    if (page > 0)              navBtns.push({ id: `inv_cat_page_${page - 1}`, title: "⬅ Prev" });
+    if (page < totalPages - 1) navBtns.push({ id: `inv_cat_page_${page + 1}`, title: "➡ Next" });
+    navBtns.push({ id: "inv_item_custom", title: "✍️ Custom item" });
+
+    return sendButtons(from, {
+      text: "Pick items by number or tap an option:",
+      buttons: navBtns.slice(0, 3)
+    });
   }
 
   if (a === "add_another_expense") {
@@ -9412,6 +9471,18 @@ Categories auto-detected ✨
     default: {
       // ── Sales doc branch selectors ─────────────────────────────────────────
       if (a === "view_all_invoices") return showSalesDocs(from, "invoice", null);
+      // Paginated doc navigation: view_invoices_page_{branchId|all}_{page}
+      if (a.startsWith("view_invoices_page_") || a.startsWith("view_quotes_page_") || a.startsWith("view_receipts_page_")) {
+        const typeMap = { view_invoices_page_: "invoice", view_quotes_page_: "quote", view_receipts_page_: "receipt" };
+        const prefix = Object.keys(typeMap).find(k => a.startsWith(k));
+        const docType = typeMap[prefix];
+        const rest = a.replace(prefix, "");
+        const lastUnderscore = rest.lastIndexOf("_");
+        const branchPart = rest.slice(0, lastUnderscore);
+        const pageNum = parseInt(rest.slice(lastUnderscore + 1), 10) || 0;
+        const branchId = branchPart === "all" ? null : branchPart;
+        return showSalesDocs(from, docType, branchId, pageNum);
+      }
       if (a.startsWith("view_invoices_branch_")) return showSalesDocs(from, "invoice", a.replace("view_invoices_branch_", ""));
       if (a === "view_all_quotes") return showSalesDocs(from, "quote", null);
       if (a.startsWith("view_quotes_branch_")) return showSalesDocs(from, "quote", a.replace("view_quotes_branch_", ""));
@@ -9419,26 +9490,44 @@ Categories auto-detected ✨
       if (a.startsWith("view_receipts_branch_")) return showSalesDocs(from, "receipt", a.replace("view_receipts_branch_", ""));
 
       // ── Product branch selectors ───────────────────────────────────────────
-      if (a === "view_all_products") {
+if (a === "view_all_products" || a.startsWith("view_all_products_page_")) {
         if (!biz) return sendMainMenu(from);
-        const products = await Product.find({ businessId: biz._id, isActive: true }).lean();
+        const products = await Product.find({ businessId: biz._id, isActive: true }).sort({ name: 1 }).lean();
         if (!products.length) { await sendText(from, "📦 No products found."); return sendProductsMenu(from); }
-        let msg = "📦 *All Products (All Branches):*\n\n";
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        const PAGE = 25;
+        const page = a.startsWith("view_all_products_page_") ? parseInt(a.replace("view_all_products_page_", ""), 10) || 0 : 0;
+        const totalPages = Math.ceil(products.length / PAGE);
+        const slice = products.slice(page * PAGE, page * PAGE + PAGE);
+        let msg = `📦 *All Products* — Page ${page + 1}/${totalPages} (${products.length} total)\n\n`;
+        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
-        return sendProductsMenu(from);
+        const navBtns = [];
+        if (page > 0)              navBtns.push({ id: `view_all_products_page_${page - 1}`, title: "⬅ Prev" });
+        if (page < totalPages - 1) navBtns.push({ id: `view_all_products_page_${page + 1}`, title: "➡ Next" });
+        navBtns.push({ id: ACTIONS.PRODUCTS_MENU, title: "⬅ Back" });
+        return sendButtons(from, { text: "Navigate products:", buttons: navBtns.slice(0, 3) });
       }
 
-      if (a.startsWith("view_products_branch_")) {
-        const branchId = a.replace("view_products_branch_", "");
+   if (a.startsWith("view_products_branch_")) {
+        // format: view_products_branch_{branchId}  OR  view_products_branch_{branchId}_page_{N}
         if (!biz) return sendMainMenu(from);
+        const pageMatch = a.match(/_page_(\d+)$/);
+        const page = pageMatch ? parseInt(pageMatch[1], 10) : 0;
+        const branchId = a.replace(/_page_\d+$/, "").replace("view_products_branch_", "");
         const branch = await Branch.findById(branchId);
-        const products = await Product.find({ businessId: biz._id, branchId, isActive: true }).lean();
-        if (!products.length) { await sendText(from, `📦 No products found for ${branch?.name || "this branch"}.`); return sendProductsMenu(from); }
-        let msg = `📦 *Products (${branch?.name || "Branch"}):*\n\n`;
-        products.forEach((p, i) => { msg += `${i + 1}) *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}\n`; });
+        const products = await Product.find({ businessId: biz._id, isActive: true, $or: [{ branchId }, { branchId: null }, { branchId: { $exists: false } }] }).sort({ name: 1 }).lean();
+        if (!products.length) { await sendText(from, `📦 No products for ${branch?.name || "this branch"}.`); return sendProductsMenu(from); }
+        const PAGE = 25;
+        const totalPages = Math.ceil(products.length / PAGE);
+        const slice = products.slice(page * PAGE, page * PAGE + PAGE);
+        let msg = `📦 *${branch?.name || "Branch"} Products* — Page ${page + 1}/${totalPages}\n\n`;
+        slice.forEach((p, i) => { msg += `${page * PAGE + i + 1}. *${p.name}* — ${formatMoney(p.unitPrice, biz.currency)}\n`; });
         await sendText(from, msg);
-        return sendProductsMenu(from);
+        const navBtns = [];
+        if (page > 0)              navBtns.push({ id: `view_products_branch_${branchId}_page_${page - 1}`, title: "⬅ Prev" });
+        if (page < totalPages - 1) navBtns.push({ id: `view_products_branch_${branchId}_page_${page + 1}`, title: "➡ Next" });
+        navBtns.push({ id: ACTIONS.PRODUCTS_MENU, title: "⬅ Back" });
+        return sendButtons(from, { text: "Navigate:", buttons: navBtns.slice(0, 3) });
       }
 
       // "cashbal_branch_all"
