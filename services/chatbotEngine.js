@@ -1374,30 +1374,60 @@ async function startOnboarding(from, phone) {
   await sendText(from, "👋 Welcome! Let's set up your business.\n\nSend your business name:");
 }
 
-async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0) {
+async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0, search = null) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const phone = from.replace(/\D+/g, "");
   const caller = await UserRole.findOne({ businessId: biz._id, phone, pending: false });
-  const query = { businessId: biz._id, type };
 
+  const query = { businessId: biz._id, type };
   if (caller?.role === "owner" && ownerBranchId !== undefined) {
     if (ownerBranchId !== null) query.branchId = ownerBranchId;
   } else if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
     query.branchId = caller.branchId;
   }
 
+  // Search filter — match invoice number or client name
+  if (search) {
+    query.$or = [
+      { number: { $regex: search, $options: "i" } }
+    ];
+    // Also try to match by client name via lookup
+    const Client = (await import("../models/client.js")).default;
+    const matchedClients = await Client.find({
+      businessId: biz._id,
+      name: { $regex: search, $options: "i" }
+    }).distinct("_id");
+    if (matchedClients.length) {
+      query.$or.push({ clientId: { $in: matchedClients } });
+    }
+  }
+
   const PAGE_SIZE = 8;
   const total = await Invoice.countDocuments(query);
 
   if (!total) {
-    await sendText(from, `📄 No ${type}s found.`);
+    const msg = search
+      ? `📄 No ${type}s found matching "*${search}*".`
+      : `📄 No ${type}s found.`;
+    await sendText(from, msg);
     return sendSalesMenu(from);
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const docs = await Invoice.find(query).sort({ createdAt: -1 }).skip(page * PAGE_SIZE).limit(PAGE_SIZE).lean();
+  const safePage   = Math.min(page, totalPages - 1);
+  const docs = await Invoice.find(query)
+    .sort({ createdAt: -1 })
+    .skip(safePage * PAGE_SIZE)
+    .limit(PAGE_SIZE)
+    .lean();
+
+  // Load client names for display
+  const Client = (await import("../models/client.js")).default;
+  const clientIds = [...new Set(docs.map(d => d.clientId?.toString()).filter(Boolean))];
+  const clients   = await Client.find({ _id: { $in: clientIds } }).lean();
+  const clientMap = Object.fromEntries(clients.map(c => [c._id.toString(), c.name || c.phone || "—"]));
 
   let header = `📄 ${type[0].toUpperCase() + type.slice(1)}s`;
   if (ownerBranchId && caller?.role === "owner") {
@@ -1406,31 +1436,46 @@ async function showSalesDocs(from, type, ownerBranchId = undefined, page = 0) {
   } else if (caller?.role === "owner" && ownerBranchId === null) {
     header += ` — All Branches`;
   }
+  if (search) header += ` 🔍 "${search}"`;
 
-  // Use sendList only if ≤9 items (WhatsApp safe limit), else paginated text
-  if (docs.length <= 9) {
-    const rows = docs.map(d => ({
-      id: `doc_${d._id}`,
-      title: `${d.number} — $${Number(d.total || 0).toFixed(2)}`
-    }));
-    if (page < totalPages - 1) {
-      rows.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page + 1}`, title: "➡ More" });
-    }
-    return sendList(from, `${header} (${total} total, pg ${page + 1}/${totalPages})`, rows);
-  }
+  const typeCode   = type === "invoice" ? "inv" : type === "quote" ? "qt" : "rct";
+  const branchCode = ownerBranchId || "all";
+  const searchCode = search ? encodeURIComponent(search) : "0";
 
-  // Paginated text fallback for larger sets
-  let msg = `${header}\nPage ${page + 1}/${totalPages} · ${total} total\n\n`;
+  // Build numbered text list — always use text (not sendList) to avoid row limits
+  let msg = `${header}\nPage ${safePage + 1}/${totalPages} · ${total} total\n\n`;
   docs.forEach((d, i) => {
-    msg += `${page * PAGE_SIZE + i + 1}. *${d.number}* — $${Number(d.total || 0).toFixed(2)} ${d.currency || ""}\n`;
+    const statusIcon = d.status === "paid" ? "✅" : d.status === "partial" ? "⏳" : "🔴";
+    const clientName = clientMap[d.clientId?.toString()] || "";
+    const clientPart = clientName ? ` · ${clientName}` : "";
+    msg += `${safePage * PAGE_SIZE + i + 1}. *${d.number}*${clientPart}\n   $${Number(d.total || 0).toFixed(2)} ${d.currency || ""} ${statusIcon}\n`;
   });
+  msg += `\nTap a number to open it, or use the buttons below.`;
+
+  // Store doc list in session so user can type a number to open
+  biz.sessionState = "sales_doc_list";
+  biz.sessionData  = {
+    docListType:    type,
+    docListPage:    safePage,
+    docListBranch:  ownerBranchId,
+    docListSearch:  search,
+    docListIds:     docs.map(d => d._id.toString()),
+    docListOffset:  safePage * PAGE_SIZE
+  };
+  await saveBizSafe(biz);
+
   await sendText(from, msg);
 
+  // Navigation buttons (max 3)
   const navBtns = [];
-  if (page > 0)              navBtns.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page - 1}`, title: "⬅ Prev" });
-  if (page < totalPages - 1) navBtns.push({ id: `view_${type}s_page_${ownerBranchId || "all"}_${page + 1}`, title: "➡ Next" });
-  navBtns.push({ id: ACTIONS.SALES_MENU, title: "⬅ Back" });
-  return sendButtons(from, { text: "Navigate:", buttons: navBtns.slice(0, 3) });
+  if (safePage > 0)              navBtns.push({ id: `vdoc_prev_${typeCode}_${branchCode}_${safePage}_${searchCode}`, title: "⬅ Prev" });
+  if (safePage < totalPages - 1) navBtns.push({ id: `vdoc_next_${typeCode}_${branchCode}_${safePage}_${searchCode}`, title: "➡ Next" });
+  navBtns.push({ id: `vdoc_search_${typeCode}_${branchCode}`, title: "🔍 Search" });
+
+  return sendButtons(from, {
+    text: navBtns.length > 1 ? "Navigate or search:" : "Search by number or client name:",
+    buttons: navBtns.slice(0, 3)
+  });
 }
 
 // ─── Client list helper ───────────────────────────────────────────────────────
@@ -1544,10 +1589,16 @@ a.startsWith("sup_load_preset_") ||
      a.startsWith("cashbal_branch_") ||
   a === "sup_search_next_page" ||
       a === "sup_search_prev_page" ||
-      a === "exp_show_categories" ||
+      a.startsWith("vdoc_prev_") ||
+      a.startsWith("vdoc_next_") ||
+      a.startsWith("vdoc_search_") ||
+    a === "exp_show_categories" ||
       a === "exp_bulk_confirm_yes" ||
       a === "exp_bulk_confirm_no" ||
-      a === "exp_bulk_keep_adding"
+      a === "exp_bulk_keep_adding" ||
+      a.startsWith("paylist_prev_") ||
+      a.startsWith("paylist_next_") ||
+      a.startsWith("paylist_search_")
     
     );
 
@@ -1720,6 +1771,9 @@ const allowedWithoutBiz =
   a.startsWith("sup_cart_clear_") ||
   a.startsWith("sup_cart_remove_") ||
   a.startsWith("sup_cart_custom_") ||
+  a.startsWith("paylist_prev_") ||
+      a.startsWith("paylist_next_") ||
+      a.startsWith("paylist_search_") ||
 a === "sup_search_next_page" ||
   a === "sup_search_prev_page" ||
   a === "my_supplier_account" ||
@@ -2476,6 +2530,47 @@ Type amount or tap Full:`,
 
   // ── Invoice confirm actions ────────────────────────────────────────────────
 
+// ── Payment invoice list: prev / next / search ────────────────────────────
+  if (a.startsWith("paylist_prev_") || a.startsWith("paylist_next_")) {
+    if (!biz) return sendMainMenu(from);
+    const raw       = a.replace("paylist_prev_", "").replace("paylist_next_", "");
+    const parts     = raw.split("_");
+    const branchRaw = parts[0] === "br0" ? null : parts[0];
+    const curPage   = parseInt(parts[1]) || 0;
+    const newPage   = a.startsWith("paylist_prev_") ? curPage - 1 : curPage + 1;
+    await showUnpaidInvoices(from, branchRaw, Math.max(0, newPage));
+    return;
+  }
+
+  if (a.startsWith("paylist_search_")) {
+    if (!biz) return sendMainMenu(from);
+    const branchRaw = a.replace("paylist_search_", "");
+    biz.sessionState = "payment_invoice_search";
+    biz.sessionData  = { invoiceSearchBranch: branchRaw === "br0" ? null : branchRaw };
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: "🔍 *Search Invoices*\n\nType invoice number:\n_e.g. INV-000005_",
+      buttons: [{ id: ACTIONS.PAYMENTS_MENU, title: "❌ Cancel" }]
+    });
+  }
+
+  // ── Doc search result — triggered after user types search term ────────────
+  if (biz?.sessionState === "sales_doc_search_ready") {
+    const docType    = biz.sessionData?.docSearchType   || "invoice";
+    const branchRaw  = biz.sessionData?.docSearchBranch;
+    const search     = biz.sessionData?.docSearchTerm   || null;
+    const branch     = branchRaw === undefined ? undefined : (branchRaw || null);
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+    return showSalesDocs(from, docType, branch, 0, search);
+  }
+
+  // ── Invoice confirm actions ────────────────────────────────────────────────
+
+
+
+
+
   if (a === "inv_generate_pdf") {
     if (!biz) return sendMainMenu(from);
     const summary = biz.sessionData.items
@@ -2963,6 +3058,51 @@ Categories auto-detected ✨
     return sendSalesMenu(from);
   }
 
+
+  // ── Doc list: prev/next page navigation ───────────────────────────────────
+  if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
+    if (!biz) return sendMainMenu(from);
+    // format: vdoc_prev_inv_all_2_0  or  vdoc_next_qt_branchId_0_searchterm
+    const parts     = a.replace("vdoc_prev_", "").replace("vdoc_next_", "").split("_");
+    const typeMap   = { inv: "invoice", qt: "quote", rct: "receipt" };
+    const docType   = typeMap[parts[0]] || "invoice";
+    const branchRaw = parts[1] === "all" ? null : parts[1];
+    const curPage   = parseInt(parts[2]) || 0;
+    const searchRaw = parts.slice(3).join("_");
+    const search    = searchRaw === "0" ? null : decodeURIComponent(searchRaw);
+    const newPage   = a.startsWith("vdoc_prev_") ? curPage - 1 : curPage + 1;
+    return showSalesDocs(from, docType, branchRaw ?? undefined, Math.max(0, newPage), search);
+  }
+
+  // ── Doc list: search trigger ────────────────────────────────────────────────
+  if (a.startsWith("vdoc_search_")) {
+    if (!biz) return sendMainMenu(from);
+    const parts   = a.replace("vdoc_search_", "").split("_");
+    const typeMap = { inv: "invoice", qt: "quote", rct: "receipt" };
+    const docType = typeMap[parts[0]] || "invoice";
+    biz.sessionState = "sales_doc_search";
+    biz.sessionData  = {
+      docSearchType:   docType,
+      docSearchBranch: parts[1] === "all" ? null : parts[1]
+    };
+    await saveBizSafe(biz);
+    return sendButtons(from, {
+      text: `🔍 *Search ${docType}s*\n\nType invoice number or client name:\n_e.g. INV-000001 or John_`,
+      buttons: [{ id: ACTIONS.SALES_MENU, title: "❌ Cancel" }]
+    });
+  }
+
+
+  // ── Doc list: search result (triggered after user types search term) ───────
+  if (biz?.sessionState === "sales_doc_search_ready") {
+    const docType   = biz.sessionData?.docSearchType   || "invoice";
+    const branchRaw = biz.sessionData?.docSearchBranch;
+    const search    = biz.sessionData?.docSearchTerm   || null;
+    const branch    = branchRaw === undefined ? undefined : (branchRaw || null);
+    biz.sessionState = "ready"; biz.sessionData = {};
+    await saveBizSafe(biz);
+    return showSalesDocs(from, docType, branch, 0, search);
+  }
   // ── Invoice client picker ──────────────────────────────────────────────────
   if (al.startsWith("client_") && al !== ACTIONS.CLIENT_STATEMENT) {
     await handleClientPicked(from, al.replace("client_", ""));
@@ -4117,7 +4257,7 @@ Or type *same* to use this WhatsApp number.`);
 
   // ── Sales document actions ─────────────────────────────────────────────────
 
-  if (a.startsWith("doc_") && a !== ACTIONS.VIEW_DOC && a !== ACTIONS.DELETE_DOC) {
+if (a.startsWith("doc_") && a !== ACTIONS.VIEW_DOC && a !== ACTIONS.DELETE_DOC) {
     const docId = a.replace("doc_", "");
     if (!biz) return sendMainMenu(from);
     const doc = await Invoice.findById(docId);
@@ -4126,14 +4266,36 @@ Or type *same* to use this WhatsApp number.`);
     biz.sessionState = "sales_doc_action"; biz.sessionData = { docId };
     await saveBizSafe(biz);
 
-    const buttons = [{ id: ACTIONS.VIEW_DOC, title: "📄 View PDF" }];
-    if (caller && ["owner", "manager"].includes(caller.role)) {
-      buttons.push({ id: ACTIONS.DELETE_DOC, title: "🗑 Delete" });
-    }
-    buttons.push({ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" });
-    buttons.push({ id: ACTIONS.BACK, title: "⬅ Back to List" });
+    const isManager = caller && ["owner", "manager"].includes(caller.role);
+    const cur = doc.currency || biz.currency || "USD";
 
-    return sendButtons(from, { text: `📄 ${doc.number}\nStatus: ${doc.status}`, buttons });
+    // Build doc summary text
+    const statusEmoji = doc.status === "paid" ? "✅" : doc.status === "partial" ? "⏳" : "🔴";
+    const docText =
+`📄 *${doc.number}*
+Type: ${doc.type} | ${statusEmoji} ${doc.status}
+Total: $${Number(doc.total || 0).toFixed(2)} ${cur}
+Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}`;
+
+    // Max 3 buttons — priority: View PDF, Delete (managers only), Back
+    if (isManager) {
+      return sendButtons(from, {
+        text: docText,
+        buttons: [
+          { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+          { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
+          { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
+        ]
+      });
+    }
+    return sendButtons(from, {
+      text: docText,
+      buttons: [
+        { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+        { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
+        { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
+      ]
+    });
   }
 
   if (a === ACTIONS.VIEW_DOC) {

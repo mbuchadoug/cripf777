@@ -341,9 +341,146 @@ const restrictedStateMap = {
     return true;
   }
 
+
+
+
+/* ===========================
+   SALES DOC LIST — type a number to open
+   e.g. user sees numbered list and types "3"
+=========================== */
+if (state === "sales_doc_list") {
+  const num = parseInt(trimmed);
+  const ids    = biz.sessionData?.docListIds || [];
+  const offset = biz.sessionData?.docListOffset || 0;
+
+  if (!isNaN(num) && num >= 1) {
+    const localIdx = num - offset - 1; // convert display number to array index
+    const docId    = ids[localIdx];
+    if (docId) {
+      const doc = await Invoice.findById(docId).lean();
+      if (doc) {
+        biz.sessionState = "sales_doc_action";
+        biz.sessionData  = { docId };
+        await saveBizSafe(biz);
+
+        const statusEmoji = doc.status === "paid" ? "✅" : doc.status === "partial" ? "⏳" : "🔴";
+        const docText =
+`📄 *${doc.number}*
+Type: ${doc.type} | ${statusEmoji} ${doc.status}
+Total: $${Number(doc.total || 0).toFixed(2)} ${doc.currency || ""}
+Paid: $${Number(doc.amountPaid || 0).toFixed(2)} | Balance: $${Number(doc.balance || 0).toFixed(2)}`;
+
+        const isManager = caller && ["owner", "manager"].includes(caller.role);
+        if (isManager) {
+          return sendButtons(from, {
+            text: docText,
+            buttons: [
+              { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+              { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
+              { id: ACTIONS.SALES_MENU, title: "⬅ Back" }
+            ]
+          });
+        }
+        return sendButtons(from, {
+          text: docText,
+          buttons: [
+            { id: ACTIONS.VIEW_DOC,   title: "📄 View PDF" },
+            { id: ACTIONS.SALES_MENU, title: "⬅ Back" },
+            { id: ACTIONS.MAIN_MENU,  title: "🏠 Main Menu" }
+          ]
+        });
+      }
+    }
+  }
+
+  // Not a valid number — remind user
+  await sendText(from, `❌ Type the item number from the list (1–${ids.length + offset}) to open it, or use the buttons below.`);
+  return true;
+}
+
+/* ===========================
+   SALES DOC SEARCH — user typed a search term
+=========================== */
+/* ===========================
+   SALES DOC SEARCH — user typed a search term
+=========================== */
+if (state === "sales_doc_search") {
+  const searchTerm = trimmed;
+  if (!searchTerm || searchTerm.length < 1) {
+    await sendText(from, "❌ Enter something to search for.");
+    return true;
+  }
+  const docType   = biz.sessionData?.docSearchType   || "invoice";
+  const branchRaw = biz.sessionData?.docSearchBranch ?? undefined;
+
+  // Store search result trigger in session, let chatbotEngine pick it up
+  biz.sessionState = "sales_doc_search_ready";
+  biz.sessionData  = {
+    docSearchType:   docType,
+    docSearchBranch: branchRaw,
+    docSearchTerm:   searchTerm
+  };
+  await saveBizSafe(biz);
+  return false; // return false so chatbotEngine continues processing
+}
+
+/* ===========================
+   PAYMENT: SELECT INVOICE BY NUMBER
+   User types "3" to pick invoice #3 from the list
+=========================== */
+if (state === "payment_select_invoice") {
+  const num    = parseInt(trimmed);
+  const ids    = biz.sessionData?.invoiceListIds    || [];
+  const offset = biz.sessionData?.invoiceListOffset || 0;
+
+  if (!isNaN(num) && num >= 1) {
+    const localIdx = num - offset - 1;
+    const invoiceId = ids[localIdx];
+    if (invoiceId) {
+      const invoice = await Invoice.findById(invoiceId);
+      if (invoice) {
+        biz.sessionState = "payment_amount";
+        biz.sessionData  = { invoiceId: invoice._id };
+        await saveBizSafe(biz);
+        return sendButtons(from, {
+          text:
+`💳 *${invoice.number}*
+Total:   $${Number(invoice.total || 0).toFixed(2)} ${invoice.currency}
+Paid:    $${Number(invoice.amountPaid || 0).toFixed(2)}
+Balance: *$${Number(invoice.balance || 0).toFixed(2)}*
+
+Type amount or tap Full Balance:`,
+          buttons: [
+            { id: `payinv_full_${invoice._id}`, title: "✅ Pay Full Balance" },
+            { id: ACTIONS.MAIN_MENU,            title: "❌ Cancel" }
+          ]
+        });
+      }
+    }
+  }
+
+  await sendText(from, `❌ Invalid number. Type a number between 1 and ${ids.length + offset}.`);
+  return true;
+}
+
+/* ===========================
+   PAYMENT: INVOICE SEARCH
+   User typed search term after tapping Search
+=========================== */
+if (state === "payment_invoice_search") {
+  const searchTerm = trimmed;
+  if (!searchTerm) { await sendText(from, "❌ Type an invoice number to search."); return true; }
+  const branchId = biz.sessionData?.invoiceSearchBranch || null;
+  biz.sessionState = "ready"; biz.sessionData = {};
+  await saveBizSafe(biz);
+  const { showUnpaidInvoices } = await import("./paymentAdapters.js");
+  await showUnpaidInvoices(from, branchId, 0, searchTerm);
+  return true;
+}
   /* ===========================
      CLIENT STATEMENT
   ============================ */
+
   if (state === "client_statement_generate") {
     const clientId = biz.sessionData.clientId;
     if (!clientId) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); await sendMainMenu(from); return true; }
