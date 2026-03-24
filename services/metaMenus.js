@@ -273,19 +273,25 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 /* =============================================================================
    REPORTS MENU - Owner sees two-tier, managers/clerks see their branch only
 ============================================================================= */
-export async function sendReportsMenu(to, isGold = false) {
+export async function sendReportsMenu(to, isGold = false, isSilver = false) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-  const phone = to.replace(/\D+/g, "");
-  let normalized = phone.startsWith("0") ? "263" + phone.slice(1) : phone;
+  if (!biz) return sendMainMenu(to);
 
-  const caller = biz ? await UserRole.findOne({ businessId: biz._id, phone: normalized, pending: false }) : null;
+  const phone      = to.replace(/\D+/g, "");
+  const normalized = phone.startsWith("0") ? "263" + phone.slice(1) : phone;
 
-  // Clerk or manager: branch-scoped only
+  // Look up caller by phone across all roles (not just current biz)
+  // This handles the case where UserRole businessId might differ
+  const caller = await UserRole.findOne({ phone: normalized, pending: false });
+
+  const canSeeAdvanced = isGold || isSilver;
+
+  // Clerk or manager: branch-scoped daily report only
   if (caller?.role === "manager" || caller?.role === "clerk") {
     const items = [
       { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" },
-      ...(isGold ? [
-        { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+      ...(canSeeAdvanced ? [
+        { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Report" },
         { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
       ] : []),
       { id: ACTIONS.BACK, title: "⬅ Back" }
@@ -293,24 +299,38 @@ export async function sendReportsMenu(to, isGold = false) {
     return sendList(to, "📈 Reports (Your Branch)", items);
   }
 
-  // Owner: two-tier
+  // Owner: overall + branch breakdown
   return sendList(to, "📈 Reports", [
     { id: "overall_reports", title: "📊 Overall Reports" },
-    { id: "branch_reports", title: "🏢 Branch Reports" },
-    { id: ACTIONS.BACK, title: "⬅ Back" }
+    { id: "branch_reports",  title: "🏢 Branch Reports"  },
+    { id: ACTIONS.BACK,      title: "⬅ Back"             }
   ]);
 }
 
-export async function sendOverallReportsMenu(to, isGold = false) {
+export async function sendOverallReportsMenu(to, isGold = false, isSilver = false) {
+  const canSeeAdvanced = isGold || isSilver;
   const items = [
     { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" },
-    ...(isGold ? [
-      { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+    ...(canSeeAdvanced ? [
+      { id: ACTIONS.WEEKLY_REPORT,  title: "📊 Weekly Report"  },
       { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" }
     ] : []),
     { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
   ];
   return sendList(to, "📊 Overall Reports (All Branches)", items);
+}
+
+export async function sendBranchReportsMenu(to, isGold = false, isSilver = false) {
+  const canSeeAdvanced = isGold || isSilver;
+  const items = [
+    { id: "branch_daily", title: "📅 Daily Report" },
+    ...(canSeeAdvanced ? [
+      { id: "branch_weekly",  title: "📊 Weekly Report"  },
+      { id: "branch_monthly", title: "📆 Monthly Report" }
+    ] : []),
+    { id: ACTIONS.BACK, title: "⬅ Back to Reports" }
+  ];
+  return sendList(to, "🏢 Branch Reports", items);
 }
 
 export async function sendBranchReportsMenu(to, isGold = false) {

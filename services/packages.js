@@ -12,7 +12,7 @@ export const PACKAGES = {
     ]
   },
 
-  bronze: {
+bronze: {
     users: 2,
     branches: 1,
     monthlyDocs: 50,
@@ -21,7 +21,8 @@ export const PACKAGES = {
       "quote",
       "receipt",
       "clients",
-      "payments"
+      "payments",
+      "reports_daily"
     ]
   },
 

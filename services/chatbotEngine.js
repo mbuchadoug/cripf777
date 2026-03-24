@@ -9503,18 +9503,39 @@ _Type *cancel* to go back._`
       return sendButtons(from, { text: `💸 *Record Payout/Drawing*\n\nEnter the amount taken out of the till:`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
     }
 
-    case ACTIONS.REPORTS_MENU: {
+  case ACTIONS.REPORTS_MENU: {
       if (!biz) return sendMainMenu(from);
-      if (!canUseFeature(biz, "reports_daily")) return promptUpgrade({ biz, from, feature: "Reports" });
+
+      // Allow reports for all active paid packages (bronze/silver/gold/enterprise)
+      // Trial only gets blocked
+      const PAID_PACKAGES = ["bronze", "silver", "gold", "enterprise"];
+      const hasPaidPackage = PAID_PACKAGES.includes(biz.package);
+      const isActive = biz.subscriptionStatus === "active";
+
+      if (!hasPaidPackage || !isActive) {
+        return promptUpgrade({ biz, from, feature: "Reports" });
+      }
+
       biz.sessionState = "reports_menu"; biz.sessionData = {}; await saveBizSafe(biz);
-      const isGold = biz.package === "gold";
-      return sendReportsMenu(from, isGold);
+      const isGold   = biz.package === "gold"   || biz.package === "enterprise";
+      const isSilver = biz.package === "silver"  || isGold;
+      return sendReportsMenu(from, isGold, isSilver);
     }
 
-    case "overall_reports": {
+case "overall_reports": {
       if (!biz) return sendMainMenu(from);
       const { sendOverallReportsMenu } = await import("./metaMenus.js");
-      return sendOverallReportsMenu(from, biz.package === "gold");
+      const isGold   = ["gold", "enterprise"].includes(biz.package);
+      const isSilver = ["silver", "gold", "enterprise"].includes(biz.package);
+      return sendOverallReportsMenu(from, isGold, isSilver);
+    }
+
+    case "branch_reports": {
+      if (!biz) return sendMainMenu(from);
+      const { sendBranchReportsMenu } = await import("./metaMenus.js");
+      const isGold   = ["gold", "enterprise"].includes(biz.package);
+      const isSilver = ["silver", "gold", "enterprise"].includes(biz.package);
+      return sendBranchReportsMenu(from, isGold, isSilver);
     }
 
     case "branch_reports": {
