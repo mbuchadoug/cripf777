@@ -2619,6 +2619,18 @@ Or tap to pick a category:`,
       { id: "exp_cat_other",       title: "📝 Other" }
     ]);
   }
+
+  // ── Expense bulk: button taps route into continueTwilioFlow ──────────────
+  if (
+    a === "exp_bulk_confirm_yes" ||
+    a === "exp_bulk_confirm_no"  ||
+    a === "exp_bulk_keep_adding"
+  ) {
+    if (!biz) return sendMainMenu(from);
+    // Pass the button ID as text so twilioStateBridge state handler picks it up
+    const handled = await continueTwilioFlow({ from, text: a });
+    if (handled) return;
+  }
   // ✅ ADD THIS BLOCK immediately after the add_another_expense block
 if (a === "expense_generate_receipt") {
   if (!biz) return sendMainMenu(from);
