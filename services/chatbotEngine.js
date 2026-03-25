@@ -1914,11 +1914,27 @@ if (!isMetaAction && text.trim().length > 2) {
       return sendList(from, `🏪 *Business matches for ${shortcode.product}* - ${directBusinessMatches.length} found`, rows);
     }
 
+ // City was given but no results found — say so, offer to try all cities
+    if (shortcode.city) {
+      return sendButtons(from, {
+        text: `😕 No results for *${shortcode.product}* in *${shortcode.city}*.\n\nTry a different city or search all of Zimbabwe?`,
+        buttons: [
+          { id: "sup_search_city_all", title: "📍 Search All Cities" },
+          { id: "find_supplier",       title: "🔍 Search Again" }
+        ]
+      });
+    }
+
+    // No city given — ask for it
+    biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
       ...SUPPLIER_CITIES.map(c => ({
         id: `sup_search_city_${c.toLowerCase()}`,
         title: c
-      }))
+      })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
     ]);
   }
 }

@@ -332,22 +332,46 @@ export async function runSupplierSearch({ city, category, product, profileType, 
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
   if (category) query.categories = category;
 
-  if (product) {
+ if (product) {
     const searchTerms = expandSearchTerms(product);
 
-    const productOr = searchTerms.flatMap(term => [
-      { listedProducts: { $regex: term, $options: "i" } },
-      { "rates.service": { $regex: term, $options: "i" } },
-      { businessName: { $regex: term, $options: "i" } }
-    ]);
+    // Also split multi-word queries into individual words so
+    // "valve brass" matches "ball valve brass 25mm"
+    const individualWords = product.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+    const productOr = [
+      // Original expanded terms (exact phrase matching)
+      ...searchTerms.flatMap(term => [
+        { listedProducts: { $regex: term, $options: "i" } },
+        { "rates.service": { $regex: term, $options: "i" } },
+        { businessName: { $regex: term, $options: "i" } }
+      ]),
+      // Individual word matching — finds "ball valve brass 25mm" when searching "valve brass"
+      ...individualWords.flatMap(word => [
+        { listedProducts: { $regex: word, $options: "i" } },
+        { "rates.service": { $regex: word, $options: "i" } }
+      ])
+    ];
 
     query.$and.push({ $or: productOr });
   }
 
-  let results = await SupplierProfile.find(query)
+let results = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
     .limit(50)
     .lean();
+
+  // If city was specified but returned 0 results, try without city restriction
+  // so "valve brass harare" still finds results even if supplier is listed under
+  // a different city spelling or area
+  if (city && results.length === 0) {
+    const relaxedQuery = { ...query };
+    delete relaxedQuery["location.city"];
+    results = await SupplierProfile.find(relaxedQuery)
+      .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
+      .limit(50)
+      .lean();
+  }
 
   results = results.filter((supplier) => {
     if (supplier?.profileType === "service") {

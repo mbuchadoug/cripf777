@@ -732,7 +732,7 @@ export async function sendSuppliersMenu(to) {
   const hasRealBiz = biz && !biz.name.startsWith("pending_supplier_");
 
 // VERIFY this is what your active supplier block looks like:
-const searchTip = "\n\n💡 _Type *find [item]* to search instantly_\n_e.g. find cement, find plumber harare_";
+const searchTip = "\n\n";
 
 if (supplier?.active) {
   return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
