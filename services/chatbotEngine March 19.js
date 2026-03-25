@@ -2494,7 +2494,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         }
         // Truly unrecognised - show helpful prompt
         return sendButtons(from, {
-          text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire bulawayo_\n\nOr type *menu* to see all options.`,
+          text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire -_\n\nOr type *menu* to see all options.`,
           buttons: [
             { id: "find_supplier", title: "🔍 Find Suppliers" },
             { id: "register_supplier", title: "📦 List My Business" }
@@ -2918,13 +2918,13 @@ return sendText(from,
 Type what you need. Add a city or suburb at the end for nearby results.
 
 *📦 Products:*
-_find cement_, _find cement mbare_, _find cooking oil harare_, _find mealie meal_, _find river sand avondale_, _find tyres bulawayo_, _find school uniforms_, _find solar panels_
+_find cement_, _find cement mbare_, _find cooking oil harare_, _find mealie meal_, _find river sand avondale_, _find tyres -_, _find school uniforms_, _find solar panels_
 
 *🔧 Services:*
-_find plumber_, _find plumber borrowdale_, _find electrician harare_, _find teacher mabelreign_, _find tutor_, _find cleaner bulawayo_, _find painter_, _find welder workington_, _find catering_, _find photographer_, _find it support_
+_find plumber_, _find plumber borrowdale_, _find electrician harare_, _find teacher mabelreign_, _find tutor_, _find cleaner -_, _find painter_, _find welder workington_, _find catering_, _find photographer_, _find it support_
 
 *🚗 Transport:*
-_find car hire_, _find delivery harare_, _find moving company bulawayo_
+_find car hire_, _find delivery harare_, _find moving company -_
 
 *💡 Tip: Include your suburb for closer results!*
 _find plumber avondale_, _find electrician glen view_, _find delivery chitungwiza_
@@ -3246,7 +3246,7 @@ if (a === "sup_edit_area") {
 Current: ${supplier.location?.area || "not set"}, ${supplier.location?.city || ""}
 
 Send your area/suburb name:
-Example: *Avondale, Bulawayo*
+Example: *Avondale, -*
 
 _Type *cancel* to go back to your account._`
     );

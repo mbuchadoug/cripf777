@@ -48,7 +48,7 @@ export const SUPPLIER_PLAN_FEATURES = {
 
 export const SUPPLIER_CITIES = [
   "Harare",
-  "Bulawayo",
+  "-",
   "Mutare",
   "Gweru",
   "Kwekwe",

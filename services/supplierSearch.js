@@ -736,27 +736,27 @@ const SUBURB_TO_CITY = {
   "warren park": "Harare",
   "warren": "Harare",
 
-  // Bulawayo suburbs
-  "nkulumane": "Bulawayo",
-  "luveve": "Bulawayo",
-  "entumbane": "Bulawayo",
-  "njube": "Bulawayo",
-  "mpopoma": "Bulawayo",
-  "lobengula": "Bulawayo",
-  "makokoba": "Bulawayo",
-  "tshabalala": "Bulawayo",
-  "pelandaba": "Bulawayo",
-  "mabutweni": "Bulawayo",
-  "emakhandeni": "Bulawayo",
-  "pumula": "Bulawayo",
-  "iminyela": "Bulawayo",
-  "cowdray park": "Bulawayo",
-  "cowdray": "Bulawayo",
-  "magwegwe": "Bulawayo",
-  "selbourne": "Bulawayo",
-  "hillside": "Bulawayo",
-  "suburbs": "Bulawayo",
-  "white city": "Bulawayo",
+  // - suburbs
+  "nkulumane": "-",
+  "luveve": "-",
+  "entumbane": "-",
+  "njube": "-",
+  "mpopoma": "-",
+  "lobengula": "-",
+  "makokoba": "-",
+  "tshabalala": "-",
+  "pelandaba": "-",
+  "mabutweni": "-",
+  "emakhandeni": "-",
+  "pumula": "-",
+  "iminyela": "-",
+  "cowdray park": "-",
+  "cowdray": "-",
+  "magwegwe": "-",
+  "selbourne": "-",
+  "hillside": "-",
+  "suburbs": "-",
+  "white city": "-",
 
   // Mutare suburbs
   "sakubva": "Mutare",
@@ -805,7 +805,7 @@ function toTitleCase(value = "") {
 
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
-    "harare", "bulawayo", "mutare", "gweru", "masvingo",
+    "harare", "-", "mutare", "gweru", "masvingo",
     "kwekwe", "kadoma", "chinhoyi", "victoria falls"
   ];
 

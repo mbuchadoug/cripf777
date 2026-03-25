@@ -430,7 +430,7 @@ export function expandSearchTerms(product) {
 // Splits "plumber harare" into { product: "plumber", city: "Harare" }
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
-    "harare", "bulawayo", "mutare", "gweru", "masvingo",
+    "harare", "-", "mutare", "gweru", "masvingo",
     "kwekwe", "kadoma", "chinhoyi", "victoria falls"
   ];
 
@@ -454,7 +454,7 @@ function parseQueryWithCity(query = "") {
 function parseQueryWithCity(query = "") {
   // Import SUPPLIER_CITIES inline to avoid circular dependency
   const KNOWN_CITIES = [
-    "harare", "bulawayo", "mutare", "gweru", "masvingo",
+    "harare", "-", "mutare", "gweru", "masvingo",
     "kwekwe", "kadoma", "chinhoyi", "victoria falls"
   ];
 

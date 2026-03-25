@@ -22,7 +22,7 @@ export const SUBSCRIPTION_PLANS = {
 
 export const SUPPLIER_CITIES = [
   "Harare",
-  "Bulawayo",
+  "-",
   "Mutare",
   "Gweru",
   "Kwekwe",
