@@ -260,7 +260,7 @@ async function ensurePublicSubdirs() {
   await fs.promises.mkdir(base, { recursive: true });
 
   // ✅ ADD "statements" HERE
-  for (const sub of ["invoices", "quotes", "receipts", "statements"]) {
+for (const sub of ["invoices", "quotes", "receipts", "statements", "orders"]) {
     await fs.promises.mkdir(path.join(base, sub), { recursive: true });
   }
 
@@ -359,19 +359,19 @@ async function generatePDF({
 }) {
 
     // ✅ ADD THIS LINE
- const folder = path.join(
-  baseDir,
-  type === "invoice"
-    ? "invoices"
-    : type === "quote"
-    ? "quotes"
-    : type === "statement"
-    ? "statements"
-    : type === "order"
-    ? "orders"
-    : "receipts"
-);
-
+ const baseDir = await ensurePublicSubdirs();
+  const folder = path.join(
+    baseDir,
+    type === "invoice"
+      ? "invoices"
+      : type === "quote"
+      ? "quotes"
+      : type === "statement"
+      ? "statements"
+      : type === "order"
+      ? "orders"
+      : "receipts"
+  );
   const safeNumber = number || "statement";
 const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
 
