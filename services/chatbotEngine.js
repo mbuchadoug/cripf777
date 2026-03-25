@@ -3937,8 +3937,9 @@ const shortcodeBlockedStates = supplierStates.filter(s =>
   s !== "supplier_search_city" && 
   s !== "supplier_order_product" && 
   s !== "supplier_order_address" &&
-  s !== "supplier_order_enter_price" &&
-   s !== "supplier_order_picking" 
+  s !== "supplier_order_enter_price"
+  // supplier_order_picking intentionally removed — NxQ input must not be
+  // intercepted by shortcode search, it belongs to the catalogue parser at line 7532
 );
 if (
   !isMetaAction &&
