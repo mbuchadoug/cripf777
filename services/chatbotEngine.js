@@ -2003,7 +2003,7 @@ if (
 
   if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
   return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: "register_supplier", title: "📦 List My Business" },
     
@@ -2271,7 +2271,7 @@ await sendText(from, "❌ Order cancelled.");
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -2357,7 +2357,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" },
         
       ]
@@ -2430,7 +2430,7 @@ if (!supplierId) {
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -2554,7 +2554,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -4185,7 +4185,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         return sendButtons(from, {
           text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire -_\n\nOr type *menu* to see all options.`,
           buttons: [
-            { id: "find_supplier", title: "🔍 Find Suppliers" },
+            { id: "find_supplier", title: "🔍 Browse & Shop" },
             { id: "register_supplier", title: "📦 List My Business" }
           ]
         });
@@ -4207,7 +4207,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -5037,8 +5037,8 @@ if (a === "my_orders" || a.startsWith("my_orders_page_")) {
       return sendButtons(from, {
         text: "📋 *My Orders*\n\nYou haven't placed any orders yet.",
         buttons: [
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "find_supplier", title: "🔍 Browse & Shop" },
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     }
@@ -6398,7 +6398,7 @@ if (a.startsWith("sup_search_city_")) {
       text: `😕 No matching offers found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
       buttons: [
         { id: "find_supplier", title: "🔍 Search Again" },
-        { id: "suppliers_home", title: "🏪 Suppliers" }
+        { id: "suppliers_home", title: "🛒 Marketplace" }
       ]
     });
   }
@@ -6419,7 +6419,7 @@ if (a.startsWith("sup_search_city_")) {
         text: `😕 No matching ${profileType === "service" ? "providers" : "suppliers"} found for *${label}*${city ? ` in ${city}` : ""}.\n\nTry another city or category.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     }
@@ -6468,7 +6468,7 @@ if (a.startsWith("sup_search_city_")) {
     text: "❌ Search session expired. Please start again.",
     buttons: [
       { id: "find_supplier", title: "🔍 Search Again" },
-      { id: "suppliers_home", title: "🏪 Suppliers" }
+      { id: "suppliers_home", title: "🛒 Marketplace" }
     ]
   });
 }
@@ -7588,7 +7588,7 @@ if (
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders",     title: "📋 My Orders" }
       ]
     });
@@ -8860,7 +8860,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" }
       ]
     });
@@ -9161,7 +9161,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" },
         { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
@@ -9315,7 +9315,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
   ]
@@ -9385,7 +9385,7 @@ if (a.startsWith("sup_decline_")) {
           `You can search for another supplier.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Find Another" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     } catch (err) {
@@ -9402,7 +9402,7 @@ if (a.startsWith("sup_decline_")) {
     return sendButtons(from, {
       text: `✅ Order declined.\n*Reason sent to buyer:* ${reason}`,
       buttons: [
-        { id: "my_supplier_account", title: "🏪 My Business" },
+        { id: "my_supplier_account", title: "🏪 My Store" },
         { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
       ]
     });

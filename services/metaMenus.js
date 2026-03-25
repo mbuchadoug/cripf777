@@ -109,44 +109,43 @@ export async function sendMainMenu(to) {
   // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
 if (supplier?.active) {
     const items = [
-      { id: "my_supplier_account", title: "🏪 My Business" },
+      { id: "my_supplier_account", title: "🏪 My Store" },
       { id: "biz_tools_menu",      title: "📊 Business Tools" },
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },    
+        { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     ];
     // Hide Business Tools for trial users
     const filtered = (biz && biz.package === "trial")
       ? items.filter(i => i.id !== "biz_tools_menu")
       : items;
-    return sendList(to, "👋 *Welcome to ZimQuote!*", filtered);
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
   }
 
   // ── Case 2: Registered supplier but not yet paid ──────────────────────────
   if (supplier && !supplier.active) {
     return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-      { id: "my_supplier_account", title: "🏪 My Business" },      // ← TOP, renamed
+      { id: "my_supplier_account", title: "🏪 My Store" },      // ← TOP, renamed
       { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-    ]);
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },    ]);
   }
 
   // ── Case 3: Has a business but no supplier profile ────────────────────────
   if (biz && !biz.name?.startsWith("pending_supplier_")) {
-    const items = [
-      { id: "my_supplier_account", title: "🏪 My Business" },      // ← unified entry
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_orders",           title: "📋 My Orders" },
-    ];
+  const items = [
+  { id: "my_supplier_account", title: "🏪 My Store" },
+  { id: "find_supplier",       title: "🔍 Browse & Shop" },
+  { id: "my_orders",           title: "📋 My Orders" },
+];
     const filtered = await filterMenuByRole({ from: to, biz, items });
-    return sendList(to, "📊 Main Menu", filtered);
+   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
   }
 
   // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
-  return sendList(to, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-    { id: "register_supplier", title: "🏪 Start My Business" },    // ← entry point
-    { id: "find_supplier",     title: "🔍 Find Suppliers" },
-    { id: "my_orders",         title: "📋 My Orders" },
-  ]);
+return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+  { id: "register_supplier", title: "🏪 List My Business" },
+  { id: "find_supplier",     title: "🔍 Browse & Shop" },
+  { id: "my_orders",         title: "📋 My Orders" },
+]);
 }
 
 
@@ -735,13 +734,13 @@ export async function sendSuppliersMenu(to) {
 const searchTip = "\n\n";
 
 if (supplier?.active) {
-  return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
-    { id: "find_supplier",       title: "🔍 Find Suppliers" },
-    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
-    { id: "my_supplier_account", title: "🏪 My Supplier Account" },
-    { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
-      title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
-  ]);
+return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
+  { id: "find_supplier",       title: "🔍 Browse & Shop" },
+  { id: "my_orders",           title: "📋 My Orders" },
+  { id: "my_supplier_account", title: "🏪 My Store" },
+  { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
+    title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
+]);
 }
 
 // FIND AND REPLACE the entire supplier && !supplier.active block:
@@ -750,11 +749,11 @@ if (supplier && !supplier.active) {
   return sendList(
     to,
     complete
-      ? `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
-      : `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
+      ? `🏪*ZimQuote Marketplace*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
+
+      : `🏪 *ZimQuote Marketplace*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
       complete
         ? { id: "sup_upgrade_plan",  title: "💳 Activate My Listing" }
         : { id: "register_supplier", title: "⏳ Finish Registration" },
@@ -764,10 +763,10 @@ if (supplier && !supplier.active) {
   );
 }
 
-return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
-  { id: "find_supplier", title: "🔍 Find Suppliers" },
-  { id: "register_supplier", title: "📦 Become a Supplier" },
-  { id: "my_orders", title: "📋 My Orders" },
+return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
+  { id: "find_supplier",     title: "🔍 Browse & Shop" },
+  { id: "register_supplier", title: "🏪 List My Business" },
+  { id: "my_orders",         title: "📋 My Orders" },
   { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
 ]);
 }
@@ -835,7 +834,7 @@ export async function sendSupplierMoreOptionsMenu(to, supplierDoc) {
 
   const statusIcon = supplier.active ? "🟢" : "🔴";
 
-  return sendList(to, "⚙️ More Supplier Options", [
+  return sendList(to, "⚙️ Seller Settings", [
     { id: "sup_edit_area", title: "📍 Edit Location" },
     { id: "sup_toggle_delivery", title: "🚚 Toggle Delivery" },
     { id: "sup_toggle_active", title: statusIcon + (supplier.active ? " Deactivate Listing" : " Activate Listing") },

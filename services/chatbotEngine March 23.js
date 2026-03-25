@@ -1749,7 +1749,7 @@ if (!isMetaAction && text.trim().length > 2) {
 
   if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
   return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: "register_supplier", title: "📦 List My Business" },
     
@@ -2017,7 +2017,7 @@ await sendText(from, "❌ Order cancelled.");
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -2103,7 +2103,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" },
         
       ]
@@ -2176,7 +2176,7 @@ if (!supplierId) {
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -2300,7 +2300,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "register_supplier", title: "📦 Become a Supplier" },
     
   ]
@@ -3617,7 +3617,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         return sendButtons(from, {
           text: `🔍 *Looking for something?*\n\nTry:\n_find cement_\n_find plumber harare_\n_find teacher_\n_find car hire -_\n\nOr type *menu* to see all options.`,
           buttons: [
-            { id: "find_supplier", title: "🔍 Find Suppliers" },
+            { id: "find_supplier", title: "🔍 Browse & Shop" },
             { id: "register_supplier", title: "📦 List My Business" }
           ]
         });
@@ -3640,7 +3640,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     
   ]
@@ -4436,8 +4436,8 @@ if (a === "sup_manage_listed_products") {
       return sendButtons(from, {
         text: "📋 *My Orders*\n\nNo orders yet.",
         buttons: [
-          { id: "find_supplier", title: "🔍 Find Suppliers" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "find_supplier", title: "🔍 Browse & Shop" },
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     }
@@ -4481,7 +4481,7 @@ if (a === "sup_manage_listed_products") {
       btns.push({ id: `rate_order_${order._id}`, title: "⭐ Rate Order" });
     }
     btns.push({ id: "my_orders", title: "⬅ My Orders" });
-    if (btns.length < 3) btns.push({ id: "suppliers_home", title: "🏪 Suppliers" });
+    if (btns.length < 3) btns.push({ id: "suppliers_home", title: "🛒 Marketplace" });
 
     return sendButtons(from, { text: msg, buttons: btns });
   }
@@ -5690,7 +5690,7 @@ if (a.startsWith("sup_search_city_")) {
       text: `😕 No matching offers found for *${product}*${city ? ` in ${city}` : ""}.\n\nTry another search term or city.`,
       buttons: [
         { id: "find_supplier", title: "🔍 Search Again" },
-        { id: "suppliers_home", title: "🏪 Suppliers" }
+        { id: "suppliers_home", title: "🛒 Marketplace" }
       ]
     });
   }
@@ -5711,7 +5711,7 @@ if (a.startsWith("sup_search_city_")) {
         text: `😕 No matching ${profileType === "service" ? "providers" : "suppliers"} found for *${label}*${city ? ` in ${city}` : ""}.\n\nTry another city or category.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     }
@@ -5760,7 +5760,7 @@ if (a.startsWith("sup_search_city_")) {
     text: "❌ Search session expired. Please start again.",
     buttons: [
       { id: "find_supplier", title: "🔍 Search Again" },
-      { id: "suppliers_home", title: "🏪 Suppliers" }
+      { id: "suppliers_home", title: "🛒 Marketplace" }
     ]
   });
 }
@@ -6900,7 +6900,7 @@ if (
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders",     title: "📋 My Orders" }
       ]
     });
@@ -8187,7 +8187,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" }
       ]
     });
@@ -8488,7 +8488,7 @@ ${pricedCount === finalItems.length ? "All items were auto-priced. Supplier can 
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "find_supplier", title: "🔍 Find Suppliers" },
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
         { id: "my_orders", title: "📋 My Orders" },
         { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
@@ -8636,7 +8636,7 @@ ${pricedCount === finalItems.length
 return sendButtons(from, {
   text: "What would you like to do next?",
   buttons: [
-    { id: "find_supplier", title: "🔍 Find Suppliers" },
+    { id: "find_supplier", title: "🔍 Browse & Shop" },
     { id: "my_orders", title: "📋 My Orders" },
     { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
   ]

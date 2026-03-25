@@ -117,8 +117,7 @@ if (biz && biz.name.startsWith("pending_supplier_")) {
     }
     // Paid and active
     return sendList(to, "👋 *Welcome to ZimQuote!*", [
-      { id: "find_supplier",       title: "🔍 Find Suppliers" },
-      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
       { id: "my_supplier_account", title: "🏪 My Supplier Account" },
       { id: "onboard_business",    title: "🧾 Run My Business" }
     ]);
@@ -150,8 +149,7 @@ if (supplier) {
   }
   // Paid and active - show full menu including My Orders as buyer
   return sendList(to, "👋 *Welcome to ZimQuote!*", [
-    { id: "find_supplier",       title: "🔍 Find Suppliers" },
-    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+    { id: "find_supplier",       title: "🔍 Browse & Shop" },    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     { id: "my_supplier_account", title: "🏪 My Supplier Account" },
     { id: "onboard_business",    title: "🧾 Run My Business" }
   ]);
@@ -728,8 +726,7 @@ const searchTip = "\n\n💡 _Type *find [item]* to search instantly_\n_e.g. find
 
 if (supplier?.active) {
   return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
-    { id: "find_supplier",       title: "🔍 Find Suppliers" },
-    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+    { id: "find_supplier",       title: "🔍 Browse & Shop" },    { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     { id: "my_supplier_account", title: "🏪 My Supplier Account" },
     { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
       title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
@@ -741,8 +738,9 @@ if (supplier && !supplier.active) {
   const complete = isSupplierRegistrationComplete(supplier);
   return sendList(to,
    complete
-      ? `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
-      : `🏪 *ZimQuote Suppliers*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
+      ? `🏪*ZimQuote Marketplace*${searchTip}\n\n⚠️ Your listing is *not yet active*.\nChoose a plan to go live and start receiving orders.`
+
+      : `🏪 *ZimQuote Marketplace*${searchTip}\n\n⚠️ Your registration is incomplete.\nFinish setup to activate your listing.`,
     [
       { id: "find_supplier",   title: "🔍 Find Suppliers" },
       complete
@@ -755,7 +753,7 @@ if (supplier && !supplier.active) {
 }
 
 return sendList(to, `🏪 *ZimQuote Suppliers*${searchTip}`, [
-  { id: "find_supplier", title: "🔍 Find Suppliers" },
+  { id: "find_supplier", title: "🔍 Browse & Shop" },
   { id: "register_supplier", title: "📦 Become a Supplier" },
   { id: "my_orders", title: "📋 My Orders" },
   { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }

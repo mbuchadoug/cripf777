@@ -164,7 +164,7 @@ await SupplierProfile.findOneAndUpdate(
           `They will be in touch to arrange ${isServiceSupplier ? "the service" : "payment & delivery"}.`,
         buttons: [
           { id: `rate_order_${order._id}`, title: isServiceSupplier ? "⭐ Rate Service" : "⭐ Rate Order" },
-          { id: "suppliers_home", title: "🏪 Suppliers" }
+          { id: "suppliers_home", title: "🛒 Marketplace" }
         ]
       });
     } catch (err) {
