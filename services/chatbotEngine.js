@@ -1856,7 +1856,20 @@ const GREETING_WORDS = new Set([
   "help", "start", "menu", "home", "back", "cancel"
 ]);
 
-if (!isMetaAction && text.trim().length > 2 && !GREETING_WORDS.has(text.trim().toLowerCase())) {
+const _sessForOrderCheck = await UserSession.findOne({ phone });
+const _activeOrderState = _sessForOrderCheck?.tempData?.orderState;
+const _orderBlockedStates = new Set([
+  "supplier_order_address",
+  "supplier_order_picking",
+  "supplier_order_enter_price"
+]);
+
+if (
+  !isMetaAction &&
+  text.trim().length > 2 &&
+  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
+  !_orderBlockedStates.has(_activeOrderState)
+) {
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
 
@@ -9134,19 +9147,22 @@ _Type your address below and send to complete your ${isServiceSupplier ? "bookin
 
 
   // ── Buyer order: address / contact note text input ────────────────────────
-  if (biz?.sessionState === "supplier_order_address" && !isMetaAction) {
-    const address = text.trim();
- if (!address || address.length < 2) {
-  return sendText(from,
-`❌ Please enter your delivery address or contact note:
+const _addrSess = await UserSession.findOne({ phone });
+const _addrViaSess = !biz && _addrSess?.tempData?.orderState === "supplier_order_address";
 
-Type *cancel* to stop this order.`);
-}
+if ((biz?.sessionState === "supplier_order_address" || _addrViaSess) && !isMetaAction) {
+  const address = text.trim();
+  if (!address || address.length < 2) {
+    return sendText(from, `❌ Please enter your delivery address or contact note:\n\nType *cancel* to stop this order.`);
+  }
 
-    const supplierId = biz.sessionData?.orderSupplierId;
-const orderItemsInput = biz.sessionData?.orderCart?.length
-  ? biz.sessionData.orderCart
-  : (biz.sessionData?.orderItems || []);
+  const supplierId = biz?.sessionData?.orderSupplierId
+    || _addrSess?.tempData?.orderSupplierId;
+  const orderItemsInput = biz?.sessionData?.orderCart?.length
+    ? biz.sessionData.orderCart
+    : _addrSess?.tempData?.orderCart?.length
+      ? _addrSess.tempData.orderCart
+      : (biz?.sessionData?.orderItems || []);
 
     if (!supplierId) {
       biz.sessionState = "ready"; biz.sessionData = {};
@@ -9216,9 +9232,12 @@ const order = await SupplierOrder.create({
   },
   status: "pending"
 });
-    await notifySupplierNewOrder(supplier.phone, order);
-    biz.sessionState = "ready"; biz.sessionData = {};
-    await saveBizSafe(biz);
+   await notifySupplierNewOrder(supplier.phone, order);
+    if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderCart": "", "tempData.orderIsService": "" } }
+    );
 
 const itemSummary = finalItems
   .map(i => `• ${i.product} x${i.quantity}${i.unit && i.unit !== "units" ? " " + i.unit : ""}`)
