@@ -3959,11 +3959,11 @@ const supplierStates = [
 // should be treated as a new shortcode search, not passed to the state machine
 const shortcodeBlockedStates = supplierStates.filter(s => 
   s !== "supplier_search_city" && 
-  s !== "supplier_order_product" && 
-  s !== "supplier_order_address" &&
+  s !== "supplier_order_product" &&
   s !== "supplier_order_enter_price"
-  // supplier_order_picking intentionally removed — NxQ input must not be
-  // intercepted by shortcode search, it belongs to the catalogue parser at line 7532
+  // supplier_order_address: intentionally blocked — address free-text must
+  // never be intercepted by shortcode search, it belongs to the address handler
+  // supplier_order_picking: intentionally blocked — NxQ input belongs to the catalogue parser
 );
 if (
   !isMetaAction &&
