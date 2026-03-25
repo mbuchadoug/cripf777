@@ -14,6 +14,7 @@ import { PACKAGES } from "./packages.js";
 import mongoose from "mongoose";
 import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
+import PhoneContact from "../models/phoneContact.js";
 import { sendDocument } from "./metaSender.js";
 import {
   canUseFeature,
@@ -1534,6 +1535,15 @@ export async function handleIncomingMessage({ from, action }) {
   if (!phone || phone.length < 9 || phone.length > 15) {
     console.error("❌ Invalid phone for session key:", { from, phone, action });
     return;
+    // ── NEW CONTACT TRACKING ─────────────────────────────────────────────────
+  // Fire-and-forget: only writes on first contact, never overwrites.
+  // setOnInsert means if doc already exists, this is a complete no-op.
+  PhoneContact.findOneAndUpdate(
+    { phone },
+    { $setOnInsert: { phone, firstMessage: String(action || "").slice(0, 200), channel: "whatsapp" } },
+    { upsert: true, new: false }
+  ).catch(err => console.error("[PHONE CONTACT TRACK]", err.message));
+  // ─────────────────────────────────────────────────────────────────────────
   }
 
   const text = typeof action === "string" ? action.trim() : "";
