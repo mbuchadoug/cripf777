@@ -637,9 +637,7 @@ export function parseShortcodeSearch(input = "") {
 
   if (!raw) return null;
 
-  const { SUPPLIER_CITIES = [] } = require("./supplierPlans.js");
-
-  const cityNames = SUPPLIER_CITIES
+const cityNames = SUPPLIER_CITIES
     .map(c => {
       if (typeof c === "string") return c.toLowerCase().trim();
       if (c?.name) return String(c.name).toLowerCase().trim();
