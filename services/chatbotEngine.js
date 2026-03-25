@@ -5192,19 +5192,46 @@ if (a === "sup_view_products") {
   if (!supplier) return sendSuppliersMenu(from);
 
   const isService = supplier.profileType === "service";
-  const items = (supplier.products || []).filter(p => p !== "pending_upload");
+  const label = isService ? "Services" : "Products";
+  const capMap = { basic: 20, pro: 60, featured: 150 };
+  const cap = capMap[supplier.tier] || 20;
 
-  await sendSupplierItemsInChunks(
-    from,
-    items,
-    `📋 Current ${isService ? "Services" : "Products"}`
+  const allItems = (supplier.products || []).filter(p => p !== "pending_upload");
+  const listedSet = new Set(
+    (supplier.listedProducts || []).filter(Boolean).map(p => normalizeProductName(p))
   );
 
+  const listed   = allItems.filter(p => listedSet.has(normalizeProductName(p)));
+  const unlisted = allItems.filter(p => !listedSet.has(normalizeProductName(p)));
+
+  // ── Listed items ────────────────────────────────────────────────────────
+  if (listed.length) {
+    await sendSupplierItemsInChunks(
+      from,
+      listed,
+      `🟢 Live ${label} (${listed.length}/${cap})`
+    );
+  } else {
+    await sendText(from, `🟢 *Live ${label}:* None listed yet.`);
+  }
+
+  // ── Unlisted items ──────────────────────────────────────────────────────
+  if (unlisted.length) {
+    await sendSupplierItemsInChunks(
+      from,
+      unlisted,
+      `⚪ Unlisted ${label} (${unlisted.length} — not visible to buyers)`
+    );
+  } else {
+    await sendText(from, `⚪ *Unlisted ${label}:* None — all items are live.`);
+  }
+
   return sendList(from, "What would you like to do next?", [
-    { id: "sup_add_products", title: `➕ Add ${isService ? "Services" : "Products"}` },
-    { id: "sup_delete_products", title: `🗑 Delete ${isService ? "Services" : "Products"}` },
-    { id: "sup_replace_products", title: `♻️ Replace Full ${isService ? "Services" : "Products"} List` },
-    { id: "my_supplier_account", title: "🏪 My Account" }
+    { id: "sup_add_products",          title: `➕ Add ${label}` },
+    { id: "sup_delete_products",       title: `🗑 Delete ${label}` },
+    { id: "sup_replace_products",      title: `♻️ Replace Full ${label} List` },
+    { id: "sup_manage_listed_products", title: `🟢 Manage Live ${label}` },
+    { id: "my_supplier_account",       title: "🏪 My Account" }
   ]);
 }
 
@@ -5250,11 +5277,33 @@ if (a === "sup_delete_products") {
     await saveBizSafe(biz);
   }
 
-  await sendSupplierItemsInChunks(
-    from,
-    items,
-    `🗑 Select ${isService ? "Services" : "Products"} to Delete`
+  const listedSet = new Set(
+    (supplier.listedProducts || []).filter(Boolean).map(p => normalizeProductName(p))
   );
+  const listedItems   = items.filter(p => listedSet.has(normalizeProductName(p)));
+  const unlistedItems = items.filter(p => !listedSet.has(normalizeProductName(p)));
+
+  // Build one combined numbered list with section headers inline
+  const allLines = [];
+  if (listedItems.length) {
+    allLines.push(`🟢 *Live (${listedItems.length}):*`);
+    listedItems.forEach((p, i) => allLines.push(`${i + 1}. ${p}`));
+  }
+  if (unlistedItems.length) {
+    allLines.push(`\n⚪ *Unlisted (${unlistedItems.length}):*`);
+    unlistedItems.forEach((p, i) => allLines.push(`${listedItems.length + i + 1}. ${p}`));
+  }
+
+  const CHUNK = 25;
+  for (let i = 0; i < allLines.length; i += CHUNK) {
+    const chunk = allLines.slice(i, i + CHUNK).join("\n");
+    const isFirst = i === 0;
+    await sendText(from,
+      isFirst
+        ? `🗑 *Select ${isService ? "Services" : "Products"} to Delete*\n\n${chunk}`
+        : chunk
+    );
+  }
 
   return sendText(
     from,
@@ -5265,12 +5314,13 @@ Examples:
 *5-8*
 *basin mixer, shower trap*
 
+⚠️ Deleting a live item will also remove it from your listing.
+
 You can delete just a few items - you do NOT need to resend the whole list.
 
 Type *cancel* to go back.`
   );
 }
-
 if (a === "sup_replace_products") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
@@ -6753,34 +6803,63 @@ await UserSession.findOneAndUpdate(
   }
 
   // ── Send numbered list in chunks of 25 (each chunk safely under 4096) ────
-  const CHUNK = 25;
-  for (let i = 0; i < products.length; i += CHUNK) {
-    const chunk = products.slice(i, i + CHUNK);
-    const lines = chunk.map((p, j) => {
-      const idx = i + j;
-      const existing = supplier.prices?.find(pr =>
-        pr.product?.toLowerCase() === p.toLowerCase()
-      );
-      const priceStr = existing
-        ? ` - $${Number(existing.amount).toFixed(2)}/${existing.unit}`
-        : " - _(not set)_";
-      return `${idx + 1}. ${p}${priceStr}`;
-    }).join("\n");
+  const listedSet = new Set(
+    (supplier.listedProducts || []).filter(Boolean).map(p => normalizeProductName(p))
+  );
+  const listedProducts   = products.filter(p => listedSet.has(normalizeProductName(p)));
+  const unlistedProducts = products.filter(p => !listedSet.has(normalizeProductName(p)));
 
-    const isFirst = i === 0;
-    const isLast = i + CHUNK >= products.length;
-    await sendText(from,
-      isFirst
-        ? `💰 *Update Prices* (${products.length} ${isService ? "services" : "products"})\n\n${lines}${isLast ? "" : "\n_(continued...)_"}`
-        : `${lines}${isLast ? "" : "\n_(continued...)_"}`
-    );
+  function buildPriceLines(items, startIndex) {
+    const CHUNK = 25;
+    const lines = [];
+    for (let i = 0; i < items.length; i++) {
+      const p = items[i];
+      const globalIdx = startIndex + i;
+      const existing = isService
+        ? supplier.rates?.find(r => r.service?.toLowerCase() === p.toLowerCase())
+        : supplier.prices?.find(pr => pr.product?.toLowerCase() === p.toLowerCase());
+      const priceStr = isService
+        ? (existing ? ` - ${existing.rate}` : " - _(not set)_")
+        : (existing ? ` - $${Number(existing.amount).toFixed(2)}/${existing.unit}` : " - _(not set)_");
+      lines.push(`${globalIdx + 1}. ${p}${priceStr}`);
+    }
+    return lines;
   }
 
-  // ── Send instruction message separately (always short) ───────────────────
-   // ── Send instruction message separately (always short) ───────────────────
+  // ── Section 1: Live (listed) items ───────────────────────────────────────
+  if (listedProducts.length) {
+    const lines = buildPriceLines(listedProducts, 0);
+    const CHUNK = 25;
+    for (let i = 0; i < lines.length; i += CHUNK) {
+      const chunk = lines.slice(i, i + CHUNK).join("\n");
+      const isFirst = i === 0;
+      const isLast  = i + CHUNK >= lines.length;
+      await sendText(from,
+        isFirst
+          ? `💰 *Update ${isService ? "Rates" : "Prices"}*\n\n🟢 *Live ${isService ? "Services" : "Products"} (${listedProducts.length})*\n\n${chunk}${isLast ? "" : "\n_(continued...)_"}`
+          : `${chunk}${isLast ? "" : "\n_(continued...)_"}`
+      );
+    }
+  }
+
+  // ── Section 2: Unlisted items ────────────────────────────────────────────
+  if (unlistedProducts.length) {
+    const lines = buildPriceLines(unlistedProducts, listedProducts.length);
+    const CHUNK = 25;
+    for (let i = 0; i < lines.length; i += CHUNK) {
+      const chunk = lines.slice(i, i + CHUNK).join("\n");
+      const isFirst = i === 0;
+      const isLast  = i + CHUNK >= lines.length;
+      await sendText(from,
+        isFirst
+          ? `⚪ *Unlisted ${isService ? "Services" : "Products"} (${unlistedProducts.length} — not visible to buyers)*\n\n${chunk}${isLast ? "" : "\n_(continued...)_"}`
+          : `${chunk}${isLast ? "" : "\n_(continued...)_"}`
+      );
+    }
+  }
+
   return sendSupplierQuickPriceHelp(from, products, isService);
 }
-
 
 
 if (biz?.sessionState === "supplier_quick_edit_products" && !isMetaAction) {
