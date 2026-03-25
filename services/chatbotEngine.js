@@ -1708,9 +1708,12 @@ if (!biz && ownerRole?.businessId) {
   // =========================
   // 🆕 NEW USER - WELCOME SCREEN (not auto-onboard)
   // =========================
-// =========================
-// 🆕 NEW USER - WELCOME SCREEN (not auto-onboard)
-// =========================
+
+const GREETING_WORDS = new Set([
+  "hi", "hello", "hey", "hie", "howzit", "helo", "sup", "yo",
+  "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
+  "help", "start", "menu", "home", "back", "cancel"
+]);
 
 if (!biz && !ownerRole) {
   const supplierExists = await SupplierProfile.findOne({ phone });
@@ -1852,11 +1855,7 @@ a === "sup_search_next_page" ||
   a === "biz_tools_menu";
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
-const GREETING_WORDS = new Set([
-  "hi", "hello", "hey", "hie", "howzit", "helo", "sup", "yo",
-  "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
-  "help", "start", "menu", "home", "back", "cancel"
-]);
+
 
 if (GREETING_WORDS.has(text.trim().toLowerCase())) {
   await UserSession.findOneAndUpdate(
