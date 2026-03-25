@@ -1722,6 +1722,7 @@ const supplierRegState = sess?.supplierRegState;
 
 if (
   searchMode === "product" &&
+  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   supplierAccountState !== "supplier_update_prices" &&
   supplierRegState !== "supplier_reg_prices"
 ) {
@@ -1856,6 +1857,22 @@ const GREETING_WORDS = new Set([
   "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
   "help", "start", "menu", "home", "back", "cancel"
 ]);
+
+if (GREETING_WORDS.has(text.trim().toLowerCase())) {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.supplierSearchMode": "",
+        "tempData.supplierSearchProduct": "",
+        "tempData.supplierSearchCategory": "",
+        "tempData.lastSearchCity": "",
+        "tempData.lastSearchArea": ""
+      }
+    },
+    { upsert: true }
+  );
+}
 
 const _sessForOrderCheck = await UserSession.findOne({ phone });
 const _activeOrderState = _sessForOrderCheck?.tempData?.orderState;
