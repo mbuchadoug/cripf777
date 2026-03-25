@@ -2,6 +2,7 @@
 
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
+import { SUPPLIER_CITIES } from "./supplierPlans.js";
 
 export async function startSupplierSearch(from, biz, saveBiz) {
  biz.sessionState = "supplier_search_category";
