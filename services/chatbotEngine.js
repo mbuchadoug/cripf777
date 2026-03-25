@@ -1575,7 +1575,8 @@ a.startsWith("sup_accept_") ||
 a === "find_supplier" ||
       a === "register_supplier" ||
       a === "my_supplier_account" ||
-      a === "my_orders" ||
+a === "my_orders" ||
+      a.startsWith("my_orders_page_") ||
       a.startsWith("order_detail_") ||
       a.startsWith("sup_book_") ||
       a.startsWith("sup_book_confirm_") ||
@@ -5024,15 +5025,17 @@ if (a === "sup_manage_listed_products") {
 
 
   // ── Buyer: My Orders list ─────────────────────────────────────────────────
-  if (a === "my_orders") {
-    const orders = await SupplierOrder.find({ buyerPhone: phone })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .populate("supplierId", "businessName");
+if (a === "my_orders" || a.startsWith("my_orders_page_")) {
+    const PAGE_SIZE = 9;
+    const page = a.startsWith("my_orders_page_")
+      ? Math.max(0, parseInt(a.replace("my_orders_page_", "")) || 0)
+      : 0;
 
-    if (!orders.length) {
+    const totalCount = await SupplierOrder.countDocuments({ buyerPhone: phone });
+
+    if (!totalCount) {
       return sendButtons(from, {
-        text: "📋 *My Orders*\n\nNo orders yet.",
+        text: "📋 *My Orders*\n\nYou haven't placed any orders yet.",
         buttons: [
           { id: "find_supplier", title: "🔍 Find Suppliers" },
           { id: "suppliers_home", title: "🏪 Suppliers" }
@@ -5040,46 +5043,97 @@ if (a === "sup_manage_listed_products") {
       });
     }
 
-    const si = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" };
-    const rows = orders.map(o => ({
-      id: `order_detail_${o._id}`,
-      title: o.supplierId?.businessName || "Supplier",
-      description: `${o.items?.[0]?.product || ""} · ${si[o.status] || "⏳"} ${o.status} · ${new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-    }));
+    const orders = await SupplierOrder.find({ buyerPhone: phone })
+      .sort({ createdAt: -1 })          // ← newest first
+      .skip(page * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .populate("supplierId", "businessName");
 
-   return sendList(from, "📋 My Placed Orders (as Buyer)", rows);
+    const si = { pending: "⏳ Pending", accepted: "✅ Accepted", declined: "❌ Declined", completed: "🏁 Completed" };
+
+    const rows = orders.map(o => {
+      const itemCount = o.items?.length || 0;
+      const firstItem = o.items?.[0]?.product || "Item";
+      const label = itemCount > 1 ? `${firstItem} +${itemCount - 1} more` : firstItem;
+      const total = o.totalAmount > 0 ? ` · $${Number(o.totalAmount).toFixed(2)}` : "";
+      const date = new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
+      return {
+        id: `order_detail_${o._id}`,
+        title: `${o.supplierId?.businessName || "Supplier"} · ${date}`,
+        description: `${si[o.status] || "⏳ Pending"} · ${label}${total}`
+      };
+    });
+
+    const hasMore = (page + 1) * PAGE_SIZE < totalCount;
+    const hasPrev = page > 0;
+    if (hasMore) rows.push({ id: `my_orders_page_${page + 1}`, title: `➡ Next page` });
+    if (hasPrev) rows.push({ id: `my_orders_page_${page - 1}`, title: `⬅ Previous page` });
+
+    const showing = `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalCount)} of ${totalCount}`;
+    return sendList(from, `📋 *My Orders* (${showing})\nNewest first — tap any order to view details.`, rows);
   }
 
   // ── Buyer: Order detail ───────────────────────────────────────────────────
-  if (a.startsWith("order_detail_")) {
+if (a.startsWith("order_detail_")) {
     const orderId = a.replace("order_detail_", "");
     const order = await SupplierOrder.findById(orderId).populate("supplierId", "businessName phone");
     if (!order) {
       return sendButtons(from, {
         text: "❌ Order not found.",
-        buttons: [{ id: "my_orders", title: "⬅ Back" }]
+        buttons: [{ id: "my_orders", title: "⬅ My Orders" }]
       });
     }
 
-    const si = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" };
-    const itemLines = (order.items || []).map(i => `• ${i.product} x${i.quantity}`).join("\n");
+    const si = { pending: "⏳ Pending", accepted: "✅ Accepted", declined: "❌ Declined", completed: "🏁 Completed" };
+    const isService = order.supplierId?.profileType === "service";
+
+    const itemLines = (order.items || []).map(i => {
+      const unitSuffix = i.unit && i.unit !== "units" ? ` ${i.unit}` : "";
+      const pricePart = typeof i.pricePerUnit === "number"
+        ? ` @ $${Number(i.pricePerUnit).toFixed(2)}${unitSuffix} = $${Number(i.total || 0).toFixed(2)}`
+        : unitSuffix;
+      return `• ${i.product} x${i.quantity}${pricePart}`;
+    }).join("\n");
+
+    const totalLine = order.totalAmount > 0
+      ? `\n💵 *Total: $${Number(order.totalAmount).toFixed(2)}*`
+      : "\n💵 Total: Pending supplier confirmation";
+
+    const deliveryLine = order.delivery?.required
+      ? `🚚 Deliver to: ${order.delivery.address}`
+      : isService
+        ? `📍 Location: ${order.delivery?.address || "Not specified"}`
+        : `🏠 Collection`;
+
+    const date = new Date(order.createdAt).toLocaleDateString("en-GB", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+
     const msg = [
       `📋 *Order Details*`,
-      `Supplier: ${order.supplierId?.businessName || "Unknown"}`,
       ``,
-      `${itemLines}`,
+      `🏪 *Supplier:* ${order.supplierId?.businessName || "Unknown"}`,
+      `📞 *Contact:* ${order.supplierId?.phone || "—"}`,
+      `📅 *Placed:* ${date}`,
       ``,
-      `Delivery: ${order.delivery?.address || "Collection"}`,
-      `Status: ${si[order.status] || "⏳"} ${order.status}`,
-      `Date: ${new Date(order.createdAt).toLocaleDateString()}`
-    ].join("\n");
+      `*Items:*`,
+      itemLines,
+      totalLine,
+      ``,
+      deliveryLine,
+      ``,
+      `*Status:* ${si[order.status] || "⏳ Pending"}`,
+      order.declineReason ? `❌ *Reason:* ${order.declineReason}` : "",
+      order.eta ? `🕐 *ETA:* ${order.eta}` : ""
+    ].filter(l => l !== "").join("\n");
 
     const btns = [];
-    if (order.status === "completed" && !order.buyerRating) {
-      btns.push({ id: `rate_order_${order._id}`, title: "⭐ Rate Order" });
+    if (order.status === "accepted" || order.status === "completed") {
+      if (!order.buyerRating) btns.push({ id: `rate_order_${order._id}`, title: "⭐ Rate Order" });
     }
     btns.push({ id: "my_orders", title: "⬅ My Orders" });
-    if (btns.length < 3) btns.push({ id: "suppliers_home", title: "🏪 Suppliers" });
+    if (btns.length < 3) btns.push({ id: "find_supplier", title: "🔍 Find Suppliers" });
 
     return sendButtons(from, { text: msg, buttons: btns });
   }
