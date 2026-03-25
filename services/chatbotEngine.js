@@ -1532,19 +1532,19 @@ export async function handleIncomingMessage({ from, action }) {
 
   const phone = from.replace(/\D+/g, "");
 
-  if (!phone || phone.length < 9 || phone.length > 15) {
+ if (!phone || phone.length < 9 || phone.length > 15) {
     console.error("❌ Invalid phone for session key:", { from, phone, action });
     return;
-    // ── NEW CONTACT TRACKING ─────────────────────────────────────────────────
+  }
+
+  // ── NEW CONTACT TRACKING ─────────────────────────────────────────────────
   // Fire-and-forget: only writes on first contact, never overwrites.
-  // setOnInsert means if doc already exists, this is a complete no-op.
   PhoneContact.findOneAndUpdate(
     { phone },
     { $setOnInsert: { phone, firstMessage: String(action || "").slice(0, 200), channel: "whatsapp" } },
     { upsert: true, new: false }
   ).catch(err => console.error("[PHONE CONTACT TRACK]", err.message));
   // ─────────────────────────────────────────────────────────────────────────
-  }
 
   const text = typeof action === "string" ? action.trim() : "";
   const al = text.toLowerCase();
@@ -1850,7 +1850,13 @@ a === "sup_search_next_page" ||
   a === "biz_tools_menu";
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
-if (!isMetaAction && text.trim().length > 2) {
+const GREETING_WORDS = new Set([
+  "hi", "hello", "hey", "hie", "howzit", "helo", "sup", "yo",
+  "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
+  "help", "start", "menu", "home", "back", "cancel"
+]);
+
+if (!isMetaAction && text.trim().length > 2 && !GREETING_WORDS.has(text.trim().toLowerCase())) {
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
 
@@ -1958,9 +1964,17 @@ if (!isMetaAction && text.trim().length > 2) {
     }
 
     // No city given — ask for it
-    biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
-    biz.sessionState = "supplier_search_city";
-    await saveBizSafe(biz);
+   // No city given — store product in session then ask for city
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.supplierSearchProduct": shortcode.product, "tempData.supplierSearchMode": "product" } },
+      { upsert: true }
+    );
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
+      biz.sessionState = "supplier_search_city";
+      await saveBizSafe(biz);
+    }
     return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
       ...SUPPLIER_CITIES.map(c => ({
         id: `sup_search_city_${c.toLowerCase()}`,
