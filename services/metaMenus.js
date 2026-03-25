@@ -164,7 +164,7 @@ export async function sendBusinessToolsMenu(to, biz) {
     { id: ACTIONS.CLIENTS_MENU,  title: "👥 Clients" },
     { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products & Services" },
     { id: ACTIONS.REPORTS_MENU,  title: "📈 Reports" },
-    // Branches & Users — only show for silver+ (multi-branch packages)
+    // Branches & Users - only show for silver+ (multi-branch packages)
     ...(isPaid && ["silver", "gold", "enterprise"].includes(pkg)
       ? [
           { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches", section: "branches" },

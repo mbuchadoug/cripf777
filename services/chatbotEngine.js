@@ -1966,7 +1966,7 @@ if (
       return sendList(from, `🏪 *Business matches for ${shortcode.product}* - ${directBusinessMatches.length} found`, rows);
     }
 
- // City was given but no results found — say so, offer to try all cities
+ // City was given but no results found - say so, offer to try all cities
     if (shortcode.city) {
       return sendButtons(from, {
         text: `😕 No results for *${shortcode.product}* in *${shortcode.city}*.\n\nTry a different city or search all of Zimbabwe?`,
@@ -1977,8 +1977,8 @@ if (
       });
     }
 
-    // No city given — ask for it
-   // No city given — store product in session then ask for city
+    // No city given - ask for it
+   // No city given - store product in session then ask for city
     await UserSession.findOneAndUpdate(
       { phone },
       { $set: { "tempData.supplierSearchProduct": shortcode.product, "tempData.supplierSearchMode": "product" } },
@@ -3975,9 +3975,9 @@ const shortcodeBlockedStates = supplierStates.filter(s =>
   s !== "supplier_search_city" && 
   s !== "supplier_order_product" &&
   s !== "supplier_order_enter_price"
-  // supplier_order_address: intentionally blocked — address free-text must
+  // supplier_order_address: intentionally blocked - address free-text must
   // never be intercepted by shortcode search, it belongs to the address handler
-  // supplier_order_picking: intentionally blocked — NxQ input belongs to the catalogue parser
+  // supplier_order_picking: intentionally blocked - NxQ input belongs to the catalogue parser
 );
 if (
   !isMetaAction &&
@@ -4022,7 +4022,7 @@ if (
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
- // City was given but 0 results — show no-results message, NOT city picker
+ // City was given but 0 results - show no-results message, NOT city picker
     if (shortcode.city) {
       biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product, city: shortcode.city } };
       await saveBizSafe(biz);
@@ -4035,7 +4035,7 @@ if (
       });
     }
 
-    // No city at all — ask for it
+    // No city at all - ask for it
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: shortcode.product }
@@ -5070,7 +5070,7 @@ if (a === "my_orders" || a.startsWith("my_orders_page_")) {
     if (hasPrev) rows.push({ id: `my_orders_page_${page - 1}`, title: `⬅ Previous page` });
 
     const showing = `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalCount)} of ${totalCount}`;
-    return sendList(from, `📋 *My Orders* (${showing})\nNewest first — tap any order to view details.`, rows);
+    return sendList(from, `📋 *My Orders* (${showing})\nNewest first - tap any order to view details.`, rows);
   }
 
   // ── Buyer: Order detail ───────────────────────────────────────────────────
@@ -5114,7 +5114,7 @@ if (a.startsWith("order_detail_")) {
       `📋 *Order Details*`,
       ``,
       `🏪 *Supplier:* ${order.supplierId?.businessName || "Unknown"}`,
-      `📞 *Contact:* ${order.supplierId?.phone || "—"}`,
+      `📞 *Contact:* ${order.supplierId?.phone || "-"}`,
       `📅 *Placed:* ${date}`,
       ``,
       `*Items:*`,
