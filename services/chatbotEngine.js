@@ -1549,8 +1549,13 @@ const isMetaAction =
       a.startsWith("sup_") ||
       a.startsWith("rate_order_") ||
       a.startsWith("sup_plan_") ||
-      a.startsWith("sup_accept_") ||
+a.startsWith("sup_accept_") ||
       a.startsWith("sup_decline_") ||
+      a.startsWith("dec_out_of_stock") ||
+      a.startsWith("dec_min_not_met") ||
+      a.startsWith("dec_no_delivery") ||
+      a.startsWith("dec_price_changed") ||
+      a.startsWith("dec_other") ||
       a.startsWith("sup_order_") ||
       a.startsWith("sup_view_") ||
       a.startsWith("sup_save_") ||
@@ -7066,8 +7071,8 @@ await order.save();
         : isServiceSupplier
           ? `Service location: ${order.delivery?.address || "TBC"}`
           : "Collection - buyer will pick up";
-      const { filename } = await generatePDF({
-        type: "receipt",
+    const { filename } = await generatePDF({
+        type: "invoice",
         number: orderRef,
         date: new Date(),
         billingTo: `Buyer: ${order.buyerPhone}\n${deliveryNote}`,
@@ -9231,9 +9236,77 @@ return sendButtons(from, {
     return;
   }
   // ── Decline order ─────────────────────────────────────────────────────────
-  if (a.startsWith("sup_decline_")) {
+if (a.startsWith("sup_decline_")) {
     const orderId = a.replace("sup_decline_", "");
     return handleOrderDeclined(from, orderId, biz, saveBizSafe);
+  }
+
+  // ── Decline reason selected ────────────────────────────────────────────────
+  if (
+    a === "dec_out_of_stock" ||
+    a === "dec_min_not_met"  ||
+    a === "dec_no_delivery"  ||
+    a === "dec_price_changed"||
+    a === "dec_other"
+  ) {
+    const reasonMap = {
+      dec_out_of_stock:  "Out of stock",
+      dec_min_not_met:   "Minimum order not met",
+      dec_no_delivery:   "Cannot deliver to area",
+      dec_price_changed: "Price has changed",
+      dec_other:         "Unable to fulfill"
+    };
+    const reason = reasonMap[a] || "Declined";
+    const orderId = biz?.sessionData?.declineOrderId;
+
+    if (!orderId) {
+      await sendText(from, "❌ Session expired. Please try again.");
+      return sendMainMenu(from);
+    }
+
+    const SupplierOrder = (await import("../models/supplierOrder.js")).default;
+    const order = await SupplierOrder.findById(orderId);
+
+    if (!order) {
+      await sendText(from, "❌ Order not found.");
+      return sendMainMenu(from);
+    }
+
+    order.status = "declined";
+    order.declineReason = reason;
+    await order.save();
+
+    // Notify buyer
+    try {
+      await sendButtons(order.buyerPhone, {
+        text:
+          `❌ *Order Declined*\n\n` +
+          `Your order has been declined.\n` +
+          `*Reason:* ${reason}\n\n` +
+          `You can search for another supplier.`,
+        buttons: [
+          { id: "find_supplier", title: "🔍 Find Another" },
+          { id: "suppliers_home", title: "🏪 Suppliers" }
+        ]
+      });
+    } catch (err) {
+      console.error("[DECLINE NOTIFY BUYER]", err.message);
+    }
+
+    // Reset supplier session
+    if (biz) {
+      biz.sessionState = "ready";
+      biz.sessionData  = {};
+      await saveBizSafe(biz);
+    }
+
+    return sendButtons(from, {
+      text: `✅ Order declined.\n*Reason sent to buyer:* ${reason}`,
+      buttons: [
+        { id: "my_supplier_account", title: "🏪 My Business" },
+        { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
+      ]
+    });
   }
 
 
