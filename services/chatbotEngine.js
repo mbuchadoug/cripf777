@@ -3969,20 +3969,22 @@ const supplierStates = [
   "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
   "supplier_reg_prices", "supplier_update_prices",
   "supplier_edit_products", "supplier_edit_area",
-"supplier_reg_confirm", "supplier_reg_enter_ecocash",
+  "supplier_reg_confirm", "supplier_reg_enter_ecocash",
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
   "supplier_reg_type",
   "supplier_reg_travel",
-  "supplier_reg_city",       // ← ADD
-  "supplier_reg_category",   // ← ADD
-  "supplier_reg_delivery",   // ← ADD
+  "supplier_reg_city",
+  "supplier_reg_category",
+  "supplier_reg_delivery",
   "supplier_search_product",
   "supplier_order_product",
   "supplier_order_address",
   "supplier_order_enter_price",
-    "supplier_order_confirm_price",  // ← ADD THIS
+  "supplier_order_confirm_price",
   "supplier_order_picking",
-  "supplier_reg_biz_currency"
+  "supplier_reg_biz_currency",
+  "supplier_select_listed_products",   // ← ADD THIS
+  "supplier_add_listed_products"        // ← ADD THIS (same issue exists here)
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
