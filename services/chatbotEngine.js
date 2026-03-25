@@ -3961,6 +3961,20 @@ if (
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
+ // City was given but 0 results — show no-results message, NOT city picker
+    if (shortcode.city) {
+      biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product, city: shortcode.city } };
+      await saveBizSafe(biz);
+      return sendButtons(from, {
+        text: `😕 No results for *${shortcode.product}* in *${shortcode.city}*.\n\nTry searching all of Zimbabwe?`,
+        buttons: [
+          { id: "sup_search_city_all", title: "📍 Search All Cities" },
+          { id: "find_supplier",       title: "🔍 Search Again" }
+        ]
+      });
+    }
+
+    // No city at all — ask for it
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: shortcode.product }
