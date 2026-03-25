@@ -1718,48 +1718,66 @@ if (
   }
 
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
-  const parsed = parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null };
+  const parsed = parseShortcodeSearch(productQuery) ||
+    parseShortcodeSearch(`find ${productQuery}`) ||
+    { product: productQuery, city: null, area: null };
+
+  const cleanProduct = String(parsed.product || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+
   await UserSession.findOneAndUpdate(
     { phone },
     {
       $set: {
-        "tempData.supplierSearchProduct": parsed.product,
-        ...(parsed.city ? { "tempData.lastSearchCity": parsed.city } : {})
+        "tempData.supplierSearchProduct": cleanProduct,
+        ...(parsed.city ? { "tempData.lastSearchCity": parsed.city } : {}),
+        ...(parsed.area ? { "tempData.lastSearchArea": parsed.area } : {})
       },
       $unset: { "tempData.supplierSearchMode": "" }
     }
   );
 
-  if (parsed.city) {
-    // Skip city picker - go straight to results
-  const results = await runSupplierSearch({
-      city: parsed.city,
-      product: parsed.product,
+  if (parsed.city || parsed.area) {
+    const results = await runSupplierSearch({
+      city: parsed.city || null,
+      product: cleanProduct,
       area: parsed.area || null,
       profileType: sess?.tempData?.supplierSearchType || null
     });
+
     if (!results.length) {
       return sendButtons(from, {
-        text: `😕 No results for *${parsed.product}* in *${parsed.city}*.\n\nTry a different city or search term.`,
+        text: `😕 No results for *${cleanProduct}*${parsed.city ? ` in *${parsed.city}*` : ""}.\n\nTry a different city or search term.`,
         buttons: [
           { id: "find_supplier", title: "🔍 Search Again" },
           { id: "sup_search_city_all", title: "📍 Try All Cities" }
         ]
       });
     }
-  const pageResults = results.slice(0, 9);
-    const rows = formatSupplierResults(pageResults, parsed.city, parsed.product);
+
+    const pageResults = results.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
     const hasMore = results.length > 9;
+
     if (hasMore) {
-      await UserSession.findOneAndUpdate({ phone }, {
-        $set: { "tempData.searchResults": results, "tempData.searchPage": 0 }
-      }, { upsert: true });
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.searchResults": results, "tempData.searchPage": 0 } },
+        { upsert: true }
+      );
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
     }
-    return sendList(from, `🔍 *${parsed.product}* in ${parsed.city} - ${results.length} found`, rows);
+
+    return sendList(
+      from,
+      `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${results.length} found`,
+      rows
+    );
   }
 
-  return sendList(from, `🔍 Looking for: *${parsed.product}*\n\nWhich city?`, [
+  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
@@ -1767,7 +1785,6 @@ if (
     { id: "sup_search_city_all", title: "📍 All Cities" }
   ]);
 }
-
   const hasActiveBuyerFlow =
     !!sess?.tempData?.orderState ||
     !!sess?.tempData?.supplierSearchMode ||
@@ -4002,39 +4019,81 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     }
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
-    if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
-      const shortcode = parseShortcodeSearch(text);
-      if (shortcode) {
-        if (shortcode.city) {
-          const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
-          if (results.length) {
-            biz.sessionState = "ready";
-            biz.sessionData = {};
-            await saveBizSafe(biz);
-            const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-            return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
-          }
+ if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
+  const shortcode = parseShortcodeSearch(text);
+
+  if (shortcode) {
+    const cleanProduct = String(shortcode.product || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (shortcode.city || shortcode.area) {
+      const results = await runSupplierSearch({
+        city: shortcode.city || null,
+        product: cleanProduct,
+        area: shortcode.area || null
+      });
+
+      if (results.length) {
+        biz.sessionState = "ready";
+        biz.sessionData = {};
+        await saveBizSafe(biz);
+        const rows = formatSupplierResults(results, shortcode.city || shortcode.area || "", cleanProduct);
+        return sendList(
+          from,
+          `🔍 *${cleanProduct}*${shortcode.city ? ` in ${shortcode.city}` : ""} - ${results.length} found`,
+          rows
+        );
+      }
+
+      biz.sessionData = {
+        ...(biz.sessionData || {}),
+        supplierSearch: {
+          product: cleanProduct,
+          ...(shortcode.city ? { city: shortcode.city } : {}),
+          ...(shortcode.area ? { area: shortcode.area } : {})
         }
-        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
-        biz.sessionState = "supplier_search_city";
-        await saveBizSafe(biz);
-        return sendList(from, `🔍 Looking for: *${shortcode.product}*\n\nWhich city?`, [
-          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
-          { id: "sup_search_city_all", title: "📍 All Cities" }
-        ]);
-      }
-      // Not a shortcode but in supplier_search_city - treat the typed text as the product name directly
-      const productQuery = text.trim();
-      if (productQuery.length > 1) {
-        biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: productQuery } };
-        biz.sessionState = "supplier_search_city";
-        await saveBizSafe(biz);
-        return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
-          ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
-          { id: "sup_search_city_all", title: "📍 All Cities" }
-        ]);
-      }
+      };
+      await saveBizSafe(biz);
+
+      return sendButtons(from, {
+        text: `😕 No results for *${cleanProduct}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry searching all of Zimbabwe?`,
+        buttons: [
+          { id: "sup_search_city_all", title: "📍 Search All Cities" },
+          { id: "find_supplier", title: "🔍 Search Again" }
+        ]
+      });
     }
+
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { product: cleanProduct }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+
+    return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
+      ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
+    ]);
+  }
+
+  const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
+  if (productQuery.length > 1) {
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { product: productQuery }
+    };
+    biz.sessionState = "supplier_search_city";
+    await saveBizSafe(biz);
+
+    return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+      ...SUPPLIER_CITIES.map(c => ({ id: `sup_search_city_${c.toLowerCase()}`, title: c })),
+      { id: "sup_search_city_all", title: "📍 All Cities" }
+    ]);
+  }
+}
 
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({

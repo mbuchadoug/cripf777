@@ -332,21 +332,27 @@ export async function runSupplierSearch({ city, category, product, profileType, 
   if (city) query["location.city"] = new RegExp(`^${city}$`, "i");
   if (category) query.categories = category;
 
- if (product) {
+  if (product) {
+    product = String(product)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+
     const searchTerms = expandSearchTerms(product);
 
-    // Also split multi-word queries into individual words so
-    // "valve brass" matches "ball valve brass 25mm"
-    const individualWords = product.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const individualWords = product.split(/\s+/).filter(w => w.length > 2);
 
     const productOr = [
-      // Original expanded terms (exact phrase matching)
+      { listedProducts: { $regex: product, $options: "i" } },
+      { "rates.service": { $regex: product, $options: "i" } },
+      { businessName: { $regex: product, $options: "i" } },
+
       ...searchTerms.flatMap(term => [
         { listedProducts: { $regex: term, $options: "i" } },
         { "rates.service": { $regex: term, $options: "i" } },
         { businessName: { $regex: term, $options: "i" } }
       ]),
-      // Individual word matching — finds "ball valve brass 25mm" when searching "valve brass"
+
       ...individualWords.flatMap(word => [
         { listedProducts: { $regex: word, $options: "i" } },
         { "rates.service": { $regex: word, $options: "i" } }
@@ -622,25 +628,59 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "s tiles", "need teacher harare"
-export function parseShortcodeSearch(text = "") {
-  const raw = text.trim().toLowerCase();
+export function parseShortcodeSearch(input = "") {
+  const raw = String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/^find\s+/i, "")
+    .replace(/\s+/g, " ");
 
-  // ── Pattern 1: explicit prefix (find/search/s/buy etc.) ──────────────────
-  const prefixPattern = /^(?:\/find|find|search|s|buy|get|looking for|need|want|seeking|i need|i want|find me|get me|where can i get|who sells|who does|do you have)\s+(.+)$/i;
-  const m = raw.match(prefixPattern);
-  if (m) {
-    return parseQueryWithCity(m[1].trim());
+  if (!raw) return null;
+
+  const { SUPPLIER_CITIES = [] } = require("./supplierPlans.js");
+
+  const cityNames = SUPPLIER_CITIES
+    .map(c => {
+      if (typeof c === "string") return c.toLowerCase().trim();
+      if (c?.name) return String(c.name).toLowerCase().trim();
+      if (c?.label) return String(c.label).toLowerCase().trim();
+      if (c?.id) return String(c.id).toLowerCase().trim();
+      return "";
+    })
+    .filter(Boolean);
+
+  const words = raw.split(" ").filter(Boolean);
+  if (!words.length) return null;
+
+  let city = null;
+  let area = null;
+  let productWords = [...words];
+
+  if (words.length >= 2) {
+    const lastTwo = words.slice(-2).join(" ").trim();
+    if (cityNames.includes(lastTwo)) {
+      city = lastTwo;
+      productWords = words.slice(0, -2);
+    }
   }
 
-  // ── Pattern 2: plain "product city" — only treat as shortcode if a known
-  //    city or suburb appears in the text (avoids hijacking normal messages)
-  const plain = parseQueryWithCity(raw);
-  if (plain && plain.city) {
-    // City was detected → treat as shortcode
-    return plain;
+  if (!city && words.length >= 1) {
+    const lastOne = words[words.length - 1].trim();
+    if (cityNames.includes(lastOne)) {
+      city = lastOne;
+      productWords = words.slice(0, -1);
+    }
   }
 
-  return null;
+  const product = productWords.join(" ").trim();
+
+  if (!product) return null;
+
+  return {
+    product,
+    city,
+    area
+  };
 }
 
 // ── Split "plumber harare" into { product: "plumber", city: "Harare" } ───────
