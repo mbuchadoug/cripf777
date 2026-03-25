@@ -359,8 +359,7 @@ async function generatePDF({
 }) {
 
     // ✅ ADD THIS LINE
-  const baseDir = await ensurePublicSubdirs();
-const folder = path.join(
+ const folder = path.join(
   baseDir,
   type === "invoice"
     ? "invoices"
@@ -368,6 +367,8 @@ const folder = path.join(
     ? "quotes"
     : type === "statement"
     ? "statements"
+    : type === "order"
+    ? "orders"
     : "receipts"
 );
 
@@ -431,10 +432,11 @@ const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
 
   // Build HTML from template (bootstrap 3.3.7 + your layout)
  function buildHtml() {
-  const typeLabel =
+const typeLabel =
     type === "invoice" ? "INVOICE" :
     type === "quote" ? "QUOTATION" :
     type === "statement" ? "STATEMENT" :
+    type === "order" ? "ORDER" :
     "RECEIPT";
 
   // ✅ STATEMENT LAYOUT (unchanged)
@@ -532,7 +534,7 @@ const statusBadge = bizMeta.status
   const total = taxableBase + vat;
 
   // ✅ SIMPLIFIED RECEIPT LAYOUT (no discount/VAT columns)
-  const isReceipt = type === "receipt";
+const isReceipt = type === "receipt" || type === "order";
 
   const rowsHtml = items.map(it => {
     const qty = Number(it.qty || 1);
@@ -958,7 +960,7 @@ try {
 }
 
 
-      doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
+    doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : type === "order" ? "ORDER" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });
       doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
       if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });

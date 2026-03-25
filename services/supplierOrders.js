@@ -189,8 +189,8 @@ await SupplierProfile.findOneAndUpdate(
         : isServiceSupplier
           ? `Service location: ${order.delivery?.address || "TBC"}`
           : "Collection - buyer will pick up";
-      const { filename } = await generatePDF({
-        type: "receipt",
+     const { filename } = await generatePDF({
+        type: "order",
         number: orderRef,
         date: new Date(),
         billingTo: `Buyer: ${order.buyerPhone}\n${deliveryNote}`,
@@ -205,11 +205,11 @@ await SupplierProfile.findOneAndUpdate(
           logoUrl: "",
           address: `${supplier?.location?.area || ""}, ${supplier?.location?.city || ""}`,
           _id: String(order._id),
-          status: "paid"
+          status: "accepted"
         }
       });
       const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-      await sendDocument(from, { link: `${site}/docs/generated/receipts/${filename}`, filename });
+      await sendDocument(from, { link: `${site}/docs/generated/orders/${filename}`, filename });
     } catch (pdfErr) {
       console.error("[ORDER ACCEPT PDF]", pdfErr.message);
     }
