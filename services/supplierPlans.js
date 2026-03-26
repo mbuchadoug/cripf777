@@ -4,13 +4,13 @@
 export const SUPPLIER_PLANS = {
   basic: {
     name: "Basic",
-    monthly: { price: 0.05,   currency: "USD", durationDays: 30  },
+    monthly: { price: 5,   currency: "USD", durationDays: 30  },
     annual:  { price: 50,  currency: "USD", durationDays: 365 }
   },
   pro: {
     name: "Pro",
-    monthly: { price: 0.05,  currency: "USD", durationDays: 30  },
-    annual:  { price: 120, currency: "USD", durationDays: 365 }
+    monthly: { price: 10,  currency: "USD", durationDays: 30  },
+    annual:  { price: 100, currency: "USD", durationDays: 365 }
   },
   featured: {
     name: "Featured",
