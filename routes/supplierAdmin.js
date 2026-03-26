@@ -4,6 +4,7 @@ import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
+import PhoneContact from "../models/phoneContact.js";   // ← ADD THIS LINE
 
 import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
@@ -1277,12 +1278,13 @@ function tierColor(t) {
 }
 
 function layout(title, content) {
-  const nav = [
-    { href: "/zq-admin", label: "📊 Dashboard", match: title === "Dashboard" },
-    { href: "/zq-admin/suppliers", label: "🏪 Suppliers", match: title === "Suppliers" || title.includes("Edit") },
-{ href: "/zq-admin/orders", label: "📦 Orders", match: title === "Orders" },
-    { href: "/zq-admin/payments", label: "💳 Payments", match: title === "Payments" },
-    { href: "/zq-admin/presets", label: "🗂 Presets", match: title === "Presets" },
+ const nav = [
+    { href: "/zq-admin",           label: "📊 Dashboard",  match: title === "Dashboard" },
+    { href: "/zq-admin/suppliers", label: "🏪 Suppliers",   match: title === "Suppliers" || title.includes("Edit") },
+    { href: "/zq-admin/orders",    label: "📦 Orders",      match: title === "Orders" },
+    { href: "/zq-admin/payments",  label: "💳 Payments",    match: title === "Payments" },
+    { href: "/zq-admin/contacts",  label: "👥 Contacts",    match: title === "Contacts" },   // ← ADD THIS
+    { href: "/zq-admin/presets",   label: "🗂 Presets",     match: title === "Presets" },
   ];
 
   return `<!DOCTYPE html>
@@ -1861,7 +1863,151 @@ router.get("/suppliers/:id/live-items", requireSupplierAdmin, async (req, res) =
 
 
 
+// ── Contacts (Phone Numbers / Users) ──────────────────────────────────────
+router.get("/contacts", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { search = "", period = "", page = 1 } = req.query;
+    const limit = 30;
+    const skip  = (Number(page) - 1) * limit;
 
+    // ── Date range for "period" filter ─────────────────────────────────────
+    const now   = new Date();
+    let dateFrom = null;
+    if (period === "today") {
+      dateFrom = new Date(now); dateFrom.setHours(0,0,0,0);
+    } else if (period === "week") {
+      dateFrom = new Date(now); dateFrom.setDate(now.getDate() - 7);
+    } else if (period === "month") {
+      dateFrom = new Date(now); dateFrom.setDate(now.getDate() - 30);
+    }
+
+    // ── Build query ─────────────────────────────────────────────────────────
+    const query = {};
+    if (search) {
+      query.$or = [
+        { phone:        { $regex: search, $options: "i" } },
+        { firstMessage: { $regex: search, $options: "i" } },
+        { channel:      { $regex: search, $options: "i" } }
+      ];
+    }
+    if (dateFrom) query.createdAt = { $gte: dateFrom };
+
+    // ── Stats (always unfiltered for accuracy) ──────────────────────────────
+    const todayStart  = new Date(now); todayStart.setHours(0,0,0,0);
+    const weekStart   = new Date(now); weekStart.setDate(now.getDate() - 7);
+    const monthStart  = new Date(now); monthStart.setDate(now.getDate() - 30);
+
+    const [
+      total, todayCount, weekCount, monthCount,
+      contacts
+    ] = await Promise.all([
+      PhoneContact.countDocuments(),
+      PhoneContact.countDocuments({ createdAt: { $gte: todayStart } }),
+      PhoneContact.countDocuments({ createdAt: { $gte: weekStart } }),
+      PhoneContact.countDocuments({ createdAt: { $gte: monthStart } }),
+      PhoneContact.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+    ]);
+
+    const filteredTotal = await PhoneContact.countDocuments(query);
+    const pages = Math.ceil(filteredTotal / limit);
+    const qs = (p) => `?page=${p}&search=${encodeURIComponent(search)}&period=${period}`;
+
+    res.send(layout("Contacts", `
+
+      <!-- ── Stats row ─────────────────────────────────────────────── -->
+      <div class="stats-grid" style="margin-bottom:20px">
+        ${stat(total,       "Total Contacts",     "")}
+        ${stat(todayCount,  "New Today",          "green")}
+        ${stat(weekCount,   "New This Week",      "blue")}
+        ${stat(monthCount,  "New This Month",     "teal")}
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Phone Contacts <span class="count">${filteredTotal}</span></h3>
+          <form method="GET" class="filter-form">
+            <input
+              name="search"
+              placeholder="Search phone or message..."
+              value="${esc(search)}"
+              style="min-width:200px"
+            />
+            <select name="period">
+              <option value="">All Time</option>
+              <option ${period === "today" ? "selected" : ""}  value="today">Today</option>
+              <option ${period === "week"  ? "selected" : ""}  value="week">Last 7 Days</option>
+              <option ${period === "month" ? "selected" : ""}  value="month">Last 30 Days</option>
+            </select>
+            <button type="submit">Filter</button>
+            <a href="/zq-admin/contacts" class="btn-reset">Clear</a>
+          </form>
+        </div>
+
+        <!-- ── Mobile-friendly table wrapper ────────────────────── -->
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Phone</th>
+                <th>First Message</th>
+                <th>Channel</th>
+                <th>First Seen</th>
+                <th>Last Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${contacts.length ? contacts.map((c, i) => `
+              <tr>
+                <td style="color:var(--muted);font-size:11px">${skip + i + 1}</td>
+                <td>
+                  <strong style="font-size:13px">${esc(c.phone)}</strong>
+                </td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">
+                  ${c.firstMessage ? esc(c.firstMessage).slice(0, 60) : "<em>—</em>"}
+                </td>
+                <td>
+                  <span class="badge badge-blue" style="font-size:10px">${esc(c.channel || "whatsapp")}</span>
+                </td>
+                <td style="white-space:nowrap;font-size:12px">
+                  ${new Date(c.firstSeen || c.createdAt).toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "2-digit",
+                    hour: "2-digit", minute: "2-digit"
+                  })}
+                </td>
+                <td style="white-space:nowrap;font-size:12px;color:var(--muted)">
+                  ${new Date(c.updatedAt || c.createdAt).toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "2-digit"
+                  })}
+                </td>
+              </tr>`).join("") : `
+              <tr>
+                <td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">
+                  No contacts found.
+                </td>
+              </tr>`}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── Pagination ─────────────────────────────────────────── -->
+        ${pages > 1 ? `
+        <div class="pagination">
+          ${Number(page) > 1 ? `<a href="${qs(Number(page) - 1)}">← Prev</a>` : ""}
+          ${Array.from({ length: Math.min(pages, 10) }, (_, i) => i + 1).map(p =>
+            `<a href="${qs(p)}" class="${Number(page) === p ? "active" : ""}">${p}</a>`
+          ).join("")}
+          ${Number(page) < pages ? `<a href="${qs(Number(page) + 1)}">Next →</a>` : ""}
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">
+          Showing ${skip + 1}–${Math.min(skip + limit, filteredTotal)} of ${filteredTotal}
+        </p>` : ""}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Contacts", `<div class="alert red">Error: ${err.message}</div>`));
+  }
+});
 
 
 
