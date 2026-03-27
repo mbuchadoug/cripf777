@@ -2,900 +2,1877 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{{org.name}} | Professional Dashboard</title>
+  <title>{{org.name}} | Learning Hub</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
   <style>
+    /* ============================================================
+       DESIGN TOKENS
+    ============================================================ */
     :root {
-      --primary: #2563eb;
-      --primary-dark: #1e40af;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --text: #111827;
-      --text-muted: #6b7280;
-      --border: #e5e7eb;
-      --surface: #ffffff;
-      --background: #f9fafb;
-      --radius: 12px;
-      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --ink:         #0d0f14;
+      --ink-soft:    #3d4354;
+      --ink-muted:   #8b92a5;
+      --ink-faint:   #c5c9d6;
+      --canvas:      #f4f5f8;
+      --surface:     #ffffff;
+      --surface-2:   #f9fafb;
+      --border:      #e4e6ed;
+      --border-soft: #edeef3;
+
+      --blue:        #2f6ef7;
+      --blue-dark:   #1d4ed8;
+      --blue-glow:   rgba(47,110,247,.12);
+      --blue-bg:     #eff4fe;
+
+      --violet:      #7c3aed;
+      --violet-bg:   #f5f3ff;
+      --teal:        #0d9488;
+      --teal-bg:     #f0fdfa;
+      --amber:       #d97706;
+      --amber-bg:    #fffbeb;
+      --rose:        #e11d48;
+      --rose-bg:     #fff1f2;
+      --emerald:     #059669;
+      --emerald-bg:  #ecfdf5;
+
+      --radius-sm:  6px;
+      --radius:     10px;
+      --radius-lg:  16px;
+      --radius-xl:  24px;
+
+      --shadow-xs:  0 1px 2px rgb(0 0 0/.05);
+      --shadow-sm:  0 1px 4px rgb(0 0 0/.08);
+      --shadow:     0 4px 16px rgb(0 0 0/.08), 0 1px 3px rgb(0 0 0/.06);
+      --shadow-lg:  0 12px 36px rgb(0 0 0/.12);
+
+      --font:       'Sora', system-ui, sans-serif;
+      --mono:       'DM Mono', monospace;
     }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: var(--background);
-      color: var(--text);
+      font-family: var(--font);
+      background: var(--canvas);
+      color: var(--ink);
       line-height: 1.6;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* ============ LAYOUT ============ */
-    .container {
-      max-width: 1400px;
+    a { text-decoration: none; color: inherit; }
+
+    /* ============================================================
+       TOPBAR
+    ============================================================ */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-soft);
+      padding: 0 24px;
+    }
+
+    .topbar-inner {
+      max-width: 1380px;
       margin: 0 auto;
-      padding: 24px 20px;
-    }
-
-    /* ============ HEADER ============ */
-    .header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 20px 0;
-      margin-bottom: 32px;
-    }
-
-    .header-content {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 0 20px;
+      height: 64px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
       gap: 16px;
     }
 
-    .header h1 {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .header-subtitle {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .header-actions {
+    .topbar-brand {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -.3px;
+      flex-shrink: 0;
       display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    /* ============ BUTTONS ============ */
-    .btn {
-      display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
-      transition: all 0.2s;
     }
 
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-dark);
-      transform: translateY(-1px);
-      box-shadow: var(--shadow);
-    }
-
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
-
-    .btn-outline:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    /* ============ CARDS ============ */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-      margin-bottom: 20px;
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .card-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    /* ============ TRIAL BANNER ============ */
-    .trial-banner {
-      background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-      border: 2px solid var(--primary);
-      border-radius: var(--radius);
-      padding: 24px;
-      margin-bottom: 32px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .trial-content h3 {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--primary-dark);
-      margin-bottom: 8px;
-    }
-
-    .trial-content p {
-      font-size: 14px;
-      color: var(--text-muted);
-    }
-
-    .trial-progress {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 12px;
-    }
-
-    .progress-bar {
-      flex: 1;
+    .topbar-brand-dot {
+      width: 8px;
       height: 8px;
-      background: rgba(37, 99, 235, 0.1);
-      border-radius: 999px;
-      overflow: hidden;
-      max-width: 200px;
+      background: var(--blue);
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
-    .progress-fill {
-      height: 100%;
-      background: var(--primary);
-      border-radius: 999px;
-      transition: width 0.3s;
+    .topbar-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      flex-shrink: 0;
     }
 
-    .progress-text {
+    .topbar-org {
       font-size: 14px;
+      font-weight: 500;
+      color: var(--ink-soft);
+    }
+
+    .topbar-spacer { flex: 1; }
+
+    .topbar-role-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
       font-weight: 600;
-      color: var(--primary-dark);
+      background: var(--blue-bg);
+      color: var(--blue-dark);
+      letter-spacing: .2px;
     }
 
-    /* ============ MODE SWITCH ============ */
-    .mode-switch {
-      background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
-      border: 1px solid var(--warning);
-      border-left: 4px solid var(--warning);
+    .topbar-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
-    /* ============ SEARCH PANEL ============ */
-    .search-panel {
+    /* ============================================================
+       NAV TABS  (Series / Category / Pillar)
+    ============================================================ */
+    .nav-tabs-bar {
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-soft);
+      padding: 0 24px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .nav-tabs-bar::-webkit-scrollbar { display: none; }
+
+    .nav-tabs-inner {
+      max-width: 1380px;
+      margin: 0 auto;
+      display: flex;
+      gap: 0;
     }
 
-.search-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr auto;
-  gap: 12px;
-  align-items: end;
-}
+    .nav-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--ink-muted);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .18s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: var(--font);
+    }
 
-@media (max-width: 1024px) {
-  .search-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-    .form-group {
+    .nav-tab:hover {
+      color: var(--ink);
+      background: var(--canvas);
+    }
+
+    .nav-tab.active {
+      color: var(--blue);
+      border-bottom-color: var(--blue);
+      font-weight: 600;
+    }
+
+    .nav-tab-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--canvas);
+      color: var(--ink-soft);
+    }
+
+    .nav-tab.active .nav-tab-count {
+      background: var(--blue-bg);
+      color: var(--blue);
+    }
+
+    /* ============================================================
+       PAGE LAYOUT
+    ============================================================ */
+    .page {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 28px 24px 60px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .page { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+
+    /* ============================================================
+       SIDEBAR
+    ============================================================ */
+    .sidebar {
+      position: sticky;
+      top: 112px;
       display: flex;
       flex-direction: column;
+      gap: 16px;
     }
 
-    .form-group label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 6px;
-    }
-
-    .form-group input,
-    .form-group select {
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 14px;
-      color: var(--text);
-      background: var(--surface);
-      transition: border-color 0.2s;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-
-    /* ============ QUIZ GRID ============ */
-    .quiz-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 20px;
-    }
-
-    .quiz-card {
+    .sidebar-section {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      transition: all 0.2s;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-xs);
     }
 
-    .quiz-card:hover {
-      border-color: var(--primary);
-      box-shadow: var(--shadow-lg);
-      transform: translateY(-2px);
-    }
-
-    .quiz-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      margin-bottom: 12px;
-    }
-
-    .quiz-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text);
-      line-height: 1.4;
-    }
-
-    .badge {
-      padding: 4px 10px;
-      border-radius: 6px;
+    .sidebar-section-header {
+      padding: 14px 16px;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: .8px;
+      color: var(--ink-muted);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface-2);
     }
 
-    .badge-trial {
-      background: #dbeafe;
-      color: var(--primary-dark);
-    }
-
-    .badge-catalog {
-      background: #f0fdf4;
-      color: #166534;
-    }
-
-    .quiz-meta {
+    .sidebar-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--text-muted);
-      margin: 12px 0;
-    }
-
-    .topic-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 12px 0;
-    }
-
-    .topic-tag {
-      background: rgba(37, 99, 235, 0.1);
-      color: var(--primary);
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
+      gap: 10px;
+      padding: 11px 16px;
+      font-size: 13.5px;
       font-weight: 500;
-    }
-
-    .quiz-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
-
-    /* ============ HISTORY TABLE ============ */
-    .history-table {
+      color: var(--ink-soft);
+      cursor: pointer;
+      transition: all .15s;
+      border: none;
+      background: none;
       width: 100%;
-      border-collapse: collapse;
-    }
-
-    .history-table th {
       text-align: left;
-      padding: 12px;
-      font-size: 13px;
+      font-family: var(--font);
+    }
+
+    .sidebar-item:hover { background: var(--canvas); color: var(--ink); }
+
+    .sidebar-item.active {
+      background: var(--blue-bg);
+      color: var(--blue-dark);
       font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 2px solid var(--border);
     }
 
-    .history-table td {
-      padding: 16px 12px;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
+    .sidebar-item-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      background: var(--canvas);
+      flex-shrink: 0;
     }
 
-    .history-table tr:hover {
-      background: var(--background);
-    }
+    .sidebar-item.active .sidebar-item-icon { background: var(--blue); }
 
-    .score-badge {
-      padding: 4px 12px;
+    .sidebar-count {
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
       border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
+      background: var(--canvas);
+      color: var(--ink-muted);
     }
 
-    .score-high {
-      background: #d1fae5;
-      color: #065f46;
+    .sidebar-item.active .sidebar-count {
+      background: var(--blue-dark);
+      color: #fff;
     }
 
-    .score-medium {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .score-low {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    /* ============ STATS GRID ============ */
-    .stats-grid {
+    /* ============================================================
+       STATS STRIP
+    ============================================================ */
+    .stats-strip {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 32px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
     }
 
     .stat-card {
       background: var(--surface);
       border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .stat-icon {
+      width: 44px;
+      height: 44px;
       border-radius: var(--radius);
-      padding: 20px;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
     }
 
+    .stat-icon-blue   { background: var(--blue-bg); }
+    .stat-icon-violet { background: var(--violet-bg); }
+    .stat-icon-teal   { background: var(--teal-bg); }
+
+    .stat-info {}
     .stat-value {
-      font-size: 36px;
+      font-size: 26px;
       font-weight: 800;
-      color: var(--primary);
       line-height: 1;
-      margin-bottom: 8px;
+      color: var(--ink);
     }
-
     .stat-label {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    /* ============================================================
+       SEARCH & FILTER BAR
+    ============================================================ */
+    .search-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .search-bar-top {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-input-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 12px 10px 38px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--canvas);
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-glow);
+      background: var(--surface);
+    }
+
+    .search-input::placeholder { color: var(--ink-faint); }
+
+    .filter-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--font);
       font-size: 13px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 600;
+      color: var(--ink-soft);
+      background: var(--canvas);
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
     }
 
-    /* ============ RESPONSIVE ============ */
+    .filter-toggle-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .filter-toggle-btn.has-filters { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-dark); }
+
+    .search-filters {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-soft);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
     @media (max-width: 768px) {
-      .search-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .trial-banner {
-        flex-direction: column;
-        text-align: center;
-      }
-
-      .quiz-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr 1fr;
-      }
+      .search-filters { grid-template-columns: 1fr 1fr; }
     }
 
-    /* ============ EMPTY STATE ============ */
+    .filter-group {}
+    .filter-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--ink-muted);
+      margin-bottom: 5px;
+    }
+
+    .filter-select {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 13.5px;
+      color: var(--ink);
+      background: var(--canvas);
+      cursor: pointer;
+      transition: border-color .2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b92a5' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--blue);
+      background-color: var(--surface);
+    }
+
+    .active-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px 4px 12px;
+      background: var(--blue-bg);
+      color: var(--blue-dark);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .filter-chip-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(47,110,247,.2);
+      color: var(--blue-dark);
+      font-size: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    /* ============================================================
+       ADMIN SHORTCUT STRIP
+    ============================================================ */
+    .admin-strip {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .admin-card {
+      flex: 1;
+      min-width: 140px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      cursor: pointer;
+      transition: all .2s;
+      text-decoration: none;
+      color: inherit;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .admin-card:hover {
+      border-color: var(--blue);
+      box-shadow: var(--shadow);
+      transform: translateY(-1px);
+    }
+
+    .admin-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .admin-card-label {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      line-height: 1.3;
+    }
+
+    /* ============================================================
+       SECTION HEADER
+    ============================================================ */
+    .content-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .content-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .content-count {
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+    }
+
+    .view-btn {
+      padding: 5px 8px;
+      border-radius: 4px;
+      border: none;
+      background: none;
+      color: var(--ink-muted);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all .15s;
+    }
+
+    .view-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xs); }
+
+    /* ============================================================
+       SERIES BLOCK
+    ============================================================ */
+    .series-block {
+      margin-bottom: 28px;
+    }
+
+    .series-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 14px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-xs);
+      cursor: pointer;
+      user-select: none;
+      transition: all .15s;
+    }
+
+    .series-header:hover { border-color: var(--blue); }
+
+    .series-accent {
+      width: 4px;
+      height: 36px;
+      border-radius: 2px;
+      background: var(--blue);
+      flex-shrink: 0;
+    }
+
+    .series-info { flex: 1; min-width: 0; }
+
+    .series-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .series-meta {
+      display: flex;
+      gap: 6px;
+      margin-top: 5px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .series-quiz-count {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-left: auto;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    .series-collapse-icon {
+      color: var(--ink-muted);
+      transition: transform .2s;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .series-collapse-icon.collapsed { transform: rotate(-90deg); }
+
+    .series-body {
+      /* shown/hidden via JS */
+    }
+
+    /* ============================================================
+       QUIZ GRID / LIST
+    ============================================================ */
+    .quiz-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+    }
+
+    .quiz-list { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ---- QUIZ CARD ---- */
+    .quiz-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: all .2s;
+      box-shadow: var(--shadow-xs);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .quiz-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--blue);
+      opacity: 0;
+      transition: opacity .2s;
+    }
+
+    .quiz-card:hover {
+      border-color: var(--blue);
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .quiz-card:hover::before { opacity: 1; }
+
+    .quiz-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .quiz-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.4;
+      flex: 1;
+    }
+
+    .quiz-badges { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
+
+    .quiz-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--ink-muted);
+      flex-wrap: wrap;
+    }
+
+    .quiz-meta-row svg { flex-shrink: 0; }
+
+    .quiz-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+    .quiz-footer {
+      display: flex;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+      align-items: center;
+    }
+
+    /* ---- LIST ROW ---- */
+    .quiz-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all .15s;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .quiz-row:hover { border-color: var(--blue); box-shadow: var(--shadow); }
+
+    .quiz-row-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius);
+      background: var(--blue-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .quiz-row-info { flex: 1; min-width: 0; }
+    .quiz-row-title { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .quiz-row-meta { font-size: 12px; color: var(--ink-muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .quiz-row-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+    /* ============================================================
+       BADGES
+    ============================================================ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      white-space: nowrap;
+    }
+
+    .badge-blue    { background: var(--blue-bg);    color: var(--blue-dark); }
+    .badge-violet  { background: var(--violet-bg);  color: var(--violet); }
+    .badge-teal    { background: var(--teal-bg);    color: var(--teal); }
+    .badge-amber   { background: var(--amber-bg);   color: var(--amber); }
+    .badge-rose    { background: var(--rose-bg);    color: var(--rose); }
+    .badge-emerald { background: var(--emerald-bg); color: var(--emerald); }
+    .badge-slate   { background: #f1f5f9; color: #475569; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      background: var(--canvas);
+      color: var(--ink-soft);
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+    }
+
+    /* ============================================================
+       BUTTONS
+    ============================================================ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: var(--radius);
+      font-size: 13.5px;
+      font-weight: 600;
+      font-family: var(--font);
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: all .18s;
+      white-space: nowrap;
+    }
+
+    .btn-sm { padding: 6px 13px; font-size: 12.5px; }
+
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--blue-dark); box-shadow: 0 4px 12px rgba(47,110,247,.35); transform: translateY(-1px); }
+
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--ink-soft);
+    }
+    .btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+
+    .btn-ghost {
+      background: none;
+      color: var(--ink-muted);
+      padding: 6px 10px;
+    }
+    .btn-ghost:hover { background: var(--canvas); color: var(--ink); }
+
+    .btn-danger { background: var(--rose-bg); color: var(--rose); border: 1.5px solid transparent; }
+    .btn-danger:hover { background: var(--rose); color: #fff; }
+
+    /* ============================================================
+       TRIAL BANNER
+    ============================================================ */
+    .trial-banner {
+      background: linear-gradient(135deg, var(--blue-bg) 0%, #e8f0fe 100%);
+      border: 1.5px solid rgba(47,110,247,.3);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .trial-banner h3 { font-size: 18px; font-weight: 800; color: var(--blue-dark); margin-bottom: 4px; }
+    .trial-banner p  { font-size: 13.5px; color: var(--ink-soft); }
+
+    .trial-progress { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .progress-bar { flex: 1; height: 8px; background: rgba(47,110,247,.15); border-radius: 999px; overflow: hidden; max-width: 220px; }
+    .progress-fill { height: 100%; background: var(--blue); border-radius: 999px; transition: width .4s; }
+    .progress-text { font-size: 13.5px; font-weight: 700; color: var(--blue-dark); white-space: nowrap; }
+
+    /* ============================================================
+       PARENT MODE BANNER
+    ============================================================ */
+    .mode-banner {
+      background: var(--amber-bg);
+      border: 1.5px solid rgba(217,119,6,.3);
+      border-radius: var(--radius-xl);
+      padding: 18px 22px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .mode-banner-text strong { font-size: 15px; color: var(--amber); }
+    .mode-banner-text p      { font-size: 13px; color: #78350f; margin-top: 2px; }
+
+    /* ============================================================
+       HISTORY TABLE
+    ============================================================ */
+    .history-section { margin-top: 32px; }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .history-table { width: 100%; border-collapse: collapse; }
+    .history-table th {
+      text-align: left;
+      padding: 11px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: var(--ink-muted);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .history-table td { padding: 14px 16px; border-bottom: 1px solid var(--border-soft); font-size: 13.5px; }
+    .history-table tr:last-child td { border-bottom: none; }
+    .history-table tr:hover td { background: var(--canvas); }
+
+    .score-pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .score-high   { background: var(--emerald-bg); color: #065f46; }
+    .score-medium { background: var(--amber-bg);   color: #92400e; }
+    .score-low    { background: var(--rose-bg);     color: #991b1b; }
+
+    /* ============================================================
+       EMPTY STATE
+    ============================================================ */
     .empty-state {
       text-align: center;
-      padding: 60px 20px;
-      color: var(--text-muted);
+      padding: 56px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
     }
 
-    .empty-state svg {
-      width: 64px;
-      height: 64px;
-      margin-bottom: 16px;
-      opacity: 0.3;
+    .empty-state-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--canvas);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin: 0 auto 16px;
     }
 
-    .empty-state h3 {
-      font-size: 18px;
-      color: var(--text);
-      margin-bottom: 8px;
+    .empty-state h3 { font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+    .empty-state p  { font-size: 14px; color: var(--ink-muted); }
+
+    /* ============================================================
+       ONBOARDING WELCOME CARD
+    ============================================================ */
+    .welcome-card {
+      background: linear-gradient(135deg, #1e3a8a 0%, var(--blue) 60%, #4f46e5 100%);
+      border-radius: var(--radius-xl);
+      padding: 28px;
+      color: #fff;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
     }
 
-    .empty-state p {
-      font-size: 14px;
+    .welcome-card::after {
+      content: '✦';
+      position: absolute;
+      right: 28px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 80px;
+      opacity: .08;
     }
+
+    .welcome-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+    .welcome-card p  { font-size: 14px; opacity: .85; max-width: 480px; }
+
+    .welcome-steps {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .welcome-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,.15);
+      border-radius: var(--radius);
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .welcome-step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    /* ============================================================
+       RESPONSIVE HELPERS
+    ============================================================ */
+    @media (max-width: 640px) {
+      .topbar-inner { padding: 0; }
+      .page { padding: 16px; }
+      .stats-strip { grid-template-columns: 1fr 1fr; }
+      .quiz-grid { grid-template-columns: 1fr; }
+      .search-filters { grid-template-columns: 1fr; }
+      .admin-strip { gap: 8px; }
+      .admin-card { min-width: 100px; }
+      .history-table th:nth-child(4),
+      .history-table td:nth-child(4) { display: none; }
+    }
+
+    /* ============================================================
+       PILLAR ACCENT COLORS
+    ============================================================ */
+    [data-pillar="consciousness"]  .series-accent { background: #7c3aed; }
+    [data-pillar="responsibility"] .series-accent { background: #0d9488; }
+    [data-pillar="purpose"]        .series-accent { background: #d97706; }
+    [data-pillar="technology"]     .series-accent { background: #2f6ef7; }
+    [data-pillar="frequencies"]    .series-accent { background: #e11d48; }
+    [data-pillar="civilization"]   .series-accent { background: #059669; }
+    [data-pillar="interpretation"] .series-accent { background: #6366f1; }
+    [data-pillar="negotiation"]    .series-accent { background: #f59e0b; }
+
+    /* ============================================================
+       JS-DRIVEN HIDE/SHOW
+    ============================================================ */
+    .js-hidden { display: none !important; }
+    [data-view-mode="list"] .quiz-grid { display: none; }
+    [data-view-mode="list"] .quiz-list { display: flex; }
+    [data-view-mode="grid"] .quiz-grid { display: grid; }
+    [data-view-mode="grid"] .quiz-list { display: none; }
   </style>
 </head>
-
 <body>
+
   {{> navbar}}
 
-  <!-- HEADER -->
-  <div class="header">
-    <div class="header-content">
-      <div>
-        <h1>{{org.name}}</h1>
-        <div class="header-subtitle">
-          {{#if (eq membership.role "student")}}
-            Student Learning Portal
-          {{else if (eq membership.role "teacher")}}
-            Teacher Dashboard
-          {{else}}
-            Professional Development Portal
-          {{/if}}
-        </div>
+  <!-- ═══════════════════════════════════════
+       TOPBAR
+  ═══════════════════════════════════════ -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-brand">
+        <span class="topbar-brand-dot"></span>
+        {{org.name}}
       </div>
-
-      <div class="header-actions">
-        {{#if isAdmin}}
-          <a href="/admin/orgs/{{org.slug}}/manage" class="btn btn-outline">
-            ⚙️ Manage Org
-          </a>
+      <div class="topbar-divider"></div>
+      <span class="topbar-org">
+        {{#if (eq membership.role "student")}}Student Learning Portal
+        {{else if (eq membership.role "teacher")}}Teacher Dashboard
+        {{else if isAdmin}}Administrator View
+        {{else}}Professional Development Portal
         {{/if}}
-        <a href="/org/{{org.slug}}/certificates" class="btn btn-outline">
-          🏆 Certificates
-        </a>
+      </span>
+      <div class="topbar-spacer"></div>
+
+      {{#if isAdmin}}
+        <span class="topbar-role-pill">
+          🔑 Admin
+        </span>
+      {{/if}}
+
+      <div class="topbar-actions">
+        {{#if isAdmin}}
+          <a href="/admin/orgs/{{org.slug}}/manage" class="btn btn-outline btn-sm">⚙️ Manage Org</a>
+        {{/if}}
+        <a href="/org/{{org.slug}}/certificates" class="btn btn-outline btn-sm">🏆 Certificates</a>
       </div>
     </div>
   </div>
 
-  <div class="container">
-
-    <!-- TRIAL BANNER -->
-    {{#if (and isCripfcntSchool (eq user.employeeSubscriptionStatus "trial"))}}
-    {{#unless isAdmin}}
-    <div class="trial-banner">
-      <div class="trial-content">
-        <h3>🎯 Welcome to CRIPFCnt Professional</h3>
-        <p>Complete your trial assessments to unlock full access to our professional development curriculum</p>
-        <div class="trial-progress">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: {{#if employeeTrialTotal}}{{math employeeTrialCompleted "/" employeeTrialTotal "*" 100}}%{{else}}0%{{/if}}"></div>
-          </div>
-          <span class="progress-text">{{employeeTrialCompleted}}/{{employeeTrialTotal}} Complete</span>
-        </div>
-      </div>
-      {{#if canUpgradeEmployee}}
-        <a href="/employee/upgrade" class="btn btn-primary">
-          Upgrade to Full Access →
-        </a>
+  <!-- ═══════════════════════════════════════
+       NAV TABS  (view switcher)
+  ═══════════════════════════════════════ -->
+  <div class="nav-tabs-bar">
+    <div class="nav-tabs-inner">
+      <button class="nav-tab active" data-tab="assessments" onclick="switchTab('assessments', this)">
+        📚 Assessments
+        <span class="nav-tab-count" id="tab-count-assessments">
+          {{#if hasAssignedQuizzes}}✓{{else}}0{{/if}}
+        </span>
+      </button>
+      <button class="nav-tab" data-tab="history" onclick="switchTab('history', this)">
+        📋 My History
+        <span class="nav-tab-count">{{attemptRows.length}}</span>
+      </button>
+      {{#if isAdmin}}
+      <button class="nav-tab" data-tab="admin-tools" onclick="switchTab('admin-tools', this)">
+        🔧 Admin Tools
+      </button>
       {{/if}}
     </div>
-    {{/unless}}
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       MAIN PAGE BODY
+  ═══════════════════════════════════════ -->
+  <div class="page">
+
+    <!-- ─── SIDEBAR ─── -->
+    {{#if isCripfcntSchool}}
+    <aside class="sidebar" id="sidebar">
+
+      <!-- PILLARS -->
+      {{#if allPillars.length}}
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">Filter by Pillar</div>
+        <button class="sidebar-item {{#unless pillarFilter}}active{{/unless}}"
+          onclick="setFilter('pillar','')">
+          <span class="sidebar-item-icon">🌐</span>
+          All Pillars
+          <span class="sidebar-count">{{allPillars.length}}</span>
+        </button>
+        {{#each allPillars}}
+        <button class="sidebar-item {{#if (eq this ../pillarFilter)}}active{{/if}}"
+          onclick="setFilter('pillar','{{this}}')">
+          <span class="sidebar-item-icon">
+            {{#if (eq this "consciousness")}}🧠
+            {{else if (eq this "responsibility")}}🤝
+            {{else if (eq this "purpose")}}🎯
+            {{else if (eq this "technology")}}💻
+            {{else if (eq this "frequencies")}}📡
+            {{else if (eq this "civilization")}}🏛
+            {{else if (eq this "interpretation")}}🔍
+            {{else if (eq this "negotiation")}}🤜
+            {{else}}📌
+            {{/if}}
+          </span>
+          {{capitalize this}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- CATEGORIES -->
+      {{#if allCategories.length}}
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">Filter by Category</div>
+        <button class="sidebar-item {{#unless categoryFilter}}active{{/unless}}"
+          onclick="setFilter('category','')">
+          <span class="sidebar-item-icon">📂</span>
+          All Categories
+        </button>
+        {{#each allCategories}}
+        <button class="sidebar-item {{#if (eq this ../categoryFilter)}}active{{/if}}"
+          onclick="setFilter('category','{{this}}')">
+          <span class="sidebar-item-icon">📁</span>
+          {{capitalize (replace this "-" " ")}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- SERIES QUICK JUMP -->
+      {{#if allSeries.length}}
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">Jump to Series</div>
+        {{#each allSeries}}
+        <button class="sidebar-item" onclick="jumpToSeries('{{this}}')">
+          <span class="sidebar-item-icon">📖</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{capitalize (replace this "-" " ")}}
+          </span>
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+
+    </aside>
     {{/if}}
 
-    <!-- MODE SWITCH -->
-    <div class="card mode-switch">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
-        <div>
-          <strong style="font-size:16px;color:#92400e">👨‍👩‍👧 Parent Learning Hub</strong>
-          <div style="font-size:14px;color:#78350f;margin-top:4px">
-            Switch to parent mode to manage your children's learning
-          </div>
-        </div>
-        <a href="/parent/dashboard" class="btn btn-primary">
-          Switch to Parent Mode →
-        </a>
-      </div>
-    </div>
+    <!-- ─── MAIN CONTENT ─── -->
+    <div id="main-content" data-view-mode="grid">
 
-    <!-- SEARCH & FILTER (cripfcnt-school only) -->
- <!-- REPLACE WITH: -->
- <!-- FIND this entire block: -->
- <!-- REPLACE WITH: -->
-{{#if isCripfcntSchool}}
+      <!-- ── TAB: ASSESSMENTS ── -->
+      <div id="tab-assessments">
 
-  {{#if hasAssignedQuizzes}}
-    {{#each quizzesBySeries}}
-      <div class="card" style="margin-bottom:28px">
-
-        {{!-- Series header --}}
-        <div class="card-header" style="border-left:4px solid var(--primary);padding-left:16px">
+        <!-- TRIAL BANNER (non-admin trial users) -->
+        {{#if (and isCripfcntSchool (eq user.employeeSubscriptionStatus "trial"))}}
+        {{#unless isAdmin}}
+        <div class="trial-banner">
           <div>
-            <h2 class="card-title" style="font-size:19px">
-              {{this.seriesLabel}}
-            </h2>
-            <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
-              {{#if this.pillar}}
-                <span class="badge" style="background:#ede9fe;color:#5b21b6">
-                  {{#if (eq this.pillar "consciousness")}}🧠{{/if}}
-                  {{#if (eq this.pillar "responsibility")}}🤝{{/if}}
-                  {{#if (eq this.pillar "interpretation")}}🔍{{/if}}
-                  {{#if (eq this.pillar "purpose")}}🎯{{/if}}
-                  {{#if (eq this.pillar "frequencies")}}📡{{/if}}
-                  {{#if (eq this.pillar "civilization")}}🏛{{/if}}
-                  {{#if (eq this.pillar "negotiation")}}🤝{{/if}}
-                  {{#if (eq this.pillar "technology")}}💻{{/if}}
-                  {{capitalize this.pillar}}
-                </span>
-              {{/if}}
-              {{#if this.category}}
-                <span class="badge" style="background:#f0fdf4;color:#166534">
-                  {{capitalize (replace this.category "-" " ")}}
-                </span>
-              {{/if}}
-              {{#if this.level}}
-                <span class="badge" style="background:#fef3c7;color:#92400e">
-                  {{capitalize this.level}}
-                </span>
-              {{/if}}
-              <span style="font-size:13px;color:var(--text-muted);margin-left:4px">
-                {{this.quizzes.length}} assessment{{#if (gt this.quizzes.length 1)}}s{{/if}}
-              </span>
+            <h3>🎯 Welcome to {{org.name}} Professional</h3>
+            <p>Complete your trial assessments to unlock full access to our professional development curriculum.</p>
+            <div class="trial-progress">
+              <div class="progress-bar">
+                <div class="progress-fill"
+                  style="width:{{#if employeeTrialTotal}}{{math employeeTrialCompleted "/" employeeTrialTotal "*" 100}}%{{else}}0%{{/if}}">
+                </div>
+              </div>
+              <span class="progress-text">{{employeeTrialCompleted}}/{{employeeTrialTotal}} Complete</span>
             </div>
           </div>
-        </div>
-
-        {{!-- Quiz cards --}}
-        <div class="quiz-grid" style="margin-top:16px">
-          {{#each this.quizzes}}
-            <div class="quiz-card">
-              <div class="quiz-card-header">
-                <h3 class="quiz-title">{{quizTitle}}</h3>
-                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
-                  {{#if isTrial}}
-                    <span class="badge badge-trial">Trial</span>
-                  {{/if}}
-                  {{#if isAdminQuiz}}
-                    <span class="badge badge-catalog">Catalog</span>
-                  {{/if}}
-                  {{#if level}}
-                    <span class="badge" style="background:#f1f5f9;color:#475569;font-size:10px">
-                      {{capitalize level}}
-                    </span>
-                  {{/if}}
-                </div>
-              </div>
-
-              <div class="quiz-meta">
-                <span>📝 {{questionCount}} questions</span>
-                {{#unless isAdminQuiz}}
-                  <span>•</span>
-                  <span style="text-transform:capitalize">{{status}}</span>
-                {{/unless}}
-                {{#if pillar}}
-                  <span>•</span>
-                  <span style="color:var(--primary);font-weight:500">{{capitalize pillar}}</span>
-                {{/if}}
-              </div>
-
-              {{#if category}}
-                <div style="margin:8px 0">
-                  <span class="topic-tag" style="background:#f0fdf4;color:#166534">
-                    {{capitalize (replace category "-" " ")}}
-                  </span>
-                </div>
-              {{/if}}
-
-              {{#if topics.length}}
-                <div class="topic-tags">
-                  {{#each topics}}
-                    <span class="topic-tag">{{this}}</span>
-                  {{/each}}
-                </div>
-              {{/if}}
-
-              <div class="quiz-actions">
-                <a href="{{openUrl}}" class="btn btn-primary" style="flex:1;justify-content:center">
-                  {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
-                </a>
-                {{#if ../../isAdmin}}
-                  {{#unless isAdminQuiz}}
-                    <form method="POST"
-                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
-                      style="display:inline"
-                      onsubmit="return confirm('Delete this assessment?');">
-                      <button class="btn btn-outline" style="color:var(--danger)">Delete</button>
-                    </form>
-                  {{/unless}}
-                {{/if}}
-              </div>
-            </div>
-          {{/each}}
-        </div>
-
-      </div>
-    {{/each}}
-
-  {{else}}
-    <div class="card">
-      <div class="empty-state">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <h3>No Assessments Available</h3>
-        <p>
-          {{#if searchQuery}}Try different search terms or clear filters
-          {{else}}Check back soon for new professional development content{{/if}}
-        </p>
-      </div>
-    </div>
-  {{/if}}
-
-{{else}}
-  {{!-- NON-CRIPFCNT-SCHOOL: Keep existing quizzesByModule rendering unchanged --}}
-  {{#if hasAssignedQuizzes}}
-    {{#each quizzesByModule}}
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">
-            {{#if (eq @key "consciousness")}}🧠{{/if}}
-            {{#if (eq @key "responsibility")}}🤝{{/if}}
-            {{#if (eq @key "purpose")}}🎯{{/if}}
-            {{#if (eq @key "technology")}}💻{{/if}}
-            {{capitalize @key}}
-          </h2>
-          <span style="font-size:14px;color:var(--text-muted)">
-            {{this.length}} assessment{{#if (gt this.length 1)}}s{{/if}}
-          </span>
-        </div>
-        <div class="quiz-grid">
-          {{#each this}}
-            <div class="quiz-card">
-              <div class="quiz-card-header">
-                <h3 class="quiz-title">{{quizTitle}}</h3>
-                <div>
-                  {{#if isTrial}}<span class="badge badge-trial">Trial</span>{{/if}}
-                  {{#if isAdminQuiz}}<span class="badge badge-catalog">Catalog</span>{{/if}}
-                </div>
-              </div>
-              <div class="quiz-meta">
-                <span>📝 {{questionCount}} questions</span>
-                {{#unless isAdminQuiz}}<span>•</span><span>{{status}}</span>{{/unless}}
-              </div>
-              {{#if topics}}
-                <div class="topic-tags">
-                  {{#each topics}}<span class="topic-tag">{{this}}</span>{{/each}}
-                </div>
-              {{/if}}
-              <div class="quiz-actions">
-                <a href="{{openUrl}}" class="btn btn-primary" style="flex:1;justify-content:center">
-                  {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
-                </a>
-                {{#if ../../isAdmin}}
-                  {{#unless isAdminQuiz}}
-                    <form method="POST"
-                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
-                      style="display:inline"
-                      onsubmit="return confirm('Delete this assessment?');">
-                      <button class="btn btn-outline" style="color:var(--danger)">Delete</button>
-                    </form>
-                  {{/unless}}
-                {{/if}}
-              </div>
-            </div>
-          {{/each}}
-        </div>
-      </div>
-    {{/each}}
-  {{else}}
-    <div class="card">
-      <div class="empty-state">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <h3>No Assessments Available</h3>
-        <p>Check back soon for new content</p>
-      </div>
-    </div>
-  {{/if}}
-{{/if}}
-    <!-- STATS (for non-trial users) -->
-    {{#if (ne user.employeeSubscriptionStatus "trial")}}
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value">{{attemptRows.length}}</div>
-        <div class="stat-label">Assessments Taken</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{certRows.length}}</div>
-        <div class="stat-label">Certificates Earned</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">
-          {{#if attemptRows.length}}
-            {{math (sum attemptRows "percentage") "/" attemptRows.length}}%
-          {{else}}
-            -
+          {{#if canUpgradeEmployee}}
+          <a href="/employee/upgrade" class="btn btn-primary">Upgrade to Full Access →</a>
           {{/if}}
         </div>
-        <div class="stat-label">Average Score</div>
-      </div>
-    </div>
-    {{/if}}
+        {{/unless}}
+        {{/if}}
 
-    <!-- QUIZZES BY MODULE -->
-    {{#if hasAssignedQuizzes}}
-      {{#each quizzesByModule}}
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              {{#if (eq @key "consciousness")}}🧠{{/if}}
-              {{#if (eq @key "responsibility")}}🤝{{/if}}
-              {{#if (eq @key "purpose")}}🎯{{/if}}
-              {{#if (eq @key "technology")}}💻{{/if}}
-              {{capitalize @key}}
-            </h2>
-            <span style="font-size:14px;color:var(--text-muted)">{{this.length}} assessment{{#if (gt this.length 1)}}s{{/if}}</span>
+        <!-- PARENT MODE BANNER -->
+        <div class="mode-banner">
+          <div class="mode-banner-text">
+            <strong>👨‍👩‍👧 Parent Learning Hub</strong>
+            <p>Switch to parent mode to manage your children's learning journey</p>
+          </div>
+          <a href="/parent/dashboard" class="btn btn-outline">Switch to Parent Mode →</a>
+        </div>
+
+        <!-- STATS STRIP (non-trial users only) -->
+        {{#if (ne user.employeeSubscriptionStatus "trial")}}
+        <div class="stats-strip">
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-blue">📝</div>
+            <div class="stat-info">
+              <div class="stat-value">{{attemptRows.length}}</div>
+              <div class="stat-label">Assessments Taken</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-violet">🏆</div>
+            <div class="stat-info">
+              <div class="stat-value">{{certRows.length}}</div>
+              <div class="stat-label">Certificates Earned</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-teal">📊</div>
+            <div class="stat-info">
+              <div class="stat-value">
+                {{#if attemptRows.length}}
+                  {{math (sum attemptRows "percentage") "/" attemptRows.length}}%
+                {{else}}
+                  —
+                {{/if}}
+              </div>
+              <div class="stat-label">Average Score</div>
+            </div>
+          </div>
+        </div>
+        {{/if}}
+
+        <!-- SEARCH & FILTER BAR -->
+        {{#if isCripfcntSchool}}
+        <form class="search-bar" method="GET" action="/org/{{org.slug}}/dashboard" id="search-form">
+          <div class="search-bar-top">
+            <div class="search-input-wrap">
+              <svg class="search-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                class="search-input"
+                type="text"
+                name="q"
+                placeholder="Search assessments by title, topic or keyword…"
+                value="{{searchQuery}}"
+                autocomplete="off"
+                oninput="liveSearch(this.value)"
+              />
+            </div>
+            <button type="button"
+              class="filter-toggle-btn {{#if (or seriesFilter categoryFilter pillarFilter)}}has-filters{{/if}}"
+              onclick="toggleFilters()">
+              ⚙️ Filters
+              {{#if (or seriesFilter categoryFilter pillarFilter)}}
+                <span style="background:var(--blue);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700">●</span>
+              {{/if}}
+            </button>
           </div>
 
-          <div class="quiz-grid">
-            {{#each this}}
-              <div class="quiz-card">
-                <div class="quiz-card-header">
-                  <h3 class="quiz-title">{{quizTitle}}</h3>
-                  <div>
-                    {{#if isTrial}}
-                      <span class="badge badge-trial">Trial</span>
-                    {{/if}}
-                    {{#if isAdminQuiz}}
-                      <span class="badge badge-catalog">Catalog</span>
-                    {{/if}}
+          <div class="search-filters js-hidden" id="filter-panel">
+            <div class="filter-group">
+              <label class="filter-label">Series</label>
+              <select class="filter-select" name="series" onchange="this.form.submit()">
+                <option value="">All Series</option>
+                {{#each allSeries}}
+                  <option value="{{this}}" {{#if (eq this ../seriesFilter)}}selected{{/if}}>
+                    {{capitalize (replace this "-" " ")}}
+                  </option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Category</label>
+              <select class="filter-select" name="category" onchange="this.form.submit()">
+                <option value="">All Categories</option>
+                {{#each allCategories}}
+                  <option value="{{this}}" {{#if (eq this ../categoryFilter)}}selected{{/if}}>
+                    {{capitalize (replace this "-" " ")}}
+                  </option>
+                {{/each}}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="filter-label">Pillar</label>
+              <select class="filter-select" name="pillar" onchange="this.form.submit()">
+                <option value="">All Pillars</option>
+                {{#each allPillars}}
+                  <option value="{{this}}" {{#if (eq this ../pillarFilter)}}selected{{/if}}>
+                    {{capitalize this}}
+                  </option>
+                {{/each}}
+              </select>
+            </div>
+            <div>
+              {{#if (or searchQuery seriesFilter categoryFilter pillarFilter moduleFilter topicFilter)}}
+              <a href="/org/{{org.slug}}/dashboard" class="btn btn-outline btn-sm" style="width:100%;justify-content:center">
+                ✕ Clear All
+              </a>
+              {{/if}}
+            </div>
+          </div>
+
+          <!-- ACTIVE FILTER CHIPS -->
+          {{#if (or searchQuery seriesFilter categoryFilter pillarFilter)}}
+          <div class="active-filters">
+            {{#if searchQuery}}
+            <span class="filter-chip">
+              🔍 "{{searchQuery}}"
+              <a class="filter-chip-remove" href="/org/{{org.slug}}/dashboard?series={{seriesFilter}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a>
+            </span>
+            {{/if}}
+            {{#if seriesFilter}}
+            <span class="filter-chip">
+              📖 {{capitalize (replace seriesFilter "-" " ")}}
+              <a class="filter-chip-remove" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a>
+            </span>
+            {{/if}}
+            {{#if categoryFilter}}
+            <span class="filter-chip">
+              📂 {{capitalize (replace categoryFilter "-" " ")}}
+              <a class="filter-chip-remove" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&pillar={{pillarFilter}}">✕</a>
+            </span>
+            {{/if}}
+            {{#if pillarFilter}}
+            <span class="filter-chip">
+              🏛 {{capitalize pillarFilter}}
+              <a class="filter-chip-remove" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&category={{categoryFilter}}">✕</a>
+            </span>
+            {{/if}}
+          </div>
+          {{/if}}
+
+        </form>
+        {{/if}}
+
+        <!-- CONTENT HEADER + VIEW TOGGLE -->
+        <div class="content-header">
+          <div>
+            <span class="content-title">Assessment Library</span>
+            <span class="content-count" id="visible-count"></span>
+          </div>
+          <div class="view-toggle">
+            <button class="view-btn active" id="view-grid" onclick="setView('grid')" title="Grid view">⊞</button>
+            <button class="view-btn" id="view-list" onclick="setView('list')" title="List view">≡</button>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════
+             CRIPFCNT-SCHOOL: GROUPED BY SERIES
+        ══════════════════════════════════════ -->
+        {{#if isCripfcntSchool}}
+
+          {{#if hasAssignedQuizzes}}
+            <div id="quiz-library">
+              {{#each quizzesBySeries}}
+              <div class="series-block" id="series-{{this.seriesSlug}}" data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
+
+                <!-- Series Header -->
+                <div class="series-header" onclick="toggleSeries('{{this.seriesSlug}}')">
+                  <div class="series-accent"></div>
+                  <div class="series-info">
+                    <div class="series-title">{{this.seriesLabel}}</div>
+                    <div class="series-meta">
+                      {{#if this.pillar}}
+                      <span class="badge badge-violet">
+                        {{#if (eq this.pillar "consciousness")}}🧠{{/if}}
+                        {{#if (eq this.pillar "responsibility")}}🤝{{/if}}
+                        {{#if (eq this.pillar "purpose")}}🎯{{/if}}
+                        {{#if (eq this.pillar "technology")}}💻{{/if}}
+                        {{#if (eq this.pillar "frequencies")}}📡{{/if}}
+                        {{#if (eq this.pillar "civilization")}}🏛{{/if}}
+                        {{#if (eq this.pillar "interpretation")}}🔍{{/if}}
+                        {{#if (eq this.pillar "negotiation")}}🤜{{/if}}
+                        {{capitalize this.pillar}}
+                      </span>
+                      {{/if}}
+                      {{#if this.category}}
+                      <span class="badge badge-teal">
+                        {{capitalize (replace this.category "-" " ")}}
+                      </span>
+                      {{/if}}
+                      {{#if this.level}}
+                      <span class="badge badge-slate">{{capitalize this.level}}</span>
+                      {{/if}}
+                    </div>
                   </div>
+                  <span class="series-quiz-count">
+                    {{this.quizzes.length}} assessment{{#if (gt this.quizzes.length 1)}}s{{/if}}
+                  </span>
+                  <span class="series-collapse-icon" id="collapse-icon-{{this.seriesSlug}}">▼</span>
                 </div>
 
-                <div class="quiz-meta">
-                  <span>📝 {{questionCount}} questions</span>
-                  {{#unless isAdminQuiz}}
-                    <span>•</span>
-                    <span>{{status}}</span>
-                  {{/unless}}
-                </div>
+                <!-- Quiz Grid -->
+                <div class="series-body" id="series-body-{{this.seriesSlug}}">
 
-                {{#if topics}}
-                  <div class="topic-tags">
-                    {{#each topics}}
-                      <span class="topic-tag">{{this}}</span>
+                  <!-- GRID VIEW -->
+                  <div class="quiz-grid">
+                    {{#each this.quizzes}}
+                    <div class="quiz-card"
+                      data-title="{{quizTitle}}"
+                      data-pillar="{{pillar}}"
+                      data-category="{{category}}"
+                      data-series="{{series}}"
+                      data-topics="{{#each topics}}{{this}} {{/each}}">
+
+                      <div class="quiz-card-top">
+                        <h3 class="quiz-title">{{quizTitle}}</h3>
+                        <div class="quiz-badges">
+                          {{#if isTrial}}   <span class="badge badge-blue">Trial</span>  {{/if}}
+                          {{#if isAdminQuiz}}<span class="badge badge-emerald">Catalog</span>{{/if}}
+                          {{#if level}}     <span class="badge badge-slate">{{capitalize level}}</span>{{/if}}
+                        </div>
+                      </div>
+
+                      <div class="quiz-meta-row">
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6M4 6h16M4 10h16"/></svg>
+                        {{questionCount}} question{{#if (gt questionCount 1)}}s{{/if}}
+                        {{#unless isAdminQuiz}}
+                          <span style="color:var(--border)">|</span>
+                          <span style="text-transform:capitalize">{{status}}</span>
+                        {{/unless}}
+                        {{#if pillar}}
+                          <span style="color:var(--border)">|</span>
+                          <span style="color:var(--violet);font-weight:600">{{capitalize pillar}}</span>
+                        {{/if}}
+                      </div>
+
+                      {{#if topics.length}}
+                      <div class="quiz-tags">
+                        {{#each topics}}<span class="tag">{{this}}</span>{{/each}}
+                      </div>
+                      {{/if}}
+
+                      <div class="quiz-footer">
+                        <a href="{{openUrl}}" class="btn btn-primary" style="flex:1">
+                          {{#if isAdminQuiz}}
+                            Take Assessment
+                          {{else if (eq status "completed")}}
+                            ✓ Review
+                          {{else}}
+                            Start →
+                          {{/if}}
+                        </a>
+                        {{#if ../../isAdmin}}
+                          {{#unless isAdminQuiz}}
+                          <form method="POST"
+                            action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                            style="display:inline"
+                            onsubmit="return confirm('Delete this assessment?');">
+                            <button class="btn btn-danger btn-sm">Delete</button>
+                          </form>
+                          {{/unless}}
+                        {{/if}}
+                      </div>
+                    </div>
                     {{/each}}
                   </div>
-                {{/if}}
 
-                <div class="quiz-actions">
-                  <a href="{{openUrl}}" class="btn btn-primary" style="flex:1;justify-content:center">
-                    {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
-                  </a>
+                  <!-- LIST VIEW -->
+                  <div class="quiz-list">
+                    {{#each this.quizzes}}
+                    <div class="quiz-row"
+                      data-title="{{quizTitle}}"
+                      data-pillar="{{pillar}}"
+                      data-category="{{category}}"
+                      data-series="{{series}}"
+                      data-topics="{{#each topics}}{{this}} {{/each}}">
 
-                  {{#if ../../isAdmin}}
-                    {{#unless isAdminQuiz}}
-                      <form
-                        method="POST"
-                        action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
-                        style="display:inline"
-                        onsubmit="return confirm('Delete this assessment?');"
-                      >
-                        <button class="btn btn-outline" style="color:var(--danger)">Delete</button>
-                      </form>
-                    {{/unless}}
-                  {{/if}}
+                      <div class="quiz-row-icon">
+                        {{#if (eq pillar "consciousness")}}🧠
+                        {{else if (eq pillar "responsibility")}}🤝
+                        {{else if (eq pillar "purpose")}}🎯
+                        {{else if (eq pillar "technology")}}💻
+                        {{else}}📄
+                        {{/if}}
+                      </div>
+                      <div class="quiz-row-info">
+                        <div class="quiz-row-title">{{quizTitle}}</div>
+                        <div class="quiz-row-meta">
+                          <span>📝 {{questionCount}} questions</span>
+                          {{#if pillar}}<span>• {{capitalize pillar}}</span>{{/if}}
+                          {{#if category}}<span>• {{capitalize (replace category "-" " ")}}</span>{{/if}}
+                          {{#unless isAdminQuiz}}<span>• {{status}}</span>{{/unless}}
+                        </div>
+                      </div>
+                      <div class="quiz-row-actions">
+                        {{#if isTrial}}<span class="badge badge-blue">Trial</span>{{/if}}
+                        {{#if isAdminQuiz}}<span class="badge badge-emerald">Catalog</span>{{/if}}
+                        <a href="{{openUrl}}" class="btn btn-primary btn-sm">
+                          {{#if isAdminQuiz}}Take{{else if (eq status "completed")}}Review{{else}}Start{{/if}}
+                        </a>
+                        {{#if ../../isAdmin}}
+                          {{#unless isAdminQuiz}}
+                          <form method="POST"
+                            action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                            style="display:inline"
+                            onsubmit="return confirm('Delete this assessment?');">
+                            <button class="btn btn-danger btn-sm">Del</button>
+                          </form>
+                          {{/unless}}
+                        {{/if}}
+                      </div>
+                    </div>
+                    {{/each}}
+                  </div>
+
+                </div><!-- /series-body -->
+              </div><!-- /series-block -->
+              {{/each}}
+            </div><!-- /quiz-library -->
+
+            <!-- No results after client-side filter -->
+            <div class="empty-state js-hidden" id="no-results">
+              <div class="empty-state-icon">🔍</div>
+              <h3>No Assessments Found</h3>
+              <p>Try adjusting your search or clearing the filters.</p>
+            </div>
+
+          {{else}}
+            <div class="empty-state">
+              <div class="empty-state-icon">📚</div>
+              <h3>No Assessments Available</h3>
+              <p>
+                {{#if searchQuery}}Try different search terms or clear filters
+                {{else}}Check back soon for new professional development content{{/if}}
+              </p>
+            </div>
+          {{/if}}
+
+        {{else}}
+          {{!-- NON-CRIPFCNT-SCHOOL: original quizzesByModule rendering --}}
+          {{#if hasAssignedQuizzes}}
+            {{#each quizzesByModule}}
+            <div class="series-block">
+              <div class="series-header" onclick="toggleSeries('mod-{{@key}}')">
+                <div class="series-accent"></div>
+                <div class="series-info">
+                  <div class="series-title">
+                    {{#if (eq @key "consciousness")}}🧠 {{/if}}
+                    {{#if (eq @key "responsibility")}}🤝 {{/if}}
+                    {{#if (eq @key "purpose")}}🎯 {{/if}}
+                    {{#if (eq @key "technology")}}💻 {{/if}}
+                    {{capitalize @key}}
+                  </div>
+                </div>
+                <span class="series-quiz-count">{{this.length}} assessment{{#if (gt this.length 1)}}s{{/if}}</span>
+                <span class="series-collapse-icon" id="collapse-icon-mod-{{@key}}">▼</span>
+              </div>
+              <div class="series-body" id="series-body-mod-{{@key}}">
+                <div class="quiz-grid">
+                  {{#each this}}
+                  <div class="quiz-card">
+                    <div class="quiz-card-top">
+                      <h3 class="quiz-title">{{quizTitle}}</h3>
+                      <div class="quiz-badges">
+                        {{#if isTrial}}<span class="badge badge-blue">Trial</span>{{/if}}
+                        {{#if isAdminQuiz}}<span class="badge badge-emerald">Catalog</span>{{/if}}
+                      </div>
+                    </div>
+                    <div class="quiz-meta-row">📝 {{questionCount}} questions
+                      {{#unless isAdminQuiz}}<span style="color:var(--border)">|</span> {{status}}{{/unless}}
+                    </div>
+                    {{#if topics}}
+                    <div class="quiz-tags">
+                      {{#each topics}}<span class="tag">{{this}}</span>{{/each}}
+                    </div>
+                    {{/if}}
+                    <div class="quiz-footer">
+                      <a href="{{openUrl}}" class="btn btn-primary" style="flex:1">
+                        {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
+                      </a>
+                      {{#if ../../isAdmin}}
+                        {{#unless isAdminQuiz}}
+                        <form method="POST"
+                          action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                          style="display:inline"
+                          onsubmit="return confirm('Delete this assessment?');">
+                          <button class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                        {{/unless}}
+                      {{/if}}
+                    </div>
+                  </div>
+                  {{/each}}
                 </div>
               </div>
+            </div>
             {{/each}}
-          </div>
+          {{else}}
+            <div class="empty-state">
+              <div class="empty-state-icon">📚</div>
+              <h3>No Assessments Available</h3>
+              <p>Check back soon for new content.</p>
+            </div>
+          {{/if}}
+        {{/if}}
+
+      </div><!-- /tab-assessments -->
+
+      <!-- ── TAB: HISTORY ── -->
+      <div id="tab-history" class="js-hidden">
+        {{#if attemptRows.length}}
+        <div class="table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Assessment</th>
+                <th>Score</th>
+                <th>Result</th>
+                <th>Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each attemptRows}}
+              <tr>
+                <td><strong>{{quizTitle}}</strong></td>
+                <td>
+                  <span class="score-pill {{#if (gte percentage 80)}}score-high{{else if (gte percentage 60)}}score-medium{{else}}score-low{{/if}}">
+                    {{percentage}}%
+                  </span>
+                </td>
+                <td>
+                  {{#if passed}}
+                  <span style="color:var(--emerald);font-weight:600">✓ Passed</span>
+                  {{else}}
+                  <span style="color:var(--rose);font-weight:600">✗ Failed</span>
+                  {{/if}}
+                </td>
+                <td style="color:var(--ink-muted)">{{formatDate finishedAt}}</td>
+                <td>
+                  <a href="/org/{{../org.slug}}/my-attempts/{{_id}}" class="btn btn-outline btn-sm">Review</a>
+                </td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
         </div>
-      {{/each}}
-    {{else}}
-      <div class="card">
+        {{else}}
         <div class="empty-state">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3>No Assessments Available</h3>
-          <p>
-            {{#if searchQuery}}
-              Try different search terms or clear filters
-            {{else}}
-              Check back soon for new professional development content
-            {{/if}}
+          <div class="empty-state-icon">📋</div>
+          <h3>No Assessment History Yet</h3>
+          <p>Complete your first assessment and your results will appear here.</p>
+        </div>
+        {{/if}}
+      </div><!-- /tab-history -->
+
+      <!-- ── TAB: ADMIN TOOLS ── -->
+      {{#if isAdmin}}
+      <div id="tab-admin-tools" class="js-hidden">
+        <div class="admin-strip" style="margin-bottom:24px">
+          <a href="/admin/orgs/{{org.slug}}/manage" class="admin-card">
+            <div class="admin-card-icon" style="background:var(--blue-bg)">⚙️</div>
+            <div class="admin-card-label">Manage Organisation</div>
+          </a>
+          <a href="/admin/orgs/{{org.slug}}/attempts" class="admin-card">
+            <div class="admin-card-icon" style="background:var(--emerald-bg)">📊</div>
+            <div class="admin-card-label">View All Attempts</div>
+          </a>
+          <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="admin-card">
+            <div class="admin-card-icon" style="background:var(--teal-bg)">⬇️</div>
+            <div class="admin-card-label">Export Attempts CSV</div>
+          </a>
+          <a href="/org/{{org.slug}}/certificates" class="admin-card">
+            <div class="admin-card-icon" style="background:var(--amber-bg)">🏆</div>
+            <div class="admin-card-label">All Certificates</div>
+          </a>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow-xs)">
+          <div class="section-title">
+            ℹ️ Admin Quick Reference
+          </div>
+          <p style="color:var(--ink-soft);font-size:14px;line-height:1.8">
+            As an administrator you see the full <strong>Assessment Library</strong> tab with every quiz organised by Series, Category and Pillar.<br>
+            Use the sidebar filters or the search bar to quickly locate assessments.<br>
+            Click <em>Take Assessment</em> on any Catalog card to preview it as a learner.<br>
+            The <em>Delete</em> button only appears on <u>assigned</u> (non-catalog) quizzes.
           </p>
         </div>
-      </div>
-    {{/if}}
+      </div><!-- /tab-admin-tools -->
+      {{/if}}
 
-    <!-- HISTORY -->
-    {{#if attemptRows.length}}
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Assessment History</h2>
-      </div>
+    </div><!-- /main-content -->
+  </div><!-- /page -->
 
-      <table class="history-table">
-        <thead>
-          <tr>
-            <th>Assessment</th>
-            <th>Score</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#each attemptRows}}
-            <tr>
-              <td><strong>{{quizTitle}}</strong></td>
-              <td>
-                <span class="score-badge {{#if (gte percentage 80)}}score-high{{else if (gte percentage 60)}}score-medium{{else}}score-low{{/if}}">
-                  {{percentage}}%
-                </span>
-              </td>
-              <td>
-                {{#if passed}}
-                  <span style="color:var(--success)">✓ Passed</span>
-                {{else}}
-                  <span style="color:var(--danger)">✗ Failed</span>
-                {{/if}}
-              </td>
-              <td style="color:var(--text-muted)">{{formatDate finishedAt}}</td>
-              <td>
-                <a href="/org/{{../org.slug}}/my-attempts/{{_id}}" class="btn btn-outline" style="padding:6px 12px;font-size:13px">
-                  Review
-                </a>
-              </td>
-            </tr>
-          {{/each}}
-        </tbody>
-      </table>
-    </div>
-    {{/if}}
+  <!-- ═══════════════════════════════════════
+       JAVASCRIPT
+  ═══════════════════════════════════════ -->
+  <script>
+    /* ── TAB SWITCHING ── */
+    function switchTab(tabId, btn) {
+      // hide all tabs
+      ['assessments','history','admin-tools'].forEach(id => {
+        const el = document.getElementById('tab-' + id);
+        if (el) el.classList.add('js-hidden');
+      });
+      // deactivate all tab buttons
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      // show selected
+      const target = document.getElementById('tab-' + tabId);
+      if (target) target.classList.remove('js-hidden');
+      if (btn) btn.classList.add('active');
+    }
 
-  </div>
+    /* ── VIEW MODE (grid / list) ── */
+    function setView(mode) {
+      const mc = document.getElementById('main-content');
+      if (mc) mc.dataset.viewMode = mode;
+      document.getElementById('view-grid').classList.toggle('active', mode === 'grid');
+      document.getElementById('view-list').classList.toggle('active', mode === 'list');
+    }
+
+    /* ── SERIES COLLAPSE ── */
+    function toggleSeries(slug) {
+      const body = document.getElementById('series-body-' + slug);
+      const icon = document.getElementById('collapse-icon-' + slug);
+      if (!body) return;
+      const isHidden = body.classList.toggle('js-hidden');
+      if (icon) icon.classList.toggle('collapsed', isHidden);
+    }
+
+    /* ── JUMP TO SERIES ── */
+    function jumpToSeries(slug) {
+      // expand if collapsed
+      const body = document.getElementById('series-body-' + slug);
+      const icon = document.getElementById('collapse-icon-' + slug);
+      if (body && body.classList.contains('js-hidden')) {
+        body.classList.remove('js-hidden');
+        if (icon) icon.classList.remove('collapsed');
+      }
+      // scroll
+      const block = document.getElementById('series-' + slug);
+      if (block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // make sure assessment tab is active
+      switchTab('assessments', document.querySelector('[data-tab="assessments"]'));
+    }
+
+    /* ── SIDEBAR FILTER (client-side URL push) ── */
+    function setFilter(key, value) {
+      const url = new URL(window.location.href);
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+      window.location.href = url.toString();
+    }
+
+    /* ── LIVE CLIENT-SIDE SEARCH ── */
+    let searchTimeout;
+    function liveSearch(q) {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const term = q.toLowerCase().trim();
+        const cards = document.querySelectorAll('.quiz-card, .quiz-row');
+        const seriesBlocks = document.querySelectorAll('.series-block');
+        let visible = 0;
+
+        seriesBlocks.forEach(block => {
+          let blockVisible = 0;
+          block.querySelectorAll('.quiz-card, .quiz-row').forEach(card => {
+            const title    = (card.dataset.title    || '').toLowerCase();
+            const topics   = (card.dataset.topics   || '').toLowerCase();
+            const pillar   = (card.dataset.pillar   || '').toLowerCase();
+            const category = (card.dataset.category || '').toLowerCase();
+            const match = !term || title.includes(term) || topics.includes(term) ||
+                          pillar.includes(term) || category.includes(term);
+            card.style.display = match ? '' : 'none';
+            if (match) blockVisible++;
+          });
+          // hide entire series if none match
+          block.style.display = (term && blockVisible === 0) ? 'none' : '';
+          visible += blockVisible;
+        });
+
+        // update count
+        const cnt = document.getElementById('visible-count');
+        if (cnt) cnt.textContent = term ? ` — ${visible} result${visible !== 1 ? 's' : ''}` : '';
+
+        // show/hide no-results
+        const noRes = document.getElementById('no-results');
+        const lib   = document.getElementById('quiz-library');
+        if (noRes && lib) {
+          const anyVisible = [...seriesBlocks].some(b => b.style.display !== 'none');
+          noRes.classList.toggle('js-hidden', !term || anyVisible);
+        }
+      }, 180);
+    }
+
+    /* ── FILTER PANEL TOGGLE ── */
+    function toggleFilters() {
+      const panel = document.getElementById('filter-panel');
+      if (panel) panel.classList.toggle('js-hidden');
+    }
+
+    /* ── INIT: open filter panel if active filters ── */
+    (function init() {
+      const url = new URL(window.location.href);
+      const hasFilters = url.searchParams.get('series') ||
+                         url.searchParams.get('category') ||
+                         url.searchParams.get('pillar');
+      if (hasFilters) {
+        const panel = document.getElementById('filter-panel');
+        if (panel) panel.classList.remove('js-hidden');
+      }
+    })();
+  </script>
+
 </body>
 </html>
