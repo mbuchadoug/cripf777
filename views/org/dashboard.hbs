@@ -1,0 +1,1784 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{org.name}} | Learning Hub</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ═══════════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════════ */
+    :root {
+      --ink:          #0d0f14;
+      --ink-soft:     #3d4354;
+      --ink-muted:    #8b92a5;
+      --ink-faint:    #c5c9d6;
+      --canvas:       #f2f4f8;
+      --surface:      #ffffff;
+      --surface-2:    #f8f9fb;
+      --border:       #e4e6ed;
+      --border-soft:  #edeef3;
+
+      --blue:         #2f6ef7;
+      --blue-dark:    #1d4ed8;
+      --blue-glow:    rgba(47,110,247,.13);
+      --blue-bg:      #eef3fe;
+      --blue-subtle:  #f5f8ff;
+
+      --violet:       #7c3aed;
+      --violet-bg:    #f5f3ff;
+      --teal:         #0d9488;
+      --teal-bg:      #f0fdfa;
+      --amber:        #d97706;
+      --amber-bg:     #fffbeb;
+      --rose:         #e11d48;
+      --rose-bg:      #fff1f2;
+      --emerald:      #059669;
+      --emerald-bg:   #ecfdf5;
+      --indigo:       #4f46e5;
+      --indigo-bg:    #eef2ff;
+      --orange:       #ea580c;
+      --orange-bg:    #fff7ed;
+
+      --topbar-h: 64px;
+      --tabs-h:   46px;
+      --fixed-h:  calc(var(--topbar-h) + var(--tabs-h));
+      --sidebar-w: 272px;
+
+      --r-sm: 6px;
+      --r:    10px;
+      --r-lg: 14px;
+      --r-xl: 20px;
+
+      --sx:  0 1px 2px rgba(0,0,0,.05);
+      --sm:  0 1px 4px rgba(0,0,0,.07);
+      --s:   0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.05);
+      --slg: 0 12px 36px rgba(0,0,0,.11);
+
+      --font: 'Sora', system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--canvas);
+      color: var(--ink);
+      line-height: 1.6;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    /* ═══════════════════════════════════════════════
+       TOPBAR — fixed, z:200
+    ═══════════════════════════════════════════════ */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--topbar-h);
+      z-index: 200;
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .topbar-in {
+      max-width: 1440px;
+      margin: 0 auto;
+      height: 100%;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 15.5px;
+      font-weight: 800;
+      color: var(--ink);
+      flex-shrink: 0;
+    }
+
+    .brand-icon {
+      width: 32px; height: 32px;
+      background: var(--blue);
+      border-radius: var(--r-sm);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 16px; font-weight: 900;
+    }
+
+    .tsep { width:1px; height:22px; background:var(--border); flex-shrink:0; }
+
+    .torg {
+      font-size: 13px; font-weight: 500; color: var(--ink-soft);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .tsp { flex: 1; }
+
+    .role-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      font-size: 11px; font-weight: 800;
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    .rp-student  { background: var(--blue-bg);   color: var(--blue-dark); }
+    .rp-teacher  { background: var(--teal-bg);   color: var(--teal); }
+    .rp-admin    { background: #fef3c7; color: #92400e; }
+    .rp-member   { background: var(--canvas);    color: var(--ink-soft); border: 1px solid var(--border); }
+
+    .top-actions { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
+
+    /* ═══════════════════════════════════════════════
+       TABS BAR — fixed below topbar, z:190
+    ═══════════════════════════════════════════════ */
+    .tabs-bar {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0; right: 0;
+      height: var(--tabs-h);
+      z-index: 190;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 0 24px;
+    }
+    .tabs-bar::-webkit-scrollbar { display: none; }
+
+    .tabs-in {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: stretch;
+    }
+
+    .ntab {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 0 17px;
+      font-size: 12.5px; font-weight: 500;
+      color: var(--ink-muted);
+      border: none; border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .14s;
+      background: none;
+      font-family: var(--font);
+    }
+    .ntab:hover { color: var(--ink); background: var(--canvas); }
+    .ntab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 700; }
+
+    .tpill {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 17px; padding: 0 5px;
+      border-radius: 999px;
+      font-size: 9.5px; font-weight: 800;
+      background: var(--canvas); color: var(--ink-muted);
+    }
+    .ntab.active .tpill { background: var(--blue-bg); color: var(--blue); }
+
+    /* ═══════════════════════════════════════════════
+       LAYOUT — sidebar + main
+    ═══════════════════════════════════════════════ */
+
+    /* Push body below fixed chrome */
+    .layout-wrap {
+      padding-top: var(--fixed-h);
+      display: flex;
+      max-width: 1440px;
+      margin: 0 auto;
+      min-height: calc(100vh - var(--fixed-h));
+      position: relative;
+    }
+
+    /* ═══════════════════════════════════════════════
+       SIDEBAR
+       KEY FIX: position:sticky on a flex child with a
+       defined height and overflow-y:auto = scrollable
+       but anchored to viewport so it doesn't jump.
+    ═══════════════════════════════════════════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      /* Sticky within the layout-wrap flex container */
+      position: sticky;
+      top: var(--fixed-h);
+      /* CRITICAL: bounded height = enables scrolling */
+      height: calc(100vh - var(--fixed-h));
+      overflow-y: auto;
+      overflow-x: hidden;
+      /* Custom thin scrollbar */
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      /* Visual */
+      background: var(--surface);
+      border-right: 1px solid var(--border-soft);
+      padding: 16px 0 48px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar::-webkit-scrollbar        { width: 4px; }
+    .sidebar::-webkit-scrollbar-track  { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+    .sidebar::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+
+    /* Main content expands into remaining space */
+    .main {
+      flex: 1;
+      min-width: 0;
+      padding: 24px 26px 64px;
+    }
+
+    @media (max-width: 1024px) {
+      .sidebar { display: none; }
+      .main { padding: 16px; }
+    }
+
+    /* ═══════════════════════════════════════════════
+       SIDEBAR CONTENTS
+    ═══════════════════════════════════════════════ */
+
+    /* User card */
+    .sb-user {
+      margin: 0 12px 14px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, var(--blue-subtle), #eef2ff);
+      border: 1px solid rgba(47,110,247,.15);
+      border-radius: var(--r-lg);
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .sb-av {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .sb-uname { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-urole { font-size: 10.5px; color: var(--ink-muted); margin-top: 1px; }
+
+    /* Section divider */
+    .sb-div {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px 5px;
+      font-size: 9.5px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 1.1px;
+      color: var(--ink-faint);
+      margin-top: 6px;
+    }
+    .sb-div::after {
+      content: '';
+      flex: 1; height: 1px;
+      background: var(--border-soft);
+    }
+
+    /* Nav item */
+    .sbi {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 14px;
+      font-size: 12.5px; font-weight: 500;
+      color: var(--ink-soft);
+      cursor: pointer;
+      transition: all .12s;
+      border: none; border-left: 3px solid transparent;
+      background: none;
+      width: 100%; text-align: left;
+      font-family: var(--font);
+    }
+
+    .sbi:hover  { background: var(--canvas); color: var(--ink); }
+
+    .sbi.active {
+      background: var(--blue-bg);
+      color: var(--blue-dark);
+      font-weight: 700;
+      border-left-color: var(--blue);
+    }
+
+    .sbi-em  { font-size: 15px; flex-shrink: 0; width: 20px; text-align: center; }
+    .sbi-txt { flex: 1; min-width: 0; }
+    .sbi-t   { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+    .sbi-s   { font-size: 10px; color: var(--ink-muted); font-weight: 400; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .sbi-n {
+      margin-left: auto; flex-shrink: 0;
+      font-size: 10px; font-weight: 800;
+      padding: 2px 6px; border-radius: 999px;
+      background: var(--canvas); color: var(--ink-muted);
+    }
+    .sbi.active .sbi-n { background: var(--blue-dark); color: #fff; }
+
+    /* Pillar colour stripe */
+    .sbi[data-pillar="consciousness"].active  { border-left-color: #7c3aed; background: #f5f3ff; color: #5b21b6; }
+    .sbi[data-pillar="responsibility"].active { border-left-color: #0d9488; background: #f0fdfa; color: #0f766e; }
+    .sbi[data-pillar="purpose"].active        { border-left-color: #d97706; background: #fffbeb; color: #b45309; }
+    .sbi[data-pillar="technology"].active     { border-left-color: #2563eb; background: var(--blue-bg); color: var(--blue-dark); }
+    .sbi[data-pillar="frequencies"].active    { border-left-color: #e11d48; background: #fff1f2; color: #be123c; }
+    .sbi[data-pillar="civilization"].active   { border-left-color: #059669; background: #ecfdf5; color: #065f46; }
+    .sbi[data-pillar="interpretation"].active { border-left-color: #4f46e5; background: var(--indigo-bg); color: #3730a3; }
+    .sbi[data-pillar="negotiation"].active    { border-left-color: #ea580c; background: var(--orange-bg); color: #c2410c; }
+
+    /* ═══════════════════════════════════════════════
+       MOBILE TOGGLE
+    ═══════════════════════════════════════════════ */
+    .mob-toggle {
+      display: none;
+      align-items: center; gap: 7px;
+      padding: 9px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      background: var(--surface);
+      font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      color: var(--ink-soft);
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 1024px) { .mob-toggle { display: flex; } }
+
+    /* Mobile drawer */
+    .mob-drawer {
+      display: none;
+      position: fixed; inset: 0; z-index: 400;
+    }
+    .mob-drawer.open { display: flex; }
+
+    .mob-panel {
+      width: min(300px, 82vw);
+      height: 100%;
+      background: var(--surface);
+      overflow-y: auto;
+      box-shadow: var(--slg);
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 40px;
+    }
+
+    .mob-back { flex: 1; background: rgba(0,0,0,.35); }
+
+    /* ═══════════════════════════════════════════════
+       STATS STRIP
+    ═══════════════════════════════════════════════ */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 11px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 600px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stats .sc:last-child { grid-column: span 2; }
+    }
+
+    .sc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 15px 16px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: var(--sx);
+      transition: box-shadow .18s;
+    }
+    .sc:hover { box-shadow: var(--s); }
+
+    .sci {
+      width: 40px; height: 40px;
+      border-radius: var(--r);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+
+    .sci-b { background: var(--blue-bg); }
+    .sci-v { background: var(--violet-bg); }
+    .sci-t { background: var(--teal-bg); }
+
+    .sv { font-size: 23px; font-weight: 800; line-height: 1; color: var(--ink); }
+    .sl { font-size: 11px; color: var(--ink-muted); margin-top: 2px; font-weight: 500; }
+
+    /* ═══════════════════════════════════════════════
+       SEARCH BAR
+    ═══════════════════════════════════════════════ */
+    .search-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 13px 16px;
+      margin-bottom: 18px;
+      box-shadow: var(--sx);
+    }
+
+    .sr { display: flex; gap: 8px; align-items: center; }
+    .sw { flex: 1; position: relative; }
+
+    .si-icon {
+      position: absolute; left: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-muted);
+      pointer-events: none;
+      display: flex;
+    }
+
+    .s-inp {
+      width: 100%;
+      padding: 9px 11px 9px 34px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      font-family: var(--font);
+      font-size: 13px; color: var(--ink);
+      background: var(--canvas);
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .s-inp:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-glow);
+      background: var(--surface);
+    }
+    .s-inp::placeholder { color: var(--ink-faint); font-size: 12.5px; }
+
+    .fbtn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 8px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      font-family: var(--font);
+      font-size: 12.5px; font-weight: 700;
+      color: var(--ink-soft);
+      background: var(--canvas);
+      cursor: pointer;
+      transition: all .14s;
+      white-space: nowrap;
+    }
+    .fbtn:hover { border-color: var(--blue); color: var(--blue); }
+    .fbtn.on    { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-dark); }
+
+    .fpanel {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 9px; align-items: end;
+    }
+    @media (max-width: 680px) { .fpanel { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 400px) { .fpanel { grid-template-columns: 1fr; } }
+
+    .fgl {}
+    .flab {
+      display: block;
+      font-size: 9.5px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--ink-muted); margin-bottom: 4px;
+    }
+
+    .fsel {
+      width: 100%;
+      padding: 8px 28px 8px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      font-family: var(--font);
+      font-size: 12.5px; color: var(--ink);
+      background: var(--canvas);
+      cursor: pointer;
+      transition: border-color .18s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b92a5' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+    .fsel:focus { outline: none; border-color: var(--blue); background-color: var(--surface); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px 3px 10px;
+      background: var(--blue-bg); color: var(--blue-dark);
+      border-radius: 999px;
+      font-size: 11px; font-weight: 700;
+    }
+    .chip-x {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: rgba(47,110,247,.2); color: var(--blue-dark);
+      font-size: 8.5px; text-decoration: none; line-height: 1;
+    }
+
+    /* ═══════════════════════════════════════════════
+       CONTENT HEADER
+    ═══════════════════════════════════════════════ */
+    .ch {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 13px;
+      flex-wrap: wrap; gap: 8px;
+    }
+
+    .ch-l { display: flex; align-items: center; gap: 7px; }
+    .ch-title { font-size: 14px; font-weight: 800; color: var(--ink); }
+    .ch-sub   { font-size: 12.5px; color: var(--ink-muted); }
+
+    .vtog {
+      display: flex; gap: 2px;
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 3px;
+    }
+
+    .vb {
+      padding: 4px 8px; border-radius: 4px;
+      border: none; background: none;
+      color: var(--ink-muted); cursor: pointer;
+      font-size: 14px; transition: all .12s;
+    }
+    .vb.active { background: var(--surface); color: var(--ink); box-shadow: var(--sx); }
+
+    /* ═══════════════════════════════════════════════
+       SERIES BLOCK
+    ═══════════════════════════════════════════════ */
+    .series-block {
+      margin-bottom: 16px;
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: var(--sx);
+    }
+
+    .series-hdr {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px;
+      background: var(--surface);
+      cursor: pointer; user-select: none;
+      transition: background .12s;
+      border: none; width: 100%; text-align: left;
+      font-family: var(--font);
+    }
+    .series-hdr:hover { background: var(--blue-subtle); }
+
+    .s-stripe {
+      width: 4px; height: 34px;
+      border-radius: 2px; flex-shrink: 0;
+      background: var(--blue);
+    }
+
+    .s-info { flex: 1; min-width: 0; }
+
+    .s-title {
+      font-size: 13.5px; font-weight: 800; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .s-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+
+    .s-right { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+
+    .s-count {
+      padding: 2px 9px; border-radius: 999px;
+      background: var(--canvas);
+      font-size: 11px; font-weight: 700; color: var(--ink-muted);
+      white-space: nowrap;
+    }
+
+    .s-chev { color: var(--ink-faint); font-size: 10px; transition: transform .18s; }
+    .s-chev.open { transform: rotate(180deg); }
+
+    .series-body {
+      padding: 12px;
+      background: var(--surface-2);
+      border-top: 1px solid var(--border-soft);
+    }
+
+    /* ═══════════════════════════════════════════════
+       QUIZ GRID / LIST
+    ═══════════════════════════════════════════════ */
+    .qgrid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 11px; }
+    .qlist { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Card */
+    .qcard {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 15px;
+      display: flex; flex-direction: column; gap: 9px;
+      transition: all .18s; box-shadow: var(--sx);
+      position: relative; overflow: hidden;
+    }
+    .qcard::before {
+      content: '';
+      position: absolute; top:0; left:0; right:0; height:3px;
+      background: var(--blue);
+      transform: scaleX(0); transform-origin: left;
+      transition: transform .2s;
+    }
+    .qcard:hover { border-color: var(--blue); box-shadow: var(--s); transform: translateY(-2px); }
+    .qcard:hover::before { transform: scaleX(1); }
+
+    .qcard-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 9px; }
+    .qtitle    { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; flex: 1; }
+    .qbdgs     { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
+
+    .qmeta {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11.5px; color: var(--ink-muted); flex-wrap: wrap;
+    }
+    .qdot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .qd-ok  { background: var(--emerald); }
+    .qd-pnd { background: var(--amber); }
+    .qd-done{ background: var(--blue); }
+    .qd-exp { background: var(--ink-faint); }
+    .qsep   { color: var(--border); }
+
+    .qtags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .qtag  { padding: 2px 7px; background: var(--canvas); color: var(--ink-soft); border-radius: var(--r-sm); font-size: 10.5px; font-weight: 500; border: 1px solid var(--border); }
+
+    .qfoot {
+      display: flex; gap: 7px; align-items: center;
+      padding-top: 9px; border-top: 1px solid var(--border-soft);
+      margin-top: auto;
+    }
+
+    /* Row */
+    .qrow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 11px 13px;
+      display: flex; align-items: center; gap: 11px;
+      transition: all .14s;
+    }
+    .qrow:hover { border-color: var(--blue); box-shadow: var(--sm); }
+
+    .qrow-n {
+      width: 30px; height: 30px; border-radius: var(--r-sm);
+      background: var(--blue-bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11.5px; font-weight: 800; color: var(--blue-dark);
+      flex-shrink: 0;
+    }
+    .qrow-info { flex:1; min-width:0; }
+    .qrow-t { font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qrow-m { font-size: 11px; color: var(--ink-muted); margin-top: 2px; display: flex; gap: 7px; flex-wrap: wrap; }
+    .qrow-a { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+
+    /* ═══════════════════════════════════════════════
+       BADGES
+    ═══════════════════════════════════════════════ */
+    .badge {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 2px 7px; border-radius: 999px;
+      font-size: 9.5px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .5px;
+      white-space: nowrap;
+    }
+
+    .b-blue    { background: var(--blue-bg);    color: var(--blue-dark); }
+    .b-violet  { background: var(--violet-bg);  color: var(--violet); }
+    .b-teal    { background: var(--teal-bg);    color: var(--teal); }
+    .b-amber   { background: var(--amber-bg);   color: var(--amber); }
+    .b-rose    { background: var(--rose-bg);    color: var(--rose); }
+    .b-emerald { background: var(--emerald-bg); color: var(--emerald); }
+    .b-indigo  { background: var(--indigo-bg);  color: var(--indigo); }
+    .b-orange  { background: var(--orange-bg);  color: var(--orange); }
+    .b-slate   { background: #f1f5f9; color: #475569; }
+
+    /* ═══════════════════════════════════════════════
+       BUTTONS
+    ═══════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 8px 15px; border-radius: var(--r);
+      font-size: 12.5px; font-weight: 700;
+      font-family: var(--font);
+      text-decoration: none; border: none;
+      cursor: pointer; transition: all .15s;
+      white-space: nowrap; line-height: 1;
+    }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-xs { padding: 4px 9px; font-size: 11px; }
+
+    .btn-p { background: var(--blue); color: #fff; }
+    .btn-p:hover { background: var(--blue-dark); box-shadow: 0 4px 12px rgba(47,110,247,.35); transform: translateY(-1px); }
+
+    .btn-o { background: transparent; border: 1.5px solid var(--border); color: var(--ink-soft); }
+    .btn-o:hover { border-color: var(--blue); color: var(--blue); }
+
+    .btn-d { background: var(--rose-bg); color: var(--rose); border: 1.5px solid transparent; }
+    .btn-d:hover { background: var(--rose); color: #fff; }
+
+    /* ═══════════════════════════════════════════════
+       TRIAL BANNER
+    ═══════════════════════════════════════════════ */
+    .trial-banner {
+      background: linear-gradient(135deg,#eff4fe,#e8f0fe);
+      border: 1.5px solid rgba(47,110,247,.22);
+      border-radius: var(--r-xl);
+      padding: 20px;
+      margin-bottom: 18px;
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 16px; flex-wrap: wrap;
+    }
+    .trial-banner h3 { font-size: 16px; font-weight: 800; color: var(--blue-dark); margin-bottom: 3px; }
+    .trial-banner p  { font-size: 12.5px; color: var(--ink-soft); }
+    .tprog { display:flex; align-items:center; gap:9px; margin-top:9px; }
+    .tpbar { flex:1; height:7px; background:rgba(47,110,247,.12); border-radius:999px; overflow:hidden; max-width:190px; }
+    .tpfill{ height:100%; background:var(--blue); border-radius:999px; transition:width .4s; }
+    .tptxt { font-size:12px; font-weight:700; color:var(--blue-dark); white-space:nowrap; }
+
+    /* ═══════════════════════════════════════════════
+       MODE BANNER
+    ═══════════════════════════════════════════════ */
+    .mode-banner {
+      background: var(--amber-bg);
+      border: 1.5px solid rgba(217,119,6,.2);
+      border-radius: var(--r-lg);
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; flex-wrap: wrap;
+    }
+    .mode-banner strong { font-size: 13.5px; color: var(--amber); }
+    .mode-banner p { font-size: 12px; color: #78350f; margin-top: 1px; }
+
+    /* ═══════════════════════════════════════════════
+       HISTORY TABLE
+    ═══════════════════════════════════════════════ */
+    .tw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden; box-shadow: var(--sx);
+    }
+
+    .ht { width:100%; border-collapse:collapse; }
+    .ht th {
+      text-align:left; padding:10px 14px;
+      font-size:10px; font-weight:800;
+      text-transform:uppercase; letter-spacing:.8px;
+      color:var(--ink-muted);
+      background:var(--surface-2);
+      border-bottom:1px solid var(--border);
+    }
+    .ht td { padding:12px 14px; border-bottom:1px solid var(--border-soft); font-size:12.5px; }
+    .ht tr:last-child td { border-bottom:none; }
+    .ht tr:hover td { background:var(--canvas); }
+
+    .spill { padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+    .sh  { background:var(--emerald-bg); color:#065f46; }
+    .smd { background:var(--amber-bg); color:#92400e; }
+    .sl  { background:var(--rose-bg); color:#991b1b; }
+
+    /* ═══════════════════════════════════════════════
+       ADMIN TOOLS
+    ═══════════════════════════════════════════════ */
+    .atgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill,minmax(170px,1fr));
+      gap: 11px; margin-bottom: 20px;
+    }
+
+    .atcard {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 16px 14px;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+      text-decoration: none; color: inherit;
+      transition: all .18s; box-shadow: var(--sx);
+    }
+    .atcard:hover { border-color: var(--blue); box-shadow: var(--s); transform: translateY(-2px); }
+
+    .ati { width:38px; height:38px; border-radius:var(--r); display:flex; align-items:center; justify-content:center; font-size:19px; }
+    .atl { font-size:12.5px; font-weight:800; color:var(--ink-soft); line-height:1.3; }
+    .atd { font-size:11px; color:var(--ink-muted); margin-top:1px; }
+
+    /* ═══════════════════════════════════════════════
+       SECTION TITLE
+    ═══════════════════════════════════════════════ */
+    .sec-title {
+      font-size:14.5px; font-weight:800; color:var(--ink);
+      margin-bottom:13px;
+      display:flex; align-items:center; gap:7px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       EMPTY STATE
+    ═══════════════════════════════════════════════ */
+    .empty {
+      text-align:center; padding:50px 20px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--r-xl);
+    }
+    .empty-ic {
+      width:64px; height:64px; border-radius:50%;
+      background:var(--canvas);
+      display:flex; align-items:center; justify-content:center;
+      font-size:28px; margin:0 auto 13px;
+    }
+    .empty h3 { font-size:15px; font-weight:800; color:var(--ink); margin-bottom:5px; }
+    .empty p  { font-size:13px; color:var(--ink-muted); }
+
+    /* ═══════════════════════════════════════════════
+       JS UTILITIES
+    ═══════════════════════════════════════════════ */
+    .jh { display:none !important; }
+
+    .main[data-view="list"] .qgrid { display:none; }
+    .main[data-view="list"] .qlist { display:flex; }
+    .main[data-view="grid"] .qgrid { display:grid; }
+    .main[data-view="grid"] .qlist { display:none; }
+
+    /* ═══════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════ */
+    @media(max-width:640px) {
+      .torg,.tsep { display:none; }
+      .qgrid { grid-template-columns:1fr; }
+      .ht th:nth-child(4),.ht td:nth-child(4) { display:none; }
+    }
+  </style>
+</head>
+<body>
+
+{{> navbar}}
+
+<!-- ═══════════════════════
+     TOPBAR
+═══════════════════════ -->
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="brand-icon">✦</div>
+      {{org.name}}
+    </div>
+    <div class="tsep"></div>
+    <span class="torg">
+      {{#if (eq membership.role "student")}}Student Portal
+      {{else if (eq membership.role "teacher")}}Teacher Dashboard
+      {{else if isAdmin}}Administrator
+      {{else}}Learning Portal{{/if}}
+    </span>
+    <div class="tsp"></div>
+
+    {{#if isAdmin}}
+      <span class="role-pill rp-admin">🔑 Admin</span>
+    {{else if (eq membership.role "student")}}
+      <span class="role-pill rp-student">🎓 Student</span>
+    {{else if (eq membership.role "teacher")}}
+      <span class="role-pill rp-teacher">📖 Teacher</span>
+    {{else}}
+      <span class="role-pill rp-member">👤 Member</span>
+    {{/if}}
+
+    <div class="top-actions">
+      {{#if isAdmin}}
+        <a href="/admin/orgs/{{org.slug}}/manage" class="btn btn-o btn-sm">⚙️ Manage</a>
+      {{/if}}
+      <a href="/org/{{org.slug}}/certificates" class="btn btn-o btn-sm">🏆 Certs</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════
+     TABS BAR
+═══════════════════════ -->
+<nav class="tabs-bar">
+  <div class="tabs-in">
+    <button class="ntab active" data-tab="assessments" onclick="switchTab('assessments',this)">
+      📚 Assessments
+      <span class="tpill" id="tpill-assessments">{{#if hasAssignedQuizzes}}✓{{else}}0{{/if}}</span>
+    </button>
+    <button class="ntab" data-tab="history" onclick="switchTab('history',this)">
+      📋 My History
+      <span class="tpill">{{attemptRows.length}}</span>
+    </button>
+    {{#if isAdmin}}
+    <button class="ntab" data-tab="admin" onclick="switchTab('admin',this)">
+      🔧 Admin Tools
+    </button>
+    {{/if}}
+  </div>
+</nav>
+
+<!-- ═══════════════════════
+     LAYOUT SHELL
+═══════════════════════ -->
+<div class="layout-wrap" id="layout-wrap">
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR  — position:sticky + bounded height = scrollable
+  ══════════════════════════════════════════ -->
+  {{#if isCripfcntSchool}}
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+
+    <!-- User card -->
+    <div class="sb-user">
+      <div class="sb-av">
+        {{#if user.firstName}}{{substring user.firstName 0 1}}{{else}}U{{/if}}
+      </div>
+      <div>
+        <div class="sb-uname">
+          {{#if user.firstName}}{{user.firstName}}{{#if user.lastName}} {{user.lastName}}{{/if}}
+          {{else if user.displayName}}{{user.displayName}}
+          {{else}}{{user.email}}{{/if}}
+        </div>
+        <div class="sb-urole">
+          {{#if isAdmin}}Administrator
+          {{else if (eq membership.role "student")}}Student
+          {{else if (eq membership.role "teacher")}}Teacher
+          {{else}}Member{{/if}}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── NAVIGATE ── -->
+    <div class="sb-div">Navigate</div>
+
+    <button class="sbi {{#unless (or pillarFilter categoryFilter seriesFilter)}}active{{/unless}}"
+      onclick="clearAllFilters()">
+      <span class="sbi-em">🏠</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">All Assessments</div>
+        <div class="sbi-s">Reset all filters</div>
+      </span>
+    </button>
+
+    {{#if attemptRows.length}}
+    <button class="sbi" onclick="switchTab('history',document.querySelector('[data-tab=history]'))">
+      <span class="sbi-em">📋</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">My History</div>
+        <div class="sbi-s">{{attemptRows.length}} attempt{{#if (gt attemptRows.length 1)}}s{{/if}}</div>
+      </span>
+      <span class="sbi-n">{{attemptRows.length}}</span>
+    </button>
+    {{/if}}
+
+    {{#if certRows.length}}
+    <a class="sbi" href="/org/{{org.slug}}/certificates">
+      <span class="sbi-em">🏆</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">My Certificates</div>
+        <div class="sbi-s">{{certRows.length}} earned</div>
+      </span>
+      <span class="sbi-n">{{certRows.length}}</span>
+    </a>
+    {{/if}}
+
+    <!-- ── PILLARS ── -->
+    {{#if allPillars.length}}
+    <div class="sb-div">Filter by Pillar</div>
+
+    {{#each allPillars}}
+    <button class="sbi {{#if (eq this ../pillarFilter)}}active{{/if}}"
+      data-pillar="{{this}}"
+      onclick="setFilter('pillar','{{this}}')">
+      <span class="sbi-em">
+        {{#if (eq this "consciousness")}}🧠
+        {{else if (eq this "responsibility")}}🤝
+        {{else if (eq this "purpose")}}🎯
+        {{else if (eq this "technology")}}💻
+        {{else if (eq this "frequencies")}}📡
+        {{else if (eq this "civilization")}}🏛
+        {{else if (eq this "interpretation")}}🔍
+        {{else if (eq this "negotiation")}}🤜
+        {{else}}📌{{/if}}
+      </span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{capitalize this}}</div>
+        <div class="sbi-s">Pillar</div>
+      </span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    <!-- ── CATEGORIES ── -->
+    {{#if allCategories.length}}
+    <div class="sb-div">Filter by Category</div>
+
+    {{#each allCategories}}
+    <button class="sbi {{#if (eq this ../categoryFilter)}}active{{/if}}"
+      onclick="setFilter('category','{{this}}')">
+      <span class="sbi-em">📂</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{capitalize (replace this "-" " ")}}</div>
+        <div class="sbi-s">Category</div>
+      </span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    <!-- ── SERIES ── -->
+    {{#if allSeries.length}}
+    <div class="sb-div">Jump to Series</div>
+
+    {{#each quizzesBySeries}}
+    <button class="sbi {{#if (eq this.seriesSlug ../seriesFilter)}}active{{/if}}"
+      onclick="jumpToSeries('{{this.seriesSlug}}')">
+      <span class="sbi-em">
+        {{#if (eq this.pillar "consciousness")}}🧠
+        {{else if (eq this.pillar "responsibility")}}🤝
+        {{else if (eq this.pillar "purpose")}}🎯
+        {{else if (eq this.pillar "technology")}}💻
+        {{else if (eq this.pillar "frequencies")}}📡
+        {{else if (eq this.pillar "civilization")}}🏛
+        {{else if (eq this.pillar "interpretation")}}🔍
+        {{else if (eq this.pillar "negotiation")}}🤜
+        {{else}}📖{{/if}}
+      </span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{this.seriesLabel}}</div>
+        <div class="sbi-s">
+          {{#if this.category}}{{capitalize (replace this.category "-" " ")}} · {{/if}}
+          {{this.quizzes.length}} quiz{{#if (gt this.quizzes.length 1)}}zes{{/if}}
+        </div>
+      </span>
+      <span class="sbi-n">{{this.quizzes.length}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    <!-- ── ADMIN LINKS ── -->
+    {{#if isAdmin}}
+    <div class="sb-div">Admin</div>
+
+    <a class="sbi" href="/admin/orgs/{{org.slug}}/manage">
+      <span class="sbi-em">⚙️</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">Manage Org</div>
+        <div class="sbi-s">Members &amp; settings</div>
+      </span>
+    </a>
+    <a class="sbi" href="/admin/orgs/{{org.slug}}/attempts">
+      <span class="sbi-em">📊</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">All Attempts</div>
+        <div class="sbi-s">View results</div>
+      </span>
+    </a>
+    <a class="sbi" href="/admin/orgs/{{org.slug}}/reports/attempts.csv">
+      <span class="sbi-em">⬇️</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">Export CSV</div>
+        <div class="sbi-s">Download data</div>
+      </span>
+    </a>
+    {{/if}}
+
+  </aside>
+  {{/if}}
+
+  <!-- ══════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════ -->
+  <main class="main" id="main-content" data-view="grid" data-org="{{org.slug}}">
+
+    <!-- Mobile sidebar open button -->
+    {{#if isCripfcntSchool}}
+    <button class="mob-toggle" onclick="openMobSidebar()">
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      Browse Pillars, Categories &amp; Series
+    </button>
+    {{/if}}
+
+    <!-- ════════════════════════════════════
+         TAB: ASSESSMENTS
+    ════════════════════════════════════ -->
+    <div id="tab-assessments">
+
+      <!-- Trial Banner -->
+      {{#if (and isCripfcntSchool (eq user.employeeSubscriptionStatus "trial"))}}
+      {{#unless isAdmin}}
+      <div class="trial-banner">
+        <div>
+          <h3>🎯 Welcome to {{org.name}}</h3>
+          <p>Complete your trial assessments to unlock the full professional curriculum.</p>
+          <div class="tprog">
+            <div class="tpbar"><div class="tpfill" style="width:{{#if employeeTrialTotal}}{{math employeeTrialCompleted "/" employeeTrialTotal "*" 100}}%{{else}}0%{{/if}}"></div></div>
+            <span class="tptxt">{{employeeTrialCompleted}}/{{employeeTrialTotal}} Complete</span>
+          </div>
+        </div>
+        {{#if canUpgradeEmployee}}
+        <a href="/employee/upgrade" class="btn btn-p">Upgrade to Full Access →</a>
+        {{/if}}
+      </div>
+      {{/unless}}
+      {{/if}}
+
+      <!-- Parent Mode Banner -->
+      <div class="mode-banner">
+        <div>
+          <strong>👨‍👩‍👧 Parent Learning Hub</strong>
+          <p>Switch to manage your children's learning journey</p>
+        </div>
+        <a href="/parent/dashboard" class="btn btn-o btn-sm">Parent Mode →</a>
+      </div>
+
+      <!-- Stats -->
+      {{#if (ne user.employeeSubscriptionStatus "trial")}}
+      <div class="stats">
+        <div class="sc">
+          <div class="sci sci-b">📝</div>
+          <div><div class="sv">{{attemptRows.length}}</div><div class="sl">Assessments Taken</div></div>
+        </div>
+        <div class="sc">
+          <div class="sci sci-v">🏆</div>
+          <div><div class="sv">{{certRows.length}}</div><div class="sl">Certificates Earned</div></div>
+        </div>
+        <div class="sc">
+          <div class="sci sci-t">📊</div>
+          <div>
+            <div class="sv">{{#if attemptRows.length}}{{math (sum attemptRows "percentage") "/" attemptRows.length}}%{{else}}—{{/if}}</div>
+            <div class="sl">Average Score</div>
+          </div>
+        </div>
+      </div>
+      {{/if}}
+
+      <!-- Search & Filter -->
+      {{#if isCripfcntSchool}}
+      <form class="search-bar" method="GET" action="/org/{{org.slug}}/dashboard" id="sf">
+        <div class="sr">
+          <div class="sw">
+            <span class="si-icon">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.3">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </span>
+            <input class="s-inp" type="text" name="q"
+              placeholder="Search assessments — title, topic, pillar, category…"
+              value="{{searchQuery}}"
+              autocomplete="off"
+              oninput="liveSearch(this.value)" />
+          </div>
+          <button type="button"
+            class="fbtn {{#if (or seriesFilter categoryFilter pillarFilter)}}on{{/if}}"
+            id="fbtn-toggle"
+            onclick="toggleFPanel(this)">
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filters
+            {{#if (or seriesFilter categoryFilter pillarFilter)}}
+              <span style="background:var(--blue);color:#fff;border-radius:999px;padding:1px 6px;font-size:9px;font-weight:900">●</span>
+            {{/if}}
+          </button>
+        </div>
+
+        <div class="fpanel jh" id="fpanel">
+          <div class="fgl">
+            <label class="flab">Series</label>
+            <select class="fsel" name="series" onchange="this.form.submit()">
+              <option value="">All Series</option>
+              {{#each allSeries}}
+                <option value="{{this}}" {{#if (eq this ../seriesFilter)}}selected{{/if}}>
+                  {{capitalize (replace this "-" " ")}}
+                </option>
+              {{/each}}
+            </select>
+          </div>
+          <div class="fgl">
+            <label class="flab">Category</label>
+            <select class="fsel" name="category" onchange="this.form.submit()">
+              <option value="">All Categories</option>
+              {{#each allCategories}}
+                <option value="{{this}}" {{#if (eq this ../categoryFilter)}}selected{{/if}}>
+                  {{capitalize (replace this "-" " ")}}
+                </option>
+              {{/each}}
+            </select>
+          </div>
+          <div class="fgl">
+            <label class="flab">Pillar</label>
+            <select class="fsel" name="pillar" onchange="this.form.submit()">
+              <option value="">All Pillars</option>
+              {{#each allPillars}}
+                <option value="{{this}}" {{#if (eq this ../pillarFilter)}}selected{{/if}}>{{capitalize this}}</option>
+              {{/each}}
+            </select>
+          </div>
+          <div>
+            {{#if (or searchQuery seriesFilter categoryFilter pillarFilter moduleFilter topicFilter)}}
+            <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-sm" style="width:100%">✕ Clear</a>
+            {{/if}}
+          </div>
+        </div>
+
+        {{#if (or searchQuery seriesFilter categoryFilter pillarFilter)}}
+        <div class="chips">
+          {{#if searchQuery}}
+          <span class="chip">🔍 "{{searchQuery}}"
+            <a class="chip-x" href="/org/{{org.slug}}/dashboard?series={{seriesFilter}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a>
+          </span>
+          {{/if}}
+          {{#if seriesFilter}}
+          <span class="chip">📖 {{capitalize (replace seriesFilter "-" " ")}}
+            <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a>
+          </span>
+          {{/if}}
+          {{#if categoryFilter}}
+          <span class="chip">📂 {{capitalize (replace categoryFilter "-" " ")}}
+            <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&pillar={{pillarFilter}}">✕</a>
+          </span>
+          {{/if}}
+          {{#if pillarFilter}}
+          <span class="chip">🏛 {{capitalize pillarFilter}}
+            <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&category={{categoryFilter}}">✕</a>
+          </span>
+          {{/if}}
+        </div>
+        {{/if}}
+      </form>
+      {{/if}}
+
+      <!-- Content header -->
+      <div class="ch">
+        <div class="ch-l">
+          <span class="ch-title">Assessment Library</span>
+          <span class="ch-sub" id="vis-cnt"></span>
+        </div>
+        <div class="vtog">
+          <button class="vb active" id="vb-grid" onclick="setView('grid')" title="Grid">⊞</button>
+          <button class="vb" id="vb-list" onclick="setView('list')" title="List">≡</button>
+        </div>
+      </div>
+
+      <!-- ════ CRIPFCNT-SCHOOL grouped by series ════ -->
+      {{#if isCripfcntSchool}}
+
+        {{#if hasAssignedQuizzes}}
+        <div id="quiz-lib">
+          {{#each quizzesBySeries}}
+          <div class="series-block"
+            id="sb-{{this.seriesSlug}}"
+            data-pillar="{{this.pillar}}"
+            data-category="{{this.category}}"
+            data-series="{{this.seriesSlug}}">
+
+            <button class="series-hdr" onclick="toggleSeries('{{this.seriesSlug}}')">
+              <div class="s-stripe" style="background:var(--p-{{this.pillar}},var(--blue));--p-consciousness:#7c3aed;--p-responsibility:#0d9488;--p-purpose:#d97706;--p-technology:#2563eb;--p-frequencies:#e11d48;--p-civilization:#059669;--p-interpretation:#4f46e5;--p-negotiation:#ea580c"></div>
+              <div class="s-info">
+                <div class="s-title">{{this.seriesLabel}}</div>
+                <div class="s-tags">
+                  {{#if this.pillar}}
+                  <span class="badge b-violet">
+                    {{#if (eq this.pillar "consciousness")}}🧠{{/if}}
+                    {{#if (eq this.pillar "responsibility")}}🤝{{/if}}
+                    {{#if (eq this.pillar "purpose")}}🎯{{/if}}
+                    {{#if (eq this.pillar "technology")}}💻{{/if}}
+                    {{#if (eq this.pillar "frequencies")}}📡{{/if}}
+                    {{#if (eq this.pillar "civilization")}}🏛{{/if}}
+                    {{#if (eq this.pillar "interpretation")}}🔍{{/if}}
+                    {{#if (eq this.pillar "negotiation")}}🤜{{/if}}
+                    {{capitalize this.pillar}}
+                  </span>
+                  {{/if}}
+                  {{#if this.category}}<span class="badge b-teal">{{capitalize (replace this.category "-" " ")}}</span>{{/if}}
+                  {{#if this.level}}<span class="badge b-slate">{{capitalize this.level}}</span>{{/if}}
+                </div>
+              </div>
+              <div class="s-right">
+                <span class="s-count">{{this.quizzes.length}} assessment{{#if (gt this.quizzes.length 1)}}s{{/if}}</span>
+                <span class="s-chev open" id="chev-{{this.seriesSlug}}">▼</span>
+              </div>
+            </button>
+
+            <div class="series-body" id="sbody-{{this.seriesSlug}}">
+
+              <!-- Grid -->
+              <div class="qgrid">
+                {{#each this.quizzes}}
+                <div class="qcard"
+                  data-title="{{quizTitle}}"
+                  data-pillar="{{pillar}}"
+                  data-category="{{category}}"
+                  data-series="{{series}}"
+                  data-topics="{{#each topics}}{{this}} {{/each}}">
+
+                  <div class="qcard-top">
+                    <h3 class="qtitle">{{quizTitle}}</h3>
+                    <div class="qbdgs">
+                      {{#if isTrial}}<span class="badge b-blue">Trial</span>{{/if}}
+                      {{#if isAdminQuiz}}<span class="badge b-emerald">Catalog</span>{{/if}}
+                      {{#if level}}<span class="badge b-slate">{{capitalize level}}</span>{{/if}}
+                    </div>
+                  </div>
+
+                  <div class="qmeta">
+                    <span class="qdot {{#if (eq status "available")}}qd-ok{{else if (eq status "completed")}}qd-done{{else if (eq status "expired")}}qd-exp{{else}}qd-pnd{{/if}}"></span>
+                    📝 {{questionCount}} q{{#if (gt questionCount 1)}}s{{/if}}
+                    {{#unless isAdminQuiz}}<span class="qsep">·</span> <span style="text-transform:capitalize">{{status}}</span>{{/unless}}
+                    {{#if pillar}}<span class="qsep">·</span><span style="color:var(--violet);font-weight:700;font-size:11px">{{capitalize pillar}}</span>{{/if}}
+                  </div>
+
+                  {{#if topics.length}}
+                  <div class="qtags">{{#each topics}}<span class="qtag">{{this}}</span>{{/each}}</div>
+                  {{/if}}
+
+                  <div class="qfoot">
+                    <a href="{{openUrl}}" class="btn btn-p btn-sm" style="flex:1">
+                      {{#if isAdminQuiz}}Take Assessment
+                      {{else if (eq status "completed")}}✓ Review
+                      {{else}}Start →{{/if}}
+                    </a>
+                    {{#if ../../isAdmin}}{{#unless isAdminQuiz}}
+                    <form method="POST" action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                      style="display:inline" onsubmit="return confirm('Delete this assessment?');">
+                      <button class="btn btn-d btn-xs">Delete</button>
+                    </form>
+                    {{/unless}}{{/if}}
+                  </div>
+                </div>
+                {{/each}}
+              </div>
+
+              <!-- List -->
+              <div class="qlist">
+                {{#each this.quizzes}}
+                <div class="qrow"
+                  data-title="{{quizTitle}}"
+                  data-pillar="{{pillar}}"
+                  data-category="{{category}}"
+                  data-series="{{series}}"
+                  data-topics="{{#each topics}}{{this}} {{/each}}">
+                  <div class="qrow-n">{{add @index 1}}</div>
+                  <div class="qrow-info">
+                    <div class="qrow-t">{{quizTitle}}</div>
+                    <div class="qrow-m">
+                      <span>📝 {{questionCount}}q</span>
+                      {{#if pillar}}<span>· {{capitalize pillar}}</span>{{/if}}
+                      {{#if category}}<span>· {{capitalize (replace category "-" " ")}}</span>{{/if}}
+                      {{#unless isAdminQuiz}}<span>· {{status}}</span>{{/unless}}
+                    </div>
+                  </div>
+                  <div class="qrow-a">
+                    {{#if isTrial}}<span class="badge b-blue">Trial</span>{{/if}}
+                    {{#if isAdminQuiz}}<span class="badge b-emerald">Cat.</span>{{/if}}
+                    <a href="{{openUrl}}" class="btn btn-p btn-xs">
+                      {{#if isAdminQuiz}}Take{{else if (eq status "completed")}}Review{{else}}Start{{/if}}
+                    </a>
+                    {{#if ../../isAdmin}}{{#unless isAdminQuiz}}
+                    <form method="POST" action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                      style="display:inline" onsubmit="return confirm('Delete?');">
+                      <button class="btn btn-d btn-xs">Del</button>
+                    </form>
+                    {{/unless}}{{/if}}
+                  </div>
+                </div>
+                {{/each}}
+              </div>
+
+            </div><!-- /series-body -->
+          </div><!-- /series-block -->
+          {{/each}}
+        </div><!-- /quiz-lib -->
+
+        <div class="empty jh" id="no-results">
+          <div class="empty-ic">🔍</div>
+          <h3>No Assessments Found</h3>
+          <p>Try adjusting your search or removing filters.</p>
+        </div>
+
+        {{else}}
+        <div class="empty">
+          <div class="empty-ic">📚</div>
+          <h3>No Assessments Available</h3>
+          <p>{{#if searchQuery}}Try different search terms or clear filters{{else}}Check back soon for new content{{/if}}</p>
+        </div>
+        {{/if}}
+
+      {{else}}
+        {{!-- Non-cripfcnt-school --}}
+        {{#if hasAssignedQuizzes}}
+          {{#each quizzesByModule}}
+          <div class="series-block">
+            <button class="series-hdr" onclick="toggleSeries('mod-{{@key}}')">
+              <div class="s-stripe"></div>
+              <div class="s-info">
+                <div class="s-title">
+                  {{#if (eq @key "consciousness")}}🧠 {{/if}}
+                  {{#if (eq @key "responsibility")}}🤝 {{/if}}
+                  {{#if (eq @key "purpose")}}🎯 {{/if}}
+                  {{#if (eq @key "technology")}}💻 {{/if}}
+                  {{capitalize @key}}
+                </div>
+              </div>
+              <div class="s-right">
+                <span class="s-count">{{this.length}} assessment{{#if (gt this.length 1)}}s{{/if}}</span>
+                <span class="s-chev open" id="chev-mod-{{@key}}">▼</span>
+              </div>
+            </button>
+            <div class="series-body" id="sbody-mod-{{@key}}">
+              <div class="qgrid">
+                {{#each this}}
+                <div class="qcard">
+                  <div class="qcard-top">
+                    <h3 class="qtitle">{{quizTitle}}</h3>
+                    <div class="qbdgs">
+                      {{#if isTrial}}<span class="badge b-blue">Trial</span>{{/if}}
+                      {{#if isAdminQuiz}}<span class="badge b-emerald">Catalog</span>{{/if}}
+                    </div>
+                  </div>
+                  <div class="qmeta">📝 {{questionCount}} questions{{#unless isAdminQuiz}}<span class="qsep">·</span>{{status}}{{/unless}}</div>
+                  {{#if topics}}<div class="qtags">{{#each topics}}<span class="qtag">{{this}}</span>{{/each}}</div>{{/if}}
+                  <div class="qfoot">
+                    <a href="{{openUrl}}" class="btn btn-p btn-sm" style="flex:1">
+                      {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
+                    </a>
+                    {{#if ../../isAdmin}}{{#unless isAdminQuiz}}
+                    <form method="POST" action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                      style="display:inline" onsubmit="return confirm('Delete?');">
+                      <button class="btn btn-d btn-xs">Delete</button>
+                    </form>
+                    {{/unless}}{{/if}}
+                  </div>
+                </div>
+                {{/each}}
+              </div>
+            </div>
+          </div>
+          {{/each}}
+        {{else}}
+        <div class="empty">
+          <div class="empty-ic">📚</div>
+          <h3>No Assessments Available</h3>
+          <p>Check back soon for new content.</p>
+        </div>
+        {{/if}}
+      {{/if}}
+
+    </div><!-- /tab-assessments -->
+
+    <!-- ════════════════════════════════════
+         TAB: HISTORY
+    ════════════════════════════════════ -->
+    <div id="tab-history" class="jh">
+      {{#if attemptRows.length}}
+      <div class="sec-title">📋 Assessment History</div>
+      <div class="tw">
+        <table class="ht">
+          <thead>
+            <tr>
+              <th>Assessment</th>
+              <th>Score</th>
+              <th>Result</th>
+              <th>Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each attemptRows}}
+            <tr>
+              <td><strong>{{quizTitle}}</strong></td>
+              <td>
+                <span class="spill {{#if (gte percentage 80)}}sh{{else if (gte percentage 60)}}smd{{else}}sl{{/if}}">
+                  {{percentage}}%
+                </span>
+              </td>
+              <td>
+                {{#if passed}}
+                  <span style="color:var(--emerald);font-weight:700">✓ Passed</span>
+                {{else}}
+                  <span style="color:var(--rose);font-weight:700">✗ Failed</span>
+                {{/if}}
+              </td>
+              <td style="color:var(--ink-muted)">{{formatDate finishedAt}}</td>
+              <td>
+                <a href="/org/{{../org.slug}}/my-attempts/{{_id}}" class="btn btn-o btn-xs">Review</a>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="empty">
+        <div class="empty-ic">📋</div>
+        <h3>No History Yet</h3>
+        <p>Complete your first assessment and results will appear here.</p>
+      </div>
+      {{/if}}
+    </div><!-- /tab-history -->
+
+    <!-- ════════════════════════════════════
+         TAB: ADMIN TOOLS
+    ════════════════════════════════════ -->
+    {{#if isAdmin}}
+    <div id="tab-admin" class="jh">
+      <div class="sec-title">🔧 Admin Tools</div>
+      <div class="atgrid">
+        <a href="/admin/orgs/{{org.slug}}/manage" class="atcard">
+          <div class="ati" style="background:var(--blue-bg)">⚙️</div>
+          <div><div class="atl">Manage Org</div><div class="atd">Members, roles &amp; settings</div></div>
+        </a>
+        <a href="/admin/orgs/{{org.slug}}/attempts" class="atcard">
+          <div class="ati" style="background:var(--emerald-bg)">📊</div>
+          <div><div class="atl">All Attempts</div><div class="atd">View every student result</div></div>
+        </a>
+        <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="atcard">
+          <div class="ati" style="background:var(--teal-bg)">⬇️</div>
+          <div><div class="atl">Export CSV</div><div class="atd">Download raw data</div></div>
+        </a>
+        <a href="/org/{{org.slug}}/certificates" class="atcard">
+          <div class="ati" style="background:var(--amber-bg)">🏆</div>
+          <div><div class="atl">Certificates</div><div class="atd">Browse awarded certs</div></div>
+        </a>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--sx)">
+        <div class="sec-title" style="margin-bottom:9px">ℹ️ Admin Quick Reference</div>
+        <p style="color:var(--ink-soft);font-size:13px;line-height:1.9">
+          The <strong>Assessment Library</strong> tab shows every quiz grouped by Series.<br>
+          Use the <strong>left sidebar</strong> to filter by Pillar or Category, or jump straight to a Series by clicking it.<br>
+          The <strong>search bar</strong> filters cards live as you type — it matches title, topic, pillar and category.<br>
+          Click <em>Take Assessment</em> on any Catalog card to preview it exactly as a student sees it.<br>
+          <em>Delete</em> only appears on assigned (non-catalog) quizzes.
+        </p>
+      </div>
+    </div>
+    {{/if}}
+
+  </main>
+</div><!-- /layout-wrap -->
+
+<!-- ═══════════════════════
+     MOBILE DRAWER
+═══════════════════════ -->
+{{#if isCripfcntSchool}}
+<div class="mob-drawer" id="mob-drawer" onclick="closeMobSidebar(event)">
+  <div class="mob-panel" id="mob-panel">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 10px;border-bottom:1px solid var(--border-soft)">
+      <span style="font-size:14px;font-weight:800">Browse</span>
+      <button onclick="closeMobSidebar(null,true)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-muted);line-height:1">✕</button>
+    </div>
+
+    <button class="sbi {{#unless (or pillarFilter categoryFilter seriesFilter)}}active{{/unless}}"
+      onclick="clearAllFilters()">
+      <span class="sbi-em">🏠</span>
+      <span class="sbi-txt"><div class="sbi-t">All Assessments</div></span>
+    </button>
+
+    {{#if allPillars.length}}
+    <div class="sb-div">Pillars</div>
+    {{#each allPillars}}
+    <button class="sbi {{#if (eq this ../pillarFilter)}}active{{/if}}" onclick="setFilter('pillar','{{this}}')">
+      <span class="sbi-em">
+        {{#if (eq this "consciousness")}}🧠{{else if (eq this "responsibility")}}🤝{{else if (eq this "purpose")}}🎯{{else if (eq this "technology")}}💻{{else if (eq this "frequencies")}}📡{{else if (eq this "civilization")}}🏛{{else if (eq this "interpretation")}}🔍{{else if (eq this "negotiation")}}🤜{{else}}📌{{/if}}
+      </span>
+      <span class="sbi-txt"><div class="sbi-t">{{capitalize this}}</div><div class="sbi-s">Pillar</div></span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    {{#if allCategories.length}}
+    <div class="sb-div">Categories</div>
+    {{#each allCategories}}
+    <button class="sbi {{#if (eq this ../categoryFilter)}}active{{/if}}" onclick="setFilter('category','{{this}}')">
+      <span class="sbi-em">📂</span>
+      <span class="sbi-txt"><div class="sbi-t">{{capitalize (replace this "-" " ")}}</div></span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    {{#if allSeries.length}}
+    <div class="sb-div">Series</div>
+    {{#each quizzesBySeries}}
+    <button class="sbi" onclick="jumpToSeries('{{this.seriesSlug}}')">
+      <span class="sbi-em">📖</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{this.seriesLabel}}</div>
+        <div class="sbi-s">{{this.quizzes.length}} quizzes</div>
+      </span>
+      <span class="sbi-n">{{this.quizzes.length}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+  </div>
+  <div class="mob-back"></div>
+</div>
+{{/if}}
+
+<script>
+/* ── TABS ── */
+function switchTab(id, btn) {
+  ['assessments','history','admin'].forEach(function(t){
+    var el = document.getElementById('tab-' + t);
+    if (el) el.classList.add('jh');
+  });
+  document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
+  var target = document.getElementById('tab-' + id);
+  if (target) target.classList.remove('jh');
+  if (btn) btn.classList.add('active');
+}
+
+/* ── VIEW ── */
+function setView(mode) {
+  var mc = document.getElementById('main-content');
+  if (mc) mc.dataset.view = mode;
+  document.getElementById('vb-grid').classList.toggle('active', mode === 'grid');
+  document.getElementById('vb-list').classList.toggle('active', mode === 'list');
+  try { localStorage.setItem('dv', mode); } catch(e){}
+}
+
+/* ── SERIES TOGGLE ── */
+function toggleSeries(slug) {
+  var b = document.getElementById('sbody-' + slug);
+  var c = document.getElementById('chev-' + slug);
+  if (!b) return;
+  var hidden = b.classList.toggle('jh');
+  if (c) c.classList.toggle('open', !hidden);
+}
+
+/* ── JUMP TO SERIES ── */
+function jumpToSeries(slug) {
+  closeMobSidebar(null, true);
+  switchTab('assessments', document.querySelector('[data-tab="assessments"]'));
+  /* Expand if collapsed */
+  var body = document.getElementById('sbody-' + slug);
+  var chev = document.getElementById('chev-' + slug);
+  if (body && body.classList.contains('jh')) {
+    body.classList.remove('jh');
+    if (chev) chev.classList.add('open');
+  }
+  setTimeout(function(){
+    var block = document.getElementById('sb-' + slug);
+    if (block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
+
+/* ── FILTER ── */
+function setFilter(key, value) {
+  closeMobSidebar(null, true);
+  var url = new URL(window.location.href);
+  if (value) url.searchParams.set(key, value);
+  else url.searchParams.delete(key);
+  window.location.href = url.toString();
+}
+
+function clearAllFilters() {
+  closeMobSidebar(null, true);
+  var mc = document.getElementById('main-content');
+  var slug = mc && mc.dataset.org;
+  window.location.href = slug ? '/org/' + slug + '/dashboard' : window.location.pathname;
+}
+
+/* ── FILTER PANEL ── */
+function toggleFPanel(btn) {
+  var p = document.getElementById('fpanel');
+  if (!p) return;
+  var hidden = p.classList.toggle('jh');
+  btn.classList.toggle('on', !hidden);
+}
+
+/* ── LIVE SEARCH ── */
+var _st;
+function liveSearch(q) {
+  clearTimeout(_st);
+  _st = setTimeout(function(){
+    var term = q.toLowerCase().trim();
+    var blocks = document.querySelectorAll('.series-block');
+    var total = 0;
+
+    blocks.forEach(function(block){
+      var cnt = 0;
+      block.querySelectorAll('.qcard, .qrow').forEach(function(card){
+        var hay = [
+          card.dataset.title    || '',
+          card.dataset.topics   || '',
+          card.dataset.pillar   || '',
+          card.dataset.category || '',
+          card.dataset.series   || ''
+        ].join(' ').toLowerCase();
+        var match = !term || hay.includes(term);
+        card.style.display = match ? '' : 'none';
+        if (match) cnt++;
+      });
+
+      if (term && cnt === 0) {
+        block.style.display = 'none';
+      } else {
+        block.style.display = '';
+        if (term && cnt > 0) {
+          /* Auto-expand series when searching */
+          var slug = block.dataset.series;
+          if (slug) {
+            var sb = document.getElementById('sbody-' + slug);
+            var cv = document.getElementById('chev-' + slug);
+            if (sb && sb.classList.contains('jh')) {
+              sb.classList.remove('jh');
+              if (cv) cv.classList.add('open');
+            }
+          }
+        }
+        total += cnt;
+      }
+    });
+
+    var vc = document.getElementById('vis-cnt');
+    if (vc) vc.textContent = term ? ' — ' + total + ' result' + (total !== 1 ? 's' : '') : '';
+
+    var nr = document.getElementById('no-results');
+    var lib = document.getElementById('quiz-lib');
+    if (nr && lib) {
+      var any = Array.from(blocks).some(function(b){ return b.style.display !== 'none'; });
+      nr.classList.toggle('jh', !term || any);
+    }
+  }, 150);
+}
+
+/* ── MOBILE SIDEBAR ── */
+function openMobSidebar() {
+  var d = document.getElementById('mob-drawer');
+  if (d) d.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobSidebar(e, force) {
+  if (!force && e) {
+    /* Only close if clicking backdrop or called directly */
+    var t = e.target;
+    if (!t.classList.contains('mob-back') && t !== e.currentTarget) return;
+  }
+  var d = document.getElementById('mob-drawer');
+  if (d) d.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ── INIT ── */
+(function(){
+  /* Restore view */
+  try { var sv = localStorage.getItem('dv'); if (sv === 'list') setView('list'); } catch(e){}
+
+  /* Open filter panel if filters are active */
+  var p = new URLSearchParams(window.location.search);
+  if (p.get('series') || p.get('category') || p.get('pillar')) {
+    var fp = document.getElementById('fpanel');
+    var fb = document.getElementById('fbtn-toggle');
+    if (fp) fp.classList.remove('jh');
+    if (fb) fb.classList.add('on');
+  }
+})();
+</script>
+
+</body>
+</html>
