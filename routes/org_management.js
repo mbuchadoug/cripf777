@@ -731,9 +731,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const slug = String(req.params.slug || "").trim();
     
     // Get search/filter params
-    const searchQuery = String(req.query.q || "").trim();
-    const moduleFilter = String(req.query.module || "").trim();
-    const topicFilter = String(req.query.topic || "").trim();
+   const searchQuery    = String(req.query.q        || "").trim();
+const moduleFilter   = String(req.query.module   || "").trim();
+const topicFilter    = String(req.query.topic    || "").trim();
+const seriesFilter   = String(req.query.series   || "").trim();  // NEW
+const categoryFilter = String(req.query.category || "").trim();  // NEW
+const pillarFilter   = String(req.query.pillar   || "").trim();  // NEW
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -773,13 +776,14 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       // ADMINS: Load ALL comprehension passages (quizzes) for this org
       console.log('[dashboard] Loading ALL cripfcnt-school quizzes for admin');
       
-      const allQuizzes = await Question.find({
-        organization: org._id,
-        type: 'comprehension'
-      })
-      .select('_id text module modules topics series questionIds createdAt')
-      .sort({ createdAt: -1 })
-      .lean();
+    // REPLACE WITH (add category, level, seriesOrder, quizTitle):
+const allQuizzes = await Question.find({
+  organization: org._id,
+  type: 'comprehension'
+})
+.select('_id text quizTitle module modules topics series category level seriesOrder questionIds createdAt meta')
+.sort({ series: 1, seriesOrder: 1, createdAt: -1 })
+.lean();
 
       console.log(`[dashboard] Found ${allQuizzes.length} total quizzes`);
 
@@ -788,23 +792,31 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       for (const quiz of allQuizzes) {
         const quizModules = quiz.modules || [quiz.module || 'general'];
         
-        exams.push({
-          assignmentId: `admin-quiz-${quiz._id}`, // Virtual assignment ID
-          examId: null, // Will be created on-demand when admin clicks
-          title: quiz.text || 'Quiz',
-          quizTitle: quiz.text || 'Quiz',
-          module: quiz.module || 'general',
-          modules: quizModules,
-          questionIds: quiz.questionIds || [],
-          createdAt: quiz.createdAt,
-          isAdminQuiz: true, // Flag to show this is from catalog
-          quizId: quiz._id, // Original quiz ID
-          status: 'available', // Always available for admins
-          meta: {
-            topics: quiz.topics || [],
-            series: quiz.series
-          }
-        });
+      // REPLACE WITH:
+exams.push({
+  assignmentId:  `admin-quiz-${quiz._id}`,
+  examId:        null,
+  title:         quiz.quizTitle || quiz.text || 'Quiz',
+  quizTitle:     quiz.quizTitle || quiz.text || 'Quiz',
+  module:        quiz.module || 'general',
+  modules:       quizModules,
+  series:        quiz.series   || null,       // NEW — read directly
+  category:      quiz.category || null,       // NEW
+  level:         quiz.level    || 'foundation', // NEW
+  seriesOrder:   quiz.seriesOrder || 99,      // NEW
+  questionIds:   quiz.questionIds || [],
+  createdAt:     quiz.createdAt,
+  isAdminQuiz:   true,
+  quizId:        quiz._id,
+  status:        'available',
+  meta: {
+    topics:      quiz.topics || [],
+    series:      quiz.series,
+    category:    quiz.category,
+    aiPillar:    quiz.meta?.aiPillar || quiz.module,
+    level:       quiz.level
+  }
+});
       }
 
     } else if (isAdmin) {
@@ -853,38 +865,37 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     /* -------------------------------
        APPLY SEARCH/FILTER
     -------------------------------- */
-    if (searchQuery || moduleFilter || topicFilter) {
-      exams = exams.filter(ex => {
-        // Search by title/quiz name
-        if (searchQuery) {
-          const title = (ex.title || ex.quizTitle || '').toLowerCase();
-          if (!title.includes(searchQuery.toLowerCase())) {
-            return false;
-          }
-        }
-
-        // Filter by module
-        if (moduleFilter) {
-          const examModules = ex.modules || [ex.module];
-          if (!examModules.includes(moduleFilter)) {
-            return false;
-          }
-        }
-
-        // Filter by topic (requires meta.topics)
-        if (topicFilter) {
-          const topics = ex.meta?.topics || [];
-          const topicMatch = topics.some(t => 
-            t.toLowerCase().includes(topicFilter.toLowerCase())
-          );
-          if (!topicMatch) {
-            return false;
-          }
-        }
-
-        return true;
-      });
+   // REPLACE WITH:
+if (searchQuery || moduleFilter || topicFilter || seriesFilter || categoryFilter || pillarFilter) {
+  exams = exams.filter(ex => {
+    if (searchQuery) {
+      const title = (ex.title || ex.quizTitle || '').toLowerCase();
+      if (!title.includes(searchQuery.toLowerCase())) return false;
     }
+    if (moduleFilter) {
+      const examModules = ex.modules || [ex.module];
+      if (!examModules.includes(moduleFilter)) return false;
+    }
+    if (topicFilter) {
+      const topics = ex.meta?.topics || [];
+      if (!topics.some(t => t.toLowerCase().includes(topicFilter.toLowerCase()))) return false;
+    }
+    // NEW filters
+    if (seriesFilter) {
+      const s = ex.series || ex.meta?.series || ex.module || "";
+      if (s !== seriesFilter) return false;
+    }
+    if (categoryFilter) {
+      const c = ex.category || ex.meta?.category || "";
+      if (c !== categoryFilter) return false;
+    }
+    if (pillarFilter) {
+      const p = ex.meta?.aiPillar || ex.module || "";
+      if (p !== pillarFilter) return false;
+    }
+    return true;
+  });
+}
 
     console.log(`[dashboard] ${exams.length} exams/quizzes after filter`);
 
@@ -915,82 +926,110 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     /* -------------------------------
        BUILD DASHBOARD DATA
     -------------------------------- */
-    const quizzesByModule = {};
-    const now = new Date();
+   /* -------------------------------
+   BUILD DASHBOARD DATA — grouped by series
+-------------------------------- */
+const quizzesBySeries = {};  // NEW: keyed by series slug
+const now = new Date();
 
-    for (const ex of exams) {
-      const assignmentKey = ex.assignmentId || ex.examId;
-      
-      // Support multiple modules
-      //const examModules = ex.modules || [ex.module || "general"];
+for (const ex of exams) {
+  const assignmentKey = ex.assignmentId || ex.examId;
 
-      const examModules =
-  (Array.isArray(ex.modules) && ex.modules.length > 0)
-    ? ex.modules
-    : [ex.module || "general"];
+  // ── Resolve series, category, pillar, level ─────────────────
+  // For admin catalog quizzes, read directly from the Question doc fields
+  // For assigned exams, read from meta or fall back to module
+  const seriesKey  = ex.series  || ex.meta?.series  || ex.module || "general";
+  const category   = ex.category || ex.meta?.category || "";
+  const pillar     = ex.meta?.aiPillar || ex.module || "general";
+  const level      = ex.level   || ex.meta?.level   || "foundation";
 
-      
-      for (const moduleKey of examModules) {
-        if (!quizzesByModule[moduleKey]) {
-          quizzesByModule[moduleKey] = [];
-        }
+  if (!quizzesBySeries[seriesKey]) {
+    quizzesBySeries[seriesKey] = {
+      seriesSlug: seriesKey,
+      // Build a readable label: "accountability-in-practice" → "Accountability In Practice"
+      seriesLabel: seriesKey
+        .split("-")
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" "),
+      pillar,
+      category,
+      level,
+      quizzes: []
+    };
+  }
 
-        let status = "pending";
-        if (ex.finishedAt) status = "completed";
-        if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
-          if (ex.expiresAt && ex.expiresAt < now) status = "expired";
-        }
+  let status = "pending";
+  if (ex.finishedAt) status = "completed";
+  if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
+    if (ex.expiresAt && ex.expiresAt < now) status = "expired";
+  }
+  if (ex.isAdminQuiz) status = "available";
 
-        // For admin catalog quizzes, status is always "available"
-        if (ex.isAdminQuiz) {
-          status = "available";
-        }
+  let quizTitle = ex.quizTitle || ex.title ||
+    (seriesKey.charAt(0).toUpperCase() + seriesKey.slice(1) + " Quiz");
 
-        let quizTitle = ex.quizTitle || ex.title ||
-          (moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1) + " Quiz");
+  let questionCount = 0;
+  if (Array.isArray(ex.questionIds)) {
+    questionCount = ex.questionIds.filter(
+      q => !String(q).startsWith("parent:")
+    ).length;
 
-        let questionCount = 0;
-        if (Array.isArray(ex.questionIds)) {
-          questionCount = ex.questionIds.filter(
-            q => !String(q).startsWith("parent:")
-          ).length;
-
-          const parentMarker = ex.questionIds.find(q =>
-            String(q).startsWith("parent:")
-          );
-
-          if (!ex.title && !ex.quizTitle && parentMarker) {
-            const parentId = String(parentMarker).replace("parent:", "");
-            quizTitle = parentTitleMap[parentId] || quizTitle;
-          }
-        }
-
-        // Build URL - for admin catalog quizzes, link to special route that creates exam on-demand
-        let openUrl;
-        if (ex.isAdminQuiz) {
-          // Admin catalog quiz - will create exam instance on-demand
-           openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
-        } else if (ex.isOnboarding) {
-          openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-        } else {
-          openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-        }
-
-        quizzesByModule[moduleKey].push({
-          assignmentId: assignmentKey,
-          quizTitle,
-          questionCount,
-          status,
-          openUrl,
-          createdAt: ex.createdAt,
-          isTrial: ex.meta?.isTrial || false,
-          isAdminQuiz: ex.isAdminQuiz || false,
-          quizId: ex.quizId,
-          topics: ex.meta?.topics || [],
-          series: ex.meta?.series
-        });
-      }
+    const parentMarker = ex.questionIds.find(q =>
+      String(q).startsWith("parent:")
+    );
+    if (!ex.title && !ex.quizTitle && parentMarker) {
+      const parentId = String(parentMarker).replace("parent:", "");
+      quizTitle = parentTitleMap[parentId] || quizTitle;
     }
+  }
+
+  let openUrl;
+  if (ex.isAdminQuiz) {
+    openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
+  } else if (ex.isOnboarding) {
+    openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+  } else {
+    openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+  }
+
+  quizzesBySeries[seriesKey].quizzes.push({
+    assignmentId:  assignmentKey,
+    quizTitle,
+    questionCount,
+    status,
+    openUrl,
+    createdAt:   ex.createdAt,
+    isTrial:     ex.meta?.isTrial || false,
+    isAdminQuiz: ex.isAdminQuiz  || false,
+    quizId:      ex.quizId,
+    topics:      ex.meta?.topics || [],
+    series:      seriesKey,
+    category,
+    pillar,
+    level,
+    seriesOrder: ex.seriesOrder || 99
+  });
+}
+
+// Sort quizzes within each series by seriesOrder
+for (const s of Object.values(quizzesBySeries)) {
+  s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
+}
+
+// ── Also build flat list of unique values for filter dropdowns ──
+const allSeries     = [...new Set(Object.keys(quizzesBySeries))].sort();
+const allCategories = [...new Set(
+  Object.values(quizzesBySeries).map(s => s.category).filter(Boolean)
+)].sort();
+const allPillars    = [...new Set(
+  Object.values(quizzesBySeries).map(s => s.pillar).filter(Boolean)
+)].sort();
+
+// Keep quizzesByModule alive for backward compat with non-school orgs
+const quizzesByModule = {};
+for (const [seriesSlug, seriesData] of Object.entries(quizzesBySeries)) {
+  quizzesByModule[seriesSlug] = seriesData.quizzes;
+}
 
     /* -------------------------------
        USER ATTEMPTS
@@ -1092,30 +1131,38 @@ if (employeeTrialTotal === 0 && req.user.employeeSubscriptionStatus === "trial")
     /* -------------------------------
        RENDER
     -------------------------------- */
-    return res.render("org/dashboard", {
-      org,
-      membership,
-      modules,
-      quizzesByModule,
-      hasAssignedQuizzes: Object.values(quizzesByModule).some(arr => arr.length > 0),
-      attemptRows,
-      certRows,
-      isAdmin,
-      isCripfcntSchool,
-      employeeTrialTotal,
-employeeTrialCompleted,
-canUpgradeEmployee,
-
-      user: req.user,
-      // Search/filter values
-      searchQuery,
-      moduleFilter,
-      topicFilter,
-      // Trial quiz info
-      showTrialBanner,
-      canUpgrade,
-      trialQuizzesRemaining
-    });
+   // REPLACE WITH:
+return res.render("org/dashboard", {
+  org,
+  membership,
+  modules,
+  quizzesByModule,       // kept for backward compat
+  quizzesBySeries,       // NEW — used by updated dashboard
+  hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
+  attemptRows,
+  certRows,
+  isAdmin,
+  isCripfcntSchool,
+  employeeTrialTotal,
+  employeeTrialCompleted,
+  canUpgradeEmployee,
+  user: req.user,
+  // Filter values
+  searchQuery,
+  moduleFilter,
+  topicFilter,
+  seriesFilter:   String(req.query.series   || "").trim(),   // NEW
+  categoryFilter: String(req.query.category || "").trim(),   // NEW
+  pillarFilter:   String(req.query.pillar   || "").trim(),   // NEW
+  // Filter options for dropdowns
+  allSeries,      // NEW
+  allCategories,  // NEW
+  allPillars,     // NEW
+  // Trial
+  showTrialBanner,
+  canUpgrade,
+  trialQuizzesRemaining
+});
 
   } catch (err) {
     console.error("[org dashboard] error:", err);

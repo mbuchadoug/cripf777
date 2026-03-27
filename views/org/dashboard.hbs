@@ -209,13 +209,18 @@
       margin-bottom: 24px;
     }
 
-    .search-grid {
-      display: grid;
-      grid-template-columns: 2fr 1fr 1fr auto;
-      gap: 12px;
-      align-items: end;
-    }
+.search-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
 
+@media (max-width: 1024px) {
+  .search-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
     .form-group {
       display: flex;
       flex-direction: column;
@@ -532,52 +537,208 @@
     </div>
 
     <!-- SEARCH & FILTER (cripfcnt-school only) -->
-    {{#if isCripfcntSchool}}
-    <div class="search-panel">
-      <form id="searchForm" method="GET" action="/org/{{org.slug}}/dashboard">
-        <div class="search-grid">
-          <div class="form-group">
-            <label for="searchQuery">Search Curriculum</label>
-            <input 
-              type="text" 
-              id="searchQuery" 
-              name="q" 
-              value="{{searchQuery}}"
-              placeholder="Search by title, topic, or keyword..."
-            />
-          </div>
+ <!-- REPLACE WITH: -->
+ <!-- FIND this entire block: -->
+ <!-- REPLACE WITH: -->
+{{#if isCripfcntSchool}}
 
-          <div class="form-group">
-            <label for="moduleFilter">Module</label>
-            <select id="moduleFilter" name="module">
-              <option value="">All Modules</option>
-              <option value="consciousness" {{#if (eq moduleFilter "consciousness")}}selected{{/if}}>Consciousness</option>
-              <option value="responsibility" {{#if (eq moduleFilter "responsibility")}}selected{{/if}}>Responsibility</option>
-              <option value="purpose" {{#if (eq moduleFilter "purpose")}}selected{{/if}}>Purpose</option>
-              <option value="technology" {{#if (eq moduleFilter "technology")}}selected{{/if}}>Technology</option>
-            </select>
-          </div>
+  {{#if hasAssignedQuizzes}}
+    {{#each quizzesBySeries}}
+      <div class="card" style="margin-bottom:28px">
 
-          <div class="form-group">
-            <label for="topicFilter">Topic</label>
-            <input 
-              type="text" 
-              id="topicFilter" 
-              name="topic" 
-              value="{{topicFilter}}"
-              placeholder="e.g., leadership, policy..."
-            />
-          </div>
-
-          <div style="display:flex;gap:8px;align-items:end">
-            <button type="submit" class="btn btn-primary">Search</button>
-            <a href="/org/{{org.slug}}/dashboard" class="btn btn-outline">Clear</a>
+        {{!-- Series header --}}
+        <div class="card-header" style="border-left:4px solid var(--primary);padding-left:16px">
+          <div>
+            <h2 class="card-title" style="font-size:19px">
+              {{this.seriesLabel}}
+            </h2>
+            <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+              {{#if this.pillar}}
+                <span class="badge" style="background:#ede9fe;color:#5b21b6">
+                  {{#if (eq this.pillar "consciousness")}}🧠{{/if}}
+                  {{#if (eq this.pillar "responsibility")}}🤝{{/if}}
+                  {{#if (eq this.pillar "interpretation")}}🔍{{/if}}
+                  {{#if (eq this.pillar "purpose")}}🎯{{/if}}
+                  {{#if (eq this.pillar "frequencies")}}📡{{/if}}
+                  {{#if (eq this.pillar "civilization")}}🏛{{/if}}
+                  {{#if (eq this.pillar "negotiation")}}🤝{{/if}}
+                  {{#if (eq this.pillar "technology")}}💻{{/if}}
+                  {{capitalize this.pillar}}
+                </span>
+              {{/if}}
+              {{#if this.category}}
+                <span class="badge" style="background:#f0fdf4;color:#166534">
+                  {{capitalize (replace this.category "-" " ")}}
+                </span>
+              {{/if}}
+              {{#if this.level}}
+                <span class="badge" style="background:#fef3c7;color:#92400e">
+                  {{capitalize this.level}}
+                </span>
+              {{/if}}
+              <span style="font-size:13px;color:var(--text-muted);margin-left:4px">
+                {{this.quizzes.length}} assessment{{#if (gt this.quizzes.length 1)}}s{{/if}}
+              </span>
+            </div>
           </div>
         </div>
-      </form>
-    </div>
-    {{/if}}
 
+        {{!-- Quiz cards --}}
+        <div class="quiz-grid" style="margin-top:16px">
+          {{#each this.quizzes}}
+            <div class="quiz-card">
+              <div class="quiz-card-header">
+                <h3 class="quiz-title">{{quizTitle}}</h3>
+                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                  {{#if isTrial}}
+                    <span class="badge badge-trial">Trial</span>
+                  {{/if}}
+                  {{#if isAdminQuiz}}
+                    <span class="badge badge-catalog">Catalog</span>
+                  {{/if}}
+                  {{#if level}}
+                    <span class="badge" style="background:#f1f5f9;color:#475569;font-size:10px">
+                      {{capitalize level}}
+                    </span>
+                  {{/if}}
+                </div>
+              </div>
+
+              <div class="quiz-meta">
+                <span>📝 {{questionCount}} questions</span>
+                {{#unless isAdminQuiz}}
+                  <span>•</span>
+                  <span style="text-transform:capitalize">{{status}}</span>
+                {{/unless}}
+                {{#if pillar}}
+                  <span>•</span>
+                  <span style="color:var(--primary);font-weight:500">{{capitalize pillar}}</span>
+                {{/if}}
+              </div>
+
+              {{#if category}}
+                <div style="margin:8px 0">
+                  <span class="topic-tag" style="background:#f0fdf4;color:#166534">
+                    {{capitalize (replace category "-" " ")}}
+                  </span>
+                </div>
+              {{/if}}
+
+              {{#if topics.length}}
+                <div class="topic-tags">
+                  {{#each topics}}
+                    <span class="topic-tag">{{this}}</span>
+                  {{/each}}
+                </div>
+              {{/if}}
+
+              <div class="quiz-actions">
+                <a href="{{openUrl}}" class="btn btn-primary" style="flex:1;justify-content:center">
+                  {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
+                </a>
+                {{#if ../../isAdmin}}
+                  {{#unless isAdminQuiz}}
+                    <form method="POST"
+                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                      style="display:inline"
+                      onsubmit="return confirm('Delete this assessment?');">
+                      <button class="btn btn-outline" style="color:var(--danger)">Delete</button>
+                    </form>
+                  {{/unless}}
+                {{/if}}
+              </div>
+            </div>
+          {{/each}}
+        </div>
+
+      </div>
+    {{/each}}
+
+  {{else}}
+    <div class="card">
+      <div class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <h3>No Assessments Available</h3>
+        <p>
+          {{#if searchQuery}}Try different search terms or clear filters
+          {{else}}Check back soon for new professional development content{{/if}}
+        </p>
+      </div>
+    </div>
+  {{/if}}
+
+{{else}}
+  {{!-- NON-CRIPFCNT-SCHOOL: Keep existing quizzesByModule rendering unchanged --}}
+  {{#if hasAssignedQuizzes}}
+    {{#each quizzesByModule}}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">
+            {{#if (eq @key "consciousness")}}🧠{{/if}}
+            {{#if (eq @key "responsibility")}}🤝{{/if}}
+            {{#if (eq @key "purpose")}}🎯{{/if}}
+            {{#if (eq @key "technology")}}💻{{/if}}
+            {{capitalize @key}}
+          </h2>
+          <span style="font-size:14px;color:var(--text-muted)">
+            {{this.length}} assessment{{#if (gt this.length 1)}}s{{/if}}
+          </span>
+        </div>
+        <div class="quiz-grid">
+          {{#each this}}
+            <div class="quiz-card">
+              <div class="quiz-card-header">
+                <h3 class="quiz-title">{{quizTitle}}</h3>
+                <div>
+                  {{#if isTrial}}<span class="badge badge-trial">Trial</span>{{/if}}
+                  {{#if isAdminQuiz}}<span class="badge badge-catalog">Catalog</span>{{/if}}
+                </div>
+              </div>
+              <div class="quiz-meta">
+                <span>📝 {{questionCount}} questions</span>
+                {{#unless isAdminQuiz}}<span>•</span><span>{{status}}</span>{{/unless}}
+              </div>
+              {{#if topics}}
+                <div class="topic-tags">
+                  {{#each topics}}<span class="topic-tag">{{this}}</span>{{/each}}
+                </div>
+              {{/if}}
+              <div class="quiz-actions">
+                <a href="{{openUrl}}" class="btn btn-primary" style="flex:1;justify-content:center">
+                  {{#if isAdminQuiz}}Take Assessment{{else}}Continue{{/if}}
+                </a>
+                {{#if ../../isAdmin}}
+                  {{#unless isAdminQuiz}}
+                    <form method="POST"
+                      action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete"
+                      style="display:inline"
+                      onsubmit="return confirm('Delete this assessment?');">
+                      <button class="btn btn-outline" style="color:var(--danger)">Delete</button>
+                    </form>
+                  {{/unless}}
+                {{/if}}
+              </div>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/each}}
+  {{else}}
+    <div class="card">
+      <div class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <h3>No Assessments Available</h3>
+        <p>Check back soon for new content</p>
+      </div>
+    </div>
+  {{/if}}
+{{/if}}
     <!-- STATS (for non-trial users) -->
     {{#if (ne user.employeeSubscriptionStatus "trial")}}
     <div class="stats-grid">

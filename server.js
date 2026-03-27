@@ -226,6 +226,9 @@ json: (context) => {
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
 
+  replace: (str, find, replace) => {
+  return String(str || '').split(find).join(replace);
+},
    // ✅ ADD SUM HELPER (for calculating averages)
   sum: (array, property) => {
     if (!Array.isArray(array)) return 0;
