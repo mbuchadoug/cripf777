@@ -738,13 +738,13 @@ router.get(
 /* ------------------------------------------------------------------ */
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
-    const slug           = String(req.params.slug || "").trim();
-    const searchQuery    = String(req.query.q || "").trim();
-    const moduleFilter   = String(req.query.module || "").trim();
-    const topicFilter    = String(req.query.topic || "").trim();
-    const seriesFilter   = String(req.query.series || "").trim();
-    const categoryFilter = String(req.query.category || "").trim();
-    const pillarFilter   = String(req.query.pillar || "").trim();
+    const slug          = String(req.params.slug || "").trim();
+    const searchQuery   = String(req.query.q        || "").trim();
+    const moduleFilter  = String(req.query.module   || "").trim();
+    const topicFilter   = String(req.query.topic    || "").trim();
+    const seriesFilter  = String(req.query.series   || "").trim();
+    const categoryFilter= String(req.query.category || "").trim();
+    const pillarFilter  = String(req.query.pillar   || "").trim();
 
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -758,24 +758,30 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       return res.status(403).send("You are not a member of this organization");
     }
 
+    /* ── Admin check ── */
     const platformAdmin = (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map(e => e.trim().toLowerCase())
-      .includes((req.user.email || "").toLowerCase());
+      .split(",").map(e => e.trim().toLowerCase())
+      .includes(req.user.email?.toLowerCase());
 
-    const role = String(membership.role || "").toLowerCase();
-    const isAdmin =
-      platformAdmin ||
-      role === "admin" ||
-      role === "manager" ||
-      role === "org_admin";
+    const role    = String(membership.role || "").toLowerCase();
+    const isAdmin = platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
 
+    /* ── Load modules ── */
     const modules = await OrgModule.find({ org: org._id }).lean();
+
     const isCripfcntSchool = org.slug === "cripfcnt-school";
 
+    /* ══════════════════════════════════════════════════════════════
+       LOAD EXAMS/QUIZZES
+       KEY CHANGE: for non-admin enrolled users we now look up the
+       source Question doc for each ExamInstance so the AI-assigned
+       fields (category, series, level, meta.aiPillar) are always
+       present — even for exams created before categorisation ran.
+    ══════════════════════════════════════════════════════════════ */
     let exams = [];
 
     if (isCripfcntSchool && isAdmin) {
+      /* ADMIN — load every comprehension quiz from the org */
       const allQuizzes = await Question.find({
         organization: org._id,
         type: "comprehension"
@@ -786,33 +792,34 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
       for (const quiz of allQuizzes) {
         const quizModules = quiz.modules || [quiz.module || "general"];
-
         exams.push({
           assignmentId: `admin-quiz-${quiz._id}`,
-          examId: null,
-          title: quiz.quizTitle || quiz.text || "Quiz",
-          quizTitle: quiz.quizTitle || quiz.text || "Quiz",
-          module: quiz.module || "general",
-          modules: quizModules,
-          series: quiz.series || null,
-          category: quiz.category || null,
-          level: quiz.level || "foundation",
-          seriesOrder: quiz.seriesOrder || 99,
-          questionIds: quiz.questionIds || [],
-          createdAt: quiz.createdAt,
-          isAdminQuiz: true,
-          quizId: quiz._id,
-          status: "available",
+          examId:       null,
+          title:        quiz.quizTitle || quiz.text || "Quiz",
+          quizTitle:    quiz.quizTitle || quiz.text || "Quiz",
+          module:       quiz.module || "general",
+          modules:      quizModules,
+          series:       quiz.series    || null,
+          category:     quiz.category  || null,
+          level:        quiz.level     || "foundation",
+          seriesOrder:  quiz.seriesOrder || 99,
+          questionIds:  quiz.questionIds || [],
+          createdAt:    quiz.createdAt,
+          isAdminQuiz:  true,
+          quizId:       quiz._id,
+          status:       "available",
           meta: {
-            topics: quiz.topics || [],
-            series: quiz.series || null,
-            category: quiz.category || null,
-            aiPillar: quiz.meta?.aiPillar || quiz.module || "general",
-            level: quiz.level || "foundation"
+            topics:   quiz.topics || [],
+            series:   quiz.series,
+            category: quiz.category,
+            aiPillar: quiz.meta?.aiPillar || quiz.module,
+            level:    quiz.level
           }
         });
       }
+
     } else if (isAdmin) {
+      /* ADMIN — non-cripfcnt org: show assigned quizzes */
       exams = await ExamInstance.aggregate([
         { $match: { org: new mongoose.Types.ObjectId(org._id) } },
         { $match: { assignmentId: { $exists: true, $ne: null }, isOnboarding: { $ne: true } } },
@@ -822,20 +829,10 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
             doc: {
               $first: {
                 assignmentId: "$assignmentId",
-                examId: "$_id",
-                module: "$module",
-                modules: "$modules",
-                title: "$title",
-                quizTitle: "$quizTitle",
-                questionIds: "$questionIds",
-                createdAt: "$createdAt",
-                expiresAt: "$expiresAt",
-                finishedAt: "$finishedAt",
-                meta: "$meta",
-                series: "$series",
-                category: "$category",
-                level: "$level",
-                seriesOrder: "$seriesOrder"
+                module: "$module", modules: "$modules",
+                title: "$title", quizTitle: "$quizTitle",
+                questionIds: "$questionIds", createdAt: "$createdAt",
+                expiresAt: "$expiresAt", meta: "$meta"
               }
             }
           }
@@ -843,20 +840,25 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         { $replaceRoot: { newRoot: "$doc" } },
         { $sort: { createdAt: -1 } }
       ]);
+
     } else {
+      /* NON-ADMIN — load this user's assigned exams */
       const rawExams = await ExamInstance.find({
-        org: org._id,
+        org:    org._id,
         userId: req.user._id
-      })
-        .sort({ createdAt: -1 })
-        .lean();
+      }).sort({ createdAt: -1 }).lean();
 
+      /* ── ENRICH: for every exam, pull the AI-categorised fields
+         from the source Question document so category/series/pillar
+         are populated even if the ExamInstance was created before
+         the categorisation script ran.                              ── */
       if (rawExams.length && isCripfcntSchool) {
+        // Collect all quizIds referenced by these exams
         const quizIds = new Set();
-
         for (const ex of rawExams) {
+          // ExamInstances for comprehension quizzes store the source quiz _id
+          // in meta.quizId, or the first "parent:" marker in questionIds
           if (ex.meta?.quizId) quizIds.add(String(ex.meta.quizId));
-
           if (Array.isArray(ex.questionIds)) {
             for (const q of ex.questionIds) {
               if (String(q).startsWith("parent:")) {
@@ -864,31 +866,29 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
               }
             }
           }
-
-          if (ex.assignmentId && String(ex.assignmentId).startsWith("admin-quiz-")) {
-            quizIds.add(String(ex.assignmentId).replace("admin-quiz-", ""));
+          // Also try using assignmentId pattern "admin-quiz-<id>" (shouldn't happen for users but guard)
+          if (ex.assignmentId && ex.assignmentId.startsWith("admin-quiz-")) {
+            quizIds.add(ex.assignmentId.replace("admin-quiz-", ""));
           }
         }
 
+        // Batch fetch source question docs
         const quizDocs = quizIds.size
           ? await Question.find({
               _id: { $in: [...quizIds].filter(id => mongoose.isValidObjectId(id)) },
               type: "comprehension"
             })
-              .select("_id series category level seriesOrder quizTitle text module meta")
+              .select("_id series category level seriesOrder quizTitle meta")
               .lean()
           : [];
 
         const quizDocMap = {};
-        for (const qd of quizDocs) {
-          quizDocMap[String(qd._id)] = qd;
-        }
+        for (const qd of quizDocs) quizDocMap[String(qd._id)] = qd;
 
+        // Merge enrichment into each exam
         for (const ex of rawExams) {
           let sourceId = null;
-
           if (ex.meta?.quizId) sourceId = String(ex.meta.quizId);
-
           if (!sourceId && Array.isArray(ex.questionIds)) {
             for (const q of ex.questionIds) {
               if (String(q).startsWith("parent:")) {
@@ -899,19 +899,16 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           }
 
           const src = sourceId ? quizDocMap[sourceId] : null;
-
           if (src) {
-            ex.series = ex.series || src.series || null;
-            ex.category = ex.category || src.category || null;
-            ex.level = ex.level || src.level || "foundation";
+            ex.series      = ex.series      || src.series      || null;
+            ex.category    = ex.category    || src.category    || null;
+            ex.level       = ex.level       || src.level       || "foundation";
             ex.seriesOrder = ex.seriesOrder || src.seriesOrder || 99;
-            ex.quizTitle = ex.quizTitle || src.quizTitle || src.text || ex.title || "Quiz";
-
+            ex.quizTitle   = ex.quizTitle   || src.quizTitle   || ex.title;
             if (!ex.meta) ex.meta = {};
-            ex.meta.aiPillar = ex.meta.aiPillar || src.meta?.aiPillar || src.module || ex.module || "general";
-            ex.meta.series = ex.meta.series || src.series || null;
+            ex.meta.aiPillar = ex.meta.aiPillar || src.meta?.aiPillar || ex.module;
+            ex.meta.series   = ex.meta.series   || src.series   || null;
             ex.meta.category = ex.meta.category || src.category || null;
-            ex.meta.level = ex.meta.level || src.level || "foundation";
           }
         }
 
@@ -921,82 +918,68 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       }
     }
 
+    /* ── Apply search / filter ── */
     if (searchQuery || moduleFilter || topicFilter || seriesFilter || categoryFilter || pillarFilter) {
       exams = exams.filter(ex => {
         if (searchQuery) {
-          const title = String(ex.title || ex.quizTitle || "").toLowerCase();
+          const title = (ex.title || ex.quizTitle || "").toLowerCase();
           if (!title.includes(searchQuery.toLowerCase())) return false;
         }
-
         if (moduleFilter) {
           const mods = ex.modules || [ex.module];
           if (!mods.includes(moduleFilter)) return false;
         }
-
         if (topicFilter) {
           const topics = ex.meta?.topics || [];
-          if (!topics.some(t => String(t).toLowerCase().includes(topicFilter.toLowerCase()))) {
-            return false;
-          }
+          if (!topics.some(t => t.toLowerCase().includes(topicFilter.toLowerCase()))) return false;
         }
-
         if (seriesFilter) {
           const s = ex.series || ex.meta?.series || ex.module || "";
           if (s !== seriesFilter) return false;
         }
-
         if (categoryFilter) {
           const c = ex.category || ex.meta?.category || "";
           if (c !== categoryFilter) return false;
         }
-
         if (pillarFilter) {
-          const p = ex.meta?.aiPillar || ex.pillar || ex.module || "";
+          const p = ex.meta?.aiPillar || ex.module || "";
           if (p !== pillarFilter) return false;
         }
-
         return true;
       });
     }
 
+    /* ── Preload comprehension titles from parent markers ── */
     const parentIds = new Set();
     for (const ex of exams) {
       if (!Array.isArray(ex.questionIds)) continue;
       for (const q of ex.questionIds) {
-        if (String(q).startsWith("parent:")) {
-          parentIds.add(String(q).replace("parent:", ""));
-        }
+        if (String(q).startsWith("parent:")) parentIds.add(String(q).replace("parent:", ""));
       }
     }
-
     const parentDocs = parentIds.size
-      ? await QuizQuestion.find({ _id: { $in: [...parentIds] } })
-          .select("_id title text")
-          .lean()
+      ? await QuizQuestion.find({ _id: { $in: [...parentIds] } }).select("_id title text").lean()
       : [];
-
     const parentTitleMap = {};
-    for (const p of parentDocs) {
-      parentTitleMap[String(p._id)] = p.title || p.text || "Quiz";
-    }
+    for (const p of parentDocs) parentTitleMap[String(p._id)] = p.title || p.text || "Quiz";
 
+    /* ══════════════════════════════════════════════════════════════
+       BUILD quizzesBySeries
+    ══════════════════════════════════════════════════════════════ */
     const quizzesBySeries = {};
     const now = new Date();
 
     for (const ex of exams) {
-      const assignmentKey = ex.assignmentId || ex.examId || String(ex._id || "");
-      const seriesKey = ex.series || ex.meta?.series || ex.module || "general";
-      const category = ex.category || ex.meta?.category || "";
-      const pillar = ex.meta?.aiPillar || ex.pillar || ex.module || "general";
-      const level = ex.level || ex.meta?.level || "foundation";
+      const assignmentKey = ex.assignmentId || ex.examId;
+      const seriesKey     = ex.series || ex.meta?.series || ex.module || "general";
+      const category      = ex.category || ex.meta?.category || "";
+      const pillar        = ex.meta?.aiPillar || ex.module || "general";
+      const level         = ex.level || ex.meta?.level || "foundation";
 
       if (!quizzesBySeries[seriesKey]) {
         quizzesBySeries[seriesKey] = {
-          seriesSlug: seriesKey,
-          seriesLabel: seriesKey
-            .split("-")
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(" "),
+          seriesSlug:  seriesKey,
+          seriesLabel: seriesKey.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
           pillar,
           category,
           level,
@@ -1006,260 +989,282 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
       let status = "pending";
       if (ex.finishedAt) status = "completed";
-      if (process.env.QUIZ_EXPIRY_ENABLED === "true" && ex.expiresAt && ex.expiresAt < now) {
-        status = "expired";
+      if (process.env.QUIZ_EXPIRY_ENABLED === "true") {
+        if (ex.expiresAt && ex.expiresAt < now) status = "expired";
       }
       if (ex.isAdminQuiz) status = "available";
 
-      let quizTitle =
-        ex.quizTitle ||
-        ex.title ||
+      let quizTitle = ex.quizTitle || ex.title ||
         (seriesKey.charAt(0).toUpperCase() + seriesKey.slice(1) + " Quiz");
 
-      if ((!quizTitle || quizTitle === "Quiz") && Array.isArray(ex.questionIds)) {
+      let questionCount = 0;
+      if (Array.isArray(ex.questionIds)) {
+        questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
         const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
-        if (parentMarker) {
-          const parentId = String(parentMarker).replace("parent:", "");
-          quizTitle = parentTitleMap[parentId] || quizTitle;
+        if (!ex.title && !ex.quizTitle && parentMarker) {
+          quizTitle = parentTitleMap[String(parentMarker).replace("parent:", "")] || quizTitle;
         }
+      }
+
+      let openUrl;
+      if (ex.isAdminQuiz) {
+        openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
+      } else if (ex.isOnboarding) {
+        openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+      } else {
+        openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
       }
 
       quizzesBySeries[seriesKey].quizzes.push({
         assignmentId: assignmentKey,
-        examId: ex.examId || ex._id || null,
-        quizId: ex.quizId || ex.meta?.quizId || null,
-        title: quizTitle,
         quizTitle,
-        module: ex.module || "general",
-        modules: ex.modules || [ex.module || "general"],
-        topics: ex.meta?.topics || [],
+        questionCount,
+        status,
+        openUrl,
+        createdAt:   ex.createdAt,
+        isTrial:     ex.meta?.isTrial || false,
+        isAdminQuiz: ex.isAdminQuiz  || false,
+        quizId:      ex.quizId,
+        topics:      ex.meta?.topics || [],
+        series:      seriesKey,
         category,
         pillar,
         level,
-        series: seriesKey,
-        seriesOrder: ex.seriesOrder || 99,
-        createdAt: ex.createdAt,
-        expiresAt: ex.expiresAt,
-        status,
-        isAdminQuiz: !!ex.isAdminQuiz
+        seriesOrder: ex.seriesOrder || 99
       });
     }
 
-    Object.values(quizzesBySeries).forEach(group => {
-      group.quizzes.sort((a, b) => {
-        const aOrder = a.seriesOrder ?? 99;
-        const bOrder = b.seriesOrder ?? 99;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      });
-    });
+    // Sort quizzes within each series
+    for (const s of Object.values(quizzesBySeries)) {
+      s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
+    }
 
-    const allSeries = Object.keys(quizzesBySeries).sort((a, b) => a.localeCompare(b));
+    const allSeries     = [...new Set(Object.keys(quizzesBySeries))].sort();
     const allCategories = [...new Set(
-      Object.values(quizzesBySeries)
-        .map(g => g.category)
-        .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b));
+      Object.values(quizzesBySeries).map(s => s.category).filter(Boolean)
+    )].sort();
+    const allPillars    = [...new Set(
+      Object.values(quizzesBySeries).map(s => s.pillar).filter(Boolean)
+    )].sort();
 
-    const allPillars = [...new Set(
-      Object.values(quizzesBySeries)
-        .map(g => g.pillar)
-        .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b));
+    /* ══════════════════════════════════════════════════════════════
+       BUILD categoryMeta — the discovery strip data
+       This gives every category a friendly label, icon, pillar
+       colour, and quiz count so the front-end can render the
+       horizontal "Browse by Professional Area" tiles without
+       any template logic.
 
+       Icon selection rule:
+         We map common category slug patterns to emojis.
+         Unknown slugs fall back to 📌.
+       Label:
+         Convert the slug to Title Case (already done in template
+         via capitalize+replace helpers, but having it in meta
+         means we can override later without touching the template).
+    ══════════════════════════════════════════════════════════════ */
     const CATEGORY_ICONS = {
-      "governance-reform": "🏛️",
-      "public-policy": "📜",
-      "institutional-accountability": "🧭",
-      "strategic-leadership": "🎯",
-      "data-governance": "📊",
-      "digital-ethics": "💻",
-      "change-management": "🔄",
-      "decision-making": "🧠",
-      "organisational-development": "🏢",
-      "strategic-communication": "🗣️",
-      "education-reform": "🎓",
-      "curriculum-design": "📚",
-      "professional-development": "🚀",
-      "community-leadership": "🤝",
-      "media-literacy": "📰",
-      "language-recalibration": "✍️",
-      "civic-consciousness": "🗳️",
-      "conscious-leadership": "🌱",
-      "social-contract": "⚖️",
-      "economic-policy": "💹"
+      // Governance & policy
+      "governance":                   "🏛",
+      "governance-reform":            "🏛",
+      "public-policy":                "📜",
+      "public-sector-ethics":         "⚖️",
+      "institutional-accountability": "⚖️",
+      "civic-consciousness":          "🌍",
+      "social-contract":              "🤝",
+      "constitutional-frameworks":    "📋",
+      "electoral-systems":            "🗳",
+      "rule-of-law":                  "⚖️",
+
+      // Leadership & management
+      "community-leadership":         "👥",
+      "conscious-leadership":         "🧠",
+      "strategic-leadership":         "🎯",
+      "organisational-development":   "🏢",
+      "change-management":            "🔄",
+      "decision-making":              "🎲",
+
+      // Communication & media
+      "strategic-communication":      "💬",
+      "media-literacy":               "📰",
+      "language-recalibration":       "🗣",
+      "public-discourse":             "🎙",
+
+      // Ethics & society
+      "digital-ethics":               "💻",
+      "economic-justice":             "💰",
+      "conflict-resolution":          "🕊",
+      "social-justice":               "⚖️",
+      "human-rights":                 "🌐",
+
+      // Technology
+      "technology-governance":        "💻",
+      "digital-transformation":       "🚀",
+      "cybersecurity":                "🔐",
+      "data-governance":              "🗄",
+      "ai-ethics":                    "🤖",
+
+      // Education
+      "education-reform":             "📚",
+      "curriculum-design":            "✏️",
+      "professional-development":     "🎓",
+
+      // Economy & finance
+      "economic-policy":              "📈",
+      "financial-accountability":     "💰",
+      "trade-and-commerce":           "🤝",
+
+      // Environment
+      "environmental-governance":     "🌿",
+      "climate-policy":               "🌡",
+
+      // Health
+      "public-health-policy":         "🏥",
+      "healthcare-governance":        "🏥",
+
+      // Default
+      "general":                      "📌",
     };
 
+    // Build categoryMeta from the categories that actually exist in this view
+    // Count quizzes per category (across all series)
     const catCounts = {};
-    const catPillar = {};
-
+    const catPillar = {}; // dominant pillar for each category
     for (const [, seriesData] of Object.entries(quizzesBySeries)) {
       const cat = seriesData.category;
       if (!cat) continue;
+      catCounts[cat] = (catCounts[cat] || 0) + seriesData.quizzes.length;
+      // track pillar — first one wins (good enough for icon colouring)
+      if (!catPillar[cat]) catPillar[cat] = seriesData.pillar;
+    }
 
-      catCounts[cat] = (catCounts[cat] || 0) + (seriesData.quizzes?.length || 0);
-      if (!catPillar[cat] && seriesData.pillar) {
-        catPillar[cat] = seriesData.pillar;
+    // Sort by quiz count descending so most-populated categories appear first
+    const categoryMeta = Object.entries(catCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([slug, count]) => {
+        // Try exact match, then partial match
+        let icon = CATEGORY_ICONS[slug];
+        if (!icon) {
+          // Try matching the start of the slug
+          const key = Object.keys(CATEGORY_ICONS).find(k => slug.startsWith(k) || k.startsWith(slug.split("-")[0]));
+          icon = key ? CATEGORY_ICONS[key] : "📌";
+        }
+        return {
+          slug,
+          label: slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+          icon,
+          pillar: catPillar[slug] || "general",
+          count
+        };
+      });
+
+    const totalQuizCount = Object.values(quizzesBySeries).reduce((s, d) => s + d.quizzes.length, 0);
+
+    // Keep quizzesByModule for backward compat
+    const quizzesByModule = {};
+    for (const [seriesSlug, seriesData] of Object.entries(quizzesBySeries)) {
+      quizzesByModule[seriesSlug] = seriesData.quizzes;
+    }
+
+    /* ── Attempts ── */
+    const attempts = await Attempt.find({ organization: org._id, userId: req.user._id })
+      .sort({ finishedAt: -1 }).lean();
+
+    const examIds = attempts.map(a => a.examId).filter(Boolean);
+    const examsByExamId = {};
+    if (examIds.length) {
+      const examDocs = await ExamInstance.find({ examId: { $in: examIds } })
+        .select("examId module questionIds").lean();
+      for (const ex of examDocs) examsByExamId[ex.examId] = ex;
+    }
+
+    const attemptRows = attempts.map(a => {
+      const ex = examsByExamId[a.examId];
+      let quizTitle = a.quizTitle;
+      if (!quizTitle && ex) {
+        quizTitle = ex.module ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz" : "Quiz";
+      }
+      return {
+        _id: a._id, examId: a.examId,
+        quizTitle: quizTitle || "Quiz",
+        score: a.score || 0, maxScore: a.maxScore || 0,
+        percentage: a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0,
+        passed: !!a.passed,
+        finishedAt: a.finishedAt || a.updatedAt || a.createdAt
+      };
+    });
+
+    /* ── Certificates ── */
+    const certificates = await Certificate.find({ userId: req.user._id, orgId: org._id })
+      .sort({ createdAt: -1 }).lean();
+    const certRows = certificates.map(c => ({
+      _id: c._id,
+      quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+      percentage: c.percentage,
+      createdAt: c.createdAt
+    }));
+
+    /* ── Trial status ── */
+    let employeeTrialTotal = 0, employeeTrialCompleted = 0, canUpgradeEmployee = false;
+    let showTrialBanner = false, canUpgrade = false, trialQuizzesRemaining = 0;
+
+    if (isCripfcntSchool && !isAdmin) {
+      try {
+        const { getEmployeeTrialStatus } = await import("../services/employeeTrialAssignment.js");
+        const trialStatus = await getEmployeeTrialStatus(req.user._id, org._id);
+        employeeTrialTotal      = trialStatus.total || 0;
+        employeeTrialCompleted  = trialStatus.completed || 0;
+        canUpgradeEmployee      = !!trialStatus.canUpgrade;
+        if (employeeTrialTotal === 0 && req.user.employeeSubscriptionStatus === "trial") {
+          canUpgradeEmployee = true;
+        }
+      } catch (err) {
+        console.error("[dashboard] trial status error:", err);
+        canUpgradeEmployee = (req.user.employeeSubscriptionStatus === "trial");
       }
     }
 
-    const categoryMeta = allCategories
-      .map(slug => ({
-        slug,
-        label: slug
-          .split("-")
-          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" "),
-        icon: CATEGORY_ICONS[slug] || "📂",
-        count: catCounts[slug] || 0,
-        pillar: catPillar[slug] || ""
-      }))
-      .sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.label.localeCompare(b.label);
-      });
-
-    const ROLE_CATEGORY_HINTS = {
-      admin: [
-        "governance-reform",
-        "public-policy",
-        "institutional-accountability",
-        "strategic-leadership",
-        "data-governance",
-        "digital-ethics"
-      ],
-      manager: [
-        "strategic-leadership",
-        "change-management",
-        "decision-making",
-        "organisational-development",
-        "strategic-communication",
-        "institutional-accountability"
-      ],
-      org_admin: [
-        "governance-reform",
-        "public-policy",
-        "institutional-accountability",
-        "strategic-leadership",
-        "data-governance",
-        "digital-ethics"
-      ],
-      teacher: [
-        "education-reform",
-        "curriculum-design",
-        "professional-development",
-        "community-leadership",
-        "media-literacy",
-        "language-recalibration"
-      ],
-      student: [
-        "community-leadership",
-        "civic-consciousness",
-        "media-literacy",
-        "language-recalibration",
-        "conscious-leadership",
-        "social-contract"
-      ],
-      employee: [
-        "governance-reform",
-        "public-policy",
-        "institutional-accountability",
-        "strategic-communication",
-        "digital-ethics",
-        "professional-development"
-      ],
-      staff: [
-        "governance-reform",
-        "public-policy",
-        "institutional-accountability",
-        "strategic-communication",
-        "digital-ethics",
-        "professional-development"
-      ],
-      professional: [
-        "governance-reform",
-        "public-policy",
-        "institutional-accountability",
-        "strategic-leadership",
-        "digital-ethics",
-        "economic-policy"
-      ]
-    };
-
-    const normalizedRole = (
-      isAdmin
-        ? (role === "manager" ? "manager" : (role === "org_admin" ? "org_admin" : "admin"))
-        : (role || "professional")
-    ).toLowerCase();
-
-    const preferredSlugs =
-      ROLE_CATEGORY_HINTS[normalizedRole] ||
-      ROLE_CATEGORY_HINTS.professional;
-
-    const suggestedCategoryMeta = preferredSlugs
-      .map(slug => categoryMeta.find(c => c.slug === slug))
-      .filter(Boolean);
-
-    const suggestedSlugSet = new Set(suggestedCategoryMeta.map(c => c.slug));
-
-    const remainingCategoryMeta = categoryMeta.filter(
-      c => !suggestedSlugSet.has(c.slug)
-    );
-
-    const totalQuizzes = Object.values(quizzesBySeries)
-      .reduce((sum, g) => sum + (g.quizzes?.length || 0), 0);
-
-    const completedCount = Object.values(quizzesBySeries)
-      .reduce(
-        (sum, g) => sum + (g.quizzes?.filter(q => q.status === "completed").length || 0),
-        0
-      );
-
-    const pendingCount = Object.values(quizzesBySeries)
-      .reduce(
-        (sum, g) => sum + (g.quizzes?.filter(q => q.status === "pending" || q.status === "available").length || 0),
-        0
-      );
-
-    const expiredCount = Object.values(quizzesBySeries)
-      .reduce(
-        (sum, g) => sum + (g.quizzes?.filter(q => q.status === "expired").length || 0),
-        0
-      );
-
+    /* ── Render ── */
     return res.render("org/dashboard", {
       org,
       membership,
-      role,
-      isAdmin,
       modules,
-
+      quizzesByModule,
+      quizzesBySeries,
+      hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
+      attemptRows,
+      certRows,
+      isAdmin,
+      isCripfcntSchool,
+      employeeTrialTotal,
+      employeeTrialCompleted,
+      canUpgradeEmployee,
+      user: req.user,
+      // filter state
       searchQuery,
       moduleFilter,
       topicFilter,
       seriesFilter,
       categoryFilter,
       pillarFilter,
-
-      quizzesBySeries,
+      // filter options
       allSeries,
       allCategories,
       allPillars,
+      // category discovery strip  ← NEW
       categoryMeta,
-      suggestedCategoryMeta,
-      remainingCategoryMeta,
-      normalizedRole,
-
-      totalQuizzes,
-      completedCount,
-      pendingCount,
-      expiredCount
+      totalQuizCount,
+      // trial
+      showTrialBanner,
+      canUpgrade,
+      trialQuizzesRemaining
     });
+
   } catch (err) {
-    console.error("dashboard route error:", err);
-    return res.status(500).send("Failed to load dashboard");
+    console.error("[org dashboard] error:", err);
+    return res.status(500).send("failed");
   }
 });
+
 
 
 

@@ -437,96 +437,6 @@
       .stats{grid-template-columns:1fr}
       .stats .sc:last-child{grid-column:auto}
     }
-
-
-        /* ═══════════════════════════════════════════════════════
-       RESPONSIVE BREAKPOINTS
-    ═══════════════════════════════════════════════════════ */
-    @media (max-width: 1100px){
-      .main{padding:18px 18px 56px}
-      .stats{grid-template-columns:1fr}
-      .fpanel{grid-template-columns:1fr 1fr}
-    }
-
-    @media (max-width: 980px){
-      .layout{
-        display:block;
-      }
-
-      .sidebar{
-        display:none;
-      }
-
-      .mob-toggle{
-        display:flex;
-      }
-
-      .main{
-        width:100%;
-        padding:16px 14px 48px;
-      }
-
-      .stats{
-        grid-template-columns:1fr;
-      }
-
-      .qgrid{
-        grid-template-columns:1fr;
-      }
-
-      .fpanel{
-        grid-template-columns:1fr;
-      }
-
-      .sr{
-        flex-direction:column;
-        align-items:stretch;
-      }
-
-      .fbtn{
-        width:100%;
-        justify-content:center;
-      }
-
-      .topbar-in,
-      .tabs-bar{
-        padding-left:12px;
-        padding-right:12px;
-      }
-
-      .torg{
-        max-width:120px;
-      }
-
-      .ctile{
-        min-width:120px;
-      }
-    }
-
-    @media (max-width: 640px){
-      .main{
-        padding:14px 10px 40px;
-      }
-
-      .qcard,
-      .series-body,
-      .search-bar{
-        padding-left:10px;
-        padding-right:10px;
-      }
-
-      .mob-panel{
-        width:min(320px, 92vw);
-      }
-
-      .sv{
-        font-size:18px;
-      }
-
-      .ch{
-        align-items:flex-start;
-      }
-    }
   </style>
 </head>
 <body>
@@ -665,16 +575,40 @@
     {{/if}}
 
     <!-- ── PROFESSIONAL CATEGORIES (specific domains — different from pillars) ── -->
-    {{#if allCategories.length}}
-    <div class="sb-div">Professional Areas</div>
-    {{#each allCategories}}
-    <button class="sbi {{#if (eq this ../categoryFilter)}}active{{/if}}"
-      onclick="setFilter('category','{{this}}')">
-      <span class="sbi-em">{{#if (includes this "governance")}}🏛{{else if (includes this "policy")}}📜{{else if (includes this "accountability")}}⚖️{{else if (includes this "civic")}}🌍{{else if (includes this "leadership")}}👥{{else if (includes this "communication")}}💬{{else if (includes this "media")}}📰{{else if (includes this "language")}}🗣{{else if (includes this "digital")}}💻{{else if (includes this "technology")}}💻{{else if (includes this "economic")}}📈{{else if (includes this "finance")}}💰{{else if (includes this "justice")}}⚖️{{else if (includes this "conflict")}}🕊{{else if (includes this "education")}}📚{{else if (includes this "health")}}🏥{{else if (includes this "environment")}}🌿{{else if (includes this "climate")}}🌡{{else if (includes this "data")}}🗄{{else if (includes this "ai")}}🤖{{else}}📂{{/if}}</span>
+    {{#if suggestedCategoryMeta.length}}
+    <div class="sb-div">Suggested For You</div>
+    {{#each suggestedCategoryMeta}}
+    <button
+      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      data-pillar="{{this.pillar}}"
+      onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
       <span class="sbi-txt">
-        <div class="sbi-t">{{capitalize (replace this "-" " ")}}</div>
-        <div class="sbi-s">Domain</div>
+        <div class="sbi-t">{{this.label}}</div>
+        <div class="sbi-s">
+          {{#if this.pillar}}{{capitalize this.pillar}}{{else}}Professional Area{{/if}}
+        </div>
       </span>
+      <span class="sbi-n">{{this.count}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    {{#if remainingCategoryMeta.length}}
+    <div class="sb-div">More Professional Areas</div>
+    {{#each remainingCategoryMeta}}
+    <button
+      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      data-pillar="{{this.pillar}}"
+      onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{this.label}}</div>
+        <div class="sbi-s">
+          {{#if this.pillar}}{{capitalize this.pillar}}{{else}}Domain{{/if}}
+        </div>
+      </span>
+      <span class="sbi-n">{{this.count}}</span>
     </button>
     {{/each}}
     {{/if}}
@@ -774,30 +708,30 @@
            (sent as categoryMeta from the backend), with curated
            emoji and friendly display names.
       ════════════════════════════════════════════════════ -->
-{{#if suggestedCategoryMeta.length}}
-<div class="cat-strip-wrap">
-  <div class="cat-strip-label">
-    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-      <path d="M12 3l2.8 5.7L21 9.6l-4.5 4.4 1.1 6.2L12 17.2 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z"/>
-    </svg>
-    Suggested Areas for {{capitalize normalizedRole}}
-  </div>
-  <div class="cat-strip">
-    {{#each suggestedCategoryMeta}}
-    <button
-      class="ctile {{#if (eq this.slug ../categoryFilter)}}ct-active{{/if}}"
-      data-pillar="{{this.pillar}}"
-      onclick="setFilter('category','{{this.slug}}')">
-      <span class="ctile-ic">{{this.icon}}</span>
-      <span class="ctile-name">{{this.label}}</span>
-      <span class="ctile-count">
-        {{#if this.pillar}}{{capitalize this.pillar}}{{else}}Area{{/if}}
-      </span>
-    </button>
-    {{/each}}
-  </div>
-</div>
-{{/if}}
+      {{#if suggestedCategoryMeta.length}}
+      <div class="cat-strip-wrap">
+        <div class="cat-strip-label">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 3l2.8 5.7L21 9.6l-4.5 4.4 1.1 6.2L12 17.2 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z"/>
+          </svg>
+          Suggested Areas for {{capitalize normalizedRole}}
+        </div>
+        <div class="cat-strip">
+          {{#each suggestedCategoryMeta}}
+          <button
+            class="ctile {{#if (eq this.slug ../categoryFilter)}}ct-active{{/if}}"
+            data-pillar="{{this.pillar}}"
+            onclick="setFilter('category','{{this.slug}}')">
+            <span class="ctile-ic">{{this.icon}}</span>
+            <span class="ctile-name">{{this.label}}</span>
+            <span class="ctile-count">
+              {{#if this.pillar}}{{capitalize this.pillar}}{{else}}Area{{/if}}
+            </span>
+          </button>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
 
       {{#if categoryMeta.length}}
       <div class="cat-strip-wrap">
@@ -1334,3 +1268,4 @@ function closeMobSidebar(e,force){
 </script>
 </body>
 </html>
+
