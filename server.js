@@ -259,6 +259,13 @@ json: (context) => {
     return Number.isFinite(n) ? (n + 1) : v;
   },
 
+add: (a, b) => {
+    const x = Number(a);
+    const y = Number(b);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+    return x + y;
+  },
+
   divide: (a, b) => {
     const x = Number(a);
     const y = Number(b);
