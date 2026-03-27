@@ -822,7 +822,7 @@ exams.push({
     } else if (isAdmin) {
       // OTHER ORGS: Show assigned quizzes (existing behavior)
       exams = await ExamInstance.aggregate([
-        { $match: { org: mongoose.Types.ObjectId(org._id) } },
+       { $match: { org: new mongoose.Types.ObjectId(org._id) } },
         {
           $match: {
             assignmentId: { $exists: true, $ne: null },
