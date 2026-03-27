@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import Question from '../models/question.js';
 import dotenv from 'dotenv';
 dotenv.config();
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error('❌ ANTHROPIC_API_KEY is not set. Check your .env file.');
+  process.exit(1);
+}
+console.log('✅ API key loaded:', process.env.ANTHROPIC_API_KEY.slice(0, 15) + '...');
 
 const BATCH_SIZE = 20; // 20 questions per API call (cost-efficient)
 
