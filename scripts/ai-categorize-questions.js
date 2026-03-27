@@ -11,12 +11,12 @@ if (!process.env.ANTHROPIC_API_KEY) {
 console.log('✅ API key loaded:', process.env.ANTHROPIC_API_KEY.slice(0, 15) + '...\n');
 
 const BATCH_SIZE = 20;
-const ORG_ID = new mongoose.Types.ObjectId('693b3d8d8004ece0477340c7'); // cripfcnt-school
+const ORG_ID = new mongoose.Types.ObjectId('693b3d8d8004ece0477340c7');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PILLARS are fixed — they ARE the CRIPFCNT framework.
-// Categories and series are OPEN — Claude decides from actual content.
-// ─────────────────────────────────────────────────────────────────────────────
+const VALID_PILLARS = [
+  'consciousness', 'responsibility', 'interpretation', 'purpose',
+  'frequencies', 'civilization', 'negotiation', 'technology', 'general'
+];
 
 const QUESTION_SYSTEM_PROMPT = `You are a categorization engine for the CRIPFCNT framework — an organizational intelligence and transformation methodology.
 
@@ -75,13 +75,8 @@ For each quiz assign:
 
 5. "level" — the difficulty/depth level:
    foundation | intermediate | advanced | expert
-   foundation = introductory concepts
-   intermediate = applied understanding
-   advanced = complex analysis
-   expert = specialist/practitioner level
 
-6. "title" — a clean, professional display title for this quiz (not the raw passage text).
-   Should be suitable to show to a professional learner. Max 8 words.
+6. "title" — a clean, professional display title for this quiz. Max 8 words.
 
 7. "confidence" — 0.0 to 1.0
 
@@ -89,45 +84,53 @@ Return ONLY a valid JSON array. No prose, no markdown, no backticks.
 [{"id":"<id>","pillar":"responsibility","category":"institutional-accountability","series":"accountability-in-practice","seriesOrder":1,"level":"intermediate","title":"Accountability in Public Institutions","confidence":0.91}]`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API CALL
+// API CALL WITH AUTOMATIC RETRY ON OVERLOAD
 // ─────────────────────────────────────────────────────────────────────────────
-async function callClaude(systemPrompt, userContent) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }]
-    })
-  });
+async function callClaude(systemPrompt, userContent, retries = 6) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }]
+      })
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`API error ${response.status}: ${err}`);
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const clean = text.replace(/```json|```/g, '').trim();
+      try {
+        return JSON.parse(clean);
+      } catch (e) {
+        const repaired = clean.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
+        return JSON.parse(repaired);
+      }
+    }
+
+    const errText = await response.text();
+
+    // Overloaded (529) or rate limited (429) — wait and retry
+    if (response.status === 529 || response.status === 429) {
+      const wait = attempt * 15000; // 15s, 30s, 45s, 60s, 75s, 90s
+      console.log(`    ⏳ API busy (${response.status}), attempt ${attempt}/${retries} — waiting ${wait / 1000}s...`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+
+    // Any other error — throw immediately
+    throw new Error(`API error ${response.status}: ${errText}`);
   }
 
-  const data = await response.json();
-  const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
-  const clean = text.replace(/```json|```/g, '').trim();
-
-  try {
-    return JSON.parse(clean);
-  } catch (e) {
-    const repaired = clean.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
-    return JSON.parse(repaired);
-  }
+  throw new Error(`API still overloaded after ${retries} attempts — skipping batch`);
 }
-
-const VALID_PILLARS = [
-  'consciousness', 'responsibility', 'interpretation', 'purpose',
-  'frequencies', 'civilization', 'negotiation', 'technology', 'general'
-];
 
 function normaliseSlug(str) {
   return (str || 'general').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -190,15 +193,17 @@ async function categorizeQuestions(stats) {
         return {
           updateOne: {
             filter: { _id: q._id },
-            update: { $set: {
-              category,
-              categories: [category],
-              series,
-              'meta.aiPillar':      pillar,
-              'meta.aiConfidence':  r.confidence || null,
-              'meta.aiCategorised': true,
-              updatedAt: new Date()
-            }}
+            update: {
+              $set: {
+                category,
+                categories:           [category],
+                series,
+                'meta.aiPillar':      pillar,
+                'meta.aiConfidence':  r.confidence || null,
+                'meta.aiCategorised': true,
+                updatedAt:            new Date()
+              }
+            }
           }
         };
       }).filter(Boolean);
@@ -213,7 +218,8 @@ async function categorizeQuestions(stats) {
         );
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      // 3 second pause between batches to avoid hammering the API
+      await new Promise(r => setTimeout(r, 3000));
 
     } catch (err) {
       console.error(`    ✗ Batch ${batchNumber} failed:`, err.message);
@@ -223,6 +229,7 @@ async function categorizeQuestions(stats) {
     }
 
     skip += BATCH_SIZE;
+    console.log(`  Running total: ${stats.questionsModified} modified | ${stats.questionErrors} failed\n`);
   }
 }
 
@@ -292,18 +299,20 @@ async function categorizeQuizzes(stats) {
         return {
           updateOne: {
             filter: { _id: q._id },
-            update: { $set: {
-              category,
-              categories:   [category],
-              series,
-              seriesOrder,
-              level,
-              quizTitle:    title,
-              'meta.aiPillar':      pillar,
-              'meta.aiConfidence':  r.confidence || null,
-              'meta.aiCategorised': true,
-              updatedAt: new Date()
-            }}
+            update: {
+              $set: {
+                category,
+                categories:           [category],
+                series,
+                seriesOrder,
+                level,
+                quizTitle:            title,
+                'meta.aiPillar':      pillar,
+                'meta.aiConfidence':  r.confidence || null,
+                'meta.aiCategorised': true,
+                updatedAt:            new Date()
+              }
+            }
           }
         };
       }).filter(Boolean);
@@ -317,7 +326,7 @@ async function categorizeQuizzes(stats) {
         );
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 3000));
 
     } catch (err) {
       console.error(`    ✗ Batch ${batchNumber} failed:`, err.message);
@@ -327,11 +336,12 @@ async function categorizeQuizzes(stats) {
     }
 
     skip += BATCH_SIZE;
+    console.log(`  Running total: ${stats.quizzesModified} modified | ${stats.quizErrors} failed\n`);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASS 3 — Propagate quiz series down to child questions
+// PASS 3 — Propagate quiz series/category down to child questions
 // ─────────────────────────────────────────────────────────────────────────────
 async function propagateQuizCategoriesToChildren(stats) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -364,11 +374,11 @@ async function propagateQuizCategoriesToChildren(stats) {
       },
       {
         $set: {
-          series:   quiz.series,
-          level:    quiz.level || 'foundation',
-          category: quiz.category,
+          series:                   quiz.series,
+          level:                    quiz.level || 'foundation',
+          category:                 quiz.category,
           'meta.inheritedFromQuiz': quiz._id,
-          updatedAt: new Date()
+          updatedAt:                new Date()
         }
       }
     );
