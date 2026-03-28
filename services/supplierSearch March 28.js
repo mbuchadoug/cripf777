@@ -644,6 +644,73 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
   });
 }
 
+// ── Parse shortcode search from raw text ─────────────────────────────────────
+// Handles: "find cement", "find plumber harare", "s tiles", "need teacher harare"
+// ── Parse shortcode search from raw text ─────────────────────────────────────
+// Handles: "find cement", "find plumber harare", "find cement mbare" etc.
+// MUST live after SUBURB_TO_CITY and toTitleCase declarations.
+export function parseShortcodeSearch(input = "") {
+  const raw = String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/^find\s+/i, "")
+    .replace(/^search\s+/i, "")
+    .replace(/^s\s+/i, "")
+    .replace(/\s+/g, " ");
+
+  if (!raw) return null;
+
+  const cityNames = SUPPLIER_CITIES
+    .map(c => {
+      if (typeof c === "string") return c.toLowerCase().trim();
+      if (c?.name)  return String(c.name).toLowerCase().trim();
+      if (c?.label) return String(c.label).toLowerCase().trim();
+      if (c?.id)    return String(c.id).toLowerCase().trim();
+      return "";
+    })
+    .filter(Boolean);
+
+  const words = raw.split(" ").filter(Boolean);
+  if (!words.length) return null;
+
+  let city = null;
+  let area = null;
+  let productWords = [...words];
+
+  // Step 1: Check last 2 → 1 words for a known CITY name
+  for (let len = Math.min(2, words.length); len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ").trim();
+    if (cityNames.includes(candidate)) {
+      city = toTitleCase(candidate);
+      productWords = words.slice(0, -len);
+      break;
+    }
+  }
+
+  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
+  if (!city) {
+    for (let len = Math.min(3, words.length); len >= 1; len--) {
+      const candidate = words.slice(-len).join(" ").trim();
+      const mappedCity = SUBURB_TO_CITY[candidate];
+      if (mappedCity) {
+        city = mappedCity;
+        area = toTitleCase(candidate);
+        productWords = words.slice(0, -len);
+        break;
+      }
+    }
+  }
+
+  const product = productWords.join(" ").trim();
+
+  if (!product) {
+    return { product: raw, city: null, area: null };
+  }
+
+  return { product, city, area };
+}
+
+// ── Split "plumber harare" into { product: "plumber", city: "Harare" } ───────
 // ── Suburb → City mapping ─────────────────────────────────────────────────
 const SUBURB_TO_CITY = {
   // Harare suburbs
@@ -761,70 +828,6 @@ function toTitleCase(value = "") {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-// ── Parse shortcode search from raw text ─────────────────────────────────────
-// Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
-export function parseShortcodeSearch(input = "") {
-  const raw = String(input || "")
-    .toLowerCase()
-    .trim()
-    .replace(/^find\s+/i, "")
-    .replace(/^search\s+/i, "")
-    .replace(/^s\s+/i, "")
-    .replace(/\s+/g, " ");
-
-  if (!raw) return null;
-
-  const cityNames = SUPPLIER_CITIES
-    .map(c => {
-      if (typeof c === "string") return c.toLowerCase().trim();
-      if (c?.name)  return String(c.name).toLowerCase().trim();
-      if (c?.label) return String(c.label).toLowerCase().trim();
-      if (c?.id)    return String(c.id).toLowerCase().trim();
-      return "";
-    })
-    .filter(Boolean);
-
-  const words = raw.split(" ").filter(Boolean);
-  if (!words.length) return null;
-
-  let city = null;
-  let area = null;
-  let productWords = [...words];
-
-  // Step 1: Check last 2 → 1 words for a known CITY name
-  for (let len = Math.min(2, words.length); len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").trim();
-    if (cityNames.includes(candidate)) {
-      city = toTitleCase(candidate);
-      productWords = words.slice(0, -len);
-      break;
-    }
-  }
-
-  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
-  if (!city) {
-    for (let len = Math.min(3, words.length); len >= 1; len--) {
-      const candidate = words.slice(-len).join(" ").trim();
-      const mappedCity = SUBURB_TO_CITY[candidate];
-      if (mappedCity) {
-        city = mappedCity;
-        area = toTitleCase(candidate);
-        productWords = words.slice(0, -len);
-        break;
-      }
-    }
-  }
-
-  const product = productWords.join(" ").trim();
-
-  if (!product) {
-    return { product: raw, city: null, area: null };
-  }
-
-  return { product, city, area };
 }
 
 function parseQueryWithCity(query = "") {
