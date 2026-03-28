@@ -1,1501 +1,1499 @@
-{{!-- admin/org_manage.hbs --}}
+{{!-- admin/org_manage.hbs — Professional Admin Panel --}}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Manage {{org.name}}</title>
+  <title>{{org.name}} · Admin Panel</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body{font-family:Inter,system-ui,Arial;margin:18px;background:#fff;color:#111}
-    main{max-width:980px;margin:0 auto}
-    h1,h2{margin:14px 0}
-    form.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    input,select,textarea{padding:8px;border:1px solid #ccc;border-radius:6px}
-    button{padding:8px 12px;border-radius:6px;background:#0b6fb7;color:#fff;border:none;cursor:pointer}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    table td, table th{border:1px solid #e6e6e6;padding:8px;text-align:left}
-    .muted{color:#666;font-size:13px}
-    .small{font-size:13px}
-    .inline-form{display:inline-block;margin:0}
-    .badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#f1f1f1;color:#333}
-    .badge-trial{background:#e8f5e9;color:#2e7d32;font-weight:700}
-    .badge-paid{background:#fff3e0;color:#e65100;font-weight:700}
-    .success{color:green}
-    .error{color:red}
-    .notice{margin-top:8px;color:#333}
-    .panel{padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee;margin-bottom:12px}
-    label.block{display:block;margin-bottom:8px}
+    /* ═══ TOKENS ═══ */
+    :root {
+      --ink:        #0f172a;
+      --ink-soft:   #334155;
+      --ink-muted:  #64748b;
+      --ink-faint:  #94a3b8;
+      --canvas:     #f1f5f9;
+      --surface:    #ffffff;
+      --surface-2:  #f8fafc;
+      --border:     #e2e8f0;
+      --border-soft:#f1f5f9;
 
-    /* ---------- Tabs ---------- */
-    .tabs{display:flex;gap:6px;margin-bottom:10px;position:sticky;top:0;background:#fafafa;padding:8px;z-index:10}
-    .tab-btn{padding:6px 12px;border-radius:16px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:13px}
-    .tab-btn.active{background:#0b6fb7;color:#fff;border-color:#0b6fb7}
-    .tab-content{display:none}
-    .tab-content.active{display:block}
+      --blue:       #2563eb;
+      --blue-dk:    #1d4ed8;
+      --blue-bg:    #eff6ff;
+      --blue-ring:  rgba(37,99,235,.15);
 
-    /* ---------- Scrollable members area ---------- */
-    .members-scroll{max-height:420px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff}
-    .members-scroll table{margin-top:0}
-    .members-scroll thead th{position:sticky;top:0;background:#f8f8f8;z-index:2}
-    #memberSearch{position:sticky;top:52px;z-index:9;background:#fff}
+      --emerald:    #059669;
+      --emerald-bg: #ecfdf5;
+      --amber:      #d97706;
+      --amber-bg:   #fffbeb;
+      --rose:       #e11d48;
+      --rose-bg:    #fff1f2;
+      --violet:     #7c3aed;
+      --violet-bg:  #f5f3ff;
+      --cyan:       #0891b2;
+      --cyan-bg:    #ecfeff;
+      --orange:     #ea580c;
+      --orange-bg:  #fff7ed;
 
-    /* ---------- Scrollable invites ---------- */
-    .invites-scroll{max-height:220px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff;padding:8px}
-    .invites-scroll ul{margin:0;padding-left:18px}
+      --nav-w:   240px;
+      --hdr-h:   64px;
+      --r:       10px;
+      --r-lg:    14px;
+      --sx:      0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+      --s:       0 4px 16px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.04);
+      --slg:     0 10px 40px rgba(0,0,0,.1);
+      --font:    'Inter',system-ui,-apple-system,sans-serif;
+    }
 
-    /* ---------- Quiz Rules Table ---------- */
-    .rules-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
-    .rules-table th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid #ddd}
-    .rules-table td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:middle}
-    .rules-table tr:hover{background:#f8f8ff}
-    .rules-table .empty-row td{text-align:center;color:#999;padding:24px}
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { font-family:var(--font); background:var(--canvas); color:var(--ink); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+    a { text-decoration:none; color:inherit; }
+    input,select,textarea,button { font-family:var(--font); }
+    button { cursor:pointer; }
 
-    /* Filter pills */
-    .filter-pills{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
-    .filter-pill{padding:5px 12px;border-radius:16px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:12px;font-weight:600}
-    .filter-pill.active{background:#0b6fb7;color:#fff;border-color:#0b6fb7}
-    .filter-pill .count{opacity:0.7;margin-left:3px}
+    /* ═══ LAYOUT ═══ */
+    .shell { display:flex; min-height:100vh; }
 
-    /* Stats row */
-    .rule-stats{display:flex;gap:12px;margin:10px 0;flex-wrap:wrap}
-    .rule-stat{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:8px 14px;font-size:13px}
-    .rule-stat strong{font-size:16px;display:block}
+    /* ═══ SIDEBAR ═══ */
+    .sidebar {
+      width:var(--nav-w); flex-shrink:0;
+      position:fixed; top:0; left:0; bottom:0;
+      background:var(--ink); z-index:200;
+      display:flex; flex-direction:column;
+      overflow-y:auto;
+    }
 
-    /* Admin nav links */
-    .admin-links{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap}
-    .admin-links a{padding:8px 16px;border-radius:8px;background:#f5f5f5;border:1px solid #ddd;color:#333;text-decoration:none;font-size:13px;font-weight:600}
-    .admin-links a:hover{background:#e8e8e8}
+    .sb-brand {
+      padding:20px 20px 16px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .sb-brand-name {
+      font-size:16px; font-weight:800;
+      color:#fff; letter-spacing:-.3px;
+    }
+    .sb-brand-name em { color:#fbbf24; font-style:normal; }
+    .sb-brand-sub {
+      font-size:11px; color:rgba(255,255,255,.45);
+      margin-top:2px; font-weight:500;
+      text-transform:uppercase; letter-spacing:.5px;
+    }
+
+    .sb-section {
+      padding:14px 12px 6px;
+      font-size:9.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.8px;
+      color:rgba(255,255,255,.3);
+    }
+
+    .sb-item {
+      display:flex; align-items:center; gap:10px;
+      padding:9px 14px;
+      font-size:13px; font-weight:500;
+      color:rgba(255,255,255,.65);
+      border-radius:8px; margin:1px 8px;
+      transition:all .12s; border:none; background:none;
+      width:calc(100% - 16px); text-align:left;
+    }
+    .sb-item:hover { background:rgba(255,255,255,.08); color:#fff; }
+    .sb-item.active {
+      background:var(--blue); color:#fff; font-weight:600;
+    }
+    .sb-item .sb-ic { font-size:15px; width:18px; text-align:center; flex-shrink:0; }
+    .sb-item .sb-badge {
+      margin-left:auto; background:rgba(255,255,255,.2);
+      color:#fff; border-radius:999px;
+      font-size:10px; font-weight:700;
+      padding:1px 7px; min-width:20px; text-align:center;
+    }
+    .sb-item.active .sb-badge { background:rgba(255,255,255,.3); }
+
+    .sb-footer {
+      margin-top:auto;
+      padding:14px 12px;
+      border-top:1px solid rgba(255,255,255,.06);
+    }
+    .sb-footer a {
+      display:flex; align-items:center; gap:8px;
+      font-size:12.5px; color:rgba(255,255,255,.4);
+      padding:6px 8px; border-radius:6px; transition:all .12s;
+    }
+    .sb-footer a:hover { color:#fff; background:rgba(255,255,255,.07); }
+
+    /* ═══ MAIN AREA ═══ */
+    .main-area {
+      margin-left:var(--nav-w);
+      flex:1; display:flex; flex-direction:column; min-height:100vh;
+    }
+
+    /* ═══ TOP HEADER ═══ */
+    .top-hdr {
+      position:sticky; top:0; z-index:100;
+      height:var(--hdr-h);
+      background:rgba(255,255,255,.95);
+      backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center;
+      padding:0 28px; gap:14px;
+    }
+    .hdr-title { font-size:17px; font-weight:800; color:var(--ink); }
+    .hdr-sub   { font-size:12.5px; color:var(--ink-muted); margin-left:2px; }
+    .hdr-sp    { flex:1; }
+
+    .hdr-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:5px 12px; border-radius:999px;
+      font-size:11px; font-weight:700;
+    }
+    .hdr-badge.school { background:#ffe4e6; color:#be123c; }
+    .hdr-badge.home   { background:#dcfce7; color:#15803d; }
+    .hdr-badge.other  { background:var(--blue-bg); color:var(--blue-dk); }
+
+    /* ═══ PAGE BODY ═══ */
+    .page { padding:28px; display:none; flex-direction:column; gap:22px; }
+    .page.active { display:flex; }
+
+    /* ═══ STAT CARDS ═══ */
+    .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+    .stat-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--r-lg); padding:18px 20px;
+      box-shadow:var(--sx); display:flex; align-items:center; gap:14px;
+    }
+    .stat-ic {
+      width:44px; height:44px; border-radius:var(--r);
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px; flex-shrink:0;
+    }
+    .stat-val { font-size:26px; font-weight:800; color:var(--ink); line-height:1; }
+    .stat-lbl { font-size:12px; color:var(--ink-muted); margin-top:2px; font-weight:500; }
+
+    /* ═══ SECTION CARD ═══ */
+    .card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--sx);
+    }
+    .card-hdr {
+      padding:16px 22px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+    .card-hdr-title { font-size:14.5px; font-weight:700; color:var(--ink); }
+    .card-hdr-sub   { font-size:12.5px; color:var(--ink-muted); }
+    .card-hdr-sp    { flex:1; }
+    .card-body      { padding:22px; }
+    .card-body.tight { padding:0; }
+
+    /* ═══ MEMBER TABLE ═══ */
+    .m-tabs { display:flex; gap:2px; padding:14px 22px 0; border-bottom:1px solid var(--border); }
+    .m-tab {
+      padding:8px 16px; font-size:12.5px; font-weight:600;
+      color:var(--ink-muted); border:none; background:none;
+      border-bottom:2px solid transparent; cursor:pointer;
+      font-family:var(--font); transition:all .12s;
+    }
+    .m-tab:hover { color:var(--ink); }
+    .m-tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+    .m-search {
+      padding:12px 22px;
+      border-bottom:1px solid var(--border-soft);
+    }
+    .m-search input {
+      width:100%; padding:9px 14px;
+      border:1.5px solid var(--border); border-radius:var(--r);
+      font-size:13px; color:var(--ink); outline:none;
+      transition:border-color .14s;
+    }
+    .m-search input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-ring); }
+
+    .m-pane { display:none; }
+    .m-pane.active { display:block; }
+
+    .mem-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .mem-table th {
+      text-align:left; padding:10px 16px;
+      font-size:10.5px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.5px; color:var(--ink-muted);
+      background:var(--surface-2); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:2;
+    }
+    .mem-table td { padding:11px 16px; border-bottom:1px solid var(--border-soft); vertical-align:middle; }
+    .mem-table tr:last-child td { border-bottom:none; }
+    .mem-table tr:hover td { background:#fafbfc; }
+
+    .avatar {
+      width:32px; height:32px; border-radius:50%;
+      background:var(--blue); color:#fff;
+      display:inline-flex; align-items:center; justify-content:center;
+      font-size:12px; font-weight:700; flex-shrink:0; margin-right:8px;
+    }
+    .user-name  { font-weight:600; color:var(--ink); }
+    .user-email { font-size:11.5px; color:var(--ink-muted); margin-top:1px; }
+    .user-id    { font-size:10.5px; color:var(--ink-faint); font-family:'Courier New',monospace; }
+
+    /* ═══ BADGES ═══ */
+    .badge {
+      display:inline-flex; align-items:center; gap:3px;
+      padding:2px 8px; border-radius:999px;
+      font-size:10.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.3px; white-space:nowrap;
+    }
+    .badge-trial   { background:#fef3c7; color:#92400e; }
+    .badge-paid    { background:var(--emerald-bg); color:#065f46; }
+    .badge-student { background:var(--blue-bg); color:var(--blue-dk); }
+    .badge-teacher { background:var(--cyan-bg); color:var(--cyan); }
+    .badge-staff   { background:var(--violet-bg); color:var(--violet); }
+    .badge-admin   { background:#fef3c7; color:#92400e; }
+    .badge-manager { background:var(--orange-bg); color:var(--orange); }
+    .badge-active  { background:var(--emerald-bg); color:#065f46; }
+    .badge-inactive{ background:var(--canvas); color:var(--ink-muted); border:1px solid var(--border); }
+
+    /* ═══ BUTTONS ═══ */
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:5px;
+      padding:8px 15px; border-radius:var(--r);
+      font-size:12.5px; font-weight:600; font-family:var(--font);
+      border:none; cursor:pointer; transition:all .14s;
+      white-space:nowrap; line-height:1;
+    }
+    .btn-sm { padding:5px 10px; font-size:11.5px; border-radius:7px; }
+    .btn-xs { padding:3px 8px; font-size:11px; border-radius:6px; }
+    .btn-p  { background:var(--blue); color:#fff; box-shadow:0 2px 6px rgba(37,99,235,.22); }
+    .btn-p:hover { background:var(--blue-dk); box-shadow:0 4px 12px rgba(37,99,235,.35); }
+    .btn-o  { background:transparent; border:1.5px solid var(--border); color:var(--ink-soft); }
+    .btn-o:hover { border-color:var(--blue); color:var(--blue); }
+    .btn-g  { background:var(--emerald); color:#fff; }
+    .btn-g:hover { background:#047857; }
+    .btn-r  { background:var(--rose-bg); color:var(--rose); border:1px solid transparent; }
+    .btn-r:hover { background:var(--rose); color:#fff; }
+    .btn-a  { background:var(--amber-bg); color:var(--amber); border:1px solid transparent; }
+    .btn-a:hover { background:var(--amber); color:#fff; }
+    .btn-full { width:100%; }
+
+    .btn-activate {
+      background:var(--emerald-bg); color:var(--emerald);
+      border:1px solid rgba(5,150,105,.25);
+      font-size:11px; padding:4px 10px; border-radius:6px; font-weight:700;
+    }
+    .btn-activate:hover { background:var(--emerald); color:#fff; }
+    .btn-activate.active {
+      background:#dcfce7; color:#15803d; cursor:default;
+    }
+
+    /* ═══ FORM ELEMENTS ═══ */
+    .fld { display:flex; flex-direction:column; gap:5px; }
+    .fld label { font-size:12px; font-weight:600; color:var(--ink-soft); }
+    .fld input, .fld select, .fld textarea {
+      padding:9px 12px; border:1.5px solid var(--border);
+      border-radius:var(--r); font-size:13.5px; color:var(--ink);
+      outline:none; transition:border-color .14s, box-shadow .14s;
+      background:#fff; width:100%;
+    }
+    .fld input:focus, .fld select:focus, .fld textarea:focus {
+      border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-ring);
+    }
+    .fld .hint { font-size:11.5px; color:var(--ink-muted); }
+
+    .form-grid { display:grid; gap:16px; }
+    .form-grid-2 { grid-template-columns:1fr 1fr; }
+    .form-grid-3 { grid-template-columns:1fr 1fr 1fr; }
+    .col-full    { grid-column:1/-1; }
+
+    /* ═══ ACTION ROW IN TABLE ═══ */
+    .act-row { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+
+    /* ═══ RESULT TOAST ═══ */
+    .result-toast {
+      display:none; padding:11px 14px; border-radius:var(--r);
+      font-size:13px; font-weight:500; margin-top:12px;
+    }
+    .result-toast.ok  { background:var(--emerald-bg); color:#065f46; border:1px solid #a7f3d0; }
+    .result-toast.err { background:var(--rose-bg); color:var(--rose); border:1px solid #fecdd3; }
+
+    /* ═══ DROPZONE (CSV upload) ═══ */
+    .dropzone {
+      border:2px dashed var(--border); border-radius:var(--r-lg);
+      padding:24px; text-align:center; cursor:pointer;
+      transition:all .14s; color:var(--ink-muted); font-size:13px;
+    }
+    .dropzone:hover, .dropzone.drag { border-color:var(--blue); background:var(--blue-bg); color:var(--blue); }
+    .dropzone input[type=file] { display:none; }
+    .dropzone .dz-icon { font-size:28px; margin-bottom:6px; }
+
+    /* ═══ MODAL ═══ */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; z-index:900;
+      background:rgba(15,23,42,.45); backdrop-filter:blur(3px);
+      align-items:center; justify-content:center; padding:24px;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--surface); border-radius:18px;
+      box-shadow:var(--slg); width:100%; max-width:520px;
+      max-height:90vh; overflow-y:auto; padding:28px;
+    }
+    .modal-title {
+      font-size:17px; font-weight:800; color:var(--ink);
+      margin-bottom:5px;
+    }
+    .modal-sub { font-size:13px; color:var(--ink-muted); margin-bottom:22px; }
+    .modal-actions { display:flex; gap:8px; margin-top:22px; justify-content:flex-end; }
+
+    /* ═══ INVITE LINK BOX ═══ */
+    .invite-link-box {
+      background:var(--blue-bg); border:1px solid #bfdbfe;
+      border-radius:var(--r); padding:12px 14px; margin-top:12px;
+      display:none;
+    }
+    .invite-link-box .link-inp {
+      width:100%; padding:8px 10px; border:1px solid #93c5fd;
+      border-radius:7px; font-size:13px; background:#fff; margin-top:6px;
+      color:var(--ink);
+    }
+
+    /* ═══ QUIZ ASSIGN PANEL ═══ */
+    .user-select-list {
+      max-height:200px; overflow-y:auto;
+      border:1.5px solid var(--border); border-radius:var(--r);
+      padding:4px;
+    }
+    .user-check {
+      display:flex; align-items:center; gap:9px;
+      padding:7px 10px; border-radius:7px; cursor:pointer;
+      transition:background .1s;
+    }
+    .user-check:hover { background:var(--canvas); }
+    .user-check input { accent-color:var(--blue); width:15px; height:15px; cursor:pointer; flex-shrink:0; }
+    .user-check .uc-name { font-size:13px; font-weight:500; color:var(--ink); }
+    .user-check .uc-meta { font-size:11px; color:var(--ink-muted); }
+
+    /* ═══ BULK IMPORT ═══ */
+    .import-card {
+      border:1px solid var(--border); border-radius:var(--r-lg);
+      overflow:hidden;
+    }
+    .import-hdr { background:var(--surface-2); padding:13px 18px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; }
+    .import-hdr-title { font-size:13px; font-weight:700; color:var(--ink); }
+    .import-body { padding:16px 18px; }
+
+    /* ═══ RULE TABLE ═══ */
+    .rule-t { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .rule-t th { background:var(--surface-2); padding:9px 14px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-muted); border-bottom:1px solid var(--border); text-align:left; }
+    .rule-t td { padding:10px 14px; border-bottom:1px solid var(--border-soft); vertical-align:middle; }
+    .rule-t tr:last-child td { border-bottom:none; }
+    .rule-t tr:hover td { background:#fafbfc; }
+
+    /* ═══ SCROLLABLE TABLE WRAP ═══ */
+    .table-wrap { overflow-y:auto; max-height:480px; }
+    .table-wrap thead th { position:sticky; top:0; z-index:2; }
+
+    /* ═══ ALERT BANNER ═══ */
+    .alert { padding:12px 16px; border-radius:var(--r); font-size:13px; display:flex; align-items:flex-start; gap:9px; }
+    .alert-warn { background:var(--amber-bg); color:#92400e; border:1px solid #fcd34d; }
+    .alert-info { background:var(--blue-bg); color:#1e40af; border:1px solid #93c5fd; }
+
+    /* ═══ SCROLLABLE MEMBERS ═══ */
+    .scroll-wrap { max-height:500px; overflow-y:auto; }
+
+    /* ═══ UTIL ═══ */
+    .hidden { display:none !important; }
+    .gap-8  { display:flex; flex-direction:column; gap:8px; }
+    .gap-12 { display:flex; flex-direction:column; gap:12px; }
+    .flex-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .mt-4 { margin-top:4px; }
+    .mt-8 { margin-top:8px; }
+    .mt-16 { margin-top:16px; }
+    .mono { font-family:'Courier New',monospace; font-size:11.5px; color:var(--blue); font-weight:600; }
+    .sep { height:1px; background:var(--border); margin:4px 0; }
+
+    /* ═══ RESPONSIVE ═══ */
+    @media(max-width:1100px) {
+      .stats-row { grid-template-columns:1fr 1fr; }
+      .form-grid-3 { grid-template-columns:1fr 1fr; }
+    }
+    @media(max-width:768px) {
+      :root { --nav-w:0px; }
+      .sidebar { transform:translateX(-240px); transition:transform .22s; }
+      .sidebar.open { transform:translateX(0); width:240px; }
+      .main-area { margin-left:0; }
+      .stats-row { grid-template-columns:1fr 1fr; }
+      .form-grid-2 { grid-template-columns:1fr; }
+    }
   </style>
 </head>
-<body>
-  {{> navbar}}
-  <main>
-    <h1>Manage {{org.name}}</h1>
+<body data-org-slug="{{org.slug}}">
 
-    {{!-- ===== ADMIN NAV LINKS (cripfcnt-home only) ===== --}}
-    {{#if isHomeSchool}}
-    <div class="admin-links">
+{{> navbar}}
+
+<div class="shell">
+
+  <!-- ══════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-brand">
+      <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
+      <div class="sb-brand-sub">Admin Console</div>
+    </div>
+
+    <div class="sb-section">Overview</div>
+    <button class="sb-item active" data-page="overview" onclick="gotoPage('overview',this)">
+      <span class="sb-ic">🏠</span> Dashboard
+    </button>
+
+    <div class="sb-section">People</div>
+    <button class="sb-item" data-page="members" onclick="gotoPage('members',this)">
+      <span class="sb-ic">👥</span> Members
+      <span class="sb-badge" id="sb-total-members">
+        {{groups.staff.length}}
+      </span>
+    </button>
+    <button class="sb-item" data-page="invites" onclick="gotoPage('invites',this)">
+      <span class="sb-ic">✉️</span> Invites
+      <span class="sb-badge">{{invites.length}}</span>
+    </button>
+    <button class="sb-item" data-page="credentials" onclick="gotoPage('credentials',this)">
+      <span class="sb-ic">🔑</span> Credentials
+    </button>
+
+    {{#unless isHomeSchool}}
+    <div class="sb-section">Assessments</div>
+    <button class="sb-item" data-page="assign" onclick="gotoPage('assign',this)">
+      <span class="sb-ic">📋</span> Assign Quiz
+    </button>
+    {{#if (eq org.slug "cripfcnt-school")}}
+    <button class="sb-item" data-page="bulk" onclick="gotoPage('bulk',this)">
+      <span class="sb-ic">📦</span> Bulk Assign
+    </button>
+    {{/if}}
+    <button class="sb-item" data-page="passages" onclick="gotoPage('passages',this)">
+      <span class="sb-ic">📝</span> Create Passage
+    </button>
+    {{/unless}}
+
+    {{#if (eq org.type "school")}}
+    <div class="sb-section">Import</div>
+    {{#unless isHomeSchool}}
+    <button class="sb-item" data-page="import" onclick="gotoPage('import',this)">
+      <span class="sb-ic">⬆️</span> Import CSV
+    </button>
+    {{/unless}}
+    {{/if}}
+
+    {{#if (or isHomeSchool isCripSchool)}}
+    <div class="sb-section">Rules</div>
+    <button class="sb-item" data-page="rules" onclick="gotoPage('rules',this)">
+      <span class="sb-ic">⚙️</span> Quiz Rules
+      <span class="sb-badge">{{quizRules.length}}</span>
+    </button>
+    {{/if}}
+
+    <div class="sb-section">Reports</div>
+    <button class="sb-item" data-page="reports" onclick="gotoPage('reports',this)">
+      <span class="sb-ic">📊</span> Reports
+    </button>
+
+    <div class="sb-footer">
+      {{#if isHomeSchool}}
       <a href="/admin/finance">💰 Finance Dashboard</a>
-      <a href="/parent/dashboard">👁️ View Parent Dashboard</a>
+      <a href="/parent/dashboard">👁 Parent View</a>
+      {{/if}}
+      <a href="/org/{{org.slug}}/dashboard">← Back to Dashboard</a>
     </div>
-    {{/if}}
+  </aside>
 
-    <section>
-      <h2>Invites</h2>
-      <!-- AJAX invite form -->
-      <form class="row" data-ajax="invite" method="post" action="/admin/orgs/{{org.slug}}/invite">
-        <label style="flex:1">
-          Email:
-          <input name="email" placeholder="employee@example.com" required />
-        </label>
+  <!-- ══════════════════════════════════════
+       MAIN AREA
+  ══════════════════════════════════════ -->
+  <div class="main-area">
 
-        <label>
-          Role:
-          <select name="role">
-            <option value="employee">Employee</option>
-            <option value="manager">Manager</option>
-          </select>
-        </label>
-
-        <button type="submit">Send Invite</button>
-      </form>
-
-      <div id="inviteFeedback" class="notice"></div>
-
-     <h3 style="margin-top:16px">Existing Invites</h3>
-
-<div class="invites-scroll">
-  <ul id="invitesList">
-    {{#each invites}}
-      <li data-invite-id="{{this._id}}">
-        <span class="small">{{this.email}}</span>
-        <span class="muted"> | token: <code>{{this.token}}</code></span>
-        <span class="badge">
-          {{#if this.used}}Used{{else}}Pending{{/if}}
-        </span>
-        <span class="muted"> | created {{this.createdAt}}</span>
-      </li>
-    {{/each}}
-  </ul>
-</div>
-
-    </section>
-
-    <hr />
-
-    {{!-- ═══════════════════════════════════════════════════════════════
-     CREDENTIALS MANAGEMENT PANEL
-     Insert this block in views/admin/org_manage.hbs
-     EXACTLY WHERE TO PASTE:
-       Find:   <hr />
-       That appears after the </section> closing the Members block.
-       Paste this entire block immediately after that <hr />.
-     ═══════════════════════════════════════════════════════════════ --}}
-
-<style>
-  /* ── Credentials panel specific styles ── */
-  .cred-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 22px 24px; margin-bottom: 20px; }
-  .cred-panel h2 { font-size: 17px; font-weight: 800; color: #0f1117; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-  .cred-panel .panel-sub { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
-
-  .cred-tabs { display: flex; gap: 6px; border-bottom: 1px solid #e5e7eb; margin-bottom: 20px; }
-  .cred-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; color: #6b7280; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all .14s; font-family: inherit; }
-  .cred-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
-
-  .cred-pane { display: none; }
-  .cred-pane.active { display: block; }
-
-  /* Issue single user */
-  .issue-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-  .issue-grid .field-full { grid-column: 1 / -1; }
-  .cred-label { display: block; font-size: 12px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
-  .cred-input {
-    width: 100%;
-    padding: 9px 12px;
-    border: 1.5px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: inherit;
-    color: #0f1117;
-    outline: none;
-    transition: border-color .14s;
-  }
-  .cred-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
-  .cred-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; appearance: none; padding-right: 30px; }
-
-  .cred-btn {
-    padding: 10px 20px;
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 13.5px;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background .14s;
-  }
-  .cred-btn:hover { background: #1d4ed8; }
-  .cred-btn.secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
-  .cred-btn.secondary:hover { background: #e5e7eb; }
-  .cred-btn.danger { background: #fee2e2; color: #dc2626; }
-  .cred-btn.danger:hover { background: #dc2626; color: #fff; }
-
-  /* Result box */
-  .cred-result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 13.5px; display: none; }
-  .cred-result.ok    { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
-  .cred-result.err   { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
-
-  /* Bulk results table */
-  .bulk-table-wrap { max-height: 360px; overflow-y: auto; margin-top: 14px; border: 1px solid #e5e7eb; border-radius: 8px; }
-  .bulk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .bulk-table th { background: #f9fafb; padding: 9px 12px; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
-  .bulk-table td { padding: 9px 12px; border-bottom: 1px solid #f3f4f6; }
-  .bulk-table tr:last-child td { border-bottom: none; }
-  .bulk-table .mono { font-family: 'DM Mono','Courier New',monospace; font-size: 12.5px; color: #2563eb; font-weight: 700; }
-  .bulk-table .pw-cell { font-family: 'DM Mono','Courier New',monospace; font-size: 12.5px; color: #374151; letter-spacing: .5px; }
-
-  .copy-btn { padding: 3px 8px; font-size: 11px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 5px; cursor: pointer; font-family: inherit; font-weight: 600; }
-  .copy-btn:hover { background: #dbeafe; }
-
-  .export-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-  .stats-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-  .stat-pill { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 20px; padding: 5px 14px; font-size: 13px; color: #0369a1; font-weight: 600; }
-
-  /* Auto-generate toggle */
-  .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: #374151; }
-  .toggle-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #2563eb; }
-</style>
-
-<section>
-<div class="cred-panel">
-  <h2>🔑 Credentials Management</h2>
-  <p class="panel-sub">Issue, reset, or bulk-generate usernames and passwords for your organisation's members.</p>
-
-  <div class="cred-tabs">
-    <button class="cred-tab active" data-cpane="single">Issue to One User</button>
-    <button class="cred-tab" data-cpane="bulk">Bulk Generate</button>
-  </div>
-
-  <!-- ═══ SINGLE USER PANE ═══ -->
-  <div class="cred-pane active" id="cpane-single">
-
-    <div class="issue-grid">
-
+    <header class="top-hdr">
       <div>
-        <label class="cred-label" for="cred-member">Member</label>
-        <select id="cred-member" class="cred-input cred-select">
-          <option value="">— select a member —</option>
-          {{!-- Students --}}
-          {{#each groups.students}}
-            {{#if this.user}}
-            <option value="{{this.user._id}}"
-              data-name="{{this.user.firstName}} {{this.user.lastName}}"
-              data-role="student">
-              🎓 {{this.user.firstName}} {{this.user.lastName}}
-              {{#if this.user.studentId}}({{this.user.studentId}}){{/if}}
-            </option>
-            {{/if}}
-          {{/each}}
-          {{!-- Teachers --}}
-          {{#each groups.teachers}}
-            {{#if this.user}}
-            <option value="{{this.user._id}}"
-              data-name="{{this.user.firstName}} {{this.user.lastName}}"
-              data-role="teacher">
-              📖 {{this.user.firstName}} {{this.user.lastName}}
-              {{#if this.user.email}}({{this.user.email}}){{/if}}
-            </option>
-            {{/if}}
-          {{/each}}
-          {{!-- Staff / Employees --}}
-          {{#each groups.staff}}
-            {{#if this.user}}
-            <option value="{{this.user._id}}"
-              data-name="{{this.user.firstName}} {{this.user.lastName}}"
-              data-role="employee">
-              👤 {{this.user.firstName}} {{this.user.lastName}}
-              {{#if this.user.email}}({{this.user.email}}){{/if}}
-            </option>
-            {{/if}}
-          {{/each}}
-          {{!-- Admins --}}
-          {{#each groups.admins}}
-            {{#if this.user}}
-            <option value="{{this.user._id}}"
-              data-name="{{this.user.firstName}} {{this.user.lastName}}"
-              data-role="admin">
-              ⭐ {{this.user.firstName}} {{this.user.lastName}}
-              {{#if this.user.email}}({{this.user.email}}){{/if}}
-            </option>
-            {{/if}}
-          {{/each}}
-        </select>
+        <div class="hdr-title">{{org.name}}</div>
+        <div class="hdr-sub" id="page-sub">Overview</div>
       </div>
-
-      <div>
-        <label class="cred-label" for="cred-username-inp">
-          Username <span style="font-weight:400;text-transform:none;letter-spacing:0">(leave blank to auto-generate)</span>
-        </label>
-        <input type="text" id="cred-username-inp" class="cred-input"
-          placeholder="e.g. johsmi2048" autocomplete="off" />
-      </div>
-
-      <div>
-        <label class="cred-label" for="cred-password-inp">Password</label>
-        <input type="text" id="cred-password-inp" class="cred-input"
-          placeholder="Min 8 characters" autocomplete="new-password" />
-      </div>
-
-      <div style="display:flex;align-items:flex-end;gap:8px">
-        <button class="cred-btn" style="flex:1" onclick="issueSingleCredentials()">Issue Credentials</button>
-        <button class="cred-btn secondary" onclick="generateTempPassword()">🎲 Generate</button>
-      </div>
-
-    </div>
-
-    <div class="toggle-row">
-      <input type="checkbox" id="cred-gen-username" checked />
-      <label for="cred-gen-username">Auto-generate username if left blank</label>
-    </div>
-
-    <div class="cred-result" id="single-result"></div>
-  </div>
-
-  <!-- ═══ BULK PANE ═══ -->
-  <div class="cred-pane" id="cpane-bulk">
-
-    <p style="font-size:13.5px;color:#374151;margin-bottom:16px;line-height:1.6">
-      Generate temporary credentials for <strong>all members who don't yet have a password</strong>.
-      Existing passwords are never overwritten. Each user gets a unique username and a temporary password
-      they should change on first login.
-    </p>
-
-    <div class="stats-row">
-      <span class="stat-pill">Members without passwords will receive credentials</span>
-    </div>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="cred-btn" onclick="bulkGenerate()">⚡ Generate Credentials for All</button>
-    </div>
-
-    <div class="cred-result" id="bulk-result"></div>
-
-    <div id="bulk-table-container" style="display:none">
-      <div class="export-row">
-        <strong style="font-size:13px">Generated Credentials:</strong>
-        <button class="cred-btn secondary" onclick="exportCSV()">⬇️ Export CSV</button>
-        <button class="cred-btn secondary" onclick="copyAll()">📋 Copy All</button>
-      </div>
-      <div class="bulk-table-wrap">
-        <table class="bulk-table" id="bulk-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Role</th>
-              <th>Username</th>
-              <th>Temp Password</th>
-              <th>Copy</th>
-            </tr>
-          </thead>
-          <tbody id="bulk-tbody"></tbody>
-        </table>
-      </div>
-      <p style="font-size:12px;color:#9ca3af;margin-top:8px">
-        ⚠️ Passwords shown once only. Export CSV before closing this page.
-      </p>
-    </div>
-
-  </div>
-</div>
-</section>
-
-<script>
-(function () {
-  /* ── Tab switching ── */
-  document.querySelectorAll('.cred-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.cred-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.cred-pane').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById('cpane-' + tab.dataset.cpane).classList.add('active');
-    });
-  });
-
-  /* ── Helpers ── */
-  function showResult(id, ok, msg) {
-    const el = document.getElementById(id);
-    el.textContent = msg;
-    el.className = 'cred-result ' + (ok ? 'ok' : 'err');
-    el.style.display = 'block';
-  }
-
-  function getOrgSlug() {
-    return document.querySelector('[data-org-slug]')?.dataset.orgSlug
-      || location.pathname.match(/\/admin\/orgs\/([^/]+)/)?.[1]
-      || '';
-  }
-
-  /* ── Generate a random temp password ── */
-  window.generateTempPassword = function () {
-    const member = document.getElementById('cred-member');
-    const name = member.options[member.selectedIndex]?.dataset?.name || 'User';
-    const first = (name.split(' ')[0] || 'User').replace(/[^a-zA-Z]/g, '');
-    const pin   = String(Math.floor(1000 + Math.random() * 9000));
-    document.getElementById('cred-password-inp').value = first + pin + '!';
-  };
-
-  /* ── Issue credentials to a single user ── */
-  window.issueSingleCredentials = async function () {
-    const userId   = document.getElementById('cred-member').value;
-    const username = document.getElementById('cred-username-inp').value.trim();
-    const password = document.getElementById('cred-password-inp').value.trim();
-    const genUser  = document.getElementById('cred-gen-username').checked;
-
-    if (!userId) return showResult('single-result', false, 'Please select a member.');
-    if (!password) return showResult('single-result', false, 'Please enter a password (min 8 characters).');
-    if (password.length < 8) return showResult('single-result', false, 'Password must be at least 8 characters.');
-
-    const slug = getOrgSlug();
-    try {
-      const resp = await fetch(`/admin/orgs/${slug}/members/${userId}/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username || undefined, password, generateUsername: genUser })
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        showResult('single-result', true,
-          `✅ Done! Username: ${data.username} — Password issued. Share these login details with the user.`
-        );
-        // Clear fields
-        document.getElementById('cred-username-inp').value = '';
-        document.getElementById('cred-password-inp').value = '';
-      } else {
-        showResult('single-result', false, '❌ ' + (data.error || 'Failed'));
-      }
-    } catch (e) {
-      showResult('single-result', false, '❌ Network error: ' + e.message);
-    }
-  };
-
-  /* ── Bulk generate ── */
-  window.bulkGenerate = async function () {
-    const slug = getOrgSlug();
-    const resultEl = document.getElementById('bulk-result');
-    showResult('bulk-result', true, '⏳ Generating credentials for all members without a password…');
-
-    try {
-      const resp = await fetch(`/admin/orgs/${slug}/credentials/bulk-generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await resp.json();
-      if (!data.ok) {
-        showResult('bulk-result', false, '❌ ' + (data.error || 'Failed'));
-        return;
-      }
-
-      showResult('bulk-result', true,
-        `✅ Issued ${data.issued} credentials. ${data.skipped} users already had passwords (not changed).`
-      );
-
-      if (data.credentials && data.credentials.length > 0) {
-        document.getElementById('bulk-table-container').style.display = 'block';
-        const tbody = document.getElementById('bulk-tbody');
-        tbody.innerHTML = '';
-        data.credentials.forEach(c => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${c.name || '—'}</td>
-            <td>${c.role || '—'}</td>
-            <td class="mono">${c.username}</td>
-            <td class="pw-cell">${c.tempPassword}</td>
-            <td><button class="copy-btn" onclick="copyRow('${c.username}','${c.tempPassword}')">Copy</button></td>
-          `;
-          tbody.appendChild(tr);
-        });
-        // Store for CSV export
-        window._bulkCredentials = data.credentials;
-      } else {
-        showResult('bulk-result', true, '✅ All members already have passwords. Nothing to generate.');
-      }
-    } catch (e) {
-      showResult('bulk-result', false, '❌ Network error: ' + e.message);
-    }
-  };
-
-  /* ── Copy single row ── */
-  window.copyRow = function (username, password) {
-    navigator.clipboard?.writeText(`Username: ${username}  Password: ${password}`)
-      .then(() => alert('Copied to clipboard!\n\nUsername: ' + username + '\nPassword: ' + password))
-      .catch(() => alert('Username: ' + username + '\nPassword: ' + password));
-  };
-
-  /* ── Copy all ── */
-  window.copyAll = function () {
-    const creds = window._bulkCredentials || [];
-    const lines = ['Name\tRole\tUsername\tPassword'];
-    creds.forEach(c => lines.push(`${c.name}\t${c.role}\t${c.username}\t${c.tempPassword}`));
-    navigator.clipboard?.writeText(lines.join('\n'))
-      .then(() => alert('All credentials copied to clipboard.'))
-      .catch(() => alert('Could not copy. Please export CSV instead.'));
-  };
-
-  /* ── Export CSV ── */
-  window.exportCSV = function () {
-    const creds = window._bulkCredentials || [];
-    if (!creds.length) return;
-    const rows = [['Name','Email','Role','Username','Temp Password','Note']];
-    creds.forEach(c => rows.push([c.name, c.email, c.role, c.username, c.tempPassword, c.note || '']));
-    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'credentials_' + Date.now() + '.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  /* ── Add data-org-slug to body for JS to read ── */
-  // (org_manage.hbs renders with {{org.slug}} — this script reads it)
-  document.body.setAttribute('data-org-slug', '{{org.slug}}');
-
-})();
-</script>
-
-
-  <section>
-  <h2>Members</h2>
-
-  <div class="panel">
-    <div class="tabs">
-      {{#if groups.students.length}}
-        <button class="tab-btn active" data-tab="students">
-          Students ({{groups.students.length}})
-        </button>
-      {{/if}}
-
-      {{#if groups.teachers.length}}
-        <button class="tab-btn" data-tab="teachers">
-          Teachers ({{groups.teachers.length}})
-        </button>
-      {{/if}}
-
-      {{#if (or groups.staff.length (not isSchool))}}
-        <button class="tab-btn" data-tab="staff">
-          Staff ({{groups.staff.length}})
-        </button>
-      {{/if}}
-
-      {{#if groups.admins.length}}
-        <button class="tab-btn" data-tab="admins">
-          Admins ({{groups.admins.length}})
-        </button>
-      {{/if}}
-    </div>
-
-    <input
-      id="memberSearch"
-      type="text"
-      placeholder="Search by name, email, ID…"
-      style="width:100%;padding:8px;margin:10px 0"
-    />
-
-    {{#if groups.students.length}}
-   <div class="tab-content active" id="students">
-  <div class="members-scroll">
-    {{> members_table rows=groups.students isSchool=isSchool}}
-  </div>
-</div>
-
-    {{/if}}
-
-    {{#if groups.teachers.length}}
-      <div class="tab-content" id="teachers">
-        {{> members_table rows=groups.teachers isSchool=isSchool}}
-      </div>
-    {{/if}}
-
- {{#if (or groups.staff.length (not isSchool))}}
-      <div class="tab-content" id="staff">
-    {{> members_table rows=groups.staff isSchool=isSchool}}
-      </div>
-    {{/if}}
-
-    {{#if groups.admins.length}}
-      <div class="tab-content" id="admins">
-       {{> members_table rows=groups.admins isSchool=isSchool}}
-      </div>
-    {{/if}}
-  </div>
-</section>
-
-
-    <hr />
-
-{{!-- ===== IMPORT SECTIONS - HIDDEN FOR CRIPFCNT-HOME ===== --}}
-{{#unless isHomeSchool}}
-
-{{#if (eq org.type "school")}}
-<div class="panel">
-  <h2>Import Students (CSV)</h2>
-
-  <form
-    method="POST"
-    action="/admin/orgs/{{org.slug}}/import-students"
-    enctype="multipart/form-data"
-  >
-    <input type="file" name="csv" accept=".csv" required />
-
-    <p class="muted small">
-      Required columns:
-      <code>studentId, firstName, lastName, grade</code>
-    </p>
-
-    <button class="btn primary">Upload CSV</button>
-  </form>
-</div>
-{{/if}}
-
-{{#if (eq org.type "school")}}
-
-<div class="panel">
-  <h2>Import Teachers (CSV)</h2>
-  <form
-    method="POST"
-    action="/admin/orgs/{{org.slug}}/import-teachers"
-    enctype="multipart/form-data"
-  >
-    <input type="file" name="csv" accept=".csv" required />
-
-    <p class="muted small">
-      Required columns:
-      <code>email, firstName, lastName</code>
-    </p>
-
-    <button class="btn primary">Upload Teachers</button>
-  </form>
-</div>
-
-<div class="panel">
-  <h2>Import School Admins (CSV)</h2>
-  <p class="muted small">
-    School admins manage <strong>this school only</strong> (not platform admins).
-  </p>
-
-  <form
-    method="POST"
-    action="/admin/orgs/{{org.slug}}/import-admins"
-    enctype="multipart/form-data"
-  >
-    <input type="file" name="csv" accept=".csv" required />
-
-    <p class="muted small">
-      Required columns:
-<code>adminId, firstName, lastName, role</code>
-
-    </p>
-
-    <button class="btn primary">Upload School Admins</button>
-  </form>
-</div>
-
-{{/if}}
-{{/unless}}
-
-{{!-- ===== MODULES SECTION - HIDDEN FOR CRIPFCNT-HOME ===== --}}
-{{#unless isHomeSchool}}
-    <section>
-      <h2>Modules</h2>
-      <a href="/admin/orgs/{{org.slug}}/modules">Manage Modules</a>
-      {{#if modules.length}}
-        <div style="margin-top:10px" class="small">
-          Modules: {{#each modules}}<span class="badge" style="margin-right:6px">{{this.title}} ({{this.slug}})</span>{{/each}}
-        </div>
+      <div class="hdr-sp"></div>
+      {{#if isCripSchool}}
+        <span class="hdr-badge school">🏫 cripfcnt-school</span>
+      {{else if isHomeSchool}}
+        <span class="hdr-badge home">🏠 cripfcnt-home</span>
       {{else}}
-        <p class="muted small">No modules defined yet.</p>
+        <span class="hdr-badge other">🏢 {{org.slug}}</span>
       {{/if}}
-    </section>
+      <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm">📊 View Attempts</a>
+      <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm">⬇ CSV</a>
+    </header>
 
-    <hr/>
-{{/unless}}
-
-{{!-- ===== ASSIGN QUIZ SECTION - HIDDEN FOR CRIPFCNT-HOME ===== --}}
-{{#unless isHomeSchool}}
-    <section>
-  
-     <div class="panel">
-       <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
-
-   {{#if (eq org.type "school")}}
-
-<label class="block">
-  Assign to:
-  <select id="targetRole" name="targetRole" required>
-    <option value="student">Students (by grade)</option>
-    <option value="teacher">Teachers (all teachers)</option>
-  </select>
-</label>
-
-<label class="block" id="gradeWrap">
-  Grade:
-  <select id="gradeSelect" name="grade">
-    <option value="">-- select grade --</option>
-    <option value="0">Grade 0</option>
-    <option value="1">Grade 1</option>
-    <option value="2">Grade 2</option>
-    <option value="3">Grade 3</option>
-    <option value="4">Grade 4</option>
-    <option value="5">Grade 5</option>
-    <option value="6">Grade 6</option>
-    <option value="7">Grade 7</option>
-    <option value="8">Grade 8</option>
-    <option value="9">Grade 9</option>
-    <option value="10">Grade 10</option>
-    <option value="11">Grade 11</option>
-    <option value="12">Grade 12</option>
-    <option value="13">Grade 13</option>
-  </select>
-</label>
-
-{{/if}}
-
-         <p>Select members to assign a quiz for the chosen module. This creates an exam instance per selected user.</p>
-
-         <label class="block">
-           Module:
-      <select id="modules" name="modules" multiple size="6" required>
-  {{#each modules}}
-    <option value="{{this.slug}}">
-      {{this.title}} ({{this.slug}})
-    </option>
-  {{/each}}
-</select>
-
-<p class="muted small">
-  Hold Ctrl / Cmd to select multiple modules
-</p>
-
-         </label>
-
-{{#unless isSchool}}
-<label class="block">
-  Users:
-  <select id="userIds" name="userIds" multiple size="6" required>
-
-    {{!-- STAFF --}}
-    {{#each groups.staff}}
-      {{#if this.user}}
-        <option value="{{this.user._id}}">
-          {{this.user.email}} (staff)
-        </option>
-      {{/if}}
-    {{/each}}
-
-    {{!-- TEACHERS --}}
-    {{#each groups.teachers}}
-      {{#if this.user}}
-        <option value="{{this.user._id}}">
-          {{this.user.email}} (teacher)
-        </option>
-      {{/if}}
-    {{/each}}
-
-  </select>
-  <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
-</label>
-{{/unless}}
-
-
-
-         <label class="block">
-           <input type="checkbox" id="usePassage" name="usePassage" value="1" /> Assign a specific passage (passage quiz)
-         </label>
-
-         <label class="block" id="passageWrap" style="display:none">
-           Passage to assign:
-           <select id="passageSelect" name="passageId">
-             <option value="">-- choose passage --</option>
-             {{#if passages}}
-               {{#each passages}}
-                 <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
-                   {{this.title}} ({{this.childCount}} q) {{#if this.organization}} - org{{/if}}
-                 </option>
-               {{/each}}
-             {{/if}}
-           </select>
-           <div class="muted small">When a passage is selected the Count will be set to the passage's child question count.</div>
-         </label>
-
-         <label class="block">
-           Count:
-           <input id="count" name="count" type="number" min="1" max="100" value="20">
-         </label>
-
-         <label class="block">
-           Expires (mins):
-           <input id="expiresMinutes" name="expiresMinutes" type="number" min="5" max="1440" value="60">
-         </label>
-
-         <label class="block">
-  Duration (mins):
-  <input
-    id="durationMinutes"
-    name="durationMinutes"
-    type="number"
-    min="1"
-    max="300"
-    value="30"
-    required
-  >
-  <div class="muted small">
-    How long the learner has to complete the quiz once they start.
-  </div>
-</label>
-
-
-         <div style="margin-top:8px">
-           <button id="assignBtn" type="submit">Assign Quiz</button>
-         </div>
-       </form>
-
-       <div id="assignResult" class="notice"></div>
-     </div>
-
-    </section>
-{{/unless}}
-
-
-{{!-- ===== BULK ASSIGN ALL QUIZZES - FIXED FOR CRIPFCNT-SCHOOL ===== --}}
-{{!-- Place this right after </section> of regular assign quiz, BEFORE the create passage section --}}
-
-{{#if (eq org.slug "cripfcnt-school")}}
-<hr style="margin:30px 0; border:1px solid #e0e0e0"/>
-
-<section>
-  <div class="panel" style="border:2px solid #28a745;background:#f0fff4">
-    <h2 style="color:#28a745; margin-top:0">🚀 Bulk Assign ALL Quizzes</h2>
-    
-    <div style="background:#fff3cd; padding:12px; border-radius:6px; margin-bottom:16px">
-      <strong>⚡ Quick Assign:</strong> Assign all <strong>{{passages.length}} quizzes</strong> to selected members at once.
-      <br>
-      <span class="muted small">Each member will get their own exam instance for every quiz.</span>
-    </div>
-
-    <form id="bulkAssignForm" method="POST">
-      
-      <label class="block">
-        <strong>Assign to:</strong>
-        <select id="bulkTargetType" name="targetType" required style="width:100%; max-width:300px">
-          <option value="all">All Members ({{groups.staff.length}} staff)</option>
-          <option value="specific">Specific Users (select manually)</option>
-        </select>
-      </label>
-
-      <label class="block" id="bulkUserWrap" style="display:none; margin-top:12px">
-        <strong>Select Users:</strong>
-        <select id="bulkUserIds" name="userIds" multiple size="10" style="width:100%">
-          {{!-- Staff/Employees --}}
-          {{#each groups.staff}}
-            {{#if this.user}}
-              <option value="{{this.user._id}}">
-                👤 {{this.user.displayName}} ({{this.user.email}})
-              </option>
-            {{/if}}
-          {{/each}}
-          
-          {{!-- Teachers if any --}}
-          {{#if groups.teachers.length}}
-            <optgroup label="Teachers">
-              {{#each groups.teachers}}
-                {{#if this.user}}
-                  <option value="{{this.user._id}}">
-                    👨‍🏫 {{this.user.displayName}} ({{this.user.email}})
-                  </option>
-                {{/if}}
-              {{/each}}
-            </optgroup>
-          {{/if}}
-          
-          {{!-- Admins --}}
-          {{#if groups.admins.length}}
-            <optgroup label="Admins">
-              {{#each groups.admins}}
-                {{#if this.user}}
-                  <option value="{{this.user._id}}">
-                    ⭐ {{this.user.displayName}} ({{this.user.email}})
-                  </option>
-                {{/if}}
-              {{/each}}
-            </optgroup>
-          {{/if}}
-        </select>
-        <p class="muted small">Hold Ctrl/Cmd to select multiple users.</p>
-      </label>
-
-      <label class="block" style="margin-top:12px">
-        <strong>Duration per quiz (minutes):</strong>
-        <input
-          name="durationMinutes"
-          type="number"
-          min="5"
-          max="300"
-          value="30"
-          required
-          style="width:100%; max-width:150px"
-        >
-        <div class="muted small">
-          How long learners have to complete each quiz once started.
-        </div>
-      </label>
-
-      <label class="block" style="margin-top:12px">
-        <input type="checkbox" id="previewOnly" name="previewOnly" value="1" checked />
-        <strong>Preview only</strong> (don't create, just show calculation)
-      </label>
-
-      <div style="margin-top:16px; padding:16px; background:#fff3cd; border:1px solid #ffc107; border-radius:6px">
-        <strong>⚠️ Warning:</strong> This will create <strong>{{passages.length}} exam instances per user</strong>.
-        <br>
-        <div class="muted small" style="margin-top:6px">
-          <strong>Example calculations:</strong><br>
-          • 1 user × {{passages.length}} quizzes = <strong>{{passages.length}}</strong> exam instances<br>
-          • 5 users × {{passages.length}} quizzes = <strong>{{math passages.length "*" 5}}</strong> exam instances<br>
-          • All staff ({{groups.staff.length}}) × {{passages.length}} quizzes = <strong>{{math passages.length "*" groups.staff.length}}</strong> exam instances
-        </div>
-      </div>
-
-      <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap">
-        <button 
-          type="submit" 
-          style="background:#28a745; color:#fff; font-size:16px; padding:14px 28px; border:none; border-radius:8px; cursor:pointer; font-weight:800"
-        >
-          📦 Bulk Assign All Quizzes
-        </button>
-        <button 
-          type="button"
-          onclick="document.getElementById('bulkAssignForm').reset(); document.getElementById('bulkAssignResult').innerHTML = ''; document.getElementById('previewOnly').checked = true;"
-          style="background:#6c757d; color:#fff; font-size:16px; padding:14px 28px; border:none; border-radius:8px; cursor:pointer"
-        >
-          Clear Form
-        </button>
-      </div>
-    </form>
-
-    <div id="bulkAssignResult" class="notice" style="margin-top:16px"></div>
-  </div>
-</section>
-
-<script>
-(function() {
-  // ===== BULK ASSIGN FORM LOGIC =====
-  const bulkTargetType = document.getElementById('bulkTargetType');
-  const bulkUserWrap = document.getElementById('bulkUserWrap');
-  const bulkForm = document.getElementById('bulkAssignForm');
-
-  // Toggle user selection based on target type
-  if (bulkTargetType) {
-    bulkTargetType.addEventListener('change', () => {
-      const val = bulkTargetType.value;
-      bulkUserWrap.style.display = val === 'specific' ? 'block' : 'none';
-    });
-  }
-
-  // Form submission
-  if (bulkForm) {
-    bulkForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-
-      const formData = new FormData(bulkForm);
-      const targetType = formData.get('targetType');
-      const durationMinutes = parseInt(formData.get('durationMinutes')) || 30;
-      const previewOnly = formData.get('previewOnly') === '1';
-
-      const payload = {
-        targetType,
-        durationMinutes,
-        previewOnly
-      };
-
-      // Handle specific users
-      if (targetType === 'specific') {
-        const select = document.getElementById('bulkUserIds');
-        payload.userIds = Array.from(select.selectedOptions).map(o => o.value);
-        
-        if (!payload.userIds.length) {
-          document.getElementById('bulkAssignResult').innerHTML = 
-            '<div class="error" style="color:#c00; padding:12px; background:#ffe6e6; border-radius:6px">❌ Please select at least one user.</div>';
-          return;
-        }
-      }
-
-      const resultDiv = document.getElementById('bulkAssignResult');
-      resultDiv.innerHTML = '<div style="color:#007bff; padding:12px; background:#e7f3ff; border-radius:6px">⏳ Processing... This may take a minute...</div>';
-
-      try {
-        const resp = await fetch('/admin/orgs/cripfcnt-school/bulk-assign-all', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok) {
-          resultDiv.innerHTML = `
-            <div class="error" style="color:#c00; padding:12px; background:#ffe6e6; border-radius:6px">
-              <strong>❌ Failed:</strong> ${data.error || 'Unknown error'}
-              ${data.detail ? `<br><small>${data.detail}</small>` : ''}
-            </div>
-          `;
-          return;
-        }
-
-        if (data.preview) {
-          // Preview mode result
-          resultDiv.innerHTML = `
-            <div class="success" style="padding:16px; background:#d4edda; border:2px solid #28a745; border-radius:8px">
-              <strong>📊 Preview Calculation:</strong><br><br>
-              
-              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0">
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#28a745">${data.usersCount}</div>
-                  <div style="color:#666; font-size:13px">Users</div>
-                </div>
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#007bff">${data.quizzesCount}</div>
-                  <div style="color:#666; font-size:13px">Quizzes</div>
-                </div>
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#ffc107">${data.totalInstances}</div>
-                  <div style="color:#666; font-size:13px">Total Instances</div>
-                </div>
-              </div>
-
-              <div style="margin-top:12px; padding:12px; background:#fff; border-radius:6px">
-                <strong>Settings:</strong><br>
-                • Duration: ${data.durationMinutes} minutes per quiz<br>
-                • Total study time: ~${Math.ceil(data.totalInstances * data.durationMinutes / 60)} hours per user<br>
-                • Database size: ~${Math.ceil(data.totalInstances * 2 / 1000)} MB
-              </div>
-
-              <div style="margin-top:12px; color:#666; font-size:13px">
-                ✅ Uncheck "Preview only" and submit again to create these exam instances.
-              </div>
-            </div>
-          `;
-        } else {
-          // Actual creation result
-          resultDiv.innerHTML = `
-            <div class="success" style="padding:16px; background:#d4edda; border:2px solid #28a745; border-radius:8px">
-              <strong>✅ Bulk Assignment Complete!</strong><br><br>
-              
-              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0">
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#28a745">${data.totalCreated}</div>
-                  <div style="color:#666; font-size:13px">Instances Created</div>
-                </div>
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#007bff">${data.usersCount}</div>
-                  <div style="color:#666; font-size:13px">Users</div>
-                </div>
-                <div style="text-align:center; padding:12px; background:#fff; border-radius:6px">
-                  <div style="font-size:32px; font-weight:800; color:#ffc107">${data.quizzesCount}</div>
-                  <div style="color:#666; font-size:13px">Quizzes Each</div>
-                </div>
-              </div>
-
-              ${data.errors && data.errors.length > 0 ? `
-                <div style="margin-top:12px; padding:12px; background:#fff3cd; border-radius:6px">
-                  <strong>⚠️ Warning:</strong> ${data.errors.length} instances failed to create.
-                  Check server logs for details.
-                </div>
-              ` : ''}
-
-              <div style="margin-top:16px">
-                <a 
-                  href="/org/cripfcnt-school/dashboard" 
-                  style="display:inline-block; background:#007bff; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:600"
-                >
-                  View Dashboard →
-                </a>
-              </div>
-            </div>
-          `;
-          
-          // Reset form but keep preview checked
-          bulkForm.reset();
-          document.getElementById('previewOnly').checked = true;
-        }
-
-      } catch (err) {
-        console.error('[bulk assign]', err);
-        resultDiv.innerHTML = `
-          <div class="error" style="color:#c00; padding:12px; background:#ffe6e6; border-radius:6px">
-            <strong>❌ Network Error:</strong> ${err.message}<br>
-            <small>Please check your connection and try again.</small>
+    <!-- ════════════════════════════
+         PAGE: OVERVIEW
+    ════════════════════════════ -->
+    <section class="page active" id="page-overview">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-ic" style="background:var(--blue-bg)">👥</div>
+          <div>
+            <div class="stat-val">{{groups.staff.length}}</div>
+            <div class="stat-lbl">Total Members</div>
           </div>
-        `;
-      }
-    });
-  }
-})();
-</script>
-{{/if}}
+        </div>
+        <div class="stat-card">
+          <div class="stat-ic" style="background:var(--violet-bg)">👤</div>
+          <div>
+            <div class="stat-val">{{groups.staff.length}}</div>
+            <div class="stat-lbl">Employees / Staff</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-ic" style="background:var(--emerald-bg)">✉️</div>
+          <div>
+            <div class="stat-val">{{invites.length}}</div>
+            <div class="stat-lbl">Invites Sent</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-ic" style="background:var(--amber-bg)">📋</div>
+          <div>
+            <div class="stat-val">{{passages.length}}</div>
+            <div class="stat-lbl">Quizzes / Passages</div>
+          </div>
+        </div>
+      </div>
 
-{{!-- ===== CREATE PASSAGE SECTION - NOW AVAILABLE FOR ALL ORGS INCLUDING CRIPFCNT-HOME ===== --}}
-<section>
-     <div class="panel">
-       <h3>Create Passage Quiz (for this organization)</h3>
-       <p class="muted">Paste passage text, then paste the child questions (each block separated by a blank line). The created passage will be saved with <code>organization</code> set to this company.</p>
+      <!-- Quick actions -->
+      <div class="card">
+        <div class="card-hdr">
+          <div>
+            <div class="card-hdr-title">Quick Actions</div>
+            <div class="card-hdr-sub">Common tasks at a glance</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="flex-row">
+            <button class="btn btn-p" onclick="gotoPage('invites',document.querySelector('[data-page=invites]'))">✉️ Send Invite</button>
+            <button class="btn btn-o" onclick="gotoPage('members',document.querySelector('[data-page=members]'))">👥 View Members</button>
+            <button class="btn btn-o" onclick="gotoPage('credentials',document.querySelector('[data-page=credentials]'))">🔑 Issue Credentials</button>
+            {{#unless isHomeSchool}}
+            <button class="btn btn-o" onclick="gotoPage('assign',document.querySelector('[data-page=assign]'))">📋 Assign Quiz</button>
+            {{/unless}}
+            <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o">⬇ Export CSV</a>
+          </div>
+        </div>
+      </div>
 
-       <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
-         <label class="block">
-           Title (short):
-           <input id="passageTitle" name="title" placeholder="Passage title (e.g. Responsibility passage 1)" required>
-         </label>
+      <!-- Members summary -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">Members at a Glance</div>
+          <div class="card-hdr-sp"></div>
+          <button class="btn btn-p btn-sm" onclick="gotoPage('members',document.querySelector('[data-page=members]'))">View All →</button>
+        </div>
+        <div class="card-body tight">
+          <div class="table-wrap" style="max-height:300px">
+            <table class="mem-table">
+              <thead><tr><th>Member</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {{#each groups.staff}}
+                {{#if this.user}}
+                <tr data-uid="{{this.user._id}}">
+                  <td>
+                    <div style="display:flex;align-items:center">
+                      <div class="avatar">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}?{{/if}}</div>
+                      <div>
+                        <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="user-email">{{this.user.email}}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-staff">{{this.role}}</span></td>
+                  <td>
+                    {{#if (eq this.user.employeeSubscriptionStatus "paid")}}
+                      <span class="badge badge-active">✓ Active</span>
+                    {{else}}
+                      <span class="badge badge-trial">Trial</span>
+                    {{/if}}
+                  </td>
+                  <td>
+                    <div class="act-row">
+                      {{#if (eq this.user.employeeSubscriptionStatus "trial")}}
+                      <button class="btn-activate" onclick="activateUser('{{this.user._id}}',this)">✓ Activate</button>
+                      {{else}}
+                      <span class="btn-activate active">✓ Active</span>
+                      {{/if}}
+                      <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+                    </div>
+                  </td>
+                </tr>
+                {{/if}}
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
 
-         <label class="block">
-           Module:
-           <select id="passageModule" name="module" required>
-             {{#each modules}}
-               <option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>
-             {{/each}}
-           </select>
-         </label>
+    <!-- ════════════════════════════
+         PAGE: MEMBERS
+    ════════════════════════════ -->
+    <section class="page" id="page-members">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">All Members</div>
+          <div class="card-hdr-sp"></div>
+        </div>
+        <!-- Tabs -->
+        <div class="m-tabs">
+          {{#if groups.students.length}}
+            <button class="m-tab active" data-mtab="m-students" onclick="switchMTab('m-students',this)">🎓 Students ({{groups.students.length}})</button>
+          {{/if}}
+          {{#if groups.teachers.length}}
+            <button class="m-tab {{#unless groups.students.length}}active{{/unless}}" data-mtab="m-teachers" onclick="switchMTab('m-teachers',this)">📖 Teachers ({{groups.teachers.length}})</button>
+          {{/if}}
+          <button class="m-tab {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" data-mtab="m-staff" onclick="switchMTab('m-staff',this)">👤 Staff / Employees ({{groups.staff.length}})</button>
+          {{#if groups.admins.length}}
+            <button class="m-tab" data-mtab="m-admins" onclick="switchMTab('m-admins',this)">⭐ Admins ({{groups.admins.length}})</button>
+          {{/if}}
+        </div>
+        <div class="m-search">
+          <input type="text" id="memberSearch" placeholder="Search by name, email, ID…" oninput="filterMembers(this.value)">
+        </div>
 
-         <label class="block">
-           Passage text:
-           <textarea id="passageText" name="passage" rows="6" style="width:100%" placeholder="Paste the passage here..." required></textarea>
-         </label>
+        <!-- STUDENTS -->
+        {{#if groups.students.length}}
+        <div class="m-pane active" id="m-students">
+          <div class="scroll-wrap">
+            <table class="mem-table">
+              <thead><tr><th>Student</th><th>ID / Grade</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {{#each groups.students}}
+                {{#if this.user}}
+                <tr class="mem-row" data-uid="{{this.user._id}}">
+                  <td>
+                    <div style="display:flex;align-items:center">
+                      <div class="avatar" style="background:var(--blue)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}S{{/if}}</div>
+                      <div>
+                        <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="user-email">{{this.user.email}}</div>
+                        {{#if this.user.username}}<div class="user-id">@{{this.user.username}}</div>{{/if}}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    {{#if this.user.studentId}}<div class="mono">{{this.user.studentId}}</div>{{/if}}
+                    {{#if this.user.grade}}<div class="user-email">Grade {{this.user.grade}}</div>{{/if}}
+                  </td>
+                  <td><span class="badge badge-student">Student</span></td>
+                  <td>
+                    <div class="act-row">
+                      <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+                      <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','student')">🔑 Creds</button>
+                      <form class="inline-form" data-member-form>
+                        <input type="hidden" name="action" value="remove">
+                        <button type="button" class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+                {{/if}}
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {{/if}}
 
-         <label class="block">
-           Child questions (plain text, same format as Import): 
-           <textarea id="passageQuestions" name="questions" rows="8" style="width:100%" placeholder="Question line\n a) option\n b) option\nCorrect Answer: a\n\nNext question..." required></textarea>
-         </label>
+        <!-- TEACHERS -->
+        {{#if groups.teachers.length}}
+        <div class="m-pane {{#unless groups.students.length}}active{{/unless}}" id="m-teachers">
+          <div class="scroll-wrap">
+            <table class="mem-table">
+              <thead><tr><th>Teacher</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {{#each groups.teachers}}
+                {{#if this.user}}
+                <tr class="mem-row" data-uid="{{this.user._id}}">
+                  <td>
+                    <div style="display:flex;align-items:center">
+                      <div class="avatar" style="background:var(--cyan)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}T{{/if}}</div>
+                      <div>
+                        <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="user-email">{{this.user.email}}</div>
+                        {{#if this.user.username}}<div class="user-id">@{{this.user.username}}</div>{{/if}}
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{#if this.user.teacherId}}<div class="mono">{{this.user.teacherId}}</div>{{/if}}</td>
+                  <td><span class="badge badge-teacher">Teacher</span></td>
+                  <td>
+                    <div class="act-row">
+                      <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+                      <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','teacher')">🔑 Creds</button>
+                      <button class="btn btn-xs btn-a" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','promote','manager')">↑ Promote</button>
+                      <button class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
+                    </div>
+                  </td>
+                </tr>
+                {{/if}}
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {{/if}}
 
-         <div>
-           <button type="submit">Create Passage Quiz</button>
-         </div>
-       </form>
+        <!-- STAFF / EMPLOYEES -->
+        <div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-staff">
+          <div class="scroll-wrap">
+            <table class="mem-table">
+              <thead><tr><th>Employee</th><th>Username</th><th>Subscription</th><th>Actions</th></tr></thead>
+              <tbody id="staff-tbody">
+                {{#each groups.staff}}
+                {{#if this.user}}
+                <tr class="mem-row" data-uid="{{this.user._id}}">
+                  <td>
+                    <div style="display:flex;align-items:center">
+                      <div class="avatar" style="background:var(--violet)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}E{{/if}}</div>
+                      <div>
+                        <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="user-email">{{this.user.email}}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    {{#if this.user.username}}<div class="mono">@{{this.user.username}}</div>{{else}}<span style="color:var(--ink-faint);font-size:12px">None</span>{{/if}}
+                    {{#if this.user.passwordHash}}<div style="font-size:10.5px;color:var(--emerald);margin-top:2px">● Has password</div>{{else}}<div style="font-size:10.5px;color:var(--ink-faint);margin-top:2px">○ No password</div>{{/if}}
+                  </td>
+                  <td>
+                    {{#if (eq this.user.employeeSubscriptionStatus "paid")}}
+                      <span class="badge badge-paid">✓ Active</span>
+                    {{else}}
+                      <span class="badge badge-trial">Trial</span>
+                    {{/if}}
+                  </td>
+                  <td>
+                    <div class="act-row">
+                      {{#if (eq this.user.employeeSubscriptionStatus "trial")}}
+                      <button class="btn-activate" onclick="activateUser('{{this.user._id}}',this)">✓ Activate</button>
+                      {{else}}
+                      <span class="btn-activate active">✓ Active</span>
+                      {{/if}}
+                      <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+                      <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','employee')">🔑 Creds</button>
+                      <button class="btn btn-xs btn-a" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','promote','manager')">↑ Mgr</button>
+                      <button class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
+                    </div>
+                  </td>
+                </tr>
+                {{/if}}
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-       <div id="createPassageResult" class="notice"></div>
-     </div>
-</section>
+        <!-- ADMINS -->
+        {{#if groups.admins.length}}
+        <div class="m-pane" id="m-admins">
+          <div class="scroll-wrap">
+            <table class="mem-table">
+              <thead><tr><th>Admin</th><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
+              <tbody>
+                {{#each groups.admins}}
+                {{#if this.user}}
+                <tr class="mem-row" data-uid="{{this.user._id}}">
+                  <td>
+                    <div style="display:flex;align-items:center">
+                      <div class="avatar" style="background:var(--amber)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}A{{/if}}</div>
+                      <div>
+                        <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="user-email">{{this.user.email}}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{#if this.user.username}}<div class="mono">@{{this.user.username}}</div>{{else}}<span style="color:var(--ink-faint);font-size:12px">None</span>{{/if}}</td>
+                  <td><span class="badge badge-admin">{{this.role}}</span></td>
+                  <td>
+                    <div class="act-row">
+                      <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+                      <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','admin')">🔑 Creds</button>
+                      <button class="btn btn-xs btn-a" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','demote')">↓ Demote</button>
+                      <button class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
+                    </div>
+                  </td>
+                </tr>
+                {{/if}}
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {{/if}}
 
+        <div id="memberFeedback" style="padding:10px 22px;"></div>
+      </div>
+    </section>
 
-{{!-- ===== QUIZ RULES - CRIPFCNT-HOME ONLY (REDESIGNED) ===== --}}
-{{#if isHomeSchool}}
-<hr/>
+    <!-- ════════════════════════════
+         PAGE: INVITES
+    ════════════════════════════ -->
+    <section class="page" id="page-invites">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">Send Invite</div>
+          <div class="card-hdr-sub">Invite someone to join {{org.name}} via email link</div>
+        </div>
+        <div class="card-body">
+          <form data-ajax="invite" method="post" action="/admin/orgs/{{org.slug}}/invite">
+            <div class="form-grid form-grid-3" style="align-items:end">
+              <div class="fld col-full" style="grid-column:span 2">
+                <label>Email Address</label>
+                <input name="email" type="email" placeholder="colleague@example.com" required>
+              </div>
+              <div class="fld">
+                <label>Role</label>
+                <select name="role">
+                  <option value="employee">Employee</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <button type="submit" class="btn btn-p">✉️ Send Invite</button>
+            </div>
+          </form>
+          <div id="inviteFeedback" class="result-toast" style="display:none"></div>
+          <div class="invite-link-box" id="inviteLinkBox">
+            <div style="font-size:12px;font-weight:700;color:#1e40af">📋 Invite Link (send via WhatsApp)</div>
+            <input type="text" class="link-inp" id="inviteLinkInp" readonly onclick="this.select()">
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn btn-o btn-sm" onclick="copyInviteLink()">📋 Copy Link</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-<section class="panel">
-  <h2>🏠 Home School – Quiz Rules</h2>
-  <p class="muted small">
-    These rules auto-assign quizzes when a parent adds a child.
-  </p>
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">Existing Invites</div>
+          <div class="card-hdr-sub">{{invites.length}} invites sent</div>
+        </div>
+        <div class="card-body tight">
+          <div class="table-wrap">
+            <table class="mem-table">
+              <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Token</th><th>Created</th></tr></thead>
+              <tbody>
+                {{#each invites}}
+                <tr>
+                  <td><strong>{{this.email}}</strong></td>
+                  <td><span class="badge badge-staff">{{this.role}}</span></td>
+                  <td>{{#if this.used}}<span class="badge badge-paid">Used</span>{{else}}<span class="badge badge-trial">Pending</span>{{/if}}</td>
+                  <td><code style="font-size:11px;color:var(--ink-muted)">{{this.token}}</code></td>
+                  <td style="color:var(--ink-muted);font-size:12px">{{this.createdAt}}</td>
+                </tr>
+                {{else}}
+                <tr><td colspan="5" style="text-align:center;color:var(--ink-faint);padding:24px">No invites yet</td></tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  {{!-- QUICK STATS --}}
-  <div class="rule-stats" id="ruleStats"></div>
+    <!-- ════════════════════════════
+         PAGE: CREDENTIALS
+    ════════════════════════════ -->
+    <section class="page" id="page-credentials">
+      <div class="card">
+        <div class="card-hdr">
+          <div>
+            <div class="card-hdr-title">🔑 Issue Credentials</div>
+            <div class="card-hdr-sub">Set username and password for any member so they can log in at /auth/school</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid form-grid-2" style="gap:14px">
+            <div class="fld">
+              <label>Select Member</label>
+              <select id="cred-member" class="cred-input">
+                <option value="">— select —</option>
+                {{#each groups.staff}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">👤 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
+                {{#each groups.teachers}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">📖 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
+                {{#each groups.students}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">🎓 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.studentId}}({{this.user.studentId}}){{/if}}</option>{{/each}}
+                {{#each groups.admins}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">⭐ {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
+              </select>
+            </div>
+            <div class="fld">
+              <label>Username <span style="font-weight:400;color:var(--ink-muted)">(blank = auto-generate)</span></label>
+              <input type="text" id="cred-username" placeholder="e.g. johsmi2048" autocomplete="off">
+            </div>
+            <div class="fld">
+              <label>Password</label>
+              <input type="text" id="cred-password" placeholder="Min 8 characters" autocomplete="new-password">
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn btn-p" style="flex:1" onclick="issueSingleCredentials()">Issue Credentials</button>
+              <button class="btn btn-o" onclick="genTempPw()" title="Auto-generate a password">🎲</button>
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="cred-gen-user" checked style="accent-color:var(--blue);width:15px;height:15px">
+            Auto-generate username if left blank
+          </label>
+          <div class="result-toast" id="cred-result"></div>
+        </div>
+      </div>
 
-  {{!-- CREATE FORM --}}
-  <div class="panel" style="background:#fff; margin:12px 0;">
-    <h3 style="margin-top:0;">➕ Create New Rule</h3>
-    <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div class="card">
+        <div class="card-hdr">
+          <div>
+            <div class="card-hdr-title">⚡ Bulk Generate Credentials</div>
+            <div class="card-hdr-sub">Issue temp username + password to every member without a password. Existing passwords are never overwritten.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <button class="btn btn-p" onclick="bulkGenCreds()">⚡ Generate for All Without Password</button>
+          <div class="result-toast" id="bulk-cred-result"></div>
+          <div id="bulk-cred-table" class="hidden" style="margin-top:16px">
+            <div class="flex-row" style="margin-bottom:10px">
+              <strong style="font-size:13px">Generated Credentials</strong>
+              <button class="btn btn-o btn-sm" onclick="exportCreds()">⬇ CSV</button>
+              <button class="btn btn-o btn-sm" onclick="copyAllCreds()">📋 Copy All</button>
+            </div>
+            <div class="table-wrap" style="max-height:280px">
+              <table class="mem-table" id="bulk-cred-tbl">
+                <thead><tr><th>Name</th><th>Role</th><th>Username</th><th>Temp Password</th><th></th></tr></thead>
+                <tbody id="bulk-cred-tbody"></tbody>
+              </table>
+            </div>
+            <p style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">⚠️ Passwords shown once only — export before closing.</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <label class="block">
-        Grade
-        <select name="grade" required>
-              <option value="0">Grade 0</option>
-          <option value="1">Grade 1</option>
-          <option value="2">Grade 2</option>
-          <option value="3">Grade 3</option>
-          <option value="4">Grade 4</option>
-          <option value="5">Grade 5</option>
-          <option value="6">Grade 6</option>
-          <option value="7">Grade 7</option>
-           <option value="8">Grade 8</option>
-    <option value="9">Grade 9</option>
-    <option value="10">Grade 10</option>
-    <option value="11">Grade 11</option>
-    <option value="12">Grade 12</option>
-    <option value="13">Grade 13</option>
-        </select>
-      </label>
+    <!-- ════════════════════════════
+         PAGE: ASSIGN QUIZ
+    ════════════════════════════ -->
+    {{#unless isHomeSchool}}
+    <section class="page" id="page-assign">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">📋 Assign Quiz to Specific Accounts</div>
+          <div class="card-hdr-sub">Choose individuals or groups and assign a quiz or passage</div>
+        </div>
+        <div class="card-body">
+          <form id="assignForm" method="post" action="/admin/orgs/{{org.slug}}/assign-quiz">
+            <div class="form-grid form-grid-2" style="gap:16px">
 
-      <label class="block">
-        Subject
-        <select name="subject">
-          <option value="math">Math</option>
-          <option value="english">English</option>
-          <option value="science">Science</option>
-           <option value="computerstudies">Computer Studies</option>
-          <option value="responsibility">Responsibility</option>
-          <option value="generalknowledge">General Knowledge</option>
-          <option value="geography">Geography</option>
-          <option value="history">History</option>
-            <option value="environmentalstudies">Environmental Studies</option>
-              <option value="biology">Biology</option>
-               <option value="businessstudies">Business Studies</option>
-        </select>
-      </label>
+              {{#if (eq org.type "school")}}
+              <div class="fld">
+                <label>Assign to Role</label>
+                <select id="targetRole" name="targetRole">
+                  <option value="student">Students (by grade)</option>
+                  <option value="teacher">Teachers (all)</option>
+                  <option value="specific">Specific Users (select below)</option>
+                </select>
+              </div>
+              <div class="fld" id="gradeWrap">
+                <label>Grade</label>
+                <select id="gradeSelect" name="grade">
+                  <option value="">— select grade —</option>
+                  <option value="0">Grade 0</option><option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option><option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option><option value="7">Grade 7</option><option value="8">Grade 8</option><option value="9">Grade 9</option><option value="10">Grade 10</option><option value="11">Grade 11</option><option value="12">Grade 12</option><option value="13">Grade 13</option>
+                </select>
+              </div>
+              {{/if}}
 
-      <label class="block">
-        Module
-        <select name="module">
-          {{#each modules}}
-            <option value="{{slug}}">{{title}}</option>
+              <div class="fld col-full" id="specificWrap" {{#unless (eq org.type "school")}}style="display:block"{{else}}style="display:none"{{/unless}}>
+                <label>Select Specific Users</label>
+                <div class="user-select-list" id="userPickList">
+                  {{#each groups.staff}}
+                    {{#if this.user}}
+                    <label class="user-check">
+                      <input type="checkbox" name="userIds" value="{{this.user._id}}">
+                      <div>
+                        <div class="uc-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="uc-meta">{{this.user.email}} · Employee</div>
+                      </div>
+                    </label>
+                    {{/if}}
+                  {{/each}}
+                  {{#each groups.teachers}}
+                    {{#if this.user}}
+                    <label class="user-check">
+                      <input type="checkbox" name="userIds" value="{{this.user._id}}">
+                      <div>
+                        <div class="uc-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="uc-meta">{{this.user.email}} · Teacher</div>
+                      </div>
+                    </label>
+                    {{/if}}
+                  {{/each}}
+                  {{#each groups.admins}}
+                    {{#if this.user}}
+                    <label class="user-check">
+                      <input type="checkbox" name="userIds" value="{{this.user._id}}">
+                      <div>
+                        <div class="uc-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                        <div class="uc-meta">{{this.user.email}} · Admin</div>
+                      </div>
+                    </label>
+                    {{/if}}
+                  {{/each}}
+                </div>
+                <div style="margin-top:6px;display:flex;gap:8px">
+                  <button type="button" class="btn btn-o btn-sm" onclick="selectAll(true)">Select All</button>
+                  <button type="button" class="btn btn-o btn-sm" onclick="selectAll(false)">Clear</button>
+                </div>
+              </div>
+
+              <div class="fld">
+                <label>Module</label>
+                <select id="modules" name="modules" multiple size="5">
+                  {{#each modules}}<option value="{{this.slug}}">{{this.title}}</option>{{/each}}
+                </select>
+                <div class="hint">Hold Ctrl/Cmd for multiple</div>
+              </div>
+
+              <div class="fld">
+                <label>Passage / Quiz <span style="font-weight:400">(optional — overrides module sampling)</span></label>
+                <select id="passageSelect" name="passageId">
+                  <option value="">— No passage (random from module) —</option>
+                  {{#each passages}}
+                  <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
+                    {{this.title}} ({{this.childCount}} q)
+                  </option>
+                  {{/each}}
+                </select>
+              </div>
+
+              <div class="fld">
+                <label>Question Count</label>
+                <input type="number" id="count" name="count" min="1" max="100" value="20">
+              </div>
+              <div class="fld">
+                <label>Duration (minutes)</label>
+                <input type="number" id="durationMinutes" name="durationMinutes" min="1" max="300" value="30">
+              </div>
+            </div>
+
+            <div style="margin-top:20px;display:flex;gap:10px">
+              <button type="submit" class="btn btn-p" id="assignBtn">📋 Assign Quiz</button>
+            </div>
+          </form>
+          <div class="result-toast" id="assignResult"></div>
+        </div>
+      </div>
+    </section>
+    {{/unless}}
+
+    <!-- ════════════════════════════
+         PAGE: BULK ASSIGN
+    ════════════════════════════ -->
+    {{#if (eq org.slug "cripfcnt-school")}}
+    <section class="page" id="page-bulk">
+      <div class="alert alert-warn">
+        <span>⚠️</span>
+        <div><strong>Large Operation:</strong> This creates one exam instance per user per quiz. With {{passages.length}} quizzes and {{groups.staff.length}} staff members, that's up to <strong>{{math passages.length "*" groups.staff.length}}</strong> instances. Use Preview first.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">📦 Bulk Assign All Quizzes</div>
+          <div class="card-hdr-sub">Assign all {{passages.length}} quizzes to selected or all members at once</div>
+        </div>
+        <div class="card-body">
+          <form id="bulkAssignForm">
+            <div class="form-grid form-grid-2" style="gap:16px">
+              <div class="fld">
+                <label>Assign to</label>
+                <select id="bulkTargetType" name="targetType">
+                  <option value="all">All Members ({{groups.staff.length}} staff)</option>
+                  <option value="specific">Specific Users</option>
+                </select>
+              </div>
+              <div class="fld">
+                <label>Duration per quiz (minutes)</label>
+                <input name="durationMinutes" type="number" min="5" max="300" value="30">
+              </div>
+              <div class="fld col-full hidden" id="bulkUserWrap">
+                <label>Select Users</label>
+                <div class="user-select-list" id="bulkUserPick">
+                  {{#each groups.staff}}{{#if this.user}}<label class="user-check"><input type="checkbox" name="bulkUserIds" value="{{this.user._id}}"><div><div class="uc-name">{{this.user.displayName}} {{this.user.firstName}}</div><div class="uc-meta">{{this.user.email}}</div></div></label>{{/if}}{{/each}}
+                </div>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="previewOnly" name="previewOnly" value="1" checked style="accent-color:var(--blue);width:15px;height:15px">
+              Preview only (calculate without creating)
+            </label>
+            <div style="margin-top:16px;display:flex;gap:10px">
+              <button type="submit" class="btn btn-g">📦 Bulk Assign All Quizzes</button>
+              <button type="button" class="btn btn-o" onclick="document.getElementById('bulkAssignForm').reset();document.getElementById('previewOnly').checked=true;document.getElementById('bulkAssignResult').style.display='none'">Reset</button>
+            </div>
+          </form>
+          <div class="result-toast" id="bulkAssignResult"></div>
+        </div>
+      </div>
+    </section>
+    {{/if}}
+
+    <!-- ════════════════════════════
+         PAGE: CREATE PASSAGE
+    ════════════════════════════ -->
+    {{#unless isHomeSchool}}
+    <section class="page" id="page-passages">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">📝 Create Passage Quiz</div>
+          <div class="card-hdr-sub">Paste a reading passage and its questions — saves as a comprehension quiz for this org</div>
+        </div>
+        <div class="card-body">
+          <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
+            <div class="form-grid form-grid-2" style="gap:16px">
+              <div class="fld">
+                <label>Title</label>
+                <input id="passageTitle" name="title" placeholder="Short descriptive title" required>
+              </div>
+              <div class="fld">
+                <label>Module</label>
+                <select id="passageModule" name="module" required>
+                  {{#each modules}}<option value="{{this.slug}}">{{this.title}} ({{this.slug}})</option>{{/each}}
+                </select>
+              </div>
+              <div class="fld col-full">
+                <label>Passage Text</label>
+                <textarea id="passageText" name="passage" rows="6" placeholder="Paste the reading passage here…" required style="resize:vertical"></textarea>
+              </div>
+              <div class="fld col-full">
+                <label>Child Questions</label>
+                <textarea id="passageQuestions" name="questions" rows="10" placeholder="Question 1&#10;a) Option&#10;b) Option&#10;Correct Answer: a&#10;&#10;Question 2…" required style="resize:vertical;font-family:'Courier New',monospace;font-size:12.5px"></textarea>
+                <div class="hint">Separate questions with a blank line. Format: question text → choices (a/b/c/d) → Correct Answer: a</div>
+              </div>
+            </div>
+            <div style="margin-top:16px">
+              <button type="submit" class="btn btn-p">Create Passage Quiz</button>
+            </div>
+          </form>
+          <div class="result-toast" id="createPassageResult"></div>
+        </div>
+      </div>
+    </section>
+    {{/unless}}
+
+    <!-- ════════════════════════════
+         PAGE: IMPORT
+    ════════════════════════════ -->
+    {{#if (eq org.type "school")}}
+    {{#unless isHomeSchool}}
+    <section class="page" id="page-import">
+      <div class="form-grid" style="gap:16px">
+
+        <div class="import-card">
+          <div class="import-hdr"><span>🎓</span><div class="import-hdr-title">Import Students</div></div>
+          <div class="import-body">
+            <p style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">Required columns: <code>studentId, firstName, lastName, grade</code></p>
+            <form method="POST" action="/admin/orgs/{{org.slug}}/import-students" enctype="multipart/form-data">
+              <label class="dropzone" id="dz-students" ondragover="this.classList.add('drag')" ondragleave="this.classList.remove('drag')" onclick="this.querySelector('input').click()">
+                <input type="file" name="csv" accept=".csv" required onchange="handleFile(this,'dz-students')">
+                <div class="dz-icon">📄</div>
+                <div>Click or drag a CSV file here</div>
+              </label>
+              <button type="submit" class="btn btn-p btn-full" style="margin-top:10px">Upload Students</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="import-card">
+          <div class="import-hdr"><span>📖</span><div class="import-hdr-title">Import Teachers</div></div>
+          <div class="import-body">
+            <p style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">Required columns: <code>email, firstName, lastName</code></p>
+            <form method="POST" action="/admin/orgs/{{org.slug}}/import-teachers" enctype="multipart/form-data">
+              <label class="dropzone" id="dz-teachers" onclick="this.querySelector('input').click()">
+                <input type="file" name="csv" accept=".csv" required onchange="handleFile(this,'dz-teachers')">
+                <div class="dz-icon">📄</div>
+                <div>Click or drag a CSV file here</div>
+              </label>
+              <button type="submit" class="btn btn-p btn-full" style="margin-top:10px">Upload Teachers</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="import-card">
+          <div class="import-hdr"><span>⭐</span><div class="import-hdr-title">Import School Admins</div></div>
+          <div class="import-body">
+            <p style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">Required columns: <code>adminId, firstName, lastName, role</code></p>
+            <form method="POST" action="/admin/orgs/{{org.slug}}/import-admins" enctype="multipart/form-data">
+              <label class="dropzone" id="dz-admins" onclick="this.querySelector('input').click()">
+                <input type="file" name="csv" accept=".csv" required onchange="handleFile(this,'dz-admins')">
+                <div class="dz-icon">📄</div>
+                <div>Click or drag a CSV file here</div>
+              </label>
+              <button type="submit" class="btn btn-p btn-full" style="margin-top:10px">Upload Admins</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </section>
+    {{/unless}}
+    {{/if}}
+
+    <!-- ════════════════════════════
+         PAGE: QUIZ RULES
+    ════════════════════════════ -->
+    {{#if (or isHomeSchool isCripSchool)}}
+    <section class="page" id="page-rules">
+      <!-- Create form -->
+      <div class="card">
+        <div class="card-hdr"><div class="card-hdr-title">➕ Create New Rule</div></div>
+        <div class="card-body">
+          <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules">
+            <div class="form-grid form-grid-3" style="gap:14px">
+              {{#if isHomeSchool}}
+              <div class="fld">
+                <label>Grade</label>
+                <select name="grade" required>
+                  <option value="0">Grade 0</option><option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option><option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option><option value="7">Grade 7</option><option value="8">Grade 8</option><option value="9">Grade 9</option><option value="10">Grade 10</option><option value="11">Grade 11</option><option value="12">Grade 12</option><option value="13">Grade 13</option>
+                </select>
+              </div>
+              <div class="fld">
+                <label>Subject</label>
+                <select name="subject">
+                  <option value="math">Math</option><option value="english">English</option><option value="science">Science</option>
+                  <option value="computerstudies">Computer Studies</option><option value="responsibility">Responsibility</option>
+                  <option value="generalknowledge">General Knowledge</option><option value="geography">Geography</option>
+                  <option value="history">History</option><option value="environmentalstudies">Environmental Studies</option>
+                  <option value="biology">Biology</option><option value="businessstudies">Business Studies</option>
+                </select>
+              </div>
+              <div class="fld">
+                <label>Module</label>
+                <select name="module">{{#each modules}}<option value="{{slug}}">{{title}}</option>{{/each}}</select>
+              </div>
+              {{else}}
+              <div class="fld">
+                <label>Module</label>
+                <select name="module" required>{{#each modules}}<option value="{{slug}}">{{title}}</option>{{/each}}</select>
+              </div>
+              {{/if}}
+              <div class="fld">
+                <label>Quiz</label>
+                <select name="quizQuestionId" required>
+                  {{#each quizzes}}<option value="{{_id}}" data-subject="{{subject}}">{{text}} ({{module}})</option>{{/each}}
+                </select>
+              </div>
+              <div class="fld">
+                <label>Question Count</label>
+                <input name="questionCount" type="number" value="10" min="1" max="100">
+              </div>
+              <div class="fld">
+                <label>Duration (mins)</label>
+                <input name="durationMinutes" type="number" value="30" min="5" max="300">
+              </div>
+              <div class="fld">
+                <label>Type</label>
+                <select name="quizType" required>
+                  <option value="trial">Trial</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button type="submit" class="btn btn-p btn-full">Create Rule</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Existing rules -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-title">📋 Existing Rules</div>
+          <div class="card-hdr-sub">{{quizRules.length}} rules</div>
+          <div class="card-hdr-sp"></div>
+          <input type="text" id="ruleSearch" placeholder="Search rules…" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;width:180px">
+        </div>
+        <div class="card-body tight">
+          <div class="table-wrap">
+            <table class="rule-t" id="rulesTable">
+              <thead>
+                <tr>
+                  {{#if isHomeSchool}}<th>Grade</th><th>Subject</th>{{else}}<th>Module</th>{{/if}}
+                  <th>Quiz</th><th>Type</th><th>Qs</th><th>Duration</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each quizRules}}
+                <tr data-grade="{{grade}}" data-type="{{quizType}}" data-subject="{{subject}}">
+                  {{#if ../isHomeSchool}}<td><strong>G{{grade}}</strong></td><td style="text-transform:capitalize">{{subject}}</td>{{else}}<td>{{module}}</td>{{/if}}
+                  <td>
+                    {{#if quizQuestionId}}
+                    <a href="/org/{{../org.slug}}/take-quiz?quizId={{quizQuestionId}}" target="_blank" style="color:var(--blue);font-weight:600">{{quizTitle}}</a>
+                    {{else}}{{quizTitle}}{{/if}}
+                    {{#if module}}<div style="font-size:11px;color:var(--ink-muted)">{{module}}</div>{{/if}}
+                  </td>
+                  <td>{{#if (eq quizType "trial")}}<span class="badge badge-trial">Trial</span>{{else}}<span class="badge badge-paid">Paid</span>{{/if}}</td>
+                  <td>{{questionCount}}</td>
+                  <td>{{durationMinutes}}m</td>
+                  <td>{{#if enabled}}<span style="color:var(--emerald);font-weight:600">● Active</span>{{else}}<span style="color:var(--ink-faint)">○ Off</span>{{/if}}</td>
+                </tr>
+                {{else}}
+                <tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">No rules yet</td></tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    {{/if}}
+
+    <!-- ════════════════════════════
+         PAGE: REPORTS
+    ════════════════════════════ -->
+    <section class="page" id="page-reports">
+      <div class="card">
+        <div class="card-hdr"><div class="card-hdr-title">📊 Reports &amp; Exports</div></div>
+        <div class="card-body">
+          <div class="form-grid form-grid-3" style="gap:14px">
+            <div style="border:1px solid var(--border);border-radius:var(--r-lg);padding:18px">
+              <div style="font-size:16px;margin-bottom:8px">📋</div>
+              <div style="font-weight:700;margin-bottom:4px">All Attempts</div>
+              <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">View every quiz attempt in a sortable table</div>
+              <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm btn-full">View Attempts →</a>
+            </div>
+            <div style="border:1px solid var(--border);border-radius:var(--r-lg);padding:18px">
+              <div style="font-size:16px;margin-bottom:8px">⬇</div>
+              <div style="font-weight:700;margin-bottom:4px">Export CSV</div>
+              <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">Download all attempts as a spreadsheet</div>
+              <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm btn-full">Download CSV</a>
+            </div>
+            {{#if isHomeSchool}}
+            <div style="border:1px solid var(--border);border-radius:var(--r-lg);padding:18px">
+              <div style="font-size:16px;margin-bottom:8px">💰</div>
+              <div style="font-weight:700;margin-bottom:4px">Finance Dashboard</div>
+              <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px">View subscriptions, payments and revenue</div>
+              <a href="/admin/finance" class="btn btn-o btn-sm btn-full">Finance →</a>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /main-area -->
+</div><!-- /shell -->
+
+<!-- ════════════════════════════
+     MODAL: ASSIGN QUIZ TO USER
+════════════════════════════ -->
+<div class="modal-overlay" id="assignModal">
+  <div class="modal">
+    <div class="modal-title">📋 Assign Quiz</div>
+    <div class="modal-sub" id="assignModal-sub">Assigning to: —</div>
+    <input type="hidden" id="assignModal-uid">
+
+    <div class="gap-12">
+      <div class="fld">
+        <label>Quiz / Passage</label>
+        <select id="assignModal-passage">
+          <option value="">— Random from module (no specific passage) —</option>
+          {{#each passages}}
+          <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
+            {{this.title}} ({{this.childCount}} q)
+          </option>
           {{/each}}
         </select>
-      </label>
-
-     <label class="block">
-  Quizzes (select multiple)
-  <select name="quizQuestionId" multiple size="10" required>
-    {{#if quizzes.length}}
-      {{#each quizzes}}
-        <option value="{{_id}}" data-subject="{{subject}}">
-          {{text}} ({{module}})
-        </option>
-      {{/each}}
-    {{else}}
-      <option disabled>No quizzes found</option>
-    {{/if}}
-  </select>
-
-  <p class="muted small">Hold Ctrl/Cmd to select multiple quizzes.</p>
-</label>
-
-
-      <label class="block">
-        Question count
-        <input name="questionCount" type="number" value="10" />
-      </label>
-
-      <label class="block">
-        Duration (mins)
-        <input name="durationMinutes" type="number" value="30" />
-      </label>
-
-      <label class="block">
-        Type
-        <select name="quizType">
-          <option value="trial">Trial</option>
-          <option value="paid">Paid</option>
-        </select>
-      </label>
-
-      <div style="display:flex; align-items:end;">
-        <button style="width:100%;">Create Quiz Rule</button>
       </div>
-    </form>
-  </div>
-
-  <hr/>
-
-  {{!-- FILTER PILLS --}}
-  <h3>📋 Existing Rules</h3>
-
-  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
-    <input
-      type="text"
-      id="ruleSearch"
-      placeholder="Search rules..."
-      style="flex:1; min-width:200px; padding:8px; border:1px solid #ccc; border-radius:6px;"
-    />
-  </div>
-
-  <div class="filter-pills" id="gradeFilters">
-    <span class="filter-pill active" data-grade="all">All Grades</span>
-    <span class="filter-pill" data-grade="1">G1</span>
-    <span class="filter-pill" data-grade="2">G2</span>
-    <span class="filter-pill" data-grade="3">G3</span>
-    <span class="filter-pill" data-grade="4">G4</span>
-    <span class="filter-pill" data-grade="5">G5</span>
-    <span class="filter-pill" data-grade="6">G6</span>
-    <span class="filter-pill" data-grade="7">G7</span>
-    <span class="filter-pill" data-grade="8">G8</span>
-    <span class="filter-pill" data-grade="9">G9</span>
-    <span class="filter-pill" data-grade="10">G10</span>
-    <span class="filter-pill" data-grade="11">G11</span>
-    <span class="filter-pill" data-grade="12">G12</span>
-    <span class="filter-pill" data-grade="13">G13</span>
-  </div>
-
-  <div class="filter-pills" id="typeFilters">
-    <span class="filter-pill active" data-type="all">All Types</span>
-    <span class="filter-pill" data-type="trial">🆓 Trial</span>
-    <span class="filter-pill" data-type="paid">💳 Paid</span>
-  </div>
-
-  <div class="filter-pills" id="subjectFilters">
-    <span class="filter-pill active" data-subject="all">All Subjects</span>
-    <span class="filter-pill" data-subject="math">📐 Math</span>
-    <span class="filter-pill" data-subject="english">📖 English</span>
-    <span class="filter-pill" data-subject="science">🔬 Science</span>
-    <span class="filter-pill" data-subject="responsibility">🤝 Responsibility</span>
-    <span class="filter-pill" data-subject="generalknowledge">General Knowledge</span>
-  </div>
-
-  {{!-- RULES TABLE --}}
-  <div style="overflow-x:auto;">
-    <table class="rules-table" id="rulesTable">
-      <thead>
-        <tr>
-          <th>Grade</th>
-          <th>Subject</th>
-          <th>Quiz Title</th>
-          <th>Type</th>
-          <th>Questions</th>
-          <th>Duration</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{#each quizRules}}
-        <tr
-          data-grade="{{grade}}"
-          data-type="{{quizType}}"
-          data-subject="{{subject}}"
-        >
-          <td><strong>Grade {{grade}}</strong></td>
-          <td style="text-transform:capitalize;">{{subject}}</td>
-         <td style="max-width:280px;">
-  <div style="font-weight:600;">
-    {{#if quizQuestionId}}
-      <a
-        href="/org/{{../org.slug}}/take-quiz?quizId={{quizQuestionId}}"
-        target="_blank"
-        rel="noopener"
-        style="color:#0b6fb7; text-decoration:none;"
-        title="Open this quiz in a new tab"
-      >
-        {{quizTitle}}
-      </a>
-    {{else}}
-      {{quizTitle}}
-    {{/if}}
-  </div>
-
-  <div class="muted small">Module: {{module}}</div>
-
-  {{#if quizQuestionId}}
-    <div style="margin-top:6px;">
-      <a
-        href="/org/{{../org.slug}}/take-quiz?quizId={{quizQuestionId}}"
-        target="_blank"
-        rel="noopener"
-        class="badge"
-        style="background:#e7f3ff; border:1px solid #bcdcff; color:#0b6fb7; text-decoration:none;"
-      >
-        ▶ Test / Attempt
-      </a>
+      <div class="fld">
+        <label>Module</label>
+        <select id="assignModal-module">
+          {{#each modules}}<option value="{{this.slug}}">{{this.title}}</option>{{/each}}
+        </select>
+      </div>
+      <div class="form-grid form-grid-2" style="gap:12px">
+        <div class="fld">
+          <label>Question Count</label>
+          <input type="number" id="assignModal-count" value="20" min="1" max="100">
+        </div>
+        <div class="fld">
+          <label>Duration (mins)</label>
+          <input type="number" id="assignModal-duration" value="30" min="5" max="300">
+        </div>
+      </div>
     </div>
-  {{/if}}
-</td>
 
-          <td>
-            {{#if (eq quizType "trial")}}
-              <span class="badge badge-trial">🆓 Trial</span>
-            {{else}}
-              <span class="badge badge-paid">💳 Paid</span>
-            {{/if}}
-          </td>
-          <td>{{questionCount}}</td>
-          <td>{{durationMinutes}} min</td>
-          <td>
-            {{#if enabled}}
-              <span style="color:green;">● Active</span>
-            {{else}}
-              <span style="color:#999;">○ Disabled</span>
-            {{/if}}
-          </td>
-        </tr>
-        {{/each}}
-
-        {{#unless quizRules.length}}
-        <tr class="empty-row">
-          <td colspan="7">No quiz rules created yet.</td>
-        </tr>
-        {{/unless}}
-      </tbody>
-    </table>
+    <div class="result-toast" id="assignModal-result"></div>
+    <div class="modal-actions">
+      <button class="btn btn-o" onclick="closeModal('assignModal')">Cancel</button>
+      <button class="btn btn-p" onclick="doAssignModal()">📋 Assign Quiz</button>
+    </div>
   </div>
+</div>
 
-  <div id="ruleCount" class="muted small" style="margin-top:8px;"></div>
-</section>
-{{/if}}
+<!-- ════════════════════════════
+     MODAL: ISSUE CREDENTIALS
+════════════════════════════ -->
+<div class="modal-overlay" id="credModal">
+  <div class="modal">
+    <div class="modal-title">🔑 Issue Credentials</div>
+    <div class="modal-sub" id="credModal-sub">—</div>
+    <input type="hidden" id="credModal-uid">
+    <input type="hidden" id="credModal-role">
 
-
-
-{{!-- ===== QUIZ RULES - CRIPFCNT-SCHOOL ONLY (NO GRADE/SUBJECT) ===== --}}
-{{#if isCripSchool}}
-<hr/>
-
-<section class="panel">
-  <h2>🏫 Crip School – Employee Quiz Rules</h2>
-  <p class="muted small">
-    These rules auto-assign quizzes to employees.
-    <br/>
-    <strong>Trial</strong> rules apply on signup. <strong>Paid</strong> rules apply after Stripe upgrade.
-  </p>
-
-  {{!-- CREATE FORM (NO grade/subject) --}}
-  <div class="panel" style="background:#fff; margin:12px 0;">
-    <h3 style="margin-top:0;">➕ Create New Rule</h3>
-
-    <form method="POST" action="/admin/orgs/{{org.slug}}/quiz-rules" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-
-      <label class="block">
-        Module
-        <select name="module" required>
-          {{#each modules}}
-            <option value="{{slug}}">{{title}}</option>
-          {{/each}}
-        </select>
-      </label>
-
-  <label class="block">
-  Quizzes (select multiple)
-  <select name="quizQuestionId" multiple size="10" required>
-    {{#each quizzes}}
-      <option value="{{_id}}">{{text}} ({{module}})</option>
-    {{/each}}
-  </select>
-
-  <p class="muted small">Hold Ctrl/Cmd to select multiple quizzes.</p>
-</label>
-
-
-      <label class="block">
-        Question count
-        <input name="questionCount" type="number" value="10" />
-      </label>
-
-      <label class="block">
-        Duration (mins)
-        <input name="durationMinutes" type="number" value="30" />
-      </label>
-
-      <label class="block">
-        Type
-        <select name="quizType" required>
-          <option value="trial">Trial</option>
-          <option value="paid">Paid</option>
-        </select>
-      </label>
-
-      <div style="display:flex; align-items:end;">
-        <button style="width:100%;">Create Quiz Rule</button>
+    <div class="gap-12">
+      <div class="fld">
+        <label>Username <span style="font-weight:400;color:var(--ink-muted)">(leave blank to auto-generate)</span></label>
+        <input type="text" id="credModal-username" placeholder="e.g. johsmi2048" autocomplete="off">
       </div>
+      <div class="fld">
+        <label>Password</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="credModal-password" placeholder="Min 8 characters" style="flex:1" autocomplete="new-password">
+          <button type="button" class="btn btn-o btn-sm" onclick="genModalPw()" title="Auto-generate">🎲</button>
+        </div>
+      </div>
+    </div>
 
-    </form>
+    <div class="result-toast" id="credModal-result"></div>
+    <div class="modal-actions">
+      <button class="btn btn-o" onclick="closeModal('credModal')">Cancel</button>
+      <button class="btn btn-p" onclick="doIssueCredModal()">Issue Credentials</button>
+    </div>
   </div>
+</div>
 
-  <hr/>
+<!-- ════════════════════════════
+     SCRIPTS
+════════════════════════════ -->
+<script>
+/* ── Global helpers ── */
+const ORG = '{{org.slug}}';
 
-  {{!-- LIST EXISTING RULES --}}
-  <h3>📋 Existing Rules</h3>
+function api(url, method, body) {
+  return fetch(url, {
+    method: method || 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })));
+}
 
-  <div style="overflow-x:auto;">
-    <table class="rules-table">
-      <thead>
-        <tr>
-          <th>Module</th>
-          <th>Quiz Title</th>
-          <th>Type</th>
-          <th>Questions</th>
-          <th>Duration</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{#each quizRules}}
-        <tr data-type="{{quizType}}">
-          <td><strong>{{module}}</strong></td>
-          <td style="max-width:320px;">
-            <div style="font-weight:600;">{{quizTitle}}</div>
-          </td>
-          <td>
-            {{#if (eq quizType "trial")}}
-              <span class="badge badge-trial">🆓 Trial</span>
-            {{else}}
-              <span class="badge badge-paid">💳 Paid</span>
-            {{/if}}
-          </td>
-          <td>{{questionCount}}</td>
-          <td>{{durationMinutes}} min</td>
-          <td>
-            {{#if enabled}}
-              <span style="color:green;">● Active</span>
-            {{else}}
-              <span style="color:#999;">○ Disabled</span>
-            {{/if}}
-          </td>
-        </tr>
-        {{/each}}
+function toast(id, ok, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'result-toast ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  if (ok) setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
 
-        {{#unless quizRules.length}}
-        <tr class="empty-row">
-          <td colspan="6">No quiz rules created yet.</td>
-        </tr>
-        {{/unless}}
-      </tbody>
-    </table>
-  </div>
-</section>
-{{/if}}
-
-  </main>
-
-  {{!-- ===== SCRIPTS - ONLY FOR NON-HOME ORGS ===== --}}
-  {{#unless isHomeSchool}}
-  <script>
-    // helper: convert FormData -> object (handles multiple selects)
-function formToObject(form) {
+function formToObj(form) {
   const fd = new FormData(form);
   const obj = {};
-
   for (const [k, v] of fd.entries()) {
     if (obj[k] !== undefined) {
       if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
@@ -1504,596 +1502,388 @@ function formToObject(form) {
       obj[k] = v;
     }
   }
-
-  const moduleSelect = form.querySelector('[name="modules"]');
-  if (moduleSelect) {
-    obj.modules = Array.from(moduleSelect.selectedOptions).map(o => o.value);
-  }
-
-  const userSelect = form.querySelector('[name="userIds"]');
-  if (userSelect) {
-    obj.userIds = Array.from(userSelect.selectedOptions).map(o => o.value);
-  }
-
   return obj;
 }
 
-
-    // hide/show passage selector + auto count
-    const usePassageCb = document.getElementById('usePassage');
-    const passageWrap = document.getElementById('passageWrap');
-    const passageSelect = document.getElementById('passageSelect');
-    const countInput = document.getElementById('count');
-    const moduleSelect = document.getElementById('module');
-
-    if (usePassageCb) {
-    usePassageCb.addEventListener('change', () => {
-      passageWrap.style.display = usePassageCb.checked ? 'block' : 'none';
-      if (!usePassageCb.checked) {
-        passageSelect.value = '';
-        countInput.removeAttribute('disabled');
-      }
-    });
-    }
-
-    if (passageSelect) {
-    passageSelect.addEventListener('change', () => {
-      const opt = passageSelect.selectedOptions[0];
-      if (!opt || !opt.value) {
-        countInput.removeAttribute('disabled');
-        return;
-      }
-      const childCount = parseInt(opt.dataset.childCount || '0', 10) || 0;
-      const passageModule = opt.dataset.module;
-      if (childCount > 0) {
-        countInput.value = childCount;
-        countInput.setAttribute('disabled','disabled');
-      } else {
-        countInput.removeAttribute('disabled');
-      }
-      if (passageModule && moduleSelect) {
-        for (const o of moduleSelect.options) {
-          if (o.value === passageModule) {
-            moduleSelect.value = passageModule;
-            break;
-          }
-        }
-      }
-    });
-    }
-
-    // AJAX invite form
-    document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
-      f.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const url = f.action;
-        const payload = formToObject(f);
-        try {
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          const data = await resp.json();
-          const fb = document.getElementById('inviteFeedback');
-          if (!resp.ok) {
-            fb.innerHTML = '<span class="error">Invite failed: ' + (data.error || 'unknown') + '</span>';
-            return;
-          }
-    const base =
-  document.querySelector('base')?.href ||
-  `${location.protocol}//${location.host}`;
-
-const inviteLink = `${base}/org/join/${data.token}`;
-
-fb.innerHTML = `
-  <div class="success">
-    <strong>Invite created ✅</strong><br><br>
-
-    <strong>Invite link (for WhatsApp):</strong><br>
-    <input
-      type="text"
-      value="${inviteLink}"
-      readonly
-      style="
-        width:100%;
-        padding:8px;
-        margin-top:6px;
-        border:1px solid #ccc;
-        border-radius:6px;
-        font-size:13px;
-      "
-      onclick="this.select()"
-    />
-
-    <div class="muted small" style="margin-top:6px">
-      Copy this link and send it to the user on WhatsApp
-    </div>
-
-    <div class="muted small">
-      Token: <code>${data.token}</code>
-    </div>
-  </div>
-`;
-
-
-          const ul = document.getElementById('invitesList');
-          const li = document.createElement('li');
-          li.innerHTML = `${payload.email} | token: <code>${data.token}</code> - <span class="badge">Pending</span>`;
-          ul.prepend(li);
-          f.reset();
-        } catch (e) {
-          console.error(e);
-          document.getElementById('inviteFeedback').innerHTML = '<span class="error">Invite failed (network)</span>';
-        }
-      });
-    });
-
-    // Member action buttons (promote/remove/demote)
-    document.querySelectorAll('form[data-ajax="member"]').forEach(f => {
-      f.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const url = f.action;
-        const payload = formToObject(f);
-        try {
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          const data = await resp.json();
-          const fb = document.getElementById('memberFeedback');
-          if (!resp.ok) {
-            fb.innerHTML = '<span class="error">Action failed: ' + (data.error || 'unknown') + '</span>';
-            return;
-          }
-          fb.innerHTML = '<span class="success">Action: ' + (data.action || 'ok') + '</span>';
-          const row = f.closest('tr');
-          if (data.action === 'removed') {
-            if (row) row.remove();
-          } else if (data.action === 'promoted' || data.action === 'demoted') {
-            if (row) {
-              const roleCell = row.querySelector('.roleCell');
-              if (roleCell) roleCell.textContent = data.role || (data.action === 'demoted' ? 'employee' : 'manager');
-            }
-          }
-        } catch (e) {
-          console.error(e);
-          document.getElementById('memberFeedback').innerHTML = '<span class="error">Action failed (network)</span>';
-        }
-      });
-    });
-
-    // Assign Quiz (AJAX)
-    const assignForm = document.getElementById('assignForm');
-    if (assignForm) {
-    assignForm.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const form = ev.currentTarget;
-  const url = form.action;
-
-  const payload = formToObject(form);
-  const isSchool = "{{org.type}}" === "school";
-
-if (isSchool) {
-  if (payload.targetRole === "student" && !payload.grade) {
-    document.getElementById('assignResult').innerHTML =
-      '<span class="error">Please select a grade.</span>';
-    return;
-  }
-  delete payload.userIds;
+/* ── Page navigation ── */
+function gotoPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('page-' + id);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
+  const sub = document.getElementById('page-sub');
+  if (sub && btn) sub.textContent = btn.querySelector('.sb-ic').nextSibling?.textContent?.trim() || '';
 }
- else {
-    if (!Array.isArray(payload.userIds) || !payload.userIds.length) {
-      document.getElementById('assignResult').innerHTML =
-        '<span class="error">Please select at least one user.</span>';
-      return;
+
+/* ── Member tabs ── */
+function switchMTab(id, btn) {
+  document.querySelectorAll('.m-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ── Member search ── */
+function filterMembers(q) {
+  const term = q.toLowerCase();
+  document.querySelectorAll('.mem-row').forEach(row => {
+    const text = row.innerText.toLowerCase();
+    row.style.display = term ? (text.includes(term) ? '' : 'none') : '';
+  });
+}
+
+/* ── Activate account ── */
+async function activateUser(userId, btn) {
+  if (!confirm('Activate this account to full access (paid)?')) return;
+  const orig = btn.textContent;
+  btn.textContent = '…'; btn.disabled = true;
+  const r = await api(`/admin/orgs/${ORG}/members/${userId}/activate`, 'POST');
+  if (r.ok) {
+    btn.textContent = '✓ Active';
+    btn.className = 'btn-activate active';
+    btn.disabled = false;
+    // update the status badge in the same row
+    const row = btn.closest('tr');
+    if (row) {
+      const badge = row.querySelector('.badge-trial');
+      if (badge) { badge.className = 'badge badge-paid'; badge.textContent = '✓ Active'; }
     }
+  } else {
+    btn.textContent = orig; btn.disabled = false;
+    alert('Activation failed: ' + (r.data.error || 'unknown'));
   }
+}
 
-  if (usePassageCb && usePassageCb.checked) {
-    const sel = passageSelect.selectedOptions[0];
-    if (!sel || !sel.value) {
-      document.getElementById('assignResult').innerHTML =
-        '<span class="error">Please choose a passage to assign.</span>';
-      return;
-    }
-    payload.passageId = sel.value;
-    payload.count = parseInt(sel.dataset.childCount || payload.count || '1', 10) || 1;
+/* ── Member action (promote/demote/remove) ── */
+async function memberAction(btn, slug, userId, action, role) {
+  const labels = { remove: 'Remove this member?', promote: `Promote to ${role||'manager'}?`, demote: 'Demote to employee?' };
+  if (!confirm(labels[action] || 'Confirm?')) return;
+  const r = await api(`/admin/orgs/${slug}/members/${userId}`, 'POST', { action, role });
+  const fb = document.getElementById('memberFeedback');
+  if (r.ok) {
+    if (action === 'remove') { btn.closest('tr')?.remove(); }
+    if (fb) { fb.innerHTML = '<span style="color:var(--emerald)">✓ Done</span>'; setTimeout(() => fb.innerHTML='', 3000); }
+  } else {
+    if (fb) { fb.innerHTML = '<span style="color:var(--rose)">✗ ' + (r.data.error||'Failed') + '</span>'; }
   }
+}
 
-  document.getElementById('assignResult').textContent = 'Assigning...';
+/* ── Modal helpers ── */
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// Close on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); });
+});
 
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+/* ── Assign modal ── */
+function openAssignModal(uid, name) {
+  document.getElementById('assignModal-uid').value = uid;
+  document.getElementById('assignModal-sub').textContent = 'Assigning to: ' + name;
+  document.getElementById('assignModal-result').style.display = 'none';
+  openModal('assignModal');
+}
+
+async function doAssignModal() {
+  const uid       = document.getElementById('assignModal-uid').value;
+  const passageId = document.getElementById('assignModal-passage').value;
+  const module    = document.getElementById('assignModal-module').value;
+  const count     = document.getElementById('assignModal-count').value;
+  const duration  = document.getElementById('assignModal-duration').value;
+
+  const body = { modules: [module], userIds: [uid], count, durationMinutes: duration };
+  if (passageId) body.passageId = passageId;
+
+  const r = await api(`/admin/orgs/${ORG}/assign-quiz`, 'POST', body);
+  if (r.ok) {
+    toast('assignModal-result', true, '✅ Quiz assigned successfully!');
+    setTimeout(() => closeModal('assignModal'), 1800);
+  } else {
+    toast('assignModal-result', false, '✗ ' + (r.data.error || 'Failed'));
+  }
+}
+
+/* ── Credential modal ── */
+function openCredModal(uid, name, role) {
+  document.getElementById('credModal-uid').value = uid;
+  document.getElementById('credModal-role').value = role;
+  document.getElementById('credModal-sub').textContent = 'Issuing credentials for: ' + name;
+  document.getElementById('credModal-password').value = '';
+  document.getElementById('credModal-username').value = '';
+  document.getElementById('credModal-result').style.display = 'none';
+  openModal('credModal');
+}
+
+function genModalPw() {
+  const name = document.getElementById('credModal-sub').textContent.replace('Issuing credentials for: ','');
+  const first = (name.split(' ')[0]||'User').replace(/[^a-zA-Z]/g,'');
+  const pin = String(Math.floor(1000+Math.random()*9000));
+  document.getElementById('credModal-password').value = first + pin + '!';
+}
+
+async function doIssueCredModal() {
+  const uid      = document.getElementById('credModal-uid').value;
+  const username = document.getElementById('credModal-username').value.trim();
+  const password = document.getElementById('credModal-password').value.trim();
+  if (!password || password.length < 8) return toast('credModal-result', false, 'Password must be at least 8 characters');
+  const r = await api(`/admin/orgs/${ORG}/members/${uid}/credentials`, 'POST', { username: username||undefined, password, generateUsername: true });
+  if (r.ok) {
+    toast('credModal-result', true, `✅ Done! Username: ${r.data.username}`);
+    setTimeout(() => closeModal('credModal'), 2000);
+  } else {
+    toast('credModal-result', false, '✗ ' + (r.data.error || 'Failed'));
+  }
+}
+
+/* ── Credentials page ── */
+function genTempPw() {
+  const sel = document.getElementById('cred-member');
+  const name = sel.options[sel.selectedIndex]?.dataset?.name || 'User';
+  const first = (name.split(' ')[0]||'User').replace(/[^a-zA-Z]/g,'');
+  const pin = String(Math.floor(1000+Math.random()*9000));
+  document.getElementById('cred-password').value = first + pin + '!';
+}
+
+async function issueSingleCredentials() {
+  const uid      = document.getElementById('cred-member').value;
+  const username = document.getElementById('cred-username').value.trim();
+  const password = document.getElementById('cred-password').value.trim();
+  const genUser  = document.getElementById('cred-gen-user').checked;
+  if (!uid)      return toast('cred-result', false, 'Select a member');
+  if (!password || password.length < 8) return toast('cred-result', false, 'Password must be ≥ 8 characters');
+  const r = await api(`/admin/orgs/${ORG}/members/${uid}/credentials`, 'POST', { username: username||undefined, password, generateUsername: genUser });
+  if (r.ok) {
+    toast('cred-result', true, `✅ Credentials issued. Username: ${r.data.username}`);
+    document.getElementById('cred-username').value = '';
+    document.getElementById('cred-password').value = '';
+  } else {
+    toast('cred-result', false, '✗ ' + (r.data.error || 'Failed'));
+  }
+}
+
+async function bulkGenCreds() {
+  if (!confirm('Generate credentials for all members without a password?')) return;
+  toast('bulk-cred-result', true, '⏳ Generating…');
+  const r = await api(`/admin/orgs/${ORG}/credentials/bulk-generate`, 'POST');
+  if (!r.ok) return toast('bulk-cred-result', false, '✗ ' + (r.data.error || 'Failed'));
+  toast('bulk-cred-result', true, `✅ Issued ${r.data.issued} credentials. ${r.data.skipped} already had passwords.`);
+  if (r.data.credentials?.length) {
+    window._bulkCreds = r.data.credentials;
+    const tbody = document.getElementById('bulk-cred-tbody');
+    tbody.innerHTML = '';
+    r.data.credentials.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${c.name}</td><td>${c.role}</td><td class="mono">${c.username}</td><td style="font-family:'Courier New',monospace;font-size:12px">${c.tempPassword}</td><td><button class="btn btn-xs btn-o" onclick="navigator.clipboard.writeText('Username: ${c.username}  Password: ${c.tempPassword}').then(()=>alert('Copied!'))">Copy</button></td>`;
+      tbody.appendChild(tr);
     });
+    document.getElementById('bulk-cred-table').classList.remove('hidden');
+  }
+}
+
+function exportCreds() {
+  const creds = window._bulkCreds || [];
+  if (!creds.length) return;
+  const rows = [['Name','Email','Role','Username','Temp Password']];
+  creds.forEach(c => rows.push([c.name, c.email, c.role, c.username, c.tempPassword]));
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download: `creds_${Date.now()}.csv` });
+  a.click();
+}
+
+function copyAllCreds() {
+  const creds = window._bulkCreds || [];
+  const text = creds.map(c => `${c.name} | @${c.username} | ${c.tempPassword}`).join('\n');
+  navigator.clipboard?.writeText(text).then(() => alert('All credentials copied!'));
+}
+
+/* ── Invite AJAX ── */
+document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
+  f.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const payload = formToObj(f);
+    const resp = await fetch(f.action, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const data = await resp.json();
-
+    const fb = document.getElementById('inviteFeedback');
     if (!resp.ok) {
-      document.getElementById('assignResult').innerHTML =
-        '<span class="error">Assign failed: ' + (data.error || 'unknown') + '</span>';
+      fb.textContent = 'Invite failed: ' + (data.error || 'unknown');
+      fb.className = 'result-toast err'; fb.style.display = 'block';
       return;
     }
-
-    document.getElementById('assignResult').innerHTML =
-      '<span class="success">Assigned ' +
-      (data.assigned ? data.assigned.length : 0) +
-      ' .</span>';
-
-  } catch (e) {
-    console.error(e);
-    document.getElementById('assignResult').innerHTML =
-      '<span class="error">Assign failed (network)</span>';
-  }
+    const base = `${location.protocol}//${location.host}`;
+    const link = `${base}/org/join/${data.token}`;
+    const box = document.getElementById('inviteLinkBox');
+    const inp = document.getElementById('inviteLinkInp');
+    inp.value = link; box.style.display = 'block';
+    fb.textContent = '✅ Invite created!'; fb.className = 'result-toast ok'; fb.style.display = 'block';
+    f.reset();
+  });
 });
-    }
 
-    // Create Passage Quiz (AJAX)
-    const createPassageForm = document.getElementById('createPassageForm');
-    if (createPassageForm) {
-    createPassageForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
-      const url = form.action;
-      const payload = formToObject(form);
-      document.getElementById('createPassageResult').textContent = 'Creating passage...';
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        document.getElementById('createPassageResult').innerHTML = '<span class="success">Passage created.</span>';
-        if (data.passage && data.passage._id && passageSelect) {
-          const opt = document.createElement('option');
-          opt.value = data.passage._id;
-          opt.textContent = (data.passage.title || 'Passage') + ' (' + (data.passage.childCount || 0) + ' q)';
-          opt.dataset.childCount = data.passage.childCount || 0;
-          opt.dataset.module = data.passage.module || '';
-          passageSelect.appendChild(opt);
-          usePassageCb.checked = true;
-          passageWrap.style.display = 'block';
-          passageSelect.value = data.passage._id;
-          passageSelect.dispatchEvent(new Event('change'));
-        }
-        form.reset();
-      } catch (e) {
-        console.error(e);
-        document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed (network)</span>';
-      }
-    });
-    }
-
-  </script>
-  {{/unless}}
-
-  {{!-- ===== CREATE PASSAGE SCRIPT - NOW FOR ALL ORGS ===== --}}
-  <script>
-    // Create Passage Quiz (AJAX) - Works for all orgs including cripfcnt-home
-    const createPassageForm = document.getElementById('createPassageForm');
-    if (createPassageForm) {
-    createPassageForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const form = ev.currentTarget;
-      const url = form.action;
-      
-      function formToObject(form) {
-        const fd = new FormData(form);
-        const obj = {};
-        for (const [k, v] of fd.entries()) {
-          obj[k] = v;
-        }
-        return obj;
-      }
-      
-      const payload = formToObject(form);
-      document.getElementById('createPassageResult').textContent = 'Creating passage...';
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        document.getElementById('createPassageResult').innerHTML = '<span class="success">✅ Passage created successfully! Created ' + (data.passage?.childCount || 0) + ' questions.</span>';
-        form.reset();
-      } catch (e) {
-        console.error(e);
-        document.getElementById('createPassageResult').innerHTML = '<span class="error">Create failed (network)</span>';
-      }
-    });
-    }
-  </script>
-
-  {{!-- ===== COMMON SCRIPTS (ALL ORGS) ===== --}}
-  <script>
- document.querySelectorAll('.set-password-form').forEach(form => {
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const userId = form.dataset.userId;
-    const password = form.querySelector('input[name="password"]').value;
-    const role = form.dataset.role;
-
-    if (!password || password.length < 4) {
-      alert("Password must be at least 4 characters");
-      return;
-    }
-
-  let endpoint;
-
-if (role === "teacher") {
-  endpoint = `/admin/orgs/{{org.slug}}/teachers/${userId}/password`;
-} else if (role === "student") {
-  endpoint = `/admin/orgs/{{org.slug}}/students/${userId}/password`;
-} else {
-  endpoint = `/admin/orgs/{{org.slug}}/admins/${userId}/password`;
+function copyInviteLink() {
+  const val = document.getElementById('inviteLinkInp').value;
+  navigator.clipboard?.writeText(val).then(() => alert('Link copied to clipboard!'));
 }
 
-    try {
-      const resp = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password })
-      });
+/* ── Assign quiz form ── */
+(function () {
+  const assignForm = document.getElementById('assignForm');
+  if (!assignForm) return;
 
-      const data = await resp.json();
-      if (!resp.ok) {
-        alert(data.error || "Failed to set password");
-        return;
-      }
+  const targetRole  = document.getElementById('targetRole');
+  const gradeWrap   = document.getElementById('gradeWrap');
+  const specificWrap = document.getElementById('specificWrap');
 
-      alert("✅ Password set successfully");
-      form.reset();
-    } catch (err) {
-      console.error(err);
-      alert("Network error");
+  if (targetRole) {
+    targetRole.addEventListener('change', () => {
+      const v = targetRole.value;
+      if (gradeWrap)    gradeWrap.style.display    = (v === 'student') ? 'block' : 'none';
+      if (specificWrap) specificWrap.style.display  = (v === 'specific') ? 'block' : 'none';
+    });
+  }
+
+  function selectAll(checked) {
+    document.querySelectorAll('#userPickList input[type=checkbox]').forEach(cb => cb.checked = checked);
+  }
+  window.selectAll = selectAll;
+
+  assignForm.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('assignBtn');
+    btn.textContent = 'Assigning…'; btn.disabled = true;
+
+    const role = targetRole?.value || 'specific';
+    const modulesSel = document.getElementById('modules');
+    const modules = modulesSel ? Array.from(modulesSel.selectedOptions).map(o => o.value) : [];
+    const passageId = document.getElementById('passageSelect')?.value || null;
+    const count = document.getElementById('count')?.value || 20;
+    const durationMinutes = document.getElementById('durationMinutes')?.value || 30;
+
+    const body = { modules, count, durationMinutes };
+    if (passageId) body.passageId = passageId;
+
+    if (role === 'specific') {
+      const checked = Array.from(document.querySelectorAll('#userPickList input[type=checkbox]:checked')).map(cb => cb.value);
+      if (!checked.length) { btn.textContent='📋 Assign Quiz'; btn.disabled=false; toast('assignResult',false,'Please select at least one user'); return; }
+      body.userIds = checked;
+    } else {
+      body.targetRole = role;
+      if (role === 'student') body.grade = document.getElementById('gradeSelect')?.value;
     }
+
+    const r = await api(`/admin/orgs/${ORG}/assign-quiz`, 'POST', body);
+    btn.textContent = '📋 Assign Quiz'; btn.disabled = false;
+    toast('assignResult', r.ok, r.ok ? `✅ Assigned to ${r.data.assigned?.length || 0} user(s)!` : ('✗ ' + (r.data.error || 'Failed')));
   });
-});
-
-</script>
-<script>
-  const tabButtons = document.querySelectorAll(".tab-btn");
-  const tabContents = document.querySelectorAll(".tab-content");
-
-  function activateFirstTab() {
-    const firstBtn = tabButtons[0];
-    if (!firstBtn) return;
-    const target = firstBtn.dataset.tab;
-    firstBtn.classList.add("active");
-    document.getElementById(target)?.classList.add("active");
-  }
-
-  tabButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.tab;
-      tabButtons.forEach(b => b.classList.remove("active"));
-      tabContents.forEach(c => c.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(target)?.classList.add("active");
-    });
-  });
-
-  activateFirstTab();
-</script>
-
-
-<script>
-  const searchInput = document.getElementById("memberSearch");
-  if (searchInput) {
-  searchInput.addEventListener("input", () => {
-    const q = searchInput.value.toLowerCase();
-    document
-      .querySelectorAll(".tab-content.active tbody tr")
-      .forEach(row => {
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(q) ? "" : "none";
-      });
-  });
-  }
-</script>
-
-
-<script>
-  const roleSelect = document.getElementById("targetRole");
-  const gradeWrap = document.getElementById("gradeWrap");
-
-  if (roleSelect && gradeWrap) {
-    roleSelect.addEventListener("change", () => {
-      gradeWrap.style.display =
-        roleSelect.value === "student" ? "block" : "none";
-    });
-  }
-</script>
-
-{{!-- ===== QUIZ RULES FILTER SCRIPT - HOME ONLY ===== --}}
-{{#if isHomeSchool}}
-<script>
-(function() {
-  const table = document.getElementById('rulesTable');
-  if (!table) return;
-
-  const rows = Array.from(table.querySelectorAll('tbody tr[data-grade]'));
-  const searchBox = document.getElementById('ruleSearch');
-  const countEl = document.getElementById('ruleCount');
-  const statsEl = document.getElementById('ruleStats');
-
-  let activeGrade = 'all';
-  let activeType = 'all';
-  let activeSubject = 'all';
-
-  // Build stats
-  const totalRules = rows.length;
-  const trialRules = rows.filter(r => r.dataset.type === 'trial').length;
-  const paidRules = rows.filter(r => r.dataset.type === 'paid').length;
-  const grades = new Set(rows.map(r => r.dataset.grade));
-
-  if (statsEl) {
-    statsEl.innerHTML = `
-      <div class="rule-stat"><strong>${totalRules}</strong> Total Rules</div>
-      <div class="rule-stat"><strong>${trialRules}</strong> Trial</div>
-      <div class="rule-stat"><strong>${paidRules}</strong> Paid</div>
-      <div class="rule-stat"><strong>${grades.size}</strong> Grades Covered</div>
-    `;
-  }
-
-  function filterRows() {
-    const q = (searchBox?.value || '').toLowerCase();
-    let visible = 0;
-
-    rows.forEach(row => {
-      const matchGrade = activeGrade === 'all' || row.dataset.grade === activeGrade;
-      const matchType = activeType === 'all' || row.dataset.type === activeType;
-      const matchSubject = activeSubject === 'all' || row.dataset.subject === activeSubject;
-      const matchSearch = !q || row.textContent.toLowerCase().includes(q);
-
-      const show = matchGrade && matchType && matchSubject && matchSearch;
-      row.style.display = show ? '' : 'none';
-      if (show) visible++;
-    });
-
-    if (countEl) {
-      countEl.textContent = `Showing ${visible} of ${totalRules} rules`;
-    }
-  }
-
-  // Grade filter pills
-  document.querySelectorAll('#gradeFilters .filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('#gradeFilters .filter-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      activeGrade = pill.dataset.grade;
-      filterRows();
-    });
-  });
-
-  // Type filter pills
-  document.querySelectorAll('#typeFilters .filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('#typeFilters .filter-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      activeType = pill.dataset.type;
-      filterRows();
-    });
-  });
-
-  // Subject filter pills
-  document.querySelectorAll('#subjectFilters .filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('#subjectFilters .filter-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      activeSubject = pill.dataset.subject;
-      filterRows();
-    });
-  });
-
-  // Search
-  if (searchBox) {
-    searchBox.addEventListener('input', filterRows);
-  }
-
-  // Initial
-  filterRows();
 })();
-</script>
 
-<script>
-  // Subject → quiz filter for create form
-  const subjectSelect = document.querySelector(
-    'form[action$="/quiz-rules"] select[name="subject"]'
-  );
-  const quizSelect = document.querySelector(
-    'form[action$="/quiz-rules"] select[name="quizQuestionId"]'
-  );
-
-  if (subjectSelect && quizSelect) {
-   function filterQuizzesBySubject() {
-  const subject = subjectSelect.value;
-
-  Array.from(quizSelect.options).forEach(opt => {
-    if (!opt.dataset.subject) return;
-
-    const show = opt.dataset.subject === subject;
-    opt.style.display = show ? '' : 'none';
-
-    // ✅ CRITICAL FIX: unselect hidden options
-    if (!show) opt.selected = false;
+/* ── Bulk assign form ── */
+(function () {
+  const form = document.getElementById('bulkAssignForm');
+  if (!form) return;
+  const bulkTargetType = document.getElementById('bulkTargetType');
+  const bulkUserWrap   = document.getElementById('bulkUserWrap');
+  if (bulkTargetType) {
+    bulkTargetType.addEventListener('change', () => {
+      bulkUserWrap?.classList.toggle('hidden', bulkTargetType.value !== 'specific');
+    });
+  }
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fd = new FormData(form);
+    const targetType = fd.get('targetType');
+    const durationMinutes = parseInt(fd.get('durationMinutes')) || 30;
+    const previewOnly = fd.get('previewOnly') === '1';
+    const payload = { targetType, durationMinutes, previewOnly };
+    if (targetType === 'specific') {
+      payload.userIds = Array.from(document.querySelectorAll('#bulkUserPick input:checked')).map(c => c.value);
+      if (!payload.userIds.length) { toast('bulkAssignResult', false, 'Select at least one user'); return; }
+    }
+    toast('bulkAssignResult', true, '⏳ Processing…');
+    const r = await api(`/admin/orgs/cripfcnt-school/bulk-assign-all`, 'POST', payload);
+    if (!r.ok) { toast('bulkAssignResult', false, '✗ ' + (r.data.error || 'Failed')); return; }
+    const d = r.data;
+    if (d.preview) {
+      toast('bulkAssignResult', true, `📊 Preview: ${d.usersCount} users × ${d.quizzesCount} quizzes = ${d.totalInstances} instances (~${Math.ceil(d.totalInstances*d.durationMinutes/60)}h per user). Uncheck Preview to create.`);
+    } else {
+      toast('bulkAssignResult', true, `✅ Created ${d.totalCreated} exam instances for ${d.usersCount} users. ${d.errors?.length||0} errors.`);
+    }
   });
+})();
 
-  // ✅ Properly reset MULTI-SELECT
-  quizSelect.selectedIndex = -1;
+/* ── Create passage AJAX ── */
+(function () {
+  const form = document.getElementById('createPassageForm');
+  if (!form) return;
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const payload = formToObj(form);
+    const res = document.getElementById('createPassageResult');
+    res.textContent = 'Creating…'; res.className = 'result-toast ok'; res.style.display = 'block';
+    const r = await api(form.action, 'POST', payload);
+    toast('createPassageResult', r.ok, r.ok ? `✅ Passage created with ${r.data.passage?.childCount||0} questions.` : '✗ ' + (r.data.error||'Failed'));
+    if (r.ok) form.reset();
+  });
+})();
+
+/* ── Dropzone file label ── */
+function handleFile(inp, dzId) {
+  const dz = document.getElementById(dzId);
+  if (!dz) return;
+  const name = inp.files[0]?.name || 'file chosen';
+  dz.querySelector('div:last-child').textContent = '📄 ' + name;
 }
 
-
-    subjectSelect.addEventListener('change', filterQuizzesBySubject);
-    filterQuizzesBySubject();
-  }
-</script>
-{{/if}}
-
-{{!-- ===== INVITE AJAX - HOME ORG (since the non-home script block has it too) ===== --}}
-{{#if isHomeSchool}}
-<script>
-  function formToObject(form) {
-    const fd = new FormData(form);
-    const obj = {};
-    for (const [k, v] of fd.entries()) {
-      if (obj[k] !== undefined) {
-        if (!Array.isArray(obj[k])) obj[k] = [obj[k]];
-        obj[k].push(v);
-      } else {
-        obj[k] = v;
-      }
-    }
-    return obj;
-  }
-
-  document.querySelectorAll('form[data-ajax="invite"]').forEach(f => {
-    f.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const url = f.action;
-      const payload = formToObject(f);
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        const fb = document.getElementById('inviteFeedback');
-        if (!resp.ok) {
-          fb.innerHTML = '<span class="error">Invite failed: ' + (data.error || 'unknown') + '</span>';
-          return;
-        }
-        const base = document.querySelector('base')?.href || `${location.protocol}//${location.host}`;
-        const inviteLink = `${base}/org/join/${data.token}`;
-        fb.innerHTML = `<div class="success"><strong>Invite created ✅</strong><br><br><strong>Invite link:</strong><br><input type="text" value="${inviteLink}" readonly style="width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:13px;" onclick="this.select()"/><div class="muted small" style="margin-top:6px">Copy this link and send it to the user on WhatsApp</div></div>`;
-        const ul = document.getElementById('invitesList');
-        const li = document.createElement('li');
-        li.innerHTML = `${payload.email} | token: <code>${data.token}</code> - <span class="badge">Pending</span>`;
-        ul.prepend(li);
-        f.reset();
-      } catch (e) {
-        console.error(e);
-        document.getElementById('inviteFeedback').innerHTML = '<span class="error">Invite failed (network)</span>';
-      }
+/* ── Rule search ── */
+(function () {
+  const inp = document.getElementById('ruleSearch');
+  if (!inp) return;
+  inp.addEventListener('input', () => {
+    const q = inp.value.toLowerCase();
+    document.querySelectorAll('#rulesTable tbody tr').forEach(tr => {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
   });
+})();
+
+/* ── Set page sub-title on load ── */
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('.sb-item.active');
+  const sub = document.getElementById('page-sub');
+  if (active && sub) sub.textContent = active.textContent.trim().replace(/^\S+\s*/,'');
+});
 </script>
-{{/if}}
+
+<!-- ══ BACKEND ROUTE NEEDED: POST /admin/orgs/:slug/members/:userId/activate ══
+     Add this to org_management.js before export default router:
+
+router.post(
+  "/admin/orgs/:slug/members/:userId/activate",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "Org not found" });
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ error: "Not a member" });
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          employeeSubscriptionStatus: "paid",
+          employeeSubscriptionPlan: "full_access",
+          employeePaidAt: new Date(),
+          employeeSubscriptionExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+        }
+      });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[activate member]", err);
+      return res.status(500).json({ error: "Failed" });
+    }
+  }
+);
+══ END BACKEND NOTE ══ -->
 
 </body>
 </html>

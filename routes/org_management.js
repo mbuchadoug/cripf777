@@ -3515,5 +3515,71 @@ router.post(
   }
 );
 
+
+
+
+
+// ══════════════════════════════════════════════════════════════════════
+//  ADD THIS ROUTE to routes/org_management.js
+//  Paste it immediately BEFORE the final  export default router;  line.
+//
+//  This enables the "✓ Activate" button in the new org_manage.hbs panel.
+//  It sets employeeSubscriptionStatus → "paid" for any org member,
+//  granting them full access without requiring a Paynow payment.
+// ══════════════════════════════════════════════════════════════════════
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Manually activate a member's account                        */
+/*  POST /admin/orgs/:slug/members/:userId/activate                    */
+/*                                                                      */
+/*  Sets employeeSubscriptionStatus = "paid" and                       */
+/*  employeeSubscriptionPlan = "full_access" on the User document.     */
+/*  Expires 1 year from now (can be any value you choose).             */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/:userId/activate",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      // Verify user is actually a member of this org
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ ok: false, error: "User is not a member of this org" });
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+      // Set 1-year expiry from today (adjust as needed)
+      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          employeeSubscriptionStatus:   "paid",
+          employeeSubscriptionPlan:     "full_access",
+          employeePaidAt:               new Date(),
+          employeeSubscriptionExpiresAt: expiresAt
+        }
+      });
+
+      console.log(`[activate] Admin activated ${user.email || userId} in org ${slug}`);
+
+      return res.json({
+        ok:        true,
+        userId:    String(userId),
+        expiresAt: expiresAt.toISOString()
+      });
+
+    } catch (err) {
+      console.error("[activate member]", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "Activation failed" });
+    }
+  }
+);
+
 // export default router
 export default router;
