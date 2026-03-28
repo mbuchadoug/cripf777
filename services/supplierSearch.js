@@ -315,9 +315,26 @@ const SEARCH_SYNONYMS = {
 // Returns original term + up to 6 synonyms to keep MongoDB $or manageable
 export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
-  const synonyms = SEARCH_SYNONYMS[lower];
-  if (!synonyms) return [lower];
-  return [lower, ...synonyms.slice(0, 6)];
+  if (!lower) return [];
+
+  // Exact match in synonym map — use it directly
+  if (SEARCH_SYNONYMS[lower]) {
+    return [lower, ...SEARCH_SYNONYMS[lower].slice(0, 6)];
+  }
+
+  // Partial match: find all synonym keys that START WITH or CONTAIN the search term
+  // e.g. "cem" → matches "cement", pulls its synonyms in too
+  // Limit to 3 partial matches to keep the $or array manageable
+  const partialMatches = Object.keys(SEARCH_SYNONYMS)
+    .filter(key => key.startsWith(lower) || (lower.length >= 4 && key.includes(lower)))
+    .slice(0, 3);
+
+  if (partialMatches.length) {
+    const extraSynonyms = partialMatches.flatMap(k => SEARCH_SYNONYMS[k]).slice(0, 6);
+    return [lower, ...partialMatches, ...extraSynonyms];
+  }
+
+  return [lower];
 }
 
 export async function runSupplierSearch({ city, category, product, profileType, area }) {
@@ -634,16 +651,19 @@ export function parseShortcodeSearch(input = "") {
     .toLowerCase()
     .trim()
     .replace(/^find\s+/i, "")
+    .replace(/^search\s+/i, "")
+    .replace(/^s\s+/i, "")
     .replace(/\s+/g, " ");
 
   if (!raw) return null;
 
-const cityNames = SUPPLIER_CITIES
+  // Build a normalised set of known city names from SUPPLIER_CITIES
+  const cityNames = SUPPLIER_CITIES
     .map(c => {
       if (typeof c === "string") return c.toLowerCase().trim();
-      if (c?.name) return String(c.name).toLowerCase().trim();
+      if (c?.name)  return String(c.name).toLowerCase().trim();
       if (c?.label) return String(c.label).toLowerCase().trim();
-      if (c?.id) return String(c.id).toLowerCase().trim();
+      if (c?.id)    return String(c.id).toLowerCase().trim();
       return "";
     })
     .filter(Boolean);
@@ -655,30 +675,46 @@ const cityNames = SUPPLIER_CITIES
   let area = null;
   let productWords = [...words];
 
-  if (words.length >= 2) {
-    const lastTwo = words.slice(-2).join(" ").trim();
-    if (cityNames.includes(lastTwo)) {
-      city = lastTwo;
-      productWords = words.slice(0, -2);
+  // ── Step 1: Check last 2 words then last 1 word for a known CITY ──────────
+  for (let len = Math.min(2, words.length); len >= 1; len--) {
+    const candidate = words.slice(-len).join(" ").trim();
+    if (cityNames.includes(candidate)) {
+      city = toTitleCase(candidate);
+      productWords = words.slice(0, -len);
+      break;
     }
   }
 
-  if (!city && words.length >= 1) {
-    const lastOne = words[words.length - 1].trim();
-    if (cityNames.includes(lastOne)) {
-      city = lastOne;
-      productWords = words.slice(0, -1);
+  // ── Step 2: If no city found yet, check last 3→1 words against SUBURB_TO_CITY ──
+  if (!city) {
+    for (let len = Math.min(3, words.length); len >= 1; len--) {
+      const candidate = words.slice(-len).join(" ").trim();
+      const mappedCity = SUBURB_TO_CITY[candidate];
+      if (mappedCity) {
+        city = mappedCity;                     // e.g. "Harare"
+        area = toTitleCase(candidate);         // e.g. "Mbare"
+        productWords = words.slice(0, -len);
+        break;
+      }
     }
   }
 
   const product = productWords.join(" ").trim();
 
-  if (!product) return null;
+  // If the city/suburb extraction consumed all words (no product left), 
+  // return the whole raw string as the product — buyer typed just a suburb name.
+  if (!product) {
+    return {
+      product: raw,
+      city: null,
+      area: null
+    };
+  }
 
   return {
     product,
-    city,
-    area
+    city,      // null if not found — caller will ask for city
+    area       // suburb name if matched, otherwise null
   };
 }
 
