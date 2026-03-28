@@ -408,170 +408,18 @@
     .mono { font-family:'Courier New',monospace; font-size:11.5px; color:var(--blue); font-weight:600; }
     .sep { height:1px; background:var(--border); margin:4px 0; }
 
-    /* ─── HAMBURGER BUTTON ─── */
-    .mob-hamburger {
-      display:none; flex-direction:column; justify-content:center;
-      align-items:center; gap:5px;
-      width:40px; height:40px; flex-shrink:0;
-      border:none; background:transparent; cursor:pointer; padding:0;
-      border-radius:8px; transition:background .15s;
-    }
-    .mob-hamburger:hover { background:var(--border); }
-    .mob-hamburger span {
-      display:block; width:20px; height:2px;
-      background:var(--ink); border-radius:2px; transition:all .2s;
-    }
-
-    /* ─── SIDEBAR OVERLAY (mobile) ─── */
-    #sb-overlay {
-      display:none; position:fixed; inset:0; z-index:190;
-      background:rgba(15,23,42,.55); backdrop-filter:blur(2px);
-    }
-    #sb-overlay.show { display:block; }
-
-    /* ─── MOBILE BOTTOM NAV ─── */
-    .mob-bottom-nav {
-      display:none; position:fixed; bottom:0; left:0; right:0;
-      z-index:180; background:var(--surface);
-      border-top:1px solid var(--border);
-      box-shadow:0 -4px 20px rgba(0,0,0,.08);
-      padding-bottom:env(safe-area-inset-bottom,0);
-    }
-    .mob-bottom-nav-row {
-      display:flex; align-items:stretch;
-    }
-    .mbn-item {
-      flex:1; display:flex; flex-direction:column; align-items:center;
-      justify-content:center; padding:10px 4px 8px;
-      border:none; background:none; cursor:pointer;
-      font-family:var(--font); font-size:10px; font-weight:600;
-      color:var(--ink-muted); gap:3px; transition:color .12s;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .mbn-item .mbn-ic { font-size:19px; line-height:1; }
-    .mbn-item.active { color:var(--blue); }
-
-    /* ─── RESPONSIVE 1100px ─── */
+    /* ═══ RESPONSIVE ═══ */
     @media(max-width:1100px) {
-      .stats-row { grid-template-columns:repeat(2,1fr); }
+      .stats-row { grid-template-columns:1fr 1fr; }
       .form-grid-3 { grid-template-columns:1fr 1fr; }
     }
-
-    /* ─── RESPONSIVE 768px — tablet/mobile ─── */
     @media(max-width:768px) {
-
-      /* Sidebar: hidden off-screen by default, slides in as drawer */
-      .sidebar {
-        transform:translateX(-100%);
-        transition:transform .26s cubic-bezier(.4,0,.2,1);
-        width:260px;
-        box-shadow:none;
-        z-index:200;
-      }
-      .sidebar.sb-open {
-        transform:translateX(0);
-        box-shadow:8px 0 32px rgba(0,0,0,.25);
-      }
-
-      /* Main area fills full width */
+      :root { --nav-w:0px; }
+      .sidebar { transform:translateX(-240px); transition:transform .22s; }
+      .sidebar.open { transform:translateX(0); width:240px; }
       .main-area { margin-left:0; }
-
-      /* Show hamburger */
-      .mob-hamburger { display:flex; }
-
-      /* Show bottom nav */
-      .mob-bottom-nav { display:block; }
-
-      /* Extra bottom padding so content clears the bottom nav */
-      .page { padding-bottom:80px; }
-
-      /* Header tighter */
-      .top-hdr { padding:0 14px; gap:10px; }
-      .hdr-title { font-size:15px; }
-      .hdr-sub { display:none; }
-      /* Hide badge + header buttons on mobile — space is precious */
-      .hdr-right-items { display:none; }
-
-      /* Stats 2×2 */
-      .stats-row { grid-template-columns:repeat(2,1fr); gap:10px; }
-      .stat-card { padding:14px 14px; gap:10px; }
-      .stat-val { font-size:22px; }
-      .stat-ic { width:38px; height:38px; font-size:17px; }
-
-      /* Page padding smaller */
-      .page { padding:16px 14px; gap:16px; padding-bottom:80px; }
-
-      /* Card padding smaller */
-      .card-hdr { padding:13px 16px; }
-      .card-body { padding:16px; }
-
-      /* Member tabs: scrollable strip */
-      .m-tabs {
-        overflow-x:auto; flex-wrap:nowrap;
-        -webkit-overflow-scrolling:touch;
-        scrollbar-width:none; padding:12px 14px 0;
-      }
-      .m-tabs::-webkit-scrollbar { display:none; }
-      .m-tab { white-space:nowrap; padding:8px 12px; font-size:12px; }
-      .m-search { padding:10px 14px; }
-
-      /* Tables: horizontal scroll */
-      .table-wrap, .scroll-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-
-      /* Hide less-important table columns */
-      .col-hide-sm { display:none !important; }
-
-      /* Form grids collapse */
-      .form-grid-2 { grid-template-columns:1fr; gap:12px; }
-      .form-grid-3 { grid-template-columns:1fr; gap:12px; }
-      .col-full { grid-column:auto; }
-
-      /* Quick-action buttons: 2-column grid */
-      .flex-row.qa { display:grid !important; grid-template-columns:1fr 1fr; gap:8px; }
-      .flex-row.qa .btn { justify-content:flex-start; }
-
-      /* Modals: full-width, slide up from bottom */
-      .modal-overlay { padding:0; align-items:flex-end; }
-      .modal {
-        border-radius:18px 18px 0 0;
-        max-height:88vh; padding:22px 18px 24px;
-      }
-
-      /* Cred info rows */
-      .cred-info-row { flex-wrap:wrap; gap:6px; padding:9px 12px; }
-      .cred-info-row .ci-label { min-width:80px; font-size:10px; }
-      .cred-info-row .ci-val { font-size:13px; }
-
-      /* Dropzone */
-      .dropzone { padding:18px; }
-
-      /* Alert */
-      .alert { font-size:12.5px; }
-    }
-
-    /* ─── RESPONSIVE 480px — small phones ─── */
-    @media(max-width:480px) {
-      .page { padding:12px 10px; gap:12px; padding-bottom:76px; }
-      .stats-row { gap:8px; }
-      .stat-card { padding:12px; gap:8px; }
-      .stat-val { font-size:20px; }
-      .card-hdr { padding:11px 12px; }
-      .card-body { padding:12px; }
-
-      /* On very narrow screens hide ID/Status columns too */
-      .col-hide-xs { display:none !important; }
-
-      /* Action buttons: icon only, no labels */
-      .act-lbl { display:none; }
-      .act-row { gap:3px; }
-
-      .modal { padding:18px 14px 22px; }
-    }
-
-    /* ─── RESPONSIVE 360px — smallest phones ─── */
-    @media(max-width:360px) {
-      .stats-row { grid-template-columns:1fr; }
-      .page { padding:10px 8px; padding-bottom:74px; }
+      .stats-row { grid-template-columns:1fr 1fr; }
+      .form-grid-2 { grid-template-columns:1fr; }
     }
     /* ═══ CREDENTIAL MODAL TABS ═══ */
     .cred-modal-tab.active { color:var(--blue) !important; border-bottom-color:var(--blue) !important; }
@@ -617,18 +465,9 @@
        SIDEBAR
   ══════════════════════════════════════ -->
   <aside class="sidebar" id="sidebar">
-    <div class="sb-brand" style="display:flex;align-items:center;justify-content:space-between;padding:20px 16px 16px">
-      <div>
-        <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
-        <div class="sb-brand-sub">Admin Console</div>
-      </div>
-      <!-- Close button — only visible on mobile -->
-      <button id="sb-close-btn" onclick="closeSidebar()"
-        style="display:none;align-items:center;justify-content:center;
-               width:32px;height:32px;border:none;border-radius:7px;
-               background:rgba(255,255,255,.1);color:#fff;font-size:18px;
-               cursor:pointer;flex-shrink:0;transition:background .12s"
-        aria-label="Close menu">✕</button>
+    <div class="sb-brand">
+      <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
+      <div class="sb-brand-sub">Admin Console</div>
     </div>
 
     <div class="sb-section">Overview</div>
@@ -703,30 +542,20 @@
   <div class="main-area">
 
     <header class="top-hdr">
-      <!-- Hamburger: only visible on mobile -->
-      <button class="mob-hamburger" id="mob-hamburger-btn"
-              onclick="openSidebar()" aria-label="Open navigation menu">
-        <span></span><span></span><span></span>
-      </button>
-
-      <div style="min-width:0;overflow:hidden">
-        <div class="hdr-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{org.name}}</div>
+      <div>
+        <div class="hdr-title">{{org.name}}</div>
         <div class="hdr-sub" id="page-sub">Overview</div>
       </div>
       <div class="hdr-sp"></div>
-
-      <!-- These items hide on mobile (via .hdr-right-items) -->
-      <div class="hdr-right-items" style="display:flex;align-items:center;gap:10px">
-        {{#if isCripSchool}}
-          <span class="hdr-badge school">🏫 cripfcnt-school</span>
-        {{else if isHomeSchool}}
-          <span class="hdr-badge home">🏠 cripfcnt-home</span>
-        {{else}}
-          <span class="hdr-badge other">🏢 {{org.slug}}</span>
-        {{/if}}
-        <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm">📊 Attempts</a>
-        <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm">⬇ CSV</a>
-      </div>
+      {{#if isCripSchool}}
+        <span class="hdr-badge school">🏫 cripfcnt-school</span>
+      {{else if isHomeSchool}}
+        <span class="hdr-badge home">🏠 cripfcnt-home</span>
+      {{else}}
+        <span class="hdr-badge other">🏢 {{org.slug}}</span>
+      {{/if}}
+      <a href="/admin/orgs/{{org.slug}}/attempts" class="btn btn-o btn-sm">📊 View Attempts</a>
+      <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="btn btn-o btn-sm">⬇ CSV</a>
     </header>
 
     <!-- ════════════════════════════
@@ -774,7 +603,7 @@
           </div>
         </div>
         <div class="card-body">
-          <div class="flex-row qa">
+          <div class="flex-row">
             <button class="btn btn-p" onclick="gotoPage('invites',document.querySelector('[data-page=invites]'))">✉️ Send Invite</button>
             <button class="btn btn-o" onclick="gotoPage('members',document.querySelector('[data-page=members]'))">👥 View Members</button>
             <button class="btn btn-o" onclick="gotoPage('credentials',document.querySelector('[data-page=credentials]'))">🔑 Issue Credentials</button>
@@ -869,7 +698,7 @@
         <div class="m-pane active" id="m-students">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Student</th><th class="col-hide-xs">ID / Grade</th><th class="col-hide-sm">Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Student</th><th>ID / Grade</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.students}}
                 {{#if this.user}}
@@ -913,7 +742,7 @@
         <div class="m-pane {{#unless groups.students.length}}active{{/unless}}" id="m-teachers">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Teacher</th><th class="col-hide-xs">ID</th><th class="col-hide-sm">Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Teacher</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.teachers}}
                 {{#if this.user}}
@@ -951,7 +780,7 @@
         <div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-staff">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Employee</th><th class="col-hide-xs">Username</th><th class="col-hide-sm">Subscription</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Employee</th><th>Username</th><th>Subscription</th><th>Actions</th></tr></thead>
               <tbody id="staff-tbody">
                 {{#each groups.staff}}
                 {{#if this.user}}
@@ -1002,7 +831,7 @@
         <div class="m-pane" id="m-admins">
           <div class="scroll-wrap">
             <table class="mem-table">
-              <thead><tr><th>Admin</th><th class="col-hide-xs">Username</th><th class="col-hide-sm">Role</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Admin</th><th>Username</th><th>Role</th><th>Actions</th></tr></thead>
               <tbody>
                 {{#each groups.admins}}
                 {{#if this.user}}
@@ -1766,49 +1595,6 @@ function formToObj(form) {
   return obj;
 }
 
-/* ── Sidebar open / close (mobile) ── */
-function openSidebar() {
-  const sb  = document.getElementById('sidebar');
-  const ov  = document.getElementById('sb-overlay');
-  const cb  = document.getElementById('sb-close-btn');
-  const hb  = document.getElementById('mob-hamburger-btn');
-  if (sb)  sb.classList.add('sb-open');
-  if (ov)  ov.classList.add('show');
-  if (cb)  cb.style.display = 'flex';
-  if (hb)  hb.style.display = 'none';
-  document.body.style.overflow = 'hidden';   // prevent body scroll when drawer is open
-}
-
-function closeSidebar() {
-  const sb  = document.getElementById('sidebar');
-  const ov  = document.getElementById('sb-overlay');
-  const cb  = document.getElementById('sb-close-btn');
-  const hb  = document.getElementById('mob-hamburger-btn');
-  if (sb)  sb.classList.remove('sb-open');
-  if (ov)  ov.classList.remove('show');
-  // Only hide close btn when on mobile (hamburger is visible)
-  if (window.innerWidth <= 768) {
-    if (cb) cb.style.display = 'none';
-    if (hb) hb.style.display = '';
-  }
-  document.body.style.overflow = '';
-}
-
-/* Close sidebar when viewport is resized back to desktop */
-window.addEventListener('resize', () => {
-  if (window.innerWidth > 768) {
-    const sb = document.getElementById('sidebar');
-    const ov = document.getElementById('sb-overlay');
-    const cb = document.getElementById('sb-close-btn');
-    const hb = document.getElementById('mob-hamburger-btn');
-    if (sb) sb.classList.remove('sb-open');
-    if (ov) ov.classList.remove('show');
-    if (cb) cb.style.display = 'none';
-    if (hb) hb.style.display = '';
-    document.body.style.overflow = '';
-  }
-});
-
 /* ── Page navigation ── */
 function gotoPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1817,21 +1603,7 @@ function gotoPage(id, btn) {
   if (el) el.classList.add('active');
   if (btn) btn.classList.add('active');
   const sub = document.getElementById('page-sub');
-  if (sub && btn) sub.textContent = btn.querySelector('.sb-ic')?.nextSibling?.textContent?.trim() || '';
-  // Close sidebar on mobile after navigation
-  if (window.innerWidth <= 768) closeSidebar();
-  // Sync bottom nav active state
-  syncBottomNav(id);
-  // Scroll main area to top
-  const ma = document.querySelector('.main-area');
-  if (ma) ma.scrollTo({ top:0, behavior:'smooth' });
-}
-
-/* ── Bottom nav sync ── */
-function syncBottomNav(pageId) {
-  document.querySelectorAll('.mbn-item').forEach(b => {
-    b.classList.toggle('active', b.dataset.page === pageId);
-  });
+  if (sub && btn) sub.textContent = btn.querySelector('.sb-ic').nextSibling?.textContent?.trim() || '';
 }
 
 /* ── Member tabs ── */
@@ -2326,92 +2098,12 @@ function handleFile(inp, dzId) {
   });
 })();
 
-/* ── Set page sub-title on load + init bottom nav ── */
+/* ── Set page sub-title on load ── */
 document.addEventListener('DOMContentLoaded', () => {
   const active = document.querySelector('.sb-item.active');
   const sub = document.getElementById('page-sub');
   if (active && sub) sub.textContent = active.textContent.trim().replace(/^\S+\s*/,'');
-
-  // Set initial active state on bottom nav
-  const initialPage = document.querySelector('.page.active')?.id?.replace('page-','') || 'overview';
-  syncBottomNav(initialPage);
-
-  // Mirror col-hide-* classes from <th> to corresponding <td> cells
-  // so mobile column hiding works without Handlebars each-row duplication
-  document.querySelectorAll('.mem-table').forEach(tbl => {
-    const ths = Array.from(tbl.querySelectorAll('thead th'));
-    ths.forEach((th, i) => {
-      const cls = [];
-      if (th.classList.contains('col-hide-sm')) cls.push('col-hide-sm');
-      if (th.classList.contains('col-hide-xs')) cls.push('col-hide-xs');
-      if (cls.length) {
-        tbl.querySelectorAll('tbody tr').forEach(tr => {
-          const td = tr.cells[i];
-          if (td) td.classList.add(...cls);
-        });
-      }
-    });
-  });
 });
-</script>
-
-<!-- ────────────────────────────────────────────────────
-     MOBILE OVERLAY (backdrop behind open sidebar)
-──────────────────────────────────────────────────── -->
-<div id="sb-overlay" onclick="closeSidebar()"></div>
-
-<!-- ────────────────────────────────────────────────────
-     MOBILE BOTTOM NAV
-     One-thumb access to the 5 most-used sections
-──────────────────────────────────────────────────── -->
-<nav class="mob-bottom-nav" aria-label="Mobile navigation">
-  <div class="mob-bottom-nav-row">
-    <button class="mbn-item active" data-page="overview"
-            onclick="gotoPage('overview', document.querySelector('[data-page=overview]'))">
-      <span class="mbn-ic">🏠</span>Home
-    </button>
-    <button class="mbn-item" data-page="members"
-            onclick="gotoPage('members', document.querySelector('[data-page=members]'))">
-      <span class="mbn-ic">👥</span>Members
-    </button>
-    <button class="mbn-item" data-page="credentials"
-            onclick="gotoPage('credentials', document.querySelector('[data-page=credentials]'))">
-      <span class="mbn-ic">🔑</span>Creds
-    </button>
-    {{#unless isHomeSchool}}
-    <button class="mbn-item" data-page="assign"
-            onclick="gotoPage('assign', document.querySelector('[data-page=assign]'))">
-      <span class="mbn-ic">📋</span>Assign
-    </button>
-    {{/unless}}
-    <button class="mbn-item" data-page="invites"
-            onclick="gotoPage('invites', document.querySelector('[data-page=invites]'))">
-      <span class="mbn-ic">✉️</span>Invites
-    </button>
-  </div>
-</nav>
-
-<script>
-/* ── Swipe right on main area to open sidebar (mobile UX) ── */
-(function () {
-  let startX = 0;
-  const main = document.querySelector('.main-area');
-  if (!main) return;
-  main.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
-  main.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - startX;
-    if (dx > 60 && startX < 40 && window.innerWidth <= 768) openSidebar();
-  }, { passive:true });
-  // Swipe left on open sidebar to close
-  const sb = document.getElementById('sidebar');
-  if (sb) {
-    sb.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
-    sb.addEventListener('touchend', e => {
-      const dx = e.changedTouches[0].clientX - startX;
-      if (dx < -50 && window.innerWidth <= 768) closeSidebar();
-    }, { passive:true });
-  }
-})();
 </script>
 
 <!-- ══ BACKEND ROUTE NEEDED: POST /admin/orgs/:slug/members/:userId/activate ══
