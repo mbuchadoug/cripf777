@@ -421,38 +421,6 @@
       .stats-row { grid-template-columns:1fr 1fr; }
       .form-grid-2 { grid-template-columns:1fr; }
     }
-    /* ═══ CREDENTIAL MODAL TABS ═══ */
-    .cred-modal-tab.active { color:var(--blue) !important; border-bottom-color:var(--blue) !important; }
-
-    /* ═══ CREDENTIAL INFO GRID ═══ */
-    .cred-info-row {
-      display:flex; align-items:flex-start; gap:12px;
-      padding:10px 14px;
-      background:var(--surface-2); border:1px solid var(--border);
-      border-radius:var(--r); font-size:13px;
-    }
-    .cred-info-row .ci-label {
-      font-size:11px; font-weight:700; text-transform:uppercase;
-      letter-spacing:.5px; color:var(--ink-muted);
-      min-width:110px; flex-shrink:0; padding-top:1px;
-    }
-    .cred-info-row .ci-val {
-      font-weight:600; color:var(--ink); font-family:'Courier New',monospace;
-      font-size:14px; word-break:break-all;
-    }
-    .cred-info-row .ci-val.none {
-      color:var(--ink-faint); font-family:var(--font);
-      font-size:13px; font-weight:400; font-style:italic;
-    }
-    .cred-info-row .ci-copy {
-      margin-left:auto; flex-shrink:0;
-      padding:2px 8px; font-size:11px; background:var(--blue-bg);
-      color:var(--blue); border:1px solid #bfdbfe; border-radius:5px;
-      cursor:pointer; font-family:var(--font); font-weight:600;
-    }
-    .cred-info-row .ci-copy:hover { background:#dbeafe; }
-    .cred-status-has  { color:var(--emerald); font-weight:600; font-size:12.5px; }
-    .cred-status-none { color:var(--ink-faint); font-size:12.5px; }
   </style>
 </head>
 <body data-org-slug="{{org.slug}}">
@@ -1468,91 +1436,33 @@
 </div>
 
 <!-- ════════════════════════════
-     MODAL: CREDENTIALS (preview + change password)
+     MODAL: ISSUE CREDENTIALS
 ════════════════════════════ -->
 <div class="modal-overlay" id="credModal">
-  <div class="modal" style="max-width:560px">
-    <div class="modal-title">🔑 Credentials</div>
+  <div class="modal">
+    <div class="modal-title">🔑 Issue Credentials</div>
     <div class="modal-sub" id="credModal-sub">—</div>
     <input type="hidden" id="credModal-uid">
     <input type="hidden" id="credModal-role">
 
-    <!-- Loading state -->
-    <div id="credModal-loading" style="text-align:center;padding:28px;color:var(--ink-muted);font-size:13px">
-      ⏳ Loading credentials…
+    <div class="gap-12">
+      <div class="fld">
+        <label>Username <span style="font-weight:400;color:var(--ink-muted)">(leave blank to auto-generate)</span></label>
+        <input type="text" id="credModal-username" placeholder="e.g. johsmi2048" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Password</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="credModal-password" placeholder="Min 8 characters" style="flex:1" autocomplete="new-password">
+          <button type="button" class="btn btn-o btn-sm" onclick="genModalPw()" title="Auto-generate">🎲</button>
+        </div>
+      </div>
     </div>
-
-    <!-- Content (shown after load) -->
-    <div id="credModal-content" style="display:none">
-
-      <!-- Tab row -->
-      <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px">
-        <button class="cred-modal-tab active" data-ctab="view" onclick="switchCredTab('view',this)"
-          style="padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--ink-muted);border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;font-family:var(--font);transition:all .12s">
-          👁 View Credentials
-        </button>
-        <button class="cred-modal-tab" data-ctab="change" onclick="switchCredTab('change',this)"
-          style="padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--ink-muted);border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;font-family:var(--font);transition:all .12s">
-          🔒 Change Password
-        </button>
-        <button class="cred-modal-tab" data-ctab="username" onclick="switchCredTab('username',this)"
-          style="padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--ink-muted);border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;font-family:var(--font);transition:all .12s">
-          ✏️ Edit Username
-        </button>
-      </div>
-
-      <!-- ── TAB: VIEW CREDENTIALS ── -->
-      <div class="cred-ctab-pane" id="ctab-view">
-        <div id="credModal-info" style="display:flex;flex-direction:column;gap:10px">
-          <!-- populated by JS -->
-        </div>
-        <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r)">
-          <div style="font-size:11.5px;font-weight:700;color:#15803d;margin-bottom:4px">🔗 Login URL</div>
-          <a href="/auth/school" target="_blank" style="font-size:13px;color:var(--blue);font-weight:600">/auth/school</a>
-          <div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">They can sign in using their username or any ID listed above.</div>
-        </div>
-        <div style="margin-top:12px">
-          <button class="btn btn-o btn-sm" id="credModal-copyBtn" onclick="copyCredentials()">📋 Copy Credentials</button>
-        </div>
-      </div>
-
-      <!-- ── TAB: CHANGE PASSWORD ── -->
-      <div class="cred-ctab-pane" id="ctab-change" style="display:none">
-        <div class="fld" style="margin-bottom:14px">
-          <label>New Password</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="credModal-password" placeholder="Min 8 characters" style="flex:1" autocomplete="new-password">
-            <button type="button" class="btn btn-o btn-sm" onclick="genModalPw()" title="Auto-generate password">🎲 Generate</button>
-          </div>
-          <div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Minimum 8 characters. The user should change this on first login.</div>
-        </div>
-        <div id="credModal-pw-strength" style="height:4px;border-radius:2px;background:var(--border);margin-bottom:12px;overflow:hidden">
-          <div id="credModal-pw-fill" style="height:100%;border-radius:2px;transition:width .2s,background .2s;width:0"></div>
-        </div>
-        <div class="result-toast" id="credModal-pw-result"></div>
-        <div style="margin-top:14px;display:flex;gap:8px">
-          <button class="btn btn-p" onclick="doChangePassword()">🔒 Set New Password</button>
-        </div>
-      </div>
-
-      <!-- ── TAB: EDIT USERNAME ── -->
-      <div class="cred-ctab-pane" id="ctab-username" style="display:none">
-        <div class="fld" style="margin-bottom:14px">
-          <label>Username</label>
-          <input type="text" id="credModal-username" placeholder="e.g. johsmi2048 — leave blank to auto-generate" autocomplete="off">
-          <div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Lowercase letters and numbers only. Min 3 characters. Leave blank to auto-generate.</div>
-        </div>
-        <div class="result-toast" id="credModal-user-result"></div>
-        <div style="margin-top:14px;display:flex;gap:8px">
-          <button class="btn btn-p" onclick="doChangeUsername()">✏️ Update Username</button>
-        </div>
-      </div>
-
-    </div><!-- /credModal-content -->
 
     <div class="result-toast" id="credModal-result"></div>
     <div class="modal-actions">
-      <button class="btn btn-o" onclick="closeModal('credModal')">Close</button>
+      <button class="btn btn-o" onclick="closeModal('credModal')">Cancel</button>
+      <button class="btn btn-p" onclick="doIssueCredModal()">Issue Credentials</button>
     </div>
   </div>
 </div>
@@ -1694,198 +1604,36 @@ async function doAssignModal() {
   }
 }
 
-/* ── Credential modal — three tabs: view, change-password, edit-username ── */
-
-// State kept in module scope so tabs can share it
-let _credData = null;
-
-function switchCredTab(tab, btn) {
-  document.querySelectorAll('.cred-modal-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.cred-ctab-pane').forEach(p => p.style.display = 'none');
-  btn.classList.add('active');
-  document.getElementById('ctab-' + tab).style.display = 'block';
-}
-
-// Called from every "🔑 Creds" button in the member tables
-async function openCredModal(uid, name, role) {
-  // Reset modal to loading state
-  document.getElementById('credModal-uid').value   = uid;
-  document.getElementById('credModal-role').value  = role;
-  document.getElementById('credModal-sub').textContent = name;
-  document.getElementById('credModal-loading').style.display  = 'block';
-  document.getElementById('credModal-content').style.display  = 'none';
-  document.getElementById('credModal-result').style.display   = 'none';
-  document.getElementById('credModal-pw-result') && (document.getElementById('credModal-pw-result').style.display = 'none');
-  document.getElementById('credModal-user-result') && (document.getElementById('credModal-user-result').style.display = 'none');
-  // Reset to view tab
-  switchCredTab('view', document.querySelector('.cred-modal-tab[data-ctab="view"]'));
+/* ── Credential modal ── */
+function openCredModal(uid, name, role) {
+  document.getElementById('credModal-uid').value = uid;
+  document.getElementById('credModal-role').value = role;
+  document.getElementById('credModal-sub').textContent = 'Issuing credentials for: ' + name;
+  document.getElementById('credModal-password').value = '';
+  document.getElementById('credModal-username').value = '';
+  document.getElementById('credModal-result').style.display = 'none';
   openModal('credModal');
-
-  // Fetch current credentials from backend
-  try {
-    const r = await fetch(`/admin/orgs/${ORG}/members/${uid}/credentials`, { method: 'GET' });
-    const data = await r.json();
-    _credData = data;
-
-    document.getElementById('credModal-loading').style.display = 'none';
-    document.getElementById('credModal-content').style.display = 'block';
-
-    // Pre-fill username field in edit tab
-    if (document.getElementById('credModal-username')) {
-      document.getElementById('credModal-username').value = data.username || '';
-    }
-
-    // Build the info display
-    renderCredInfo(data);
-
-  } catch (e) {
-    document.getElementById('credModal-loading').textContent = '✗ Failed to load credentials. Check network.';
-  }
-}
-
-function renderCredInfo(data) {
-  const container = document.getElementById('credModal-info');
-
-  function row(label, value, canCopy) {
-    const hasVal = value && String(value).trim();
-    return `
-      <div class="cred-info-row">
-        <div class="ci-label">${label}</div>
-        <div class="ci-val ${hasVal ? '' : 'none'}">${hasVal ? escHtml(value) : 'Not set'}</div>
-        ${hasVal && canCopy ? `<button class="ci-copy" onclick="clipCopy('${escAttr(value)}','${escAttr(label)}')">Copy</button>` : ''}
-      </div>`;
-  }
-
-  const pwStatus = data.hasPassword
-    ? `<span class="cred-status-has">● Password is set</span>${data.needsPasswordSetup ? ' <span style="font-size:11.5px;color:var(--amber)">(user should change it)</span>' : ''}`
-    : `<span class="cred-status-none">○ No password — user cannot log in yet</span>`;
-
-  container.innerHTML = `
-    ${row('Username', data.username, true)}
-    ${data.studentId ? row('Student ID', data.studentId, true) : ''}
-    ${data.teacherId ? row('Teacher ID', data.teacherId, true) : ''}
-    ${data.adminId   ? row('Admin ID',   data.adminId,   true) : ''}
-    ${data.email     ? row('Email',      data.email,     true) : ''}
-    <div class="cred-info-row">
-      <div class="ci-label">Password</div>
-      <div style="flex:1">${pwStatus}</div>
-    </div>
-    ${data.lastLogin ? row('Last Login', new Date(data.lastLogin).toLocaleString(), false) : ''}
-  `;
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function escAttr(s) {
-  return String(s).replace(/'/g,"\\'");
-}
-
-function clipCopy(val, label) {
-  navigator.clipboard?.writeText(val)
-    .then(() => toast('credModal-result', true, `✅ ${label} copied to clipboard`))
-    .catch(() => toast('credModal-result', false, 'Copy failed — please copy manually: ' + val));
-}
-
-function copyCredentials() {
-  if (!_credData) return;
-  const lines = [
-    `Name: ${(_credData.firstName||'')+' '+(_credData.lastName||'')}`.trim(),
-    _credData.username  ? `Username:   ${_credData.username}`  : null,
-    _credData.studentId ? `Student ID: ${_credData.studentId}` : null,
-    _credData.teacherId ? `Teacher ID: ${_credData.teacherId}` : null,
-    _credData.adminId   ? `Admin ID:   ${_credData.adminId}`   : null,
-    _credData.email     ? `Email:      ${_credData.email}`     : null,
-    `Login URL:  /auth/school`,
-  ].filter(Boolean);
-  navigator.clipboard?.writeText(lines.join('\n'))
-    .then(() => toast('credModal-result', true, '✅ Credentials copied to clipboard'))
-    .catch(() => alert(lines.join('\n')));
 }
 
 function genModalPw() {
-  const name = _credData
-    ? (_credData.firstName || 'User')
-    : document.getElementById('credModal-sub').textContent.split(' ')[0] || 'User';
-  const first = name.replace(/[^a-zA-Z]/g, '');
-  const pin = String(Math.floor(1000 + Math.random() * 9000));
-  const pw = first + pin + '!';
-  document.getElementById('credModal-password').value = pw;
-  // Show strength
-  updatePwStrength(pw);
+  const name = document.getElementById('credModal-sub').textContent.replace('Issuing credentials for: ','');
+  const first = (name.split(' ')[0]||'User').replace(/[^a-zA-Z]/g,'');
+  const pin = String(Math.floor(1000+Math.random()*9000));
+  document.getElementById('credModal-password').value = first + pin + '!';
 }
 
-function updatePwStrength(val) {
-  const fill = document.getElementById('credModal-pw-fill');
-  if (!fill) return;
-  let score = 0;
-  if (val.length >= 8)  score++;
-  if (val.length >= 12) score++;
-  if (/[A-Z]/.test(val)) score++;
-  if (/[0-9]/.test(val)) score++;
-  if (/[^A-Za-z0-9]/.test(val)) score++;
-  const cols = ['#e2e8f0','#ef4444','#f97316','#eab308','#22c55e','#16a34a'];
-  const pcts = ['0%','20%','40%','60%','80%','100%'];
-  fill.style.width = pcts[score];
-  fill.style.background = cols[score];
-}
-
-// Wire password strength to input
-document.addEventListener('DOMContentLoaded', () => {
-  const pwInp = document.getElementById('credModal-password');
-  if (pwInp) pwInp.addEventListener('input', e => updatePwStrength(e.target.value));
-});
-
-async function doChangePassword() {
-  const uid      = document.getElementById('credModal-uid').value;
-  const password = document.getElementById('credModal-password').value.trim();
-  if (!password || password.length < 8) {
-    return toast('credModal-pw-result', false, 'Password must be at least 8 characters');
-  }
-  const r = await api(`/admin/orgs/${ORG}/users/${uid}/password`, 'POST', { password });
-  if (r.ok) {
-    toast('credModal-pw-result', true, '✅ Password changed successfully');
-    document.getElementById('credModal-password').value = '';
-    document.getElementById('credModal-pw-fill').style.width = '0';
-    // Refresh the info panel
-    if (_credData) {
-      _credData.hasPassword = true;
-      _credData.needsPasswordSetup = false;
-      renderCredInfo(_credData);
-    }
-  } else {
-    toast('credModal-pw-result', false, '✗ ' + (r.data.error || 'Failed'));
-  }
-}
-
-async function doChangeUsername() {
+async function doIssueCredModal() {
   const uid      = document.getElementById('credModal-uid').value;
   const username = document.getElementById('credModal-username').value.trim();
-  // We call the credentials endpoint with the new username and a dummy password-keep flow.
-  // Since the credentials endpoint requires a password, we use the unified endpoint differently:
-  // We post JUST the username update by sending password="" and relying on the server
-  // to keep the existing password if we use a dedicated username-only endpoint.
-  // Use the existing credentials endpoint but pass generateUsername=false and no password change.
-  // Actually: easiest is to call GET creds → get current hash presence,
-  // then POST /members/:id/credentials with username + a sentinel.
-  // Since we can't get the raw password back, we instead send the username update only
-  // via a new approach: POST /admin/orgs/:slug/members/:userId/username
-  // But that route doesn't exist yet. For now use the credentials route with a temp password
-  // only if no password exists, otherwise just update username via a direct mongo update.
-  // ── Simplest safe approach: dedicated username-change call ──
-  const r = await api(`/admin/orgs/${ORG}/members/${uid}/username`, 'POST', { username: username || undefined, generate: !username });
+  const password = document.getElementById('credModal-password').value.trim();
+  if (!password || password.length < 8) return toast('credModal-result', false, 'Password must be at least 8 characters');
+  const r = await api(`/admin/orgs/${ORG}/members/${uid}/credentials`, 'POST', { username: username||undefined, password, generateUsername: true });
   if (r.ok) {
-    toast('credModal-user-result', true, `✅ Username updated to: ${r.data.username}`);
-    if (_credData) { _credData.username = r.data.username; renderCredInfo(_credData); }
-    document.getElementById('credModal-username').value = r.data.username;
+    toast('credModal-result', true, `✅ Done! Username: ${r.data.username}`);
+    setTimeout(() => closeModal('credModal'), 2000);
   } else {
-    toast('credModal-user-result', false, '✗ ' + (r.data.error || 'Failed'));
+    toast('credModal-result', false, '✗ ' + (r.data.error || 'Failed'));
   }
-}
-
-// Legacy: kept for backward compat if anything still calls doIssueCredModal
-function doIssueCredModal() {
-  switchCredTab('change', document.querySelector('.cred-modal-tab[data-ctab="change"]'));
 }
 
 /* ── Credentials page ── */

@@ -3581,5 +3581,132 @@ router.post(
   }
 );
 
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADD BOTH ROUTES to routes/org_management.js
+//  Paste immediately BEFORE the final  export default router;  line.
+//
+//  Route 1: GET  /admin/orgs/:slug/members/:userId/credentials
+//    → Returns current username, IDs, hasPassword — for admin preview
+//
+//  Route 2: POST /admin/orgs/:slug/members/:userId/username
+//    → Changes only the username, leaves password untouched
+// ═══════════════════════════════════════════════════════════════════
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Preview a member's current credentials (read-only)          */
+/*  GET /admin/orgs/:slug/members/:userId/credentials                  */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/admin/orgs/:slug/members/:userId/credentials",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ ok: false, error: "User is not a member of this org" });
+
+      const user = await User.findById(userId)
+        .select("username studentId teacherId adminId email firstName lastName passwordHash needsPasswordSetup role createdAt lastLogin")
+        .lean();
+
+      if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+      return res.json({
+        ok:                true,
+        userId:            String(user._id),
+        firstName:         user.firstName        || "",
+        lastName:          user.lastName         || "",
+        email:             user.email            || "",
+        role:              membership.role        || user.role || "",
+        username:          user.username          || null,
+        studentId:         user.studentId         || null,
+        teacherId:         user.teacherId         || null,
+        adminId:           user.adminId           || null,
+        hasPassword:       !!user.passwordHash,
+        needsPasswordSetup:!!user.needsPasswordSetup,
+        loginUrl:          "/auth/school",
+        lastLogin:         user.lastLogin         || null,
+        createdAt:         user.createdAt         || null,
+      });
+    } catch (err) {
+      console.error("[admin get credentials]", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "Failed to load credentials" });
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Update username only — password is NOT touched              */
+/*  POST /admin/orgs/:slug/members/:userId/username                    */
+/*                                                                      */
+/*  Body: { username?, generate? }                                      */
+/*    – username: custom slug (optional — validated for uniqueness)     */
+/*    – generate: true  → auto-generate if username is blank/omitted    */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/:userId/username",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+      let { username, generate } = req.body;
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ ok: false, error: "User not a member of this org" });
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+      if (username) {
+        // Custom username provided — sanitise and check uniqueness
+        username = String(username).toLowerCase().trim().replace(/[^a-z0-9_\-\.]/g, "");
+        if (username.length < 3) {
+          return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
+        }
+        const taken = await User.findOne({ username, _id: { $ne: user._id } }).lean();
+        if (taken) {
+          return res.status(409).json({ ok: false, error: `Username "${username}" is already taken` });
+        }
+        user.username = username;
+      } else if (generate || !user.username) {
+        // Auto-generate
+        user.username = await User.createUniqueUsername(
+          user.firstName || user.displayName?.split(" ")[0] || "user",
+          user.lastName  || user.displayName?.split(" ").slice(1).join("") || ""
+        );
+      } else {
+        // Nothing to do — user already has a username and no new one was supplied
+        return res.json({ ok: true, username: user.username, message: "Username unchanged" });
+      }
+
+      await user.save();
+
+      console.log(`[username] Admin set username for ${user.email || userId} → ${user.username}`);
+
+      return res.json({
+        ok:       true,
+        username: user.username,
+        userId:   String(user._id),
+        message:  `Username updated to: ${user.username}`
+      });
+    } catch (err) {
+      console.error("[admin update username]", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "Failed to update username" });
+    }
+  }
+);
+
 // export default router
 export default router;
