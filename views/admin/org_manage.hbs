@@ -408,6 +408,12 @@
     .mono { font-family:'Courier New',monospace; font-size:11.5px; color:var(--blue); font-weight:600; }
     .sep { height:1px; background:var(--border); margin:4px 0; }
 
+    /* ─── CLOSE BUTTON: hidden on desktop (sidebar always visible there) ─── */
+    #sb-close-btn { display:none; }
+    @media(max-width:768px) {
+      #sb-close-btn { display:flex; }
+    }
+
     /* ─── HAMBURGER BUTTON ─── */
     .mob-hamburger {
       display:none; flex-direction:column; justify-content:center;
@@ -624,7 +630,7 @@
       </div>
       <!-- Close button — only visible on mobile -->
       <button id="sb-close-btn" onclick="closeSidebar()"
-        style="display:none;align-items:center;justify-content:center;
+        style="display:flex;align-items:center;justify-content:center;
                width:32px;height:32px;border:none;border-radius:7px;
                background:rgba(255,255,255,.1);color:#fff;font-size:18px;
                cursor:pointer;flex-shrink:0;transition:background .12s"
@@ -1768,45 +1774,24 @@ function formToObj(form) {
 
 /* ── Sidebar open / close (mobile) ── */
 function openSidebar() {
-  const sb  = document.getElementById('sidebar');
-  const ov  = document.getElementById('sb-overlay');
-  const cb  = document.getElementById('sb-close-btn');
-  const hb  = document.getElementById('mob-hamburger-btn');
-  if (sb)  sb.classList.add('sb-open');
-  if (ov)  ov.classList.add('show');
-  if (cb)  cb.style.display = 'flex';
-  if (hb)  hb.style.display = 'none';
-  document.body.style.overflow = 'hidden';   // prevent body scroll when drawer is open
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  if (sb) sb.classList.add('sb-open');
+  if (ov) ov.classList.add('show');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeSidebar() {
-  const sb  = document.getElementById('sidebar');
-  const ov  = document.getElementById('sb-overlay');
-  const cb  = document.getElementById('sb-close-btn');
-  const hb  = document.getElementById('mob-hamburger-btn');
-  if (sb)  sb.classList.remove('sb-open');
-  if (ov)  ov.classList.remove('show');
-  // Only hide close btn when on mobile (hamburger is visible)
-  if (window.innerWidth <= 768) {
-    if (cb) cb.style.display = 'none';
-    if (hb) hb.style.display = '';
-  }
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  if (sb) sb.classList.remove('sb-open');
+  if (ov) ov.classList.remove('show');
   document.body.style.overflow = '';
 }
 
-/* Close sidebar when viewport is resized back to desktop */
+/* Reset drawer when resizing to desktop */
 window.addEventListener('resize', () => {
-  if (window.innerWidth > 768) {
-    const sb = document.getElementById('sidebar');
-    const ov = document.getElementById('sb-overlay');
-    const cb = document.getElementById('sb-close-btn');
-    const hb = document.getElementById('mob-hamburger-btn');
-    if (sb) sb.classList.remove('sb-open');
-    if (ov) ov.classList.remove('show');
-    if (cb) cb.style.display = 'none';
-    if (hb) hb.style.display = '';
-    document.body.style.overflow = '';
-  }
+  if (window.innerWidth > 768) closeSidebar();
 });
 
 /* ── Page navigation ── */
