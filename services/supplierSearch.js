@@ -646,6 +646,9 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "s tiles", "need teacher harare"
+// ── Parse shortcode search from raw text ─────────────────────────────────────
+// Handles: "find cement", "find plumber harare", "find cement mbare" etc.
+// MUST live after SUBURB_TO_CITY and toTitleCase declarations.
 export function parseShortcodeSearch(input = "") {
   const raw = String(input || "")
     .toLowerCase()
@@ -657,7 +660,6 @@ export function parseShortcodeSearch(input = "") {
 
   if (!raw) return null;
 
-  // Build a normalised set of known city names from SUPPLIER_CITIES
   const cityNames = SUPPLIER_CITIES
     .map(c => {
       if (typeof c === "string") return c.toLowerCase().trim();
@@ -675,7 +677,7 @@ export function parseShortcodeSearch(input = "") {
   let area = null;
   let productWords = [...words];
 
-  // ── Step 1: Check last 2 words then last 1 word for a known CITY ──────────
+  // Step 1: Check last 2 → 1 words for a known CITY name
   for (let len = Math.min(2, words.length); len >= 1; len--) {
     const candidate = words.slice(-len).join(" ").trim();
     if (cityNames.includes(candidate)) {
@@ -685,14 +687,14 @@ export function parseShortcodeSearch(input = "") {
     }
   }
 
-  // ── Step 2: If no city found yet, check last 3→1 words against SUBURB_TO_CITY ──
+  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
   if (!city) {
     for (let len = Math.min(3, words.length); len >= 1; len--) {
       const candidate = words.slice(-len).join(" ").trim();
       const mappedCity = SUBURB_TO_CITY[candidate];
       if (mappedCity) {
-        city = mappedCity;                     // e.g. "Harare"
-        area = toTitleCase(candidate);         // e.g. "Mbare"
+        city = mappedCity;
+        area = toTitleCase(candidate);
         productWords = words.slice(0, -len);
         break;
       }
@@ -701,21 +703,11 @@ export function parseShortcodeSearch(input = "") {
 
   const product = productWords.join(" ").trim();
 
-  // If the city/suburb extraction consumed all words (no product left), 
-  // return the whole raw string as the product — buyer typed just a suburb name.
   if (!product) {
-    return {
-      product: raw,
-      city: null,
-      area: null
-    };
+    return { product: raw, city: null, area: null };
   }
 
-  return {
-    product,
-    city,      // null if not found — caller will ask for city
-    area       // suburb name if matched, otherwise null
-  };
+  return { product, city, area };
 }
 
 // ── Split "plumber harare" into { product: "plumber", city: "Harare" } ───────
