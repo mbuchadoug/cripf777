@@ -473,15 +473,19 @@
     <div class="sb-div">Suggested for {{capitalize normalizedRole}}s</div>
     {{#each suggestedCategoryMeta}}
     <button
-      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}{{#if (eq this.count 0)}} hint{{/if}}"
       data-pillar="{{this.pillar}}"
-      onclick="setFilter('category','{{this.slug}}')">
+      onclick="{{#if (gt this.count 0)}}setFilter('category','{{this.slug}}'){{else}}return false{{/if}}">
       <span class="sbi-em">{{this.icon}}</span>
       <span class="sbi-txt">
         <div class="sbi-t">{{this.label}}</div>
-        <div class="sbi-s">{{#if this.pillar}}{{capitalize this.pillar}}{{else}}Professional Area{{/if}} · {{this.count}} qs</div>
+        <div class="sbi-s">{{#if this.pillar}}{{capitalize this.pillar}}{{else}}Professional Area{{/if}}</div>
       </span>
-      <span class="sbi-n">{{this.count}}</span>
+      {{#if (gt this.count 0)}}
+        <span class="sbi-n">{{this.count}}</span>
+      {{else}}
+        <span class="sbi-n zero">—</span>
+      {{/if}}
     </button>
     {{/each}}
     {{/if}}
@@ -592,12 +596,15 @@
         <div class="strip">
           {{#each suggestedCategoryMeta}}
           <button
-            class="ctile {{#if (eq this.slug ../../categoryFilter)}}ct-active{{/if}}"
+            class="ctile {{#if (eq this.slug ../../categoryFilter)}}ct-active{{/if}}{{#if (eq this.count 0)}} ct-hint{{/if}}"
             data-pillar="{{this.pillar}}"
-            onclick="setFilter('category','{{this.slug}}')">
+            onclick="{{#if (gt this.count 0)}}setFilter('category','{{this.slug}}'){{/if}}">
             <span class="ctile-ic">{{this.icon}}</span>
             <span class="ctile-name">{{this.label}}</span>
-            <span class="ctile-count">{{this.count}} question{{#if (gt this.count 1)}}s{{/if}}</span>
+            <span class="ctile-count">
+              {{#if (gt this.count 0)}}{{this.count}} assessment{{#if (gt this.count 1)}}s{{/if}}
+              {{else}}Coming soon{{/if}}
+            </span>
           </button>
           {{/each}}
         </div>
@@ -930,12 +937,12 @@
     {{#if suggestedCategoryMeta.length}}
     <div class="sb-div">Suggested for {{capitalize normalizedRole}}s</div>
     {{#each suggestedCategoryMeta}}
-    <button class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+    <button class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}{{#if (eq this.count 0)}} hint{{/if}}"
       data-pillar="{{this.pillar}}"
-      onclick="setFilter('category','{{this.slug}}')">
+      onclick="{{#if (gt this.count 0)}}setFilter('category','{{this.slug}}'){{else}}return false{{/if}}">
       <span class="sbi-em">{{this.icon}}</span>
-      <span class="sbi-txt"><div class="sbi-t">{{this.label}}</div><div class="sbi-s">{{this.count}} questions</div></span>
-      <span class="sbi-n">{{this.count}}</span>
+      <span class="sbi-txt"><div class="sbi-t">{{this.label}}</div><div class="sbi-s">{{#if (gt this.count 0)}}{{this.count}} assessments{{else}}Coming soon{{/if}}</div></span>
+      {{#if (gt this.count 0)}}<span class="sbi-n">{{this.count}}</span>{{else}}<span class="sbi-n zero">—</span>{{/if}}
     </button>
     {{/each}}
     {{/if}}
