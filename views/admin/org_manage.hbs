@@ -122,6 +122,389 @@
 
     <hr />
 
+    {{!-- ═══════════════════════════════════════════════════════════════
+     CREDENTIALS MANAGEMENT PANEL
+     Insert this block in views/admin/org_manage.hbs
+     EXACTLY WHERE TO PASTE:
+       Find:   <hr />
+       That appears after the </section> closing the Members block.
+       Paste this entire block immediately after that <hr />.
+     ═══════════════════════════════════════════════════════════════ --}}
+
+<style>
+  /* ── Credentials panel specific styles ── */
+  .cred-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 22px 24px; margin-bottom: 20px; }
+  .cred-panel h2 { font-size: 17px; font-weight: 800; color: #0f1117; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .cred-panel .panel-sub { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+
+  .cred-tabs { display: flex; gap: 6px; border-bottom: 1px solid #e5e7eb; margin-bottom: 20px; }
+  .cred-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; color: #6b7280; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all .14s; font-family: inherit; }
+  .cred-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+
+  .cred-pane { display: none; }
+  .cred-pane.active { display: block; }
+
+  /* Issue single user */
+  .issue-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .issue-grid .field-full { grid-column: 1 / -1; }
+  .cred-label { display: block; font-size: 12px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+  .cred-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #0f1117;
+    outline: none;
+    transition: border-color .14s;
+  }
+  .cred-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+  .cred-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; appearance: none; padding-right: 30px; }
+
+  .cred-btn {
+    padding: 10px 20px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .14s;
+  }
+  .cred-btn:hover { background: #1d4ed8; }
+  .cred-btn.secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+  .cred-btn.secondary:hover { background: #e5e7eb; }
+  .cred-btn.danger { background: #fee2e2; color: #dc2626; }
+  .cred-btn.danger:hover { background: #dc2626; color: #fff; }
+
+  /* Result box */
+  .cred-result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 13.5px; display: none; }
+  .cred-result.ok    { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .cred-result.err   { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+
+  /* Bulk results table */
+  .bulk-table-wrap { max-height: 360px; overflow-y: auto; margin-top: 14px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .bulk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .bulk-table th { background: #f9fafb; padding: 9px 12px; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+  .bulk-table td { padding: 9px 12px; border-bottom: 1px solid #f3f4f6; }
+  .bulk-table tr:last-child td { border-bottom: none; }
+  .bulk-table .mono { font-family: 'DM Mono','Courier New',monospace; font-size: 12.5px; color: #2563eb; font-weight: 700; }
+  .bulk-table .pw-cell { font-family: 'DM Mono','Courier New',monospace; font-size: 12.5px; color: #374151; letter-spacing: .5px; }
+
+  .copy-btn { padding: 3px 8px; font-size: 11px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 5px; cursor: pointer; font-family: inherit; font-weight: 600; }
+  .copy-btn:hover { background: #dbeafe; }
+
+  .export-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .stats-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat-pill { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 20px; padding: 5px 14px; font-size: 13px; color: #0369a1; font-weight: 600; }
+
+  /* Auto-generate toggle */
+  .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: #374151; }
+  .toggle-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #2563eb; }
+</style>
+
+<section>
+<div class="cred-panel">
+  <h2>🔑 Credentials Management</h2>
+  <p class="panel-sub">Issue, reset, or bulk-generate usernames and passwords for your organisation's members.</p>
+
+  <div class="cred-tabs">
+    <button class="cred-tab active" data-cpane="single">Issue to One User</button>
+    <button class="cred-tab" data-cpane="bulk">Bulk Generate</button>
+  </div>
+
+  <!-- ═══ SINGLE USER PANE ═══ -->
+  <div class="cred-pane active" id="cpane-single">
+
+    <div class="issue-grid">
+
+      <div>
+        <label class="cred-label" for="cred-member">Member</label>
+        <select id="cred-member" class="cred-input cred-select">
+          <option value="">— select a member —</option>
+          {{!-- Students --}}
+          {{#each groups.students}}
+            {{#if this.user}}
+            <option value="{{this.user._id}}"
+              data-name="{{this.user.firstName}} {{this.user.lastName}}"
+              data-role="student">
+              🎓 {{this.user.firstName}} {{this.user.lastName}}
+              {{#if this.user.studentId}}({{this.user.studentId}}){{/if}}
+            </option>
+            {{/if}}
+          {{/each}}
+          {{!-- Teachers --}}
+          {{#each groups.teachers}}
+            {{#if this.user}}
+            <option value="{{this.user._id}}"
+              data-name="{{this.user.firstName}} {{this.user.lastName}}"
+              data-role="teacher">
+              📖 {{this.user.firstName}} {{this.user.lastName}}
+              {{#if this.user.email}}({{this.user.email}}){{/if}}
+            </option>
+            {{/if}}
+          {{/each}}
+          {{!-- Staff / Employees --}}
+          {{#each groups.staff}}
+            {{#if this.user}}
+            <option value="{{this.user._id}}"
+              data-name="{{this.user.firstName}} {{this.user.lastName}}"
+              data-role="employee">
+              👤 {{this.user.firstName}} {{this.user.lastName}}
+              {{#if this.user.email}}({{this.user.email}}){{/if}}
+            </option>
+            {{/if}}
+          {{/each}}
+          {{!-- Admins --}}
+          {{#each groups.admins}}
+            {{#if this.user}}
+            <option value="{{this.user._id}}"
+              data-name="{{this.user.firstName}} {{this.user.lastName}}"
+              data-role="admin">
+              ⭐ {{this.user.firstName}} {{this.user.lastName}}
+              {{#if this.user.email}}({{this.user.email}}){{/if}}
+            </option>
+            {{/if}}
+          {{/each}}
+        </select>
+      </div>
+
+      <div>
+        <label class="cred-label" for="cred-username-inp">
+          Username <span style="font-weight:400;text-transform:none;letter-spacing:0">(leave blank to auto-generate)</span>
+        </label>
+        <input type="text" id="cred-username-inp" class="cred-input"
+          placeholder="e.g. johsmi2048" autocomplete="off" />
+      </div>
+
+      <div>
+        <label class="cred-label" for="cred-password-inp">Password</label>
+        <input type="text" id="cred-password-inp" class="cred-input"
+          placeholder="Min 8 characters" autocomplete="new-password" />
+      </div>
+
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button class="cred-btn" style="flex:1" onclick="issueSingleCredentials()">Issue Credentials</button>
+        <button class="cred-btn secondary" onclick="generateTempPassword()">🎲 Generate</button>
+      </div>
+
+    </div>
+
+    <div class="toggle-row">
+      <input type="checkbox" id="cred-gen-username" checked />
+      <label for="cred-gen-username">Auto-generate username if left blank</label>
+    </div>
+
+    <div class="cred-result" id="single-result"></div>
+  </div>
+
+  <!-- ═══ BULK PANE ═══ -->
+  <div class="cred-pane" id="cpane-bulk">
+
+    <p style="font-size:13.5px;color:#374151;margin-bottom:16px;line-height:1.6">
+      Generate temporary credentials for <strong>all members who don't yet have a password</strong>.
+      Existing passwords are never overwritten. Each user gets a unique username and a temporary password
+      they should change on first login.
+    </p>
+
+    <div class="stats-row">
+      <span class="stat-pill">Members without passwords will receive credentials</span>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="cred-btn" onclick="bulkGenerate()">⚡ Generate Credentials for All</button>
+    </div>
+
+    <div class="cred-result" id="bulk-result"></div>
+
+    <div id="bulk-table-container" style="display:none">
+      <div class="export-row">
+        <strong style="font-size:13px">Generated Credentials:</strong>
+        <button class="cred-btn secondary" onclick="exportCSV()">⬇️ Export CSV</button>
+        <button class="cred-btn secondary" onclick="copyAll()">📋 Copy All</button>
+      </div>
+      <div class="bulk-table-wrap">
+        <table class="bulk-table" id="bulk-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Username</th>
+              <th>Temp Password</th>
+              <th>Copy</th>
+            </tr>
+          </thead>
+          <tbody id="bulk-tbody"></tbody>
+        </table>
+      </div>
+      <p style="font-size:12px;color:#9ca3af;margin-top:8px">
+        ⚠️ Passwords shown once only. Export CSV before closing this page.
+      </p>
+    </div>
+
+  </div>
+</div>
+</section>
+
+<script>
+(function () {
+  /* ── Tab switching ── */
+  document.querySelectorAll('.cred-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.cred-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.cred-pane').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('cpane-' + tab.dataset.cpane).classList.add('active');
+    });
+  });
+
+  /* ── Helpers ── */
+  function showResult(id, ok, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'cred-result ' + (ok ? 'ok' : 'err');
+    el.style.display = 'block';
+  }
+
+  function getOrgSlug() {
+    return document.querySelector('[data-org-slug]')?.dataset.orgSlug
+      || location.pathname.match(/\/admin\/orgs\/([^/]+)/)?.[1]
+      || '';
+  }
+
+  /* ── Generate a random temp password ── */
+  window.generateTempPassword = function () {
+    const member = document.getElementById('cred-member');
+    const name = member.options[member.selectedIndex]?.dataset?.name || 'User';
+    const first = (name.split(' ')[0] || 'User').replace(/[^a-zA-Z]/g, '');
+    const pin   = String(Math.floor(1000 + Math.random() * 9000));
+    document.getElementById('cred-password-inp').value = first + pin + '!';
+  };
+
+  /* ── Issue credentials to a single user ── */
+  window.issueSingleCredentials = async function () {
+    const userId   = document.getElementById('cred-member').value;
+    const username = document.getElementById('cred-username-inp').value.trim();
+    const password = document.getElementById('cred-password-inp').value.trim();
+    const genUser  = document.getElementById('cred-gen-username').checked;
+
+    if (!userId) return showResult('single-result', false, 'Please select a member.');
+    if (!password) return showResult('single-result', false, 'Please enter a password (min 8 characters).');
+    if (password.length < 8) return showResult('single-result', false, 'Password must be at least 8 characters.');
+
+    const slug = getOrgSlug();
+    try {
+      const resp = await fetch(`/admin/orgs/${slug}/members/${userId}/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username || undefined, password, generateUsername: genUser })
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showResult('single-result', true,
+          `✅ Done! Username: ${data.username} — Password issued. Share these login details with the user.`
+        );
+        // Clear fields
+        document.getElementById('cred-username-inp').value = '';
+        document.getElementById('cred-password-inp').value = '';
+      } else {
+        showResult('single-result', false, '❌ ' + (data.error || 'Failed'));
+      }
+    } catch (e) {
+      showResult('single-result', false, '❌ Network error: ' + e.message);
+    }
+  };
+
+  /* ── Bulk generate ── */
+  window.bulkGenerate = async function () {
+    const slug = getOrgSlug();
+    const resultEl = document.getElementById('bulk-result');
+    showResult('bulk-result', true, '⏳ Generating credentials for all members without a password…');
+
+    try {
+      const resp = await fetch(`/admin/orgs/${slug}/credentials/bulk-generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        showResult('bulk-result', false, '❌ ' + (data.error || 'Failed'));
+        return;
+      }
+
+      showResult('bulk-result', true,
+        `✅ Issued ${data.issued} credentials. ${data.skipped} users already had passwords (not changed).`
+      );
+
+      if (data.credentials && data.credentials.length > 0) {
+        document.getElementById('bulk-table-container').style.display = 'block';
+        const tbody = document.getElementById('bulk-tbody');
+        tbody.innerHTML = '';
+        data.credentials.forEach(c => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${c.name || '—'}</td>
+            <td>${c.role || '—'}</td>
+            <td class="mono">${c.username}</td>
+            <td class="pw-cell">${c.tempPassword}</td>
+            <td><button class="copy-btn" onclick="copyRow('${c.username}','${c.tempPassword}')">Copy</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+        // Store for CSV export
+        window._bulkCredentials = data.credentials;
+      } else {
+        showResult('bulk-result', true, '✅ All members already have passwords. Nothing to generate.');
+      }
+    } catch (e) {
+      showResult('bulk-result', false, '❌ Network error: ' + e.message);
+    }
+  };
+
+  /* ── Copy single row ── */
+  window.copyRow = function (username, password) {
+    navigator.clipboard?.writeText(`Username: ${username}  Password: ${password}`)
+      .then(() => alert('Copied to clipboard!\n\nUsername: ' + username + '\nPassword: ' + password))
+      .catch(() => alert('Username: ' + username + '\nPassword: ' + password));
+  };
+
+  /* ── Copy all ── */
+  window.copyAll = function () {
+    const creds = window._bulkCredentials || [];
+    const lines = ['Name\tRole\tUsername\tPassword'];
+    creds.forEach(c => lines.push(`${c.name}\t${c.role}\t${c.username}\t${c.tempPassword}`));
+    navigator.clipboard?.writeText(lines.join('\n'))
+      .then(() => alert('All credentials copied to clipboard.'))
+      .catch(() => alert('Could not copy. Please export CSV instead.'));
+  };
+
+  /* ── Export CSV ── */
+  window.exportCSV = function () {
+    const creds = window._bulkCredentials || [];
+    if (!creds.length) return;
+    const rows = [['Name','Email','Role','Username','Temp Password','Note']];
+    creds.forEach(c => rows.push([c.name, c.email, c.role, c.username, c.tempPassword, c.note || '']));
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'credentials_' + Date.now() + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /* ── Add data-org-slug to body for JS to read ── */
+  // (org_manage.hbs renders with {{org.slug}} — this script reads it)
+  document.body.setAttribute('data-org-slug', '{{org.slug}}');
+
+})();
+</script>
+
+
   <section>
   <h2>Members</h2>
 

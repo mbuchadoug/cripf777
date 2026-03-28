@@ -3278,7 +3278,242 @@ router.post(
   }
 );
 
+// ═══════════════════════════════════════════════════════════════════
+//  ADD THESE ROUTES TO routes/org_management.js
+//  Paste them immediately BEFORE the final  export default router;  line.
+//
+//  These routes give admins a single, unified endpoint to:
+//    1. Issue (or update) a username + password for any org member
+//    2. Bulk-issue credentials to all members who don't have one yet
+//    3. Let a user see their own credentials (username only)
+//  The existing per-type password routes (/students/:id/password etc.)
+//  are KEPT as-is for backward compat; these new routes complement them.
+// ═══════════════════════════════════════════════════════════════════
 
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Issue / update credentials for any single org member        */
+/*  POST /admin/orgs/:slug/members/:userId/credentials                 */
+/*                                                                      */
+/*  Body: { username?, password, generateUsername? }                   */
+/*    – if username is omitted and generateUsername=true, one is made   */
+/*    – password is required and must be ≥ 8 chars                     */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/:userId/credentials",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+      let { username, password, generateUsername } = req.body;
+
+      if (!password || String(password).length < 8) {
+        return res.status(400).json({ ok: false, error: "Password must be at least 8 characters" });
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      // User must be a member of this org
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ ok: false, error: "User not a member of this org" });
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+      // ── Username handling ──────────────────────────────────────
+      if (username) {
+        // Admin supplied a custom username — validate and check uniqueness
+        username = String(username).toLowerCase().trim().replace(/[^a-z0-9_.\-]/g, "");
+        if (username.length < 3) {
+          return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
+        }
+        const taken = await User.findOne({ username, _id: { $ne: user._id } }).lean();
+        if (taken) {
+          return res.status(409).json({ ok: false, error: `Username "${username}" is already taken` });
+        }
+        user.username = username;
+      } else if (generateUsername || !user.username) {
+        // Auto-generate if not supplied or if user has no username yet
+        user.username = await User.createUniqueUsername(
+          user.firstName || user.displayName?.split(" ")[0] || "user",
+          user.lastName  || user.displayName?.split(" ").slice(1).join("") || ""
+        );
+      }
+      // if username="" and generateUsername=false and user already has one → keep existing
+
+      // ── Password ──────────────────────────────────────────────
+      await user.setPassword(String(password));
+      user.needsPasswordSetup = false;
+
+      await user.save();
+
+      console.log(`[credentials] Admin issued credentials to ${user.email || user._id} — username: ${user.username}`);
+
+      return res.json({
+        ok: true,
+        username: user.username,
+        userId:   String(user._id),
+        message:  `Credentials issued. Username: ${user.username}`
+      });
+    } catch (err) {
+      console.error("[admin issue credentials]", err);
+      return res.status(500).json({ ok: false, error: "Failed to issue credentials" });
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Bulk-issue credentials to ALL members with no password      */
+/*  POST /admin/orgs/:slug/credentials/bulk-generate                   */
+/*                                                                      */
+/*  Finds every org member without a passwordHash, generates a         */
+/*  username + a random 10-char temporary password, returns the list   */
+/*  as JSON so the admin can copy/send them.                           */
+/*  Does NOT overwrite users who already have passwords.               */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/credentials/bulk-generate",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      // All memberships for this org
+      const memberships = await OrgMembership.find({ org: org._id })
+        .populate("user", "_id firstName lastName email username passwordHash displayName role")
+        .lean();
+
+      const results = [];
+      let skipped = 0;
+
+      for (const m of memberships) {
+        const u = m.user;
+        if (!u) continue;
+        if (u.passwordHash) { skipped++; continue; } // already has a password
+
+        const user = await User.findById(u._id);
+        if (!user) continue;
+
+        // Generate username if missing
+        if (!user.username) {
+          user.username = await User.createUniqueUsername(
+            user.firstName || user.displayName?.split(" ")[0] || "user",
+            user.lastName  || user.displayName?.split(" ").slice(1).join("") || ""
+          );
+        }
+
+        // Generate a secure temporary password:  <FirstName><4-digit-pin>!
+        const pin   = String(Math.floor(1000 + Math.random() * 9000));
+        const first = (user.firstName || "User").replace(/[^a-zA-Z]/g, "");
+        const tempPassword = first + pin + "!";
+
+        await user.setPassword(tempPassword);
+        user.needsPasswordSetup = true; // flag: they should change this
+        await user.save();
+
+        results.push({
+          userId:   String(user._id),
+          name:     `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.displayName || user.email,
+          email:    user.email || "",
+          role:     m.role,
+          username: user.username,
+          tempPassword,
+          note: "User should change this password on first login"
+        });
+      }
+
+      return res.json({
+        ok:       true,
+        issued:   results.length,
+        skipped,
+        credentials: results
+      });
+    } catch (err) {
+      console.error("[bulk generate credentials]", err);
+      return res.status(500).json({ ok: false, error: "Bulk generation failed" });
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  USER: Get own credentials (username only — password never sent)    */
+/*  GET /org/:slug/my-credentials                                      */
+/* ------------------------------------------------------------------ */
+router.get(
+  "/org/:slug/my-credentials",
+  ensureAuth,
+  async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ error: "Org not found" });
+
+      const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+      if (!membership) return res.status(403).json({ error: "Not a member" });
+
+      const user = await User.findById(req.user._id)
+        .select("username studentId teacherId adminId email firstName lastName needsPasswordSetup passwordHash")
+        .lean();
+
+      return res.json({
+        username:          user.username || null,
+        studentId:         user.studentId || null,
+        teacherId:         user.teacherId || null,
+        adminId:           user.adminId || null,
+        hasPassword:       !!user.passwordHash,
+        needsPasswordSetup:!!user.needsPasswordSetup,
+        loginUrl:          "/auth/school"
+      });
+    } catch (err) {
+      console.error("[my-credentials]", err);
+      return res.status(500).json({ error: "Failed" });
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  BACKWARD COMPAT: Unified set-password for any user type            */
+/*  POST /admin/orgs/:slug/users/:userId/password                      */
+/*  (replaces /students/:id/password, /teachers/:id/password, etc.    */
+/*   but those old routes still work too)                              */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/users/:userId/password",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug, userId } = req.params;
+      const { password } = req.body;
+
+      if (!password || String(password).length < 4) {
+        return res.status(400).json({ error: "Password too short (min 4 chars)" });
+      }
+
+      const org = await Organization.findOne({ slug });
+      if (!org) return res.status(404).json({ error: "Org not found" });
+
+      const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
+      if (!membership) return res.status(404).json({ error: "User not a member of this org" });
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      await user.setPassword(String(password));
+      await user.save();
+
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[unified set password]", err);
+      return res.status(500).json({ error: "Failed to set password" });
+    }
+  }
+);
 
 // export default router
 export default router;
