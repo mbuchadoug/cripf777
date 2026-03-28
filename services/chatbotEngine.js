@@ -1935,13 +1935,49 @@ if (
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
 
-    if (shortcode.city && results.length) {
-      const pageResults = results.slice(0, 9);
-      const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
+ if (shortcode.city && results.length) {
       const locationLabel = shortcode.area
         ? `${shortcode.area}, ${shortcode.city}`
         : shortcode.city;
 
+      const offerResults = await runSupplierOfferSearch({
+        city: shortcode.city,
+        product: shortcode.product,
+        area: shortcode.area || null
+      });
+
+      if (offerResults.length) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": offerResults,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "offers"
+            }
+          },
+          { upsert: true }
+        );
+        if (biz) {
+          biz.sessionData = {
+            ...(biz.sessionData || {}),
+            supplierSearch: { product: shortcode.product, city: shortcode.city },
+            searchResults: offerResults,
+            searchPage: 0,
+            searchResultMode: "offers"
+          };
+          await saveBizSafe(biz);
+        }
+        const pageOffers = offerResults.slice(0, 9);
+        const rows = formatSupplierOfferResults(pageOffers);
+        if (offerResults.length > 9) {
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      }
+
+      const pageResults = results.slice(0, 9);
+      const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
       if (results.length > 9) {
         await UserSession.findOneAndUpdate(
           { phone },
@@ -1956,7 +1992,6 @@ if (
         );
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
       }
-
       return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
     }
 
@@ -4007,36 +4042,57 @@ if (
 ) {
   const shortcode = parseShortcodeSearch(text);
   if (shortcode) {
-    if (shortcode.city) {
+  if (shortcode.city) {
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city;
+
+      biz.sessionData = {
+        ...(biz.sessionData || {}),
+        supplierSearch: { product: shortcode.product, city: shortcode.city }
+      };
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.supplierSearchProduct": shortcode.product } },
+        { upsert: true }
+      );
+
+      const offerResults = await runSupplierOfferSearch({
+        city: shortcode.city,
+        product: shortcode.product,
+        area: shortcode.area || null
+      });
+
+      if (offerResults.length) {
+        biz.sessionData = {
+          ...(biz.sessionData || {}),
+          supplierSearch: { product: shortcode.product, city: shortcode.city },
+          searchResults: offerResults,
+          searchPage: 0,
+          searchResultMode: "offers"
+        };
+        await saveBizSafe(biz);
+        const pageOffers = offerResults.slice(0, 9);
+        const rows = formatSupplierOfferResults(pageOffers);
+        if (offerResults.length > 9) {
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      }
+
       const results = await runSupplierSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
-    if (results.length) {
-        // ── CRITICAL FIX: always update biz.sessionData with the CURRENT search product ──
-        // Without this, sup_order_ reads a stale product from a previous search.
-        biz.sessionData = {
-          ...(biz.sessionData || {}),
-          supplierSearch: { product: shortcode.product, city: shortcode.city }
-        };
-        // Also update UserSession so it's consistent for all code paths
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.supplierSearchProduct": shortcode.product } },
-          { upsert: true }
-        );
+      if (results.length) {
         const pageResults = results.slice(0, 9);
         const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
-        const locationLabel = shortcode.area
-            ? `${shortcode.area}, ${shortcode.city}`
-            : shortcode.city;
-        const hasMore = results.length > 9;
-        if (hasMore) {
+        if (results.length > 9) {
           biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
         }
-        await saveBizSafe(biz); // save supplierSearch.product + optional searchResults
+        await saveBizSafe(biz);
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
       }
     }
