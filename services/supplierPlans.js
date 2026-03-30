@@ -350,143 +350,10 @@ export const SUPPLIER_CATEGORIES = [
     presetKey: null
   },
 
-   {
+  {
     id: "landscaping",
     label: "🌿 Landscaping & Garden",
     types: ["service"],
-    presetKey: null
-  },
-
-  {
-    id: "dentists",
-    label: "🦷 Dentists & Dental Clinics",
-    types: ["service"],
-    subcats: [
-      { id: "general_dentistry", label: "General Dentistry" },
-      { id: "tooth_extraction",  label: "Tooth Extraction" },
-      { id: "teeth_cleaning",    label: "Teeth Cleaning & Whitening" },
-      { id: "braces_aligners",   label: "Braces & Aligners" },
-      { id: "dental_implants",   label: "Dental Implants" },
-      { id: "emergency_dental",  label: "Emergency Dental Care" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "legal",
-    label: "⚖️ Legal Services",
-    types: ["service"],
-    subcats: [
-      { id: "conveyancing",      label: "Conveyancing & Property Transfer" },
-      { id: "notary_commission", label: "Notary & Commissioner Services" },
-      { id: "company_registration", label: "Company Registration" },
-      { id: "family_law",        label: "Family Law" },
-      { id: "labour_law",        label: "Labour Law" },
-      { id: "litigation",        label: "Litigation & Court Matters" },
-      { id: "contract_drafting", label: "Contracts & Agreements" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "real_estate",
-    label: "🏠 Real Estate Services",
-    types: ["service"],
-    subcats: [
-      { id: "property_sales",    label: "Property Sales" },
-      { id: "property_rentals",  label: "Property Rentals" },
-      { id: "property_valuation", label: "Property Valuation" },
-      { id: "property_management", label: "Property Management" },
-      { id: "commercial_property", label: "Commercial Property" },
-      { id: "land_sales",        label: "Land & Stands" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "accounting",
-    label: "📊 Accounting & Bookkeeping",
-    types: ["service"],
-    subcats: [
-      { id: "bookkeeping",       label: "Bookkeeping" },
-      { id: "financial_statements", label: "Financial Statements" },
-      { id: "payroll",           label: "Payroll Services" },
-      { id: "management_accounts", label: "Management Accounts" },
-      { id: "tax_returns",       label: "Tax Returns" },
-      { id: "vat_returns",       label: "VAT Returns" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "auditing",
-    label: "🧾 Auditing & Assurance",
-    types: ["service"],
-    subcats: [
-      { id: "external_audit",    label: "External Audit" },
-      { id: "internal_audit",    label: "Internal Audit" },
-      { id: "compliance_review", label: "Compliance Review" },
-      { id: "risk_assessment",   label: "Risk Assessment" },
-      { id: "forensic_audit",    label: "Forensic Audit" },
-      { id: "assurance_services", label: "Assurance Services" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "medical",
-    label: "🏥 Private Clinics & Medical Services",
-    types: ["service"],
-    subcats: [
-      { id: "general_practice",  label: "General Practice" },
-      { id: "specialist_consult", label: "Specialist Consultation" },
-      { id: "laboratory",        label: "Laboratory Services" },
-      { id: "scans_xray",        label: "Scans & X-Ray" },
-      { id: "physiotherapy",     label: "Physiotherapy" },
-      { id: "occupational_health", label: "Occupational Health" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "architecture",
-    label: "📐 Architecture & Design",
-    types: ["service"],
-    subcats: [
-      { id: "house_plans",       label: "House Plans" },
-      { id: "commercial_design", label: "Commercial Design" },
-      { id: "plan_approvals",    label: "Plan Approvals" },
-      { id: "interior_design",   label: "Interior Design" },
-      { id: "3d_visuals",        label: "3D Visuals & Concepts" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "engineering",
-    label: "🏗️ Engineering Services",
-    types: ["service"],
-    subcats: [
-      { id: "structural_engineering", label: "Structural Engineering" },
-      { id: "civil_engineering",      label: "Civil Engineering" },
-      { id: "electrical_engineering", label: "Electrical Engineering" },
-      { id: "mechanical_engineering", label: "Mechanical Engineering" },
-      { id: "site_inspections",       label: "Site Inspections & Reports" }
-    ],
-    presetKey: null
-  },
-
-  {
-    id: "insurance",
-    label: "🛡️ Insurance Services",
-    types: ["service"],
-    subcats: [
-      { id: "motor_insurance",   label: "Motor Insurance" },
-    { id: "medical_insurance", label: "Medical Insurance" },
-      { id: "funeral_cover",     label: "Funeral Cover" },
-      { id: "business_insurance", label: "Business Insurance" },
-      { id: "property_insurance", label: "Property Insurance" }
-    ],
     presetKey: null
   },
 
@@ -496,5 +363,4 @@ export const SUPPLIER_CATEGORIES = [
     types: ["service"],
     presetKey: null
   }
-
 ];
