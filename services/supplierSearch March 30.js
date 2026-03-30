@@ -363,20 +363,17 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     const productOr = [
       { listedProducts: { $regex: product, $options: "i" } },
       { "rates.service": { $regex: product, $options: "i" } },
-      { categories: { $regex: product, $options: "i" } },
       { businessName: { $regex: product, $options: "i" } },
 
       ...searchTerms.flatMap(term => [
         { listedProducts: { $regex: term, $options: "i" } },
         { "rates.service": { $regex: term, $options: "i" } },
-        { categories: { $regex: term, $options: "i" } },
         { businessName: { $regex: term, $options: "i" } }
       ]),
 
       ...individualWords.flatMap(word => [
         { listedProducts: { $regex: word, $options: "i" } },
-        { "rates.service": { $regex: word, $options: "i" } },
-        { categories: { $regex: word, $options: "i" } }
+        { "rates.service": { $regex: word, $options: "i" } }
       ])
     ];
 
@@ -400,14 +397,9 @@ let results = await SupplierProfile.find(query)
       .lean();
   }
 
- results = results.filter((supplier) => {
+  results = results.filter((supplier) => {
     if (supplier?.profileType === "service") {
-      // Accept if they have rates, listed products, or at least a category match
-      const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-      const hasListedProducts = (supplier.listedProducts || []).some(p =>
-        p && p !== "pending_upload" && normalizeProductName(p)
-      );
-      return hasRates || hasListedProducts;
+      return (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
     }
 
     return (supplier.listedProducts || []).some(p =>
