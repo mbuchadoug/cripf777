@@ -1104,38 +1104,63 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
       // ── Categories: count by topic keyword matching ─────────────────
       // Pull all unique topics from the org's questions in one query
-  // ── Categories: count directly from the category field on quizzes ──
-// After re-categorisation, every comprehension quiz has category set.
-// This is faster, more accurate, and requires no keyword matching.
-const catAgg = await Question.aggregate([
-  {
-    $match: {
-      organization: org._id,
-      type: "comprehension",
-      "meta.aiCategorised": true,
-      "meta.isOutOfScope": { $ne: true },
-      category: { $exists: true, $nin: [null, "", "out-of-scope"] }
-    }
-  },
-  {
-    $group: {
-      _id: "$category",
-      count:  { $sum: 1 },
-      pillar: { $first: "$meta.aiPillar" }
-    }
-  },
-  { $sort: { count: -1 } }
-]);
+      const topicAgg = await Question.aggregate([
+        {
+          $match: {
+            organization: org._id,
+            topics: { $exists: true, $not: { $size: 0 } }
+          }
+        },
+        { $unwind: "$topics" },
+        { $group: { _id: "$topics", count: { $sum: 1 } } }
+      ]);
 
-allCategoryMeta = catAgg.map(c => ({
-  slug:   c._id,
-  label:  slugToLabel(c._id),
-  icon:   getIcon(c._id),
-  pillar: c.pillar || "general",
-  count:  c.count
-}));
+      // Build a lookup: topic slug → count
+      const topicCountMap = {};
+      for (const t of topicAgg) {
+        if (t._id) topicCountMap[String(t._id).toLowerCase()] = t.count;
+      }
 
-//allCategorySlugs = allCategoryMeta.map(c => c.slug);
+      // For each category, sum counts of all matching topics
+      // A topic matches a category keyword if it contains that keyword
+      allCategoryMeta = Object.entries(CATEGORY_TOPIC_KEYWORDS).map(([catSlug, keywords]) => {
+        let count = 0;
+        for (const [topicSlug, topicCount] of Object.entries(topicCountMap)) {
+          if (keywords.some(kw => topicSlug.includes(kw) || kw.includes(topicSlug))) {
+            count += topicCount;
+          }
+        }
+        return {
+          slug:   catSlug,
+          label:  slugToLabel(catSlug),
+          icon:   getIcon(catSlug),
+          pillar: "general", // will be enriched below
+          count
+        };
+      }).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
+
+      // Also try getting pillar from actual category field on comprehension docs
+      if (allCategoryMeta.length === 0) {
+        // Fallback: category field on comprehension docs (post-AI-run data)
+        const catAgg = await Question.aggregate([
+          {
+            $match: {
+              organization: org._id,
+              type: "comprehension",
+              category: { $exists: true, $ne: null, $ne: "" }
+            }
+          },
+          { $group: { _id: "$category", count: { $sum: 1 }, pillar: { $first: "$meta.aiPillar" } } },
+          { $sort: { count: -1 } }
+        ]);
+        allCategoryMeta = catAgg.map(c => ({
+          slug:   c._id,
+          label:  slugToLabel(c._id),
+          icon:   getIcon(c._id),
+          pillar: c.pillar || "general",
+          count:  c.count
+        }));
+      }
 
       allCategorySlugs = allCategoryMeta.map(c => c.slug);
     }
@@ -1168,62 +1193,39 @@ allCategoryMeta = catAgg.map(c => ({
 
     if (isCripfcntSchool && isAdmin) {
       const allQuizzes = await Question.find({
-  organization: org._id,
-  type: "comprehension",
-  'meta.isOutOfScope': { $ne: true }   // exclude maths/science/etc.
-})
-.select("_id text quizTitle module modules topics series category level seriesOrder questionIds createdAt meta")
-// No change needed here — meta.aiPillar is already included via "meta"
-// BUT add: exclude out-of-scope quizzes from the library
+        organization: org._id,
+        type: "comprehension"
+      })
+        .select("_id text quizTitle module modules topics series category level seriesOrder questionIds createdAt meta")
         .sort({ series: 1, seriesOrder: 1, createdAt: -1 })
         .lean();
 
-    // FIXED — pull topics from child questions for richer matching
-// Build a child-question topic lookup for all quiz IDs in this batch
-const allQuizIds = allQuizzes.map(q => q._id);
-const childTopicDocs = await Question.find({
-  'meta.inheritedFromQuiz': { $in: allQuizIds },
-  topics: { $exists: true, $not: { $size: 0 } }
-}).select('meta.inheritedFromQuiz topics').lean();
-
-const quizTopicMap = {};
-for (const c of childTopicDocs) {
-  const parentId = String(c.meta?.inheritedFromQuiz);
-  if (!quizTopicMap[parentId]) quizTopicMap[parentId] = new Set();
-  for (const t of (c.topics || [])) quizTopicMap[parentId].add(t);
-}
-
-for (const quiz of allQuizzes) {
-  // Merge quiz-level topics + inherited child topics
-  const ownTopics   = Array.isArray(quiz.topics) ? quiz.topics : [];
-  const childTopics = [...(quizTopicMap[String(quiz._id)] || [])];
-  const allTopics   = [...new Set([...ownTopics, ...childTopics])];
-
-  exams.push({
-    assignmentId: `admin-quiz-${quiz._id}`,
-    examId:       null,
-    title:        quiz.quizTitle || quiz.text || 'Quiz',
-    quizTitle:    quiz.quizTitle || quiz.text || 'Quiz',
-    module:       quiz.module    || 'general',
-    modules:      quiz.modules   || [quiz.module || 'general'],
-    series:       quiz.series    || null,
-    category:     quiz.category  || null,     // ← now populated after re-categorisation
-    level:        quiz.level     || 'foundation',
-    seriesOrder:  quiz.seriesOrder || 99,
-    questionIds:  quiz.questionIds || [],
-    createdAt:    quiz.createdAt,
-    isAdminQuiz:  true,
-    quizId:       quiz._id,
-    status:       'available',
-    meta: {
-      topics:   allTopics,                    // ← now has real topics
-      series:   quiz.series,
-      category: quiz.category,               // ← populated field
-      aiPillar: quiz.meta?.aiPillar || quiz.module,
-      level:    quiz.level
-    }
-  });
-}
+      for (const quiz of allQuizzes) {
+        exams.push({
+          assignmentId: `admin-quiz-${quiz._id}`,
+          examId:       null,
+          title:        quiz.quizTitle || quiz.text || "Quiz",
+          quizTitle:    quiz.quizTitle || quiz.text || "Quiz",
+          module:       quiz.module    || "general",
+          modules:      quiz.modules   || [quiz.module || "general"],
+          series:       quiz.series    || null,
+          category:     quiz.category  || null,
+          level:        quiz.level     || "foundation",
+          seriesOrder:  quiz.seriesOrder || 99,
+          questionIds:  quiz.questionIds || [],
+          createdAt:    quiz.createdAt,
+          isAdminQuiz:  true,
+          quizId:       quiz._id,
+          status:       "available",
+          meta: {
+            topics:   quiz.topics || [],
+            series:   quiz.series,
+            category: quiz.category,
+            aiPillar: quiz.meta?.aiPillar || quiz.module,
+            level:    quiz.level
+          }
+        });
+      }
 
     } else if (isAdmin) {
       exams = await ExamInstance.aggregate([
@@ -1325,66 +1327,55 @@ for (const quiz of allQuizzes) {
           const topics = ex.meta?.topics || [];
           if (!topics.some(t => String(t).toLowerCase().includes(topicFilter.toLowerCase()))) return false;
         }
-      if (seriesFilter) {
-  // Check series field, then meta.series — do NOT fall back to module
-  const s = (ex.series || ex.meta?.series || "").toLowerCase().trim();
-  if (!s || s !== seriesFilter.toLowerCase().trim()) return false;
-}
-if (categoryFilter) {
-  // Try 1 (primary): exact category field match — works after re-categorisation
-  const cat = (ex.category || ex.meta?.category || "").toLowerCase().trim();
-  if (cat === categoryFilter) return true;
+        if (seriesFilter) {
+          const s = ex.series || ex.meta?.series || ex.module || "";
+          if (s !== seriesFilter) return false;
+        }
+        if (categoryFilter) {
+          // Try 1: exact category field match
+          const cat = ex.category || ex.meta?.category || "";
+          if (cat === categoryFilter) return true;
 
-  // Try 2: topic keyword matching against CATEGORY_TOPIC_KEYWORDS
-  if (activeCategoryKeywords.length > 0) {
-    const exTopics = (ex.meta?.topics || []).map(t => String(t).toLowerCase());
-    if (exTopics.some(topic =>
-      activeCategoryKeywords.some(kw =>
-        topic.includes(kw) || kw.includes(topic)
-      )
-    )) return true;
-  }
+          // Try 2: topic keyword matching
+          if (activeCategoryKeywords.length > 0) {
+            const exTopics = (ex.meta?.topics || []).map(t => String(t).toLowerCase());
+            // Match if ANY of the exam's topics contains ANY of the category keywords
+            const matched = exTopics.some(topic =>
+              activeCategoryKeywords.some(kw =>
+                topic.includes(kw) || kw.includes(topic)
+              )
+            );
+            if (matched) return true;
+          }
 
-  // Try 3: series slug contains meaningful parts of the category slug
-  // Only use words ≥5 chars to avoid false positives on "and", "the" etc.
-  const exSeries = (ex.series || ex.meta?.series || "").toLowerCase();
-  const categoryParts = categoryFilter.split("-").filter(p => p.length >= 5);
-  if (exSeries && categoryParts.length &&
-      categoryParts.some(part => exSeries.includes(part))) {
-    return true;
-  }
+          // Try 3: series name contains category slug parts
+          const series = (ex.series || "").toLowerCase();
+          if (series && categoryFilter.split("-").some(part => part.length > 3 && series.includes(part))) {
+            return true;
+          }
 
-  // Try 4: pillar-to-category alignment (last resort)
-  // Use aiPillar, not module, since module may be "general" for school quizzes
-  const quizPillar = (ex.meta?.aiPillar || "").toLowerCase();
-  const PILLAR_CATEGORY_MAP = {
-    responsibility:  ["governance","institutional-accountability","public-sector-ethics",
-                      "responsibility-frameworks","structural-responsibility",
-                      "financial-accountability","social-contract","rule-of-law"],
-    consciousness:   ["consciousness-studies","philosophical-inquiry","systems-thinking",
-                      "critical-thinking","narrative-framing"],
-    technology:      ["technology-governance","digital-ethics"],
-    negotiation:     ["conflict-resolution","negotiation-dynamics"],
-    purpose:         ["strategic-leadership","change-management","policy-implementation",
-                      "community-leadership","crisis-management"],
-    civilization:    ["civilisation-theory","social-contract","human-rights",
-                      "social-justice","economic-justice","environmental-governance"],
-    interpretation:  ["interpretive-frameworks","narrative-framing",
-                      "language-recalibration","media-literacy","strategic-communication"],
-    frequencies:     ["frequencies-and-influence","consciousness-studies"],
-    general:         ["professional-development","education-reform","performance-metrics",
-                      "institutional-trust","scoi-fundamentals"],
-  };
-  if (quizPillar && PILLAR_CATEGORY_MAP[quizPillar]?.includes(categoryFilter)) return true;
+          // Try 4: module match on pillar-aligned categories
+          const pillarCategories = {
+            responsibility: ["governance","institutional-accountability","public-sector-ethics","responsibility-frameworks","structural-responsibility"],
+            consciousness:  ["consciousness-studies","philosophical-inquiry","systems-thinking","critical-thinking"],
+            technology:     ["technology-governance","digital-ethics"],
+            negotiation:    ["conflict-resolution","negotiation-dynamics"],
+            purpose:        ["strategic-leadership","change-management","policy-implementation"],
+            civilization:   ["civilisation-theory","social-contract","human-rights","social-justice"],
+            interpretation: ["interpretive-frameworks","narrative-framing","language-recalibration"],
+            frequencies:    ["frequencies-and-influence"],
+          };
+          const moduleName = (ex.module || "").toLowerCase();
+          for (const [mod, cats] of Object.entries(pillarCategories)) {
+            if (mod === moduleName && cats.includes(categoryFilter)) return true;
+          }
 
-  return false;
-}
-
-if (pillarFilter) {
-  // FIX: use aiPillar, not module — module is often "general" for school quizzes
-  const p = (ex.meta?.aiPillar || "").toLowerCase();
-  if (!p || p !== pillarFilter) return false;
-}
+          return false;
+        }
+        if (pillarFilter) {
+          const p = ex.meta?.aiPillar || ex.module || "";
+          if (p !== pillarFilter) return false;
+        }
         return true;
       });
     }
@@ -2364,11 +2355,10 @@ router.post(
       // ===================================
       // STEP 2: LOAD ALL QUIZZES
       // ===================================
-     const allQuizzes = await Question.find({
-  organization: org._id,
-  type: "comprehension",
-  'meta.isOutOfScope': { $ne: true }   // exclude maths/science/etc.
-})
+      const allQuizzes = await Question.find({
+        organization: org._id,
+        type: 'comprehension'
+      })
       .select('_id text module modules topics series questionIds')
       .lean();
 
