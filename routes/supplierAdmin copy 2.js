@@ -556,66 +556,9 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const tierRank  = tier === "featured" ? 3 : tier === "pro" ? 2 : 1;
 
-    // Tier → Business package mapping (mirrors supplierRegistration.js)
-    const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
-    const bizPackage = TIER_TO_PACKAGE[tier] || "bronze";
-    const isActive   = setActive === "true";
-
-    // ── Import models needed for full business account setup ──────────────
-    const Business    = (await import("../models/business.js")).default;
-    const UserRole    = (await import("../models/userRole.js")).default;
-    const Branch      = (await import("../models/branch.js")).default;
-    const UserSession = (await import("../models/userSession.js")).default;
-    const Product     = (await import("../models/product.js")).default;
-
-    // ── 1. Create the Business record ─────────────────────────────────────
-    const newBiz = await Business.create({
-      name:                businessName.trim(),
-      currency:            currency || "USD",
-      package:             isActive ? bizPackage : "trial",
-      subscriptionStatus:  isActive ? "active" : "inactive",
-      subscriptionStartedAt: isActive ? now : undefined,
-      subscriptionEndsAt:    isActive ? expiresAt : undefined,
-      isSupplier:          true,
-      ownerPhone:          cleanPhone,
-      sessionState:        "ready",
-      sessionData:         {}
-    });
-
-    // ── 2. Create UserRole (owner) ────────────────────────────────────────
-    await UserRole.create({
-      phone:      cleanPhone,
-      role:       "owner",
-      pending:    false,
-      businessId: newBiz._id
-    });
-
-    // ── 3. Create main Branch ─────────────────────────────────────────────
-    const mainBranch = await Branch.create({
-      businessId: newBiz._id,
-      name:       "Main Branch",
-      isDefault:  true
-    });
-
-    // ── 4. Link branch to the owner's UserRole ────────────────────────────
-    await UserRole.findOneAndUpdate(
-      { phone: cleanPhone, businessId: newBiz._id },
-      { branchId: mainBranch._id }
-    );
-
-    // ── 5. Set activeBusinessId in UserSession so WhatsApp login works ────
-    await UserSession.findOneAndUpdate(
-      { phone: cleanPhone },
-      { phone: cleanPhone, activeBusinessId: newBiz._id },
-      { upsert: true }
-    );
-
-    // ── 6. Create SupplierProfile linked to the Business ──────────────────
     const supplier = await SupplierProfile.create({
       businessName:          businessName.trim(),
       phone:                 cleanPhone,
-      businessId:            newBiz._id,
-      mainBranchId:          mainBranch._id,
       location:              { city: city.trim(), area: area.trim() },
       profileType:           profileType || "product",
       categories,
@@ -630,7 +573,7 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       subscriptionPlan:      billingCycle || "monthly",
       subscriptionStartedAt: now,
       subscriptionEndsAt:    expiresAt,
-      active:                isActive,
+      active:                setActive === "true",
       delivery: {
         available: profileType === "service" ? false : deliveryAvailable === "true"
       },
@@ -646,37 +589,6 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
         : `[Admin registered on ${now.toDateString()}]`
     });
 
-    // ── 7. Link SupplierProfile ID back onto the Business ─────────────────
-    await Business.findByIdAndUpdate(newBiz._id, {
-      supplierProfileId: supplier._id
-    });
-
-    // ── 8. Sync products/services into the Product model ──────────────────
-    // (mirrors the sync in supplierRegistration.js so catalogue is ready)
-    const capMap   = { basic: 20, pro: 60, featured: 150 };
-    const cap      = capMap[tier] || 20;
-    const toSync   = productList.slice(0, cap);
-    for (const itemName of toSync) {
-      const priceEntry = priceList.find(p => p.product === itemName);
-      const rateEntry  = rateList.find(r => r.service === itemName);
-      const unitPrice  = priceEntry?.amount || 0;
-      const description = rateEntry?.rate || null;
-      await Product.findOneAndUpdate(
-        { businessId: newBiz._id, name: itemName },
-        {
-          $set: {
-            businessId:  newBiz._id,
-            branchId:    mainBranch._id,
-            unitPrice,
-            description,
-            isActive:    true
-          }
-        },
-        { upsert: true }
-      );
-    }
-
-    // ── 9. Log a $0 subscription payment record ───────────────────────────
     await SupplierSubscriptionPayment.create({
       supplierPhone: cleanPhone,
       supplierId:    supplier._id,
@@ -691,7 +603,7 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     });
 
     res.redirect(
-      `/zq-admin/suppliers/${supplier._id}?success=${encodeURIComponent("Supplier registered successfully! Business account and WhatsApp access created.")}`
+      `/zq-admin/suppliers/${supplier._id}?success=${encodeURIComponent("Supplier registered successfully!")}`
     );
   } catch (err) {
     res.redirect(
@@ -1015,88 +927,9 @@ router.post("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
 
 // ── Toggle actions ─────────────────────────────────────────────────────────
 router.post("/suppliers/:id/toggle-active", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect(`/zq-admin/suppliers/${req.params.id}`);
-
-    supplier.active = !supplier.active;
-    await supplier.save();
-
-    // When toggling ON: ensure Business + UserRole + Branch + UserSession exist
-    if (supplier.active) {
-      const Business    = (await import("../models/business.js")).default;
-      const UserRole    = (await import("../models/userRole.js")).default;
-      const Branch      = (await import("../models/branch.js")).default;
-      const UserSession = (await import("../models/userSession.js")).default;
-      const cleanPhone  = supplier.phone;
-
-      const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
-      const bizPackage = TIER_TO_PACKAGE[supplier.tier] || "bronze";
-
-      // Find or create Business
-      let bizRecord = supplier.businessId
-        ? await Business.findById(supplier.businessId)
-        : null;
-
-      if (!bizRecord) {
-        const existingRole = await UserRole.findOne({ phone: cleanPhone, role: "owner" });
-        if (existingRole?.businessId) bizRecord = await Business.findById(existingRole.businessId);
-      }
-
-      if (!bizRecord) {
-        bizRecord = await Business.create({
-          name:               supplier.businessName,
-          currency:           "USD",
-          package:            bizPackage,
-          subscriptionStatus: "active",
-          isSupplier:         true,
-          supplierProfileId:  supplier._id,
-          ownerPhone:         cleanPhone,
-          sessionState:       "ready",
-          sessionData:        {}
-        });
-        await UserRole.create({
-          phone: cleanPhone, role: "owner", pending: false, businessId: bizRecord._id
-        });
-      } else {
-        if (bizRecord.name?.startsWith("pending_")) bizRecord.name = supplier.businessName;
-        bizRecord.isSupplier        = true;
-        bizRecord.supplierProfileId = supplier._id;
-        bizRecord.package           = bizPackage;
-        bizRecord.subscriptionStatus = "active";
-        await bizRecord.save();
-      }
-
-      // Ensure Branch
-      let mainBranchId;
-      const existingBranch = await Branch.findOne({ businessId: bizRecord._id, isDefault: true });
-      if (!existingBranch) {
-        const b = await Branch.create({ businessId: bizRecord._id, name: "Main Branch", isDefault: true });
-        await UserRole.findOneAndUpdate(
-          { businessId: bizRecord._id, role: "owner" }, { branchId: b._id }
-        );
-        mainBranchId = b._id;
-      } else {
-        mainBranchId = existingBranch._id;
-      }
-
-      // Update SupplierProfile with businessId + mainBranchId
-      await SupplierProfile.findByIdAndUpdate(req.params.id, {
-        businessId: bizRecord._id, mainBranchId
-      });
-
-      // Set activeBusinessId in UserSession
-      await UserSession.findOneAndUpdate(
-        { phone: cleanPhone },
-        { phone: cleanPhone, activeBusinessId: bizRecord._id },
-        { upsert: true }
-      );
-    }
-
-    res.redirect(`/zq-admin/suppliers/${req.params.id}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}`);
-  }
+  const supplier = await SupplierProfile.findById(req.params.id);
+  if (supplier) { supplier.active = !supplier.active; await supplier.save(); }
+  res.redirect(`/zq-admin/suppliers/${req.params.id}`);
 });
 
 router.post("/suppliers/:id/toggle-suspend", requireSupplierAdmin, async (req, res) => {
@@ -1177,160 +1010,42 @@ router.post("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) =>
     const { tier, plan, durationDays, reason, setActive } = req.body;
     const { SUPPLIER_PLANS } = await import("../services/supplierPlans.js");
 
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-
     const planDetails = SUPPLIER_PLANS[tier]?.[plan];
     const days = Number(durationDays) || planDetails?.durationDays || 30;
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-    // Tier → Business package mapping (mirrors supplierRegistration.js)
-    const TIER_TO_PACKAGE = { basic: "bronze", pro: "silver", featured: "gold" };
-    const bizPackage = TIER_TO_PACKAGE[tier] || "bronze";
-    const isActive   = setActive === "true";
-
-    // ── Import models ─────────────────────────────────────────────────────
-    const Business    = (await import("../models/business.js")).default;
-    const UserRole    = (await import("../models/userRole.js")).default;
-    const Branch      = (await import("../models/branch.js")).default;
-    const UserSession = (await import("../models/userSession.js")).default;
-    const Product     = (await import("../models/product.js")).default;
-
-    const cleanPhone = supplier.phone;
-
-    // ── 1. Find or create the Business record ─────────────────────────────
-    let bizRecord = supplier.businessId
-      ? await Business.findById(supplier.businessId)
-      : null;
-
-    if (!bizRecord) {
-      // Check if a Business already exists for this phone (e.g. from WhatsApp)
-      const existingRole = await UserRole.findOne({ phone: cleanPhone, role: "owner" });
-      if (existingRole?.businessId) {
-        bizRecord = await Business.findById(existingRole.businessId);
-      }
-    }
-
-    if (!bizRecord) {
-      // No Business at all — create one now
-      bizRecord = await Business.create({
-        name:               supplier.businessName,
-        currency:           "USD",
-        package:            isActive ? bizPackage : "trial",
-        subscriptionStatus: isActive ? "active" : "inactive",
-        subscriptionStartedAt: isActive ? now : undefined,
-        subscriptionEndsAt:    isActive ? expiresAt : undefined,
-        isSupplier:         true,
-        supplierProfileId:  supplier._id,
-        ownerPhone:         cleanPhone,
-        sessionState:       "ready",
-        sessionData:        {}
-      });
-
-      // Create UserRole for owner
-      await UserRole.create({
-        phone:      cleanPhone,
-        role:       "owner",
-        pending:    false,
-        businessId: bizRecord._id
-      });
-    } else {
-      // Update existing Business to reflect new plan
-      bizRecord.name               = bizRecord.name?.startsWith("pending_") ? supplier.businessName : bizRecord.name;
-      bizRecord.package            = isActive ? bizPackage : bizRecord.package;
-      bizRecord.subscriptionStatus = isActive ? "active" : bizRecord.subscriptionStatus;
-      bizRecord.isSupplier         = true;
-      bizRecord.supplierProfileId  = supplier._id;
-      if (isActive) {
-        bizRecord.subscriptionStartedAt = now;
-        bizRecord.subscriptionEndsAt    = expiresAt;
-      }
-      await bizRecord.save();
-    }
-
-    // ── 2. Ensure main Branch exists ──────────────────────────────────────
-    let mainBranchId;
-    const existingBranch = await Branch.findOne({ businessId: bizRecord._id, isDefault: true });
-    if (!existingBranch) {
-      const mainBranch = await Branch.create({
-        businessId: bizRecord._id,
-        name:       "Main Branch",
-        isDefault:  true
-      });
-      await UserRole.findOneAndUpdate(
-        { businessId: bizRecord._id, role: "owner" },
-        { branchId: mainBranch._id }
-      );
-      mainBranchId = mainBranch._id;
-    } else {
-      mainBranchId = existingBranch._id;
-    }
-
-    // ── 3. Set activeBusinessId in UserSession so WhatsApp login works ────
-    await UserSession.findOneAndUpdate(
-      { phone: cleanPhone },
-      { phone: cleanPhone, activeBusinessId: bizRecord._id },
-      { upsert: true }
-    );
-
-    // ── 4. Update SupplierProfile with businessId + mainBranchId ─────────
-    const supplierUpdate = {
+    const update = {
       tier,
-      tierRank:              tier === "featured" ? 3 : tier === "pro" ? 2 : 1,
-      subscriptionStatus:    "active",
+      tierRank: tier === "featured" ? 3 : tier === "pro" ? 2 : 1,
+      subscriptionStatus: "active",
       subscriptionStartedAt: now,
-      subscriptionEndsAt:    expiresAt,
-      subscriptionPlan:      plan,
-      active:                isActive,
-      businessId:            bizRecord._id,
-      mainBranchId:          mainBranchId,
+      subscriptionExpiresAt: expiresAt,
+      subscriptionPlan: plan,
+      active: setActive === "true",
       adminNote: reason
         ? `[Admin activated ${tier}/${plan} on ${now.toDateString()}] ${reason}`
         : `[Admin activated ${tier}/${plan} on ${now.toDateString()}]`
     };
-    await SupplierProfile.findByIdAndUpdate(req.params.id, supplierUpdate);
 
-    // ── 5. Sync products into the Product model ───────────────────────────
-    const capMap  = { basic: 20, pro: 60, featured: 150 };
-    const cap     = capMap[tier] || 20;
-    const toSync  = (supplier.listedProducts || supplier.products || []).slice(0, cap);
-    for (const itemName of toSync) {
-      const priceEntry  = (supplier.prices || []).find(p => p.product?.toLowerCase() === itemName.toLowerCase());
-      const rateEntry   = (supplier.rates  || []).find(r => r.service?.toLowerCase() === itemName.toLowerCase());
-      const unitPrice   = priceEntry?.amount || 0;
-      const description = rateEntry?.rate || null;
-      await Product.findOneAndUpdate(
-        { businessId: bizRecord._id, name: itemName },
-        {
-          $set: {
-            businessId:  bizRecord._id,
-            branchId:    mainBranchId,
-            unitPrice,
-            description,
-            isActive:    true
-          }
-        },
-        { upsert: true }
-      );
-    }
+    await SupplierProfile.findByIdAndUpdate(req.params.id, update);
 
-    // ── 6. Log a payment record ───────────────────────────────────────────
+    // Log a payment record so it shows in payment history
     await SupplierSubscriptionPayment.create({
-      supplierPhone: cleanPhone,
-      supplierId:    req.params.id,
+      supplierPhone: (await SupplierProfile.findById(req.params.id).lean())?.phone || "",
+      supplierId: req.params.id,
       tier,
       plan,
-      amount:        0,
-      currency:      "USD",
-      reference:     `MANUAL_${req.params.id}_${Date.now()}`,
-      status:        "paid",
-      paidAt:        now,
-      ecocashPhone:  "manual-admin"
+      amount: 0,
+      currency: "USD",
+      reference: `MANUAL_${req.params.id}_${Date.now()}`,
+      status: "paid",
+      paidAt: now,
+      ecocashPhone: "manual-admin"
     });
 
-    res.redirect(`/zq-admin/suppliers/${req.params.id}?success=${encodeURIComponent("Supplier activated! Business account and WhatsApp access are ready.")}`);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}`);
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
   }
