@@ -32,6 +32,15 @@ export const CATEGORY_SERVICE_EXAMPLES = {
   // ── New categories ─────────────────────────────────────────────────────────
   carpentry:       ["door fitting", "built-in cupboards", "kitchen units", "window frames", "decking"],
   landscaping:     ["lawn mowing", "tree trimming", "garden design", "irrigation installation"],
+  dentists:        ["tooth extraction", "teeth cleaning", "dental filling", "braces consultation", "emergency dental care"],
+  legal:           ["property transfer", "affidavit commissioning", "company registration", "contract drafting", "labour dispute advice"],
+  real_estate:     ["house for sale", "house to rent", "stand for sale", "property valuation", "property management"],
+  accounting:      ["bookkeeping", "financial statements", "payroll processing", "VAT return filing", "management accounts"],
+  auditing:        ["external audit", "internal audit", "compliance review", "risk assessment", "forensic audit"],
+  medical:         ["general consultation", "specialist consultation", "lab tests", "x-ray service", "physiotherapy session"],
+  architecture:    ["house plan design", "plan approval drawings", "interior design", "3D house render", "commercial building design"],
+  engineering:     ["structural design", "civil works supervision", "electrical design", "mechanical design", "site inspection report"],
+  insurance:       ["motor insurance", "medical aid package", "funeral cover", "business insurance", "property insurance"],
   other_services:  ["handyman", "deliveries", "odd jobs", "general maintenance"],
   // ── Existing categories ────────────────────────────────────────────────────
   plumbing:        ["burst pipe repair", "geyser installation", "blocked drain", "toilet fitting"],
