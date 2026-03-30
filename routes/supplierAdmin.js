@@ -173,25 +173,28 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
     const qs = (p) => `?page=${p}&search=${encodeURIComponent(search)}&status=${status}&tier=${tier}`;
 
     res.send(layout("Suppliers", `
-      <div class="panel">
-        <div class="panel-head">
+<div class="panel">
+    <div class="panel-head">
           <h3>Suppliers <span class="count">${total}</span></h3>
-          <form method="GET" class="filter-form">
-            <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
-            <select name="status">
-              <option value="">All Status</option>
-              <option ${status === "active" ? "selected" : ""} value="active">Active</option>
-              <option ${status === "inactive" ? "selected" : ""} value="inactive">Inactive</option>
-            </select>
-            <select name="tier">
-              <option value="">All Tiers</option>
-              <option ${tier === "basic" ? "selected" : ""} value="basic">Basic</option>
-              <option ${tier === "pro" ? "selected" : ""} value="pro">Pro</option>
-              <option ${tier === "featured" ? "selected" : ""} value="featured">Featured</option>
-            </select>
-            <button type="submit">Filter</button>
-            <a href="/zq-admin/suppliers" class="btn-reset">Clear</a>
-          </form>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <a href="/zq-admin/suppliers/new" class="btn btn-green btn-sm">➕ Register New</a>
+            <form method="GET" class="filter-form">
+              <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
+              <select name="status">
+                <option value="">All Status</option>
+                <option ${status === "active" ? "selected" : ""} value="active">Active</option>
+                <option ${status === "inactive" ? "selected" : ""} value="inactive">Inactive</option>
+              </select>
+              <select name="tier">
+                <option value="">All Tiers</option>
+                <option ${tier === "basic" ? "selected" : ""} value="basic">Basic</option>
+                <option ${tier === "pro" ? "selected" : ""} value="pro">Pro</option>
+                <option ${tier === "featured" ? "selected" : ""} value="featured">Featured</option>
+              </select>
+              <button type="submit">Filter</button>
+              <a href="/zq-admin/suppliers" class="btn-reset">Clear</a>
+            </form>
+          </div>
         </div>
         <table>
           <thead>
@@ -245,8 +248,13 @@ router.get("/suppliers/:id", requireSupplierAdmin, async (req, res) => {
       .filter(o => o.status === "completed")
       .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
+const successMsg = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
+      : "";
+
     res.send(layout(esc(supplier.businessName), `
       <a href="/zq-admin/suppliers" class="back-link">← Back to Suppliers</a>
+      ${successMsg}
 
       <div class="two-col">
         <div class="panel">
@@ -1278,13 +1286,14 @@ function tierColor(t) {
 }
 
 function layout(title, content) {
- const nav = [
-    { href: "/zq-admin",           label: "📊 Dashboard",  match: title === "Dashboard" },
-    { href: "/zq-admin/suppliers", label: "🏪 Suppliers",   match: title === "Suppliers" || title.includes("Edit") },
-    { href: "/zq-admin/orders",    label: "📦 Orders",      match: title === "Orders" },
-    { href: "/zq-admin/payments",  label: "💳 Payments",    match: title === "Payments" },
-    { href: "/zq-admin/contacts",  label: "👥 Contacts",    match: title === "Contacts" },   // ← ADD THIS
-    { href: "/zq-admin/presets",   label: "🗂 Presets",     match: title === "Presets" },
+const nav = [
+    { href: "/zq-admin",                label: "📊 Dashboard",        match: title === "Dashboard" },
+    { href: "/zq-admin/suppliers",      label: "🏪 Suppliers",         match: title === "Suppliers" || title.includes("Edit") },
+    { href: "/zq-admin/suppliers/new",  label: "➕ Register Supplier", match: title === "Register Supplier" },
+    { href: "/zq-admin/orders",         label: "📦 Orders",            match: title === "Orders" },
+    { href: "/zq-admin/payments",       label: "💳 Payments",          match: title === "Payments" },
+    { href: "/zq-admin/contacts",       label: "👥 Contacts",          match: title === "Contacts" },
+    { href: "/zq-admin/presets",        label: "🗂 Presets",           match: title === "Presets" },
   ];
 
   return `<!DOCTYPE html>
@@ -2009,7 +2018,421 @@ router.get("/contacts", requireSupplierAdmin, async (req, res) => {
   }
 });
 
+// ── Register New Supplier (Admin) ──────────────────────────────────────────
+router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
+  const { SUPPLIER_CITIES, SUPPLIER_CATEGORIES, SERVICE_COLLAR_GROUPS } = await import("../services/supplierPlans.js");
 
+  const productCats = SUPPLIER_CATEGORIES.filter(c => c.types?.includes("product"));
+  const serviceCats = SUPPLIER_CATEGORIES.filter(c => c.types?.includes("service"));
+
+  // Build category options grouped by collar for services
+  const serviceOptgroups = Object.entries(SERVICE_COLLAR_GROUPS).map(([key, group]) => {
+    const cats = serviceCats.filter(c => c.collar === key);
+    const options = cats.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("");
+    return `<optgroup label="${esc(group.label)}">${options}</optgroup>`;
+  }).join("");
+
+  const productOptions = productCats.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.label)}</option>`
+  ).join("");
+
+  const cityOptions = SUPPLIER_CITIES.map(city =>
+    `<option value="${esc(city)}">${esc(city)}</option>`
+  ).join("");
+
+  const error = req.query.error ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
+  const success = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+
+  res.send(layout("Register Supplier", `
+    <a href="/zq-admin/suppliers" class="back-link">← Back to Suppliers</a>
+    ${error}${success}
+
+    <div class="panel" style="max-width:860px">
+      <div class="panel-head">
+        <h3>➕ Register New Supplier / Service Provider</h3>
+        <span style="font-size:12px;color:var(--muted)">Admin-created listing — bypasses WhatsApp flow</span>
+      </div>
+
+      <form method="POST" action="/zq-admin/suppliers/new" class="edit-form">
+
+        <!-- ── SECTION 1: Business Info ─────────────────────────────── -->
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            1. Business Info
+          </p>
+          <div class="form-grid">
+            <div class="fg">
+              <label>Business Name <span style="color:red">*</span></label>
+              <input name="businessName" placeholder="e.g. Ace Hardware Harare" required />
+            </div>
+            <div class="fg">
+              <label>WhatsApp Phone <span style="color:red">*</span></label>
+              <input name="phone" placeholder="e.g. 2637712345678" required
+                     title="Include country code, no + sign. e.g. 2637712345678" />
+            </div>
+            <div class="fg">
+              <label>City <span style="color:red">*</span></label>
+              <select name="city" required>
+                <option value="">Select city...</option>
+                ${cityOptions}
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Area / Suburb <span style="color:red">*</span></label>
+              <input name="area" placeholder="e.g. Borrowdale, Avondale" required />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SECTION 2: Business Type & Category ──────────────────── -->
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            2. Type & Category
+          </p>
+          <div class="form-grid">
+            <div class="fg">
+              <label>Profile Type <span style="color:red">*</span></label>
+              <select name="profileType" id="profileTypeSelect" required onchange="toggleCategoryGroups()">
+                <option value="product">📦 Product Supplier</option>
+                <option value="service">🔧 Service Provider</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Tier / Plan <span style="color:red">*</span></label>
+              <select name="tier" required>
+                <option value="basic">Basic — up to 20 items</option>
+                <option value="pro">Pro — up to 60 items</option>
+                <option value="featured">Featured — up to 150 items</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="fg" id="productCatWrap">
+              <label>Product Category</label>
+              <select name="productCategory" id="productCategorySelect">
+                <option value="">Select category...</option>
+                ${productOptions}
+              </select>
+            </div>
+            <div class="fg" id="serviceCatWrap" style="display:none">
+              <label>Service Category</label>
+              <select name="serviceCategory" id="serviceCategorySelect">
+                <option value="">Select category...</option>
+                ${serviceOptgroups}
+              </select>
+            </div>
+            <div class="fg" id="subcatWrap" style="display:none">
+              <label>Specialisation / Sub-category</label>
+              <select name="subcategory" id="subcategorySelect">
+                <option value="">All / General</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SECTION 3: Products / Services ───────────────────────── -->
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            3. Products / Services
+          </p>
+          <div class="fg full" style="margin-bottom:12px">
+            <label id="productsLabel">Products (comma-separated)</label>
+            <textarea name="products" id="productsTextarea" rows="4"
+              placeholder="cooking oil, rice, sugar, mealie meal 10kg"></textarea>
+            <span style="font-size:11px;color:var(--muted)">
+              These become the supplier's searchable catalogue items.
+            </span>
+          </div>
+          <div class="fg full" id="pricesWrap" style="margin-bottom:12px">
+            <label id="pricesLabel">Prices (one per line: <code>product, amount, unit</code>)</label>
+            <textarea name="prices" rows="4"
+              placeholder="cooking oil, 4.50, litre&#10;rice, 8.00, 5kg bag&#10;sugar, 1.20, kg"></textarea>
+            <span style="font-size:11px;color:var(--muted)">Optional — leave blank to let supplier set prices later.</span>
+          </div>
+          <div class="fg full" id="ratesWrap" style="display:none;margin-bottom:12px">
+            <label>Service Rates (one per line: <code>service name, rate</code>)</label>
+            <textarea name="rates" rows="4"
+              placeholder="burst pipe repair, 30/job&#10;geyser installation, 80/job&#10;blocked drain, 25/hr"></textarea>
+            <span style="font-size:11px;color:var(--muted)">Optional — format: <code>service name, amount/unit</code></span>
+          </div>
+        </div>
+
+        <!-- ── SECTION 4: Delivery / Travel ─────────────────────────── -->
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            4. Delivery / Travel
+          </p>
+          <div class="form-grid">
+            <div class="fg" id="deliveryWrap">
+              <label>Delivery Available?</label>
+              <select name="deliveryAvailable">
+                <option value="false">🏠 Collection Only</option>
+                <option value="true">🚚 Yes, Delivers</option>
+              </select>
+            </div>
+            <div class="fg" id="travelWrap" style="display:none">
+              <label>Travel to Clients?</label>
+              <select name="travelAvailable">
+                <option value="true">🚗 Yes, Travels to Clients</option>
+                <option value="false">📍 Clients Come to Provider</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Min Order ($)</label>
+              <input type="number" name="minOrder" value="0" min="0" step="0.5" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SECTION 5: Subscription & Activation ─────────────────── -->
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+            5. Subscription & Activation
+          </p>
+          <div class="form-grid">
+            <div class="fg">
+              <label>Billing Cycle</label>
+              <select name="billingCycle">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Duration (days)</label>
+              <input type="number" name="durationDays" value="30" min="1" max="365" />
+            </div>
+            <div class="fg">
+              <label>Set Active Immediately?</label>
+              <select name="setActive">
+                <option value="true">✅ Yes — visible to buyers now</option>
+                <option value="false">⏸ No — save as inactive</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Currency</label>
+              <select name="currency">
+                <option value="USD">USD ($)</option>
+                <option value="ZWL">ZWL (Z$)</option>
+                <option value="ZAR">ZAR (R)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SECTION 6: Admin Note ─────────────────────────────────── -->
+        <div class="fg full" style="margin-bottom:20px">
+          <label>Admin Note (internal only)</label>
+          <textarea name="adminNote" rows="2"
+            placeholder="e.g. Registered at trade fair, paid cash, free trial..."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-green">✅ Register Supplier</button>
+          <a href="/zq-admin/suppliers" class="btn btn-gray">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+    <script>
+    // ── Subcategory data injected from server ────────────────────────────
+    const SUBCATS = ${JSON.stringify(
+      SUPPLIER_CATEGORIES.filter(c => c.subcats?.length).reduce((acc, c) => {
+        acc[c.id] = c.subcats.map(s => ({ id: s.id, label: s.label }));
+        return acc;
+      }, {})
+    )};
+
+    function toggleCategoryGroups() {
+      const type = document.getElementById("profileTypeSelect").value;
+      const isService = type === "service";
+
+      document.getElementById("productCatWrap").style.display  = isService ? "none" : "";
+      document.getElementById("serviceCatWrap").style.display  = isService ? "" : "none";
+      document.getElementById("deliveryWrap").style.display    = isService ? "none" : "";
+      document.getElementById("travelWrap").style.display      = isService ? "" : "none";
+      document.getElementById("pricesWrap").style.display      = isService ? "none" : "";
+      document.getElementById("ratesWrap").style.display       = isService ? "" : "none";
+
+      document.getElementById("productsLabel").textContent =
+        isService ? "Services (comma-separated)" : "Products (comma-separated)";
+      document.getElementById("productsTextarea").placeholder =
+        isService
+          ? "burst pipe repair, geyser installation, blocked drain"
+          : "cooking oil, rice, sugar, mealie meal 10kg";
+
+      // Reset subcats when type changes
+      document.getElementById("subcatWrap").style.display = "none";
+      document.getElementById("subcategorySelect").innerHTML = '<option value="">All / General</option>';
+    }
+
+    function updateSubcats() {
+      const type = document.getElementById("profileTypeSelect").value;
+      const catId = type === "service"
+        ? document.getElementById("serviceCategorySelect").value
+        : document.getElementById("productCategorySelect").value;
+
+      const subcatSelect = document.getElementById("subcategorySelect");
+      const subcatWrap   = document.getElementById("subcatWrap");
+
+      const subs = SUBCATS[catId] || [];
+      if (subs.length) {
+        subcatSelect.innerHTML = '<option value="">All / General</option>' +
+          subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
+        subcatWrap.style.display = "";
+      } else {
+        subcatSelect.innerHTML = '<option value="">All / General</option>';
+        subcatWrap.style.display = "none";
+      }
+    }
+
+    document.getElementById("serviceCategorySelect").addEventListener("change", updateSubcats);
+    document.getElementById("productCategorySelect").addEventListener("change", updateSubcats);
+    </script>
+  `));
+});
+
+router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
+  try {
+    const {
+      businessName, phone, city, area, profileType,
+      tier, billingCycle, durationDays, setActive,
+      productCategory, serviceCategory, subcategory,
+      products, prices, rates,
+      deliveryAvailable, travelAvailable, minOrder,
+      currency, adminNote
+    } = req.body;
+
+    // ── Validate required fields ───────────────────────────────────────────
+    if (!businessName?.trim()) throw new Error("Business name is required.");
+    if (!phone?.trim())        throw new Error("Phone number is required.");
+    if (!city?.trim())         throw new Error("City is required.");
+    if (!area?.trim())         throw new Error("Area/suburb is required.");
+
+    const cleanPhone = phone.trim().replace(/\s+/g, "");
+
+    // ── Check for duplicate phone ──────────────────────────────────────────
+    const existing = await SupplierProfile.findOne({ phone: cleanPhone });
+    if (existing) {
+      return res.redirect(
+        `/zq-admin/suppliers/new?error=${encodeURIComponent(
+          "A supplier with phone " + cleanPhone + " already exists."
+        )}`
+      );
+    }
+
+    // ── Parse products ─────────────────────────────────────────────────────
+    const productList = (products || "")
+      .split(",")
+      .map(p => p.trim().toLowerCase())
+      .filter(Boolean);
+
+    // ── Parse prices (product, amount, unit — one per line) ────────────────
+    const priceList = [];
+    if (prices && profileType === "product") {
+      for (const line of prices.split("\n")) {
+        const parts = line.split(",").map(s => s.trim());
+        const name = parts[0]?.toLowerCase();
+        const amount = parseFloat(parts[1]);
+        const unit = parts[2] || "each";
+        if (name && !isNaN(amount) && amount > 0) {
+          priceList.push({ product: name, amount, unit, inStock: true, currency: "USD" });
+        }
+      }
+    }
+
+    // ── Parse service rates (service, rate — one per line) ─────────────────
+    const rateList = [];
+    if (rates && profileType === "service") {
+      for (const line of rates.split("\n")) {
+        const parts = line.split(",").map(s => s.trim());
+        const service = parts[0]?.toLowerCase();
+        const rate = parts[1]?.trim();
+        if (service && rate) {
+          rateList.push({ service, rate });
+        }
+      }
+    }
+
+    // ── Category ───────────────────────────────────────────────────────────
+    const category = profileType === "service" ? serviceCategory : productCategory;
+    const categories = category ? [category] : [];
+
+    // ── Subscription dates ─────────────────────────────────────────────────
+    const now = new Date();
+    const days = Number(durationDays) || 30;
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const tierRank = tier === "featured" ? 3 : tier === "pro" ? 2 : 1;
+    const isActive = setActive === "true";
+
+    // ── Create SupplierProfile ─────────────────────────────────────────────
+    const supplier = await SupplierProfile.create({
+      businessName:          businessName.trim(),
+      phone:                 cleanPhone,
+      location: {
+        city:  city.trim(),
+        area:  area.trim()
+      },
+      profileType:           profileType || "product",
+      categories,
+      subcategory:           subcategory || null,
+      collarGroup:           profileType === "service"
+                               ? (req.body.collarGroup || null)
+                               : null,
+      products:              productList,
+      listedProducts:        productList,   // all uploaded = all listed initially
+      prices:                priceList,
+      rates:                 rateList,
+      tier:                  tier || "basic",
+      tierRank,
+      subscriptionStatus:    "active",
+      subscriptionPlan:      billingCycle || "monthly",
+      subscriptionStartedAt: now,
+      subscriptionExpiresAt: expiresAt,
+      active:                isActive,
+      delivery: {
+        available: profileType === "service" ? false : deliveryAvailable === "true"
+      },
+      travelAvailable:       profileType === "service" ? travelAvailable === "true" : false,
+      minOrder:              Number(minOrder) || 0,
+      currency:              currency || "USD",
+      rating:                0,
+      reviewCount:           0,
+      completedOrders:       0,
+      monthlyOrders:         0,
+      credibilityScore:      0,
+      adminNote:             adminNote?.trim()
+        ? `[Admin registered on ${now.toDateString()}] ${adminNote.trim()}`
+        : `[Admin registered on ${now.toDateString()}]`
+    });
+
+    // ── Log a subscription payment record ─────────────────────────────────
+    await SupplierSubscriptionPayment.create({
+      supplierPhone: cleanPhone,
+      supplierId:    supplier._id,
+      tier:          tier || "basic",
+      plan:          billingCycle || "monthly",
+      amount:        0,
+      currency:      "USD",
+      reference:     `ADMIN_REG_${supplier._id}_${Date.now()}`,
+      status:        "paid",
+      paidAt:        now,
+      ecocashPhone:  "admin-registered"
+    });
+
+    res.redirect(
+      `/zq-admin/suppliers/${supplier._id}?success=${encodeURIComponent(
+        "Supplier registered successfully!"
+      )}`
+    );
+  } catch (err) {
+    res.redirect(
+      `/zq-admin/suppliers/new?error=${encodeURIComponent(err.message)}`
+    );
+  }
+});
 
 router.post("/suppliers/:id/live-items", requireSupplierAdmin, async (req, res) => {
   const supplier = await SupplierProfile.findById(req.params.id);
