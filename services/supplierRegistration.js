@@ -29,27 +29,41 @@ export const CATEGORY_PRODUCT_EXAMPLES = {
 };
 
 export const CATEGORY_SERVICE_EXAMPLES = {
-  // ── New categories ─────────────────────────────────────────────────────────
-  carpentry:       ["door fitting", "built-in cupboards", "kitchen units", "window frames", "decking"],
-  landscaping:     ["lawn mowing", "tree trimming", "garden design", "irrigation installation"],
-  other_services:  ["handyman", "deliveries", "odd jobs", "general maintenance"],
-  // ── Existing categories ────────────────────────────────────────────────────
-  plumbing:        ["burst pipe repair", "geyser installation", "blocked drain", "toilet fitting"],
-  electrical:      ["house wiring", "DB board installation", "solar installation", "fault finding"],
-  construction:    ["bricklaying", "plastering", "roofing", "tiling", "house renovations"],
-  painting:        ["interior painting", "exterior painting", "roof painting", "texture coat"],
-  welding:         ["gate fabrication", "burglar bars", "steel door", "carport"],
-  cleaning:        ["office cleaning", "carpet cleaning", "deep clean", "window cleaning"],
-  transport:       ["car hire", "delivery", "airport transfers", "furniture removal"],
-  food_cooked:     ["catering", "wedding cake", "lunch boxes", "event catering"],
-  printing:        ["business cards", "banners", "flyers", "branded t-shirts"],
-  beauty:          ["hair braiding", "nails", "makeup", "massage"],
-  photography:     ["wedding photos", "passport photos", "events coverage", "drone footage"],
-  tutoring:        ["maths tutor", "O-Level prep", "A-Level tuition", "driving lessons"],
-  it_support:      ["laptop repair", "wifi setup", "CCTV installation", "phone repair"],
-  security:        ["security guard", "alarm installation", "access control", "electric fence"],
-  services:        ["plumbing", "welding", "painting"],
-  other:           ["handyman", "deliveries", "odd jobs"]
+  // ── Trade & Artisan ────────────────────────────────────────────────────────
+  carpentry:           ["door fitting", "built-in cupboards", "kitchen units", "window frames", "decking"],
+  landscaping:         ["lawn mowing", "tree trimming", "garden design", "irrigation installation", "paving"],
+  tiling_flooring:     ["floor tiling", "wall tiling", "wooden floors", "epoxy flooring", "carpet laying"],
+  air_conditioning:    ["AC installation", "AC repair & service", "fridge repair", "cold room install"],
+  glazing_aluminium:   ["aluminium windows", "glass replacement", "shower screens", "mirror installation"],
+  // ── White Collar / Professional ────────────────────────────────────────────
+  accounting:          ["bookkeeping", "tax returns (ZIMRA)", "payroll processing", "financial statements", "VAT registration"],
+  legal:               ["contract drafting", "company registration", "property conveyancing", "notary services"],
+  financial_advisory:  ["investment planning", "insurance advisory", "business valuation", "loan advisory"],
+  hr_recruitment:      ["recruitment & headhunting", "HR consulting", "staff training", "labour relations"],
+  marketing_digital:   ["social media management", "SEO & Google Ads", "website development", "branding & logo", "content creation"],
+  architecture_design: ["architectural plans", "structural engineering", "interior design", "quantity surveying"],
+  medical_health:      ["GP consultation", "dental services", "physiotherapy", "home nursing", "nutrition counselling"],
+  real_estate:         ["property sales", "property management", "property valuations", "tenant finding"],
+  events_management:   ["event planning", "wedding coordination", "MC services", "DJ hire", "tent & decor hire"],
+  // ── Blue Collar / General ──────────────────────────────────────────────────
+  other_services:      ["handyman", "pest control", "laundry & dry cleaning", "pool maintenance"],
+  // ── Existing (kept for backward compat) ────────────────────────────────────
+  plumbing:            ["burst pipe repair", "geyser installation", "blocked drain", "toilet fitting"],
+  electrical:          ["house wiring", "DB board installation", "solar installation", "fault finding"],
+  construction:        ["bricklaying", "plastering", "roofing", "tiling", "house renovations"],
+  painting:            ["interior painting", "exterior painting", "roof painting", "texture coat"],
+  welding:             ["gate fabrication", "burglar bars", "steel door", "carport"],
+  cleaning:            ["office cleaning", "carpet cleaning", "deep clean", "window cleaning"],
+  transport:           ["car hire", "delivery", "airport transfers", "furniture removal"],
+  food_cooked:         ["catering", "wedding cake", "lunch boxes", "event catering"],
+  printing:            ["business cards", "banners", "flyers", "branded t-shirts"],
+  beauty:              ["hair braiding", "nails", "makeup", "massage"],
+  photography:         ["wedding photos", "passport photos", "events coverage", "drone footage"],
+  tutoring:            ["maths tutor", "O-Level prep", "A-Level tuition", "driving lessons"],
+  it_support:          ["laptop repair", "wifi setup", "CCTV installation", "phone repair"],
+  security:            ["security guard", "alarm installation", "access control", "electric fence"],
+  services:            ["plumbing", "welding", "painting"],
+  other:               ["handyman", "deliveries", "odd jobs"]
 };
 function getCategoryExamples(categories = [], profileType = "product") {
   const map = profileType === "service" ? CATEGORY_SERVICE_EXAMPLES : CATEGORY_PRODUCT_EXAMPLES;

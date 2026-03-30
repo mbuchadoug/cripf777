@@ -78,12 +78,7 @@ import axios from "axios";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
-import {
-  SUPPLIER_PLANS,
-  SUPPLIER_CITIES,
-  SUPPLIER_CATEGORIES,
-  SERVICE_CATEGORY_GROUPS
-} from "./supplierPlans.js";
+import { SUPPLIER_PLANS, SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
 import {
   startSupplierRegistration,
   handleSupplierRegistrationStates
@@ -1587,9 +1582,8 @@ a === "my_orders" ||
       a.startsWith("sup_book_confirm_") ||
       a === "exp_show_categories" ||
       a.startsWith("exp_quick_save_") ||
-   a === "reg_type_product" ||
+      a === "reg_type_product" ||
       a === "reg_type_service" ||
-      a.startsWith("sup_collar_") ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
       a === "sup_preset_confirm" ||
@@ -5656,21 +5650,6 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   biz.sessionData = biz.sessionData || {};
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.profileType = profileType;
-
-  // ── Services: show collar group picker first, then category ──────────────
-  if (profileType === "service") {
-    const { SERVICE_COLLAR_GROUPS } = await import("./supplierPlans.js");
-    biz.sessionState = "supplier_reg_collar";
-    await saveBizSafe(biz);
-
-    return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
-      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
-      { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
-      { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
-    ]);
-  }
-
-  // ── Products: go straight to category as before ───────────────────────────
   biz.sessionState = "supplier_reg_category";
   await saveBizSafe(biz);
 
@@ -5686,72 +5665,15 @@ if (a === "reg_type_product" || a === "reg_type_service") {
       : [])
   ];
 
-  return sendList(from, "🗂 What product do you mainly offer?", categoryRows);
-}
-
-
-// ── Supplier collar group selected during service registration ────────────
-if (a.startsWith("sup_collar_")) {
-  if (!biz) return sendMainMenu(from);
-
-  const collarKey = a.replace("sup_collar_", "");
-  const validCollars = ["white_collar", "trade", "blue_collar"];
-  if (!validCollars.includes(collarKey)) {
-    await sendText(from, "❌ Invalid selection. Please try again.");
-    return sendMainMenu(from);
-  }
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  biz.sessionData.supplierReg.collarGroup = collarKey;
-  biz.sessionState = "supplier_reg_category";
-  await saveBizSafe(biz);
-
-  // Show only categories belonging to this collar group
-  const filteredCategories = SUPPLIER_CATEGORIES.filter(
-    c => c.types.includes("service") && c.collar === collarKey
-  );
-
-  const collarLabels = {
-    white_collar: "💼 Professional Services",
-    trade: "🔧 Trade & Artisan",
-    blue_collar: "🧹 General Services"
-  };
-
-  const categoryRows = [
-    ...filteredCategories.slice(0, 9).map(c => ({
-      id: `sup_cat_${c.id}`,
-      title: c.label
-    })),
-    ...(filteredCategories.length > 9
-      ? [{ id: `sup_collar_more_${collarKey}`, title: "➕ More Categories" }]
-      : [])
-  ];
-
   return sendList(
     from,
-    `${collarLabels[collarKey]}\n\n_Choose your main category:_`,
+    profileType === "service"
+      ? "🗂 What service do you mainly offer?"
+      : "🗂 What product do you mainly offer?",
     categoryRows
   );
 }
 
-// ── More categories for a specific collar group ───────────────────────────
-if (a.startsWith("sup_collar_more_")) {
-  if (!biz) return sendMainMenu(from);
-
-  const collarKey = a.replace("sup_collar_more_", "");
-  const filteredCategories = SUPPLIER_CATEGORIES.filter(
-    c => c.types.includes("service") && c.collar === collarKey
-  );
-
-  return sendList(from, "🗂 More Categories", [
-    ...filteredCategories.slice(9).map(c => ({
-      id: `sup_cat_${c.id}`,
-      title: c.label
-    })),
-    { id: `sup_collar_${collarKey}`, title: "⬅ Back" }
-  ]);
-}
 
 
 if (a === "sup_cat_more") {
@@ -5760,45 +5682,17 @@ if (a === "sup_cat_more") {
   const profileType = biz.sessionData?.supplierReg?.profileType || "product";
   const filteredCategories = getSupplierCategoriesForType(profileType);
 
-  // For services, "More Categories" should return service groups, not a huge flat list
-  if (profileType === "service") {
-    return sendList(from, "🗂 Service Groups", [
-      { id: "sup_grp_trades_technical", title: "🛠️ Trades & Technical" },
-      { id: "sup_grp_home_property", title: "🏠 Home & Property" },
-      { id: "sup_grp_professional_corporate", title: "💼 Professional & Corporate" },
-      { id: "sup_grp_health_personal", title: "🩺 Health & Personal Care" },
-      { id: "sup_grp_creative_events_media", title: "🎨 Creative, Events & Media" },
-      { id: "sup_grp_education_digital", title: "💻 Education & Digital" },
-      { id: "sup_grp_transport_logistics", title: "🚚 Transport & Logistics" },
-      { id: "sup_grp_other_services_group", title: "🧰 Other Services" }
-    ]);
-  }
+  return sendList(
+  from,
+  "🗂 More Categories",
+  [
+    ...filteredCategories.slice(9).map(c => ({
+      id: `sup_cat_${c.id}`,
+      title: c.label
+    }))
+  ]
+);
 
-  // Keep product flow paginated and valid
-  const moreRows = filteredCategories.slice(9, 18).map(c => ({
-    id: `sup_cat_${c.id}`,
-    title: c.label
-  }));
-
-  if (filteredCategories.length > 18) {
-    moreRows.push({ id: "sup_cat_more_2", title: "➡ More Categories" });
-  }
-
-  return sendList(from, "🗂 More Categories", moreRows);
-}
-
-if (a === "sup_cat_more_2") {
-  if (!biz) return sendMainMenu(from);
-
-  const profileType = biz.sessionData?.supplierReg?.profileType || "product";
-  const filteredCategories = getSupplierCategoriesForType(profileType);
-
-  const moreRows = filteredCategories.slice(18, 27).map(c => ({
-    id: `sup_cat_${c.id}`,
-    title: c.label
-  }));
-
-  return sendList(from, "🗂 More Categories (Page 2)", moreRows);
 }
 
   // ── Travel yes/no during service registration ─────────────────────────────
@@ -5837,37 +5731,6 @@ if (a === "sup_travel_no") {
     });
   }
   // ── Supplier category selected during registration ────────────────────────
-
-if (a.startsWith("sup_grp_")) {
-  if (!biz) return sendMainMenu(from);
-
-  const groupId = a.replace("sup_grp_", "");
-  const group = SERVICE_CATEGORY_GROUPS.find(g => g.id === groupId);
-
-  if (!group) {
-    return sendText(from, "❌ Service group not found. Please try again.");
-  }
-
-  const rows = group.categoryIds
-    .map(catId => SUPPLIER_CATEGORIES.find(c => c.id === catId && c.types?.includes("service")))
-    .filter(Boolean)
-    .slice(0, 9)
-    .map(c => ({
-      id: `sup_cat_${c.id}`,
-      title: c.label
-    }));
-
-  rows.push({ id: "reg_type_service", title: "⬅ Back to Service Groups" });
-
-  return sendList(from, group.label, rows);
-}
-
-
-
-
-
-
-
 if (a.startsWith("sup_cat_")) {
   const catId = a.replace("sup_cat_", "");
   if (!biz) return sendMainMenu(from);
@@ -5879,73 +5742,54 @@ if (a.startsWith("sup_cat_")) {
   const existing = biz.sessionData.supplierReg.categories || [];
   if (!existing.includes(catId)) existing.push(catId);
   biz.sessionData.supplierReg.categories = existing;
-
-  // ── NEW: if this category has subcats, ask the supplier to pick one ───────
-  const selectedCat = SUPPLIER_CATEGORIES.find(c => c.id === catId);
-  if (selectedCat?.subcats?.length) {
-    biz.sessionState = "supplier_reg_subcat";
-    await saveBizSafe(biz);
-
-    const subcatRows = [
-      { id: "sup_subcat_all", title: "📋 All / General" },
-      ...selectedCat.subcats.slice(0, 9).map(s => ({
-        id: `sup_subcat_${s.id}`,
-        title: s.label
-      }))
-    ];
-
-    return sendList(
-      from,
-      `📂 *${selectedCat.label}*\n\nWhich area do you specialise in?\n_You can always add more services later._`,
-      subcatRows
-    );
-  }
-
-  // ── No subcats: continue directly to products/services step ──────────────
   biz.sessionState = "supplier_reg_products";
   await saveBizSafe(biz);
 
+// Get category-specific examples for either services or products
   const { CATEGORY_PRODUCT_EXAMPLES, CATEGORY_SERVICE_EXAMPLES } = await import("./supplierRegistration.js");
   const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
   const template = await getTemplateForCategoryWithDB(catId);
 
-  if (profileType === "service") {
-    const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b"];
-    const exampleText = catExamples.slice(0, 2).join(", ");
+if (profileType === "service") {
+  const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b"];
+  const exampleText = catExamples.slice(0, 2).join(", ");
 
-    return sendButtons(from, {
-      text: `✅ *Category selected!*\n\nHow would you like to add your services?\n\n_e.g. ${exampleText}_`,
-      buttons: [
-        { id: "sup_request_upload",     title: "📤 Send Us Your List" },
-        { id: "sup_enter_own_products", title: "✍️ Type My Own" },
-        { id: "sup_skip_products",      title: "⏭ Skip For Now" }
-      ]
-    });
-  }
+  return sendButtons(from, {
+    text: `✅ *Category selected!*\n\nHow would you like to add your services?\n\n_e.g. ${exampleText}_`,
+    buttons: [
+      { id: "sup_request_upload",     title: "📤 Send Us Your List" },
+      { id: "sup_enter_own_products", title: "✍️ Type My Own" },
+      { id: "sup_skip_products",      title: "⏭ Skip For Now" }
+    ]
+  });
+}
 
+  // Products - check for preset template first
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b", "product c"];
   const exampleText = catExamples.slice(0, 3).join(", ");
 
-  if (template) {
-    const preview = template.products.slice(0, 6).join(", ");
-    const moreCount = template.products.length - 6;
+if (template) {
+  const preview = template.products.slice(0, 6).join(", ");
+  const moreCount = template.products.length - 6;
 
-    return sendButtons(from, {
-      text:
+  return sendButtons(from, {
+    text:
 `✅ *Category selected!*
 
 📦 *Preset available:* _${preview}${moreCount > 0 ? ` + ${moreCount} more` : ""}_
 
 How would you like to add your products?`,
-      buttons: [
-        { id: "sup_request_upload",       title: "📤 Send Us Your List" },
-        { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
-        { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
-      ]
-    });
-  }
+    buttons: [
+      { id: "sup_request_upload",       title: "📤 Send Us Your List" },
+      { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
+      { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
+    ]
+  });
+}
 
-  return sendButtons(from, {
+  // No preset for this category - still show all options
+// No preset for this category - still show all options
+return sendButtons(from, {
     text:
 `✅ *Category selected!*
 
@@ -5965,47 +5809,6 @@ _Examples: ${exampleText}_`,
 
 
 
-// ── Supplier subcategory selected during service registration ─────────────
-if (a.startsWith("sup_subcat_")) {
-  if (!biz) return sendMainMenu(from);
-
-  const subcatId = a.replace("sup_subcat_", "");
-  const profileType = biz.sessionData?.supplierReg?.profileType || "service";
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  // Store subcategory (null means "All / General")
-  biz.sessionData.supplierReg.subcategory = subcatId === "all" ? null : subcatId;
-  biz.sessionState = "supplier_reg_products";
-  await saveBizSafe(biz);
-
-  const catId = (biz.sessionData.supplierReg.categories || [])[0];
-  const { CATEGORY_SERVICE_EXAMPLES, CATEGORY_PRODUCT_EXAMPLES } = await import("./supplierRegistration.js");
-
-  if (profileType === "service") {
-    const catExamples = CATEGORY_SERVICE_EXAMPLES[catId] || ["service a", "service b"];
-    const exampleText = catExamples.slice(0, 2).join(", ");
-
-    return sendButtons(from, {
-      text: `✅ *Specialisation saved!*\n\nHow would you like to add your services?\n\n_e.g. ${exampleText}_`,
-      buttons: [
-        { id: "sup_request_upload",     title: "📤 Send Us Your List" },
-        { id: "sup_enter_own_products", title: "✍️ Type My Own" },
-        { id: "sup_skip_products",      title: "⏭ Skip For Now" }
-      ]
-    });
-  }
-
-  const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b"];
-  return sendButtons(from, {
-    text: `✅ *Subcategory saved!*\n\nHow would you like to add your products?\n\n_e.g. ${catExamples.slice(0, 3).join(", ")}_`,
-    buttons: [
-      { id: "sup_request_upload",     title: "📤 Send Us Your List" },
-      { id: "sup_enter_own_products", title: "✍️ Type My Own" },
-      { id: "sup_skip_products",      title: "⏭ Skip For Now" }
-    ]
-  });
-}
 
 
 
