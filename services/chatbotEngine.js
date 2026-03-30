@@ -82,7 +82,7 @@ import {
   SUPPLIER_PLANS,
   SUPPLIER_CITIES,
   SUPPLIER_CATEGORIES,
-  SERVICE_CATEGORY_GROUPS
+SERVICE_COLLAR_GROUPS
 } from "./supplierPlans.js";
 import {
   startSupplierRegistration,
