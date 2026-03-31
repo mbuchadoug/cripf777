@@ -525,10 +525,10 @@
       {{/if}}
       {{/unless}}
 
-      {{!-- BROWSE STRIP — always shown, All + professional area CATEGORIES --}}
-      {{#if categoryMeta.length}}
+      {{!-- BROWSE STRIP — always shown, All + pillars --}}
+      {{#if quizzesByPillarArray.length}}
       <div class="strip-wrap">
-        <div class="strip-lbl">📂 Browse by Professional Area</div>
+        <div class="strip-lbl">📂 Browse by Pillar</div>
         <div class="strip">
           <button class="ctile {{#unless (or categoryFilter pillarFilter seriesFilter)}}ct-active{{/unless}}"
             onclick="clearAllFilters()" style="min-width:80px">
@@ -536,12 +536,14 @@
             <span class="ctile-name">All Areas</span>
             <span class="ctile-count">{{totalQuizCount}} total</span>
           </button>
-          {{#each categoryMeta}}
-          <button class="ctile ctile-cat {{#if (eq this.slug ../categoryFilter)}}ct-active{{/if}}"
-            onclick="setFilter('category','{{this.slug}}')">
-            <span class="ctile-ic">{{this.icon}}</span>
-            <span class="ctile-name">{{this.label}}</span>
-            <span class="ctile-count">{{this.count}} assessments</span>
+          {{#each quizzesByPillarArray}}
+          <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
+            data-pillar="{{this.pillarSlug}}"
+            onclick="setFilter('pillar','{{this.pillarSlug}}')"
+            style="border-left:3px solid {{this.pillarColor}}">
+            <span class="ctile-ic">{{this.pillarIcon}}</span>
+            <span class="ctile-name">{{this.pillarLabel}}</span>
+            <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
           </button>
           {{/each}}
         </div>
