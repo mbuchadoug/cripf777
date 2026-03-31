@@ -925,12 +925,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     let allCategories = [];
 
     if (isCripfcntSchool) {
+      // IMPORTANT: aggregate() does NOT auto-cast ObjectId — must wrap explicitly
+      const orgOid = new mongoose.Types.ObjectId(String(org._id));
 
-      // Single aggregate — no meta.aiCategorised gate, just query the category field directly
       const rawCats = await Question.aggregate([
         {
           $match: {
-            organization: org._id,
+            organization: orgOid,
             type:         "comprehension",
             category:     { $exists: true, $nin: [null, "", "out-of-scope"] }
           }
@@ -939,10 +940,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         { $sort:  { count: -1 } }
       ]);
 
-      // ── DEBUG: log what the aggregate returned ────────────────────────────
-      console.log(`[dashboard] org=${slug} rawCats from DB:`, rawCats.slice(0, 5));
-      console.log(`[dashboard] total rawCats: ${rawCats.length}`);
-      // ── END DEBUG ─────────────────────────────────────────────────────────
+      console.log(`[dashboard] org=${slug} rawCats=${rawCats.length}`, rawCats.slice(0,3));
 
       categoryMeta = rawCats
         .filter(c => c.count > 0)
@@ -953,14 +951,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           count: c.count
         }));
 
-      console.log(`[dashboard] categoryMeta built: ${categoryMeta.length} categories`);
-
       allCategories = categoryMeta.map(c => c.slug);
 
       const seriesAgg = await Question.aggregate([
         {
           $match: {
-            organization: org._id,
+            organization: orgOid,
             type:         "comprehension",
             series:       { $exists: true, $nin: [null, "", "out-of-scope"] }
           }
