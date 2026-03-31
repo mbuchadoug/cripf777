@@ -908,7 +908,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     // ─────────────────────────────────────────────
     // 6. RENDER
     // ─────────────────────────────────────────────
-    res.render("dashboard", {
+    res.render("org/dashboard", {
       org,
       user: req.user,
       quizzes,
