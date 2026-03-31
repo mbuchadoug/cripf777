@@ -1023,27 +1023,55 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     }
 
     // Role → suggested category slugs (always shown, even at count=0)
-    const ROLE_SUGGESTED = {
-      administrator: [
-        "governance","institutional-accountability","public-sector-ethics",
-        "strategic-leadership","change-management","policy-implementation"
-      ],
-      teacher: [
-        "education-reform","critical-thinking","professional-development",
-        "community-leadership","strategic-communication","systems-thinking"
-      ],
-      student: [
-        "consciousness-studies","critical-thinking","social-contract",
-        "human-rights","economic-justice","media-literacy"
-      ],
-      professional: [
-        "governance","public-policy","strategic-communication",
-        "institutional-accountability","economic-policy","digital-ethics"
-      ]
-    };
+   // ── PILLAR → preferred categories (used for ordering, not hard-coding) ──────
+// These are preference hints — we match them against actual DB categories
+// using startsWith/includes so naming variations still match.
+const PILLAR_CATEGORY_HINTS = {
+  responsibility:  ["governance","accountability","ethics","responsibility","rule-of-law","compliance"],
+  consciousness:   ["consciousness","awareness","philosophical","systems-thinking","critical"],
+  purpose:         ["leadership","strategic","change","implementation","mission","purpose"],
+  interpretation:  ["interpretation","narrative","language","media","communication","framing"],
+  frequencies:     ["frequencies","influence","energy","resonance","signal"],
+  civilization:    ["civilization","civilisation","society","heritage","culture","social"],
+  negotiation:     ["negotiation","conflict","dialogue","consensus","diplomacy"],
+  technology:      ["technology","digital","ai","cyber","data","innovation"],
+  general:         ["professional","development","training","scoi","performance"],
+};
 
-    const suggestedSlugs = ROLE_SUGGESTED[normalizedRole] || ROLE_SUGGESTED.professional;
+// Build suggestedSlugs dynamically from actual DB categories
+// Priority: match DB category slugs against pillar hints
+// This means the tiles always show real categories with real counts
+const suggestedSlugs = (() => {
+  if (!isCripfcntSchool || !allCategoryMeta.length) return [];
 
+  // For each pillar, find the best-matching DB category (highest count among hint matches)
+  const seen   = new Set();
+  const result = [];
+
+  // Always include the top 2 categories per pillar (by count), prioritising hint matches
+  for (const [, hints] of Object.entries(PILLAR_CATEGORY_HINTS)) {
+    const matches = allCategoryMeta
+      .filter(cm => cm.count > 0 && !seen.has(cm.slug) &&
+        hints.some(hint => cm.slug.includes(hint) || hint.includes(cm.slug.split('-')[0]))
+      )
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 1);
+
+    for (const m of matches) {
+      seen.add(m.slug);
+      result.push(m.slug);
+    }
+  }
+
+  // Fill remaining slots with highest-count DB categories not yet included
+  const remaining = allCategoryMeta
+    .filter(cm => cm.count > 0 && !seen.has(cm.slug))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, Math.max(0, 8 - result.length))
+    .map(cm => cm.slug);
+
+  return [...result, ...remaining].slice(0, 8);
+})();
     // ══════════════════════════════════════════════════════════════════
     //  STEP 1 — Count questions per category using topic keyword matching
     //
@@ -1462,6 +1490,78 @@ if (pillarFilter) {
     for (const s of Object.values(quizzesBySeries))
       s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
 
+    // ══════════════════════════════════════════════════════════════════
+    //  BUILD quizzesByPillarArray — Pillar → Category → Series hierarchy
+    //  Used by the new institutional sidebar and filtered pillar view.
+    // ══════════════════════════════════════════════════════════════════
+    const PILLAR_ORDER = [
+      'consciousness','responsibility','interpretation','purpose',
+      'frequencies','civilization','negotiation','technology','general'
+    ];
+    const PILLAR_META = {
+      consciousness:  { label:'Consciousness',  icon:'🧠', color:'#7c3aed', desc:'Institutional awareness & strategic foresight' },
+      responsibility: { label:'Responsibility', icon:'🤝', color:'#0d9488', desc:'Accountability frameworks & performance systems' },
+      interpretation: { label:'Interpretation', icon:'🔍', color:'#4f46e5', desc:'Evidence-based analysis for decision-making' },
+      purpose:        { label:'Purpose',        icon:'🎯', color:'#d97706', desc:'Mission clarity & strategic alignment' },
+      frequencies:    { label:'Frequencies',    icon:'📡', color:'#e11d48', desc:'Communication protocols & stakeholder engagement' },
+      civilization:   { label:'Civilization',   icon:'🏛', color:'#059669', desc:'Societal infrastructure & institutional frameworks' },
+      negotiation:    { label:'Negotiation',    icon:'🤜', color:'#ea580c', desc:'Strategic dialogue & consensus-building' },
+      technology:     { label:'Technology',     icon:'💻', color:'#2563eb', desc:'AI-age tools & digital transformation' },
+      general:        { label:'General',        icon:'📌', color:'#8b92a5', desc:'Cross-pillar professional development' },
+    };
+
+    const _pillarBuckets = {};
+
+    for (const [seriesSlug, seriesData] of Object.entries(quizzesBySeries)) {
+      const pillar   = seriesData.pillar   || 'general';
+      const category = seriesData.category || 'general';
+
+      if (!_pillarBuckets[pillar]) {
+        _pillarBuckets[pillar] = {
+          pillarSlug:   pillar,
+          pillarLabel:  PILLAR_META[pillar]?.label || slugToLabel(pillar),
+          pillarIcon:   PILLAR_META[pillar]?.icon  || '📌',
+          pillarColor:  PILLAR_META[pillar]?.color || '#8b92a5',
+          pillarDesc:   PILLAR_META[pillar]?.desc  || '',
+          totalQuizzes: 0,
+          categories:   {}
+        };
+      }
+
+      if (!_pillarBuckets[pillar].categories[category]) {
+        _pillarBuckets[pillar].categories[category] = {
+          categorySlug:  category,
+          categoryLabel: slugToLabel(category),
+          totalQuizzes:  0,
+          seriesList:    []
+        };
+      }
+
+      _pillarBuckets[pillar].categories[category].seriesList.push({
+        seriesSlug:   seriesData.seriesSlug,
+        seriesLabel:  seriesData.seriesLabel,
+        pillar:       seriesData.pillar,
+        pillarIcon:   PILLAR_META[pillar]?.icon || '📌',
+        pillarColor:  PILLAR_META[pillar]?.color || '#8b92a5',
+        category:     seriesData.category,
+        level:        seriesData.level,
+        quizCount:    seriesData.quizzes.length,
+        quizzes:      seriesData.quizzes
+      });
+
+      _pillarBuckets[pillar].categories[category].totalQuizzes += seriesData.quizzes.length;
+      _pillarBuckets[pillar].totalQuizzes += seriesData.quizzes.length;
+    }
+
+    // Convert to ordered arrays (Handlebars cannot iterate plain objects reliably)
+    const quizzesByPillarArray = PILLAR_ORDER
+      .filter(p => _pillarBuckets[p]?.totalQuizzes > 0)
+      .map(p => ({
+        ..._pillarBuckets[p],
+        categories: Object.values(_pillarBuckets[p].categories)
+          .sort((a, b) => b.totalQuizzes - a.totalQuizzes)
+      }));
+
     // These come from the DB-scan above — always complete, filter-independent
     const allSeries     = allSeriesSlugs.length
       ? allSeriesSlugs
@@ -1534,10 +1634,11 @@ if (pillarFilter) {
     }
 
     // ── Render ───────────────────────────────────────────────────────
-    return res.render("org/dashboard", {
+return res.render("org/dashboard", {
       org, membership, modules,
       quizzesByModule,
       quizzesBySeries,
+      quizzesByPillarArray,
       hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
       attemptRows, certRows,
       isAdmin, isCripfcntSchool,
