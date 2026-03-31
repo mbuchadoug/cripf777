@@ -1591,6 +1591,8 @@ router.get('/org/:slug/dashboard', ensureAuth, async (req, res) => {
     // NOTE: categoryMeta passed to template = allCategoryMeta (sorted by count DESC)
     // The template's cat-scroll strip uses categoryMeta directly.
     // All previously existing template variables are preserved for backward compat.
+
+    console.log(org,'org')
     return res.render('org/dashboard', {
       org, membership, modules,
 
