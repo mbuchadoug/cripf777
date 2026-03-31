@@ -459,7 +459,68 @@ router.get(
 /*  GET /org/:slug/dashboard                                          */
 /* ------------------------------------------------------------------ */
 
+router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || "");
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return res.status(404).send("org not found");
 
+    const membership = await OrgMembership.findOne({
+      org: org._id,
+      user: req.user._id,
+    }).lean();
+    if (!membership) {
+      return res.status(403).send("You are not a member of this organization");
+    }
+
+    const modules = await OrgModule.find({ org: org._id }).lean();
+
+    const exams = await ExamInstance.find({
+      org: org._id,
+      user: req.user._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const quizzesByModule = {};
+    const now = new Date();
+
+    for (const ex of exams) {
+      const key = ex.module || "general";
+      if (!quizzesByModule[key]) quizzesByModule[key] = [];
+
+      let status = "pending";
+      if (ex.finishedAt) status = "completed";
+      else if (ex.expiresAt && ex.expiresAt < now) status = "expired";
+
+      // 👇 Org quiz link: 20-question UI, includes module for label
+      const openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(
+        ex.examId
+      )}&module=${encodeURIComponent(ex.module || "Responsibility")}`;
+
+      quizzesByModule[key].push({
+        examId: ex.examId,
+        module: ex.module,
+        createdAt: ex.createdAt,
+        expiresAt: ex.expiresAt,
+        finishedAt: ex.finishedAt,
+        status,
+        openUrl,
+      });
+    }
+
+    return res.render("org/dashboard", {
+      org,
+      membership,
+      modules,
+      user: req.user,
+      quizzesByModule,
+    });
+  } catch (err) {
+    console.error("[org dashboard] error:", err && (err.stack || err));
+    return res.status(500).send("failed");
+  }
+});
 
 /* ------------------------------------------------------------------ */
 /*  ORG: View a single module's learning material                     */
