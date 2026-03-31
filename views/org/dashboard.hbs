@@ -545,7 +545,7 @@
            Pillars are a compact dropdown filter only — not big cards.
            Only categories with count > 0 are shown.
       ═══════════════════════════════════════════════════════════════ --}}
-      {{#if categoryMeta.length}}
+      {{#if (or categoryMeta.length allCategories.length)}}
       <div class="cat-nav">
         <div class="cat-nav-hdr">
           <div class="cat-nav-lbl">🗂 Professional Areas</div>
@@ -610,6 +610,7 @@
           {{/each}}
           {{else}}
           {{!-- No pillar filter: show all categories sorted by count --}}
+          {{#if categoryMeta.length}}
           {{#each categoryMeta}}
           {{#if (gt this.count 0)}}
           <button class="ccard {{#if (eq this.slug ../categoryFilter)}}cc-active{{/if}}"
@@ -622,6 +623,18 @@
           </button>
           {{/if}}
           {{/each}}
+          {{else}}
+          {{#each allCategories}}
+          <button class="ccard {{#if (eq this ../categoryFilter)}}cc-active{{/if}}"
+            data-pillar="responsibility"
+            onclick="setFilter('category','{{this}}')">
+            <span class="ccard-ic">📂</span>
+            <span class="ccard-name">{{capitalize (replace this "-" " ")}}</span>
+            <span class="ccard-count">Area</span>
+            <span class="ccard-pill">Category</span>
+          </button>
+          {{/each}}
+          {{/if}}
           {{/if}}
         </div>
       </div>
