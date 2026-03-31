@@ -133,41 +133,44 @@
     .sv{font-size:22px;font-weight:800;line-height:1;color:var(--ink)}
     .sl{font-size:11px;color:var(--ink-muted);margin-top:2px;font-weight:500}
 
-    /* CATEGORY STRIP — PRIMARY NAVIGATION */
-    .strip-wrap{margin-bottom:16px}
-    .strip-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px}
-    .strip-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-muted);display:flex;align-items:center;gap:6px}
-    .pillar-sel-wrap{display:flex;align-items:center;gap:6px}
-    .pillar-sel-lbl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);white-space:nowrap}
-    .pillar-inline-sel{padding:3px 22px 3px 7px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--font);font-size:11.5px;color:var(--ink);background:var(--canvas);cursor:pointer;transition:border-color .18s;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b92a5' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;min-width:130px}
-    .pillar-inline-sel:focus{outline:none;border-color:var(--blue)}
-    .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-    .strip::-webkit-scrollbar{display:none}
-
-    /* Category tile */
-    .ctile{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:10px 13px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .16s;min-width:120px;max-width:158px;font-family:var(--font);text-align:left}
-    .ctile:hover{box-shadow:var(--s);border-color:var(--blue);transform:translateY(-2px)}
-    .ctile.ct-active{border-color:var(--blue);background:var(--blue-bg)}
-    .ctile-ic{font-size:19px;line-height:1}
-    .ctile-name{font-size:11px;font-weight:700;color:var(--ink);line-height:1.3}
-    .ctile-count{font-size:9.5px;color:var(--ink-muted);font-weight:500}
-
-    /* Pillar-coloured active state for category tiles */
-    .ctile[data-pillar="consciousness"].ct-active{border-color:#7c3aed;background:#f5f3ff}
-    .ctile[data-pillar="responsibility"].ct-active{border-color:#0d9488;background:#f0fdfa}
-    .ctile[data-pillar="purpose"].ct-active{border-color:#d97706;background:#fffbeb}
-    .ctile[data-pillar="technology"].ct-active{border-color:#2563eb;background:var(--blue-bg)}
-    .ctile[data-pillar="frequencies"].ct-active{border-color:#e11d48;background:#fff1f2}
-    .ctile[data-pillar="civilization"].ct-active{border-color:#059669;background:#ecfdf5}
-    .ctile[data-pillar="interpretation"].ct-active{border-color:#4f46e5;background:var(--indigo-bg)}
-    .ctile[data-pillar="negotiation"].ct-active{border-color:#ea580c;background:var(--orange-bg)}
-
-    /* Pillar context bar (shown when pillar filter active) */
-    .pillar-ctx{display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:var(--r-lg);border:1.5px solid var(--border);background:var(--surface);margin-bottom:10px}
-    .pillar-ctx-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-    .pillar-ctx-label{font-size:12px;font-weight:700;color:var(--ink);flex:1}
+    /* ═══════════════════════════════════════════════════════
+       PROFESSIONAL AREA CARDS — PRIMARY TOP NAVIGATION
+       Large scrollable cards. Pillars are a dropdown only.
+    ═══════════════════════════════════════════════════════ */
+    .cat-nav{margin-bottom:20px}
+    .cat-nav-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+    .cat-nav-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--ink-muted);display:flex;align-items:center;gap:5px}
+    .pillar-drop-wrap{display:flex;align-items:center;gap:7px}
+    .pillar-drop-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-muted);white-space:nowrap}
+    .pillar-drop{padding:5px 26px 5px 9px;border:1.5px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink);background:var(--surface);cursor:pointer;transition:border-color .15s,box-shadow .15s;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b92a5' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;min-width:140px}
+    .pillar-drop:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow)}
+    .pillar-drop.has-value{border-color:var(--blue);background-color:var(--blue-bg);color:var(--blue-dk)}
+    .cat-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .cat-scroll::-webkit-scrollbar{display:none}
+    .ccard{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:16px 16px 14px;border-radius:var(--r-xl);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .18s;min-width:150px;max-width:175px;font-family:var(--font);text-align:left;position:relative;overflow:hidden}
+    .ccard::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--blue);transform:scaleX(0);transform-origin:left;transition:transform .2s}
+    .ccard:hover{border-color:var(--blue);box-shadow:var(--s);transform:translateY(-2px)}
+    .ccard:hover::after{transform:scaleX(1)}
+    .ccard.cc-active{border-color:var(--blue);background:var(--blue-bg);box-shadow:var(--sm)}
+    .ccard.cc-active::after{transform:scaleX(1)}
+    .ccard-ic{font-size:28px;line-height:1;margin-bottom:2px}
+    .ccard-name{font-size:12.5px;font-weight:800;color:var(--ink);line-height:1.3}
+    .ccard-count{font-size:10px;color:var(--ink-muted);font-weight:500}
+    .ccard-pillar{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:999px;background:var(--canvas);color:var(--ink-muted);align-self:flex-start}
+    .ccard-all{min-width:110px;max-width:130px}
+    .ccard[data-pillar="consciousness"].cc-active{border-color:#7c3aed;background:#f5f3ff}.ccard[data-pillar="consciousness"].cc-active::after{background:#7c3aed}
+    .ccard[data-pillar="responsibility"].cc-active{border-color:#0d9488;background:#f0fdfa}.ccard[data-pillar="responsibility"].cc-active::after{background:#0d9488}
+    .ccard[data-pillar="purpose"].cc-active{border-color:#d97706;background:#fffbeb}.ccard[data-pillar="purpose"].cc-active::after{background:#d97706}
+    .ccard[data-pillar="technology"].cc-active{border-color:#2563eb;background:var(--blue-bg)}.ccard[data-pillar="technology"].cc-active::after{background:#2563eb}
+    .ccard[data-pillar="frequencies"].cc-active{border-color:#e11d48;background:#fff1f2}.ccard[data-pillar="frequencies"].cc-active::after{background:#e11d48}
+    .ccard[data-pillar="civilization"].cc-active{border-color:#059669;background:#ecfdf5}.ccard[data-pillar="civilization"].cc-active::after{background:#059669}
+    .ccard[data-pillar="interpretation"].cc-active{border-color:#4f46e5;background:var(--indigo-bg)}.ccard[data-pillar="interpretation"].cc-active::after{background:#4f46e5}
+    .ccard[data-pillar="negotiation"].cc-active{border-color:#ea580c;background:var(--orange-bg)}.ccard[data-pillar="negotiation"].cc-active::after{background:#ea580c}
+    .pillar-ctx-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:var(--r-lg);border:1.5px solid var(--border);background:var(--surface);margin-bottom:14px;flex-wrap:wrap}
+    .pillar-ctx-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+    .pillar-ctx-lbl{font-size:12px;font-weight:700;color:var(--ink);flex:1}
     .pillar-ctx-sub{font-size:10.5px;color:var(--ink-muted)}
-    .pillar-ctx-clear{font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:3px 8px;border-radius:999px;border:none;cursor:pointer;font-family:var(--font)}
+    .pillar-ctx-clear{font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:3px 9px;border-radius:999px;border:none;cursor:pointer;font-family:var(--font);white-space:nowrap}
     .pillar-ctx-clear:hover{background:var(--blue);color:#fff}
 
     /* SEARCH */
@@ -181,7 +184,7 @@
     .fbtn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border:1.5px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;font-weight:700;color:var(--ink-soft);background:var(--canvas);cursor:pointer;transition:all .14s;white-space:nowrap}
     .fbtn:hover{border-color:var(--blue);color:var(--blue)}
     .fbtn.on{border-color:var(--blue);background:var(--blue-bg);color:var(--blue-dk)}
-    .fpanel{margin-top:11px;padding-top:11px;border-top:1px solid var(--border-soft);display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end}
+    .fpanel{margin-top:11px;padding-top:11px;border-top:1px solid var(--border-soft);display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
     .fgl{} .flab{display:block;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-muted);margin-bottom:4px}
     .fsel{width:100%;padding:7px 26px 7px 9px;border:1.5px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12.5px;color:var(--ink);background:var(--canvas);cursor:pointer;transition:border-color .18s;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b92a5' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
     .fsel:focus{outline:none;border-color:var(--blue);background-color:var(--surface)}
@@ -320,9 +323,10 @@
       .atgrid{grid-template-columns:repeat(2,1fr)}
       .ht th:nth-child(4),.ht td:nth-child(4){display:none}
       .s-count{display:none}
-      .ctile{min-width:110px;padding:9px 11px}
-      .pillar-sel-wrap{width:100%}
-      .pillar-inline-sel{flex:1}
+      .ccard{min-width:130px;padding:13px 13px 11px}
+      .ccard-ic{font-size:24px}
+      .pillar-drop-wrap{width:100%}
+      .pillar-drop{flex:1}
     }
     @media(max-width:480px){
       :root{--topbar-h:52px;--tabs-h:38px}
@@ -334,8 +338,9 @@
       .ht th:nth-child(3),.ht td:nth-child(3){display:none}
       .top-act .btn-o:not(:last-child){display:none}
       .trial-banner{flex-direction:column;gap:12px}
-      .ctile{min-width:98px;max-width:125px;padding:8px 10px}
-      .ctile-name{font-size:10px}
+      .ccard{min-width:115px;max-width:140px;padding:11px 11px 10px}
+      .ccard-name{font-size:11.5px}
+      .ccard-ic{font-size:22px}
       .qrow-a .badge{display:none}
     }
     @media(max-width:360px){.brand span{display:none}.stats{grid-template-columns:1fr}.stats .sc:last-child{grid-column:auto}}
@@ -495,7 +500,7 @@
     {{#if isCripfcntSchool}}
     <button class="mob-toggle" onclick="openMobSidebar()">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      Browse Areas, Pillars &amp; Series
+      Browse Professional Areas
     </button>
     {{/if}}
 
@@ -533,21 +538,19 @@
       {{#if isCripfcntSchool}}
 
       {{!-- ═══════════════════════════════════════════════════════════════
-           PRIMARY NAVIGATION: PROFESSIONAL AREAS (CATEGORIES)
-           This is the main browsing layer. Pillars are a secondary filter.
-           Categories are derived from real quiz content via the classification
-           script. Only categories with count > 0 are shown.
+           PROFESSIONAL AREA CARDS — PRIMARY TOP NAVIGATION
+           Large horizontally-scrollable cards. Categories first.
+           Pillar filter is a compact dropdown (not big cards).
+           Only categories with count > 0 are shown.
       ═══════════════════════════════════════════════════════════════ --}}
       {{#if categoryMeta.length}}
-      <div class="strip-wrap">
-        <div class="strip-hdr">
-          <div class="strip-lbl">📂 Professional Areas</div>
-
-          {{!-- PILLAR FILTER: demoted to compact inline dropdown --}}
+      <div class="cat-nav">
+        <div class="cat-nav-hdr">
+          <div class="cat-nav-lbl">🗂 Professional Areas</div>
           {{#if quizzesByPillarArray.length}}
-          <div class="pillar-sel-wrap">
-            <span class="pillar-sel-lbl">Framework Pillar:</span>
-            <select class="pillar-inline-sel"
+          <div class="pillar-drop-wrap">
+            <span class="pillar-drop-lbl">Filter by Pillar:</span>
+            <select class="pillar-drop {{#if pillarFilter}}has-value{{/if}}"
               onchange="applyPillarFilter(this.value)">
               <option value="">All Pillars</option>
               {{#each quizzesByPillarArray}}
@@ -560,58 +563,56 @@
           {{/if}}
         </div>
 
-        {{!-- Active pillar context bar --}}
         {{#if pillarFilter}}
         {{#each quizzesByPillarArray}}
         {{#if (eq this.pillarSlug ../pillarFilter)}}
-        <div class="pillar-ctx" style="border-color:{{this.pillarColor}}20">
+        <div class="pillar-ctx-bar" style="border-color:{{this.pillarColor}}30">
           <div class="pillar-ctx-dot" style="background:{{this.pillarColor}}"></div>
-          <div>
-            <div class="pillar-ctx-label">{{this.pillarIcon}} {{this.pillarLabel}} Pillar</div>
-            <div class="pillar-ctx-sub">Showing {{this.totalQuizzes}} assessments in this framework dimension</div>
+          <div style="flex:1">
+            <div class="pillar-ctx-lbl">{{this.pillarIcon}} {{this.pillarLabel}} Pillar</div>
+            <div class="pillar-ctx-sub">{{this.totalQuizzes}} assessments in this CRIPFCNT dimension</div>
           </div>
-          <button class="pillar-ctx-clear" onclick="applyPillarFilter('')">✕ Clear Pillar</button>
+          <button class="pillar-ctx-clear" onclick="applyPillarFilter('')">✕ Clear</button>
         </div>
         {{/if}}
         {{/each}}
         {{/if}}
 
-        <div class="strip">
-          {{!-- All Areas reset tile --}}
-          <button class="ctile {{#unless (or categoryFilter pillarFilter seriesFilter)}}ct-active{{/unless}}"
-            onclick="clearAllFilters()" style="min-width:80px">
-            <span class="ctile-ic">🌐</span>
-            <span class="ctile-name">All Areas</span>
-            <span class="ctile-count">{{totalQuizCount}} total</span>
+        <div class="cat-scroll">
+          <button class="ccard ccard-all {{#unless (or categoryFilter pillarFilter seriesFilter)}}cc-active{{/unless}}"
+            onclick="clearAllFilters()">
+            <span class="ccard-ic">🌐</span>
+            <span class="ccard-name">All Areas</span>
+            <span class="ccard-count">{{totalQuizCount}} total</span>
           </button>
 
-          {{!-- When pillar filter active: show only that pillar's categories --}}
           {{#if pillarFilter}}
-            {{#each quizzesByPillarArray}}
-            {{#if (eq this.pillarSlug ../pillarFilter)}}
-              {{#each this.categories}}
-              {{#if (gt this.totalQuizzes 0)}}
-              <button class="ctile {{#if (eq this.categorySlug ../../categoryFilter)}}ct-active{{/if}}"
-                data-pillar="{{this.pillar}}"
-                onclick="setFilter('category','{{this.categorySlug}}')">
-                <span class="ctile-ic">{{this.categoryIcon}}</span>
-                <span class="ctile-name">{{this.categoryLabel}}</span>
-                <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
-              </button>
-              {{/if}}
-              {{/each}}
-            {{/if}}
-            {{/each}}
+          {{#each quizzesByPillarArray}}
+          {{#if (eq this.pillarSlug ../pillarFilter)}}
+          {{#each this.categories}}
+          {{#if (gt this.totalQuizzes 0)}}
+          <button class="ccard {{#if (eq this.categorySlug ../../categoryFilter)}}cc-active{{/if}}"
+            data-pillar="{{this.pillar}}"
+            onclick="setFilter('category','{{this.categorySlug}}')">
+            <span class="ccard-ic">{{this.categoryIcon}}</span>
+            <span class="ccard-name">{{this.categoryLabel}}</span>
+            <span class="ccard-count">{{this.totalQuizzes}} assessments</span>
+            <span class="ccard-pillar">{{capitalize this.pillar}}</span>
+          </button>
+          {{/if}}
+          {{/each}}
+          {{/if}}
+          {{/each}}
           {{else}}
-          {{!-- No pillar filter: show all categories sorted by count --}}
           {{#each categoryMeta}}
           {{#if (gt this.count 0)}}
-          <button class="ctile {{#if (eq this.slug ../categoryFilter)}}ct-active{{/if}}"
+          <button class="ccard {{#if (eq this.slug ../categoryFilter)}}cc-active{{/if}}"
             data-pillar="{{this.pillar}}"
             onclick="setFilter('category','{{this.slug}}')">
-            <span class="ctile-ic">{{this.icon}}</span>
-            <span class="ctile-name">{{this.label}}</span>
-            <span class="ctile-count">{{this.count}} assessments</span>
+            <span class="ccard-ic">{{this.icon}}</span>
+            <span class="ccard-name">{{this.label}}</span>
+            <span class="ccard-count">{{this.count}} assessments</span>
+            <span class="ccard-pillar">{{capitalize this.pillar}}</span>
           </button>
           {{/if}}
           {{/each}}
@@ -619,7 +620,7 @@
         </div>
       </div>
       {{/if}}
-      {{!-- END PRIMARY NAVIGATION --}}
+      {{!-- END PROFESSIONAL AREA CARDS --}}
 
       <!-- Search + advanced filters -->
       <form class="search-bar" method="GET" action="/org/{{org.slug}}/dashboard" id="sf">
@@ -647,13 +648,6 @@
             <select class="fsel" name="category" onchange="this.form.submit()">
               <option value="">All Areas</option>
               {{#each allCategories}}<option value="{{this}}" {{#if (eq this ../categoryFilter)}}selected{{/if}}>{{capitalize (replace this "-" " ")}}</option>{{/each}}
-            </select>
-          </div>
-          <div class="fgl">
-            <label class="flab">Pillar</label>
-            <select class="fsel" name="pillar" onchange="this.form.submit()">
-              <option value="">All Pillars</option>
-              {{#each allPillars}}<option value="{{this}}" {{#if (eq this ../pillarFilter)}}selected{{/if}}>{{capitalize this}}</option>{{/each}}
             </select>
           </div>
           <div>
