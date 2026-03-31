@@ -6,22 +6,24 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* ═══════════════════════════════════════ TOKENS */
     :root {
-      --ink:#0d0f14; --ink-soft:#3d4354; --ink-muted:#8b92a5; --ink-faint:#c5c9d6;
-      --canvas:#f2f4f8; --surface:#fff; --surface-2:#f8f9fb;
-      --border:#e4e6ed; --border-soft:#edeef3;
-      --blue:#2f6ef7; --blue-dk:#1d4ed8; --blue-glow:rgba(47,110,247,.13);
-      --blue-bg:#eef3fe; --blue-sub:#f5f8ff;
-      --violet:#7c3aed; --violet-bg:#f5f3ff;
-      --teal:#0d9488; --teal-bg:#f0fdfa;
-      --amber:#d97706; --amber-bg:#fffbeb;
-      --rose:#e11d48; --rose-bg:#fff1f2;
-      --emerald:#059669; --emerald-bg:#ecfdf5;
-      --indigo:#4f46e5; --indigo-bg:#eef2ff;
-      --orange:#ea580c; --orange-bg:#fff7ed;
-      --topbar-h:60px; --tabs-h:44px;
-      --fixed-h:calc(var(--topbar-h) + var(--tabs-h));
-      --sidebar-w:280px;
+      --ink:       #0d0f14; --ink-soft:#3d4354; --ink-muted:#8b92a5; --ink-faint:#c5c9d6;
+      --canvas:    #f2f4f8; --surface:#fff; --surface-2:#f8f9fb;
+      --border:    #e4e6ed; --border-soft:#edeef3;
+      --blue:      #2f6ef7; --blue-dk:#1d4ed8; --blue-glow:rgba(47,110,247,.13);
+      --blue-bg:   #eef3fe; --blue-sub:#f5f8ff;
+      --violet:    #7c3aed; --violet-bg:#f5f3ff;
+      --teal:      #0d9488; --teal-bg:#f0fdfa;
+      --amber:     #d97706; --amber-bg:#fffbeb;
+      --rose:      #e11d48; --rose-bg:#fff1f2;
+      --emerald:   #059669; --emerald-bg:#ecfdf5;
+      --indigo:    #4f46e5; --indigo-bg:#eef2ff;
+      --orange:    #ea580c; --orange-bg:#fff7ed;
+      --topbar-h:  60px;
+      --tabs-h:    44px;
+      --fixed-h:   calc(var(--topbar-h) + var(--tabs-h));
+      --sidebar-w: 272px;
       --r-sm:4px; --r:10px; --r-lg:14px; --r-xl:20px;
       --sx:0 1px 2px rgba(0,0,0,.05);
       --sm:0 1px 4px rgba(0,0,0,.07);
@@ -34,8 +36,8 @@
     body{font-family:var(--font);background:var(--canvas);color:var(--ink);line-height:1.6;font-size:15px;-webkit-font-smoothing:antialiased}
     a{text-decoration:none;color:inherit}
 
-    /* TOPBAR */
-    .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);z-index:300;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);border-bottom:1px solid var(--border-soft)}
+    /* ═══════════════════════════════════════ TOPBAR */
+    .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);z-index:300;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border-soft)}
     .topbar-in{max-width:1440px;margin:0 auto;height:100%;padding:0 20px;display:flex;align-items:center;gap:10px}
     .brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;color:var(--ink);flex-shrink:0}
     .brand-ic{width:30px;height:30px;background:var(--blue);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900}
@@ -43,11 +45,13 @@
     .torg{font-size:12.5px;font-weight:500;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
     .tsp{flex:1}
     .rpill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:800;white-space:nowrap;flex-shrink:0}
-    .rp-s{background:var(--blue-bg);color:var(--blue-dk)} .rp-t{background:var(--teal-bg);color:var(--teal)}
-    .rp-a{background:#fef3c7;color:#92400e} .rp-m{background:var(--canvas);color:var(--ink-soft);border:1px solid var(--border)}
+    .rp-s{background:var(--blue-bg);color:var(--blue-dk)}
+    .rp-t{background:var(--teal-bg);color:var(--teal)}
+    .rp-a{background:#fef3c7;color:#92400e}
+    .rp-m{background:var(--canvas);color:var(--ink-soft);border:1px solid var(--border)}
     .top-act{display:flex;gap:6px;align-items:center;flex-shrink:0}
 
-    /* TABS */
+    /* ═══════════════════════════════════════ TABS */
     .tabs-bar{position:fixed;top:var(--topbar-h);left:0;right:0;height:var(--tabs-h);z-index:290;background:var(--surface);border-bottom:1px solid var(--border-soft);display:flex;align-items:stretch;overflow-x:auto;scrollbar-width:none;padding:0 20px}
     .tabs-bar::-webkit-scrollbar{display:none}
     .tabs-in{max-width:1440px;width:100%;margin:0 auto;display:flex;align-items:stretch}
@@ -57,66 +61,56 @@
     .tpill{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:16px;padding:0 4px;border-radius:999px;font-size:9px;font-weight:800;background:var(--canvas);color:var(--ink-muted)}
     .ntab.active .tpill{background:var(--blue-bg);color:var(--blue)}
 
-    /* LAYOUT */
+    /* ═══════════════════════════════════════ LAYOUT */
     .layout{padding-top:var(--fixed-h);display:flex;max-width:1440px;margin:0 auto;min-height:calc(100vh - var(--fixed-h))}
 
-    /* ═══════════════════ SIDEBAR */
-    .sidebar{width:var(--sidebar-w);flex-shrink:0;position:sticky;top:var(--fixed-h);height:calc(100vh - var(--fixed-h));overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--border) transparent;background:var(--surface);border-right:1px solid var(--border-soft);padding:12px 0 60px;display:flex;flex-direction:column;z-index:100}
+    /* ═══════════════════════════════════════ SIDEBAR */
+    .sidebar{width:var(--sidebar-w);flex-shrink:0;position:sticky;top:var(--fixed-h);height:calc(100vh - var(--fixed-h));overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--border) transparent;background:var(--surface);border-right:1px solid var(--border-soft);padding:14px 0 60px;display:flex;flex-direction:column;z-index:100}
     .sidebar::-webkit-scrollbar{width:4px}
+    .sidebar::-webkit-scrollbar-track{background:transparent}
     .sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-
     .sb-user{margin:0 10px 12px;padding:11px 12px;background:linear-gradient(135deg,var(--blue-sub),#eef2ff);border:1px solid rgba(47,110,247,.15);border-radius:var(--r-lg);display:flex;align-items:center;gap:9px}
     .sb-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
     .sb-uname{font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .sb-urole{font-size:10px;color:var(--ink-muted);margin-top:1px}
-
-    /* Section divider */
     .sb-div{display:flex;align-items:center;gap:7px;padding:9px 12px 4px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;color:var(--ink-faint);margin-top:4px}
     .sb-div::after{content:'';flex:1;height:1px;background:var(--border-soft)}
-
-    /* Base sidebar item */
     .sbi{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12px;font-weight:500;color:var(--ink-soft);cursor:pointer;transition:all .11s;border:none;border-left:3px solid transparent;background:none;width:100%;text-align:left;font-family:var(--font)}
     .sbi:hover{background:var(--canvas);color:var(--ink)}
     .sbi.active{background:var(--blue-bg);color:var(--blue-dk);font-weight:700;border-left-color:var(--blue)}
-    .sbi-em{font-size:14px;flex-shrink:0;width:20px;text-align:center}
+    .sbi.hint{opacity:.55}
+    .sbi.hint:hover{opacity:.85}
+    .sbi-em{font-size:14px;flex-shrink:0;width:19px;text-align:center}
     .sbi-txt{flex:1;min-width:0}
     .sbi-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
     .sbi-s{font-size:9.5px;color:var(--ink-muted);font-weight:400;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .sbi-n{margin-left:auto;flex-shrink:0;font-size:9.5px;font-weight:800;padding:2px 5px;border-radius:999px;background:var(--canvas);color:var(--ink-muted)}
     .sbi.active .sbi-n{background:var(--blue-dk);color:#fff}
+    .sbi-n.zero{background:#f1f5f9;color:var(--ink-faint)}
+    /* Pillar-coloured active states */
+    .sbi[data-pillar="consciousness"].active {border-left-color:#7c3aed;background:#f5f3ff;color:#5b21b6}
+    .sbi[data-pillar="responsibility"].active{border-left-color:#0d9488;background:#f0fdfa;color:#0f766e}
+    .sbi[data-pillar="purpose"].active       {border-left-color:#d97706;background:#fffbeb;color:#b45309}
+    .sbi[data-pillar="technology"].active    {border-left-color:#2563eb;background:var(--blue-bg);color:var(--blue-dk)}
+    .sbi[data-pillar="frequencies"].active   {border-left-color:#e11d48;background:#fff1f2;color:#be123c}
+    .sbi[data-pillar="civilization"].active  {border-left-color:#059669;background:#ecfdf5;color:#065f46}
+    .sbi[data-pillar="interpretation"].active{border-left-color:#4f46e5;background:var(--indigo-bg);color:#3730a3}
+    .sbi[data-pillar="negotiation"].active   {border-left-color:#ea580c;background:var(--orange-bg);color:#c2410c}
+    /* Pillar→Category→Series sidebar */
+    .sb-cat-wrap{margin-bottom:2px}
+    .sb-cat-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--ink-faint);padding:6px 12px 2px;display:block}
+    .sbi-series{padding-left:20px}
+    .sbi-series .sbi-t{font-size:11.5px;font-weight:600}
+    .sbi-series .sbi-s{font-size:9px}
 
-    /* ── LEVEL 1: PILLAR button ── */
-    .sb-pillar{font-weight:800;font-size:11.5px;padding:8px 12px;margin-top:4px;border-radius:0}
-    .sb-pillar .sbi-t{font-size:11.5px;font-weight:800}
-    .sb-pillar[data-pillar="consciousness"].active{border-left-color:#7c3aed;background:#f5f3ff;color:#5b21b6}
-    .sb-pillar[data-pillar="responsibility"].active{border-left-color:#0d9488;background:#f0fdfa;color:#0f766e}
-    .sb-pillar[data-pillar="purpose"].active{border-left-color:#d97706;background:#fffbeb;color:#b45309}
-    .sb-pillar[data-pillar="technology"].active{border-left-color:#2563eb;background:var(--blue-bg);color:var(--blue-dk)}
-    .sb-pillar[data-pillar="frequencies"].active{border-left-color:#e11d48;background:#fff1f2;color:#be123c}
-    .sb-pillar[data-pillar="civilization"].active{border-left-color:#059669;background:#ecfdf5;color:#065f46}
-    .sb-pillar[data-pillar="interpretation"].active{border-left-color:#4f46e5;background:var(--indigo-bg);color:#3730a3}
-    .sb-pillar[data-pillar="negotiation"].active{border-left-color:#ea580c;background:var(--orange-bg);color:#c2410c}
-
-    /* ── LEVEL 2: CATEGORY button ── */
-    .sb-cat{padding:5px 12px 5px 24px;font-size:11.5px;font-weight:600;color:var(--ink-soft)}
-    .sb-cat .sbi-em{font-size:12px;width:16px}
-    .sb-cat.active{background:var(--blue-bg);color:var(--blue-dk);font-weight:700;border-left-color:var(--blue)}
-    .sb-cat .sbi-n{font-size:9px;padding:1px 4px}
-
-    /* ── LEVEL 3: SERIES button ── */
-    .sb-series{padding:4px 12px 4px 36px;font-size:11px;font-weight:500;color:var(--ink-muted)}
-    .sb-series .sbi-em{font-size:9px;width:10px;color:var(--ink-faint)}
-    .sb-series.active{background:var(--blue-sub);color:var(--blue-dk);font-weight:700;border-left-color:var(--blue)}
-    .sb-series .sbi-n{font-size:8.5px;padding:1px 4px}
-
-    /* MAIN */
+    /* ═══════════════════════════════════════ MAIN */
     .main{flex:1;min-width:0;padding:22px 24px 64px}
 
-    /* MOBILE DRAWER */
+    /* ═══════════════════════════════════════ MOBILE DRAWER */
     .mob-toggle{display:none;align-items:center;gap:7px;padding:9px 14px;border:1.5px solid var(--border);border-radius:var(--r);background:var(--surface);font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;margin-bottom:14px;width:100%}
     .mob-drawer{display:none;position:fixed;inset:0;z-index:400}
     .mob-drawer.open{display:flex}
-    .mob-panel{width:min(300px,85vw);height:100%;background:var(--surface);overflow-y:auto;box-shadow:var(--slg);display:flex;flex-direction:column;padding-bottom:48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+    .mob-panel{width:min(290px,82vw);height:100%;background:var(--surface);overflow-y:auto;box-shadow:var(--slg);display:flex;flex-direction:column;padding-bottom:48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
     .mob-panel::-webkit-scrollbar{width:4px}
     .mob-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     .mob-back{flex:1;background:rgba(0,0,0,.45)}
@@ -124,7 +118,7 @@
     .mob-header span{font-size:14px;font-weight:800;color:var(--ink)}
     .mob-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-muted);line-height:1;padding:0 4px}
 
-    /* STATS */
+    /* ═══════════════════════════════════════ STATS */
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
     .sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 15px;display:flex;align-items:center;gap:11px;box-shadow:var(--sx);transition:box-shadow .18s}
     .sc:hover{box-shadow:var(--s)}
@@ -133,14 +127,17 @@
     .sv{font-size:22px;font-weight:800;line-height:1;color:var(--ink)}
     .sl{font-size:11px;color:var(--ink-muted);margin-top:2px;font-weight:500}
 
-    /* STRIP */
+    /* ═══════════════════════════════════════ DISCOVERY STRIP */
     .strip-wrap{margin-bottom:16px}
     .strip-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
     .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
     .strip::-webkit-scrollbar{display:none}
-    .ctile{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:10px 13px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .16s;min-width:120px;max-width:158px;font-family:var(--font);text-align:left}
+    .ctile{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:10px 13px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .16s;min-width:120px;max-width:155px;font-family:var(--font);text-align:left}
     .ctile:hover{box-shadow:var(--s);border-color:var(--blue);transform:translateY(-2px)}
     .ctile.ct-active{border-color:var(--blue);background:var(--blue-bg)}
+    .ctile.ct-hint{opacity:.5;border-style:dashed}
+    .ctile.ct-hint:hover{opacity:.85;border-style:dashed}
+    .ctile.ct-active.ct-hint{opacity:1;border-style:solid}
     .ctile-ic{font-size:19px;line-height:1}
     .ctile-name{font-size:11px;font-weight:700;color:var(--ink);line-height:1.3}
     .ctile-count{font-size:9.5px;color:var(--ink-muted);font-weight:500}
@@ -153,11 +150,7 @@
     .ctile[data-pillar="interpretation"].ct-active{border-color:#4f46e5;background:var(--indigo-bg)}
     .ctile[data-pillar="negotiation"].ct-active{border-color:#ea580c;background:var(--orange-bg)}
 
-    /* CATEGORY TILE (second row strip) */
-    .ctile-cat{border-style:solid}
-    .ctile-cat.ct-active{border-width:2px}
-
-    /* SEARCH */
+    /* ═══════════════════════════════════════ SEARCH BAR */
     .search-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:16px;box-shadow:var(--sx)}
     .sr{display:flex;gap:7px;align-items:center}
     .sw{flex:1;position:relative}
@@ -176,7 +169,7 @@
     .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 10px;background:var(--blue-bg);color:var(--blue-dk);border-radius:999px;font-size:11px;font-weight:700}
     .chip-x{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(47,110,247,.2);color:var(--blue-dk);font-size:9px;text-decoration:none;line-height:1}
 
-    /* CONTENT HEADER */
+    /* ═══════════════════════════════════════ CONTENT HEADER */
     .ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:7px}
     .ch-l{display:flex;align-items:center;gap:6px}
     .ch-title{font-size:13.5px;font-weight:800;color:var(--ink)}
@@ -185,17 +178,7 @@
     .vb{padding:4px 8px;border-radius:4px;border:none;background:none;color:var(--ink-muted);cursor:pointer;font-size:13px;transition:all .12s}
     .vb.active{background:var(--surface);color:var(--ink);box-shadow:var(--sx)}
 
-    /* CATEGORY SECTION (main area, pillar view) */
-    .cat-section{margin-bottom:20px}
-    .cat-section-hdr{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:10px;cursor:pointer}
-    .cat-section-hdr:hover{background:var(--canvas)}
-    .cat-section-icon{font-size:16px}
-    .cat-section-title{font-size:13px;font-weight:800;color:var(--ink);flex:1}
-    .cat-section-count{font-size:10.5px;font-weight:600;color:var(--ink-muted);background:var(--canvas);padding:2px 8px;border-radius:999px}
-    .cat-section-filter{font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:2px 8px;border-radius:999px;border:none;cursor:pointer;font-family:var(--font)}
-    .cat-section-filter:hover{background:var(--blue);color:#fff}
-
-    /* SERIES BLOCK */
+    /* ═══════════════════════════════════════ SERIES BLOCK */
     .series-block{margin-bottom:14px;border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--border);box-shadow:var(--sx)}
     .series-hdr{display:flex;align-items:center;gap:11px;padding:12px 15px;background:var(--surface);cursor:pointer;user-select:none;transition:background .12s;border:none;width:100%;text-align:left;font-family:var(--font)}
     .series-hdr:hover{background:var(--blue-sub)}
@@ -209,7 +192,13 @@
     .s-chev.open{transform:rotate(180deg)}
     .series-body{padding:11px;background:var(--surface-2);border-top:1px solid var(--border-soft)}
 
-    /* QUIZ GRID/LIST */
+    /* ═══════════════════════════════════════ CATEGORY SECTION (pillar view) */
+    .cat-section{margin-bottom:18px}
+    .cat-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:2px solid var(--border-soft);margin-bottom:8px}
+    .cat-section-title{font-size:13px;font-weight:800;color:var(--ink)}
+    .cat-section-count{font-size:10.5px;font-weight:600;color:var(--ink-muted);background:var(--canvas);padding:2px 8px;border-radius:999px}
+
+    /* ═══════════════════════════════════════ QUIZ GRID/LIST */
     .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
     .qlist{display:flex;flex-direction:column;gap:8px}
     .qcard{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;gap:9px;transition:all .18s;box-shadow:var(--sx);position:relative;overflow:hidden}
@@ -234,7 +223,7 @@
     .qrow-m{font-size:10.5px;color:var(--ink-muted);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap}
     .qrow-a{display:flex;gap:5px;align-items:center;flex-shrink:0}
 
-    /* BADGES */
+    /* ═══════════════════════════════════════ BADGES */
     .badge{display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:999px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
     .b-blue{background:var(--blue-bg);color:var(--blue-dk)} .b-violet{background:var(--violet-bg);color:var(--violet)}
     .b-teal{background:var(--teal-bg);color:var(--teal)} .b-amber{background:var(--amber-bg);color:var(--amber)}
@@ -242,7 +231,7 @@
     .b-indigo{background:var(--indigo-bg);color:var(--indigo)} .b-orange{background:var(--orange-bg);color:var(--orange)}
     .b-slate{background:#f1f5f9;color:#475569}
 
-    /* BUTTONS */
+    /* ═══════════════════════════════════════ BUTTONS */
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 14px;border-radius:var(--r);font-size:12px;font-weight:700;font-family:var(--font);text-decoration:none;border:none;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1}
     .btn-sm{padding:5px 11px;font-size:11.5px} .btn-xs{padding:3px 8px;font-size:10.5px}
     .btn-p{background:var(--blue);color:#fff}
@@ -252,7 +241,7 @@
     .btn-d{background:var(--rose-bg);color:var(--rose);border:1.5px solid transparent}
     .btn-d:hover{background:var(--rose);color:#fff}
 
-    /* BANNERS */
+    /* ═══════════════════════════════════════ BANNERS */
     .trial-banner{background:linear-gradient(135deg,#eff4fe,#e8f0fe);border:1.5px solid rgba(47,110,247,.22);border-radius:var(--r-xl);padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
     .trial-banner h3{font-size:15px;font-weight:800;color:var(--blue-dk);margin-bottom:2px}
     .trial-banner p{font-size:12px;color:var(--ink-soft)}
@@ -264,7 +253,7 @@
     .mode-banner strong{font-size:13px;color:var(--amber)}
     .mode-banner p{font-size:11.5px;color:#78350f;margin-top:1px}
 
-    /* TABLE */
+    /* ═══════════════════════════════════════ TABLE */
     .tw{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sx)}
     .ht{width:100%;border-collapse:collapse}
     .ht th{text-align:left;padding:9px 13px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-muted);background:var(--surface-2);border-bottom:1px solid var(--border)}
@@ -274,7 +263,7 @@
     .spill{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
     .sh{background:var(--emerald-bg);color:#065f46} .smd{background:var(--amber-bg);color:#92400e} .sl{background:var(--rose-bg);color:#991b1b}
 
-    /* ADMIN */
+    /* ═══════════════════════════════════════ ADMIN TOOLS */
     .atgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:18px}
     .atcard{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:15px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-decoration:none;color:inherit;transition:all .18s;box-shadow:var(--sx)}
     .atcard:hover{border-color:var(--blue);box-shadow:var(--s);transform:translateY(-2px)}
@@ -287,14 +276,14 @@
     .empty h3{font-size:14.5px;font-weight:800;color:var(--ink);margin-bottom:4px}
     .empty p{font-size:12.5px;color:var(--ink-muted)}
 
-    /* JS UTILS */
+    /* ═══════════════════════════════════════ JS UTILS */
     .jh{display:none!important}
     .main[data-view="list"] .qgrid{display:none}
     .main[data-view="list"] .qlist{display:flex}
     .main[data-view="grid"] .qgrid{display:grid}
     .main[data-view="grid"] .qlist{display:none}
 
-    /* RESPONSIVE */
+    /* ═══════════════════════════════════════ RESPONSIVE */
     @media(max-width:1024px){.sidebar{display:none}.main{padding:18px 18px 56px}.mob-toggle{display:flex}}
     @media(max-width:768px){
       :root{--topbar-h:54px;--tabs-h:40px}
@@ -330,6 +319,7 @@
 
 {{> navbar}}
 
+<!-- TOPBAR -->
 <header class="topbar">
   <div class="topbar-in">
     <div class="brand"><div class="brand-ic">✦</div><span>{{org.name}}</span></div>
@@ -352,6 +342,7 @@
   </div>
 </header>
 
+<!-- TABS -->
 <nav class="tabs-bar">
   <div class="tabs-in">
     <button class="ntab active" data-tab="assessments" onclick="switchTab('assessments',this)">📚 Assessments<span class="tpill">{{#if hasAssignedQuizzes}}✓{{else}}0{{/if}}</span></button>
@@ -360,6 +351,7 @@
   </div>
 </nav>
 
+<!-- LAYOUT -->
 <div class="layout" id="layout-wrap">
 
   {{#if isCripfcntSchool}}
@@ -374,8 +366,10 @@
           {{else}}{{user.email}}{{/if}}
         </div>
         <div class="sb-urole">
-          {{#if isAdmin}}Administrator{{else if (eq membership.role "student")}}Student
-          {{else if (eq membership.role "teacher")}}Teacher{{else}}Member{{/if}}
+          {{#if isAdmin}}Administrator
+          {{else if (eq membership.role "student")}}Student
+          {{else if (eq membership.role "teacher")}}Teacher
+          {{else}}Member{{/if}}
         </div>
       </div>
     </div>
@@ -400,54 +394,28 @@
     </a>
     {{/if}}
 
-    {{!-- ══════════════════════════════════════════════════
-         SIDEBAR HIERARCHY: Pillar → Category → Series
-         All three levels are clickable buttons.
-         Pillar filters by ?pillar=
-         Category filters by ?category=
-         Series filters by ?series=
-    ══════════════════════════════════════════════════ --}}
+    {{!-- ══ PILLAR → CATEGORY → SERIES NAVIGATION ══ --}}
     {{#if quizzesByPillarArray.length}}
-    <div class="sb-div">Framework</div>
     {{#each quizzesByPillarArray}}
-
-    {{!-- LEVEL 1: PILLAR — clickable --}}
-    <button class="sbi sb-pillar {{#if (eq this.pillarSlug ../pillarFilter)}}active{{/if}}"
-      data-pillar="{{this.pillarSlug}}"
-      onclick="setFilter('pillar','{{this.pillarSlug}}')">
-      <span class="sbi-em">{{this.pillarIcon}}</span>
-      <span class="sbi-txt">
-        <div class="sbi-t">{{this.pillarLabel}}</div>
-        <div class="sbi-s">{{this.totalQuizzes}} assessments</div>
-      </span>
-      <span class="sbi-n">{{this.totalQuizzes}}</span>
-    </button>
-
+    <div class="sb-div" style="color:{{this.pillarColor}}">
+      {{this.pillarIcon}} {{this.pillarLabel}}
+      <span style="margin-left:auto;font-weight:600;color:var(--ink-faint)">{{this.totalQuizzes}}</span>
+    </div>
     {{#each this.categories}}
-    {{!-- LEVEL 2: CATEGORY — clickable --}}
-    <button class="sbi sb-cat {{#if (eq this.categorySlug ../../categoryFilter)}}active{{/if}}"
-      onclick="setFilter('category','{{this.categorySlug}}')">
-      <span class="sbi-em">{{this.categoryIcon}}</span>
-      <span class="sbi-txt">
-        <div class="sbi-t">{{this.categoryLabel}}</div>
-        <div class="sbi-s">{{this.totalQuizzes}} assessments</div>
-      </span>
-      <span class="sbi-n">{{this.totalQuizzes}}</span>
-    </button>
-
-    {{#each this.seriesList}}
-    {{!-- LEVEL 3: SERIES — clickable --}}
-    <button class="sbi sb-series {{#if (eq this.seriesSlug ../../../seriesFilter)}}active{{/if}}"
-      onclick="setFilter('series','{{this.seriesSlug}}')">
-      <span class="sbi-em">▸</span>
-      <span class="sbi-txt">
-        <div class="sbi-t">{{this.seriesLabel}}</div>
-        <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}{{#if this.level}} · {{capitalize this.level}}{{/if}}</div>
-      </span>
-      <span class="sbi-n">{{this.quizCount}}</span>
-    </button>
-    {{/each}}
-
+    <div class="sb-cat-wrap">
+      <div class="sb-cat-label">{{this.categoryLabel}}</div>
+      {{#each this.seriesList}}
+      <button class="sbi sbi-series {{#if (eq this.seriesSlug ../../seriesFilter)}}active{{/if}}"
+        onclick="setFilter('series','{{this.seriesSlug}}')">
+        <span class="sbi-em" style="font-size:10px;color:var(--ink-faint)">▸</span>
+        <span class="sbi-txt">
+          <div class="sbi-t">{{this.seriesLabel}}</div>
+          <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}{{#if this.level}} · {{capitalize this.level}}{{/if}}</div>
+        </span>
+        <span class="sbi-n">{{this.quizCount}}</span>
+      </button>
+      {{/each}}
+    </div>
     {{/each}}
     {{/each}}
     {{/if}}
@@ -462,15 +430,17 @@
   </aside>
   {{/if}}
 
+  <!-- MAIN CONTENT -->
   <main class="main" id="main-content" data-view="grid" data-org="{{org.slug}}">
 
     {{#if isCripfcntSchool}}
     <button class="mob-toggle" onclick="openMobSidebar()">
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      Browse Pillars, Categories &amp; Series
+      Pillars, Categories &amp; Series
     </button>
     {{/if}}
 
+    <!-- TAB: ASSESSMENTS -->
     <div id="tab-assessments">
 
       {{#if (and isCripfcntSchool (eq user.employeeSubscriptionStatus "trial"))}}
@@ -504,7 +474,7 @@
 
       {{#if isCripfcntSchool}}
 
-      {{!-- PILLAR STRIP — shown when no filter active --}}
+      {{!-- ══ PILLAR FRAMEWORK STRIP (shown when no filter active) ══ --}}
       {{#unless (or seriesFilter categoryFilter pillarFilter)}}
       {{#if quizzesByPillarArray.length}}
       <div class="strip-wrap">
@@ -514,7 +484,7 @@
           <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
             data-pillar="{{this.pillarSlug}}"
             onclick="setFilter('pillar','{{this.pillarSlug}}')"
-            style="border-top:3px solid {{this.pillarColor}}">
+            style="min-width:130px;border-top:3px solid {{this.pillarColor}}">
             <span class="ctile-ic">{{this.pillarIcon}}</span>
             <span class="ctile-name">{{this.pillarLabel}}</span>
             <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
@@ -525,10 +495,10 @@
       {{/if}}
       {{/unless}}
 
-      {{!-- BROWSE STRIP — always shown, All + pillars --}}
+      {{!-- ══ BROWSE BY PILLAR STRIP (always shown) ══ --}}
       {{#if quizzesByPillarArray.length}}
       <div class="strip-wrap">
-        <div class="strip-lbl">📂 Browse by Pillar</div>
+        <div class="strip-lbl">📂 Browse by Pillar &amp; Professional Area</div>
         <div class="strip">
           <button class="ctile {{#unless (or categoryFilter pillarFilter seriesFilter)}}ct-active{{/unless}}"
             onclick="clearAllFilters()" style="min-width:80px">
@@ -548,28 +518,6 @@
           {{/each}}
         </div>
       </div>
-
-      {{!-- CATEGORY STRIP — shown when a pillar is selected --}}
-      {{#if pillarFilter}}
-      {{#each quizzesByPillarArray}}
-      {{#if (eq this.pillarSlug ../pillarFilter)}}
-      <div class="strip-wrap">
-        <div class="strip-lbl" style="color:{{this.pillarColor}}">{{this.pillarIcon}} Professional Areas — {{this.pillarLabel}}</div>
-        <div class="strip">
-          {{#each this.categories}}
-          <button class="ctile ctile-cat {{#if (eq this.categorySlug ../../categoryFilter)}}ct-active{{/if}}"
-            onclick="setFilter('category','{{this.categorySlug}}')">
-            <span class="ctile-ic">{{this.categoryIcon}}</span>
-            <span class="ctile-name">{{this.categoryLabel}}</span>
-            <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
-          </button>
-          {{/each}}
-        </div>
-      </div>
-      {{/if}}
-      {{/each}}
-      {{/if}}
-
       {{/if}}
 
       <!-- Search bar -->
@@ -616,9 +564,9 @@
         {{#if (or searchQuery seriesFilter categoryFilter pillarFilter)}}
         <div class="chips">
           {{#if searchQuery}}<span class="chip">🔍 "{{searchQuery}}" <a class="chip-x" href="/org/{{org.slug}}/dashboard?series={{seriesFilter}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a></span>{{/if}}
-          {{#if pillarFilter}}<span class="chip">🏛 {{capitalize pillarFilter}} <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&category={{categoryFilter}}">✕</a></span>{{/if}}
-          {{#if categoryFilter}}<span class="chip">📂 {{capitalize (replace categoryFilter "-" " ")}} <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&pillar={{pillarFilter}}">✕</a></span>{{/if}}
           {{#if seriesFilter}}<span class="chip">📖 {{capitalize (replace seriesFilter "-" " ")}} <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a></span>{{/if}}
+          {{#if categoryFilter}}<span class="chip">📂 {{capitalize (replace categoryFilter "-" " ")}} <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&pillar={{pillarFilter}}">✕</a></span>{{/if}}
+          {{#if pillarFilter}}<span class="chip">🏛 {{capitalize pillarFilter}} <a class="chip-x" href="/org/{{org.slug}}/dashboard?q={{searchQuery}}&series={{seriesFilter}}&category={{categoryFilter}}">✕</a></span>{{/if}}
         </div>
         {{/if}}
       </form>
@@ -628,10 +576,11 @@
       <div class="ch">
         <div class="ch-l">
           {{#if seriesFilter}}
-          <a href="/org/{{org.slug}}/dashboard{{#if pillarFilter}}?pillar={{pillarFilter}}{{else if categoryFilter}}?category={{categoryFilter}}{{/if}}" class="btn btn-o btn-xs" style="margin-right:6px">← Back</a>
+          <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
           <span class="ch-title">{{capitalize (replace seriesFilter "-" " ")}}</span>
+          <span class="ch-sub"> — {{#each quizzesBySeries}}{{#if (eq this.seriesSlug ../seriesFilter)}}{{this.quizzes.length}} assessments{{/if}}{{/each}}</span>
           {{else if categoryFilter}}
-          <a href="/org/{{org.slug}}/dashboard{{#if pillarFilter}}?pillar={{pillarFilter}}{{/if}}" class="btn btn-o btn-xs" style="margin-right:6px">← Back</a>
+          <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
           <span class="ch-title">{{capitalize (replace categoryFilter "-" " ")}}</span>
           {{else if pillarFilter}}
           <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
@@ -651,23 +600,18 @@
         {{#if hasAssignedQuizzes}}
         <div id="quiz-lib">
 
-          {{!-- ══════════════════════════════════════════════════
-               PILLAR VIEW (pillar selected, no category/series filter):
-               Show Category section headers → Series blocks → Quiz cards
-               4 levels: Pillar → Category → Series → Quiz
-          ══════════════════════════════════════════════════ --}}
+          {{!-- ══ PILLAR VIEW: category section headers ══
+               FIX: use #unless instead of (not ...) which is not a standard Handlebars helper --}}
           {{#if pillarFilter}}
-          {{#unless categoryFilter}}
           {{#unless seriesFilter}}
+          {{#unless categoryFilter}}
           {{#each quizzesByPillarArray}}
           {{#if (eq this.pillarSlug ../pillarFilter)}}
           {{#each this.categories}}
           <div class="cat-section">
-            <div class="cat-section-hdr" onclick="setFilter('category','{{this.categorySlug}}')">
-              <span class="cat-section-icon">{{this.categoryIcon}}</span>
+            <div class="cat-section-hdr">
               <span class="cat-section-title">{{this.categoryLabel}}</span>
               <span class="cat-section-count">{{this.totalQuizzes}} assessment{{#if (gt this.totalQuizzes 1)}}s{{/if}}</span>
-              <button class="cat-section-filter" onclick="event.stopPropagation();setFilter('category','{{this.categorySlug}}')">Filter →</button>
             </div>
             {{#each this.seriesList}}
             <div class="series-block" id="sb-{{this.seriesSlug}}"
@@ -749,11 +693,7 @@
           {{/unless}}
           {{/if}}
 
-          {{!-- ══════════════════════════════════════════════════
-               ALL OTHER VIEWS (no filter, category filter, series filter,
-               or pillar+category/series combined):
-               Flat series list → Quiz cards
-          ══════════════════════════════════════════════════ --}}
+          {{!-- ══ DEFAULT / SERIES / CATEGORY filtered view ══ --}}
           {{#unless pillarFilter}}
           {{#each quizzesBySeries}}
           <div class="series-block" id="sb-{{this.seriesSlug}}" data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
@@ -762,9 +702,7 @@
               <div class="s-info">
                 <div class="s-title">{{this.seriesLabel}}</div>
                 <div class="s-tags">
-                  {{#if this.pillar}}<span class="badge b-violet">
-                    {{#if (eq this.pillar "consciousness")}}🧠{{/if}}{{#if (eq this.pillar "responsibility")}}🤝{{/if}}{{#if (eq this.pillar "purpose")}}🎯{{/if}}{{#if (eq this.pillar "technology")}}💻{{/if}}{{#if (eq this.pillar "frequencies")}}📡{{/if}}{{#if (eq this.pillar "civilization")}}🏛{{/if}}{{#if (eq this.pillar "interpretation")}}🔍{{/if}}{{#if (eq this.pillar "negotiation")}}🤜{{/if}}
-                    {{capitalize this.pillar}}</span>{{/if}}
+                  {{#if this.pillar}}<span class="badge b-violet">{{#if (eq this.pillar "consciousness")}}🧠{{/if}}{{#if (eq this.pillar "responsibility")}}🤝{{/if}}{{#if (eq this.pillar "purpose")}}🎯{{/if}}{{#if (eq this.pillar "technology")}}💻{{/if}}{{#if (eq this.pillar "frequencies")}}📡{{/if}}{{#if (eq this.pillar "civilization")}}🏛{{/if}}{{#if (eq this.pillar "interpretation")}}🔍{{/if}}{{#if (eq this.pillar "negotiation")}}🤜{{/if}} {{capitalize this.pillar}}</span>{{/if}}
                   {{#if this.category}}<span class="badge b-teal">{{capitalize (replace this.category "-" " ")}}</span>{{/if}}
                   {{#if this.level}}<span class="badge b-slate">{{capitalize this.level}}</span>{{/if}}
                 </div>
@@ -837,9 +775,9 @@
           {{/each}}
           {{/unless}}
 
-          {{!-- Category + series filtered view when pillar also active --}}
+          {{!-- Also show flat list when pillarFilter is set but series/category filter is also active --}}
           {{#if pillarFilter}}
-          {{#if categoryFilter}}
+          {{#if seriesFilter}}
           {{#each quizzesBySeries}}
           <div class="series-block" id="sb-{{this.seriesSlug}}" data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
             <button class="series-hdr" onclick="toggleSeries('{{this.seriesSlug}}')">
@@ -939,6 +877,7 @@
 
     </div>{{!-- /tab-assessments --}}
 
+    <!-- TAB: HISTORY -->
     <div id="tab-history" class="jh">
       {{#if attemptRows.length}}
       <div class="sec-title">📋 Assessment History</div>
@@ -963,6 +902,7 @@
       {{/if}}
     </div>
 
+    <!-- TAB: ADMIN -->
     {{#if isAdmin}}
     <div id="tab-admin" class="jh">
       <div class="sec-title">🔧 Admin Tools</div>
@@ -976,9 +916,9 @@
     {{/if}}
 
   </main>
-</div>
+</div>{{!-- /layout --}}
 
-<!-- MOBILE SIDEBAR -->
+<!-- MOBILE SIDEBAR DRAWER -->
 {{#if isCripfcntSchool}}
 <div class="mob-drawer" id="mob-drawer" onclick="closeMobSidebar(event)">
   <div class="mob-panel" id="mob-panel">
@@ -986,70 +926,68 @@
       <span>Browse</span>
       <button class="mob-close" onclick="closeMobSidebar(null,true)">✕</button>
     </div>
+
     <button class="sbi {{#unless (or pillarFilter categoryFilter seriesFilter)}}active{{/unless}}" onclick="clearAllFilters()">
       <span class="sbi-em">🏠</span><span class="sbi-txt"><div class="sbi-t">All Assessments</div><div class="sbi-s">Reset filters</div></span>
     </button>
+
+    {{!-- Mobile: same Pillar → Category → Series hierarchy --}}
     {{#if quizzesByPillarArray.length}}
     {{#each quizzesByPillarArray}}
-    {{!-- Mobile Level 1: Pillar --}}
-    <button class="sbi sb-pillar {{#if (eq this.pillarSlug ../pillarFilter)}}active{{/if}}"
-      data-pillar="{{this.pillarSlug}}"
-      onclick="setFilter('pillar','{{this.pillarSlug}}')">
-      <span class="sbi-em">{{this.pillarIcon}}</span>
-      <span class="sbi-txt"><div class="sbi-t">{{this.pillarLabel}}</div><div class="sbi-s">{{this.totalQuizzes}} assessments</div></span>
-      <span class="sbi-n">{{this.totalQuizzes}}</span>
-    </button>
+    <div class="sb-div" style="color:{{this.pillarColor}}">{{this.pillarIcon}} {{this.pillarLabel}}</div>
     {{#each this.categories}}
-    {{!-- Mobile Level 2: Category --}}
-    <button class="sbi sb-cat {{#if (eq this.categorySlug ../../categoryFilter)}}active{{/if}}"
-      onclick="setFilter('category','{{this.categorySlug}}')">
-      <span class="sbi-em">{{this.categoryIcon}}</span>
-      <span class="sbi-txt"><div class="sbi-t">{{this.categoryLabel}}</div><div class="sbi-s">{{this.totalQuizzes}} assessments</div></span>
-      <span class="sbi-n">{{this.totalQuizzes}}</span>
-    </button>
-    {{#each this.seriesList}}
-    {{!-- Mobile Level 3: Series --}}
-    <button class="sbi sb-series {{#if (eq this.seriesSlug ../../../seriesFilter)}}active{{/if}}"
-      onclick="setFilter('series','{{this.seriesSlug}}')">
-      <span class="sbi-em">▸</span>
-      <span class="sbi-txt"><div class="sbi-t">{{this.seriesLabel}}</div><div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}</div></span>
-      <span class="sbi-n">{{this.quizCount}}</span>
-    </button>
-    {{/each}}
+    <div class="sb-cat-wrap">
+      <div class="sb-cat-label">{{this.categoryLabel}}</div>
+      {{#each this.seriesList}}
+      <button class="sbi sbi-series {{#if (eq this.seriesSlug ../../seriesFilter)}}active{{/if}}"
+        onclick="setFilter('series','{{this.seriesSlug}}')">
+        <span class="sbi-em" style="font-size:10px;color:var(--ink-faint)">▸</span>
+        <span class="sbi-txt">
+          <div class="sbi-t">{{this.seriesLabel}}</div>
+          <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}</div>
+        </span>
+        <span class="sbi-n">{{this.quizCount}}</span>
+      </button>
+      {{/each}}
+    </div>
     {{/each}}
     {{/each}}
     {{/if}}
+
   </div>
   <div class="mob-back"></div>
 </div>
 {{/if}}
 
 <script>
+/* TABS */
 function switchTab(id,btn){
   ['assessments','history','admin'].forEach(function(t){var el=document.getElementById('tab-'+t);if(el)el.classList.add('jh');});
   document.querySelectorAll('.ntab').forEach(function(t){t.classList.remove('active');});
   var target=document.getElementById('tab-'+id);if(target)target.classList.remove('jh');
   if(btn)btn.classList.add('active');
 }
+
+/* VIEW */
 function setView(mode){
   var mc=document.getElementById('main-content');if(mc)mc.dataset.view=mode;
   document.getElementById('vb-grid').classList.toggle('active',mode==='grid');
   document.getElementById('vb-list').classList.toggle('active',mode==='list');
   try{localStorage.setItem('dv',mode);}catch(e){}
 }
+
+/* SERIES TOGGLE */
 function toggleSeries(slug){
   var b=document.getElementById('sbody-'+slug),c=document.getElementById('chev-'+slug);
   if(!b)return;
   var h=b.classList.toggle('jh');
   if(c)c.classList.toggle('open',!h);
 }
+
+/* FILTER */
 function setFilter(key,value){
   closeMobSidebar(null,true);
   var url=new URL(window.location.href);
-  // When setting a new pillar, clear category and series
-  if(key==='pillar'){url.searchParams.delete('category');url.searchParams.delete('series');}
-  // When setting a new category, clear series
-  if(key==='category'){url.searchParams.delete('series');}
   if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);
   window.location.href=url.toString();
 }
@@ -1062,6 +1000,8 @@ function toggleFPanel(btn){
   var p=document.getElementById('fpanel');if(!p)return;
   var h=p.classList.toggle('jh');btn.classList.toggle('on',!h);
 }
+
+/* LIVE SEARCH */
 var _st;
 function liveSearch(q){
   clearTimeout(_st);
@@ -1089,12 +1029,19 @@ function liveSearch(q){
     if(nr&&lib){var any=Array.from(blocks).some(function(b){return b.style.display!=='none';});nr.classList.toggle('jh',!term||any);}
   },150);
 }
-function openMobSidebar(){var d=document.getElementById('mob-drawer');if(d)d.classList.add('open');document.body.style.overflow='hidden';}
+
+/* MOBILE SIDEBAR */
+function openMobSidebar(){
+  var d=document.getElementById('mob-drawer');if(d)d.classList.add('open');
+  document.body.style.overflow='hidden';
+}
 function closeMobSidebar(e,force){
   if(!force&&e){var t=e.target;if(!t.classList.contains('mob-back')&&t!==e.currentTarget)return;}
   var d=document.getElementById('mob-drawer');if(d)d.classList.remove('open');
   document.body.style.overflow='';
 }
+
+/* INIT */
 (function(){
   try{var sv=localStorage.getItem('dv');if(sv==='list')setView('list');}catch(e){}
   var p=new URLSearchParams(window.location.search);

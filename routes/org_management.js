@@ -771,6 +771,18 @@ router.get(
 //  router.get("/org/:slug/dashboard", ...) block.
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+//  DASHBOARD ROUTE — replace the existing router.get("/org/:slug/dashboard")
+//  block in routes/org_management.js with this entire block.
+//
+//  KEY FIXES:
+//  1. catAgg falls back to reading category directly (no aiCategorised flag)
+//     so categories appear even before re-categorisation script runs
+//  2. _pillarBuckets resolves empty category using allCategoryMeta by pillar
+//     instead of defaulting everything to "general"
+//  3. suggestedSlugs built AFTER allCategoryMeta (correct order)
+// ═══════════════════════════════════════════════════════════════════════
+
 router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   try {
     const slug           = String(req.params.slug  || "").trim();
@@ -800,14 +812,14 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const isCripfcntSchool = org.slug === "cripfcnt-school";
     const modules = await OrgModule.find({ org: org._id }).lean();
 
-    // ── Role label for UI ────────────────────────────────────────────
+    // ── Role label ───────────────────────────────────────────────────
     let normalizedRole = "professional";
     if (isAdmin)                                      normalizedRole = "administrator";
     else if (role === "student")                      normalizedRole = "student";
     else if (role === "teacher")                      normalizedRole = "teacher";
     else if (role === "employee" || role === "staff") normalizedRole = "professional";
 
-    // ── Icon + slug helpers ──────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────
     const ICON_MAP = {
       "governance":"🏛","public-policy":"📜","institutional-accountability":"⚖️",
       "public-sector-ethics":"⚖️","rule-of-law":"⚖️","electoral-systems":"🗳",
@@ -821,81 +833,89 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       "technology-governance":"💻","digital-ethics":"🔐",
       "social-justice":"✊","human-rights":"🌐","conflict-resolution":"🕊",
       "education-reform":"📚","critical-thinking":"🧠","professional-development":"🎓",
-      "environmental-governance":"🌿",
-      "civilisation-theory":"🏛","frequencies-and-influence":"📡",
-      "interpretive-frameworks":"🔍","negotiation-dynamics":"🤜",
-      "scoi-fundamentals":"📊","institutional-trust":"🤝",
-      "structural-responsibility":"🔧","performance-metrics":"📊",
+      "environmental-governance":"🌿","civilisation-theory":"🏛",
+      "frequencies-and-influence":"📡","interpretive-frameworks":"🔍",
+      "negotiation-dynamics":"🤜","scoi-fundamentals":"📊",
+      "institutional-trust":"🤝","structural-responsibility":"🔧","performance-metrics":"📊",
     };
-
-    function getIcon(slug) {
-      if (ICON_MAP[slug]) return ICON_MAP[slug];
-      const first = (slug || "").split("-")[0];
-      const k = Object.keys(ICON_MAP).find(k => k.startsWith(first));
+    function getIcon(s) {
+      if (ICON_MAP[s]) return ICON_MAP[s];
+      const k = Object.keys(ICON_MAP).find(k => k.startsWith((s||"").split("-")[0]));
       return k ? ICON_MAP[k] : "📂";
     }
-
-    function slugToLabel(slug) {
-      return (slug || "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    function slugToLabel(s) {
+      return (s||"").split("-").map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
     }
 
-    // ── CATEGORY_TOPIC_KEYWORDS — used only for filter fallback ─────
+    // ── Pillar → allowed categories (for fallback resolution) ────────
+    const PILLAR_CATEGORY_MAP = {
+      consciousness:  ["consciousness-studies","philosophical-inquiry","systems-thinking","critical-thinking","narrative-framing"],
+      responsibility: ["governance","institutional-accountability","public-sector-ethics","rule-of-law","financial-accountability","structural-responsibility","social-contract","responsibility-frameworks"],
+      interpretation: ["interpretive-frameworks","language-recalibration","media-literacy","strategic-communication","narrative-framing"],
+      purpose:        ["strategic-leadership","change-management","policy-implementation","community-leadership","crisis-management"],
+      frequencies:    ["frequencies-and-influence"],
+      civilization:   ["civilisation-theory","social-justice","human-rights","economic-justice","environmental-governance","electoral-systems"],
+      negotiation:    ["conflict-resolution","negotiation-dynamics"],
+      technology:     ["technology-governance","digital-ethics"],
+      general:        ["professional-development","education-reform","performance-metrics","institutional-trust","scoi-fundamentals"],
+    };
+
+    // ── Category → keywords (used for filter fallback matching) ──────
     const CATEGORY_TOPIC_KEYWORDS = {
-      "governance":                ["governance","government","institution","ministry","parliament","accountability","public-sector","civil-service","administration","policy"],
-      "public-policy":             ["policy","legislation","regulation","law-reform","public-administration","regulatory","compliance","bill","statute","framework"],
+      "governance":["governance","government","institution","ministry","parliament","accountability","public-sector","civil-service","administration","policy"],
+      "public-policy":["policy","legislation","regulation","law-reform","public-administration","regulatory","compliance","bill","statute","framework"],
       "institutional-accountability":["accountability","transparency","oversight","audit","control","institutional","corruption","integrity","procurement","ethics"],
-      "public-sector-ethics":      ["ethics","integrity","misconduct","professional-standards","code-of-conduct","conflict-of-interest","bribery","whistleblower","public-trust"],
-      "rule-of-law":               ["rule-of-law","constitution","rights","judicial","court","legal","justice","law","enforcement","constitutional"],
-      "electoral-systems":         ["election","voting","democracy","ballot","electoral","representation","political-party","campaign","mandate"],
-      "strategic-leadership":      ["leadership","strategic","vision","decision","executive","ceo","management","direction","strategy","commander"],
-      "change-management":         ["change","transformation","reform","restructuring","transition","adaptation","disruption","reorganisation","organisational-change"],
-      "policy-implementation":     ["implementation","execution","delivery","programme","project","rollout","service-delivery","operational","monitoring","evaluation"],
-      "community-leadership":      ["community","local","grassroots","civic","neighbourhood","municipality","village","ward","stakeholder","participation"],
-      "crisis-management":         ["crisis","emergency","disaster","risk","resilience","continuity","response","pandemic","hazard","contingency"],
-      "responsibility-frameworks": ["responsibility","accountability","blame","obligation","duty","outsourcing","delegation","transfer","burden","ownership"],
-      "social-contract":           ["social-contract","citizenship","obligation","rights-and-duties","consent","legitimacy","civic","public-service"],
-      "strategic-communication":   ["communication","messaging","narrative","framing","rhetoric","speech","media-strategy","public-relations","branding","discourse"],
-      "media-literacy":            ["media","journalism","news","misinformation","disinformation","fake-news","social-media","broadcast","press","editorial"],
-      "language-recalibration":    ["language","terminology","recalibration","semantics","definition","vocabulary","framing","wording","redefinition","discourse"],
-      "narrative-framing":         ["narrative","story","framing","agenda","spin","perception","context","interpretation","propaganda","messaging"],
-      "consciousness-studies":     ["consciousness","awareness","perception","mind","cognitive","self-awareness","metacognition","attention","clarity"],
-      "philosophical-inquiry":     ["philosophy","ethics","morality","ontology","epistemology","truth","meaning","value","principle","virtue"],
-      "systems-thinking":          ["system","systems-thinking","complexity","feedback","interdependence","emergent","network","holistic","dynamic","interconnected"],
-      "economic-policy":           ["economic","economy","fiscal","monetary","budget","inflation","growth","gdp","trade","market"],
-      "economic-justice":          ["economic-justice","inequality","poverty","redistribution","wages","wealth-gap","equity","fair","social-mobility","living-wage"],
-      "financial-accountability":  ["financial","audit","treasury","expenditure","budget","procurement","misappropriation","fraud","fiduciary","public-funds"],
-      "technology-governance":     ["technology","digital","data","cyber","ai","artificial-intelligence","platform","algorithm","tech-policy","innovation"],
-      "digital-ethics":            ["digital-ethics","privacy","surveillance","algorithmic","bias","facial-recognition","ai-ethics","data-protection","human-rights-digital"],
-      "social-justice":            ["social-justice","equality","discrimination","race","gender","marginalised","inclusion","diversity","oppression","civil-rights"],
-      "human-rights":              ["human-rights","rights","freedoms","dignity","protection","abuse","violation","refugee","asylum","torture"],
-      "conflict-resolution":       ["conflict","resolution","negotiation","mediation","peace","diplomacy","dialogue","reconciliation","compromise","agreement"],
-      "education-reform":          ["education","curriculum","school","learning","teaching","reform","pedagogy","student","literacy","numeracy"],
-      "critical-thinking":         ["critical-thinking","analysis","reasoning","logic","evaluate","evidence","argument","bias","fallacy","question"],
-      "professional-development":  ["professional","development","training","capacity","skill","competency","mentoring","career","certification","upskill"],
-      "environmental-governance":  ["environment","climate","ecology","sustainability","green","carbon","pollution","conservation","natural-resources","biodiversity"],
-      "civilisation-theory":       ["civilisation","civilization","society","culture","heritage","identity","nation","state","modernity","progress"],
-      "frequencies-and-influence": ["frequencies","influence","energy","vibration","signal","frequency","resonance","awareness","consciousness-level"],
-      "interpretive-frameworks":   ["interpretation","framework","lens","perspective","worldview","paradigm","model","theory","reading","analysis"],
-      "negotiation-dynamics":      ["negotiation","bargain","deal","agreement","compromise","leverage","power","concession","zone","outcome"],
-      "scoi-fundamentals":         ["scoi","visibility","contribution","measurement","performance","score","ratio","output","impact","metrics"],
-      "institutional-trust":       ["trust","credibility","legitimacy","confidence","faith","institutional-trust","reputation","reliability","dependability"],
-      "structural-responsibility": ["structural","responsibility","blame","accountability","responsibility-outsourcing","burden","downward","transfer"],
-      "performance-metrics":       ["metrics","measurement","kpi","indicator","evaluation","assessment","benchmark","performance","results","output"],
+      "public-sector-ethics":["ethics","integrity","misconduct","professional-standards","code-of-conduct","conflict-of-interest","bribery","whistleblower","public-trust"],
+      "rule-of-law":["rule-of-law","constitution","rights","judicial","court","legal","justice","law","enforcement","constitutional"],
+      "electoral-systems":["election","voting","democracy","ballot","electoral","representation","political-party","campaign","mandate"],
+      "strategic-leadership":["leadership","strategic","vision","decision","executive","ceo","management","direction","strategy","commander"],
+      "change-management":["change","transformation","reform","restructuring","transition","adaptation","disruption","reorganisation","organisational-change"],
+      "policy-implementation":["implementation","execution","delivery","programme","project","rollout","service-delivery","operational","monitoring","evaluation"],
+      "community-leadership":["community","local","grassroots","civic","neighbourhood","municipality","village","ward","stakeholder","participation"],
+      "crisis-management":["crisis","emergency","disaster","risk","resilience","continuity","response","pandemic","hazard","contingency"],
+      "responsibility-frameworks":["responsibility","accountability","blame","obligation","duty","outsourcing","delegation","transfer","burden","ownership"],
+      "social-contract":["social-contract","citizenship","obligation","rights-and-duties","consent","legitimacy","civic","public-service"],
+      "strategic-communication":["communication","messaging","narrative","framing","rhetoric","speech","media-strategy","public-relations","branding","discourse"],
+      "media-literacy":["media","journalism","news","misinformation","disinformation","fake-news","social-media","broadcast","press","editorial"],
+      "language-recalibration":["language","terminology","recalibration","semantics","definition","vocabulary","framing","wording","redefinition","discourse"],
+      "narrative-framing":["narrative","story","framing","agenda","spin","perception","context","interpretation","propaganda","messaging"],
+      "consciousness-studies":["consciousness","awareness","perception","mind","cognitive","self-awareness","metacognition","attention","clarity"],
+      "philosophical-inquiry":["philosophy","ethics","morality","ontology","epistemology","truth","meaning","value","principle","virtue"],
+      "systems-thinking":["system","systems-thinking","complexity","feedback","interdependence","emergent","network","holistic","dynamic","interconnected"],
+      "economic-justice":["economic-justice","inequality","poverty","redistribution","wages","wealth-gap","equity","fair","social-mobility","living-wage"],
+      "financial-accountability":["financial","audit","treasury","expenditure","budget","procurement","misappropriation","fraud","fiduciary","public-funds"],
+      "technology-governance":["technology","digital","data","cyber","ai","artificial-intelligence","platform","algorithm","tech-policy","innovation"],
+      "digital-ethics":["digital-ethics","privacy","surveillance","algorithmic","bias","facial-recognition","ai-ethics","data-protection"],
+      "social-justice":["social-justice","equality","discrimination","race","gender","marginalised","inclusion","diversity","oppression","civil-rights"],
+      "human-rights":["human-rights","rights","freedoms","dignity","protection","abuse","violation","refugee","asylum","torture"],
+      "conflict-resolution":["conflict","resolution","negotiation","mediation","peace","diplomacy","dialogue","reconciliation","compromise","agreement"],
+      "education-reform":["education","curriculum","school","learning","teaching","reform","pedagogy","student","literacy","numeracy"],
+      "critical-thinking":["critical-thinking","analysis","reasoning","logic","evaluate","evidence","argument","bias","fallacy","question"],
+      "professional-development":["professional","development","training","capacity","skill","competency","mentoring","career","certification","upskill"],
+      "environmental-governance":["environment","climate","ecology","sustainability","green","carbon","pollution","conservation","natural-resources","biodiversity"],
+      "civilisation-theory":["civilisation","civilization","society","culture","heritage","identity","nation","state","modernity","progress"],
+      "frequencies-and-influence":["frequencies","influence","energy","vibration","signal","frequency","resonance","awareness","consciousness-level"],
+      "interpretive-frameworks":["interpretation","framework","lens","perspective","worldview","paradigm","model","theory","reading","analysis"],
+      "negotiation-dynamics":["negotiation","bargain","deal","agreement","compromise","leverage","power","concession","zone","outcome"],
+      "scoi-fundamentals":["scoi","visibility","contribution","measurement","performance","score","ratio","output","impact","metrics"],
+      "institutional-trust":["trust","credibility","legitimacy","confidence","faith","institutional-trust","reputation","reliability","dependability"],
+      "structural-responsibility":["structural","responsibility","blame","accountability","responsibility-outsourcing","burden","downward","transfer"],
+      "performance-metrics":["metrics","measurement","kpi","indicator","evaluation","assessment","benchmark","performance","results","output"],
     };
 
     // ══════════════════════════════════════════════════════════════════
-    //  STEP 1 — Aggregations: pillars, series, categories
-    //  NOTE: allCategoryMeta MUST be built before suggestedSlugs
+    //  STEP 1 — Aggregations
+    //  allCategoryMeta MUST be built before suggestedSlugs
     // ══════════════════════════════════════════════════════════════════
-    let allPillarSlugs  = [];
+    let allPillarSlugs   = [];
     let allCategorySlugs = [];
-    let allSeriesSlugs  = [];
-    let allCategoryMeta = [];
-    let allSeriesMeta   = [];
+    let allSeriesSlugs   = [];
+    let allCategoryMeta  = [];
+    let allSeriesMeta    = [];
 
     if (isCripfcntSchool) {
 
-      // ── Pillars ────────────────────────────────────────────────────
+      // Pillars
       const pillarAgg = await Question.aggregate([
         { $match: { organization: org._id, "meta.aiPillar": { $exists: true, $ne: null, $ne: "" } } },
         { $group: { _id: "$meta.aiPillar", count: { $sum: 1 } } },
@@ -903,109 +923,106 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       ]);
       allPillarSlugs = pillarAgg.map(p => p._id).filter(Boolean);
 
-      // ── Series ─────────────────────────────────────────────────────
+      // Series
       const seriesAgg = await Question.aggregate([
-        { $match: { organization: org._id, type: "comprehension", series: { $exists: true, $ne: null, $ne: "" } } },
-        { $group: { _id: "$series", count: { $sum: 1 }, pillar: { $first: "$meta.aiPillar" }, category: { $first: "$category" }, level: { $first: "$level" } } },
+        { $match: { organization: org._id, type: "comprehension",
+            "meta.isOutOfScope": { $ne: true },
+            series: { $exists: true, $ne: null, $ne: "" } } },
+        { $group: { _id: "$series", count: { $sum: 1 },
+            pillar: { $first: "$meta.aiPillar" },
+            category: { $first: "$category" },
+            level: { $first: "$level" } } },
         { $sort: { _id: 1 } }
       ]);
       allSeriesSlugs = seriesAgg.map(s => s._id).filter(Boolean);
       allSeriesMeta  = seriesAgg.map(s => ({
-        slug:     s._id,
-        label:    slugToLabel(s._id),
-        pillar:   s.pillar   || "general",
-        category: s.category || "",
-        level:    s.level    || "foundation",
-        count:    s.count
+        slug: s._id, label: slugToLabel(s._id),
+        pillar: s.pillar || "general", category: s.category || "",
+        level: s.level || "foundation", count: s.count
       }));
 
-      // ── Categories — directly from category field after re-categorisation ──
-      const catAgg = await Question.aggregate([
-        {
-          $match: {
-            organization: org._id,
-            type: "comprehension",
-            "meta.aiCategorised": true,
-            "meta.isOutOfScope": { $ne: true },
-            category: { $exists: true, $nin: [null, "", "out-of-scope"] }
-          }
-        },
+      // ── Categories — PRIMARY: after re-categorisation script ─────────
+      const catAggPrimary = await Question.aggregate([
+        { $match: { organization: org._id, type: "comprehension",
+            "meta.aiCategorised": true, "meta.isOutOfScope": { $ne: true },
+            category: { $exists: true, $nin: [null, "", "out-of-scope"] } } },
         { $group: { _id: "$category", count: { $sum: 1 }, pillar: { $first: "$meta.aiPillar" } } },
         { $sort: { count: -1 } }
       ]);
 
-      allCategoryMeta = catAgg.map(c => ({
-        slug:   c._id,
-        label:  slugToLabel(c._id),
-        icon:   getIcon(c._id),
-        pillar: c.pillar || "general",
-        count:  c.count
-      }));
+      // ── Categories — FALLBACK: before re-categorisation runs ─────────
+      // Reads category field directly without checking aiCategorised flag.
+      // This makes categories visible even before the script has been run.
+      const catAggFallback = catAggPrimary.length === 0
+        ? await Question.aggregate([
+            { $match: { organization: org._id, type: "comprehension",
+                "meta.isOutOfScope": { $ne: true },
+                category: { $exists: true, $nin: [null, "", "out-of-scope"] } } },
+            { $group: { _id: "$category", count: { $sum: 1 }, pillar: { $first: "$meta.aiPillar" } } },
+            { $sort: { count: -1 } }
+          ])
+        : [];
 
+      const rawCats = catAggPrimary.length > 0 ? catAggPrimary : catAggFallback;
+      allCategoryMeta = rawCats.map(c => ({
+        slug: c._id, label: slugToLabel(c._id), icon: getIcon(c._id),
+        pillar: c.pillar || "general", count: c.count
+      }));
       allCategorySlugs = allCategoryMeta.map(c => c.slug);
     }
 
-    // ── suggestedSlugs — MUST be built AFTER allCategoryMeta ────────
+    // ── suggestedSlugs — MUST come AFTER allCategoryMeta is built ───
     const PILLAR_CATEGORY_HINTS = {
-      responsibility:  ["governance","accountability","ethics","responsibility","rule-of-law","compliance"],
-      consciousness:   ["consciousness","awareness","philosophical","systems-thinking","critical"],
-      purpose:         ["leadership","strategic","change","implementation","mission","purpose"],
-      interpretation:  ["interpretation","narrative","language","media","communication","framing"],
-      frequencies:     ["frequencies","influence","energy","resonance","signal"],
-      civilization:    ["civilization","civilisation","society","heritage","culture","social"],
-      negotiation:     ["negotiation","conflict","dialogue","consensus","diplomacy"],
-      technology:      ["technology","digital","ai","cyber","data","innovation"],
-      general:         ["professional","development","training","scoi","performance"],
+      responsibility: ["governance","accountability","ethics","responsibility","rule-of-law","compliance","structural"],
+      consciousness:  ["consciousness","awareness","philosophical","systems-thinking","critical"],
+      purpose:        ["leadership","strategic","change","implementation","mission","purpose","community","crisis"],
+      interpretation: ["interpretation","narrative","language","media","communication","framing"],
+      frequencies:    ["frequencies","influence","energy","resonance","signal"],
+      civilization:   ["civilization","civilisation","society","heritage","culture","social","justice","human","electoral","environment"],
+      negotiation:    ["negotiation","conflict","dialogue","consensus","diplomacy"],
+      technology:     ["technology","digital","ai","cyber","data","innovation"],
+      general:        ["professional","development","training","scoi","performance","institutional","education"],
     };
 
     const suggestedSlugs = (() => {
       if (!isCripfcntSchool || !allCategoryMeta.length) return [];
-      const seen   = new Set();
-      const result = [];
+      const seen = new Set(), result = [];
       for (const [, hints] of Object.entries(PILLAR_CATEGORY_HINTS)) {
         const matches = allCategoryMeta
           .filter(cm => cm.count > 0 && !seen.has(cm.slug) &&
-            hints.some(hint => cm.slug.includes(hint) || hint.includes(cm.slug.split('-')[0]))
-          )
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 1);
+            hints.some(h => cm.slug.includes(h) || h.includes(cm.slug.split('-')[0])))
+          .sort((a,b) => b.count - a.count).slice(0,1);
         for (const m of matches) { seen.add(m.slug); result.push(m.slug); }
       }
-      const remaining = allCategoryMeta
-        .filter(cm => cm.count > 0 && !seen.has(cm.slug))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, Math.max(0, 8 - result.length))
-        .map(cm => cm.slug);
+      const remaining = allCategoryMeta.filter(cm => cm.count > 0 && !seen.has(cm.slug))
+        .sort((a,b) => b.count - a.count)
+        .slice(0, Math.max(0, 8 - result.length)).map(cm => cm.slug);
       return [...result, ...remaining].slice(0, 8);
     })();
 
-    // ── Build suggestedCategoryMeta + remainingCategoryMeta ─────────
     const catMetaBySlug = {};
     for (const cm of allCategoryMeta) catMetaBySlug[cm.slug] = cm;
 
-    const suggestedCategoryMeta = suggestedSlugs.map(slug =>
-      catMetaBySlug[slug] || { slug, label: slugToLabel(slug), icon: getIcon(slug), pillar: "general", count: 0 }
+    const suggestedCategoryMeta = suggestedSlugs.map(s =>
+      catMetaBySlug[s] || { slug: s, label: slugToLabel(s), icon: getIcon(s), pillar: "general", count: 0 }
     );
-
     const suggestedSet = new Set(suggestedSlugs);
     const remainingCategoryMeta = allCategoryMeta.filter(cm => !suggestedSet.has(cm.slug) && cm.count > 0);
 
     // ══════════════════════════════════════════════════════════════════
-    //  STEP 2 — Load exams / quizzes
+    //  STEP 2 — Load quizzes
     // ══════════════════════════════════════════════════════════════════
     let exams = [];
 
     if (isCripfcntSchool && isAdmin) {
       const allQuizzes = await Question.find({
-        organization: org._id,
-        type: "comprehension",
+        organization: org._id, type: "comprehension",
         "meta.isOutOfScope": { $ne: true }
       })
         .select("_id text quizTitle module modules topics series category level seriesOrder questionIds createdAt meta")
         .sort({ series: 1, seriesOrder: 1, createdAt: -1 })
         .lean();
 
-      // Pull child question topics for richer matching
       const allQuizIds = allQuizzes.map(q => q._id);
       const childTopicDocs = await Question.find({
         "meta.inheritedFromQuiz": { $in: allQuizIds },
@@ -1014,38 +1031,34 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
       const quizTopicMap = {};
       for (const c of childTopicDocs) {
-        const parentId = String(c.meta?.inheritedFromQuiz);
-        if (!quizTopicMap[parentId]) quizTopicMap[parentId] = new Set();
-        for (const t of (c.topics || [])) quizTopicMap[parentId].add(t);
+        const pid = String(c.meta?.inheritedFromQuiz);
+        if (!quizTopicMap[pid]) quizTopicMap[pid] = new Set();
+        for (const t of (c.topics||[])) quizTopicMap[pid].add(t);
       }
 
       for (const quiz of allQuizzes) {
         const ownTopics   = Array.isArray(quiz.topics) ? quiz.topics : [];
         const childTopics = [...(quizTopicMap[String(quiz._id)] || [])];
         const allTopics   = [...new Set([...ownTopics, ...childTopics])];
-
         exams.push({
           assignmentId: `admin-quiz-${quiz._id}`,
-          examId:       null,
-          title:        quiz.quizTitle || quiz.text || "Quiz",
-          quizTitle:    quiz.quizTitle || quiz.text || "Quiz",
-          module:       quiz.module    || "general",
-          modules:      quiz.modules   || [quiz.module || "general"],
-          series:       quiz.series    || null,
-          category:     quiz.category  || null,
-          level:        quiz.level     || "foundation",
-          seriesOrder:  quiz.seriesOrder || 99,
-          questionIds:  quiz.questionIds || [],
-          createdAt:    quiz.createdAt,
-          isAdminQuiz:  true,
-          quizId:       quiz._id,
-          status:       "available",
+          examId: null,
+          title:  quiz.quizTitle || quiz.text || "Quiz",
+          quizTitle: quiz.quizTitle || quiz.text || "Quiz",
+          module: quiz.module || "general",
+          modules: quiz.modules || [quiz.module || "general"],
+          series:  quiz.series || null,
+          category: quiz.category || null,
+          level: quiz.level || "foundation",
+          seriesOrder: quiz.seriesOrder || 99,
+          questionIds: quiz.questionIds || [],
+          createdAt: quiz.createdAt,
+          isAdminQuiz: true,
+          quizId: quiz._id,
+          status: "available",
           meta: {
-            topics:   allTopics,
-            series:   quiz.series,
-            category: quiz.category,
-            aiPillar: quiz.meta?.aiPillar || quiz.module,
-            level:    quiz.level
+            topics: allTopics, series: quiz.series, category: quiz.category,
+            aiPillar: quiz.meta?.aiPillar || quiz.module, level: quiz.level
           }
         });
       }
@@ -1054,52 +1067,42 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       exams = await ExamInstance.aggregate([
         { $match: { org: new mongoose.Types.ObjectId(org._id) } },
         { $match: { assignmentId: { $exists: true, $ne: null }, isOnboarding: { $ne: true } } },
-        {
-          $group: {
-            _id: "$assignmentId",
-            doc: { $first: { assignmentId:"$assignmentId", module:"$module", modules:"$modules", title:"$title", quizTitle:"$quizTitle", questionIds:"$questionIds", createdAt:"$createdAt", expiresAt:"$expiresAt", meta:"$meta" } }
-          }
-        },
+        { $group: { _id: "$assignmentId", doc: { $first: {
+            assignmentId:"$assignmentId", module:"$module", modules:"$modules",
+            title:"$title", quizTitle:"$quizTitle", questionIds:"$questionIds",
+            createdAt:"$createdAt", expiresAt:"$expiresAt", meta:"$meta"
+        }}}},
         { $replaceRoot: { newRoot: "$doc" } },
         { $sort: { createdAt: -1 } }
       ]);
 
     } else {
-      // Non-admin — load assigned exams + enrich from source Question docs
-      const rawExams = await ExamInstance.find({
-        org: org._id, userId: req.user._id
-      }).sort({ createdAt: -1 }).lean();
+      const rawExams = await ExamInstance.find({ org: org._id, userId: req.user._id })
+        .sort({ createdAt: -1 }).lean();
 
       if (rawExams.length && isCripfcntSchool) {
         const quizIds = new Set();
         for (const ex of rawExams) {
           if (ex.meta?.quizId) quizIds.add(String(ex.meta.quizId));
-          if (Array.isArray(ex.questionIds)) {
-            for (const q of ex.questionIds) {
+          if (Array.isArray(ex.questionIds))
+            for (const q of ex.questionIds)
               if (String(q).startsWith("parent:")) quizIds.add(String(q).replace("parent:", ""));
-            }
-          }
         }
-
         const quizDocs = quizIds.size
           ? await Question.find({
               _id: { $in: [...quizIds].filter(id => mongoose.isValidObjectId(id)) },
               type: "comprehension"
             }).select("_id series category level seriesOrder quizTitle topics meta").lean()
           : [];
-
         const quizDocMap = {};
         for (const qd of quizDocs) quizDocMap[String(qd._id)] = qd;
 
         for (const ex of rawExams) {
-          let sourceId = null;
-          if (ex.meta?.quizId) sourceId = String(ex.meta.quizId);
-          if (!sourceId && Array.isArray(ex.questionIds)) {
-            for (const q of ex.questionIds) {
-              if (String(q).startsWith("parent:")) { sourceId = String(q).replace("parent:", ""); break; }
-            }
-          }
-          const src = sourceId ? quizDocMap[sourceId] : null;
+          let srcId = ex.meta?.quizId ? String(ex.meta.quizId) : null;
+          if (!srcId && Array.isArray(ex.questionIds))
+            for (const q of ex.questionIds)
+              if (String(q).startsWith("parent:")) { srcId = String(q).replace("parent:", ""); break; }
+          const src = srcId ? quizDocMap[srcId] : null;
           if (src) {
             ex.series      = ex.series      || src.series      || null;
             ex.category    = ex.category    || src.category    || null;
@@ -1123,78 +1126,55 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     //  STEP 3 — Apply filters
     // ══════════════════════════════════════════════════════════════════
     if (searchQuery || moduleFilter || topicFilter || seriesFilter || categoryFilter || pillarFilter) {
-      const activeCategoryKeywords = categoryFilter ? (CATEGORY_TOPIC_KEYWORDS[categoryFilter] || []) : [];
+      const activeCatKw = categoryFilter ? (CATEGORY_TOPIC_KEYWORDS[categoryFilter] || []) : [];
 
       exams = exams.filter(ex => {
         if (searchQuery) {
-          const t = (ex.title || ex.quizTitle || "").toLowerCase();
-          if (!t.includes(searchQuery.toLowerCase())) return false;
+          if (!(ex.title||ex.quizTitle||"").toLowerCase().includes(searchQuery.toLowerCase())) return false;
         }
         if (moduleFilter) {
-          const mods = ex.modules || [ex.module];
-          if (!mods.includes(moduleFilter)) return false;
+          if (!(ex.modules||[ex.module]).includes(moduleFilter)) return false;
         }
         if (topicFilter) {
-          const topics = ex.meta?.topics || [];
-          if (!topics.some(t => String(t).toLowerCase().includes(topicFilter.toLowerCase()))) return false;
+          if (!(ex.meta?.topics||[]).some(t => String(t).toLowerCase().includes(topicFilter.toLowerCase()))) return false;
         }
         if (seriesFilter) {
-          const s = (ex.series || ex.meta?.series || "").toLowerCase().trim();
+          const s = (ex.series||ex.meta?.series||"").toLowerCase().trim();
           if (!s || s !== seriesFilter.toLowerCase().trim()) return false;
         }
         if (categoryFilter) {
-          // Try 1: exact category field match
-          const cat = (ex.category || ex.meta?.category || "").toLowerCase().trim();
+          const cat = (ex.category||ex.meta?.category||"").toLowerCase().trim();
           if (cat === categoryFilter) return true;
-
-          // Try 2: topic keyword matching
-          if (activeCategoryKeywords.length > 0) {
-            const exTopics = (ex.meta?.topics || []).map(t => String(t).toLowerCase());
-            if (exTopics.some(topic => activeCategoryKeywords.some(kw => topic.includes(kw) || kw.includes(topic)))) return true;
+          if (activeCatKw.length) {
+            const exTopics = (ex.meta?.topics||[]).map(t => String(t).toLowerCase());
+            if (exTopics.some(t => activeCatKw.some(kw => t.includes(kw)||kw.includes(t)))) return true;
           }
-
-          // Try 3: series slug contains meaningful parts of category slug
-          const exSeries = (ex.series || ex.meta?.series || "").toLowerCase();
-          const categoryParts = categoryFilter.split("-").filter(p => p.length >= 5);
-          if (exSeries && categoryParts.length && categoryParts.some(part => exSeries.includes(part))) return true;
-
-          // Try 4: pillar-to-category alignment
-          const quizPillar = (ex.meta?.aiPillar || "").toLowerCase();
-          const PILLAR_CATEGORY_MAP = {
-            responsibility:  ["governance","institutional-accountability","public-sector-ethics","responsibility-frameworks","structural-responsibility","financial-accountability","social-contract","rule-of-law"],
-            consciousness:   ["consciousness-studies","philosophical-inquiry","systems-thinking","critical-thinking","narrative-framing"],
-            technology:      ["technology-governance","digital-ethics"],
-            negotiation:     ["conflict-resolution","negotiation-dynamics"],
-            purpose:         ["strategic-leadership","change-management","policy-implementation","community-leadership","crisis-management"],
-            civilization:    ["civilisation-theory","social-contract","human-rights","social-justice","economic-justice","environmental-governance"],
-            interpretation:  ["interpretive-frameworks","narrative-framing","language-recalibration","media-literacy","strategic-communication"],
-            frequencies:     ["frequencies-and-influence","consciousness-studies"],
-            general:         ["professional-development","education-reform","performance-metrics","institutional-trust","scoi-fundamentals"],
-          };
-          if (quizPillar && PILLAR_CATEGORY_MAP[quizPillar]?.includes(categoryFilter)) return true;
-
+          const exSeries = (ex.series||"").toLowerCase();
+          const catParts = categoryFilter.split("-").filter(p => p.length >= 5);
+          if (exSeries && catParts.length && catParts.some(p => exSeries.includes(p))) return true;
+          const qPillar = (ex.meta?.aiPillar||"").toLowerCase();
+          if (qPillar && PILLAR_CATEGORY_MAP[qPillar]?.includes(categoryFilter)) return true;
           return false;
         }
         if (pillarFilter) {
-          const p = (ex.meta?.aiPillar || "").toLowerCase();
+          const p = (ex.meta?.aiPillar||"").toLowerCase();
           if (!p || p !== pillarFilter) return false;
         }
         return true;
       });
     }
 
-    // ── Preload comprehension titles ─────────────────────────────────
+    // ── Preload parent titles ────────────────────────────────────────
     const parentIds = new Set();
-    for (const ex of exams) {
-      if (!Array.isArray(ex.questionIds)) continue;
-      for (const q of ex.questionIds)
-        if (String(q).startsWith("parent:")) parentIds.add(String(q).replace("parent:", ""));
-    }
+    for (const ex of exams)
+      if (Array.isArray(ex.questionIds))
+        for (const q of ex.questionIds)
+          if (String(q).startsWith("parent:")) parentIds.add(String(q).replace("parent:", ""));
     const parentDocs = parentIds.size
       ? await QuizQuestion.find({ _id: { $in: [...parentIds] } }).select("_id title text").lean()
       : [];
     const parentTitleMap = {};
-    for (const p of parentDocs) parentTitleMap[String(p._id)] = p.title || p.text || "Quiz";
+    for (const p of parentDocs) parentTitleMap[String(p._id)] = p.title||p.text||"Quiz";
 
     // ══════════════════════════════════════════════════════════════════
     //  STEP 4 — Build quizzesBySeries
@@ -1204,84 +1184,105 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
     for (const ex of exams) {
       const assignmentKey = ex.assignmentId || ex.examId;
-      const seriesKey     = ex.series || ex.meta?.series || ex.module || "general";
-      const category      = ex.category || ex.meta?.category || "";
-      const pillar        = ex.meta?.aiPillar || ex.module || "general";
-      const level         = ex.level || ex.meta?.level || "foundation";
+      const seriesKey  = ex.series || ex.meta?.series || ex.module || "general";
+      const category   = ex.category || ex.meta?.category || "";
+      const pillar     = ex.meta?.aiPillar || ex.module || "general";
+      const level      = ex.level || ex.meta?.level || "foundation";
 
       if (!quizzesBySeries[seriesKey]) {
         quizzesBySeries[seriesKey] = {
-          seriesSlug:  seriesKey,
-          seriesLabel: seriesKey.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+          seriesSlug: seriesKey,
+          seriesLabel: slugToLabel(seriesKey),
           pillar, category, level, quizzes: []
         };
       }
 
       let status = "pending";
       if (ex.finishedAt) status = "completed";
-      if (process.env.QUIZ_EXPIRY_ENABLED === "true")
-        if (ex.expiresAt && ex.expiresAt < now) status = "expired";
+      if (process.env.QUIZ_EXPIRY_ENABLED === "true" && ex.expiresAt && ex.expiresAt < now) status = "expired";
       if (ex.isAdminQuiz) status = "available";
 
-      let quizTitle = ex.quizTitle || ex.title ||
-        (seriesKey.charAt(0).toUpperCase() + seriesKey.slice(1) + " Quiz");
-
+      let quizTitle = ex.quizTitle || ex.title || slugToLabel(seriesKey) + " Quiz";
       let questionCount = 0;
       if (Array.isArray(ex.questionIds)) {
         questionCount = ex.questionIds.filter(q => !String(q).startsWith("parent:")).length;
-        const parentMarker = ex.questionIds.find(q => String(q).startsWith("parent:"));
-        if (!ex.title && !ex.quizTitle && parentMarker)
-          quizTitle = parentTitleMap[String(parentMarker).replace("parent:", "")] || quizTitle;
+        const pm = ex.questionIds.find(q => String(q).startsWith("parent:"));
+        if (!ex.title && !ex.quizTitle && pm)
+          quizTitle = parentTitleMap[String(pm).replace("parent:", "")] || quizTitle;
       }
 
       let openUrl;
-      if (ex.isAdminQuiz) {
-        openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
-      } else if (ex.isOnboarding) {
-        openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-      } else {
-        openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-      }
+      if (ex.isAdminQuiz)       openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
+      else if (ex.isOnboarding) openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+      else                      openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
 
       quizzesBySeries[seriesKey].quizzes.push({
         assignmentId: assignmentKey, quizTitle, questionCount, status, openUrl,
-        createdAt:   ex.createdAt,
-        isTrial:     ex.meta?.isTrial || false,
-        isAdminQuiz: ex.isAdminQuiz  || false,
-        quizId:      ex.quizId,
-        topics:      ex.meta?.topics || [],
-        series: seriesKey, category, pillar, level,
-        seriesOrder: ex.seriesOrder || 99
+        createdAt: ex.createdAt, isTrial: ex.meta?.isTrial||false,
+        isAdminQuiz: ex.isAdminQuiz||false, quizId: ex.quizId,
+        topics: ex.meta?.topics||[], series: seriesKey, category, pillar, level,
+        seriesOrder: ex.seriesOrder||99
       });
     }
 
     for (const s of Object.values(quizzesBySeries))
-      s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
+      s.quizzes.sort((a,b) => (a.seriesOrder||99)-(b.seriesOrder||99));
 
     // ══════════════════════════════════════════════════════════════════
     //  STEP 5 — Build quizzesByPillarArray (Pillar → Category → Series)
+    //
+    //  THE CRITICAL FIX IS HERE:
+    //  When seriesData.category is empty (pre-categorisation), we look up
+    //  the best matching category from allCategoryMeta for that pillar
+    //  instead of defaulting everything to "general".
+    //  After the categorisation script runs, every quiz will have a real
+    //  category and this fallback is never needed.
     // ══════════════════════════════════════════════════════════════════
     const PILLAR_ORDER = [
       "consciousness","responsibility","interpretation","purpose",
       "frequencies","civilization","negotiation","technology","general"
     ];
     const PILLAR_META = {
-      consciousness:  { label:"Consciousness",  icon:"🧠", color:"#7c3aed", desc:"Institutional awareness & strategic foresight" },
-      responsibility: { label:"Responsibility", icon:"🤝", color:"#0d9488", desc:"Accountability frameworks & performance systems" },
-      interpretation: { label:"Interpretation", icon:"🔍", color:"#4f46e5", desc:"Evidence-based analysis for decision-making" },
-      purpose:        { label:"Purpose",        icon:"🎯", color:"#d97706", desc:"Mission clarity & strategic alignment" },
-      frequencies:    { label:"Frequencies",    icon:"📡", color:"#e11d48", desc:"Communication protocols & stakeholder engagement" },
-      civilization:   { label:"Civilization",   icon:"🏛", color:"#059669", desc:"Societal infrastructure & institutional frameworks" },
-      negotiation:    { label:"Negotiation",    icon:"🤜", color:"#ea580c", desc:"Strategic dialogue & consensus-building" },
-      technology:     { label:"Technology",     icon:"💻", color:"#2563eb", desc:"AI-age tools & digital transformation" },
-      general:        { label:"General",        icon:"📌", color:"#8b92a5", desc:"Cross-pillar professional development" },
+      consciousness:  { label:"Consciousness",  icon:"🧠", color:"#7c3aed" },
+      responsibility: { label:"Responsibility", icon:"🤝", color:"#0d9488" },
+      interpretation: { label:"Interpretation", icon:"🔍", color:"#4f46e5" },
+      purpose:        { label:"Purpose",        icon:"🎯", color:"#d97706" },
+      frequencies:    { label:"Frequencies",    icon:"📡", color:"#e11d48" },
+      civilization:   { label:"Civilization",   icon:"🏛", color:"#059669" },
+      negotiation:    { label:"Negotiation",    icon:"🤜", color:"#ea580c" },
+      technology:     { label:"Technology",     icon:"💻", color:"#2563eb" },
+      general:        { label:"General",        icon:"📌", color:"#8b92a5" },
     };
+
+    // Pre-compute: best DB category per pillar (highest count)
+    const bestCatForPillar = {};
+    for (const cm of allCategoryMeta) {
+      const p = cm.pillar || "general";
+      if (!bestCatForPillar[p] || cm.count > (bestCatForPillar[p].count || 0))
+        bestCatForPillar[p] = cm;
+    }
 
     const _pillarBuckets = {};
 
     for (const [, seriesData] of Object.entries(quizzesBySeries)) {
-      const pillar   = seriesData.pillar   || "general";
-      const category = seriesData.category || "general";
+      const pillar = seriesData.pillar || "general";
+
+      // ── RESOLVE CATEGORY ─────────────────────────────────────────────
+      // Priority 1: category already set on the series (after script runs)
+      // Priority 2: best DB category for this pillar from allCategoryMeta
+      // Priority 3: first allowed category for this pillar from static map
+      // Priority 4: "general" (last resort)
+      let category = seriesData.category;
+      if (!category || category === "general" || category === "") {
+        if (bestCatForPillar[pillar]) {
+          category = bestCatForPillar[pillar].slug;
+        } else if (PILLAR_CATEGORY_MAP[pillar]?.length) {
+          category = PILLAR_CATEGORY_MAP[pillar][0];
+        } else {
+          category = "general";
+        }
+      }
+      // ── END RESOLVE ──────────────────────────────────────────────────
 
       if (!_pillarBuckets[pillar]) {
         _pillarBuckets[pillar] = {
@@ -1289,7 +1290,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
           pillarLabel:  PILLAR_META[pillar]?.label || slugToLabel(pillar),
           pillarIcon:   PILLAR_META[pillar]?.icon  || "📌",
           pillarColor:  PILLAR_META[pillar]?.color || "#8b92a5",
-          pillarDesc:   PILLAR_META[pillar]?.desc  || "",
           totalQuizzes: 0,
           categories:   {}
         };
@@ -1299,6 +1299,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
         _pillarBuckets[pillar].categories[category] = {
           categorySlug:  category,
           categoryLabel: slugToLabel(category),
+          categoryIcon:  getIcon(category),
           totalQuizzes:  0,
           seriesList:    []
         };
@@ -1307,13 +1308,13 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       _pillarBuckets[pillar].categories[category].seriesList.push({
         seriesSlug:  seriesData.seriesSlug,
         seriesLabel: seriesData.seriesLabel,
-        pillar:      seriesData.pillar,
+        pillar,
         pillarIcon:  PILLAR_META[pillar]?.icon  || "📌",
         pillarColor: PILLAR_META[pillar]?.color || "#8b92a5",
-        category:    seriesData.category,
-        level:       seriesData.level,
-        quizCount:   seriesData.quizzes.length,
-        quizzes:     seriesData.quizzes
+        category,
+        level:     seriesData.level,
+        quizCount: seriesData.quizzes.length,
+        quizzes:   seriesData.quizzes
       });
 
       _pillarBuckets[pillar].categories[category].totalQuizzes += seriesData.quizzes.length;
@@ -1325,7 +1326,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .map(p => ({
         ..._pillarBuckets[p],
         categories: Object.values(_pillarBuckets[p].categories)
-          .sort((a, b) => b.totalQuizzes - a.totalQuizzes)
+          .sort((a,b) => b.totalQuizzes - a.totalQuizzes)
       }));
 
     // ── Final derived lists ──────────────────────────────────────────
@@ -1344,10 +1345,10 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const categoryMeta   = allCategoryMeta;
     const totalQuizCount = isCripfcntSchool
       ? (await Question.countDocuments({ organization: org._id, type: "comprehension" }))
-      : Object.values(quizzesBySeries).reduce((s, d) => s + d.quizzes.length, 0);
+      : Object.values(quizzesBySeries).reduce((s,d) => s + d.quizzes.length, 0);
 
     const quizzesByModule = {};
-    for (const [k, v] of Object.entries(quizzesBySeries)) quizzesByModule[k] = v.quizzes;
+    for (const [k,v] of Object.entries(quizzesBySeries)) quizzesByModule[k] = v.quizzes;
 
     // ── Attempts ─────────────────────────────────────────────────────
     const attempts = await Attempt.find({ organization: org._id, userId: req.user._id })
@@ -1361,27 +1362,24 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const attemptRows = attempts.map(a => {
       const ex = examsByExamId[a.examId];
       let quizTitle = a.quizTitle;
-      if (!quizTitle && ex)
-        quizTitle = ex.module ? ex.module.charAt(0).toUpperCase() + ex.module.slice(1) + " Quiz" : "Quiz";
-      return {
-        _id: a._id, examId: a.examId, quizTitle: quizTitle || "Quiz",
-        score: a.score || 0, maxScore: a.maxScore || 0,
-        percentage: a.maxScore ? Math.round((a.score / a.maxScore) * 100) : 0,
-        passed: !!a.passed, finishedAt: a.finishedAt || a.updatedAt || a.createdAt
-      };
+      if (!quizTitle && ex) quizTitle = ex.module ? ex.module.charAt(0).toUpperCase()+ex.module.slice(1)+" Quiz" : "Quiz";
+      return { _id: a._id, examId: a.examId, quizTitle: quizTitle||"Quiz",
+        score: a.score||0, maxScore: a.maxScore||0,
+        percentage: a.maxScore ? Math.round((a.score/a.maxScore)*100) : 0,
+        passed: !!a.passed, finishedAt: a.finishedAt||a.updatedAt||a.createdAt };
     });
 
     // ── Certificates ──────────────────────────────────────────────────
     const certs = await Certificate.find({ userId: req.user._id, orgId: org._id })
       .sort({ createdAt: -1 }).lean();
     const certRows = certs.map(c => ({
-      _id: c._id, quizTitle: c.quizTitle || c.courseTitle || "Quiz",
+      _id: c._id, quizTitle: c.quizTitle||c.courseTitle||"Quiz",
       percentage: c.percentage, createdAt: c.createdAt
     }));
 
     // ── Trial status ──────────────────────────────────────────────────
-    let employeeTrialTotal = 0, employeeTrialCompleted = 0, canUpgradeEmployee = false;
-    let showTrialBanner = false, canUpgrade = false, trialQuizzesRemaining = 0;
+    let employeeTrialTotal=0, employeeTrialCompleted=0, canUpgradeEmployee=false;
+    let showTrialBanner=false, canUpgrade=false, trialQuizzesRemaining=0;
 
     if (isCripfcntSchool && !isAdmin) {
       try {
@@ -1401,32 +1399,23 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     // ── Render ────────────────────────────────────────────────────────
     return res.render("org/dashboard", {
       org, membership, modules,
-      quizzesByModule,
-      quizzesBySeries,
-      quizzesByPillarArray,
+      quizzesByModule, quizzesBySeries, quizzesByPillarArray,
       hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
-      attemptRows, certRows,
-      isAdmin, isCripfcntSchool,
+      attemptRows, certRows, isAdmin, isCripfcntSchool,
       employeeTrialTotal, employeeTrialCompleted, canUpgradeEmployee,
-      user: req.user,
-      normalizedRole,
+      user: req.user, normalizedRole,
       searchQuery, moduleFilter, topicFilter,
       seriesFilter, categoryFilter, pillarFilter,
       allSeries, allCategories, allPillars,
-      categoryMeta,
-      suggestedCategoryMeta,
-      remainingCategoryMeta,
-      allSeriesMeta,
-      totalQuizCount,
-      showTrialBanner, canUpgrade, trialQuizzesRemaining
+      categoryMeta, suggestedCategoryMeta, remainingCategoryMeta, allSeriesMeta,
+      totalQuizCount, showTrialBanner, canUpgrade, trialQuizzesRemaining
     });
 
   } catch (err) {
-    console.error("[org dashboard] error:", err && (err.stack || err));
+    console.error("[org dashboard] error:", err && (err.stack||err));
     return res.status(500).send("failed");
   }
 });
-
 
 
 
