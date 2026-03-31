@@ -133,10 +133,9 @@
     .sv{font-size:22px;font-weight:800;line-height:1;color:var(--ink)}
     .sl{font-size:11px;color:var(--ink-muted);margin-top:2px;font-weight:500}
 
-    /* ═══════════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════════
        PROFESSIONAL AREA CARDS — PRIMARY TOP NAVIGATION
-       Large scrollable cards. Pillars are a dropdown only.
-    ═══════════════════════════════════════════════════════ */
+    ═══════════════════════════════════════════════════ */
     .cat-nav{margin-bottom:20px}
     .cat-nav-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px}
     .cat-nav-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--ink-muted);display:flex;align-items:center;gap:5px}
@@ -147,17 +146,19 @@
     .pillar-drop.has-value{border-color:var(--blue);background-color:var(--blue-bg);color:var(--blue-dk)}
     .cat-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
     .cat-scroll::-webkit-scrollbar{display:none}
-    .ccard{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:16px 16px 14px;border-radius:var(--r-xl);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .18s;min-width:150px;max-width:175px;font-family:var(--font);text-align:left;position:relative;overflow:hidden}
+    /* Large category card */
+    .ccard{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:18px 16px 15px;border-radius:var(--r-xl);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .18s;min-width:155px;max-width:180px;font-family:var(--font);text-align:left;position:relative;overflow:hidden}
     .ccard::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--blue);transform:scaleX(0);transform-origin:left;transition:transform .2s}
     .ccard:hover{border-color:var(--blue);box-shadow:var(--s);transform:translateY(-2px)}
     .ccard:hover::after{transform:scaleX(1)}
     .ccard.cc-active{border-color:var(--blue);background:var(--blue-bg);box-shadow:var(--sm)}
     .ccard.cc-active::after{transform:scaleX(1)}
-    .ccard-ic{font-size:28px;line-height:1;margin-bottom:2px}
-    .ccard-name{font-size:12.5px;font-weight:800;color:var(--ink);line-height:1.3}
+    .ccard-ic{font-size:30px;line-height:1;margin-bottom:1px}
+    .ccard-name{font-size:13px;font-weight:800;color:var(--ink);line-height:1.3}
     .ccard-count{font-size:10px;color:var(--ink-muted);font-weight:500}
-    .ccard-pillar{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:999px;background:var(--canvas);color:var(--ink-muted);align-self:flex-start}
-    .ccard-all{min-width:110px;max-width:130px}
+    .ccard-pill{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:999px;background:var(--canvas);color:var(--ink-muted);border:1px solid var(--border-soft);align-self:flex-start}
+    .ccard-all{min-width:115px;max-width:135px}
+    /* Pillar colour active states */
     .ccard[data-pillar="consciousness"].cc-active{border-color:#7c3aed;background:#f5f3ff}.ccard[data-pillar="consciousness"].cc-active::after{background:#7c3aed}
     .ccard[data-pillar="responsibility"].cc-active{border-color:#0d9488;background:#f0fdfa}.ccard[data-pillar="responsibility"].cc-active::after{background:#0d9488}
     .ccard[data-pillar="purpose"].cc-active{border-color:#d97706;background:#fffbeb}.ccard[data-pillar="purpose"].cc-active::after{background:#d97706}
@@ -166,6 +167,7 @@
     .ccard[data-pillar="civilization"].cc-active{border-color:#059669;background:#ecfdf5}.ccard[data-pillar="civilization"].cc-active::after{background:#059669}
     .ccard[data-pillar="interpretation"].cc-active{border-color:#4f46e5;background:var(--indigo-bg)}.ccard[data-pillar="interpretation"].cc-active::after{background:#4f46e5}
     .ccard[data-pillar="negotiation"].cc-active{border-color:#ea580c;background:var(--orange-bg)}.ccard[data-pillar="negotiation"].cc-active::after{background:#ea580c}
+    /* Pillar active context bar */
     .pillar-ctx-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:var(--r-lg);border:1.5px solid var(--border);background:var(--surface);margin-bottom:14px;flex-wrap:wrap}
     .pillar-ctx-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
     .pillar-ctx-lbl{font-size:12px;font-weight:700;color:var(--ink);flex:1}
@@ -323,7 +325,7 @@
       .atgrid{grid-template-columns:repeat(2,1fr)}
       .ht th:nth-child(4),.ht td:nth-child(4){display:none}
       .s-count{display:none}
-      .ccard{min-width:130px;padding:13px 13px 11px}
+      .ccard{min-width:130px;padding:14px 13px 12px}
       .ccard-ic{font-size:24px}
       .pillar-drop-wrap{width:100%}
       .pillar-drop{flex:1}
@@ -338,8 +340,8 @@
       .ht th:nth-child(3),.ht td:nth-child(3){display:none}
       .top-act .btn-o:not(:last-child){display:none}
       .trial-banner{flex-direction:column;gap:12px}
-      .ccard{min-width:115px;max-width:140px;padding:11px 11px 10px}
-      .ccard-name{font-size:11.5px}
+      .ccard{min-width:115px;max-width:140px;padding:11px 12px 10px}
+      .ccard-name{font-size:12px}
       .ccard-ic{font-size:22px}
       .qrow-a .badge{display:none}
     }
@@ -539,8 +541,8 @@
 
       {{!-- ═══════════════════════════════════════════════════════════════
            PROFESSIONAL AREA CARDS — PRIMARY TOP NAVIGATION
-           Large horizontally-scrollable cards. Categories first.
-           Pillar filter is a compact dropdown (not big cards).
+           Large horizontally-scrollable cards. Categories are first.
+           Pillars are a compact dropdown filter only — not big cards.
            Only categories with count > 0 are shown.
       ═══════════════════════════════════════════════════════════════ --}}
       {{#if categoryMeta.length}}
@@ -563,6 +565,7 @@
           {{/if}}
         </div>
 
+        {{!-- Pillar context bar: shown only when a pillar is active --}}
         {{#if pillarFilter}}
         {{#each quizzesByPillarArray}}
         {{#if (eq this.pillarSlug ../pillarFilter)}}
@@ -579,6 +582,7 @@
         {{/if}}
 
         <div class="cat-scroll">
+          {{!-- All Areas reset card --}}
           <button class="ccard ccard-all {{#unless (or categoryFilter pillarFilter seriesFilter)}}cc-active{{/unless}}"
             onclick="clearAllFilters()">
             <span class="ccard-ic">🌐</span>
@@ -586,6 +590,7 @@
             <span class="ccard-count">{{totalQuizCount}} total</span>
           </button>
 
+          {{!-- When pillar active: show only that pillar's categories --}}
           {{#if pillarFilter}}
           {{#each quizzesByPillarArray}}
           {{#if (eq this.pillarSlug ../pillarFilter)}}
@@ -597,13 +602,14 @@
             <span class="ccard-ic">{{this.categoryIcon}}</span>
             <span class="ccard-name">{{this.categoryLabel}}</span>
             <span class="ccard-count">{{this.totalQuizzes}} assessments</span>
-            <span class="ccard-pillar">{{capitalize this.pillar}}</span>
+            <span class="ccard-pill">{{capitalize this.pillar}}</span>
           </button>
           {{/if}}
           {{/each}}
           {{/if}}
           {{/each}}
           {{else}}
+          {{!-- No pillar filter: show all categories sorted by count --}}
           {{#each categoryMeta}}
           {{#if (gt this.count 0)}}
           <button class="ccard {{#if (eq this.slug ../categoryFilter)}}cc-active{{/if}}"
@@ -612,7 +618,7 @@
             <span class="ccard-ic">{{this.icon}}</span>
             <span class="ccard-name">{{this.label}}</span>
             <span class="ccard-count">{{this.count}} assessments</span>
-            <span class="ccard-pillar">{{capitalize this.pillar}}</span>
+            <span class="ccard-pill">{{capitalize this.pillar}}</span>
           </button>
           {{/if}}
           {{/each}}
