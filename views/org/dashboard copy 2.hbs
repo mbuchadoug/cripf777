@@ -483,17 +483,7 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:.55"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             Professional Areas
           </div>
-          <div class="cat-browse-right">
-            <span class="cat-browse-meta">{{categoryMeta.length}} area{{#if (gt categoryMeta.length 1)}}s{{/if}} · {{totalQuizCount}} assessments</span>
-            <div class="cat-nav-arrows">
-              <button class="cat-arrow" id="cat-prev" onclick="scrollCats(-1)" title="Scroll left" aria-label="Scroll categories left">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <button class="cat-arrow" id="cat-next" onclick="scrollCats(1)" title="Scroll right" aria-label="Scroll categories right">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-          </div>
+          <span class="cat-browse-meta">{{categoryMeta.length}} area{{#if (gt categoryMeta.length 1)}}s{{/if}} · {{totalQuizCount}} assessments</span>
         </div>
 
         {{!-- Active category context bar --}}
@@ -513,8 +503,7 @@
         {{/if}}
 
         {{!-- Horizontally scrollable card strip --}}
-        <div class="cat-scroll-wrap" id="cat-scroll-wrap">
-        <div class="cat-scroll" id="cat-scroll" role="list" aria-label="Browse by professional area">
+        <div class="cat-scroll" role="list" aria-label="Browse by professional area">
 
           {{!-- "All" reset card --}}
           <button class="ccard ccard-all {{#unless categoryFilter}}cc-active{{/unless}}"
@@ -539,7 +528,6 @@
           {{/each}}
 
         </div>{{!-- /cat-scroll --}}
-        </div>{{!-- /cat-scroll-wrap --}}
       </div>{{!-- /cat-browse --}}
       {{/if}}{{!-- /isCripfcntSchool --}}
       {{!-- END CATEGORY BROWSE STRIP --}}
@@ -952,82 +940,6 @@ function closeMobSidebar(e,force){
   if(!force&&e){var t=e.target;if(!t.classList.contains('mob-back')&&t!==e.currentTarget)return;}
   var d=document.getElementById('mob-drawer');if(d)d.classList.remove('open');document.body.style.overflow='';
 }
-
-/* ── Category carousel: arrow scroll + mouse drag + fade state ─────────── */
-(function(){
-  var scroll = null, wrap = null, prevBtn = null, nextBtn = null;
-
-  function initCatScroll() {
-    scroll  = document.getElementById('cat-scroll');
-    wrap    = document.getElementById('cat-scroll-wrap');
-    prevBtn = document.getElementById('cat-prev');
-    nextBtn = document.getElementById('cat-next');
-    if (!scroll) return;
-    scroll.addEventListener('scroll', updateArrows, { passive: true });
-    updateArrows();
-    initDrag();
-  }
-
-  function updateArrows() {
-    if (!scroll || !wrap) return;
-    var atStart = scroll.scrollLeft <= 4;
-    var atEnd   = scroll.scrollLeft >= (scroll.scrollWidth - scroll.clientWidth - 4);
-    wrap.classList.toggle('at-start', atStart);
-    wrap.classList.toggle('at-end',   atEnd);
-    if (prevBtn) prevBtn.disabled = atStart;
-    if (nextBtn) nextBtn.disabled = atEnd;
-  }
-
-  window.scrollCats = function(dir) {
-    if (!scroll) return;
-    /* scroll by ~3 card widths (approx 520px) */
-    scroll.scrollBy({ left: dir * 520, behavior: 'smooth' });
-  };
-
-  function initDrag() {
-    if (!scroll) return;
-    var isDown = false, startX = 0, scrollStart = 0, moved = false;
-
-    scroll.addEventListener('mousedown', function(e) {
-      if (e.button !== 0) return;
-      isDown = true; moved = false;
-      startX = e.pageX - scroll.offsetLeft;
-      scrollStart = scroll.scrollLeft;
-      scroll.classList.add('is-dragging');
-      e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', function(e) {
-      if (!isDown) return;
-      var x    = e.pageX - scroll.offsetLeft;
-      var dist = x - startX;
-      if (Math.abs(dist) > 4) moved = true;
-      scroll.scrollLeft = scrollStart - dist;
-    });
-
-    document.addEventListener('mouseup', function(e) {
-      if (!isDown) return;
-      isDown = false;
-      scroll.classList.remove('is-dragging');
-      /* if the mouse barely moved, treat as a click — do nothing extra */
-      /* if it moved, prevent the click event on child buttons */
-      if (moved) {
-        var stop = function(ev) { ev.stopPropagation(); ev.preventDefault(); };
-        scroll.addEventListener('click', stop, { once: true, capture: true });
-      }
-    });
-
-    /* prevent text selection while dragging */
-    scroll.addEventListener('dragstart', function(e){ e.preventDefault(); });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCatScroll);
-  } else {
-    initCatScroll();
-  }
-})();
-
 (function(){
   try{var sv=localStorage.getItem('dv');if(sv==='list')setView('list');}catch(e){}
   var p=new URLSearchParams(window.location.search);
