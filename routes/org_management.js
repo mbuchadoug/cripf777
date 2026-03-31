@@ -823,7 +823,7 @@ router.get(
 //   • backward-compatible — all previously existing template vars still present
 // ─────────────────────────────────────────────────────────────────────────────
 
-import mongoose from 'mongoose';
+
 
 router.get('/org/:slug/dashboard', ensureAuth, async (req, res) => {
   try {
