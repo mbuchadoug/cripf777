@@ -11,8 +11,10 @@
       --ink:       #0d0f14; --ink-soft:#3d4354; --ink-muted:#8b92a5; --ink-faint:#c5c9d6;
       --canvas:    #f2f4f8; --surface:#fff; --surface-2:#f8f9fb;
       --border:    #e4e6ed; --border-soft:#edeef3;
+
       --blue:      #2f6ef7; --blue-dk:#1d4ed8; --blue-glow:rgba(47,110,247,.13);
       --blue-bg:   #eef3fe; --blue-sub:#f5f8ff;
+
       --violet:    #7c3aed; --violet-bg:#f5f3ff;
       --teal:      #0d9488; --teal-bg:#f0fdfa;
       --amber:     #d97706; --amber-bg:#fffbeb;
@@ -20,10 +22,12 @@
       --emerald:   #059669; --emerald-bg:#ecfdf5;
       --indigo:    #4f46e5; --indigo-bg:#eef2ff;
       --orange:    #ea580c; --orange-bg:#fff7ed;
+
       --topbar-h:  60px;
       --tabs-h:    44px;
       --fixed-h:   calc(var(--topbar-h) + var(--tabs-h));
       --sidebar-w: 272px;
+
       --r-sm:4px; --r:10px; --r-lg:14px; --r-xl:20px;
       --sx:0 1px 2px rgba(0,0,0,.05);
       --sm:0 1px 4px rgba(0,0,0,.07);
@@ -31,6 +35,7 @@
       --slg:0 12px 36px rgba(0,0,0,.13);
       --font:'Sora',system-ui,sans-serif;
     }
+
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{font-family:var(--font);background:var(--canvas);color:var(--ink);line-height:1.6;font-size:15px;-webkit-font-smoothing:antialiased}
@@ -64,22 +69,37 @@
     /* ═══════════════════════════════════════ LAYOUT */
     .layout{padding-top:var(--fixed-h);display:flex;max-width:1440px;margin:0 auto;min-height:calc(100vh - var(--fixed-h))}
 
-    /* ═══════════════════════════════════════ SIDEBAR */
-    .sidebar{width:var(--sidebar-w);flex-shrink:0;position:sticky;top:var(--fixed-h);height:calc(100vh - var(--fixed-h));overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--border) transparent;background:var(--surface);border-right:1px solid var(--border-soft);padding:14px 0 60px;display:flex;flex-direction:column;z-index:100}
+    /* ═══════════════════════════════════════ SIDEBAR — desktop sticky+scrollable */
+    .sidebar{
+      width:var(--sidebar-w);flex-shrink:0;
+      position:sticky;top:var(--fixed-h);
+      height:calc(100vh - var(--fixed-h));
+      overflow-y:auto;overflow-x:hidden;
+      scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+      background:var(--surface);border-right:1px solid var(--border-soft);
+      padding:14px 0 60px;display:flex;flex-direction:column;
+      z-index:100;
+    }
     .sidebar::-webkit-scrollbar{width:4px}
     .sidebar::-webkit-scrollbar-track{background:transparent}
     .sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
     .sb-user{margin:0 10px 12px;padding:11px 12px;background:linear-gradient(135deg,var(--blue-sub),#eef2ff);border:1px solid rgba(47,110,247,.15);border-radius:var(--r-lg);display:flex;align-items:center;gap:9px}
     .sb-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
     .sb-uname{font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .sb-urole{font-size:10px;color:var(--ink-muted);margin-top:1px}
+
     .sb-div{display:flex;align-items:center;gap:7px;padding:9px 12px 4px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;color:var(--ink-faint);margin-top:4px}
     .sb-div::after{content:'';flex:1;height:1px;background:var(--border-soft)}
+
     .sbi{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12px;font-weight:500;color:var(--ink-soft);cursor:pointer;transition:all .11s;border:none;border-left:3px solid transparent;background:none;width:100%;text-align:left;font-family:var(--font)}
     .sbi:hover{background:var(--canvas);color:var(--ink)}
     .sbi.active{background:var(--blue-bg);color:var(--blue-dk);font-weight:700;border-left-color:var(--blue)}
+
+    /* zero-count category — show greyed as hint */
     .sbi.hint{opacity:.55}
     .sbi.hint:hover{opacity:.85}
+
     .sbi-em{font-size:14px;flex-shrink:0;width:19px;text-align:center}
     .sbi-txt{flex:1;min-width:0}
     .sbi-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
@@ -87,6 +107,7 @@
     .sbi-n{margin-left:auto;flex-shrink:0;font-size:9.5px;font-weight:800;padding:2px 5px;border-radius:999px;background:var(--canvas);color:var(--ink-muted)}
     .sbi.active .sbi-n{background:var(--blue-dk);color:#fff}
     .sbi-n.zero{background:#f1f5f9;color:var(--ink-faint)}
+
     /* Pillar-coloured active states */
     .sbi[data-pillar="consciousness"].active {border-left-color:#7c3aed;background:#f5f3ff;color:#5b21b6}
     .sbi[data-pillar="responsibility"].active{border-left-color:#0d9488;background:#f0fdfa;color:#0f766e}
@@ -96,24 +117,67 @@
     .sbi[data-pillar="civilization"].active  {border-left-color:#059669;background:#ecfdf5;color:#065f46}
     .sbi[data-pillar="interpretation"].active{border-left-color:#4f46e5;background:var(--indigo-bg);color:#3730a3}
     .sbi[data-pillar="negotiation"].active   {border-left-color:#ea580c;background:var(--orange-bg);color:#c2410c}
-    /* Pillar→Category→Series sidebar */
-    .sb-cat-wrap{margin-bottom:2px}
-    .sb-cat-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--ink-faint);padding:6px 12px 2px;display:block}
-    .sbi-series{padding-left:20px}
-    .sbi-series .sbi-t{font-size:11.5px;font-weight:600}
-    .sbi-series .sbi-s{font-size:9px}
 
+/* ══ Pillar → Category → Series sidebar ══ */
+.sb-cat-wrap{margin-bottom:4px}
+.sb-cat-label{
+  font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;
+  color:var(--ink-faint);padding:5px 12px 2px;
+}
+.sbi-series{padding-left:22px}
+.sbi-series .sbi-em{color:var(--ink-faint);width:12px;font-size:10px}
+.sbi-series .sbi-t{font-size:11.5px;font-weight:600}
+.sbi-series .sbi-s{font-size:9px}
+
+
+
+
+/* ══ Category section header (shown inside pillar view) ══ */
+.category-section{margin-bottom:20px}
+.cat-section-hdr{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 4px;margin-bottom:8px;
+  border-bottom:2px solid var(--border-soft);
+}
+.cat-section-icon{font-size:14px}
+.cat-section-title{
+  font-size:13px;font-weight:800;color:var(--ink);
+}
+.cat-section-count{
+  margin-left:auto;font-size:10.5px;font-weight:600;
+  color:var(--ink-muted);background:var(--canvas);
+  padding:2px 8px;border-radius:999px;
+}
     /* ═══════════════════════════════════════ MAIN */
     .main{flex:1;min-width:0;padding:22px 24px 64px}
 
-    /* ═══════════════════════════════════════ MOBILE DRAWER */
+    /* ═══════════════════════════════════════ MOBILE — fixed full-screen sidebar drawer */
+    /* The mob-toggle button is always hidden on desktop */
     .mob-toggle{display:none;align-items:center;gap:7px;padding:9px 14px;border:1.5px solid var(--border);border-radius:var(--r);background:var(--surface);font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;margin-bottom:14px;width:100%}
-    .mob-drawer{display:none;position:fixed;inset:0;z-index:400}
+
+    /* On mobile the drawer IS the sidebar — full height, slides in from left */
+    .mob-drawer{
+      display:none;
+      position:fixed;inset:0;z-index:400;
+    }
     .mob-drawer.open{display:flex}
-    .mob-panel{width:min(290px,82vw);height:100%;background:var(--surface);overflow-y:auto;box-shadow:var(--slg);display:flex;flex-direction:column;padding-bottom:48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+
+    .mob-panel{
+      width:min(290px,82vw);
+      height:100%;
+      background:var(--surface);
+      overflow-y:auto;
+      box-shadow:var(--slg);
+      display:flex;flex-direction:column;
+      padding-bottom:48px;
+      /* same scrollbar style as desktop */
+      scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+    }
     .mob-panel::-webkit-scrollbar{width:4px}
     .mob-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
     .mob-back{flex:1;background:rgba(0,0,0,.45)}
+
     .mob-header{display:flex;justify-content:space-between;align-items:center;padding:14px 14px 10px;border-bottom:1px solid var(--border-soft);flex-shrink:0}
     .mob-header span{font-size:14px;font-weight:800;color:var(--ink)}
     .mob-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-muted);line-height:1;padding:0 4px}
@@ -127,20 +191,24 @@
     .sv{font-size:22px;font-weight:800;line-height:1;color:var(--ink)}
     .sl{font-size:11px;color:var(--ink-muted);margin-top:2px;font-weight:500}
 
-    /* ═══════════════════════════════════════ DISCOVERY STRIP */
+    /* ═══════════════════════════════════════ CATEGORY DISCOVERY STRIP */
     .strip-wrap{margin-bottom:16px}
     .strip-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
     .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
     .strip::-webkit-scrollbar{display:none}
+
+    /* Category tile */
     .ctile{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:10px 13px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--surface);box-shadow:var(--sx);cursor:pointer;transition:all .16s;min-width:120px;max-width:155px;font-family:var(--font);text-align:left}
     .ctile:hover{box-shadow:var(--s);border-color:var(--blue);transform:translateY(-2px)}
     .ctile.ct-active{border-color:var(--blue);background:var(--blue-bg)}
     .ctile.ct-hint{opacity:.5;border-style:dashed}
-    .ctile.ct-hint:hover{opacity:.85;border-style:dashed}
-    .ctile.ct-active.ct-hint{opacity:1;border-style:solid}
+.ctile.ct-hint:hover{opacity:.85;border-style:dashed}
+.ctile.ct-active.ct-hint{opacity:1;border-style:solid}
     .ctile-ic{font-size:19px;line-height:1}
     .ctile-name{font-size:11px;font-weight:700;color:var(--ink);line-height:1.3}
     .ctile-count{font-size:9.5px;color:var(--ink-muted);font-weight:500}
+
+    /* Pillar strip tile colours */
     .ctile[data-pillar="consciousness"].ct-active{border-color:#7c3aed;background:#f5f3ff}
     .ctile[data-pillar="responsibility"].ct-active{border-color:#0d9488;background:#f0fdfa}
     .ctile[data-pillar="purpose"].ct-active{border-color:#d97706;background:#fffbeb}
@@ -192,12 +260,6 @@
     .s-chev.open{transform:rotate(180deg)}
     .series-body{padding:11px;background:var(--surface-2);border-top:1px solid var(--border-soft)}
 
-    /* ═══════════════════════════════════════ CATEGORY SECTION (pillar view) */
-    .cat-section{margin-bottom:18px}
-    .cat-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:2px solid var(--border-soft);margin-bottom:8px}
-    .cat-section-title{font-size:13px;font-weight:800;color:var(--ink)}
-    .cat-section-count{font-size:10.5px;font-weight:600;color:var(--ink-muted);background:var(--canvas);padding:2px 8px;border-radius:999px}
-
     /* ═══════════════════════════════════════ QUIZ GRID/LIST */
     .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
     .qlist{display:flex;flex-direction:column;gap:8px}
@@ -241,7 +303,7 @@
     .btn-d{background:var(--rose-bg);color:var(--rose);border:1.5px solid transparent}
     .btn-d:hover{background:var(--rose);color:#fff}
 
-    /* ═══════════════════════════════════════ BANNERS */
+    /* ═══════════════════════════════════════ TRIAL / MODE BANNERS */
     .trial-banner{background:linear-gradient(135deg,#eff4fe,#e8f0fe);border:1.5px solid rgba(47,110,247,.22);border-radius:var(--r-xl);padding:18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
     .trial-banner h3{font-size:15px;font-weight:800;color:var(--blue-dk);margin-bottom:2px}
     .trial-banner p{font-size:12px;color:var(--ink-soft)}
@@ -270,11 +332,25 @@
     .ati{width:36px;height:36px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:18px}
     .atl{font-size:12px;font-weight:800;color:var(--ink-soft);line-height:1.3}
     .atd{font-size:10.5px;color:var(--ink-muted);margin-top:1px}
+
     .sec-title{font-size:14px;font-weight:800;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:7px}
     .empty{text-align:center;padding:48px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl)}
     .empty-ic{width:60px;height:60px;border-radius:50%;background:var(--canvas);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 12px}
     .empty h3{font-size:14.5px;font-weight:800;color:var(--ink);margin-bottom:4px}
     .empty p{font-size:12.5px;color:var(--ink-muted)}
+
+    /* ══ Pillar→Category→Series sidebar ══ */
+    .sb-cat-wrap{margin-bottom:2px}
+    .sb-cat-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--ink-faint);padding:6px 12px 2px;display:block}
+    .sbi-series{padding-left:20px}
+    .sbi-series .sbi-t{font-size:11.5px;font-weight:600}
+    .sbi-series .sbi-s{font-size:9px}
+
+    /* ══ Category section header (pillar view) ══ */
+    .cat-section{margin-bottom:18px}
+    .cat-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:2px solid var(--border-soft);margin-bottom:8px}
+    .cat-section-title{font-size:13px;font-weight:800;color:var(--ink)}
+    .cat-section-count{font-size:10.5px;font-weight:600;color:var(--ink-muted);background:var(--canvas);padding:2px 8px;border-radius:999px}
 
     /* ═══════════════════════════════════════ JS UTILS */
     .jh{display:none!important}
@@ -284,7 +360,15 @@
     .main[data-view="grid"] .qlist{display:none}
 
     /* ═══════════════════════════════════════ RESPONSIVE */
-    @media(max-width:1024px){.sidebar{display:none}.main{padding:18px 18px 56px}.mob-toggle{display:flex}}
+
+    /* Tablet landscape — hide desktop sidebar, show mob toggle */
+    @media(max-width:1024px){
+      .sidebar{display:none}
+      .main{padding:18px 18px 56px}
+      .mob-toggle{display:flex}
+    }
+
+    /* Tablet portrait */
     @media(max-width:768px){
       :root{--topbar-h:54px;--tabs-h:40px}
       .torg,.tsep{display:none}
@@ -298,6 +382,8 @@
       .s-count{display:none}
       .ctile{min-width:110px;padding:9px 11px}
     }
+
+    /* Phone */
     @media(max-width:480px){
       :root{--topbar-h:52px;--tabs-h:38px}
       .main{padding:12px 12px 44px}
@@ -312,7 +398,13 @@
       .ctile-name{font-size:10px}
       .qrow-a .badge{display:none}
     }
-    @media(max-width:360px){.brand span{display:none}.stats{grid-template-columns:1fr}.stats .sc:last-child{grid-column:auto}}
+
+    /* Small phone */
+    @media(max-width:360px){
+      .brand span{display:none}
+      .stats{grid-template-columns:1fr}
+      .stats .sc:last-child{grid-column:auto}
+    }
   </style>
 </head>
 <body>
@@ -354,6 +446,12 @@
 <!-- LAYOUT -->
 <div class="layout" id="layout-wrap">
 
+  <!-- ════════════════════════════════════════════════════
+       DESKTOP SIDEBAR
+       Always full list from DB — pillars, categories, series all shown.
+       Categories include governance, public policy etc because they
+       come from the AI categorisation (not just CRIPFCNT pillars).
+  ════════════════════════════════════════════════════ -->
   {{#if isCripfcntSchool}}
   <aside class="sidebar" id="sidebar">
 
@@ -394,31 +492,87 @@
     </a>
     {{/if}}
 
-    {{!-- ══ PILLAR → CATEGORY → SERIES NAVIGATION ══ --}}
-    {{#if quizzesByPillarArray.length}}
-    {{#each quizzesByPillarArray}}
-    <div class="sb-div" style="color:{{this.pillarColor}}">
-      {{this.pillarIcon}} {{this.pillarLabel}}
-      <span style="margin-left:auto;font-weight:600;color:var(--ink-faint)">{{this.totalQuizzes}}</span>
-    </div>
-    {{#each this.categories}}
-    <div class="sb-cat-wrap">
-      <div class="sb-cat-label">{{this.categoryLabel}}</div>
-      {{#each this.seriesList}}
-      <button class="sbi sbi-series {{#if (eq this.seriesSlug ../../seriesFilter)}}active{{/if}}"
-        onclick="setFilter('series','{{this.seriesSlug}}')">
-        <span class="sbi-em" style="font-size:10px;color:var(--ink-faint)">▸</span>
-        <span class="sbi-txt">
-          <div class="sbi-t">{{this.seriesLabel}}</div>
-          <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}{{#if this.level}} · {{capitalize this.level}}{{/if}}</div>
-        </span>
-        <span class="sbi-n">{{this.quizCount}}</span>
-      </button>
-      {{/each}}
-    </div>
-    {{/each}}
+    <!-- ══ CRIPFCNT PILLARS (9 conceptual pillars) ══ -->
+    {{#if allPillars.length}}
+    <div class="sb-div">CRIPFCNT Pillars</div>
+    {{#each allPillars}}
+    <button class="sbi {{#if (eq this ../pillarFilter)}}active{{/if}}" data-pillar="{{this}}" onclick="setFilter('pillar','{{this}}')">
+      <span class="sbi-em">
+        {{#if (eq this "consciousness")}}🧠{{else if (eq this "responsibility")}}🤝{{else if (eq this "purpose")}}🎯
+        {{else if (eq this "technology")}}💻{{else if (eq this "frequencies")}}📡{{else if (eq this "civilization")}}🏛
+        {{else if (eq this "interpretation")}}🔍{{else if (eq this "negotiation")}}🤜{{else}}📌{{/if}}
+      </span>
+      <span class="sbi-txt"><div class="sbi-t">{{capitalize this}}</div><div class="sbi-s">Pillar</div></span>
+    </button>
     {{/each}}
     {{/if}}
+
+    <!-- ══ SUGGESTED PROFESSIONAL AREAS (role-based, from DB) ══
+         These are the governance, public policy, leadership etc.
+         items the product owner wants visible at all times.
+         Items with count=0 show greyed as hints — they exist in
+         the CRIPFCNT curriculum even if no quiz is assigned yet.
+    ══ -->
+    {{#if suggestedCategoryMeta.length}}
+    <div class="sb-div">Suggested for {{capitalize normalizedRole}}s</div>
+    {{#each suggestedCategoryMeta}}
+    <button
+      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      data-pillar="{{this.pillar}}"
+      onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{this.label}}</div>
+        <div class="sbi-s">{{#if this.pillar}}{{capitalize this.pillar}}{{else}}Professional Area{{/if}} · {{this.count}} qs</div>
+      </span>
+      <span class="sbi-n">{{this.count}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    <!-- ══ MORE PROFESSIONAL AREAS (rest from DB) ══ -->
+    {{#if remainingCategoryMeta.length}}
+    <div class="sb-div">More Professional Areas</div>
+    {{#each remainingCategoryMeta}}
+    <button
+      class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      data-pillar="{{this.pillar}}"
+      onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
+      <span class="sbi-txt">
+        <div class="sbi-t">{{this.label}}</div>
+        <div class="sbi-s">{{#if this.pillar}}{{capitalize this.pillar}}{{else}}Domain{{/if}}</div>
+      </span>
+      <span class="sbi-n">{{this.count}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+ <!-- ══ PILLAR → CATEGORY → SERIES NAVIGATION ══ -->
+{{#if quizzesByPillarArray.length}}
+{{#each quizzesByPillarArray}}
+<div class="sb-div" style="color:{{this.pillarColor}};border-bottom-color:{{this.pillarColor}}20">
+  <span>{{this.pillarIcon}}</span> {{this.pillarLabel}}
+  <span style="margin-left:auto;font-size:9px;font-weight:600;color:var(--ink-faint)">{{this.totalQuizzes}}</span>
+</div>
+{{#each this.categories}}
+<div class="sb-cat-wrap">
+  <div class="sb-cat-label">{{this.categoryLabel}}</div>
+  {{#each this.series}}
+  <button class="sbi sbi-series {{#if (eq this.seriesSlug ../../seriesFilter)}}active{{/if}}"
+    onclick="setFilter('series','{{this.seriesSlug}}')">
+    <span class="sbi-em" style="font-size:10px">▸</span>
+    <span class="sbi-txt">
+      <div class="sbi-t">{{this.seriesLabel}}</div>
+      <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}} · {{capitalize this.level}}</div>
+    </span>
+    <span class="sbi-n">{{this.quizCount}}</span>
+  </button>
+  {{/each}}
+</div>
+{{/each}}
+{{/each}}
+{{/if}}
 
     {{#if isAdmin}}
     <div class="sb-div">Admin</div>
@@ -474,46 +628,78 @@
 
       {{#if isCripfcntSchool}}
 
-      {{!-- ══ PILLAR FRAMEWORK STRIP (shown when no filter active) ══ --}}
-      {{#unless (or seriesFilter categoryFilter pillarFilter)}}
-      {{#if quizzesByPillarArray.length}}
-      <div class="strip-wrap">
-        <div class="strip-lbl">🏛 CRIPFCNT Framework Pillars</div>
-        <div class="strip">
-          {{#each quizzesByPillarArray}}
-          <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
-            data-pillar="{{this.pillarSlug}}"
-            onclick="setFilter('pillar','{{this.pillarSlug}}')"
-            style="min-width:130px;border-top:3px solid {{this.pillarColor}}">
-            <span class="ctile-ic">{{this.pillarIcon}}</span>
-            <span class="ctile-name">{{this.pillarLabel}}</span>
-            <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
-          </button>
-          {{/each}}
-        </div>
-      </div>
-      {{/if}}
-      {{/unless}}
+      <!-- ══════════════════════════════════════════════════════
+           DISCOVERY STRIP 1 — Suggested professional areas
+           These are always shown with dashed border as "hints"
+           when they have 0 quizzes, solid when they have content.
+           This is what gives the governance / public policy feel
+           the product owner described.
+      ══════════════════════════════════════════════════════ -->
+     {{#unless (or seriesFilter categoryFilter pillarFilter)}}
+{{#if quizzesByPillarArray.length}}
+<div class="strip-wrap">
+  <div class="strip-lbl">🏛 CRIPFCNT Framework Pillars</div>
+  <div class="strip">
+    {{#each quizzesByPillarArray}}
+    <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
+      data-pillar="{{this.pillarSlug}}"
+      onclick="setFilter('pillar','{{this.pillarSlug}}')"
+      style="min-width:130px;border-top:3px solid {{this.pillarColor}}">
+      <span class="ctile-ic">{{this.pillarIcon}}</span>
+      <span class="ctile-name">{{this.pillarLabel}}</span>
+      <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
+    </button>
+    {{/each}}
+  </div>
+</div>
+{{/if}}
+{{/unless}}
 
-      {{!-- ══ BROWSE BY PILLAR STRIP (always shown) ══ --}}
-      {{#if quizzesByPillarArray.length}}
+      <!-- ══════════════════════════════════════════════════════
+           DISCOVERY STRIP 2 — All professional areas from DB
+           Every category the AI assigned — sorted by quiz count.
+           Has an "All" reset tile first.
+      ══════════════════════════════════════════════════════ -->
+{{#if quizzesByPillarArray.length}}
+<div class="strip-wrap">
+  <div class="strip-lbl">📂 Browse by Pillar & Professional Area</div>
+  <div class="strip">
+    <button class="ctile {{#unless (or categoryFilter pillarFilter seriesFilter)}}ct-active{{/unless}}"
+      onclick="clearAllFilters()" style="min-width:80px">
+      <span class="ctile-ic">🌐</span>
+      <span class="ctile-name">All Areas</span>
+      <span class="ctile-count">{{totalQuizCount}} total</span>
+    </button>
+    {{#each quizzesByPillarArray}}
+    <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
+      data-pillar="{{this.pillarSlug}}"
+      onclick="setFilter('pillar','{{this.pillarSlug}}')"
+      style="border-left:3px solid {{this.pillarColor}}">
+      <span class="ctile-ic">{{this.pillarIcon}}</span>
+      <span class="ctile-name">{{this.pillarLabel}}</span>
+      <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
+    </button>
+    {{/each}}
+  </div>
+</div>
+{{/if}}
+      <!-- ══════════════════════════════════════════════════════
+           DISCOVERY STRIP 3 — CRIPFCNT Pillars (conceptual)
+           Separate from categories — these are the 9 framework pillars.
+      ══════════════════════════════════════════════════════ -->
+      {{#if allPillars.length}}
       <div class="strip-wrap">
-        <div class="strip-lbl">📂 Browse by Pillar &amp; Professional Area</div>
+        <div class="strip-lbl">🏛 CRIPFCNT Pillars</div>
         <div class="strip">
-          <button class="ctile {{#unless (or categoryFilter pillarFilter seriesFilter)}}ct-active{{/unless}}"
-            onclick="clearAllFilters()" style="min-width:80px">
-            <span class="ctile-ic">🌐</span>
-            <span class="ctile-name">All Areas</span>
-            <span class="ctile-count">{{totalQuizCount}} total</span>
-          </button>
-          {{#each quizzesByPillarArray}}
-          <button class="ctile {{#if (eq this.pillarSlug ../pillarFilter)}}ct-active{{/if}}"
-            data-pillar="{{this.pillarSlug}}"
-            onclick="setFilter('pillar','{{this.pillarSlug}}')"
-            style="border-left:3px solid {{this.pillarColor}}">
-            <span class="ctile-ic">{{this.pillarIcon}}</span>
-            <span class="ctile-name">{{this.pillarLabel}}</span>
-            <span class="ctile-count">{{this.totalQuizzes}} assessments</span>
+          {{#each allPillars}}
+          <button class="ctile {{#if (eq this ../pillarFilter)}}ct-active{{/if}}" data-pillar="{{this}}" onclick="setFilter('pillar','{{this}}')">
+            <span class="ctile-ic">
+              {{#if (eq this "consciousness")}}🧠{{else if (eq this "responsibility")}}🤝{{else if (eq this "purpose")}}🎯
+              {{else if (eq this "technology")}}💻{{else if (eq this "frequencies")}}📡{{else if (eq this "civilization")}}🏛
+              {{else if (eq this "interpretation")}}🔍{{else if (eq this "negotiation")}}🤜{{else}}📌{{/if}}
+            </span>
+            <span class="ctile-name">{{capitalize this}}</span>
+            <span class="ctile-count">Pillar</span>
           </button>
           {{/each}}
         </div>
@@ -533,6 +719,7 @@
             {{#if (or seriesFilter categoryFilter pillarFilter)}}<span style="background:var(--blue);color:#fff;border-radius:999px;padding:1px 5px;font-size:9px;font-weight:900">●</span>{{/if}}
           </button>
         </div>
+
         <div class="fpanel jh" id="fpanel">
           <div class="fgl">
             <label class="flab">Series</label>
@@ -561,6 +748,7 @@
             {{/if}}
           </div>
         </div>
+
         {{#if (or searchQuery seriesFilter categoryFilter pillarFilter)}}
         <div class="chips">
           {{#if searchQuery}}<span class="chip">🔍 "{{searchQuery}}" <a class="chip-x" href="/org/{{org.slug}}/dashboard?series={{seriesFilter}}&category={{categoryFilter}}&pillar={{pillarFilter}}">✕</a></span>{{/if}}
@@ -573,23 +761,23 @@
 
       {{/if}}{{!-- /isCripfcntSchool --}}
 
-      <div class="ch">
-        <div class="ch-l">
-          {{#if seriesFilter}}
-          <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
-          <span class="ch-title">{{capitalize (replace seriesFilter "-" " ")}}</span>
-          <span class="ch-sub"> — {{#each quizzesBySeries}}{{#if (eq this.seriesSlug ../seriesFilter)}}{{this.quizzes.length}} assessments{{/if}}{{/each}}</span>
-          {{else if categoryFilter}}
-          <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
-          <span class="ch-title">{{capitalize (replace categoryFilter "-" " ")}}</span>
-          {{else if pillarFilter}}
-          <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
-          <span class="ch-title">{{capitalize pillarFilter}} Pillar</span>
-          {{else}}
-          <span class="ch-title">Assessment Library</span>
-          {{/if}}
-          <span class="ch-sub" id="vis-cnt"></span>
-        </div>
+   <div class="ch">
+  <div class="ch-l">
+    {{#if seriesFilter}}
+    <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
+    <span class="ch-title">{{capitalize (replace seriesFilter "-" " ")}}</span>
+    <span class="ch-sub"> — {{#each quizzesBySeries}}{{#if (eq this.seriesSlug ../seriesFilter)}}{{this.quizzes.length}} assessments{{/if}}{{/each}}</span>
+    {{else if categoryFilter}}
+    <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
+    <span class="ch-title">{{capitalize (replace categoryFilter "-" " ")}}</span>
+    {{else if pillarFilter}}
+    <a href="/org/{{org.slug}}/dashboard" class="btn btn-o btn-xs" style="margin-right:6px">← All</a>
+    <span class="ch-title">{{capitalize pillarFilter}} Pillar</span>
+    {{else}}
+    <span class="ch-title">Assessment Library</span>
+    {{/if}}
+    <span class="ch-sub" id="vis-cnt"></span>
+  </div>
         <div class="vtog">
           <button class="vb active" id="vb-grid" onclick="setView('grid')" title="Grid">⊞</button>
           <button class="vb" id="vb-list" onclick="setView('list')" title="List">≡</button>
@@ -598,13 +786,9 @@
 
       {{#if isCripfcntSchool}}
         {{#if hasAssignedQuizzes}}
-        <div id="quiz-lib">
-
-          {{!-- ══ PILLAR VIEW: category section headers ══
-               FIX: use #unless instead of (not ...) which is not a standard Handlebars helper --}}
-          {{#if pillarFilter}}
-          {{#unless seriesFilter}}
-          {{#unless categoryFilter}}
+     <div id="quiz-lib">
+          {{#if (and pillarFilter (not seriesFilter) (not categoryFilter))}}
+          {{!-- ══ PILLAR VIEW: show category section headers ══ --}}
           {{#each quizzesByPillarArray}}
           {{#if (eq this.pillarSlug ../pillarFilter)}}
           {{#each this.categories}}
@@ -689,12 +873,9 @@
           {{/each}}
           {{/if}}
           {{/each}}
-          {{/unless}}
-          {{/unless}}
-          {{/if}}
 
-          {{!-- ══ DEFAULT / SERIES / CATEGORY filtered view ══ --}}
-          {{#unless pillarFilter}}
+          {{else}}
+          {{!-- ══ DEFAULT / SERIES / CATEGORY filtered view: flat list ══ --}}
           {{#each quizzesBySeries}}
           <div class="series-block" id="sb-{{this.seriesSlug}}" data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
             <button class="series-hdr" onclick="toggleSeries('{{this.seriesSlug}}')">
@@ -773,65 +954,7 @@
             </div>
           </div>
           {{/each}}
-          {{/unless}}
-
-          {{!-- Also show flat list when pillarFilter is set but series/category filter is also active --}}
-          {{#if pillarFilter}}
-          {{#if seriesFilter}}
-          {{#each quizzesBySeries}}
-          <div class="series-block" id="sb-{{this.seriesSlug}}" data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
-            <button class="series-hdr" onclick="toggleSeries('{{this.seriesSlug}}')">
-              <div class="s-stripe" style="background:var(--p-{{this.pillar}},var(--blue));--p-consciousness:#7c3aed;--p-responsibility:#0d9488;--p-purpose:#d97706;--p-technology:#2563eb;--p-frequencies:#e11d48;--p-civilization:#059669;--p-interpretation:#4f46e5;--p-negotiation:#ea580c"></div>
-              <div class="s-info">
-                <div class="s-title">{{this.seriesLabel}}</div>
-                <div class="s-tags">
-                  {{#if this.pillar}}<span class="badge b-violet">{{capitalize this.pillar}}</span>{{/if}}
-                  {{#if this.category}}<span class="badge b-teal">{{capitalize (replace this.category "-" " ")}}</span>{{/if}}
-                  {{#if this.level}}<span class="badge b-slate">{{capitalize this.level}}</span>{{/if}}
-                </div>
-              </div>
-              <div class="s-right">
-                <span class="s-count">{{this.quizzes.length}} assessment{{#if (gt this.quizzes.length 1)}}s{{/if}}</span>
-                <span class="s-chev open" id="chev-{{this.seriesSlug}}">▼</span>
-              </div>
-            </button>
-            <div class="series-body" id="sbody-{{this.seriesSlug}}">
-              <div class="qgrid">
-                {{#each this.quizzes}}
-                <div class="qcard" data-title="{{quizTitle}}" data-pillar="{{pillar}}" data-category="{{category}}" data-series="{{series}}" data-topics="{{#each topics}}{{this}} {{/each}}">
-                  <div class="qcard-top">
-                    <h3 class="qtitle">{{quizTitle}}</h3>
-                    <div class="qbdgs">
-                      {{#if isTrial}}<span class="badge b-blue">Trial</span>{{/if}}
-                      {{#if isAdminQuiz}}<span class="badge b-emerald">Catalog</span>{{/if}}
-                      {{#if level}}<span class="badge b-slate">{{capitalize level}}</span>{{/if}}
-                    </div>
-                  </div>
-                  <div class="qmeta">
-                    <span class="qdot {{#if (eq status "available")}}qd-ok{{else if (eq status "completed")}}qd-done{{else if (eq status "expired")}}qd-exp{{else}}qd-pnd{{/if}}"></span>
-                    📝 {{questionCount}}q
-                    {{#unless isAdminQuiz}}<span class="qsep">·</span><span style="text-transform:capitalize">{{status}}</span>{{/unless}}
-                  </div>
-                  {{#if topics.length}}<div class="qtags">{{#each topics}}<span class="qtag">{{this}}</span>{{/each}}</div>{{/if}}
-                  <div class="qfoot">
-                    <a href="{{openUrl}}" class="btn btn-p btn-sm" style="flex:1">
-                      {{#if isAdminQuiz}}Take Assessment{{else if (eq status "completed")}}✓ Review{{else}}Start →{{/if}}
-                    </a>
-                    {{#if ../../isAdmin}}{{#unless isAdminQuiz}}
-                    <form method="POST" action="/admin/orgs/{{../../org.slug}}/quizzes/{{assignmentId}}/delete" style="display:inline" onsubmit="return confirm('Delete?');">
-                      <button class="btn btn-d btn-xs">Delete</button>
-                    </form>
-                    {{/unless}}{{/if}}
-                  </div>
-                </div>
-                {{/each}}
-              </div>
-            </div>
-          </div>
-          {{/each}}
           {{/if}}
-          {{/if}}
-
         </div>
         <div class="empty jh" id="no-results">
           <div class="empty-ic">🔍</div><h3>No Assessments Found</h3>
@@ -912,13 +1035,27 @@
         <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="atcard"><div class="ati" style="background:var(--teal-bg)">⬇️</div><div><div class="atl">Export CSV</div><div class="atd">Download raw data</div></div></a>
         <a href="/org/{{org.slug}}/certificates" class="atcard"><div class="ati" style="background:var(--amber-bg)">🏆</div><div><div class="atl">Certificates</div><div class="atd">Browse awarded certs</div></div></a>
       </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;box-shadow:var(--sx)">
+        <div class="sec-title" style="margin-bottom:8px">ℹ️ How Categories Work</div>
+        <p style="color:var(--ink-soft);font-size:12.5px;line-height:1.9">
+          <strong>Pillars</strong> (🧠🤝🎯…) = the 9 CRIPFCNT conceptual pillars set on <code>meta.aiPillar</code> by the categorisation script.<br>
+          <strong>Professional Areas / Categories</strong> (Governance, Public Policy, Leadership…) = granular domain labels set on <code>category</code> — these come directly from your database and are always listed in full.<br>
+          <strong>Suggested areas</strong> shown at top are role-based hints. Greyed-out items exist in the CRIPFCNT curriculum but have no quizzes assigned yet.<br>
+          The sidebar and discovery strips both read from a direct DB aggregation — they never go empty because of an active filter.
+        </p>
+      </div>
     </div>
     {{/if}}
 
   </main>
 </div>{{!-- /layout --}}
 
-<!-- MOBILE SIDEBAR DRAWER -->
+<!-- ═════════════════════════════════════════════════
+     MOBILE SIDEBAR DRAWER
+     Fixed full-height panel, slides in from left.
+     Same complete content as desktop sidebar.
+     Scrollable internally — same thin scrollbar.
+═════════════════════════════════════════════════ -->
 {{#if isCripfcntSchool}}
 <div class="mob-drawer" id="mob-drawer" onclick="closeMobSidebar(event)">
   <div class="mob-panel" id="mob-panel">
@@ -931,26 +1068,48 @@
       <span class="sbi-em">🏠</span><span class="sbi-txt"><div class="sbi-t">All Assessments</div><div class="sbi-s">Reset filters</div></span>
     </button>
 
-    {{!-- Mobile: same Pillar → Category → Series hierarchy --}}
-    {{#if quizzesByPillarArray.length}}
-    {{#each quizzesByPillarArray}}
-    <div class="sb-div" style="color:{{this.pillarColor}}">{{this.pillarIcon}} {{this.pillarLabel}}</div>
-    {{#each this.categories}}
-    <div class="sb-cat-wrap">
-      <div class="sb-cat-label">{{this.categoryLabel}}</div>
-      {{#each this.seriesList}}
-      <button class="sbi sbi-series {{#if (eq this.seriesSlug ../../seriesFilter)}}active{{/if}}"
-        onclick="setFilter('series','{{this.seriesSlug}}')">
-        <span class="sbi-em" style="font-size:10px;color:var(--ink-faint)">▸</span>
-        <span class="sbi-txt">
-          <div class="sbi-t">{{this.seriesLabel}}</div>
-          <div class="sbi-s">{{this.quizCount}} assessment{{#if (gt this.quizCount 1)}}s{{/if}}</div>
-        </span>
-        <span class="sbi-n">{{this.quizCount}}</span>
-      </button>
-      {{/each}}
-    </div>
+    {{#if allPillars.length}}
+    <div class="sb-div">CRIPFCNT Pillars</div>
+    {{#each allPillars}}
+    <button class="sbi {{#if (eq this ../pillarFilter)}}active{{/if}}" data-pillar="{{this}}" onclick="setFilter('pillar','{{this}}')">
+      <span class="sbi-em">{{#if (eq this "consciousness")}}🧠{{else if (eq this "responsibility")}}🤝{{else if (eq this "purpose")}}🎯{{else if (eq this "technology")}}💻{{else if (eq this "frequencies")}}📡{{else if (eq this "civilization")}}🏛{{else if (eq this "interpretation")}}🔍{{else if (eq this "negotiation")}}🤜{{else}}📌{{/if}}</span>
+      <span class="sbi-txt"><div class="sbi-t">{{capitalize this}}</div><div class="sbi-s">Pillar</div></span>
+    </button>
     {{/each}}
+    {{/if}}
+
+    {{#if suggestedCategoryMeta.length}}
+    <div class="sb-div">Suggested for {{capitalize normalizedRole}}s</div>
+    {{#each suggestedCategoryMeta}}
+    <button class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}"
+      data-pillar="{{this.pillar}}"
+      onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
+      <span class="sbi-txt"><div class="sbi-t">{{this.label}}</div><div class="sbi-s">{{this.count}} questions</div></span>
+      <span class="sbi-n">{{this.count}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    {{#if remainingCategoryMeta.length}}
+    <div class="sb-div">More Professional Areas</div>
+    {{#each remainingCategoryMeta}}
+    <button class="sbi {{#if (eq this.slug ../categoryFilter)}}active{{/if}}" data-pillar="{{this.pillar}}" onclick="setFilter('category','{{this.slug}}')">
+      <span class="sbi-em">{{this.icon}}</span>
+      <span class="sbi-txt"><div class="sbi-t">{{this.label}}</div><div class="sbi-s">{{this.count}} assessments</div></span>
+      <span class="sbi-n">{{this.count}}</span>
+    </button>
+    {{/each}}
+    {{/if}}
+
+    {{#if allSeries.length}}
+    <div class="sb-div">Learning Series</div>
+    {{#each quizzesBySeries}}
+   <button class="sbi {{#if (eq this.seriesSlug ../seriesFilter)}}active{{/if}}" onclick="setFilter('series','{{this.seriesSlug}}')">
+      <span class="sbi-em">📖</span>
+      <span class="sbi-txt"><div class="sbi-t">{{this.seriesLabel}}</div><div class="sbi-s">{{this.quizzes.length}} quizzes</div></span>
+      <span class="sbi-n">{{this.quizzes.length}}</span>
+    </button>
     {{/each}}
     {{/if}}
 
@@ -982,6 +1141,15 @@ function toggleSeries(slug){
   if(!b)return;
   var h=b.classList.toggle('jh');
   if(c)c.classList.toggle('open',!h);
+}
+
+/* JUMP TO SERIES */
+function jumpToSeries(slug){
+  closeMobSidebar(null,true);
+  switchTab('assessments',document.querySelector('[data-tab="assessments"]'));
+  var body=document.getElementById('sbody-'+slug),chev=document.getElementById('chev-'+slug);
+  if(body&&body.classList.contains('jh')){body.classList.remove('jh');if(chev)chev.classList.add('open');}
+  setTimeout(function(){var b=document.getElementById('sb-'+slug);if(b)b.scrollIntoView({behavior:'smooth',block:'start'});},50);
 }
 
 /* FILTER */
