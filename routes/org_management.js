@@ -949,46 +949,31 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     //  STEP 1 — Aggregations (cripfcnt-school only)
     // ══════════════════════════════════════════════════════════════════════════
-    let categoryMeta  = [];   // [{slug, label, icon, count}] sorted by count desc
-    let allSeriesMeta = [];   // [{slug, label, category, level, count}]
-    let allSeries     = [];   // string[]
-    let allCategories = [];   // string[]
+    let categoryMeta  = [];
+    let allSeriesMeta = [];
+    let allSeries     = [];
+    let allCategories = [];
 
     if (isCripfcntSchool) {
 
       // ── Category aggregation ─────────────────────────────────────────────
-      // Primary: quizzes classified by AI script (meta.aiCategorised = true)
-      // Fallback: any quiz with a non-null category field
-      // Zero-count guard: always .filter(c => c.count > 0)
-      // Sort: descending by count so most-popular categories appear first
-      const catAggPrimary = await Question.aggregate([
+      // Query ALL comprehension quizzes that have a real category value.
+      // DO NOT gate on meta.aiCategorised — the field path can vary between
+      // Mongoose versions and the categorisation script has already run.
+      // Exclude: null, empty string, "out-of-scope".
+      // Sort: descending by count → most-populated categories appear first.
+      const rawCats = await Question.aggregate([
         {
           $match: {
-            organization:         org._id,
-            type:                 "comprehension",
-            "meta.aiCategorised": true,
-            "meta.isOutOfScope":  { $ne: true },
-            category:             { $exists: true, $nin: [null, "", "out-of-scope"] }
+            organization:        org._id,
+            type:                "comprehension",
+            "meta.isOutOfScope": { $ne: true },
+            category:            { $exists: true, $nin: [null, "", "out-of-scope"] }
           }
         },
         { $group: { _id: "$category", count: { $sum: 1 } } },
         { $sort:  { count: -1 } }
       ]);
-
-      const rawCats = catAggPrimary.length > 0
-        ? catAggPrimary
-        : await Question.aggregate([
-            {
-              $match: {
-                organization:        org._id,
-                type:                "comprehension",
-                "meta.isOutOfScope": { $ne: true },
-                category:            { $exists: true, $nin: [null, "", "out-of-scope"] }
-              }
-            },
-            { $group: { _id: "$category", count: { $sum: 1 } } },
-            { $sort:  { count: -1 } }
-          ]);
 
       categoryMeta = rawCats
         .filter(c => c.count > 0)
@@ -1038,7 +1023,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     let exams = [];
 
     if (isCripfcntSchool && isAdmin) {
-      // Admin: load all comprehension quizzes directly from Question collection
       const allQuizzes = await Question.find({
         organization:        org._id,
         type:                "comprehension",
@@ -1092,7 +1076,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       }
 
     } else if (isAdmin) {
-      // Admin on non-cripfcnt orgs
       exams = await ExamInstance.aggregate([
         { $match: { org: new mongoose.Types.ObjectId(org._id) } },
         { $match: { assignmentId: { $exists: true, $ne: null }, isOnboarding: { $ne: true } } },
@@ -1111,12 +1094,10 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       ]);
 
     } else {
-      // Regular user
       const rawExams = await ExamInstance.find({ org: org._id, userId: req.user._id })
         .sort({ createdAt: -1 }).lean();
 
       if (rawExams.length && isCripfcntSchool) {
-        // Hydrate series/category/level from parent quiz docs
         const quizIds = new Set();
         for (const ex of rawExams) {
           if (ex.meta?.quizId) quizIds.add(String(ex.meta.quizId));
@@ -1160,42 +1141,33 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
 
     // ══════════════════════════════════════════════════════════════════════════
     //  STEP 3 — Apply filters
-    //  Only category, series, search, module, topic filters.
-    //  Pillar is not a user-facing filter in this version.
     // ══════════════════════════════════════════════════════════════════════════
     if (searchQuery || moduleFilter || topicFilter || seriesFilter || categoryFilter) {
       const activeCatKw = categoryFilter ? (CATEGORY_TOPIC_KEYWORDS[categoryFilter] || []) : [];
 
       exams = exams.filter(ex => {
-        // Full-text search on title
         if (searchQuery) {
           if (!(ex.title || ex.quizTitle || "").toLowerCase().includes(searchQuery.toLowerCase())) return false;
         }
-        // Module filter
         if (moduleFilter) {
           if (!(ex.modules || [ex.module]).includes(moduleFilter)) return false;
         }
-        // Topic filter
         if (topicFilter) {
           if (!(ex.meta?.topics || []).some(t => String(t).toLowerCase().includes(topicFilter.toLowerCase()))) return false;
         }
-        // Series filter (exact slug)
         if (seriesFilter) {
           const s = (ex.series || ex.meta?.series || "").toLowerCase().trim();
           if (!s || s !== seriesFilter.toLowerCase().trim()) return false;
         }
-        // Category filter: exact → keyword fallback → series fragment
         if (categoryFilter) {
           const cat = (ex.category || ex.meta?.category || "").toLowerCase().trim();
           if (cat === categoryFilter) return true;
-          // Keyword fallback via meta.topics
           if (activeCatKw.length) {
             const exTopics = (ex.meta?.topics || []).map(t => String(t).toLowerCase());
             if (exTopics.some(t => activeCatKw.some(kw => t.includes(kw) || kw.includes(t)))) return true;
           }
-          // Series slug contains a long-enough fragment of the category slug
-          const exSeries  = (ex.series || "").toLowerCase();
-          const catParts  = categoryFilter.split("-").filter(p => p.length >= 5);
+          const exSeries = (ex.series || "").toLowerCase();
+          const catParts = categoryFilter.split("-").filter(p => p.length >= 5);
           if (exSeries && catParts.length && catParts.some(p => exSeries.includes(p))) return true;
           return false;
         }
@@ -1270,7 +1242,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     for (const s of Object.values(quizzesBySeries))
       s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
 
-    // ── Derived lists ─────────────────────────────────────────────────────────
     if (!allSeries.length)
       allSeries = [...new Set(Object.keys(quizzesBySeries))].sort();
 
@@ -1280,7 +1251,6 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const quizzesByModule = {};
     for (const [k, v] of Object.entries(quizzesBySeries)) quizzesByModule[k] = v.quizzes;
 
-    // ── Real total quiz count from DB ─────────────────────────────────────────
     const totalQuizCount = isCripfcntSchool
       ? (await Question.countDocuments({
           organization:        org._id,
@@ -1350,48 +1320,30 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     // ── Render ────────────────────────────────────────────────────────────────
     return res.render("org/dashboard", {
       org, membership, modules,
-
-      // Quiz data
       quizzesByModule,
       quizzesBySeries,
       hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
-
-      // Attempt / cert history
       attemptRows,
       certRows,
-
-      // Auth / role
       isAdmin,
       isCripfcntSchool,
       user: req.user,
       normalizedRole,
-
-      // Trial
       employeeTrialTotal,
       employeeTrialCompleted,
       canUpgradeEmployee,
       showTrialBanner,
       canUpgrade,
       trialQuizzesRemaining,
-
-      // Active filters
       searchQuery,
       moduleFilter,
       topicFilter,
       seriesFilter,
       categoryFilter,
-
-      // Category cards data (sorted by count desc, zero-count excluded)
-      categoryMeta,       // [{slug, label, icon, count}] — primary source for card strip
-
-      // Series metadata for sidebar drill-down
-      allSeriesMeta,      // [{slug, label, category, level, count}]
-
-      // Filter dropdown lists
-      allSeries,          // string[]
-      allCategories,      // string[]
-
-      // Total quiz count from DB
+      categoryMeta,
+      allSeriesMeta,
+      allSeries,
+      allCategories,
       totalQuizCount
     });
 
