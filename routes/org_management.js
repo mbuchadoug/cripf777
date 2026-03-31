@@ -1249,6 +1249,17 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
   }
 });
 
+router.get("/debug-cats", ensureAuth, async (req, res) => {
+  const total = await Question.countDocuments({ type: "comprehension" });
+  const sample = await Question.findOne({ type: "comprehension" }).select("organization category series").lean();
+  const cats = await Question.aggregate([
+    { $match: { type: "comprehension" } },
+    { $group: { _id: "$category", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 10 }
+  ]);
+  res.json({ total, sample, cats });
+});
 
 
 /* ------------------------------------------------------------------ */
