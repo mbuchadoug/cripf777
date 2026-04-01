@@ -356,7 +356,7 @@ if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
 // ✅ CLASSIFICATION MANAGER: Load quizzes with category data (cripfcnt-home only)
 let classifyQuizzes = [];
 let classifyCategoryCounts = {};
-if (org.slug === "cripfcnt-home") {
+if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
   classifyQuizzes = await Question.find({
     type: "comprehension",
     $or: [{ organization: org._id }, { organization: null }]
