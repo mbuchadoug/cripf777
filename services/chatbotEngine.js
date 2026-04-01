@@ -5637,7 +5637,7 @@ return sendText(from,
 
 What area or suburb are you in?
 
-Example: *Mbare, Chitungwiza, Belgravia*
+Example: *Avondale, Mbare, Belgravia*
 
 _Type *cancel* to return to main menu._`
     );

@@ -257,18 +257,6 @@ const SEARCH_SYNONYMS = {
   "spa": ["massage", "beauty", "salon", "relaxation", "wellness"],
   "massage": ["spa", "massage therapist", "beauty", "wellness", "relaxation"],
 
-  // ── MEDICAL & DENTAL ──────────────────────────────────────────────────────
-  "dentist": ["dental", "teeth", "teeth cleaning", "dental clinic", "dental care", "check-ups", "fillings", "root canal", "dental surgery", "oral health", "medical_health"],
-  "dental": ["dentist", "teeth", "teeth cleaning", "dental clinic", "dental care", "check-ups", "fillings", "root canal", "oral health", "medical_health"],
-  "teeth cleaning": ["dental", "dentist", "dental hygiene", "scaling", "oral health", "dental clinic", "medical_health"],
-  "teeth": ["dental", "dentist", "teeth cleaning", "oral health", "dental care", "medical_health"],
-  "doctor": ["clinic", "medical", "health", "gp", "general practitioner", "medical_health"],
-  "clinic": ["doctor", "medical", "health", "hospital", "medical_health"],
-  "medical": ["doctor", "clinic", "health", "hospital", "medical_health", "pharmacy"],
-  "pharmacy": ["chemist", "medicine", "drugs", "medical", "health", "medical_health"],
-  "optician": ["optometrist", "eyes", "glasses", "eyecare", "medical_health"],
-  "physiotherapy": ["physio", "rehabilitation", "therapy", "medical", "health", "medical_health"],
-
   // ── PHOTOGRAPHY & VIDEOGRAPHY ─────────────────────────────────────────────
   "photographer": ["photography", "photos", "pictures", "videography", "video", "wedding photography", "events"],
   "photography": ["photographer", "photos", "pictures", "videography", "video", "events", "wedding"],
@@ -374,24 +362,21 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
     const productOr = [
       { listedProducts: { $regex: product, $options: "i" } },
-      { products:       { $regex: product, $options: "i" } },
       { "rates.service": { $regex: product, $options: "i" } },
-      { categories:     { $regex: product, $options: "i" } },
-      { businessName:   { $regex: product, $options: "i" } },
+      { categories: { $regex: product, $options: "i" } },
+      { businessName: { $regex: product, $options: "i" } },
 
       ...searchTerms.flatMap(term => [
         { listedProducts: { $regex: term, $options: "i" } },
-        { products:       { $regex: term, $options: "i" } },
         { "rates.service": { $regex: term, $options: "i" } },
-        { categories:     { $regex: term, $options: "i" } },
-        { businessName:   { $regex: term, $options: "i" } }
+        { categories: { $regex: term, $options: "i" } },
+        { businessName: { $regex: term, $options: "i" } }
       ]),
 
       ...individualWords.flatMap(word => [
         { listedProducts: { $regex: word, $options: "i" } },
-        { products:       { $regex: word, $options: "i" } },
         { "rates.service": { $regex: word, $options: "i" } },
-        { categories:     { $regex: word, $options: "i" } }
+        { categories: { $regex: word, $options: "i" } }
       ])
     ];
 
@@ -417,24 +402,17 @@ let results = await SupplierProfile.find(query)
 
  results = results.filter((supplier) => {
     if (supplier?.profileType === "service") {
-      // Accept if they have rates, listed products, or products[] entries
+      // Accept if they have rates, listed products, or at least a category match
       const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
       const hasListedProducts = (supplier.listedProducts || []).some(p =>
         p && p !== "pending_upload" && normalizeProductName(p)
       );
-      const hasProducts = (supplier.products || []).some(p =>
-        p && normalizeProductName(p)
-      );
-      return hasRates || hasListedProducts || hasProducts;
+      return hasRates || hasListedProducts;
     }
 
-    const hasListedProducts = (supplier.listedProducts || []).some(p =>
+    return (supplier.listedProducts || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-    const hasProducts = (supplier.products || []).some(p =>
-      p && normalizeProductName(p)
-    );
-    return hasListedProducts || hasProducts;
   });
 
   if (area && results.length > 1) {
@@ -511,7 +489,6 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
   };
 
   if (supplier.profileType === "service") {
-    // First try rates[] (has prices)
     for (const rate of (supplier.rates || [])) {
       const serviceName = String(rate?.service || "").trim();
       const rawRate = String(rate?.rate || "").trim();
@@ -527,34 +504,6 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
         unit,
         matchSource: "rates"
       });
-    }
-
-    // Fallback: products[] (no price, shows "Price on request")
-    if (offers.length === 0) {
-      for (const p of (supplier.products || [])) {
-        const productName = String(p || "").trim();
-        if (!normalizeProductName(productName)) continue;
-        pushOffer({
-          product: productName,
-          price: null,
-          unit: "job",
-          matchSource: "products"
-        });
-      }
-    }
-
-    // Final fallback: listedProducts[]
-    if (offers.length === 0) {
-      for (const p of (supplier.listedProducts || [])) {
-        const productName = String(p || "").trim();
-        if (!normalizeProductName(productName) || productName === "pending_upload") continue;
-        pushOffer({
-          product: productName,
-          price: null,
-          unit: "job",
-          matchSource: "listedProducts"
-        });
-      }
     }
 
     return offers;
