@@ -1887,11 +1887,13 @@ const _orderBlockedStates = new Set([
   "supplier_order_enter_price"
 ]);
 
+// AFTER:
 if (
   !isMetaAction &&
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
-  !_orderBlockedStates.has(_activeOrderState)
+  !_orderBlockedStates.has(_activeOrderState) &&
+  biz?.sessionState !== "supplier_search_city"
 ) {
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);

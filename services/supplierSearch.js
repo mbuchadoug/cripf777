@@ -360,25 +360,29 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
     const individualWords = product.split(/\s+/).filter(w => w.length > 2);
 
-    const productOr = [
-      { listedProducts: { $regex: product, $options: "i" } },
-      { "rates.service": { $regex: product, $options: "i" } },
-      { categories: { $regex: product, $options: "i" } },
-      { businessName: { $regex: product, $options: "i" } },
+ // AFTER:
+const productOr = [
+  { listedProducts: { $regex: product, $options: "i" } },
+  { products: { $regex: product, $options: "i" } },
+  { "rates.service": { $regex: product, $options: "i" } },
+  { categories: { $regex: product, $options: "i" } },
+  { businessName: { $regex: product, $options: "i" } },
 
-      ...searchTerms.flatMap(term => [
-        { listedProducts: { $regex: term, $options: "i" } },
-        { "rates.service": { $regex: term, $options: "i" } },
-        { categories: { $regex: term, $options: "i" } },
-        { businessName: { $regex: term, $options: "i" } }
-      ]),
+  ...searchTerms.flatMap(term => [
+    { listedProducts: { $regex: term, $options: "i" } },
+    { products: { $regex: term, $options: "i" } },
+    { "rates.service": { $regex: term, $options: "i" } },
+    { categories: { $regex: term, $options: "i" } },
+    { businessName: { $regex: term, $options: "i" } }
+  ]),
 
-      ...individualWords.flatMap(word => [
-        { listedProducts: { $regex: word, $options: "i" } },
-        { "rates.service": { $regex: word, $options: "i" } },
-        { categories: { $regex: word, $options: "i" } }
-      ])
-    ];
+  ...individualWords.flatMap(word => [
+    { listedProducts: { $regex: word, $options: "i" } },
+    { products: { $regex: word, $options: "i" } },
+    { "rates.service": { $regex: word, $options: "i" } },
+    { categories: { $regex: word, $options: "i" } }
+  ])
+];
 
     query.$and.push({ $or: productOr });
   }
@@ -400,20 +404,24 @@ let results = await SupplierProfile.find(query)
       .lean();
   }
 
- results = results.filter((supplier) => {
-    if (supplier?.profileType === "service") {
-      // Accept if they have rates, listed products, or at least a category match
-      const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-      const hasListedProducts = (supplier.listedProducts || []).some(p =>
-        p && p !== "pending_upload" && normalizeProductName(p)
-      );
-      return hasRates || hasListedProducts;
-    }
-
-    return (supplier.listedProducts || []).some(p =>
+// AFTER:
+results = results.filter((supplier) => {
+  if (supplier?.profileType === "service") {
+    const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
+    const hasListedProducts = (supplier.listedProducts || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-  });
+    // Also accept if they have products[] (set during registration before listedProducts is populated)
+    const hasProducts = (supplier.products || []).some(p =>
+      p && p !== "pending_upload" && normalizeProductName(p)
+    );
+    return hasRates || hasListedProducts || hasProducts;
+  }
+
+  return (supplier.listedProducts || []).some(p =>
+    p && p !== "pending_upload" && normalizeProductName(p)
+  );
+});
 
   if (area && results.length > 1) {
     const areaLower = area.toLowerCase();
