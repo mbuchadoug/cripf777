@@ -738,13 +738,29 @@
     </button>
     {{/unless}}
 
-    {{#if (eq org.type "school")}}
+  {{#if (eq org.type "school")}}
     <div class="sb-section">Import</div>
     {{#unless isHomeSchool}}
     <button class="sb-item" data-page="import" onclick="gotoPage('import',this)">
       <span class="sb-ic">⬆️</span> Import CSV
     </button>
     {{/unless}}
+    {{/if}}
+
+    {{#if (or isHomeSchool isCripSchool)}}
+    <div class="sb-section">Rules</div>
+    <button class="sb-item" data-page="rules" onclick="gotoPage('rules',this)">
+      <span class="sb-ic">⚙️</span> Quiz Rules
+      <span class="sb-badge">{{quizRules.length}}</span>
+    </button>
+    {{/if}}
+
+    {{#if isHomeSchool}}
+    <div class="sb-section">Categories</div>
+    <button class="sb-item" data-page="classify" onclick="gotoPage('classify',this)">
+      <span class="sb-ic">🏷️</span> Classify Quizzes
+      {{#if unclassifiedCount}}<span class="sb-badge" style="background:var(--rose)">{{unclassifiedCount}}</span>{{/if}}
+    </button>
     {{/if}}
 
     <!-- ════════════════════════════
@@ -911,21 +927,6 @@
   </div>
 </div>
 
-   {{#if (or isHomeSchool isCripSchool)}}
-<div class="sb-section">Rules</div>
-<button class="sb-item" data-page="rules" onclick="gotoPage('rules',this)">
-  <span class="sb-ic">⚙️</span> Quiz Rules
-  <span class="sb-badge">{{quizRules.length}}</span>
-</button>
-{{/if}}
-
-{{#if isHomeSchool}}
-<div class="sb-section">Categories</div>
-<button class="sb-item" data-page="classify" onclick="gotoPage('classify',this)">
-  <span class="sb-ic">🏷️</span> Classify Quizzes
-  {{#if unclassifiedCount}}<span class="sb-badge" style="background:var(--rose)">{{unclassifiedCount}}</span>{{/if}}
-</button>
-{{/if}}
 
     <div class="sb-section">Reports</div>
     <button class="sb-item" data-page="reports" onclick="gotoPage('reports',this)">
@@ -973,6 +974,150 @@
       </div>
     </header>
 
+
+<!-- ════════════════════════════
+         PAGE: CLASSIFY QUIZZES
+    ════════════════════════════ -->
+    {{#if isHomeSchool}}
+    <section class="page" id="page-classify">
+      <div class="card" style="overflow:visible">
+        <div class="card-hdr">
+          <div>
+            <div class="card-hdr-title">🏷️ Quiz Classification Manager</div>
+            <div class="card-hdr-sub">Assign or reassign quizzes to pillars and categories shown in the dashboard carousel</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="clf-status-badge" style="font-size:12px;color:var(--ink-muted)"></span>
+            <button class="btn btn-o btn-sm" onclick="clfReload()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="clf-shell">
+            <div class="clf-sidebar">
+              <div class="clf-sb-section">Show</div>
+              <button class="clf-filter active" id="clf-f-all" onclick="clfSetFilter('all')">
+                <span>📋</span> All Quizzes
+                <span class="clf-filter-count" id="clf-count-all">—</span>
+              </button>
+              <button class="clf-filter" id="clf-f-unclassified" onclick="clfSetFilter('unclassified')">
+                <span>⚠️</span> Unclassified
+                <span class="clf-filter-count" id="clf-count-unclassified" style="background:var(--rose-bg);color:var(--rose)">{{unclassifiedCount}}</span>
+              </button>
+              <button class="clf-filter" id="clf-f-locked" onclick="clfSetFilter('locked')">
+                <span>🔒</span> Manual Locks
+                <span class="clf-filter-count" id="clf-count-locked">—</span>
+              </button>
+              <div class="clf-sb-section" style="margin-top:8px">Pillar</div>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','consciousness')">
+                <span class="clf-dot" style="background:#7c3aed"></span> Consciousness
+                <span class="clf-filter-count" id="clf-p-consciousness">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','responsibility')">
+                <span class="clf-dot" style="background:#0d9488"></span> Responsibility
+                <span class="clf-filter-count" id="clf-p-responsibility">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','interpretation')">
+                <span class="clf-dot" style="background:#4f46e5"></span> Interpretation
+                <span class="clf-filter-count" id="clf-p-interpretation">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','purpose')">
+                <span class="clf-dot" style="background:#d97706"></span> Purpose
+                <span class="clf-filter-count" id="clf-p-purpose">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','frequencies')">
+                <span class="clf-dot" style="background:#e11d48"></span> Frequencies
+                <span class="clf-filter-count" id="clf-p-frequencies">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','civilization')">
+                <span class="clf-dot" style="background:#059669"></span> Civilization
+                <span class="clf-filter-count" id="clf-p-civilization">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','negotiation')">
+                <span class="clf-dot" style="background:#ea580c"></span> Negotiation
+                <span class="clf-filter-count" id="clf-p-negotiation">—</span>
+              </button>
+              <button class="clf-filter" onclick="clfSetFilter('pillar','technology')">
+                <span class="clf-dot" style="background:#2563eb"></span> Technology
+                <span class="clf-filter-count" id="clf-p-technology">—</span>
+              </button>
+            </div>
+            <div class="clf-main">
+              <div class="clf-toolbar">
+                <input type="text" id="clf-search" placeholder="Search quiz titles…" oninput="clfSearch(this.value)">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-muted);cursor:pointer;white-space:nowrap">
+                  <input type="checkbox" id="clf-select-all" onchange="clfToggleAll(this.checked)">
+                  Select all
+                </label>
+                <button class="btn btn-o btn-sm" onclick="clfClearSelection()" id="clf-clear-btn" style="display:none">Clear</button>
+              </div>
+              <div class="clf-list" id="clf-list">
+                <div class="clf-loading">⏳ Loading quizzes…</div>
+              </div>
+              <div class="clf-bulk-bar" id="clf-bulk-bar">
+                <span class="clf-bulk-label" id="clf-bulk-label">0 selected</span>
+                <select id="clf-bulk-pillar" class="fsel" style="font-size:12.5px" onchange="clfBulkPillarChange()">
+                  <option value="">— Select Pillar —</option>
+                  <option value="consciousness">Consciousness</option>
+                  <option value="responsibility">Responsibility</option>
+                  <option value="interpretation">Interpretation</option>
+                  <option value="purpose">Purpose</option>
+                  <option value="frequencies">Frequencies</option>
+                  <option value="civilization">Civilization</option>
+                  <option value="negotiation">Negotiation</option>
+                  <option value="technology">Technology</option>
+                </select>
+                <select id="clf-bulk-category" class="fsel" style="font-size:12.5px" disabled>
+                  <option value="">— Select Category —</option>
+                </select>
+                <button class="btn btn-p btn-sm" onclick="clfBulkApply()" id="clf-bulk-apply-btn" disabled>Apply to Selected</button>
+                <span id="clf-bulk-result" style="font-size:12.5px;color:var(--emerald)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    {{/if}}
+
+    <!-- ── CLASSIFICATION PANEL (right slide-in) ── -->
+    <div class="clf-panel-overlay" id="clfOverlay" onclick="clfClosePanel()"></div>
+    <div class="clf-panel" id="clfPanel">
+      <div class="clf-panel-hdr">
+        <div class="clf-panel-title">🏷️ Classify Quiz</div>
+        <div class="clf-panel-sub" id="clf-panel-sub">—</div>
+      </div>
+      <div class="clf-panel-body">
+        <input type="hidden" id="clf-panel-quizId">
+        <div class="fld" style="margin-bottom:18px">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">1. SELECT PILLAR</label>
+          <div class="clf-pillar-grid" id="clf-pillar-grid"></div>
+        </div>
+        <div class="fld" style="margin-bottom:18px" id="clf-cat-section">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">2. SELECT CATEGORY</label>
+          <div class="clf-cat-list" id="clf-cat-list"></div>
+        </div>
+        <div class="fld" id="clf-series-section" style="display:none;margin-bottom:18px">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-muted);margin-bottom:8px;display:block">3. SERIES SLUG <span style="font-weight:400;color:var(--ink-faint)">(optional)</span></label>
+          <input type="text" id="clf-panel-series" placeholder="e.g. governance-foundations" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-family:var(--font)">
+          <div style="font-size:11.5px;color:var(--ink-faint);margin-top:4px">Lowercase slugs only. Leave blank to keep current series.</div>
+        </div>
+        <div style="padding:12px 14px;background:var(--surface-2);border-radius:var(--r);font-size:12.5px;color:var(--ink-muted);border:1px solid var(--border)">
+          <strong style="color:var(--ink)">🔒 Manual Lock</strong><br>
+          Saving will lock this quiz against future AI re-categorisation. Unlock by unchecking below.
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+            <input type="checkbox" id="clf-panel-lock" checked>
+            <span style="font-size:12.5px;font-weight:500">Lock this classification</span>
+          </label>
+        </div>
+        <div id="clf-panel-result" style="margin-top:14px;font-size:13px"></div>
+      </div>
+      <div class="clf-panel-footer">
+        <button class="btn btn-o" onclick="clfClosePanel()">Cancel</button>
+        <button class="btn btn-p" id="clf-panel-save-btn" onclick="clfSave()" disabled>Save Classification</button>
+      </div>
+    </div>
+
+   
     <!-- ════════════════════════════
          PAGE: OVERVIEW
     ════════════════════════════ -->

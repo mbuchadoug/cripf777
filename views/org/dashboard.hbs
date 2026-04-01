@@ -828,6 +828,7 @@
         <a href="/admin/orgs/{{org.slug}}/reports/attempts.csv" class="atcard"><div class="ati" style="background:var(--teal-bg)">⬇️</div><div><div class="atl">Export CSV</div><div class="atd">Download raw data</div></div></a>
         <a href="/org/{{org.slug}}/certificates" class="atcard"><div class="ati" style="background:var(--amber-bg)">🏆</div><div><div class="atl">Certificates</div><div class="atd">Browse awarded certs</div></div></a>
         <a href="/admin/orgs/{{org.slug}}/classification-review" class="atcard"><div class="ati" style="background:var(--violet-bg)">🏷️</div><div><div class="atl">Classification Review</div><div class="atd">Review low-confidence AI categories</div></div></a>
+        <a href="/admin/orgs/{{org.slug}}/manage#classify" class="atcard" onclick="event.preventDefault();window.location='/admin/orgs/{{org.slug}}/manage';setTimeout(()=>document.querySelector('[data-page=classify]')?.click(),400)"><div class="ati" style="background:var(--blue-bg)">📂</div><div><div class="atl">Reclassify Quizzes</div><div class="atd">Manually assign pillars and categories</div></div></a>
       </div>
     </div>
     {{/if}}

@@ -123,6 +123,18 @@ const QuestionSchema = new mongoose.Schema({
   tags: [String],
   source: { type: String, default: "import" },
   raw: { type: String, default: null },
+
+  // ==============================
+// META (AI classification tracking)
+// ==============================
+meta: {
+  aiPillar:          { type: String, default: null },
+  aiConfidence:      { type: Number, default: null },
+  aiCategorised:     { type: Boolean, default: false },
+  manualOverride:    { type: Boolean, default: false },
+  isOutOfScope:      { type: Boolean, default: false },
+  inheritedFromQuiz: { type: mongoose.Schema.Types.ObjectId, ref: "Question", default: null }
+},
   createdAt: { type: Date, default: () => new Date() },
   updatedAt: { type: Date, default: () => new Date() }
 });
