@@ -4,6 +4,34 @@ import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
 
+// ── Rate helper functions (mirrored from chatbotEngine.js) ────────────────────
+function parseSupplierRateValue(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  return Number(m[1]);
+}
+
+function parseSupplierRateUnit(rate = "") {
+  const raw = String(rate || "").trim();
+  const parts = raw.split("/");
+  if (parts.length < 2) return "each";
+  return parts[1].trim() || "each";
+}
+
+function formatSupplierRateDisplay(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("$")) return raw;
+  const value = parseSupplierRateValue(raw);
+  const unit = parseSupplierRateUnit(raw);
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return `$${value}/${unit}`;
+  }
+  return raw;
+}
+
 export async function startSupplierSearch(from, biz, saveBiz) {
  biz.sessionState = "supplier_search_category";
 biz.sessionData = {
