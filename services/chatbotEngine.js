@@ -2434,7 +2434,7 @@ Type *cancel* to stop this order.`);
   const _sid2 = _sess2?.tempData?.orderSupplierId;
   const _sup2 = _sid2 ? await SupplierProfile.findById(_sid2).lean() : null;
   const isServiceSupplier = _sup2?.profileType === "service";
-  const _needsAddress2 = isServiceSupplier || (_sup2?.delivery?.available === true);
+ const _needsAddress2 = (isServiceSupplier && _sup2?.travelAvailable) || (!isServiceSupplier && _sup2?.delivery?.available === true);
 
   const preview = parsedItems
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
@@ -8149,7 +8149,8 @@ if (rawLower === "confirm" || rawLower === "done" || rawLower === "send") {
     }
     // For collection-only product suppliers, route straight to sup_cart_confirm_
     // which will skip the address step automatically
-    const needsAddress = isService || supplier.delivery?.available;
+  // Only ask for address if: product supplier with delivery, OR service supplier who travels to clients
+const needsAddress = (isService && supplier.travelAvailable) || (!isService && supplier.delivery?.available);
     if (!needsAddress) {
       // Redirect to the confirm handler which handles collection-only path
       return handleIncomingMessage({ from, action: `sup_cart_confirm_${supplierId}` });
@@ -8182,9 +8183,8 @@ ${previewLines}${totalLine}
 *Step 2 of 2 -Enter your ${isService ? "location" : "delivery address"}* 👇
 
 ${isService
-  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Come tomorrow 10am_`
-  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect -call me_`}
-
+  ? `📍 *Add a contact note for the provider:*\n\nExamples:\n• _Call me on arrival_\n• _Preferred time: Mon 10am_\n• _+263 7XX XXX XXX_`
+  : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect - call me_`}
 _Type your address below and send_ ✍️`,
       buttons: [
         { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
@@ -9363,7 +9363,7 @@ ${selectedTopLine}${previewLines}${totalLine}
 *Step 2 of 2 - Enter your ${isService ? "location" : "delivery address"}* 👇
 
 ${isService
-  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am, Mabelreign_`
+  ? `📍 *Add a contact note for the provider:*\n\nExamples:\n• _Call me on arrival_\n• _Preferred time: Mon 10am_\n• _+263 7XX XXX XXX_`
   : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect - call me_`
 }
 
@@ -9635,7 +9635,7 @@ Type *cancel* to stop this order.`);
   const _sidBiz = biz.sessionData?.orderSupplierId;
   const _supBiz = _sidBiz ? await SupplierProfile.findById(_sidBiz).lean() : null;
   const isServiceSupplier = _supBiz?.profileType === "service";
-  const _needsAddressBiz = isServiceSupplier || (_supBiz?.delivery?.available === true);
+ const _needsAddressBiz = (isServiceSupplier && _supBiz?.travelAvailable) || (!isServiceSupplier && _supBiz?.delivery?.available === true);
 
   const preview = parsedItems
     .map(i => `• ${i.product} x${i.quantity}${i.unitLabel && i.unitLabel !== "units" ? " " + i.unitLabel : ""}`)
@@ -9704,7 +9704,7 @@ ${preview}
 *Step 2 of 2 - Enter your ${isServiceSupplier ? "location" : "delivery address"}* 👇
 
 ${isServiceSupplier
-  ? `📍 *Where should we come to?*\n\nExamples:\n• _24 Borrowdale Rd, Harare_\n• _Call me when you arrive_\n• _Come tomorrow 10am_`
+  ? `📍 *Add a contact note for the provider:*\n\nExamples:\n• _Call me on arrival_\n• _Preferred time: Mon 10am_\n• _+263 7XX XXX XXX_`
   : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _Deliver to Avondale after 4pm_\n• _I will collect - call me_`
 }
 
