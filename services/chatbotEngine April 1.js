@@ -2034,36 +2034,8 @@ if (
       });
     }
 
-    // No city in shortcode — try a fresh parse with expanded input as final rescue
-    {
-      const { parseShortcodeSearch: _reparse } = await import("./supplierSearch.js");
-      const _retry = _reparse(`find ${text.trim()}`) || _reparse(text.trim());
-      if (_retry && (_retry.city || _retry.area)) {
-        const _city = _retry.city || null;
-        const _area = _retry.area || null;
-        const _prod = String(_retry.product || shortcode.product || "").toLowerCase().trim();
-        const _locationLabel = _area ? `${_area}, ${_city}` : _city;
-        const _res = await runSupplierSearch({ city: _city, product: _prod, area: _area });
-        if (_res.length) {
-          await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.supplierSearchProduct": _prod } }, { upsert: true });
-          if (biz) { biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod, city: _city } }; biz.sessionState = "ready"; await saveBizSafe(biz); }
-          const _offerRes = await runSupplierOfferSearch({ city: _city, product: _prod, area: _area });
-          if (_offerRes.length) {
-            const _rows = formatSupplierOfferResults(_offerRes.slice(0, 9));
-            if (_offerRes.length > 9) _rows.push({ id: "sup_search_next_page", title: `➡ More results (${_offerRes.length - 9} more)` });
-            return sendList(from, `🔍 *${_prod}* in ${_locationLabel} - ${_offerRes.length} found`, _rows);
-          }
-          const _rows = formatSupplierResults(_res.slice(0, 9), _city, _prod);
-          return sendList(from, `🔍 *${_prod}* in ${_locationLabel} - ${_res.length} found`, _rows);
-        }
-        // Found city/area but no results — show no-results, not city picker
-        return sendButtons(from, {
-          text: `😕 No results for *${_prod}* in *${_locationLabel}*.\n\nTry searching all of Zimbabwe?`,
-          buttons: [{ id: "sup_search_city_all", title: "📍 Search All Cities" }, { id: "find_supplier", title: "🔍 Search Again" }]
-        });
-      }
-    }
-    // Genuinely no city detected — ask for it
+    // No city given - ask for it
+   // No city given - store product in session then ask for city
     await UserSession.findOneAndUpdate(
       { phone },
       { $set: { "tempData.supplierSearchProduct": shortcode.product, "tempData.supplierSearchMode": "product" } },
@@ -4143,37 +4115,7 @@ if (
       });
     }
 
-    // No city at all — one last rescue: re-parse with "find " prefix
-    {
-      const _retry2 = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
-      if (_retry2 && (_retry2.city || _retry2.area)) {
-        const _city2 = _retry2.city || null;
-        const _area2 = _retry2.area || null;
-        const _prod2 = String(_retry2.product || shortcode.product || "").toLowerCase().trim();
-        const _label2 = _area2 ? `${_area2}, ${_city2}` : _city2;
-        const _offerRes2 = await runSupplierOfferSearch({ city: _city2, product: _prod2, area: _area2 });
-        if (_offerRes2.length) {
-          biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod2, city: _city2 }, searchResults: _offerRes2, searchPage: 0, searchResultMode: "offers" };
-          biz.sessionState = "ready";
-          await saveBizSafe(biz);
-          const _rows2 = formatSupplierOfferResults(_offerRes2.slice(0, 9));
-          if (_offerRes2.length > 9) _rows2.push({ id: "sup_search_next_page", title: `➡ More results (${_offerRes2.length - 9} more)` });
-          return sendList(from, `🔍 *${_prod2}* in ${_label2} - ${_offerRes2.length} found`, _rows2);
-        }
-        const _res2 = await runSupplierSearch({ city: _city2, product: _prod2, area: _area2 });
-        if (_res2.length) {
-          biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod2, city: _city2 } };
-          biz.sessionState = "ready";
-          await saveBizSafe(biz);
-          return sendList(from, `🔍 *${_prod2}* in ${_label2} - ${_res2.length} found`, formatSupplierResults(_res2.slice(0,9), _city2, _prod2));
-        }
-        return sendButtons(from, {
-          text: `😕 No results for *${_prod2}* in *${_label2}*.\n\nTry all of Zimbabwe?`,
-          buttons: [{ id: "sup_search_city_all", title: "📍 Search All Cities" }, { id: "find_supplier", title: "🔍 Search Again" }]
-        });
-      }
-    }
-    // Genuinely no city — ask for it
+    // No city at all - ask for it
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: shortcode.product }
@@ -4248,26 +4190,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       });
     }
 
-    // shortcode parsed but no city — re-attempt with "find " prefix as rescue
-    {
-      const _rc = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
-      if (_rc && (_rc.city || _rc.area)) {
-        const _rcProd = String(_rc.product || cleanProduct).toLowerCase().trim();
-        const _rcLabel = _rc.area ? `${_rc.area}, ${_rc.city}` : _rc.city;
-        const _rcOff = await runSupplierOfferSearch({ city: _rc.city, product: _rcProd, area: _rc.area });
-        if (_rcOff.length) {
-          biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-          const _rcRows = formatSupplierOfferResults(_rcOff.slice(0,9));
-          if (_rcOff.length>9) _rcRows.push({id:"sup_search_next_page",title:`➡ More results (${_rcOff.length-9} more)`});
-          return sendList(from, `🔍 *${_rcProd}* in ${_rcLabel} - ${_rcOff.length} found`, _rcRows);
-        }
-        const _rcRes = await runSupplierSearch({ city: _rc.city, product: _rcProd, area: _rc.area });
-        if (_rcRes.length) {
-          biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-          return sendList(from, `🔍 *${_rcProd}* in ${_rcLabel} - ${_rcRes.length} found`, formatSupplierResults(_rcRes.slice(0,9), _rc.city, _rcProd));
-        }
-      }
-    }
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: cleanProduct }
@@ -4283,24 +4205,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 
   const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
   if (productQuery.length > 1) {
-    // Raw text typed in city state — try parsing as a full shortcode search first
-    const _rawParse = parseShortcodeSearch(`find ${productQuery}`) || parseShortcodeSearch(productQuery);
-    if (_rawParse && (_rawParse.city || _rawParse.area)) {
-      const _rProd = String(_rawParse.product || productQuery).toLowerCase().trim();
-      const _rLabel = _rawParse.area ? `${_rawParse.area}, ${_rawParse.city}` : _rawParse.city;
-      const _rOff = await runSupplierOfferSearch({ city: _rawParse.city, product: _rProd, area: _rawParse.area });
-      if (_rOff.length) {
-        biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-        const _rRows = formatSupplierOfferResults(_rOff.slice(0,9));
-        if (_rOff.length>9) _rRows.push({id:"sup_search_next_page",title:`➡ More results (${_rOff.length-9} more)`});
-        return sendList(from, `🔍 *${_rProd}* in ${_rLabel} - ${_rOff.length} found`, _rRows);
-      }
-      const _rRes = await runSupplierSearch({ city: _rawParse.city, product: _rProd, area: _rawParse.area });
-      if (_rRes.length) {
-        biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-        return sendList(from, `🔍 *${_rProd}* in ${_rLabel} - ${_rRes.length} found`, formatSupplierResults(_rRes.slice(0,9), _rawParse.city, _rProd));
-      }
-    }
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: productQuery }
