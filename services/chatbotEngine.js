@@ -4212,7 +4212,23 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         biz.sessionState = "ready";
         biz.sessionData = {};
         await saveBizSafe(biz);
+    const offerResults2 = await runSupplierOfferSearch({
+          city: shortcode.city || null,
+          product: cleanProduct,
+          area: shortcode.area || null
+        });
+        if (offerResults2.length) {
+          biz.sessionState = "ready";
+          biz.sessionData = {};
+          await saveBizSafe(biz);
+          const rows2 = formatSupplierOfferResults(offerResults2.slice(0, 9));
+          if (offerResults2.length > 9) rows2.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults2.length - 9} more)` });
+          return sendList(from, `🔍 *${cleanProduct}* in ${shortcode.city || shortcode.area} - ${offerResults2.length} found`, rows2);
+        }
         const rows = formatSupplierResults(results, shortcode.city || shortcode.area || "", cleanProduct);
+        biz.sessionState = "ready";
+        biz.sessionData = {};
+        await saveBizSafe(biz);
         return sendList(
           from,
           `🔍 *${cleanProduct}*${shortcode.city ? ` in ${shortcode.city}` : ""} - ${results.length} found`,

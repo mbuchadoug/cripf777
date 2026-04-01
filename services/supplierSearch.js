@@ -474,9 +474,10 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 
   if (!supplier) return offers;
 
-  // ── SERVICE SUPPLIERS ────────────────────────────────────────────────────────
+  // ── SERVICE SUPPLIERS ──────────────────────────────────────────────────
   if (supplier.profileType === "service") {
-    // 1. Try rates[] first (has prices set)
+
+    // 1. Use rates[] if the supplier has set prices
     for (const rate of (supplier.rates || [])) {
       const serviceName = String(rate?.service || "").trim();
       const rawRate = String(rate?.rate || "").trim();
@@ -508,19 +509,22 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       });
     }
 
-    // 2. Fallback to products[] when no rates set yet — bypass term matching because
-    //    runSupplierSearch already confirmed this supplier matches the search query.
+    // 2. No rates set yet — show every item from products[] and listedProducts[]
+    //    Skip the search-term match check: runSupplierSearch already confirmed
+    //    this supplier is relevant to the query.
     if (offers.length === 0) {
-      const serviceItems = [
+      const seen2 = new Set();
+      const allServiceItems = [
         ...(supplier.listedProducts || []),
         ...(supplier.products || [])
-      ].filter(p => p && p !== "pending_upload" && normalizeProductName(p));
-
-      for (const svcName of serviceItems) {
+      ];
+      for (const svcName of allServiceItems) {
+        if (!svcName || svcName === "pending_upload") continue;
         const cleanSvc = String(svcName).trim();
-        const dedupeKey = `${supplier._id}:${normalizeProductName(cleanSvc)}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
+        const norm = normalizeProductName(cleanSvc);
+        if (!norm) continue;
+        if (seen2.has(norm)) continue;
+        seen2.add(norm);
 
         offers.push({
           supplierId: String(supplier._id),
@@ -544,7 +548,7 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     return offers;
   }
 
-  // ── PRODUCT SUPPLIERS ────────────────────────────────────────────────────────
+  // ── PRODUCT SUPPLIERS ──────────────────────────────────────────────────
   const allowedNames = new Set(
     (supplier.listedProducts || [])
       .filter(p => p && p !== "pending_upload")
