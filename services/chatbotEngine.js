@@ -1743,7 +1743,6 @@ if (
     });
   }
 
-  const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const parsed = parseShortcodeSearch(productQuery) ||
     parseShortcodeSearch(`find ${productQuery}`) ||
     { product: productQuery, city: null, area: null };
@@ -1893,7 +1892,6 @@ if (
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState)
 ) {
-  const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
 
   if (shortcode) {
@@ -2036,8 +2034,7 @@ if (
 
     // No city in shortcode — try a fresh parse with expanded input as final rescue
     {
-      const { parseShortcodeSearch: _reparse } = await import("./supplierSearch.js");
-      const _retry = _reparse(`find ${text.trim()}`) || _reparse(text.trim());
+      const _retry = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
       if (_retry && (_retry.city || _retry.area)) {
         const _city = _retry.city || null;
         const _area = _retry.area || null;
