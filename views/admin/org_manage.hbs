@@ -152,7 +152,7 @@
     .hdr-badge.other  { background:var(--blue-bg); color:var(--blue-dk); }
 
     /* ═══ PAGE BODY ═══ */
-    .page { padding:28px; display:none; flex-direction:column; gap:22px; overflow-x:hidden; }
+    .page { padding:28px; display:none; flex-direction:column; gap:22px; overflow-x:hidden; box-sizing:border-box; width:100%; }
     .page.active { display:flex; }
 
     /* ═══ STAT CARDS ═══ */
@@ -618,160 +618,274 @@
 
 
     /* ═══════════════════════════════════════════════════
-       CLASSIFICATION MANAGER — Fixed sidebar + scrollable list
+       CLASSIFICATION MANAGER
+       Key principles:
+       • The card is 100% of the content column — no horizontal overflow
+       • clf-shell is a fixed-height flex row inside the card
+       • LEFT sidebar never scrolls with the quiz list
+       • ONLY clf-list scrolls vertically
+       • Edit button is ALWAYS visible — never pushed off screen
+       • Mobile: sidebar becomes horizontal swipeable pill strip
     ═══════════════════════════════════════════════════ */
 
-    /* Outer shell: fixed total height so inner parts scroll */
-    .clf-shell {
-      display:flex; gap:0;
-      height:calc(100vh - 200px); /* fill remaining viewport */
-      min-height:480px;
-      max-height:900px;
-      border:1px solid var(--border);
-      border-radius:var(--r-lg);
+    /* page-classify: no extra padding needed, card fills width */
+    #page-classify {
+      padding:20px;
+      box-sizing:border-box;
+      width:100%;
+      max-width:100%;
+    }
+    #page-classify .card {
+      width:100%;
+      max-width:100%;
+      box-sizing:border-box;
       overflow:hidden;
     }
 
-    /* LEFT SIDEBAR — sticky, never scrolls with the list */
+    /* clf-shell: the two-column layout container
+       Height is set by JS (clfSetShellHeight) — falls back to 70vh */
+    .clf-shell {
+      display:flex;
+      width:100%;
+      max-width:100%;
+      height:70vh;
+      min-height:420px;
+      max-height:860px;
+      overflow:hidden; /* clips both columns cleanly */
+      box-sizing:border-box;
+    }
+
+    /* LEFT SIDEBAR: fixed width, never shrinks, scrolls independently */
     .clf-sidebar {
-      width:200px; flex-shrink:0;
+      width:180px;
+      min-width:180px;
+      max-width:180px;
+      flex-shrink:0;
       background:var(--surface-2);
       border-right:1px solid var(--border);
-      overflow-y:auto;         /* sidebar itself can scroll if pillars overflow */
+      overflow-y:auto;
       overflow-x:hidden;
-      position:sticky;         /* stays put while list scrolls */
-      top:0; align-self:flex-start;
-      height:100%;
+      height:100%; /* fills shell height */
+      box-sizing:border-box;
     }
 
-    /* RIGHT MAIN AREA — column flex so toolbar + list + bulk bar stack */
+    /* RIGHT MAIN: takes all remaining width, clips overflow */
     .clf-main {
-      flex:1; min-width:0;
-      display:flex; flex-direction:column;
+      flex:1;
+      min-width:0; /* CRITICAL — prevents flex child from exceeding parent */
+      max-width:100%;
+      display:flex;
+      flex-direction:column;
       overflow:hidden;
       height:100%;
+      box-sizing:border-box;
     }
 
-    /* TOOLBAR — never scrolls, always visible at top */
+    /* TOOLBAR: fixed height, never scrolls */
     .clf-toolbar {
       flex-shrink:0;
-      display:flex; gap:8px; align-items:center;
-      padding:12px 14px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      padding:10px 12px;
       border-bottom:1px solid var(--border);
       background:var(--surface);
       flex-wrap:wrap;
+      box-sizing:border-box;
+      width:100%;
     }
     .clf-toolbar input {
-      flex:1; min-width:120px;
-      padding:8px 30px 8px 10px;
-      border:1.5px solid var(--border); border-radius:var(--r);
-      font-size:13px; font-family:var(--font);
-      outline:none; transition:border-color .14s;
+      flex:1;
+      min-width:0; /* allows input to shrink */
+      padding:8px 28px 8px 10px;
+      border:1.5px solid var(--border);
+      border-radius:var(--r);
+      font-size:13px;
+      font-family:var(--font);
+      outline:none;
+      transition:border-color .14s;
+      box-sizing:border-box;
     }
-    .clf-toolbar input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-ring); }
+    .clf-toolbar input:focus {
+      border-color:var(--blue);
+      box-shadow:0 0 0 3px var(--blue-ring);
+    }
 
-    /* QUIZ LIST — the ONLY scrolling element */
+    /* QUIZ LIST: THE ONLY ELEMENT THAT SCROLLS VERTICALLY */
     .clf-list {
       flex:1;
       overflow-y:auto;
-      overflow-x:hidden;
+      overflow-x:hidden; /* never horizontal scroll */
       -webkit-overflow-scrolling:touch;
+      width:100%;
+      box-sizing:border-box;
     }
 
-    /* Sidebar filter pills */
+    /* QUIZ ROW: checkbox + info (shrinks/truncates) + Edit (never shrinks) */
+    .clf-row {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border-soft);
+      transition:background .1s;
+      width:100%;
+      box-sizing:border-box;
+      min-width:0; /* prevents row expanding beyond container */
+    }
+    .clf-row:hover  { background:var(--surface-2); }
+    .clf-row.selected { background:var(--blue-bg); }
+
+    /* Checkbox: fixed, never shrinks */
+    .clf-row-chk {
+      flex-shrink:0;
+      width:16px;
+      display:flex;
+      align-items:center;
+    }
+
+    /* Info section: takes remaining space, truncates — NEVER pushes Edit off */
+    .clf-row-info {
+      flex:1;
+      min-width:0; /* THE key rule for truncation without overflow */
+      overflow:hidden;
+    }
+    .clf-row-title {
+      font-size:13px;
+      font-weight:500;
+      color:var(--ink);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      width:100%;
+      display:block;
+    }
+    .clf-row-meta {
+      font-size:11px;
+      color:var(--ink-muted);
+      margin-top:2px;
+      display:flex;
+      gap:4px;
+      flex-wrap:wrap;
+      align-items:center;
+      width:100%;
+    }
+
+    /* Edit button: ALWAYS visible — flex-shrink:0 guarantees it */
+    .clf-row-actions {
+      flex-shrink:0; /* NEVER shrinks, always has its space */
+      display:flex;
+      align-items:center;
+      padding-left:6px;
+    }
+    .clf-edit-btn {
+      display:inline-flex;
+      align-items:center;
+      gap:3px;
+      padding:5px 10px;
+      border-radius:6px;
+      font-size:11.5px;
+      font-weight:600;
+      font-family:var(--font);
+      border:1.5px solid var(--border);
+      background:var(--surface);
+      color:var(--blue);
+      cursor:pointer;
+      white-space:nowrap;
+      flex-shrink:0;
+      transition:all .12s;
+    }
+    .clf-edit-btn:hover {
+      border-color:var(--blue);
+      background:var(--blue-bg);
+      box-shadow:0 2px 6px rgba(37,99,235,.15);
+    }
+
+    /* Sidebar section labels */
     .clf-sb-section {
       padding:10px 12px 4px;
-      font-size:10px; font-weight:700;
-      color:var(--ink-faint); letter-spacing:.06em; text-transform:uppercase;
+      font-size:9.5px;
+      font-weight:700;
+      color:var(--ink-faint);
+      letter-spacing:.06em;
+      text-transform:uppercase;
     }
+
+    /* Sidebar filter buttons */
     .clf-filter {
-      display:flex; align-items:center; gap:8px;
-      padding:8px 12px;
-      font-size:12px; color:var(--ink-soft);
-      cursor:pointer; border:none; background:none;
-      width:100%; text-align:left;
+      display:flex;
+      align-items:center;
+      gap:7px;
+      padding:7px 12px;
+      font-size:12px;
+      color:var(--ink-soft);
+      cursor:pointer;
+      border:none;
+      background:none;
+      width:100%;
+      text-align:left;
       transition:background .1s;
+      box-sizing:border-box;
     }
-    .clf-filter:hover { background:rgba(0,0,0,.04); }
+    .clf-filter:hover  { background:rgba(0,0,0,.04); }
     .clf-filter.active { color:var(--blue); background:var(--blue-bg); font-weight:600; }
-    .clf-filter-count {
-      margin-left:auto; flex-shrink:0;
-      font-size:10.5px; font-weight:700;
-      color:var(--ink-faint); background:var(--canvas);
-      padding:1px 5px; border-radius:99px;
+    .clf-filter-count  {
+      margin-left:auto;
+      flex-shrink:0;
+      font-size:10px;
+      font-weight:700;
+      color:var(--ink-faint);
+      background:var(--canvas);
+      padding:1px 5px;
+      border-radius:99px;
     }
     .clf-filter.active .clf-filter-count { background:var(--blue-bg); color:var(--blue); }
 
-    /* Pillar color dots */
+    /* Pillar colour dot */
     .clf-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 
-    /* ── QUIZ ROWS ──
-       Layout: checkbox | info (flex:1, min-width:0) | Edit button (flex-shrink:0)
-       The info section truncates — Edit button is ALWAYS visible, no horizontal scroll */
-    .clf-row {
-      display:flex; align-items:center; gap:10px;
-      padding:11px 14px;
-      border-bottom:1px solid var(--border-soft);
-      transition:background .1s;
-      min-width:0; /* critical: prevent row from growing wider than container */
-    }
-    .clf-row:hover { background:var(--surface-2); }
-    .clf-row.selected { background:var(--blue-bg); }
-
-    .clf-row-chk { flex-shrink:0; width:16px; }
-
-    .clf-row-info {
-      flex:1; min-width:0; /* allows truncation without pushing Edit off screen */
-    }
-    .clf-row-title {
-      font-size:13px; font-weight:500; color:var(--ink);
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      max-width:100%;
-    }
-    .clf-row-meta {
-      font-size:11px; color:var(--ink-muted);
-      margin-top:3px; display:flex; gap:5px; flex-wrap:wrap; align-items:center;
-    }
-
-    /* Edit button: ALWAYS visible, never pushed off screen */
-    .clf-row-actions {
-      flex-shrink:0; /* never shrinks */
-      margin-left:auto;
-      display:flex; gap:6px; align-items:center;
-    }
-    .clf-edit-btn {
-      display:inline-flex; align-items:center; gap:4px;
-      padding:5px 10px; border-radius:6px;
-      font-size:11.5px; font-weight:600; font-family:var(--font);
-      border:1.5px solid var(--border); background:var(--surface);
-      color:var(--ink-soft); cursor:pointer; white-space:nowrap;
-      transition:all .12s; flex-shrink:0;
-    }
-    .clf-edit-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
-
     /* Badges */
-    .clf-badge { font-size:10px; font-weight:600; padding:2px 6px; border-radius:99px; white-space:nowrap; flex-shrink:0; }
-    .clf-badge-cat { background:var(--violet-bg); color:var(--violet); }
+    .clf-badge {
+      font-size:10px; font-weight:600;
+      padding:1px 6px; border-radius:99px;
+      white-space:nowrap; flex-shrink:0;
+    }
+    .clf-badge-cat  { background:var(--violet-bg); color:var(--violet); }
     .clf-badge-none { background:var(--canvas); color:var(--ink-faint); border:1px solid var(--border); }
     .clf-badge-lock { background:var(--amber-bg); color:var(--amber); }
-    .clf-badge-oos { background:var(--rose-bg); color:var(--rose); }
+    .clf-badge-oos  { background:var(--rose-bg); color:var(--rose); }
     .clf-badge-conf { background:var(--emerald-bg); color:var(--emerald); }
 
-    /* BULK ACTION BAR — sticky at bottom, above clf-list scroll */
+    /* BULK ACTION BAR: fixed at bottom of clf-main */
     .clf-bulk-bar {
-      display:none; flex-shrink:0;
-      align-items:center; gap:8px;
-      padding:10px 14px;
+      display:none;
+      flex-shrink:0;
+      align-items:center;
+      gap:8px;
+      padding:9px 12px;
       background:var(--blue-bg);
       border-top:1px solid #bfdbfe;
       flex-wrap:wrap;
+      width:100%;
+      box-sizing:border-box;
     }
     .clf-bulk-bar.visible { display:flex; }
-    .clf-bulk-label { font-size:12.5px; font-weight:700; color:var(--blue); white-space:nowrap; }
-    .clf-bulk-bar select { font-size:12px; padding:6px 8px; border:1.5px solid var(--border); border-radius:var(--r); font-family:var(--font); }
+    .clf-bulk-label {
+      font-size:12px; font-weight:700; color:var(--blue); white-space:nowrap;
+    }
+    .clf-bulk-bar select {
+      font-size:12px; padding:5px 8px;
+      border:1.5px solid var(--border);
+      border-radius:var(--r);
+      font-family:var(--font);
+    }
 
-    /* CLASSIFICATION PANEL — full-height right drawer */
-    .clf-panel-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:500; display:none; }
+    /* CLASSIFICATION SLIDE-IN PANEL */
+    .clf-panel-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.4);
+      z-index:500; display:none;
+    }
     .clf-panel-overlay.open { display:block; }
     .clf-panel {
       position:fixed; top:0; right:0;
@@ -783,7 +897,8 @@
     }
     .clf-panel.open { transform:translateX(0); }
     .clf-panel-hdr {
-      padding:18px 22px 14px; border-bottom:1px solid var(--border);
+      padding:18px 22px 14px;
+      border-bottom:1px solid var(--border);
       flex-shrink:0;
     }
     .clf-panel-title { font-size:16px; font-weight:700; color:var(--ink); }
@@ -793,69 +908,85 @@
     }
     .clf-panel-body { flex:1; overflow-y:auto; padding:18px 22px; }
     .clf-panel-footer {
-      padding:14px 22px; border-top:1px solid var(--border);
+      padding:14px 22px;
+      border-top:1px solid var(--border);
       display:flex; gap:10px; flex-shrink:0;
       background:var(--surface-2);
     }
 
-    /* Pillar→Category selects */
+    /* Pillar → Category buttons in panel */
     .clf-pillar-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
-    .clf-cat-list { display:grid; grid-template-columns:1fr; gap:5px; margin-bottom:14px; }
+    .clf-cat-list    { display:grid; grid-template-columns:1fr; gap:5px; margin-bottom:14px; }
     .clf-cat-btn {
-      padding:8px 11px; border:1.5px solid var(--border); border-radius:var(--r);
-      font-size:12.5px; font-family:var(--font); color:var(--ink-soft);
-      background:var(--surface); text-align:left; cursor:pointer; transition:all .12s;
+      padding:8px 11px;
+      border:1.5px solid var(--border); border-radius:var(--r);
+      font-size:12.5px; font-family:var(--font);
+      color:var(--ink-soft); background:var(--surface);
+      text-align:left; cursor:pointer; transition:all .12s;
     }
-    .clf-cat-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
+    .clf-cat-btn:hover    { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
     .clf-cat-btn.selected { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); font-weight:600; }
 
     /* Loading / empty state */
     .clf-loading {
       display:flex; align-items:center; justify-content:center;
-      padding:56px 20px; color:var(--ink-muted); font-size:13px;
+      padding:48px 20px; color:var(--ink-muted); font-size:13px;
       gap:10px; flex-direction:column; text-align:center;
     }
 
-    /* ── MOBILE RESPONSIVE ── */
-    @media(max-width:768px) {
-      /* On mobile: sidebar collapses to a horizontal pill strip at top */
+    /* ─── MOBILE ≤ 768px ─────────────────────────────────
+       Sidebar becomes a horizontal swipeable pill strip     */
+    @media (max-width:768px) {
+      #page-classify { padding:12px; }
+
       .clf-shell {
         flex-direction:column;
-        height:auto; max-height:none;
+        height:auto;
+        max-height:none;
       }
       .clf-sidebar {
-        width:100%; height:auto;
-        border-right:none; border-bottom:1px solid var(--border);
-        display:flex; flex-direction:row;
-        overflow-x:auto; overflow-y:hidden;
+        width:100%;
+        min-width:0;
+        max-width:100%;
+        height:auto;
+        border-right:none;
+        border-bottom:1px solid var(--border);
+        display:flex;
+        flex-direction:row;
+        overflow-x:auto;
+        overflow-y:hidden;
         -webkit-overflow-scrolling:touch;
-        scrollbar-width:none; position:static;
-        padding:8px 10px; gap:4px; flex-wrap:nowrap;
+        scrollbar-width:none;
+        position:static;
+        padding:6px 8px;
+        gap:4px;
+        flex-wrap:nowrap;
       }
       .clf-sidebar::-webkit-scrollbar { display:none; }
-      /* Hide section labels on mobile - too noisy in horizontal strip */
       .clf-sb-section { display:none; }
       .clf-filter {
         white-space:nowrap; flex-shrink:0;
         padding:6px 10px; border-radius:99px; width:auto;
-        border:1.5px solid var(--border); font-size:11.5px;
+        border:1.5px solid var(--border); font-size:11px;
       }
-      .clf-filter.active { border-color:var(--blue); }
-      .clf-filter-count { font-size:10px; }
-      /* List gets a fixed max-height on mobile */
-      .clf-list { max-height:60vh; }
-      /* Row adjustments — Edit still always visible */
-      .clf-row { padding:10px 12px; gap:8px; }
-      .clf-row-title { font-size:12.5px; }
-      .clf-row-meta { font-size:10.5px; gap:4px; }
-      .clf-edit-btn { padding:5px 9px; font-size:11px; }
-      /* Bulk bar wraps cleanly */
+      .clf-filter.active { border-color:var(--blue); background:var(--blue-bg); }
+      .clf-filter-count { font-size:9.5px; }
+      .clf-main { height:auto; }
+      .clf-list { max-height:55vh; overflow-y:auto; }
+      .clf-row { padding:9px 10px; gap:7px; }
+      .clf-row-title { font-size:12px; }
+      .clf-row-meta { font-size:10px; gap:3px; }
+      .clf-edit-btn { padding:5px 8px; font-size:11px; }
       .clf-bulk-bar { flex-wrap:wrap; gap:6px; }
     }
-    @media(max-width:480px) {
-      /* Very small phones: hide checkbox, show Edit button prominently */
-      .clf-row-chk { display:none; }
-      .clf-row-title { font-size:12px; }
+
+    /* ─── VERY SMALL PHONES ≤ 480px ──────────────────── */
+    @media (max-width:480px) {
+      #page-classify { padding:8px; }
+      .clf-row-chk { display:none; } /* hide checkbox — too cramped */
+      .clf-row-title { font-size:11.5px; }
+      .clf-row { padding:9px 8px; }
+      .clf-list { max-height:50vh; }
     }
   </style>
 </head>
@@ -996,8 +1127,8 @@
          PAGE: CLASSIFY QUIZZES
     ════════════════════════════ -->
     {{#if (or isHomeSchool isCripSchool)}}
-    <section class="page" id="page-classify" style="padding-bottom:28px">
-      <div class="card" style="overflow:hidden">
+    <section class="page" id="page-classify">
+      <div class="card" style="overflow:hidden;width:100%;box-sizing:border-box">
         <!-- Card header: title + status badge + refresh -->
         <div class="card-hdr" style="flex-shrink:0">
           <div style="flex:1;min-width:0">
@@ -2886,16 +3017,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Dynamically set clf-shell height based on available viewport
+  // Set clf-shell height to fill available viewport below the card header
   function clfSetShellHeight() {
     const shell = document.querySelector('.clf-shell');
     if (!shell) return;
+    if (window.innerWidth <= 768) {
+      // On mobile clf-shell is auto height — remove any fixed height
+      shell.style.height = '';
+      return;
+    }
     const rect = shell.getBoundingClientRect();
-    const available = window.innerHeight - rect.top - 20; // 20px breathing room
-    const clamped = Math.max(400, Math.min(available, 880));
+    const viewportH = window.innerHeight;
+    const topOffset = rect.top;
+    // 32px bottom breathing room so page doesn't look cramped
+    const available = viewportH - topOffset - 32;
+    const clamped = Math.max(420, Math.min(available, 860));
     shell.style.height = clamped + 'px';
   }
-  window.addEventListener('resize', clfSetShellHeight);
+  window.addEventListener('resize', () => {
+    clearTimeout(window._clfResizeTimer);
+    window._clfResizeTimer = setTimeout(clfSetShellHeight, 60);
+  });
 
   // ── Public API (called by inline onclick) ──
   window.clfReload        = clfReload;
