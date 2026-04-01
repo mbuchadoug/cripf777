@@ -152,7 +152,7 @@
     .hdr-badge.other  { background:var(--blue-bg); color:var(--blue-dk); }
 
     /* ═══ PAGE BODY ═══ */
-    .page { padding:28px; display:none; flex-direction:column; gap:22px; }
+    .page { padding:28px; display:none; flex-direction:column; gap:22px; overflow-x:hidden; }
     .page.active { display:flex; }
 
     /* ═══ STAT CARDS ═══ */
@@ -617,66 +617,246 @@
 
 
 
-    /* ═══ CLASSIFICATION MANAGER ═══ */
-.clf-shell { display:flex; gap:0; min-height:600px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
-.clf-sidebar { width:220px; flex-shrink:0; background:var(--surface-2); border-right:1px solid var(--border); overflow-y:auto; }
-.clf-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.clf-toolbar { display:flex; gap:8px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-.clf-toolbar input { flex:1; min-width:160px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--r); font-size:13px; font-family:var(--font); }
-.clf-list { flex:1; overflow-y:auto; }
+    /* ═══════════════════════════════════════════════════
+       CLASSIFICATION MANAGER — Fixed sidebar + scrollable list
+    ═══════════════════════════════════════════════════ */
 
-/* Sidebar filter pills */
-.clf-sb-section { padding:10px 14px 4px; font-size:10.5px; font-weight:700; color:var(--ink-faint); letter-spacing:.06em; text-transform:uppercase; }
-.clf-filter { display:flex; align-items:center; gap:8px; padding:8px 14px; font-size:12.5px; color:var(--ink-soft); cursor:pointer; border:none; background:none; width:100%; text-align:left; transition:background .1s; }
-.clf-filter:hover { background:var(--border-soft); }
-.clf-filter.active { color:var(--blue); background:var(--blue-bg); font-weight:600; }
-.clf-filter-count { margin-left:auto; font-size:11px; font-weight:700; color:var(--ink-faint); background:var(--canvas); padding:1px 6px; border-radius:99px; }
-.clf-filter.active .clf-filter-count { background:var(--blue-bg); color:var(--blue); }
+    /* Outer shell: fixed total height so inner parts scroll */
+    .clf-shell {
+      display:flex; gap:0;
+      height:calc(100vh - 200px); /* fill remaining viewport */
+      min-height:480px;
+      max-height:900px;
+      border:1px solid var(--border);
+      border-radius:var(--r-lg);
+      overflow:hidden;
+    }
 
-/* Pillar color dots */
-.clf-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    /* LEFT SIDEBAR — sticky, never scrolls with the list */
+    .clf-sidebar {
+      width:200px; flex-shrink:0;
+      background:var(--surface-2);
+      border-right:1px solid var(--border);
+      overflow-y:auto;         /* sidebar itself can scroll if pillars overflow */
+      overflow-x:hidden;
+      position:sticky;         /* stays put while list scrolls */
+      top:0; align-self:flex-start;
+      height:100%;
+    }
 
-/* Quiz rows */
-.clf-row { display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border-soft); cursor:pointer; transition:background .1s; }
-.clf-row:hover { background:var(--surface-2); }
-.clf-row.selected { background:var(--blue-bg); }
-.clf-row-chk { flex-shrink:0; }
-.clf-row-info { flex:1; min-width:0; }
-.clf-row-title { font-size:13px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.clf-row-meta { font-size:11.5px; color:var(--ink-muted); margin-top:2px; display:flex; gap:6px; flex-wrap:wrap; }
-.clf-row-actions { flex-shrink:0; display:flex; gap:6px; }
-.clf-badge { font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px; white-space:nowrap; }
-.clf-badge-cat { background:var(--violet-bg); color:var(--violet); }
-.clf-badge-none { background:var(--canvas); color:var(--ink-faint); border:1px solid var(--border); }
-.clf-badge-lock { background:var(--amber-bg); color:var(--amber); }
-.clf-badge-oos { background:var(--rose-bg); color:var(--rose); }
-.clf-badge-conf { background:var(--emerald-bg); color:var(--emerald); }
+    /* RIGHT MAIN AREA — column flex so toolbar + list + bulk bar stack */
+    .clf-main {
+      flex:1; min-width:0;
+      display:flex; flex-direction:column;
+      overflow:hidden;
+      height:100%;
+    }
 
-/* Bulk action bar */
-.clf-bulk-bar { display:none; align-items:center; gap:10px; padding:10px 16px; background:var(--blue-bg); border-top:1px solid var(--border); flex-wrap:wrap; }
-.clf-bulk-bar.visible { display:flex; }
-.clf-bulk-label { font-size:13px; font-weight:600; color:var(--blue); }
+    /* TOOLBAR — never scrolls, always visible at top */
+    .clf-toolbar {
+      flex-shrink:0;
+      display:flex; gap:8px; align-items:center;
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+      flex-wrap:wrap;
+    }
+    .clf-toolbar input {
+      flex:1; min-width:120px;
+      padding:8px 30px 8px 10px;
+      border:1.5px solid var(--border); border-radius:var(--r);
+      font-size:13px; font-family:var(--font);
+      outline:none; transition:border-color .14s;
+    }
+    .clf-toolbar input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-ring); }
 
-/* Classification panel (right drawer-like) */
-.clf-panel-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:500; display:none; }
-.clf-panel-overlay.open { display:block; }
-.clf-panel { position:fixed; top:0; right:0; width:420px; max-width:95vw; height:100vh; background:var(--surface); box-shadow:var(--slg); z-index:501; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .22s cubic-bezier(.4,0,.2,1); }
-.clf-panel.open { transform:translateX(0); }
-.clf-panel-hdr { padding:20px 22px 16px; border-bottom:1px solid var(--border); }
-.clf-panel-title { font-size:16px; font-weight:700; color:var(--ink); }
-.clf-panel-sub { font-size:12.5px; color:var(--ink-muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.clf-panel-body { flex:1; overflow-y:auto; padding:20px 22px; }
-.clf-panel-footer { padding:16px 22px; border-top:1px solid var(--border); display:flex; gap:10px; }
+    /* QUIZ LIST — the ONLY scrolling element */
+    .clf-list {
+      flex:1;
+      overflow-y:auto;
+      overflow-x:hidden;
+      -webkit-overflow-scrolling:touch;
+    }
 
-/* Pillar→Category cascading selects */
-.clf-pillar-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
-.clf-cat-list { display:grid; grid-template-columns:1fr; gap:6px; margin-bottom:16px; }
-.clf-cat-btn { padding:9px 12px; border:1.5px solid var(--border); border-radius:var(--r); font-size:13px; font-family:var(--font); color:var(--ink-soft); background:var(--surface); text-align:left; cursor:pointer; transition:all .12s; }
-.clf-cat-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
-.clf-cat-btn.selected { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); font-weight:600; }
+    /* Sidebar filter pills */
+    .clf-sb-section {
+      padding:10px 12px 4px;
+      font-size:10px; font-weight:700;
+      color:var(--ink-faint); letter-spacing:.06em; text-transform:uppercase;
+    }
+    .clf-filter {
+      display:flex; align-items:center; gap:8px;
+      padding:8px 12px;
+      font-size:12px; color:var(--ink-soft);
+      cursor:pointer; border:none; background:none;
+      width:100%; text-align:left;
+      transition:background .1s;
+    }
+    .clf-filter:hover { background:rgba(0,0,0,.04); }
+    .clf-filter.active { color:var(--blue); background:var(--blue-bg); font-weight:600; }
+    .clf-filter-count {
+      margin-left:auto; flex-shrink:0;
+      font-size:10.5px; font-weight:700;
+      color:var(--ink-faint); background:var(--canvas);
+      padding:1px 5px; border-radius:99px;
+    }
+    .clf-filter.active .clf-filter-count { background:var(--blue-bg); color:var(--blue); }
 
-/* Loading state */
-.clf-loading { display:flex; align-items:center; justify-content:center; padding:48px 20px; color:var(--ink-muted); font-size:13px; gap:10px; }
+    /* Pillar color dots */
+    .clf-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+    /* ── QUIZ ROWS ──
+       Layout: checkbox | info (flex:1, min-width:0) | Edit button (flex-shrink:0)
+       The info section truncates — Edit button is ALWAYS visible, no horizontal scroll */
+    .clf-row {
+      display:flex; align-items:center; gap:10px;
+      padding:11px 14px;
+      border-bottom:1px solid var(--border-soft);
+      transition:background .1s;
+      min-width:0; /* critical: prevent row from growing wider than container */
+    }
+    .clf-row:hover { background:var(--surface-2); }
+    .clf-row.selected { background:var(--blue-bg); }
+
+    .clf-row-chk { flex-shrink:0; width:16px; }
+
+    .clf-row-info {
+      flex:1; min-width:0; /* allows truncation without pushing Edit off screen */
+    }
+    .clf-row-title {
+      font-size:13px; font-weight:500; color:var(--ink);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      max-width:100%;
+    }
+    .clf-row-meta {
+      font-size:11px; color:var(--ink-muted);
+      margin-top:3px; display:flex; gap:5px; flex-wrap:wrap; align-items:center;
+    }
+
+    /* Edit button: ALWAYS visible, never pushed off screen */
+    .clf-row-actions {
+      flex-shrink:0; /* never shrinks */
+      margin-left:auto;
+      display:flex; gap:6px; align-items:center;
+    }
+    .clf-edit-btn {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:5px 10px; border-radius:6px;
+      font-size:11.5px; font-weight:600; font-family:var(--font);
+      border:1.5px solid var(--border); background:var(--surface);
+      color:var(--ink-soft); cursor:pointer; white-space:nowrap;
+      transition:all .12s; flex-shrink:0;
+    }
+    .clf-edit-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
+
+    /* Badges */
+    .clf-badge { font-size:10px; font-weight:600; padding:2px 6px; border-radius:99px; white-space:nowrap; flex-shrink:0; }
+    .clf-badge-cat { background:var(--violet-bg); color:var(--violet); }
+    .clf-badge-none { background:var(--canvas); color:var(--ink-faint); border:1px solid var(--border); }
+    .clf-badge-lock { background:var(--amber-bg); color:var(--amber); }
+    .clf-badge-oos { background:var(--rose-bg); color:var(--rose); }
+    .clf-badge-conf { background:var(--emerald-bg); color:var(--emerald); }
+
+    /* BULK ACTION BAR — sticky at bottom, above clf-list scroll */
+    .clf-bulk-bar {
+      display:none; flex-shrink:0;
+      align-items:center; gap:8px;
+      padding:10px 14px;
+      background:var(--blue-bg);
+      border-top:1px solid #bfdbfe;
+      flex-wrap:wrap;
+    }
+    .clf-bulk-bar.visible { display:flex; }
+    .clf-bulk-label { font-size:12.5px; font-weight:700; color:var(--blue); white-space:nowrap; }
+    .clf-bulk-bar select { font-size:12px; padding:6px 8px; border:1.5px solid var(--border); border-radius:var(--r); font-family:var(--font); }
+
+    /* CLASSIFICATION PANEL — full-height right drawer */
+    .clf-panel-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:500; display:none; }
+    .clf-panel-overlay.open { display:block; }
+    .clf-panel {
+      position:fixed; top:0; right:0;
+      width:440px; max-width:100vw; height:100vh;
+      background:var(--surface); box-shadow:var(--slg);
+      z-index:501; display:flex; flex-direction:column;
+      transform:translateX(100%);
+      transition:transform .22s cubic-bezier(.4,0,.2,1);
+    }
+    .clf-panel.open { transform:translateX(0); }
+    .clf-panel-hdr {
+      padding:18px 22px 14px; border-bottom:1px solid var(--border);
+      flex-shrink:0;
+    }
+    .clf-panel-title { font-size:16px; font-weight:700; color:var(--ink); }
+    .clf-panel-sub {
+      font-size:12px; color:var(--ink-muted); margin-top:3px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .clf-panel-body { flex:1; overflow-y:auto; padding:18px 22px; }
+    .clf-panel-footer {
+      padding:14px 22px; border-top:1px solid var(--border);
+      display:flex; gap:10px; flex-shrink:0;
+      background:var(--surface-2);
+    }
+
+    /* Pillar→Category selects */
+    .clf-pillar-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+    .clf-cat-list { display:grid; grid-template-columns:1fr; gap:5px; margin-bottom:14px; }
+    .clf-cat-btn {
+      padding:8px 11px; border:1.5px solid var(--border); border-radius:var(--r);
+      font-size:12.5px; font-family:var(--font); color:var(--ink-soft);
+      background:var(--surface); text-align:left; cursor:pointer; transition:all .12s;
+    }
+    .clf-cat-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
+    .clf-cat-btn.selected { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); font-weight:600; }
+
+    /* Loading / empty state */
+    .clf-loading {
+      display:flex; align-items:center; justify-content:center;
+      padding:56px 20px; color:var(--ink-muted); font-size:13px;
+      gap:10px; flex-direction:column; text-align:center;
+    }
+
+    /* ── MOBILE RESPONSIVE ── */
+    @media(max-width:768px) {
+      /* On mobile: sidebar collapses to a horizontal pill strip at top */
+      .clf-shell {
+        flex-direction:column;
+        height:auto; max-height:none;
+      }
+      .clf-sidebar {
+        width:100%; height:auto;
+        border-right:none; border-bottom:1px solid var(--border);
+        display:flex; flex-direction:row;
+        overflow-x:auto; overflow-y:hidden;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none; position:static;
+        padding:8px 10px; gap:4px; flex-wrap:nowrap;
+      }
+      .clf-sidebar::-webkit-scrollbar { display:none; }
+      /* Hide section labels on mobile - too noisy in horizontal strip */
+      .clf-sb-section { display:none; }
+      .clf-filter {
+        white-space:nowrap; flex-shrink:0;
+        padding:6px 10px; border-radius:99px; width:auto;
+        border:1.5px solid var(--border); font-size:11.5px;
+      }
+      .clf-filter.active { border-color:var(--blue); }
+      .clf-filter-count { font-size:10px; }
+      /* List gets a fixed max-height on mobile */
+      .clf-list { max-height:60vh; }
+      /* Row adjustments — Edit still always visible */
+      .clf-row { padding:10px 12px; gap:8px; }
+      .clf-row-title { font-size:12.5px; }
+      .clf-row-meta { font-size:10.5px; gap:4px; }
+      .clf-edit-btn { padding:5px 9px; font-size:11px; }
+      /* Bulk bar wraps cleanly */
+      .clf-bulk-bar { flex-wrap:wrap; gap:6px; }
+    }
+    @media(max-width:480px) {
+      /* Very small phones: hide checkbox, show Edit button prominently */
+      .clf-row-chk { display:none; }
+      .clf-row-title { font-size:12px; }
+    }
   </style>
 </head>
 <body data-org-slug="{{org.slug}}">
@@ -816,111 +996,129 @@
          PAGE: CLASSIFY QUIZZES
     ════════════════════════════ -->
     {{#if (or isHomeSchool isCripSchool)}}
-    <section class="page" id="page-classify">
-      <div class="card" style="overflow:visible">
-        <div class="card-hdr">
-          <div>
+    <section class="page" id="page-classify" style="padding-bottom:28px">
+      <div class="card" style="overflow:hidden">
+        <!-- Card header: title + status badge + refresh -->
+        <div class="card-hdr" style="flex-shrink:0">
+          <div style="flex:1;min-width:0">
             <div class="card-hdr-title">🏷️ Quiz Classification Manager</div>
-            <div class="card-hdr-sub">Assign or reassign quizzes to pillars and categories shown in the dashboard carousel</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span id="clf-status-badge" style="font-size:12px;color:var(--ink-muted)"></span>
-            <button class="btn btn-o btn-sm" onclick="clfReload()">↻ Refresh</button>
-          </div>
-        </div>
-        <div class="card-body" style="padding:0">
-          <div class="clf-shell">
-            <div class="clf-sidebar">
-              <div class="clf-sb-section">Show</div>
-              <button class="clf-filter active" id="clf-f-all" onclick="clfSetFilter('all')">
-                <span>📋</span> All Quizzes
-                <span class="clf-filter-count" id="clf-count-all">—</span>
-              </button>
-              <button class="clf-filter" id="clf-f-unclassified" onclick="clfSetFilter('unclassified')">
-                <span>⚠️</span> Unclassified
-                <span class="clf-filter-count" id="clf-count-unclassified" style="background:var(--rose-bg);color:var(--rose)">{{unclassifiedCount}}</span>
-              </button>
-              <button class="clf-filter" id="clf-f-locked" onclick="clfSetFilter('locked')">
-                <span>🔒</span> Manual Locks
-                <span class="clf-filter-count" id="clf-count-locked">—</span>
-              </button>
-              <div class="clf-sb-section" style="margin-top:8px">Pillar</div>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','consciousness')">
-                <span class="clf-dot" style="background:#7c3aed"></span> Consciousness
-                <span class="clf-filter-count" id="clf-p-consciousness">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','responsibility')">
-                <span class="clf-dot" style="background:#0d9488"></span> Responsibility
-                <span class="clf-filter-count" id="clf-p-responsibility">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','interpretation')">
-                <span class="clf-dot" style="background:#4f46e5"></span> Interpretation
-                <span class="clf-filter-count" id="clf-p-interpretation">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','purpose')">
-                <span class="clf-dot" style="background:#d97706"></span> Purpose
-                <span class="clf-filter-count" id="clf-p-purpose">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','frequencies')">
-                <span class="clf-dot" style="background:#e11d48"></span> Frequencies
-                <span class="clf-filter-count" id="clf-p-frequencies">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','civilization')">
-                <span class="clf-dot" style="background:#059669"></span> Civilization
-                <span class="clf-filter-count" id="clf-p-civilization">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','negotiation')">
-                <span class="clf-dot" style="background:#ea580c"></span> Negotiation
-                <span class="clf-filter-count" id="clf-p-negotiation">—</span>
-              </button>
-              <button class="clf-filter" onclick="clfSetFilter('pillar','technology')">
-                <span class="clf-dot" style="background:#2563eb"></span> Technology
-                <span class="clf-filter-count" id="clf-p-technology">—</span>
-              </button>
-            </div>
-            <div class="clf-main">
-              <div class="clf-toolbar">
-                <div style="display:flex;flex:1;min-width:160px;position:relative">
-                  <input type="text" id="clf-search" placeholder="Search quiz titles…"
-                    oninput="clfSearch(this.value)"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();clfSearchNow();}"
-                    style="flex:1;padding-right:32px">
-                  <button id="clf-search-clear" onclick="clfSearchClear()" title="Clear search"
-                    style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
-                    border:none;background:none;cursor:pointer;font-size:14px;color:var(--ink-muted);padding:4px">✕</button>
-                </div>
-                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-muted);cursor:pointer;white-space:nowrap">
-                  <input type="checkbox" id="clf-select-all" onchange="clfToggleAll(this.checked)">
-                  Select all
-                </label>
-                <button class="btn btn-o btn-sm" onclick="clfClearSelection()" id="clf-clear-btn" style="display:none">Clear</button>
-              </div>
-              <div class="clf-list" id="clf-list">
-                <div class="clf-loading">⏳ Loading quizzes…</div>
-              </div>
-              <div class="clf-bulk-bar" id="clf-bulk-bar">
-                <span class="clf-bulk-label" id="clf-bulk-label">0 selected</span>
-                <select id="clf-bulk-pillar" class="fsel" style="font-size:12.5px" onchange="clfBulkPillarChange()">
-                  <option value="">— Select Pillar —</option>
-                  <option value="consciousness">Consciousness</option>
-                  <option value="responsibility">Responsibility</option>
-                  <option value="interpretation">Interpretation</option>
-                  <option value="purpose">Purpose</option>
-                  <option value="frequencies">Frequencies</option>
-                  <option value="civilization">Civilization</option>
-                  <option value="negotiation">Negotiation</option>
-                  <option value="technology">Technology</option>
-                </select>
-                <select id="clf-bulk-category" class="fsel" style="font-size:12.5px" disabled>
-                  <option value="">— Select Category —</option>
-                </select>
-                <button class="btn btn-p btn-sm" onclick="clfBulkApply()" id="clf-bulk-apply-btn" disabled>Apply to Selected</button>
-                <span id="clf-bulk-result" style="font-size:12.5px;color:var(--emerald)"></span>
-              </div>
+            <div class="card-hdr-sub" style="margin-top:2px">
+              <span id="clf-status-badge" style="font-size:12px;color:var(--ink-muted)">Assign or reassign quizzes to pillars and categories</span>
             </div>
           </div>
+          <button class="btn btn-o btn-sm" onclick="clfReload()" style="flex-shrink:0">↻ Refresh</button>
         </div>
-      </div>
+
+        <!-- clf-shell: fixed height, left sidebar + right main area -->
+        <div class="clf-shell">
+
+          <!-- ── LEFT: Pillar filter sidebar (FIXED — never scrolls with list) ── -->
+          <div class="clf-sidebar">
+            <div class="clf-sb-section">Show</div>
+            <button class="clf-filter active" id="clf-f-all" onclick="clfSetFilter('all')">
+              <span>📋</span><span style="flex:1">All</span>
+              <span class="clf-filter-count" id="clf-count-all">—</span>
+            </button>
+            <button class="clf-filter" id="clf-f-unclassified" onclick="clfSetFilter('unclassified')">
+              <span>⚠️</span><span style="flex:1">Unclassified</span>
+              <span class="clf-filter-count" id="clf-count-unclassified" style="background:var(--rose-bg);color:var(--rose)">{{unclassifiedCount}}</span>
+            </button>
+            <button class="clf-filter" id="clf-f-locked" onclick="clfSetFilter('locked')">
+              <span>🔒</span><span style="flex:1">Locked</span>
+              <span class="clf-filter-count" id="clf-count-locked">—</span>
+            </button>
+            <div class="clf-sb-section" style="margin-top:6px">Pillar</div>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','consciousness')">
+              <span class="clf-dot" style="background:#7c3aed"></span><span style="flex:1">Consciousness</span>
+              <span class="clf-filter-count" id="clf-p-consciousness">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','responsibility')">
+              <span class="clf-dot" style="background:#0d9488"></span><span style="flex:1">Responsibility</span>
+              <span class="clf-filter-count" id="clf-p-responsibility">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','interpretation')">
+              <span class="clf-dot" style="background:#4f46e5"></span><span style="flex:1">Interpretation</span>
+              <span class="clf-filter-count" id="clf-p-interpretation">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','purpose')">
+              <span class="clf-dot" style="background:#d97706"></span><span style="flex:1">Purpose</span>
+              <span class="clf-filter-count" id="clf-p-purpose">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','frequencies')">
+              <span class="clf-dot" style="background:#e11d48"></span><span style="flex:1">Frequencies</span>
+              <span class="clf-filter-count" id="clf-p-frequencies">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','civilization')">
+              <span class="clf-dot" style="background:#059669"></span><span style="flex:1">Civilization</span>
+              <span class="clf-filter-count" id="clf-p-civilization">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','negotiation')">
+              <span class="clf-dot" style="background:#ea580c"></span><span style="flex:1">Negotiation</span>
+              <span class="clf-filter-count" id="clf-p-negotiation">—</span>
+            </button>
+            <button class="clf-filter" onclick="clfSetFilter('pillar','technology')">
+              <span class="clf-dot" style="background:#2563eb"></span><span style="flex:1">Technology</span>
+              <span class="clf-filter-count" id="clf-p-technology">—</span>
+            </button>
+          </div>
+
+          <!-- ── RIGHT: Toolbar + scrollable list + bulk bar ── -->
+          <div class="clf-main">
+
+            <!-- Toolbar: always visible, never scrolls -->
+            <div class="clf-toolbar">
+              <!-- Search wrapper with inline clear button -->
+              <div style="flex:1;min-width:120px;position:relative;display:flex">
+                <input type="text" id="clf-search"
+                  placeholder="🔍  Search quiz titles…"
+                  oninput="clfSearch(this.value)"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();clfSearchNow();}">
+                <button id="clf-search-clear" onclick="clfSearchClear()" title="Clear search"
+                  style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                  border:none;background:none;cursor:pointer;font-size:13px;
+                  color:var(--ink-muted);line-height:1;padding:2px 4px">✕</button>
+              </div>
+              <!-- Select-all checkbox -->
+              <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;
+                color:var(--ink-muted);cursor:pointer;white-space:nowrap;flex-shrink:0">
+                <input type="checkbox" id="clf-select-all" onchange="clfToggleAll(this.checked)"
+                  style="accent-color:var(--blue);width:14px;height:14px">
+                All
+              </label>
+              <button class="btn btn-o btn-sm" onclick="clfClearSelection()"
+                id="clf-clear-btn" style="display:none;flex-shrink:0">✕ Clear</button>
+            </div>
+
+            <!-- THE ONLY SCROLLING ELEMENT: quiz list -->
+            <div class="clf-list" id="clf-list">
+              <div class="clf-loading">⏳ Loading quizzes…</div>
+            </div>
+
+            <!-- Bulk action bar: visible only when quizzes are selected -->
+            <div class="clf-bulk-bar" id="clf-bulk-bar">
+              <span class="clf-bulk-label" id="clf-bulk-label">0 selected</span>
+              <select id="clf-bulk-pillar" onchange="clfBulkPillarChange()">
+                <option value="">— Pillar —</option>
+                <option value="consciousness">Consciousness</option>
+                <option value="responsibility">Responsibility</option>
+                <option value="interpretation">Interpretation</option>
+                <option value="purpose">Purpose</option>
+                <option value="frequencies">Frequencies</option>
+                <option value="civilization">Civilization</option>
+                <option value="negotiation">Negotiation</option>
+                <option value="technology">Technology</option>
+              </select>
+              <select id="clf-bulk-category" disabled>
+                <option value="">— Category —</option>
+              </select>
+              <button class="btn btn-p btn-sm" onclick="clfBulkApply()"
+                id="clf-bulk-apply-btn" disabled style="flex-shrink:0">Apply</button>
+              <span id="clf-bulk-result" style="font-size:12px;color:var(--emerald)"></span>
+            </div>
+
+          </div><!-- /clf-main -->
+        </div><!-- /clf-shell -->
+      </div><!-- /card -->
     </section>
     {{/if}}
 
@@ -2679,11 +2877,29 @@ document.addEventListener('DOMContentLoaded', () => {
   const origGotoPage = window.gotoPage;
   window.gotoPage = function(page, el) {
     origGotoPage && origGotoPage(page, el);
-    if (page === 'classify') clfReload();
+    if (page === 'classify') {
+      // Small delay so the section is visible before measuring height
+      setTimeout(() => {
+        clfSetShellHeight();
+        clfReload();
+      }, 30);
+    }
   };
+
+  // Dynamically set clf-shell height based on available viewport
+  function clfSetShellHeight() {
+    const shell = document.querySelector('.clf-shell');
+    if (!shell) return;
+    const rect = shell.getBoundingClientRect();
+    const available = window.innerHeight - rect.top - 20; // 20px breathing room
+    const clamped = Math.max(400, Math.min(available, 880));
+    shell.style.height = clamped + 'px';
+  }
+  window.addEventListener('resize', clfSetShellHeight);
 
   // ── Public API (called by inline onclick) ──
   window.clfReload        = clfReload;
+  window.clfSetShellHeight = clfSetShellHeight;
   window.clfSetFilter     = clfSetFilter;
   window.clfSearch        = clfSearchDebounce;
   window.clfSearchNow     = clfSearchNow;
@@ -2802,18 +3018,23 @@ document.addEventListener('DOMContentLoaded', () => {
       const isChecked = _selected.has(q.id) ? 'checked' : '';
 
       return `<div class="clf-row${_selected.has(q.id)?' selected':''}" id="clfrow-${q.id}">
-        <div class="clf-row-chk"><input type="checkbox" ${isChecked} onchange="clfToggleRow('${q.id}',this.checked)"></div>
+        <div class="clf-row-chk">
+          <input type="checkbox" ${isChecked} onchange="clfToggleRow('${q.id}',this.checked)"
+            style="accent-color:var(--blue);width:14px;height:14px;cursor:pointer">
+        </div>
         <div class="clf-row-info">
           <div class="clf-row-title">${escHtml(q.title)}</div>
           <div class="clf-row-meta">
-            ${pillarDot}${q.pillar ? `<span>${toLabel(q.pillar)}</span>` : ''}
-            ${catBadge} ${lockBadge} ${confBadge}
-            ${q.series ? `<span style="color:var(--ink-faint)">· ${q.series}</span>` : ''}
+            ${pillarDot}${q.pillar ? `<span style="font-weight:500">${toLabel(q.pillar)}</span>` : ''}
+            ${q.pillar && (q.category || lockBadge) ? '<span style="color:var(--border)">·</span>' : ''}
+            ${catBadge} ${lockBadge}
+            ${q.series ? `<span style="color:var(--ink-faint);font-size:10.5px">· ${escHtml(q.series)}</span>` : ''}
           </div>
         </div>
         <div class="clf-row-actions">
-          <button class="btn btn-xs btn-o" onclick="clfOpenPanel('${q.id}','${escAttr(q.title)}','${q.pillar||''}','${q.category||''}','${q.series||''}')">
-            ✏️ Edit
+          <button class="clf-edit-btn"
+            onclick="clfOpenPanel('${q.id}','${escAttr(q.title)}','${q.pillar||''}','${q.category||''}','${q.series||''}')">
+            ✏️ <span class="act-lbl">Edit</span>
           </button>
         </div>
       </div>`;
