@@ -421,11 +421,12 @@ results = results.filter((supplier) => {
     const hasListedProducts = (supplier.listedProducts || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-    // Also accept if they have products[] (set during registration before listedProducts is populated)
     const hasProducts = (supplier.products || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-    return hasRates || hasListedProducts || hasProducts;
+    // Accept service suppliers even if no products/rates are listed yet —
+    // they matched by businessName or category in the DB query, so they are relevant
+    return hasRates || hasListedProducts || hasProducts || true;
   }
 
   return (supplier.listedProducts || []).some(p =>
@@ -518,7 +519,18 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
         ...(supplier.listedProducts || []),
         ...(supplier.products || [])
       ];
-      for (const svcName of allServiceItems) {
+    // Sort: items whose name contains the search term bubble to the top,
+      // so the offer list title shows the most relevant service first.
+      const searchNorm = normalizeProductName(searchTerm || "");
+      const sortedItems = [...allServiceItems].sort((a, b) => {
+        const aNorm = normalizeProductName(a || "");
+        const bNorm = normalizeProductName(b || "");
+        const aMatch = searchNorm && (aNorm.includes(searchNorm) || searchNorm.includes(aNorm)) ? 0 : 1;
+        const bMatch = searchNorm && (bNorm.includes(searchNorm) || searchNorm.includes(bNorm)) ? 0 : 1;
+        return aMatch - bMatch;
+      });
+
+      for (const svcName of sortedItems) {
         if (!svcName || svcName === "pending_upload") continue;
         const cleanSvc = String(svcName).trim();
         const norm = normalizeProductName(cleanSvc);
@@ -683,14 +695,23 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
 
-    let matchHint = "";
-    if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
-      const match = s.rates.find(r => {
-        const serviceName = normalizeProductName(r?.service || "");
-        return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
-      });
-      if (match) matchHint = ` · ${match.service} ${match.rate}`;
-    } else if (normalizedSearchTerm) {
+let matchHint = "";
+if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
+  const match = s.rates.find(r => {
+    const serviceName = normalizeProductName(r?.service || "");
+    return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
+  });
+  if (match) matchHint = ` · ${match.service} ${match.rate}`;
+} else if (normalizedSearchTerm && s.profileType === "service" && !s.rates?.length) {
+  // No rates yet — show a matching product/service name as the hint
+  const allItems = [...(s.listedProducts || []), ...(s.products || [])];
+  const matchedItem = allItems.find(p => {
+    const norm = normalizeProductName(p || "");
+    return norm && (norm.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(norm));
+  });
+  if (matchedItem) matchHint = ` · ${matchedItem}`;
+  else matchHint = ` · ${allItems[0] || ""}`.trimEnd();
+} else if (normalizedSearchTerm) {
       const allowedNames = new Set(
         (s.listedProducts || [])
           .map(p => normalizeProductName(p))
