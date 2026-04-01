@@ -1301,56 +1301,71 @@ _12x2, 15x1, 18x6_`
 async function _sendSupplierCartMenu(from, supplier, cart = []) {
   const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") });
   const focusedItem = sess?.tempData?.selectedSupplierItem || null;
+  const isService = supplier?.profileType === "service";
 
   if (!cart.length) {
     return sendButtons(from, {
-      text: "🛒 Your cart is empty.",
+      text: isService ? "📅 Your booking is empty." : "🛒 Your cart is empty.",
       buttons: [
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Browse Catalogue" },
-        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Supplier" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: isService ? "📚 Browse Services" : "📚 Browse Catalogue" },
+        { id: `sup_catalogue_search_${supplier._id}`, title: isService ? "🔎 Search Services" : "🔎 Search Supplier" },
         { id: "suppliers_home", title: "⬅ Suppliers" }
       ]
     });
   }
 
+  const unitLabel = isService ? "job" : "each";
+
   const rows = cart.slice(0, 5).map(item => ({
     id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(item.product)}`,
     title: `➖ Remove ${item.product}`.slice(0, 72),
     description:
-      `Qty ${item.quantity}` +
+      (isService ? `x${item.quantity} session(s)` : `Qty ${item.quantity}`) +
       (typeof item.pricePerUnit === "number"
-        ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}`
-        : "")
+        ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || unitLabel}`
+        : " • Price on request")
   }));
 
   rows.push({
     id: `sup_cart_confirm_${supplier._id}`,
-    title: supplier.profileType === "service" ? "✅ Confirm & Send Booking" : "✅ Confirm & Send Order"
+    title: isService ? "✅ Confirm & Book" : "✅ Confirm & Send Order"
   });
 
-  rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
-  rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Add More Items" });
-  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
-  rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
+  rows.push({ id: `sup_cart_clear_${supplier._id}`, title: isService ? "🗑 Clear Booking" : "🗑 Clear Cart" });
+  rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: isService ? "➕ Add More Services" : "📚 Add More Items" });
+  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: isService ? "🔎 Search Services" : "🔎 Search This Supplier" });
+  if (!isService) {
+    rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
+  }
 
   const summary = cart
     .map(i => {
-      const price = typeof i.pricePerUnit === "number" ? ` @ $${Number(i.pricePerUnit).toFixed(2)}` : "";
-      return `• ${i.product} x${i.quantity}${price}`;
+      const price = typeof i.pricePerUnit === "number"
+        ? ` @ $${Number(i.pricePerUnit).toFixed(2)}/${i.unit || unitLabel}`
+        : " (price on request)";
+      const qty = isService ? `x${i.quantity} session(s)` : `x${i.quantity}`;
+      return `• ${i.product} ${qty}${price}`;
     })
     .join("\n");
 
   const focusedLine = focusedItem?.product
-    ? `🎯 *Selected now:* ${focusedItem.product}\n\n`
+    ? `🎯 *Selected:* ${focusedItem.product}\n\n`
+    : "";
+
+  const knownTotal = cart
+    .filter(i => typeof i.pricePerUnit === "number")
+    .reduce((s, i) => s + i.quantity * i.pricePerUnit, 0);
+  const totalLine = knownTotal > 0
+    ? `\n💵 *Estimated total: $${knownTotal.toFixed(2)}*`
     : "";
 
   if (rows.length > 10) rows.splice(10);
 
-  return sendList(
-    from,
-    `${focusedLine}🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
-    rows
-  );
+  const header = isService
+    ? `${focusedLine}📅 *Your Booking* (${cart.length} service${cart.length === 1 ? "" : "s"})\n\n${summary}${totalLine}`
+    : `${focusedLine}🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}${totalLine}`;
+
+  return sendList(from, header, rows);
 }
 /**
  * Helper: get caller's effective branchId.

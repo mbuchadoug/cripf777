@@ -503,56 +503,28 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "", extraTe
     });
   };
 
-  if (supplier.profileType === "service") {
-    // First try rates[] (has prices)
-    for (const rate of (supplier.rates || [])) {
-      const serviceName = String(rate?.service || "").trim();
-      const rawRate = String(rate?.rate || "").trim();
-      if (!normalizeProductName(serviceName)) continue;
+if (supplier.profileType === "service") {
+    const rateItems = (supplier.rates || [])
+      .filter(r => normalizeProductName(r?.service || ""))
+      .map(r => ({
+        name: String(r.service).trim(),
+        priceLabel: formatSupplierRateDisplay(r.rate || ""),
+        rawPrice: parseSupplierRateValue(r.rate || ""),
+        unit: parseSupplierRateUnit(r.rate || "") || "job"
+      }));
 
-      const amountMatch = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
-      const amount = amountMatch ? Number(amountMatch[1]) : null;
-      const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
+    if (rateItems.length) return rateItems;
 
-      pushOffer({
-        product: serviceName,
-        price: amount,
-        unit,
-        matchSource: "rates"
-      });
-    }
-
-    // Fallback: products[] (no price, shows "Price on request")
-    if (offers.length === 0) {
-      for (const p of (supplier.products || [])) {
-        const productName = String(p || "").trim();
-        if (!normalizeProductName(productName)) continue;
-        pushOffer({
-          product: productName,
-          price: null,
-          unit: "job",
-          matchSource: "products"
-        });
-      }
-    }
-
-    // Final fallback: listedProducts[]
-    if (offers.length === 0) {
-      for (const p of (supplier.listedProducts || [])) {
-        const productName = String(p || "").trim();
-        if (!normalizeProductName(productName) || productName === "pending_upload") continue;
-        pushOffer({
-          product: productName,
-          price: null,
-          unit: "job",
-          matchSource: "listedProducts"
-        });
-      }
-    }
-
-    return offers;
+    // Fallback: products[] when rates[] is empty (service supplier hasn't set prices yet)
+    return (supplier.products || [])
+      .filter(p => p && normalizeProductName(p))
+      .map(p => ({
+        name: String(p).trim(),
+        priceLabel: "Price on request",
+        rawPrice: null,
+        unit: "job"
+      }));
   }
-
   const allowedNames = new Set(
     (supplier.listedProducts || [])
       .filter(p => p && p !== "pending_upload")
@@ -635,6 +607,23 @@ export function formatSupplierOfferResults(offers = []) {
         : "Price on request";
 
     const locationText = [offer.supplierArea, offer.supplierCity].filter(Boolean).join(", ");
+
+    if (offer.profileType === "service") {
+      // Services: title = business name, description = service + price + location
+      const desc = [
+        offer.product,
+        priceText,
+        locationText ? `📍 ${locationText}` : "",
+        offer.deliveryText || ""
+      ].filter(Boolean).join(" · ");
+      return {
+        id: `sup_offer_pick_${offer.supplierId}_${encodeURIComponent(offer.product)}`,
+        title: `${offer.supplierName}`.slice(0, 72),
+        description: desc.slice(0, 72)
+      };
+    }
+
+    // Products: title = product name, description = supplier + location + price
     const desc = [
       `🏪 ${offer.supplierName}`,
       locationText ? `📍 ${locationText}` : "",
@@ -666,9 +655,9 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
 
-  let matchHint = "";
+let matchHint = "";
     if (s.profileType === "service") {
-      // Try to find a matching rate with a price
+      // Try rated services first
       if (normalizedSearchTerm && s.rates?.length) {
         const match = s.rates.find(r => {
           const serviceName = normalizeProductName(r?.service || "");
@@ -676,7 +665,7 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
         });
         if (match) matchHint = ` · ${match.service} ${match.rate}`;
       }
-      // Fallback: show first 2 services from products[] when rates[] is empty or no match found
+      // Fallback: show first 2 items from products[] when rates[] empty or no match
       if (!matchHint) {
         const serviceList = (s.products || []).filter(Boolean).slice(0, 2).join(", ");
         if (serviceList) matchHint = ` · ${serviceList}`;
@@ -697,8 +686,7 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
       });
 
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
-    }
-    return {
+    } return {
       id: `sup_view_${s._id}`,
       title: `${badge}${s.businessName}`,
       description: `${delivery}${min}${rating}${matchHint}`

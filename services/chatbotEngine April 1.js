@@ -1139,8 +1139,8 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
         `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
         (searchTerm ? ` for *${searchTerm}*.` : "."),
       buttons: [
-        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
+     { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
