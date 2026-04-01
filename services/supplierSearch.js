@@ -823,8 +823,11 @@ function toTitleCase(value = "") {
 }
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
-// Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// Handles: "find cement", "find plumber harare", "find cement mbare",
+//          "find dentist avondale", "find cleaner borrowdale harare",
+//          "find electrician mbare harare"
+// Scans ALL word-window positions so city/suburb can appear anywhere in the
+// phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
   const raw = String(input || "")
     .toLowerCase()
@@ -851,34 +854,58 @@ export function parseShortcodeSearch(input = "") {
 
   let city = null;
   let area = null;
-  let productWords = [...words];
+  let cityStartIdx = -1;
+  let cityLen      = 0;
+  let areaStartIdx = -1;
+  let areaLen      = 0;
 
-  // Step 1: Check last 2 → 1 words for a known CITY name
+  // ── Pass 1: scan ALL positions (longest match first) for a known CITY ──────
+  outer1:
   for (let len = Math.min(2, words.length); len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").trim();
-    if (cityNames.includes(candidate)) {
-      city = toTitleCase(candidate);
-      productWords = words.slice(0, -len);
-      break;
-    }
-  }
-
-  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
-  if (!city) {
-    for (let len = Math.min(3, words.length); len >= 1; len--) {
-      const candidate = words.slice(-len).join(" ").trim();
-      const mappedCity = SUBURB_TO_CITY[candidate];
-      if (mappedCity) {
-        city = mappedCity;
-        area = toTitleCase(candidate);
-        productWords = words.slice(0, -len);
-        break;
+    for (let i = 0; i <= words.length - len; i++) {
+      const candidate = words.slice(i, i + len).join(" ");
+      if (cityNames.includes(candidate)) {
+        city         = toTitleCase(candidate);
+        cityStartIdx = i;
+        cityLen      = len;
+        break outer1;
       }
     }
   }
 
+  // ── Pass 2: scan ALL positions for a known SUBURB ───────────────────────────
+  // Runs regardless of whether a city was found — suburb gives area precision.
+  // If no city was found yet, the suburb's mapped city is used.
+  outer2:
+  for (let len = Math.min(3, words.length); len >= 1; len--) {
+    for (let i = 0; i <= words.length - len; i++) {
+      // Skip the slice already matched as city
+      if (i === cityStartIdx && len === cityLen) continue;
+      const candidate = words.slice(i, i + len).join(" ");
+      const mappedCity = SUBURB_TO_CITY[candidate];
+      if (mappedCity) {
+        area         = toTitleCase(candidate);
+        areaStartIdx = i;
+        areaLen      = len;
+        if (!city) city = mappedCity; // use suburb→city mapping if no explicit city
+        break outer2;
+      }
+    }
+  }
+
+  // ── Remove city + suburb slices from words to build product ─────────────────
+  const removeRanges = [];
+  if (cityStartIdx >= 0) removeRanges.push([cityStartIdx, cityStartIdx + cityLen]);
+  if (areaStartIdx >= 0) removeRanges.push([areaStartIdx, areaStartIdx + areaLen]);
+  removeRanges.sort((a, b) => a[0] - b[0]);
+
+  const productWords = words.filter((_, i) =>
+    !removeRanges.some(([s, e]) => i >= s && i < e)
+  );
+
   const product = productWords.join(" ").trim();
 
+  // If stripping location left nothing, return full raw as product (safe fallback)
   if (!product) {
     return { product: raw, city: null, area: null };
   }
