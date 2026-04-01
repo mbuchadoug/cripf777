@@ -825,88 +825,48 @@ function toTitleCase(value = "") {
 // Scans ALL word-window positions so city/suburb can appear anywhere in the
 // phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
-  const raw = String(input || "")
-    .toLowerCase()
-    .trim()
-    .replace(/^find\s+/i, "")
-    .replace(/^search\s+/i, "")
-    .replace(/^s\s+/i, "")
-    .replace(/\s+/g, " ");
+  // Hardcoded suburb map inside function — works regardless of module scope
+  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pelandaba":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+  const _CITIES = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls"];
 
+  const raw = String(input || "").toLowerCase().trim()
+    .replace(/^find\s+/i, "").replace(/^search\s+/i, "").replace(/^s\s+/i, "").replace(/\s+/g, " ");
   if (!raw) return null;
 
-  const cityNames = SUPPLIER_CITIES
-    .map(c => {
-      if (typeof c === "string") return c.toLowerCase().trim();
-      if (c?.name)  return String(c.name).toLowerCase().trim();
-      if (c?.label) return String(c.label).toLowerCase().trim();
-      if (c?.id)    return String(c.id).toLowerCase().trim();
-      return "";
-    })
-    .filter(Boolean);
+  function _tc(v) { return String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" "); }
 
   const words = raw.split(" ").filter(Boolean);
   if (!words.length) return null;
 
-  let city = null;
-  let area = null;
-  let cityStartIdx = -1;
-  let cityLen      = 0;
-  let areaStartIdx = -1;
-  let areaLen      = 0;
+  let city=null, area=null, cityIdx=-1, cityLen=0, areaIdx=-1, areaLen=0;
 
-  // ── Pass 1: scan ALL positions (longest match first) for a known CITY ──────
-  outer1:
-  for (let len = Math.min(2, words.length); len >= 1; len--) {
-    for (let i = 0; i <= words.length - len; i++) {
-      const candidate = words.slice(i, i + len).join(" ");
-      if (cityNames.includes(candidate)) {
-        city         = toTitleCase(candidate);
-        cityStartIdx = i;
-        cityLen      = len;
-        break outer1;
-      }
+  // Pass 1: find city name anywhere in phrase
+  outer1: for (let len=Math.min(2,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      const c = words.slice(i,i+len).join(" ");
+      if (_CITIES.includes(c)) { city=_tc(c); cityIdx=i; cityLen=len; break outer1; }
     }
   }
 
-  // ── Pass 2: scan ALL positions for a known SUBURB ───────────────────────────
-  // Runs regardless of whether a city was found — suburb gives area precision.
-  // If no city was found yet, the suburb's mapped city is used.
-  outer2:
-  for (let len = Math.min(3, words.length); len >= 1; len--) {
-    for (let i = 0; i <= words.length - len; i++) {
-      // Skip the slice already matched as city
-      if (i === cityStartIdx && len === cityLen) continue;
-      const candidate = words.slice(i, i + len).join(" ");
-      const mappedCity = SUBURB_TO_CITY[candidate];
-      if (mappedCity) {
-        area         = toTitleCase(candidate);
-        areaStartIdx = i;
-        areaLen      = len;
-        if (!city) city = mappedCity; // use suburb→city mapping if no explicit city
-        break outer2;
-      }
+  // Pass 2: find suburb anywhere in phrase
+  outer2: for (let len=Math.min(3,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      if (i===cityIdx && len===cityLen) continue;
+      const c = words.slice(i,i+len).join(" ");
+      if (_SUBURBS[c]) { area=_tc(c); areaIdx=i; areaLen=len; if(!city) city=_SUBURBS[c]; break outer2; }
     }
   }
 
-  // ── Remove city + suburb slices from words to build product ─────────────────
-  const removeRanges = [];
-  if (cityStartIdx >= 0) removeRanges.push([cityStartIdx, cityStartIdx + cityLen]);
-  if (areaStartIdx >= 0) removeRanges.push([areaStartIdx, areaStartIdx + areaLen]);
-  removeRanges.sort((a, b) => a[0] - b[0]);
-
-  const productWords = words.filter((_, i) =>
-    !removeRanges.some(([s, e]) => i >= s && i < e)
-  );
-
+  // Remove city+suburb from words to get product
+  const remove = [];
+  if (cityIdx>=0) remove.push([cityIdx, cityIdx+cityLen]);
+  if (areaIdx>=0) remove.push([areaIdx, areaIdx+areaLen]);
+  remove.sort((a,b)=>a[0]-b[0]);
+  const productWords = words.filter((_,i) => !remove.some(([s,e])=>i>=s&&i<e));
   const product = productWords.join(" ").trim();
 
-  // If stripping location left nothing, return full raw as product (safe fallback)
-  if (!product) {
-    return { product: raw, city: null, area: null };
-  }
-
-  return { product, city, area };
+  console.log(`[parseShortcodeSearch] input="${input}" -> product="${product||raw}" city="${city}" area="${area}"`);
+  return { product: product||raw, city, area };
 }
 
 function parseQueryWithCity(query = "") {
