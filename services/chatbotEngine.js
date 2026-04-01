@@ -747,7 +747,8 @@ function getSupplierCatalogueSourceItems(supplier) {
   if (!supplier) return [];
 
   if (supplier.profileType === "service") {
-    return (supplier.rates || [])
+    // Use rates[] if available — they have prices
+    const rateItems = (supplier.rates || [])
       .filter(r => normalizeProductName(r?.service || ""))
       .map(r => ({
         name: String(r.service).trim(),
@@ -755,6 +756,30 @@ function getSupplierCatalogueSourceItems(supplier) {
         rawPrice: parseSupplierRateValue(r.rate || ""),
         unit: parseSupplierRateUnit(r.rate || "") || "job"
       }));
+
+    if (rateItems.length) return rateItems;
+
+    // No rates yet — fall back to products[] and listedProducts[]
+    const seen = new Set();
+    const fallbackItems = [];
+    const allServiceItems = [
+      ...(supplier.listedProducts || []),
+      ...(supplier.products || [])
+    ];
+    for (const svcName of allServiceItems) {
+      if (!svcName || svcName === "pending_upload") continue;
+      const clean = String(svcName).trim();
+      const norm = normalizeProductName(clean);
+      if (!norm || seen.has(norm)) continue;
+      seen.add(norm);
+      fallbackItems.push({
+        name: clean,
+        priceLabel: "",
+        rawPrice: null,
+        unit: "job"
+      });
+    }
+    return fallbackItems;
   }
 
   const listedProducts = (supplier.listedProducts || [])
@@ -6993,13 +7018,12 @@ if (a.startsWith("sup_view_")) {
           `${deliveryText}${badge}\n` +
           `⭐ ${(supplier.rating || 0).toFixed(1)} (${supplier.reviewCount || 0} reviews)\n` +
           `📞 ${supplier.phone}`,
-    buttons: [
+buttons: [
       {
         id: `sup_order_${supplierId}`,
         title: supplier.profileType === "service" ? "📅 Book Service" : "🛒 Place Order"
       },
-      { id: `sup_save_${supplierId}`, title: "Save Supplier" },
-      { id: "find_supplier", title: "🔍 Find Suppliers" }
+      { id: "find_supplier", title: "🔍 Search Again" }
     ]
   });
 }
@@ -8641,6 +8665,17 @@ if (a.startsWith("sup_order_")) {
     await saveBizSafe(biz);
   }
 
+// For service suppliers, only pre-filter by search term if the supplier
+  // actually has a service whose name contains that term.
+  // Otherwise open full catalogue — the search found them via synonym/category match,
+  // not a literal service name match.
+  let effectiveSearch = searchedProduct;
+  if (isService && searchedProduct) {
+    const { getFilteredSupplierCatalogueItems: _gf } = { getFilteredSupplierCatalogueItems };
+    const matched = getFilteredSupplierCatalogueItems(supplier, searchedProduct);
+    if (!matched.length) effectiveSearch = "";
+  }
+
   await persistOrderFlowState({
     biz,
     phone,
@@ -8648,17 +8683,17 @@ if (a.startsWith("sup_order_")) {
       orderSupplierId: String(supplier._id),
       orderCart: initialCart,
       orderIsService: isService,
-      orderBrowseMode: searchedProduct ? "search_pick" : "catalogue",
+      orderBrowseMode: effectiveSearch ? "search_pick" : "catalogue",
       orderCataloguePage: 0,
-      orderCatalogueSearch: searchedProduct,
+      orderCatalogueSearch: effectiveSearch,
       selectedSupplierItem: null
     }
   });
 
   return _sendSupplierCatalogueBrowser(from, supplier, initialCart, {
     page: 0,
-    searchTerm: searchedProduct,
-    selectionMode: searchedProduct ? "search_pick" : "catalogue"
+    searchTerm: effectiveSearch,
+    selectionMode: effectiveSearch ? "search_pick" : "catalogue"
   });
 }
 
