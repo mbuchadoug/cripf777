@@ -880,7 +880,15 @@
             </div>
             <div class="clf-main">
               <div class="clf-toolbar">
-                <input type="text" id="clf-search" placeholder="Search quiz titles…" oninput="clfSearch(this.value)">
+                <div style="display:flex;flex:1;min-width:160px;position:relative">
+                  <input type="text" id="clf-search" placeholder="Search quiz titles…"
+                    oninput="clfSearch(this.value)"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();clfSearchNow();}"
+                    style="flex:1;padding-right:32px">
+                  <button id="clf-search-clear" onclick="clfSearchClear()" title="Clear search"
+                    style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
+                    border:none;background:none;cursor:pointer;font-size:14px;color:var(--ink-muted);padding:4px">✕</button>
+                </div>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-muted);cursor:pointer;white-space:nowrap">
                   <input type="checkbox" id="clf-select-all" onchange="clfToggleAll(this.checked)">
                   Select all
@@ -2678,6 +2686,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.clfReload        = clfReload;
   window.clfSetFilter     = clfSetFilter;
   window.clfSearch        = clfSearchDebounce;
+  window.clfSearchNow     = clfSearchNow;
+  window.clfSearchClear   = clfSearchClear;
   window.clfToggleAll     = clfToggleAll;
   window.clfClearSelection= clfClearSelection;
   window.clfBulkPillarChange = clfBulkPillarChange;
@@ -2713,12 +2723,21 @@ document.addEventListener('DOMContentLoaded', () => {
       renderList();
       updateBulkBar();
 
-      // Show result count when searching
+      // Show result count / search feedback
       const badge = document.getElementById('clf-status-badge');
       if (badge) {
-        badge.textContent = _search
-          ? `${_quizzes.length} result${_quizzes.length !== 1 ? 's' : ''} for "${_search}"`
-          : `${_totalAll} total quiz${_totalAll !== 1 ? 'zes' : ''}`;
+        if (_search) {
+          const n = _quizzes.length;
+          badge.style.color = n === 0 ? 'var(--rose)' : n === _totalAll ? 'var(--amber)' : 'var(--emerald)';
+          badge.textContent = n === 0
+            ? `No results for "${_search}"`
+            : n === _totalAll
+            ? `⚠ ${n} results — all quizzes match, search may not be filtering`
+            : `${n} result${n !== 1 ? 's' : ''} for "${_search}"`;
+        } else {
+          badge.style.color = 'var(--ink-muted)';
+          badge.textContent = `${_totalAll} total quiz${_totalAll !== 1 ? 'zes' : ''}`;
+        }
       }
     } catch (e) {
       list.innerHTML = `<div class="clf-loading" style="color:var(--rose)">⚠ ${e.message}</div>`;
@@ -2751,7 +2770,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderList() {
     const list = document.getElementById('clf-list');
     if (!_quizzes.length) {
-      list.innerHTML = '<div class="clf-loading">No quizzes match this filter.</div>';
+      if (_search) {
+        list.innerHTML = `<div class="clf-loading" style="flex-direction:column;gap:8px">
+          <span style="font-size:18px">🔍</span>
+          <span>No quizzes found for <strong>"${escHtml(_search)}"</strong></span>
+          <span style="font-size:12px;color:var(--ink-faint)">Try a shorter search term or part of the title</span>
+          <button class="btn btn-o btn-sm" style="margin-top:4px" onclick="clfSearchClear()">Clear Search</button>
+        </div>`;
+      } else {
+        list.innerHTML = '<div class="clf-loading">No quizzes match this filter.</div>';
+      }
       return;
     }
 
@@ -2807,8 +2835,31 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Search ──
   function clfSearchDebounce(val) {
     _search = val.trim();
+    // Show/hide clear button
+    const clearBtn = document.getElementById('clf-search-clear');
+    if (clearBtn) clearBtn.style.display = _search ? 'block' : 'none';
     clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(clfReload, 350);
+    _searchTimer = setTimeout(clfReload, 500); // 500ms debounce — avoids mid-word hits
+  }
+
+  // Immediate search on Enter key
+  function clfSearchNow() {
+    clearTimeout(_searchTimer);
+    const inp = document.getElementById('clf-search');
+    if (inp) _search = inp.value.trim();
+    const clearBtn = document.getElementById('clf-search-clear');
+    if (clearBtn) clearBtn.style.display = _search ? 'block' : 'none';
+    clfReload();
+  }
+
+  // Clear search
+  function clfSearchClear() {
+    const inp = document.getElementById('clf-search');
+    if (inp) inp.value = '';
+    _search = '';
+    const clearBtn = document.getElementById('clf-search-clear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    clfReload();
   }
 
   // ── Selection ──

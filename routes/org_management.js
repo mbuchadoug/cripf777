@@ -3501,16 +3501,25 @@ router.get(
         match.$and.push({ "meta.aiPillar": pillar });
       }
 
-      // ── BUG FIX: search added to $and — never overwrites org scope ──
+      // Search: escape regex metacharacters so colons, brackets etc don't break the pattern
       if (q && q.trim()) {
-        const re = { $regex: q.trim(), $options: "i" };
-        match.$and.push({ $or: [{ quizTitle: re }, { text: re }] });
+        const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = { $regex: escaped, $options: "i" };
+        // Search quizTitle (set by AI script), text (stores title for passage imports),
+        // and passage (raw passage body — fallback for older imports)
+        match.$and.push({ $or: [
+          { quizTitle: re },
+          { text:      re },
+          { passage:   re }
+        ]});
+        console.log('[classify search] q=%s | match=%s', JSON.stringify(q.trim()), JSON.stringify(match));
       }
 
-      // ── BUG FIX: removed .limit(200) — load every quiz ──
+      // No .limit() — load every quiz so admin can see and classify all of them
+      // Sort: quizTitle first (AI-enriched), then text (original import field)
       const quizzes = await Question.find(match)
         .select("_id quizTitle text category series meta")
-        .sort({ quizTitle: 1 })
+        .sort({ quizTitle: 1, text: 1 })
         .lean();
 
       // Category counts for sidebar (always full corpus, no filter)
@@ -3533,16 +3542,24 @@ router.get(
       return res.json({
         ok: true,
         total: quizzes.length,
-        quizzes: quizzes.map(qz => ({
-          id:          String(qz._id),
-          title:       qz.quizTitle || qz.text?.slice(0, 80) || "Untitled",
-          category:    qz.category  || null,
-          series:      qz.series    || null,
-          pillar:      qz.meta?.aiPillar    || null,
-          confidence:  qz.meta?.aiConfidence ?? null,
-          isLocked:    !!qz.meta?.manualOverride,
-          isOutOfScope:!!qz.meta?.isOutOfScope
-        })),
+        quizzes: quizzes.map(qz => {
+          // Title resolution: quizTitle (AI-set) > text (passage import stores title here)
+          // > first 80 chars of passage body > fallback
+          const title = qz.quizTitle
+            || qz.text?.slice(0, 120)
+            || qz.passage?.slice(0, 80)
+            || "Untitled";
+          return {
+            id:          String(qz._id),
+            title,
+            category:    qz.category  || null,
+            series:      qz.series    || null,
+            pillar:      qz.meta?.aiPillar    || null,
+            confidence:  qz.meta?.aiConfidence ?? null,
+            isLocked:    !!qz.meta?.manualOverride,
+            isOutOfScope:!!qz.meta?.isOutOfScope
+          };
+        }),
         counts
       });
     } catch (err) {
