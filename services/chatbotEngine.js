@@ -9525,26 +9525,70 @@ if (biz) {
   // ── Buyer: free-text product search ──────────────────────────────────────
 if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
   const rawQuery = text.trim();
-  const productQuery = rawQuery.replace(/^find\s+/i, "").trim();
 
-  if (!productQuery || productQuery.length < 1) {
+  if (!rawQuery || rawQuery.length < 1) {
     return sendButtons(from, {
       text: "❌ Please type what you're looking for.\n\nExample:\n_find valve brass_",
       buttons: [{ id: "find_supplier", title: "⬅ Back" }]
     });
   }
 
+  // ── Parse location out of the free-text query ──────────────────────────
+  const parsed = parseShortcodeSearch(rawQuery) || { product: rawQuery.replace(/^find\s+/i, "").trim(), city: null, area: null };
+  const cleanProduct = String(parsed.product || rawQuery.replace(/^find\s+/i, "").trim()).trim();
+
+  if (!cleanProduct) {
+    return sendButtons(from, {
+      text: "❌ Please type what you're looking for.\n\nExample:\n_find valve brass_",
+      buttons: [{ id: "find_supplier", title: "⬅ Back" }]
+    });
+  }
+
+  // ── If city/area was already in the query, search immediately ──────────
+  if (parsed.city || parsed.area) {
+    const locationLabel = parsed.area ? `${parsed.area}, ${parsed.city}` : parsed.city;
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct, city: parsed.city }
+    };
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    const results = await runSupplierSearch({
+      city: parsed.city || null,
+      product: cleanProduct,
+      area: parsed.area || null
+    });
+
+    if (!results.length) {
+      return sendButtons(from, {
+        text: `😕 No results for *${cleanProduct}* in *${locationLabel}*.\n\nTry a different city or search all of Zimbabwe?`,
+        buttons: [
+          { id: "sup_search_city_all", title: "📍 Search All Cities" },
+          { id: "find_supplier", title: "🔍 Search Again" }
+        ]
+      });
+    }
+
+    const pageResults = results.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
+    if (results.length > 9) {
+      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+      await saveBizSafe(biz);
+    }
+    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${results.length} found`, rows);
+  }
+
+  // ── No location found — ask for city as before ─────────────────────────
   biz.sessionData = {
     ...(biz.sessionData || {}),
-    supplierSearch: {
-      ...(biz.sessionData?.supplierSearch || {}),
-      product: productQuery
-    }
+    supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct }
   };
   biz.sessionState = "supplier_search_city";
   await saveBizSafe(biz);
 
-  return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
