@@ -1743,9 +1743,24 @@ if (
     });
   }
 
-  const parsed = parseShortcodeSearch(productQuery) ||
-    parseShortcodeSearch(`find ${productQuery}`) ||
-    { product: productQuery, city: null, area: null };
+  // Inline suburb lookup — does NOT depend on module-level SUBURB_TO_CITY
+  function _inlineParseLocation(txt) {
+    const _S = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+    const _C = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls","bindura"];
+    const _tc = v => String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" ");
+    const raw = txt.toLowerCase().trim().replace(/^find\s+/i,"").replace(/^search\s+/i,"").replace(/\s+/g," ");
+    const words = raw.split(" ").filter(Boolean);
+    let city=null,area=null,ci=-1,cl=0,ai=-1,al=0;
+    outer1: for(let len=Math.min(2,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){const c=words.slice(i,i+len).join(" ");if(_C.includes(c)){city=_tc(c);ci=i;cl=len;break outer1;}}}
+    outer2: for(let len=Math.min(3,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){if(i===ci&&len===cl)continue;const c=words.slice(i,i+len).join(" ");if(_S[c]){area=_tc(c);ai=i;al=len;if(!city)city=_S[c];break outer2;}}}
+    const rem=[];if(ci>=0)rem.push([ci,ci+cl]);if(ai>=0)rem.push([ai,ai+al]);rem.sort((a,b)=>a[0]-b[0]);
+    const prod=words.filter((_,i)=>!rem.some(([s,e])=>i>=s&&i<e)).join(" ").trim();
+    return{product:prod||raw,city,area};
+  }
+
+  const _loc = _inlineParseLocation(productQuery);
+  const parsed = (_loc.city || _loc.area) ? _loc : (parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null, area: null });
+  console.log(`[searchMode=product] input="${productQuery}" parsed:`, JSON.stringify(parsed));
 
   const cleanProduct = String(parsed.product || "")
     .toLowerCase()
