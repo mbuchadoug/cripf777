@@ -343,39 +343,14 @@ if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
   quizzes = await Question.find({
     type: "comprehension",
     $or: [
-      { organization: org._id },
-      { organization: { $exists: false } },
-      { organization: null }
+      { organization: org._id },            // org quizzes
+      { organization: { $exists: false } }, // legacy
+      { organization: null }                // global
     ]
   })
     .select("_id text module")
     .sort({ createdAt: -1 })
     .lean();
-}
-
-// ✅ CLASSIFICATION MANAGER: Load quizzes with category data (cripfcnt-home only)
-let classifyQuizzes = [];
-let classifyCategoryCounts = {};
-if (org.slug === "cripfcnt-home") {
-  classifyQuizzes = await Question.find({
-    type: "comprehension",
-    $or: [{ organization: org._id }, { organization: null }]
-  })
-    .select("_id quizTitle text category series meta")
-    .sort({ quizTitle: 1 })
-    .lean();
-
-  // Build category counts for the sidebar badge
-  const catAgg = await Question.aggregate([
-    {
-      $match: {
-        type: "comprehension",
-        $or: [{ organization: org._id }, { organization: null }]
-      }
-    },
-    { $group: { _id: "$category", count: { $sum: 1 } } }
-  ]);
-  catAgg.forEach(c => { classifyCategoryCounts[c._id || "__none__"] = c.count; });
 }
 
 
@@ -410,17 +385,13 @@ return res.render("admin/org_manage", {
   modules,
   isCripSchool,
   passages,
-  quizzes,
+  quizzes,        // ✅ ADD THIS LINE
   groups,
   user: req.user,
   isAdmin: true,
   isSchool,
   isHomeSchool,
-  quizRules,
-  // Classification manager
-  classifyQuizzes,
-  classifyCategoryCounts,
-  unclassifiedCount: classifyQuizzes.filter(q => !q.category || q.category === "out-of-scope").length
+  quizRules
 });
 
 
@@ -3444,225 +3415,5 @@ router.post(
   }
 );
 
-
-
-
-// ═══════════════════════════════════════════════════════════════════
-//  QUIZ CLASSIFICATION MANAGER
-//  These routes power the admin Classification page in org_manage.hbs
-// ═══════════════════════════════════════════════════════════════════
-
-/* ------------------------------------------------------------------ */
-/*  GET /admin/orgs/:slug/classify/quizzes                            */
-/*  Returns all comprehension quizzes with their current category     */
-/*  Supports ?pillar= ?category= ?unclassified=1 ?q= filters         */
-/* ------------------------------------------------------------------ */
-router.get(
-  "/admin/orgs/:slug/classify/quizzes",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const org = await Organization.findOne({ slug: req.params.slug }).lean();
-      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
-
-      const { pillar, category, unclassified, q } = req.query;
-
-      const match = {
-        type: "comprehension",
-        $or: [{ organization: org._id }, { organization: null }]
-      };
-
-      if (unclassified === "1") {
-        match.$and = [
-          { $or: [{ category: { $exists: false } }, { category: null }, { category: "" }, { category: "out-of-scope" }] }
-        ];
-      } else if (category) {
-        match.category = category;
-      } else if (pillar) {
-        match["meta.aiPillar"] = pillar;
-      }
-
-      if (q) {
-        match.$or = [
-          { quizTitle: { $regex: q, $options: "i" } },
-          { text: { $regex: q, $options: "i" } }
-        ];
-      }
-
-      const quizzes = await Question.find(match)
-        .select("_id quizTitle text category series meta")
-        .sort({ quizTitle: 1 })
-        .limit(200)
-        .lean();
-
-      // Category counts for sidebar
-      const catAgg = await Question.aggregate([
-        { $match: { type: "comprehension", $or: [{ organization: org._id }, { organization: null }] } },
-        { $group: { _id: "$category", count: { $sum: 1 } } }
-      ]);
-      const counts = {};
-      catAgg.forEach(c => { counts[c._id || "__none__"] = c.count; });
-
-      return res.json({
-        ok: true,
-        quizzes: quizzes.map(q => ({
-          id: String(q._id),
-          title: q.quizTitle || q.text?.slice(0, 80) || "Untitled",
-          category: q.category || null,
-          series: q.series || null,
-          pillar: q.meta?.aiPillar || null,
-          confidence: q.meta?.aiConfidence || null,
-          isLocked: !!q.meta?.manualOverride,
-          isOutOfScope: !!q.meta?.isOutOfScope
-        })),
-        counts
-      });
-    } catch (err) {
-      console.error("[classify list]", err);
-      return res.status(500).json({ ok: false, error: "Server error" });
-    }
-  }
-);
-
-/* ------------------------------------------------------------------ */
-/*  PATCH /admin/orgs/:slug/classify/quiz/:quizId                     */
-/*  Reclassify a single quiz. Body: { category, series?, lock? }      */
-/* ------------------------------------------------------------------ */
-
-// Full pillar→category taxonomy (mirrors ai-categorize-questions.js)
-const CLASSIFY_PILLAR_CATEGORIES = {
-  consciousness:  ["consciousness-studies","philosophical-inquiry","systems-thinking","critical-thinking","psychology","education","communication"],
-  responsibility: ["governance","institutional-accountability","public-sector-ethics","rule-of-law","financial-accountability","structural-responsibility","social-contract","administration"],
-  interpretation: ["interpretive-frameworks","language-recalibration","media-literacy","strategic-communication","narrative-framing","research-methodology"],
-  purpose:        ["strategic-leadership","change-management","policy-implementation","community-leadership","crisis-management","motivation","organisational-development","human-resources"],
-  frequencies:    ["frequencies-and-influence","social-development","institutional-reform","performance-metrics"],
-  civilization:   ["civilisation-theory","social-justice","human-rights","economic-justice","environmental-governance","electoral-systems","public-policy","law"],
-  negotiation:    ["conflict-resolution","negotiation-dynamics","diplomacy","finance","strategy"],
-  technology:     ["technology-governance","digital-ethics","ai-governance","risk-and-compliance","innovation"]
-};
-const CLASSIFY_CATEGORY_TO_PILLAR = {};
-for (const [pillar, cats] of Object.entries(CLASSIFY_PILLAR_CATEGORIES)) {
-  for (const cat of cats) CLASSIFY_CATEGORY_TO_PILLAR[cat] = pillar;
-}
-const CLASSIFY_ALL_CATEGORIES = Object.values(CLASSIFY_PILLAR_CATEGORIES).flat();
-
-router.patch(
-  "/admin/orgs/:slug/classify/quiz/:quizId",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const { slug, quizId } = req.params;
-      const { category, series, lock } = req.body;
-
-      if (!category || !CLASSIFY_ALL_CATEGORIES.includes(category)) {
-        return res.status(400).json({ ok: false, error: `Invalid category: "${category}"` });
-      }
-
-      const pillar = CLASSIFY_CATEGORY_TO_PILLAR[category];
-      const org    = await Organization.findOne({ slug }).lean();
-      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
-
-      const quiz = await Question.findById(quizId);
-      if (!quiz) return res.status(404).json({ ok: false, error: "Quiz not found" });
-
-      // Update the parent quiz
-      quiz.category          = category;
-      quiz.meta              = quiz.meta || {};
-      quiz.meta.aiPillar     = pillar;
-      quiz.meta.manualOverride = lock !== false; // default true — admin edits lock the record
-      quiz.meta.aiCategorised  = true;
-      quiz.meta.isOutOfScope   = false;
-      if (series) quiz.series = series;
-      quiz.updatedAt = new Date();
-      await quiz.save();
-
-      // Propagate to child questions
-      if (Array.isArray(quiz.questionIds) && quiz.questionIds.length > 0) {
-        await Question.updateMany(
-          { _id: { $in: quiz.questionIds } },
-          {
-            $set: {
-              category,
-              "meta.aiPillar":          pillar,
-              "meta.inheritedFromQuiz": quiz._id,
-              "meta.aiCategorised":     true,
-              updatedAt: new Date()
-            }
-          }
-        );
-      }
-
-      console.log(`[classify] Admin reclassified ${quizId} → ${pillar}/${category} (lock=${lock})`);
-      return res.json({ ok: true, quizId, category, pillar, series: quiz.series || null });
-    } catch (err) {
-      console.error("[classify single]", err);
-      return res.status(500).json({ ok: false, error: "Server error" });
-    }
-  }
-);
-
-/* ------------------------------------------------------------------ */
-/*  POST /admin/orgs/:slug/classify/bulk                              */
-/*  Bulk reclassify. Body: { quizIds: string[], category, series? }  */
-/* ------------------------------------------------------------------ */
-router.post(
-  "/admin/orgs/:slug/classify/bulk",
-  ensureAuth,
-  ensureAdminEmails,
-  async (req, res) => {
-    try {
-      const { slug }  = req.params;
-      const { quizIds, category, series } = req.body;
-
-      if (!Array.isArray(quizIds) || !quizIds.length) {
-        return res.status(400).json({ ok: false, error: "quizIds required" });
-      }
-      if (!category || !CLASSIFY_ALL_CATEGORIES.includes(category)) {
-        return res.status(400).json({ ok: false, error: "Invalid category" });
-      }
-
-      const pillar = CLASSIFY_CATEGORY_TO_PILLAR[category];
-
-      // Build bulk ops — skip manualOverride-locked items
-      const ids   = quizIds.map(id => new mongoose.Types.ObjectId(id));
-      const setObj = {
-        category,
-        "meta.aiPillar":      pillar,
-        "meta.manualOverride": true,
-        "meta.aiCategorised":  true,
-        "meta.isOutOfScope":   false,
-        updatedAt: new Date()
-      };
-      if (series) setObj.series = series;
-
-      const result = await Question.updateMany({ _id: { $in: ids } }, { $set: setObj });
-
-      // Propagate to children
-      const parents = await Question.find({ _id: { $in: ids } }).select("questionIds").lean();
-      const childIds = parents.flatMap(p => p.questionIds || []);
-      if (childIds.length > 0) {
-        await Question.updateMany(
-          { _id: { $in: childIds } },
-          {
-            $set: {
-              category,
-              "meta.aiPillar":      pillar,
-              "meta.aiCategorised": true,
-              updatedAt: new Date()
-            }
-          }
-        );
-      }
-
-      console.log(`[classify bulk] ${result.modifiedCount} quizzes → ${pillar}/${category}`);
-      return res.json({ ok: true, modified: result.modifiedCount, pillar, category });
-    } catch (err) {
-      console.error("[classify bulk]", err);
-      return res.status(500).json({ ok: false, error: "Server error" });
-    }
-  }
-);
 // export default router
 export default router;
