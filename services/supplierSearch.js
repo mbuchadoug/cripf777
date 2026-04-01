@@ -474,67 +474,54 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 
   if (!supplier) return offers;
 
-  const pushOffer = ({ product, price, unit, matchSource }) => {
-    const cleanProduct = String(product || "").trim();
-    const normalizedProduct = normalizeProductName(cleanProduct);
-
-    if (!cleanProduct || !normalizedProduct) return;
-// For services, also accept if the supplier was matched via category/synonym —
-    // in that case searchTerm won't literally appear in the service name (e.g. "dentist" vs "check-ups")
-    const termMatchFails = !productMatchesSearch(cleanProduct, searchTerm);
-    if (termMatchFails && supplier.profileType !== "service") return;
-
-    const dedupeKey = `${supplier._id}:${normalizedProduct}`;
-    if (seen.has(dedupeKey)) return;
-    seen.add(dedupeKey);
-
-    offers.push({
-      supplierId: String(supplier._id),
-      supplierName: supplier.businessName || "Supplier",
-      supplierPhone: supplier.phone || "",
-      supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
-      supplierArea: supplier.location?.area || "",
-      supplierCity: supplier.location?.city || "",
-      supplierTier: supplier.tier || "",
-      supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
-      profileType: supplier.profileType || "product",
-      deliveryText:
-        supplier.profileType === "service"
-          ? (supplier.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider")
-          : (supplier.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only"),
-      product: cleanProduct,
-      pricePerUnit: typeof price === "number" && !Number.isNaN(price) ? Number(price) : null,
-      unit: unit || (supplier.profileType === "service" ? "job" : "each"),
-      matchSource: matchSource || "listedProducts"
-    });
-  };
-
-if (supplier.profileType === "service") {
+  // ── SERVICE SUPPLIERS ────────────────────────────────────────────────────────
+  if (supplier.profileType === "service") {
+    // 1. Try rates[] first (has prices set)
     for (const rate of (supplier.rates || [])) {
       const serviceName = String(rate?.service || "").trim();
       const rawRate = String(rate?.rate || "").trim();
-      if (!normalizeProductName(serviceName)) continue;
+      if (!serviceName || !normalizeProductName(serviceName)) continue;
 
       const amountMatch = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
       const amount = amountMatch ? Number(amountMatch[1]) : null;
       const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
 
-      pushOffer({ product: serviceName, price: amount, unit, matchSource: "rates" });
+      const dedupeKey = `${supplier._id}:${normalizeProductName(serviceName)}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      offers.push({
+        supplierId: String(supplier._id),
+        supplierName: supplier.businessName || "Supplier",
+        supplierPhone: supplier.phone || "",
+        supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+        supplierArea: supplier.location?.area || "",
+        supplierCity: supplier.location?.city || "",
+        supplierTier: supplier.tier || "",
+        supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
+        profileType: "service",
+        deliveryText: supplier.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider",
+        product: serviceName,
+        pricePerUnit: typeof amount === "number" && !Number.isNaN(amount) ? amount : null,
+        unit,
+        matchSource: "rates"
+      });
     }
 
-    // Fallback: surface items from products[] when rates[] is empty
-    // (supplier registered but hasn't set prices yet)
-// Fallback: surface items from products[] when rates[] is empty
-    // (supplier registered but hasn't set prices yet)
-    // Bypass the match guard here — runSupplierSearch already confirmed this
-    // supplier matches the search; every service they offer is relevant.
+    // 2. Fallback to products[] when no rates set yet — bypass term matching because
+    //    runSupplierSearch already confirmed this supplier matches the search query.
     if (offers.length === 0) {
-      for (const svcName of (supplier.products || [])) {
-        if (!svcName || !normalizeProductName(svcName)) continue;
+      const serviceItems = [
+        ...(supplier.listedProducts || []),
+        ...(supplier.products || [])
+      ].filter(p => p && p !== "pending_upload" && normalizeProductName(p));
+
+      for (const svcName of serviceItems) {
         const cleanSvc = String(svcName).trim();
         const dedupeKey = `${supplier._id}:${normalizeProductName(cleanSvc)}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
+
         offers.push({
           supplierId: String(supplier._id),
           supplierName: supplier.businessName || "Supplier",
@@ -557,6 +544,7 @@ if (supplier.profileType === "service") {
     return offers;
   }
 
+  // ── PRODUCT SUPPLIERS ────────────────────────────────────────────────────────
   const allowedNames = new Set(
     (supplier.listedProducts || [])
       .filter(p => p && p !== "pending_upload")
@@ -569,10 +557,25 @@ if (supplier.profileType === "service") {
     if (!normalizedPriceProduct) continue;
     if (price?.inStock === false) continue;
     if (!allowedNames.has(normalizedPriceProduct)) continue;
+    if (!productMatchesSearch(price?.product || "", searchTerm)) continue;
 
-    pushOffer({
+    const dedupeKey = `${supplier._id}:${normalizedPriceProduct}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    offers.push({
+      supplierId: String(supplier._id),
+      supplierName: supplier.businessName || "Supplier",
+      supplierPhone: supplier.phone || "",
+      supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+      supplierArea: supplier.location?.area || "",
+      supplierCity: supplier.location?.city || "",
+      supplierTier: supplier.tier || "",
+      supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
+      profileType: "product",
+      deliveryText: supplier.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only",
       product: price?.product || "",
-      price: typeof price?.amount === "number" ? Number(price.amount) : null,
+      pricePerUnit: typeof price?.amount === "number" ? Number(price.amount) : null,
       unit: price?.unit || "each",
       matchSource: "prices"
     });
@@ -582,16 +585,25 @@ if (supplier.profileType === "service") {
     const normalizedListedProduct = normalizeProductName(product);
     if (!normalizedListedProduct) continue;
     if (product === "pending_upload") continue;
+    if (!productMatchesSearch(product, searchTerm)) continue;
 
-    const alreadyExists = offers.some(o =>
-      normalizeProductName(o.product) === normalizedListedProduct
-    );
+    const dedupeKey = `${supplier._id}:${normalizedListedProduct}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
 
-    if (alreadyExists) continue;
-
-    pushOffer({
+    offers.push({
+      supplierId: String(supplier._id),
+      supplierName: supplier.businessName || "Supplier",
+      supplierPhone: supplier.phone || "",
+      supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+      supplierArea: supplier.location?.area || "",
+      supplierCity: supplier.location?.city || "",
+      supplierTier: supplier.tier || "",
+      supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
+      profileType: "product",
+      deliveryText: supplier.delivery?.available ? "🚚 Delivery available" : "🏠 Collection only",
       product,
-      price: null,
+      pricePerUnit: null,
       unit: "each",
       matchSource: "listedProducts"
     });
