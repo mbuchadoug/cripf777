@@ -524,10 +524,33 @@ if (supplier.profileType === "service") {
 
     // Fallback: surface items from products[] when rates[] is empty
     // (supplier registered but hasn't set prices yet)
+// Fallback: surface items from products[] when rates[] is empty
+    // (supplier registered but hasn't set prices yet)
+    // Bypass the match guard here — runSupplierSearch already confirmed this
+    // supplier matches the search; every service they offer is relevant.
     if (offers.length === 0) {
       for (const svcName of (supplier.products || [])) {
         if (!svcName || !normalizeProductName(svcName)) continue;
-        pushOffer({ product: svcName, price: null, unit: "job", matchSource: "products" });
+        const cleanSvc = String(svcName).trim();
+        const dedupeKey = `${supplier._id}:${normalizeProductName(cleanSvc)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        offers.push({
+          supplierId: String(supplier._id),
+          supplierName: supplier.businessName || "Supplier",
+          supplierPhone: supplier.phone || "",
+          supplierLocation: `${supplier.location?.area || ""}, ${supplier.location?.city || ""}`.replace(/^,\s*|,\s*$/g, ""),
+          supplierArea: supplier.location?.area || "",
+          supplierCity: supplier.location?.city || "",
+          supplierTier: supplier.tier || "",
+          supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
+          profileType: "service",
+          deliveryText: supplier.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider",
+          product: cleanSvc,
+          pricePerUnit: null,
+          unit: "job",
+          matchSource: "products"
+        });
       }
     }
 

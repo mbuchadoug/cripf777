@@ -1776,7 +1776,40 @@ function _inlineParseLocation(txt) {
     }
   );
 
-  if (parsed.city || parsed.area) {
+if (parsed.city || parsed.area) {
+    const locationLabel = parsed.area
+      ? `${parsed.area}, ${parsed.city}`
+      : parsed.city;
+
+    // Try offer-level first (individual services/products) — same as sup_search_city_ handler
+    const offerResults = await runSupplierOfferSearch({
+      city: parsed.city || null,
+      product: cleanProduct,
+      area: parsed.area || null,
+      profileType: sess?.tempData?.supplierSearchType || null
+    });
+
+    if (offerResults.length) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.searchResults": offerResults,
+            "tempData.searchPage": 0,
+            "tempData.searchResultMode": "offers"
+          }
+        },
+        { upsert: true }
+      );
+      const pageOffers = offerResults.slice(0, 9);
+      const rows = formatSupplierOfferResults(pageOffers);
+      if (offerResults.length > 9) {
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+      }
+      return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
+    }
+
+    // Fallback to business-level if no offer rows produced
     const results = await runSupplierSearch({
       city: parsed.city || null,
       product: cleanProduct,
@@ -1796,12 +1829,16 @@ function _inlineParseLocation(txt) {
 
     const pageResults = results.slice(0, 9);
     const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
-    const hasMore = results.length > 9;
-
-    if (hasMore) {
+    if (results.length > 9) {
       await UserSession.findOneAndUpdate(
         { phone },
-        { $set: { "tempData.searchResults": results, "tempData.searchPage": 0 } },
+        {
+          $set: {
+            "tempData.searchResults": results,
+            "tempData.searchPage": 0,
+            "tempData.searchResultMode": "suppliers"
+          }
+        },
         { upsert: true }
       );
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
