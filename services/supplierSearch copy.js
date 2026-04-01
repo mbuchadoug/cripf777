@@ -4,6 +4,34 @@ import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
 import { SUPPLIER_CITIES } from "./supplierPlans.js";
 
+// ── Rate helper functions (mirrored from chatbotEngine.js) ────────────────────
+function parseSupplierRateValue(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^\$?\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  return Number(m[1]);
+}
+
+function parseSupplierRateUnit(rate = "") {
+  const raw = String(rate || "").trim();
+  const parts = raw.split("/");
+  if (parts.length < 2) return "each";
+  return parts[1].trim() || "each";
+}
+
+function formatSupplierRateDisplay(rate = "") {
+  const raw = String(rate || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("$")) return raw;
+  const value = parseSupplierRateValue(raw);
+  const unit = parseSupplierRateUnit(raw);
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return `$${value}/${unit}`;
+  }
+  return raw;
+}
+
 export async function startSupplierSearch(from, biz, saveBiz) {
  biz.sessionState = "supplier_search_category";
 biz.sessionData = {
@@ -257,6 +285,18 @@ const SEARCH_SYNONYMS = {
   "spa": ["massage", "beauty", "salon", "relaxation", "wellness"],
   "massage": ["spa", "massage therapist", "beauty", "wellness", "relaxation"],
 
+  // ── MEDICAL & DENTAL ──────────────────────────────────────────────────────
+  "dentist": ["dental", "teeth", "teeth cleaning", "dental clinic", "dental care", "check-ups", "fillings", "root canal", "dental surgery", "oral health", "medical_health"],
+  "dental": ["dentist", "teeth", "teeth cleaning", "dental clinic", "dental care", "check-ups", "fillings", "root canal", "oral health", "medical_health"],
+  "teeth cleaning": ["dental", "dentist", "dental hygiene", "scaling", "oral health", "dental clinic", "medical_health"],
+  "teeth": ["dental", "dentist", "teeth cleaning", "oral health", "dental care", "medical_health"],
+  "doctor": ["clinic", "medical", "health", "gp", "general practitioner", "medical_health"],
+  "clinic": ["doctor", "medical", "health", "hospital", "medical_health"],
+  "medical": ["doctor", "clinic", "health", "hospital", "medical_health", "pharmacy"],
+  "pharmacy": ["chemist", "medicine", "drugs", "medical", "health", "medical_health"],
+  "optician": ["optometrist", "eyes", "glasses", "eyecare", "medical_health"],
+  "physiotherapy": ["physio", "rehabilitation", "therapy", "medical", "health", "medical_health"],
+
   // ── PHOTOGRAPHY & VIDEOGRAPHY ─────────────────────────────────────────────
   "photographer": ["photography", "photos", "pictures", "videography", "video", "wedding photography", "events"],
   "photography": ["photographer", "photos", "pictures", "videography", "video", "events", "wedding"],
@@ -362,21 +402,24 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
     const productOr = [
       { listedProducts: { $regex: product, $options: "i" } },
+      { products:       { $regex: product, $options: "i" } },
       { "rates.service": { $regex: product, $options: "i" } },
-      { categories: { $regex: product, $options: "i" } },
-      { businessName: { $regex: product, $options: "i" } },
+      { categories:     { $regex: product, $options: "i" } },
+      { businessName:   { $regex: product, $options: "i" } },
 
       ...searchTerms.flatMap(term => [
         { listedProducts: { $regex: term, $options: "i" } },
+        { products:       { $regex: term, $options: "i" } },
         { "rates.service": { $regex: term, $options: "i" } },
-        { categories: { $regex: term, $options: "i" } },
-        { businessName: { $regex: term, $options: "i" } }
+        { categories:     { $regex: term, $options: "i" } },
+        { businessName:   { $regex: term, $options: "i" } }
       ]),
 
       ...individualWords.flatMap(word => [
         { listedProducts: { $regex: word, $options: "i" } },
+        { products:       { $regex: word, $options: "i" } },
         { "rates.service": { $regex: word, $options: "i" } },
-        { categories: { $regex: word, $options: "i" } }
+        { categories:     { $regex: word, $options: "i" } }
       ])
     ];
 
@@ -402,17 +445,15 @@ let results = await SupplierProfile.find(query)
 
  results = results.filter((supplier) => {
     if (supplier?.profileType === "service") {
-      // Accept if they have rates, listed products, or at least a category match
       const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-      const hasListedProducts = (supplier.listedProducts || []).some(p =>
-        p && p !== "pending_upload" && normalizeProductName(p)
-      );
-      return hasRates || hasListedProducts;
+      const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+      const hasProducts = (supplier.products || []).some(p => p && normalizeProductName(p));
+      const hasCategories = (supplier.categories || []).some(c => c && String(c).length > 0);
+      return hasRates || hasListedProducts || hasProducts || hasCategories;
     }
-
-    return (supplier.listedProducts || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
+    const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+    const hasProducts = (supplier.products || []).some(p => p && normalizeProductName(p));
+    return hasListedProducts || hasProducts;
   });
 
   if (area && results.length > 1) {
@@ -450,7 +491,7 @@ function productMatchesSearch(productName = "", searchTerm = "") {
   return productNorm.includes(searchNorm) || searchNorm.includes(productNorm);
 }
 
-function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
+function buildProductSearchOffersFromSupplier(supplier, searchTerm = "", extraTerms = []) {
   const offers = [];
   const seen = new Set();
 
@@ -461,7 +502,9 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     const normalizedProduct = normalizeProductName(cleanProduct);
 
     if (!cleanProduct || !normalizedProduct) return;
-    if (!productMatchesSearch(cleanProduct, searchTerm)) return;
+    const _termMatch = productMatchesSearch(cleanProduct, searchTerm) ||
+      (extraTerms.length && extraTerms.some(t => productMatchesSearch(cleanProduct, t)));
+    if (!_termMatch) return;
 
     const dedupeKey = `${supplier._id}:${normalizedProduct}`;
     if (seen.has(dedupeKey)) return;
@@ -488,27 +531,28 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     });
   };
 
-  if (supplier.profileType === "service") {
-    for (const rate of (supplier.rates || [])) {
-      const serviceName = String(rate?.service || "").trim();
-      const rawRate = String(rate?.rate || "").trim();
-      if (!normalizeProductName(serviceName)) continue;
+if (supplier.profileType === "service") {
+    const rateItems = (supplier.rates || [])
+      .filter(r => normalizeProductName(r?.service || ""))
+      .map(r => ({
+        name: String(r.service).trim(),
+        priceLabel: formatSupplierRateDisplay(r.rate || ""),
+        rawPrice: parseSupplierRateValue(r.rate || ""),
+        unit: parseSupplierRateUnit(r.rate || "") || "job"
+      }));
 
-      const amountMatch = rawRate.match(/^\$?\s*(\d+(?:\.\d+)?)/);
-      const amount = amountMatch ? Number(amountMatch[1]) : null;
-      const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
+    if (rateItems.length) return rateItems;
 
-      pushOffer({
-        product: serviceName,
-        price: amount,
-        unit,
-        matchSource: "rates"
-      });
-    }
-
-    return offers;
+    // Fallback: products[] when rates[] is empty (service supplier hasn't set prices yet)
+    return (supplier.products || [])
+      .filter(p => p && normalizeProductName(p))
+      .map(p => ({
+        name: String(p).trim(),
+        priceLabel: "Price on request",
+        rawPrice: null,
+        unit: "job"
+      }));
   }
-
   const allowedNames = new Set(
     (supplier.listedProducts || [])
       .filter(p => p && p !== "pending_upload")
@@ -555,8 +599,11 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 export async function runSupplierOfferSearch({ city, category, product, profileType, area }) {
   const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
 
+  // Use the first matching synonym as the search term for offer matching,
+  // so "dentist" also matches "check-ups", "teeth cleaning" etc.
+  const _offerSearchTerms = expandSearchTerms(product || category || "");
   const offers = suppliers.flatMap(supplier =>
-    buildProductSearchOffersFromSupplier(supplier, product || category || "")
+    buildProductSearchOffersFromSupplier(supplier, product || category || "", _offerSearchTerms)
       .map((offer, idx) => ({
         ...offer,
         sortTierRank: typeof supplier.tierRank === "number" ? supplier.tierRank : 0,
@@ -574,7 +621,7 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
     if (b.sortCredibility !== a.sortCredibility) return b.sortCredibility - a.sortCredibility;
     if (b.supplierRating !== a.supplierRating) return b.supplierRating - a.supplierRating;
 
-    return a.product.localeCompare(b.product);
+    return (a.product || "").localeCompare(b.product || "");
   });
 
   return offers.slice(0, 50);
@@ -588,6 +635,23 @@ export function formatSupplierOfferResults(offers = []) {
         : "Price on request";
 
     const locationText = [offer.supplierArea, offer.supplierCity].filter(Boolean).join(", ");
+
+    if (offer.profileType === "service") {
+      // Services: title = business name, description = service + price + location
+      const desc = [
+        offer.product,
+        priceText,
+        locationText ? `📍 ${locationText}` : "",
+        offer.deliveryText || ""
+      ].filter(Boolean).join(" · ");
+      return {
+        id: `sup_offer_pick_${offer.supplierId}_${encodeURIComponent(offer.product)}`,
+        title: `${offer.supplierName}`.slice(0, 72),
+        description: desc.slice(0, 72)
+      };
+    }
+
+    // Products: title = product name, description = supplier + location + price
     const desc = [
       `🏪 ${offer.supplierName}`,
       locationText ? `📍 ${locationText}` : "",
@@ -619,13 +683,21 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
 
-    let matchHint = "";
-    if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
-      const match = s.rates.find(r => {
-        const serviceName = normalizeProductName(r?.service || "");
-        return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
-      });
-      if (match) matchHint = ` · ${match.service} ${match.rate}`;
+let matchHint = "";
+    if (s.profileType === "service") {
+      // Try rated services first
+      if (normalizedSearchTerm && s.rates?.length) {
+        const match = s.rates.find(r => {
+          const serviceName = normalizeProductName(r?.service || "");
+          return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
+        });
+        if (match) matchHint = ` · ${match.service} ${match.rate}`;
+      }
+      // Fallback: show first 2 items from products[] when rates[] empty or no match
+      if (!matchHint) {
+        const serviceList = (s.products || []).filter(Boolean).slice(0, 2).join(", ");
+        if (serviceList) matchHint = ` · ${serviceList}`;
+      }
     } else if (normalizedSearchTerm) {
       const allowedNames = new Set(
         (s.listedProducts || [])
@@ -642,9 +714,7 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
       });
 
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
-    }
-
-    return {
+    } return {
       id: `sup_view_${s._id}`,
       title: `${badge}${s.businessName}`,
       description: `${delivery}${min}${rating}${matchHint}`
@@ -772,67 +842,54 @@ function toTitleCase(value = "") {
 }
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
-// Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// Handles: "find cement", "find plumber harare", "find cement mbare",
+//          "find dentist avondale", "find cleaner borrowdale harare",
+//          "find electrician mbare harare"
+// Scans ALL word-window positions so city/suburb can appear anywhere in the
+// phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
-  const raw = String(input || "")
-    .toLowerCase()
-    .trim()
-    .replace(/^find\s+/i, "")
-    .replace(/^search\s+/i, "")
-    .replace(/^s\s+/i, "")
-    .replace(/\s+/g, " ");
+  // Hardcoded suburb map inside function — works regardless of module scope
+  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pelandaba":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+  const _CITIES = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls"];
 
+  const raw = String(input || "").toLowerCase().trim()
+    .replace(/^find\s+/i, "").replace(/^search\s+/i, "").replace(/^s\s+/i, "").replace(/\s+/g, " ");
   if (!raw) return null;
 
-  const cityNames = SUPPLIER_CITIES
-    .map(c => {
-      if (typeof c === "string") return c.toLowerCase().trim();
-      if (c?.name)  return String(c.name).toLowerCase().trim();
-      if (c?.label) return String(c.label).toLowerCase().trim();
-      if (c?.id)    return String(c.id).toLowerCase().trim();
-      return "";
-    })
-    .filter(Boolean);
+  function _tc(v) { return String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" "); }
 
   const words = raw.split(" ").filter(Boolean);
   if (!words.length) return null;
 
-  let city = null;
-  let area = null;
-  let productWords = [...words];
+  let city=null, area=null, cityIdx=-1, cityLen=0, areaIdx=-1, areaLen=0;
 
-  // Step 1: Check last 2 → 1 words for a known CITY name
-  for (let len = Math.min(2, words.length); len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").trim();
-    if (cityNames.includes(candidate)) {
-      city = toTitleCase(candidate);
-      productWords = words.slice(0, -len);
-      break;
+  // Pass 1: find city name anywhere in phrase
+  outer1: for (let len=Math.min(2,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      const c = words.slice(i,i+len).join(" ");
+      if (_CITIES.includes(c)) { city=_tc(c); cityIdx=i; cityLen=len; break outer1; }
     }
   }
 
-  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
-  if (!city) {
-    for (let len = Math.min(3, words.length); len >= 1; len--) {
-      const candidate = words.slice(-len).join(" ").trim();
-      const mappedCity = SUBURB_TO_CITY[candidate];
-      if (mappedCity) {
-        city = mappedCity;
-        area = toTitleCase(candidate);
-        productWords = words.slice(0, -len);
-        break;
-      }
+  // Pass 2: find suburb anywhere in phrase
+  outer2: for (let len=Math.min(3,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      if (i===cityIdx && len===cityLen) continue;
+      const c = words.slice(i,i+len).join(" ");
+      if (_SUBURBS[c]) { area=_tc(c); areaIdx=i; areaLen=len; if(!city) city=_SUBURBS[c]; break outer2; }
     }
   }
 
+  // Remove city+suburb from words to get product
+  const remove = [];
+  if (cityIdx>=0) remove.push([cityIdx, cityIdx+cityLen]);
+  if (areaIdx>=0) remove.push([areaIdx, areaIdx+areaLen]);
+  remove.sort((a,b)=>a[0]-b[0]);
+  const productWords = words.filter((_,i) => !remove.some(([s,e])=>i>=s&&i<e));
   const product = productWords.join(" ").trim();
 
-  if (!product) {
-    return { product: raw, city: null, area: null };
-  }
-
-  return { product, city, area };
+  console.log(`[parseShortcodeSearch] input="${input}" -> product="${product||raw}" city="${city}" area="${area}"`);
+  return { product: product||raw, city, area };
 }
 
 function parseQueryWithCity(query = "") {

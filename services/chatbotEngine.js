@@ -747,25 +747,13 @@ function getSupplierCatalogueSourceItems(supplier) {
   if (!supplier) return [];
 
   if (supplier.profileType === "service") {
-    const rateItems = (supplier.rates || [])
+    return (supplier.rates || [])
       .filter(r => normalizeProductName(r?.service || ""))
       .map(r => ({
         name: String(r.service).trim(),
         priceLabel: formatSupplierRateDisplay(r.rate || ""),
         rawPrice: parseSupplierRateValue(r.rate || ""),
         unit: parseSupplierRateUnit(r.rate || "") || "job"
-      }));
-
-    if (rateItems.length) return rateItems;
-
-    // Fallback: use products[] when rates[] is empty (no prices set yet)
-    return (supplier.products || [])
-      .filter(p => p && normalizeProductName(p))
-      .map(p => ({
-        name: String(p).trim(),
-        priceLabel: "Price on request",
-        rawPrice: null,
-        unit: "job"
       }));
   }
 
@@ -1150,8 +1138,8 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
       text:
         `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
         (searchTerm ? ` for *${searchTerm}*.` : "."),
- buttons: [
-        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
+      buttons: [
+     { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
         { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
@@ -1222,9 +1210,9 @@ async function _sendSupplierNumberedCatalogueText(from, supplier, cart = [], opt
       text:
         `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
         (searchTerm ? ` for *${searchTerm}*.` : "."),
- buttons: [
+      buttons: [
         { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
@@ -1301,71 +1289,56 @@ _12x2, 15x1, 18x6_`
 async function _sendSupplierCartMenu(from, supplier, cart = []) {
   const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") });
   const focusedItem = sess?.tempData?.selectedSupplierItem || null;
-  const isService = supplier?.profileType === "service";
 
   if (!cart.length) {
     return sendButtons(from, {
-      text: isService ? "📅 Your booking is empty." : "🛒 Your cart is empty.",
+      text: "🛒 Your cart is empty.",
       buttons: [
-        { id: `sup_catalog_page_open_${supplier._id}`, title: isService ? "📚 Browse Services" : "📚 Browse Catalogue" },
-        { id: `sup_catalogue_search_${supplier._id}`, title: isService ? "🔎 Search Services" : "🔎 Search Supplier" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Browse Catalogue" },
+        { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Supplier" },
         { id: "suppliers_home", title: "⬅ Suppliers" }
       ]
     });
   }
 
-  const unitLabel = isService ? "job" : "each";
-
   const rows = cart.slice(0, 5).map(item => ({
     id: `sup_cart_remove_${supplier._id}_${encodeURIComponent(item.product)}`,
     title: `➖ Remove ${item.product}`.slice(0, 72),
     description:
-      (isService ? `x${item.quantity} session(s)` : `Qty ${item.quantity}`) +
+      `Qty ${item.quantity}` +
       (typeof item.pricePerUnit === "number"
-        ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || unitLabel}`
-        : " • Price on request")
+        ? ` • $${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}`
+        : "")
   }));
 
   rows.push({
     id: `sup_cart_confirm_${supplier._id}`,
-    title: isService ? "✅ Confirm & Book" : "✅ Confirm & Send Order"
+    title: supplier.profileType === "service" ? "✅ Confirm & Send Booking" : "✅ Confirm & Send Order"
   });
 
-  rows.push({ id: `sup_cart_clear_${supplier._id}`, title: isService ? "🗑 Clear Booking" : "🗑 Clear Cart" });
-  rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: isService ? "➕ Add More Services" : "📚 Add More Items" });
-  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: isService ? "🔎 Search Services" : "🔎 Search This Supplier" });
-  if (!isService) {
-    rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
-  }
+  rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
+  rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Add More Items" });
+  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
+  rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
 
   const summary = cart
     .map(i => {
-      const price = typeof i.pricePerUnit === "number"
-        ? ` @ $${Number(i.pricePerUnit).toFixed(2)}/${i.unit || unitLabel}`
-        : " (price on request)";
-      const qty = isService ? `x${i.quantity} session(s)` : `x${i.quantity}`;
-      return `• ${i.product} ${qty}${price}`;
+      const price = typeof i.pricePerUnit === "number" ? ` @ $${Number(i.pricePerUnit).toFixed(2)}` : "";
+      return `• ${i.product} x${i.quantity}${price}`;
     })
     .join("\n");
 
   const focusedLine = focusedItem?.product
-    ? `🎯 *Selected:* ${focusedItem.product}\n\n`
-    : "";
-
-  const knownTotal = cart
-    .filter(i => typeof i.pricePerUnit === "number")
-    .reduce((s, i) => s + i.quantity * i.pricePerUnit, 0);
-  const totalLine = knownTotal > 0
-    ? `\n💵 *Estimated total: $${knownTotal.toFixed(2)}*`
+    ? `🎯 *Selected now:* ${focusedItem.product}\n\n`
     : "";
 
   if (rows.length > 10) rows.splice(10);
 
-  const header = isService
-    ? `${focusedLine}📅 *Your Booking* (${cart.length} service${cart.length === 1 ? "" : "s"})\n\n${summary}${totalLine}`
-    : `${focusedLine}🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}${totalLine}`;
-
-  return sendList(from, header, rows);
+  return sendList(
+    from,
+    `${focusedLine}🛒 *Your Cart* (${cart.length} item${cart.length === 1 ? "" : "s"})\n\n${summary}`,
+    rows
+  );
 }
 /**
  * Helper: get caller's effective branchId.
@@ -1770,24 +1743,10 @@ if (
     });
   }
 
-  // Inline suburb lookup — does NOT depend on module-level SUBURB_TO_CITY
-  function _inlineParseLocation(txt) {
-    const _S = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
-    const _C = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls","bindura"];
-    const _tc = v => String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" ");
-    const raw = txt.toLowerCase().trim().replace(/^find\s+/i,"").replace(/^search\s+/i,"").replace(/\s+/g," ");
-    const words = raw.split(" ").filter(Boolean);
-    let city=null,area=null,ci=-1,cl=0,ai=-1,al=0;
-    outer1: for(let len=Math.min(2,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){const c=words.slice(i,i+len).join(" ");if(_C.includes(c)){city=_tc(c);ci=i;cl=len;break outer1;}}}
-    outer2: for(let len=Math.min(3,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){if(i===ci&&len===cl)continue;const c=words.slice(i,i+len).join(" ");if(_S[c]){area=_tc(c);ai=i;al=len;if(!city)city=_S[c];break outer2;}}}
-    const rem=[];if(ci>=0)rem.push([ci,ci+cl]);if(ai>=0)rem.push([ai,ai+al]);rem.sort((a,b)=>a[0]-b[0]);
-    const prod=words.filter((_,i)=>!rem.some(([s,e])=>i>=s&&i<e)).join(" ").trim();
-    return{product:prod||raw,city,area};
-  }
-
-  const _loc = _inlineParseLocation(productQuery);
-  const parsed = (_loc.city || _loc.area) ? _loc : (parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null, area: null });
-  console.log(`[searchMode=product] input="${productQuery}" parsed:`, JSON.stringify(parsed));
+  const { parseShortcodeSearch } = await import("./supplierSearch.js");
+  const parsed = parseShortcodeSearch(productQuery) ||
+    parseShortcodeSearch(`find ${productQuery}`) ||
+    { product: productQuery, city: null, area: null };
 
   const cleanProduct = String(parsed.product || "")
     .toLowerCase()
@@ -1934,6 +1893,7 @@ if (
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState)
 ) {
+  const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
 
   if (shortcode) {
@@ -2074,35 +2034,8 @@ if (
       });
     }
 
-    // No city in shortcode — try a fresh parse with expanded input as final rescue
-    {
-      const _retry = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
-      if (_retry && (_retry.city || _retry.area)) {
-        const _city = _retry.city || null;
-        const _area = _retry.area || null;
-        const _prod = String(_retry.product || shortcode.product || "").toLowerCase().trim();
-        const _locationLabel = _area ? `${_area}, ${_city}` : _city;
-        const _res = await runSupplierSearch({ city: _city, product: _prod, area: _area });
-        if (_res.length) {
-          await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.supplierSearchProduct": _prod } }, { upsert: true });
-          if (biz) { biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod, city: _city } }; biz.sessionState = "ready"; await saveBizSafe(biz); }
-          const _offerRes = await runSupplierOfferSearch({ city: _city, product: _prod, area: _area });
-          if (_offerRes.length) {
-            const _rows = formatSupplierOfferResults(_offerRes.slice(0, 9));
-            if (_offerRes.length > 9) _rows.push({ id: "sup_search_next_page", title: `➡ More results (${_offerRes.length - 9} more)` });
-            return sendList(from, `🔍 *${_prod}* in ${_locationLabel} - ${_offerRes.length} found`, _rows);
-          }
-          const _rows = formatSupplierResults(_res.slice(0, 9), _city, _prod);
-          return sendList(from, `🔍 *${_prod}* in ${_locationLabel} - ${_res.length} found`, _rows);
-        }
-        // Found city/area but no results — show no-results, not city picker
-        return sendButtons(from, {
-          text: `😕 No results for *${_prod}* in *${_locationLabel}*.\n\nTry searching all of Zimbabwe?`,
-          buttons: [{ id: "sup_search_city_all", title: "📍 Search All Cities" }, { id: "find_supplier", title: "🔍 Search Again" }]
-        });
-      }
-    }
-    // Genuinely no city detected — ask for it
+    // No city given - ask for it
+   // No city given - store product in session then ask for city
     await UserSession.findOneAndUpdate(
       { phone },
       { $set: { "tempData.supplierSearchProduct": shortcode.product, "tempData.supplierSearchMode": "product" } },
@@ -4182,37 +4115,7 @@ if (
       });
     }
 
-    // No city at all — one last rescue: re-parse with "find " prefix
-    {
-      const _retry2 = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
-      if (_retry2 && (_retry2.city || _retry2.area)) {
-        const _city2 = _retry2.city || null;
-        const _area2 = _retry2.area || null;
-        const _prod2 = String(_retry2.product || shortcode.product || "").toLowerCase().trim();
-        const _label2 = _area2 ? `${_area2}, ${_city2}` : _city2;
-        const _offerRes2 = await runSupplierOfferSearch({ city: _city2, product: _prod2, area: _area2 });
-        if (_offerRes2.length) {
-          biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod2, city: _city2 }, searchResults: _offerRes2, searchPage: 0, searchResultMode: "offers" };
-          biz.sessionState = "ready";
-          await saveBizSafe(biz);
-          const _rows2 = formatSupplierOfferResults(_offerRes2.slice(0, 9));
-          if (_offerRes2.length > 9) _rows2.push({ id: "sup_search_next_page", title: `➡ More results (${_offerRes2.length - 9} more)` });
-          return sendList(from, `🔍 *${_prod2}* in ${_label2} - ${_offerRes2.length} found`, _rows2);
-        }
-        const _res2 = await runSupplierSearch({ city: _city2, product: _prod2, area: _area2 });
-        if (_res2.length) {
-          biz.sessionData = { ...(biz.sessionData||{}), supplierSearch: { product: _prod2, city: _city2 } };
-          biz.sessionState = "ready";
-          await saveBizSafe(biz);
-          return sendList(from, `🔍 *${_prod2}* in ${_label2} - ${_res2.length} found`, formatSupplierResults(_res2.slice(0,9), _city2, _prod2));
-        }
-        return sendButtons(from, {
-          text: `😕 No results for *${_prod2}* in *${_label2}*.\n\nTry all of Zimbabwe?`,
-          buttons: [{ id: "sup_search_city_all", title: "📍 Search All Cities" }, { id: "find_supplier", title: "🔍 Search Again" }]
-        });
-      }
-    }
-    // Genuinely no city — ask for it
+    // No city at all - ask for it
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: shortcode.product }
@@ -4287,26 +4190,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       });
     }
 
-    // shortcode parsed but no city — re-attempt with "find " prefix as rescue
-    {
-      const _rc = parseShortcodeSearch(`find ${text.trim()}`) || parseShortcodeSearch(text.trim());
-      if (_rc && (_rc.city || _rc.area)) {
-        const _rcProd = String(_rc.product || cleanProduct).toLowerCase().trim();
-        const _rcLabel = _rc.area ? `${_rc.area}, ${_rc.city}` : _rc.city;
-        const _rcOff = await runSupplierOfferSearch({ city: _rc.city, product: _rcProd, area: _rc.area });
-        if (_rcOff.length) {
-          biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-          const _rcRows = formatSupplierOfferResults(_rcOff.slice(0,9));
-          if (_rcOff.length>9) _rcRows.push({id:"sup_search_next_page",title:`➡ More results (${_rcOff.length-9} more)`});
-          return sendList(from, `🔍 *${_rcProd}* in ${_rcLabel} - ${_rcOff.length} found`, _rcRows);
-        }
-        const _rcRes = await runSupplierSearch({ city: _rc.city, product: _rcProd, area: _rc.area });
-        if (_rcRes.length) {
-          biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-          return sendList(from, `🔍 *${_rcProd}* in ${_rcLabel} - ${_rcRes.length} found`, formatSupplierResults(_rcRes.slice(0,9), _rc.city, _rcProd));
-        }
-      }
-    }
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: cleanProduct }
@@ -4322,24 +4205,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 
   const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
   if (productQuery.length > 1) {
-    // Raw text typed in city state — try parsing as a full shortcode search first
-    const _rawParse = parseShortcodeSearch(`find ${productQuery}`) || parseShortcodeSearch(productQuery);
-    if (_rawParse && (_rawParse.city || _rawParse.area)) {
-      const _rProd = String(_rawParse.product || productQuery).toLowerCase().trim();
-      const _rLabel = _rawParse.area ? `${_rawParse.area}, ${_rawParse.city}` : _rawParse.city;
-      const _rOff = await runSupplierOfferSearch({ city: _rawParse.city, product: _rProd, area: _rawParse.area });
-      if (_rOff.length) {
-        biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-        const _rRows = formatSupplierOfferResults(_rOff.slice(0,9));
-        if (_rOff.length>9) _rRows.push({id:"sup_search_next_page",title:`➡ More results (${_rOff.length-9} more)`});
-        return sendList(from, `🔍 *${_rProd}* in ${_rLabel} - ${_rOff.length} found`, _rRows);
-      }
-      const _rRes = await runSupplierSearch({ city: _rawParse.city, product: _rProd, area: _rawParse.area });
-      if (_rRes.length) {
-        biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz);
-        return sendList(from, `🔍 *${_rProd}* in ${_rLabel} - ${_rRes.length} found`, formatSupplierResults(_rRes.slice(0,9), _rawParse.city, _rProd));
-      }
-    }
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: { product: productQuery }
@@ -9552,70 +9417,26 @@ if (biz) {
   // ── Buyer: free-text product search ──────────────────────────────────────
 if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
   const rawQuery = text.trim();
+  const productQuery = rawQuery.replace(/^find\s+/i, "").trim();
 
-  if (!rawQuery || rawQuery.length < 1) {
+  if (!productQuery || productQuery.length < 1) {
     return sendButtons(from, {
       text: "❌ Please type what you're looking for.\n\nExample:\n_find valve brass_",
       buttons: [{ id: "find_supplier", title: "⬅ Back" }]
     });
   }
 
-  // ── Parse location out of the free-text query ──────────────────────────
-  const parsed = parseShortcodeSearch(rawQuery) || { product: rawQuery.replace(/^find\s+/i, "").trim(), city: null, area: null };
-  const cleanProduct = String(parsed.product || rawQuery.replace(/^find\s+/i, "").trim()).trim();
-
-  if (!cleanProduct) {
-    return sendButtons(from, {
-      text: "❌ Please type what you're looking for.\n\nExample:\n_find valve brass_",
-      buttons: [{ id: "find_supplier", title: "⬅ Back" }]
-    });
-  }
-
-  // ── If city/area was already in the query, search immediately ──────────
-  if (parsed.city || parsed.area) {
-    const locationLabel = parsed.area ? `${parsed.area}, ${parsed.city}` : parsed.city;
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct, city: parsed.city }
-    };
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
-
-    const results = await runSupplierSearch({
-      city: parsed.city || null,
-      product: cleanProduct,
-      area: parsed.area || null
-    });
-
-    if (!results.length) {
-      return sendButtons(from, {
-        text: `😕 No results for *${cleanProduct}* in *${locationLabel}*.\n\nTry a different city or search all of Zimbabwe?`,
-        buttons: [
-          { id: "sup_search_city_all", title: "📍 Search All Cities" },
-          { id: "find_supplier", title: "🔍 Search Again" }
-        ]
-      });
-    }
-
-    const pageResults = results.slice(0, 9);
-    const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
-    if (results.length > 9) {
-      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
-      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
-      await saveBizSafe(biz);
-    }
-    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${results.length} found`, rows);
-  }
-
-  // ── No location found — ask for city as before ─────────────────────────
   biz.sessionData = {
     ...(biz.sessionData || {}),
-    supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct }
+    supplierSearch: {
+      ...(biz.sessionData?.supplierSearch || {}),
+      product: productQuery
+    }
   };
   biz.sessionState = "supplier_search_city";
   await saveBizSafe(biz);
 
-  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
+  return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
