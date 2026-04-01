@@ -417,23 +417,14 @@ let results = await SupplierProfile.find(query)
 
  results = results.filter((supplier) => {
     if (supplier?.profileType === "service") {
-      // Accept if they have rates, listed products, or products[] entries
       const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-      const hasListedProducts = (supplier.listedProducts || []).some(p =>
-        p && p !== "pending_upload" && normalizeProductName(p)
-      );
-      const hasProducts = (supplier.products || []).some(p =>
-        p && normalizeProductName(p)
-      );
-      return hasRates || hasListedProducts || hasProducts;
+      const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+      const hasProducts = (supplier.products || []).some(p => p && normalizeProductName(p));
+      const hasCategories = (supplier.categories || []).some(c => c && String(c).length > 0);
+      return hasRates || hasListedProducts || hasProducts || hasCategories;
     }
-
-    const hasListedProducts = (supplier.listedProducts || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
-    const hasProducts = (supplier.products || []).some(p =>
-      p && normalizeProductName(p)
-    );
+    const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+    const hasProducts = (supplier.products || []).some(p => p && normalizeProductName(p));
     return hasListedProducts || hasProducts;
   });
 
@@ -472,7 +463,7 @@ function productMatchesSearch(productName = "", searchTerm = "") {
   return productNorm.includes(searchNorm) || searchNorm.includes(productNorm);
 }
 
-function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
+function buildProductSearchOffersFromSupplier(supplier, searchTerm = "", extraTerms = []) {
   const offers = [];
   const seen = new Set();
 
@@ -483,7 +474,9 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     const normalizedProduct = normalizeProductName(cleanProduct);
 
     if (!cleanProduct || !normalizedProduct) return;
-    if (!productMatchesSearch(cleanProduct, searchTerm)) return;
+    const _termMatch = productMatchesSearch(cleanProduct, searchTerm) ||
+      (extraTerms.length && extraTerms.some(t => productMatchesSearch(cleanProduct, t)));
+    if (!_termMatch) return;
 
     const dedupeKey = `${supplier._id}:${normalizedProduct}`;
     if (seen.has(dedupeKey)) return;
@@ -606,8 +599,11 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 export async function runSupplierOfferSearch({ city, category, product, profileType, area }) {
   const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
 
+  // Use the first matching synonym as the search term for offer matching,
+  // so "dentist" also matches "check-ups", "teeth cleaning" etc.
+  const _offerSearchTerms = expandSearchTerms(product || category || "");
   const offers = suppliers.flatMap(supplier =>
-    buildProductSearchOffersFromSupplier(supplier, product || category || "")
+    buildProductSearchOffersFromSupplier(supplier, product || category || "", _offerSearchTerms)
       .map((offer, idx) => ({
         ...offer,
         sortTierRank: typeof supplier.tierRank === "number" ? supplier.tierRank : 0,
