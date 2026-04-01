@@ -666,13 +666,21 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
     const min = s.minOrder > 0 ? ` · Min $${s.minOrder}` : "";
     const rating = typeof s.rating === "number" ? ` · ⭐${s.rating.toFixed(1)}` : "";
 
-    let matchHint = "";
-    if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
-      const match = s.rates.find(r => {
-        const serviceName = normalizeProductName(r?.service || "");
-        return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
-      });
-      if (match) matchHint = ` · ${match.service} ${match.rate}`;
+  let matchHint = "";
+    if (s.profileType === "service") {
+      // Try to find a matching rate with a price
+      if (normalizedSearchTerm && s.rates?.length) {
+        const match = s.rates.find(r => {
+          const serviceName = normalizeProductName(r?.service || "");
+          return serviceName && (serviceName.includes(normalizedSearchTerm) || normalizedSearchTerm.includes(serviceName));
+        });
+        if (match) matchHint = ` · ${match.service} ${match.rate}`;
+      }
+      // Fallback: show first 2 services from products[] when rates[] is empty or no match found
+      if (!matchHint) {
+        const serviceList = (s.products || []).filter(Boolean).slice(0, 2).join(", ");
+        if (serviceList) matchHint = ` · ${serviceList}`;
+      }
     } else if (normalizedSearchTerm) {
       const allowedNames = new Set(
         (s.listedProducts || [])
@@ -690,7 +698,6 @@ export function formatSupplierResults(suppliers, city, searchTerm) {
 
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
     }
-
     return {
       id: `sup_view_${s._id}`,
       title: `${badge}${s.businessName}`,

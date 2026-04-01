@@ -747,13 +747,25 @@ function getSupplierCatalogueSourceItems(supplier) {
   if (!supplier) return [];
 
   if (supplier.profileType === "service") {
-    return (supplier.rates || [])
+    const rateItems = (supplier.rates || [])
       .filter(r => normalizeProductName(r?.service || ""))
       .map(r => ({
         name: String(r.service).trim(),
         priceLabel: formatSupplierRateDisplay(r.rate || ""),
         rawPrice: parseSupplierRateValue(r.rate || ""),
         unit: parseSupplierRateUnit(r.rate || "") || "job"
+      }));
+
+    if (rateItems.length) return rateItems;
+
+    // Fallback: use products[] when rates[] is empty (no prices set yet)
+    return (supplier.products || [])
+      .filter(p => p && normalizeProductName(p))
+      .map(p => ({
+        name: String(p).trim(),
+        priceLabel: "Price on request",
+        rawPrice: null,
+        unit: "job"
       }));
   }
 
@@ -1138,9 +1150,9 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
       text:
         `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
         (searchTerm ? ` for *${searchTerm}*.` : "."),
-      buttons: [
+ buttons: [
         { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
@@ -1210,9 +1222,9 @@ async function _sendSupplierNumberedCatalogueText(from, supplier, cart = [], opt
       text:
         `😕 No ${supplier.profileType === "service" ? "services" : "products"} found` +
         (searchTerm ? ` for *${searchTerm}*.` : "."),
-      buttons: [
+ buttons: [
         { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
