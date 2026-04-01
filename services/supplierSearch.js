@@ -806,8 +806,7 @@ function toTitleCase(value = "") {
 // Scans ALL word-window positions so city/suburb can appear anywhere in the
 // phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
-  // Self-contained suburb/city maps so this works regardless of module-scope ordering
-  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pelandaba":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
   const _CITIES = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls"];
 
   const raw = String(input || "").toLowerCase().trim()
@@ -821,7 +820,7 @@ export function parseShortcodeSearch(input = "") {
 
   let city=null, area=null, cityIdx=-1, cityLen=0, areaIdx=-1, areaLen=0;
 
-  // Pass 1: find city name at ANY position in the phrase
+  // Pass 1: find city name at ANY position in phrase
   outer1: for (let len=Math.min(2,words.length); len>=1; len--) {
     for (let i=0; i<=words.length-len; i++) {
       const c = words.slice(i,i+len).join(" ");
@@ -829,7 +828,7 @@ export function parseShortcodeSearch(input = "") {
     }
   }
 
-  // Pass 2: find suburb at ANY position in the phrase
+  // Pass 2: find suburb at ANY position in phrase
   outer2: for (let len=Math.min(3,words.length); len>=1; len--) {
     for (let i=0; i<=words.length-len; i++) {
       if (i===cityIdx && len===cityLen) continue;
@@ -838,7 +837,7 @@ export function parseShortcodeSearch(input = "") {
     }
   }
 
-  // Remove city+suburb words to get the product term
+  // Strip city+suburb words to get the product term
   const remove = [];
   if (cityIdx>=0) remove.push([cityIdx, cityIdx+cityLen]);
   if (areaIdx>=0) remove.push([areaIdx, areaIdx+areaLen]);
@@ -848,7 +847,6 @@ export function parseShortcodeSearch(input = "") {
 
   return { product: product||raw, city, area };
 }
-
 function parseQueryWithCity(query = "") {
   const KNOWN_CITIES = [
     "harare", "-", "mutare", "gweru", "masvingo",

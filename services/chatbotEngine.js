@@ -1742,11 +1742,22 @@ if (
       buttons: [{ id: "find_supplier", title: "⬅ Back" }]
     });
   }
+function _inlineParseLocation(txt) {
+    const _S = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+    const _C = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls","bindura"];
+    const _tc = v => String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" ");
+    const raw = txt.toLowerCase().trim().replace(/^find\s+/i,"").replace(/^search\s+/i,"").replace(/\s+/g," ");
+    const words = raw.split(" ").filter(Boolean);
+    let city=null,area=null,ci=-1,cl=0,ai=-1,al=0;
+    outer1: for(let len=Math.min(2,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){const c=words.slice(i,i+len).join(" ");if(_C.includes(c)){city=_tc(c);ci=i;cl=len;break outer1;}}}
+    outer2: for(let len=Math.min(3,words.length);len>=1;len--){for(let i=0;i<=words.length-len;i++){if(i===ci&&len===cl)continue;const c=words.slice(i,i+len).join(" ");if(_S[c]){area=_tc(c);ai=i;al=len;if(!city)city=_S[c];break outer2;}}}
+    const rem=[];if(ci>=0)rem.push([ci,ci+cl]);if(ai>=0)rem.push([ai,ai+al]);rem.sort((a,b)=>a[0]-b[0]);
+    const prod=words.filter((_,i)=>!rem.some(([s,e])=>i>=s&&i<e)).join(" ").trim();
+    return{product:prod||raw,city,area};
+  }
 
-  const { parseShortcodeSearch } = await import("./supplierSearch.js");
-  const parsed = parseShortcodeSearch(productQuery) ||
-    parseShortcodeSearch(`find ${productQuery}`) ||
-    { product: productQuery, city: null, area: null };
+  const _loc = _inlineParseLocation(productQuery);
+  const parsed = (_loc.city || _loc.area) ? _loc : (parseShortcodeSearch(productQuery) || parseShortcodeSearch(`find ${productQuery}`) || { product: productQuery, city: null, area: null });
 
   const cleanProduct = String(parsed.product || "")
     .toLowerCase()
@@ -1892,8 +1903,7 @@ if (
   !isMetaAction &&
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
-  !_orderBlockedStates.has(_activeOrderState) &&
-  biz?.sessionState !== "supplier_search_city"
+  !_orderBlockedStates.has(_activeOrderState)
 ) {
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
@@ -9428,17 +9438,51 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     });
   }
 
+  // ── Parse location out of the free-text query ──────────────────────────
+  const parsed = parseShortcodeSearch(rawQuery) || { product: productQuery, city: null, area: null };
+  const cleanProduct = String(parsed.product || productQuery).trim();
+
+  // ── If city/area was already in the query, search immediately ──────────
+  if (parsed.city || parsed.area) {
+    const locationLabel = parsed.area ? `${parsed.area}, ${parsed.city}` : parsed.city;
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct, city: parsed.city }
+    };
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    const results = await runSupplierSearch({ city: parsed.city || null, product: cleanProduct, area: parsed.area || null });
+
+    if (!results.length) {
+      return sendButtons(from, {
+        text: `😕 No results for *${cleanProduct}* in *${locationLabel}*.\n\nTry a different city or search all of Zimbabwe?`,
+        buttons: [
+          { id: "sup_search_city_all", title: "📍 Search All Cities" },
+          { id: "find_supplier", title: "🔍 Search Again" }
+        ]
+      });
+    }
+
+    const pageResults = results.slice(0, 9);
+    const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
+    if (results.length > 9) {
+      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+      await saveBizSafe(biz);
+    }
+    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${results.length} found`, rows);
+  }
+
+  // ── No location found — ask for city ───────────────────────────────────
   biz.sessionData = {
     ...(biz.sessionData || {}),
-    supplierSearch: {
-      ...(biz.sessionData?.supplierSearch || {}),
-      product: productQuery
-    }
+    supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct }
   };
   biz.sessionState = "supplier_search_city";
   await saveBizSafe(biz);
 
-  return sendList(from, `🔍 Looking for: *${productQuery}*\n\nWhich city?`, [
+  return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
       id: `sup_search_city_${c.toLowerCase()}`,
       title: c
