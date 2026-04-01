@@ -353,28 +353,26 @@ if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
     .lean();
 }
 
-// ✅ CLASSIFICATION MANAGER: Load quizzes with category data (cripfcnt-home + cripfcnt-school)
+// ✅ CLASSIFICATION MANAGER: Load quizzes with category data (cripfcnt-home only)
 let classifyQuizzes = [];
 let classifyCategoryCounts = {};
 if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
-  // Three-branch org scope: owned, legacy no-field, explicitly null
-  const classifyOrgScope = {
+  classifyQuizzes = await Question.find({
     type: "comprehension",
-    $or: [
-      { organization: org._id },
-      { organization: { $exists: false } },
-      { organization: null }
-    ]
-  };
-
-  classifyQuizzes = await Question.find(classifyOrgScope)
+    $or: [{ organization: org._id }, { organization: null }]
+  })
     .select("_id quizTitle text category series meta")
     .sort({ quizTitle: 1 })
     .lean();
 
   // Build category counts for the sidebar badge
   const catAgg = await Question.aggregate([
-    { $match: classifyOrgScope },
+    {
+      $match: {
+        type: "comprehension",
+        $or: [{ organization: org._id }, { organization: null }]
+      }
+    },
     { $group: { _id: "$category", count: { $sum: 1 } } }
   ]);
   catAgg.forEach(c => { classifyCategoryCounts[c._id || "__none__"] = c.count; });
@@ -3470,61 +3468,37 @@ router.get(
 
       const { pillar, category, unclassified, q } = req.query;
 
-      // ── BUG FIX: org scope uses $and so search can never overwrite it ──
-      // Three branches: org-owned, legacy no-field, or explicitly null
-      const orgScope = {
-        $or: [
-          { organization: org._id },
-          { organization: { $exists: false } },
-          { organization: null }
-        ]
-      };
-
       const match = {
         type: "comprehension",
-        $and: [ orgScope ]
+        $or: [{ organization: org._id }, { organization: null }]
       };
 
-      // Pillar / category / unclassified filter — all pushed into $and
       if (unclassified === "1") {
-        match.$and.push({
-          $or: [
-            { category: { $exists: false } },
-            { category: null },
-            { category: "" },
-            { category: "out-of-scope" }
-          ]
-        });
+        match.$and = [
+          { $or: [{ category: { $exists: false } }, { category: null }, { category: "" }, { category: "out-of-scope" }] }
+        ];
       } else if (category) {
-        match.$and.push({ category });
+        match.category = category;
       } else if (pillar) {
-        match.$and.push({ "meta.aiPillar": pillar });
+        match["meta.aiPillar"] = pillar;
       }
 
-      // ── BUG FIX: search added to $and — never overwrites org scope ──
-      if (q && q.trim()) {
-        const re = { $regex: q.trim(), $options: "i" };
-        match.$and.push({ $or: [{ quizTitle: re }, { text: re }] });
+      if (q) {
+        match.$or = [
+          { quizTitle: { $regex: q, $options: "i" } },
+          { text: { $regex: q, $options: "i" } }
+        ];
       }
 
-      // ── BUG FIX: removed .limit(200) — load every quiz ──
       const quizzes = await Question.find(match)
         .select("_id quizTitle text category series meta")
         .sort({ quizTitle: 1 })
+        .limit(200)
         .lean();
 
-      // Category counts for sidebar (always full corpus, no filter)
+      // Category counts for sidebar
       const catAgg = await Question.aggregate([
-        {
-          $match: {
-            type: "comprehension",
-            $or: [
-              { organization: org._id },
-              { organization: { $exists: false } },
-              { organization: null }
-            ]
-          }
-        },
+        { $match: { type: "comprehension", $or: [{ organization: org._id }, { organization: null }] } },
         { $group: { _id: "$category", count: { $sum: 1 } } }
       ]);
       const counts = {};
@@ -3532,16 +3506,15 @@ router.get(
 
       return res.json({
         ok: true,
-        total: quizzes.length,
-        quizzes: quizzes.map(qz => ({
-          id:          String(qz._id),
-          title:       qz.quizTitle || qz.text?.slice(0, 80) || "Untitled",
-          category:    qz.category  || null,
-          series:      qz.series    || null,
-          pillar:      qz.meta?.aiPillar    || null,
-          confidence:  qz.meta?.aiConfidence ?? null,
-          isLocked:    !!qz.meta?.manualOverride,
-          isOutOfScope:!!qz.meta?.isOutOfScope
+        quizzes: quizzes.map(q => ({
+          id: String(q._id),
+          title: q.quizTitle || q.text?.slice(0, 80) || "Untitled",
+          category: q.category || null,
+          series: q.series || null,
+          pillar: q.meta?.aiPillar || null,
+          confidence: q.meta?.aiConfidence || null,
+          isLocked: !!q.meta?.manualOverride,
+          isOutOfScope: !!q.meta?.isOutOfScope
         })),
         counts
       });

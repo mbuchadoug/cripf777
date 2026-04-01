@@ -2654,6 +2654,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── State ──
   let _quizzes  = [];        // current list
+  let _totalAll = 0;         // total count from server (unfiltered)
   let _counts   = {};        // category → count from server
   let _selected = new Set(); // selected quiz IDs
   let _filter   = 'all';
@@ -2704,28 +2705,38 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await r.json();
       if (!data.ok) throw new Error(data.error);
 
-      _quizzes = data.quizzes;
-      _counts  = data.counts;
+      _quizzes   = data.quizzes;
+      _totalAll  = data.total;   // full unfiltered count from server
+      _counts    = data.counts;
       _selected.clear();
       updateSidebarCounts();
       renderList();
       updateBulkBar();
+
+      // Show result count when searching
+      const badge = document.getElementById('clf-status-badge');
+      if (badge) {
+        badge.textContent = _search
+          ? `${_quizzes.length} result${_quizzes.length !== 1 ? 's' : ''} for "${_search}"`
+          : `${_totalAll} total quiz${_totalAll !== 1 ? 'zes' : ''}`;
+      }
     } catch (e) {
       list.innerHTML = `<div class="clf-loading" style="color:var(--rose)">⚠ ${e.message}</div>`;
     }
   }
 
   function updateSidebarCounts() {
-    // Total
-    document.getElementById('clf-count-all').textContent = _quizzes.length;
-    // Unclassified: count from current list
-    document.getElementById('clf-count-unclassified').textContent =
+    // Total — always from server total, not current filtered list
+    document.getElementById('clf-count-all').textContent = _totalAll || _quizzes.length;
+    // Unclassified + locked — derive from server _counts (none key = unclassified)
+    const unclassifiedTotal = (_counts['__none__'] || 0) + (_counts[''] || 0)
+      + (_counts['null'] || 0) + (_counts['out-of-scope'] || 0);
+    document.getElementById('clf-count-unclassified').textContent = unclassifiedTotal || 
       _quizzes.filter(q => !q.category || q.category === 'out-of-scope').length;
-    // Locked
     document.getElementById('clf-count-locked').textContent =
       _quizzes.filter(q => q.isLocked).length;
 
-    // Per-pillar counts from server _counts
+    // Per-pillar counts from server _counts (full corpus, not filtered list)
     const pillarTotals = {};
     for (const [cat, count] of Object.entries(_counts)) {
       const p = CAT_TO_PILLAR[cat];
@@ -2744,10 +2755,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Apply locked/unclassified client-side sub-filter
+    // Server already applied all filters; client-side only needed for locked
+    // (unclassified is handled server-side via ?unclassified=1)
     let items = _quizzes;
-    if (_filter === 'locked')       items = _quizzes.filter(q => q.isLocked);
-    else if (_filter === 'unclassified') items = _quizzes.filter(q => !q.category || q.category === 'out-of-scope');
+    if (_filter === 'locked') items = _quizzes.filter(q => q.isLocked);
 
     list.innerHTML = items.map(q => {
       const catBadge = q.category && q.category !== 'out-of-scope'
@@ -2808,9 +2819,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBulkBar();
   }
   function clfToggleAll(checked) {
+    // Server already filtered for unclassified/pillar; client only filters locked
     let items = _quizzes;
     if (_filter === 'locked') items = _quizzes.filter(q => q.isLocked);
-    else if (_filter === 'unclassified') items = _quizzes.filter(q => !q.category || q.category === 'out-of-scope');
     items.forEach(q => {
       if (checked) _selected.add(q.id); else _selected.delete(q.id);
       const row = document.getElementById(`clfrow-${q.id}`);
