@@ -1014,9 +1014,9 @@ async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, ca
       `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` +
       (searchTerm ? `\n🔎 Search: ${searchTerm}` : "") +
       `\n\nWhat would you like to do next?`,
-    buttons: [
-      { id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: "➕ Add to Cart" },
-      { id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "⚡ Book This Now" : "⚡ Order This Now" },
+ buttons: [
+      { id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "✅ Confirm Booking" : "✅ Place Order" },
+      { id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "➕ Add Another Service" : "➕ Add to Cart" },
       { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
     ]
   });
@@ -6920,6 +6920,14 @@ if (a.startsWith("sup_offer_pick_")) {
     }
   });
 
+// For services, skip qty picker — default to 1 and go straight to preview
+  if (supplier.profileType === "service") {
+    return _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart, {
+      quantity: 1,
+      searchTerm: productName
+    });
+  }
+
   return _sendSupplierQuantityPicker(from, supplier, selectedItem, cart, {
     backId: "sup_offer_results_back"
   });
@@ -9015,6 +9023,32 @@ if (a.startsWith("sup_cart_add_")) {
       selectedSupplierItem: selectedItem
     }
   });
+
+// For services, quantity is always 1 — skip the qty picker entirely
+  if (isService) {
+    selectedItem.quantity = 1;
+    selectedItem.total =
+      typeof selectedItem.pricePerUnit === "number" && !Number.isNaN(selectedItem.pricePerUnit)
+        ? Number((1 * selectedItem.pricePerUnit).toFixed(2))
+        : null;
+
+    await persistOrderFlowState({
+      biz,
+      phone,
+      patch: {
+        orderSupplierId: String(supplier._id),
+        orderIsService: true,
+        orderBrowseMode: "selected_offer",
+        orderCatalogueSearch: currentSearchTerm,
+        selectedSupplierItem: selectedItem
+      }
+    });
+
+    return _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart, {
+      quantity: 1,
+      searchTerm: currentSearchTerm
+    });
+  }
 
   return _sendSupplierQuantityPicker(from, supplier, selectedItem, cart, {
     backId: currentSearchTerm && currentBrowseMode !== "numbered_catalogue"
