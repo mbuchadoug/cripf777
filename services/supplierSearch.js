@@ -309,6 +309,16 @@ const SEARCH_SYNONYMS = {
   "carpenter": ["woodwork", "furniture", "carpentry", "timber", "doors"],
   "tailor": ["sewing", "clothing", "alterations", "dressmaker", "fashion"],
   "driver": ["transport", "car hire", "delivery", "taxi", "chauffeur"],
+
+  // ── MEDICAL & DENTAL ──────────────────────────────────────────────────────
+  "dentist": ["dental", "teeth", "teeth cleaning", "dental clinic", "check-ups", "fillings", "root canal", "oral health", "medical_health"],
+  "dental": ["dentist", "teeth", "teeth cleaning", "dental clinic", "check-ups", "fillings", "root canal", "oral health", "medical_health"],
+  "teeth cleaning": ["dental", "dentist", "oral health", "dental clinic", "medical_health"],
+  "teeth": ["dental", "dentist", "teeth cleaning", "oral health", "medical_health"],
+  "doctor": ["clinic", "medical", "health", "gp", "general practitioner", "medical_health"],
+  "clinic": ["doctor", "medical", "health", "hospital", "medical_health"],
+  "medical": ["doctor", "clinic", "health", "hospital", "medical_health", "pharmacy"],
+  "pharmacy": ["chemist", "medicine", "drugs", "medical", "health", "medical_health"],
 };
 
 // ── Expand a search term using the synonym map ───────────────────────────────
@@ -469,7 +479,10 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     const normalizedProduct = normalizeProductName(cleanProduct);
 
     if (!cleanProduct || !normalizedProduct) return;
-    if (!productMatchesSearch(cleanProduct, searchTerm)) return;
+// For services, also accept if the supplier was matched via category/synonym —
+    // in that case searchTerm won't literally appear in the service name (e.g. "dentist" vs "check-ups")
+    const termMatchFails = !productMatchesSearch(cleanProduct, searchTerm);
+    if (termMatchFails && supplier.profileType !== "service") return;
 
     const dedupeKey = `${supplier._id}:${normalizedProduct}`;
     if (seen.has(dedupeKey)) return;
@@ -496,7 +509,7 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     });
   };
 
-  if (supplier.profileType === "service") {
+if (supplier.profileType === "service") {
     for (const rate of (supplier.rates || [])) {
       const serviceName = String(rate?.service || "").trim();
       const rawRate = String(rate?.rate || "").trim();
@@ -506,12 +519,16 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       const amount = amountMatch ? Number(amountMatch[1]) : null;
       const unit = rawRate.includes("/") ? rawRate.split("/")[1].trim() || "job" : "job";
 
-      pushOffer({
-        product: serviceName,
-        price: amount,
-        unit,
-        matchSource: "rates"
-      });
+      pushOffer({ product: serviceName, price: amount, unit, matchSource: "rates" });
+    }
+
+    // Fallback: surface items from products[] when rates[] is empty
+    // (supplier registered but hasn't set prices yet)
+    if (offers.length === 0) {
+      for (const svcName of (supplier.products || [])) {
+        if (!svcName || !normalizeProductName(svcName)) continue;
+        pushOffer({ product: svcName, price: null, unit: "job", matchSource: "products" });
+      }
     }
 
     return offers;
@@ -782,65 +799,54 @@ function toTitleCase(value = "") {
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare" etc.
 // Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// ── Parse shortcode search from raw text ─────────────────────────────────────
+// Handles: "find cement", "find plumber harare", "find cement mbare",
+//          "find dentist avondale", "find cleaner borrowdale harare",
+//          "find electrician mbare harare"
+// Scans ALL word-window positions so city/suburb can appear anywhere in the
+// phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
-  const raw = String(input || "")
-    .toLowerCase()
-    .trim()
-    .replace(/^find\s+/i, "")
-    .replace(/^search\s+/i, "")
-    .replace(/^s\s+/i, "")
-    .replace(/\s+/g, " ");
+  // Self-contained suburb/city maps so this works regardless of module-scope ordering
+  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pelandaba":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe"};
+  const _CITIES = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls"];
 
+  const raw = String(input || "").toLowerCase().trim()
+    .replace(/^find\s+/i, "").replace(/^search\s+/i, "").replace(/^s\s+/i, "").replace(/\s+/g, " ");
   if (!raw) return null;
 
-  const cityNames = SUPPLIER_CITIES
-    .map(c => {
-      if (typeof c === "string") return c.toLowerCase().trim();
-      if (c?.name)  return String(c.name).toLowerCase().trim();
-      if (c?.label) return String(c.label).toLowerCase().trim();
-      if (c?.id)    return String(c.id).toLowerCase().trim();
-      return "";
-    })
-    .filter(Boolean);
+  function _tc(v) { return String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" "); }
 
   const words = raw.split(" ").filter(Boolean);
   if (!words.length) return null;
 
-  let city = null;
-  let area = null;
-  let productWords = [...words];
+  let city=null, area=null, cityIdx=-1, cityLen=0, areaIdx=-1, areaLen=0;
 
-  // Step 1: Check last 2 → 1 words for a known CITY name
-  for (let len = Math.min(2, words.length); len >= 1; len--) {
-    const candidate = words.slice(-len).join(" ").trim();
-    if (cityNames.includes(candidate)) {
-      city = toTitleCase(candidate);
-      productWords = words.slice(0, -len);
-      break;
+  // Pass 1: find city name at ANY position in the phrase
+  outer1: for (let len=Math.min(2,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      const c = words.slice(i,i+len).join(" ");
+      if (_CITIES.includes(c)) { city=_tc(c); cityIdx=i; cityLen=len; break outer1; }
     }
   }
 
-  // Step 2: If no city yet, check last 3 → 1 words against SUBURB_TO_CITY
-  if (!city) {
-    for (let len = Math.min(3, words.length); len >= 1; len--) {
-      const candidate = words.slice(-len).join(" ").trim();
-      const mappedCity = SUBURB_TO_CITY[candidate];
-      if (mappedCity) {
-        city = mappedCity;
-        area = toTitleCase(candidate);
-        productWords = words.slice(0, -len);
-        break;
-      }
+  // Pass 2: find suburb at ANY position in the phrase
+  outer2: for (let len=Math.min(3,words.length); len>=1; len--) {
+    for (let i=0; i<=words.length-len; i++) {
+      if (i===cityIdx && len===cityLen) continue;
+      const c = words.slice(i,i+len).join(" ");
+      if (_SUBURBS[c]) { area=_tc(c); areaIdx=i; areaLen=len; if(!city) city=_SUBURBS[c]; break outer2; }
     }
   }
 
+  // Remove city+suburb words to get the product term
+  const remove = [];
+  if (cityIdx>=0) remove.push([cityIdx, cityIdx+cityLen]);
+  if (areaIdx>=0) remove.push([areaIdx, areaIdx+areaLen]);
+  remove.sort((a,b)=>a[0]-b[0]);
+  const productWords = words.filter((_,i) => !remove.some(([s,e])=>i>=s&&i<e));
   const product = productWords.join(" ").trim();
 
-  if (!product) {
-    return { product: raw, city: null, area: null };
-  }
-
-  return { product, city, area };
+  return { product: product||raw, city, area };
 }
 
 function parseQueryWithCity(query = "") {
