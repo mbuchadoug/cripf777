@@ -654,8 +654,35 @@ export async function runSupplierOfferSearch({ city, category, product, profileT
   return offers.slice(0, 50);
 }
 
-export function formatSupplierOfferResults(offers = []) {
-  return offers.map((offer) => {
+export function formatSupplierOfferResults(offers = [], searchTerm = "") {
+  // Dedupe by supplierId when all offers from a supplier have no price and
+  // none of their service names contain the search term — collapse to one row
+  // showing the businessName so the list isn't flooded with "check-ups / fillings / root canal"
+  // for a "dentist" search where none of those words match.
+  const searchNorm = (searchTerm || "").toLowerCase().trim().replace(/[^\w\s]/g, "").replace(/\s+/g, " ");
+
+  const seen = new Set();
+  const deduped = [];
+
+  for (const offer of offers) {
+    const productNorm = (offer.product || "").toLowerCase().trim().replace(/[^\w\s]/g, "").replace(/\s+/g, " ");
+    const nameMatches = searchNorm && (productNorm.includes(searchNorm) || searchNorm.includes(productNorm));
+    const hasPricing = offer.pricePerUnit !== null;
+
+    // Always show if: has a price, or service name matches search term
+    if (hasPricing || nameMatches) {
+      deduped.push({ ...offer, _useBusinessName: false });
+      continue;
+    }
+
+    // No price + no name match: show only ONE row per supplier, using businessName as title
+    if (!seen.has(offer.supplierId)) {
+      seen.add(offer.supplierId);
+      deduped.push({ ...offer, _useBusinessName: true });
+    }
+  }
+
+  return deduped.map((offer) => {
     const priceText =
       offer.pricePerUnit !== null
         ? `$${Number(offer.pricePerUnit).toFixed(2)}/${offer.unit || "each"}`
@@ -663,15 +690,18 @@ export function formatSupplierOfferResults(offers = []) {
 
     const locationText = [offer.supplierArea, offer.supplierCity].filter(Boolean).join(", ");
     const desc = [
-      `🏪 ${offer.supplierName}`,
       locationText ? `📍 ${locationText}` : "",
       offer.deliveryText || ""
     ].filter(Boolean).join(" · ");
 
+    const title = offer._useBusinessName
+      ? offer.supplierName
+      : offer.product;
+
     return {
       id: `sup_offer_pick_${offer.supplierId}_${encodeURIComponent(offer.product)}`,
-      title: `${offer.product}`.slice(0, 72),
-      description: `${priceText} · ${desc}`.slice(0, 72)
+      title: title.slice(0, 72),
+      description: `${priceText} · 🏪 ${offer.supplierName} · ${desc}`.slice(0, 72)
     };
   });
 }

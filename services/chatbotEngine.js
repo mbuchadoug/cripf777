@@ -1802,7 +1802,7 @@ if (parsed.city || parsed.area) {
         { upsert: true }
       );
       const pageOffers = offerResults.slice(0, 9);
-      const rows = formatSupplierOfferResults(pageOffers);
+    const rows = formatSupplierOfferResults(pageOffers, cleanProduct);
       if (offerResults.length > 9) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
       }
@@ -2024,7 +2024,7 @@ if (
           await saveBizSafe(biz);
         }
         const pageOffers = offerResults.slice(0, 9);
-        const rows = formatSupplierOfferResults(pageOffers);
+    const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
@@ -4128,7 +4128,7 @@ if (
         };
         await saveBizSafe(biz);
         const pageOffers = offerResults.slice(0, 9);
-        const rows = formatSupplierOfferResults(pageOffers);
+   const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
@@ -4221,7 +4221,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
           biz.sessionState = "ready";
           biz.sessionData = {};
           await saveBizSafe(biz);
-          const rows2 = formatSupplierOfferResults(offerResults2.slice(0, 9));
+         const rows2 = formatSupplierOfferResults(offerResults2.slice(0, 9), cleanProduct);
           if (offerResults2.length > 9) rows2.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults2.length - 9} more)` });
           return sendList(from, `🔍 *${cleanProduct}* in ${shortcode.city || shortcode.area} - ${offerResults2.length} found`, rows2);
         }
@@ -6725,7 +6725,7 @@ if (a.startsWith("sup_search_city_")) {
       }
 
       const pageResults = offerResults.slice(0, 9);
-      const rows = formatSupplierOfferResults(pageResults);
+     const rows = formatSupplierOfferResults(pageResults, product);
 
       if (offerResults.length > 9) {
         rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
@@ -6923,7 +6923,7 @@ if (a === "sup_offer_results_back") {
   const PAGE_SIZE = 9;
   const start = currentPage * PAGE_SIZE;
   const pageResults = allResults.slice(start, start + PAGE_SIZE);
-  const rows = formatSupplierOfferResults(pageResults);
+const rows = formatSupplierOfferResults(pageResults, biz?.sessionData?.supplierSearch?.product || "");
 
   const hasMore = allResults.length > start + PAGE_SIZE;
   const hasPrev = currentPage > 0;
@@ -8578,8 +8578,8 @@ if (a === "sup_search_prev_page") {
     resultMode = sess?.tempData?.searchResultMode || "suppliers";
   }
 
-  const rows = resultMode === "offers"
-    ? formatSupplierOfferResults(pageResults)
+ const rows = resultMode === "offers"
+  ? formatSupplierOfferResults(pageResults, biz?.sessionData?.supplierSearch?.product || "")
     : formatSupplierResults(pageResults, null, null);
   const hasMore = allResults.length > start + PAGE_SIZE;
   const hasPrev = currentPage > 0;
