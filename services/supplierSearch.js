@@ -424,9 +424,7 @@ results = results.filter((supplier) => {
     const hasProducts = (supplier.products || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-    // Accept service suppliers even if no products/rates are listed yet —
-    // they matched by businessName or category in the DB query, so they are relevant
-    return hasRates || hasListedProducts || hasProducts || true;
+    return hasRates || hasListedProducts || hasProducts;
   }
 
   return (supplier.listedProducts || []).some(p =>
