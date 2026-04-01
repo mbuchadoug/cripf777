@@ -8186,10 +8186,11 @@ ${isService
   ? `📍 *Add a contact note for the provider:*\n\nExamples:\n• _Call me on arrival_\n• _Preferred time: Mon 10am_\n• _+263 7XX XXX XXX_`
   : `📍 *Where should we deliver?*\n\nExamples:\n• _123 Samora Machel Ave, Harare_\n• _I will collect - call me_`}
 _Type your address below and send_ ✍️`,
-      buttons: [
+   buttons: [
+        ...(isService ? [{ id: `sup_skip_note_${supplierId}`, title: "⏭ Skip & Send" }] : []),
         { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
         { id: "find_supplier", title: "❌ Cancel" }
-      ]
+      ].slice(0, 3)
     });
   }
 
@@ -9368,13 +9369,73 @@ ${isService
 }
 
 _Type your address below and send to complete your ${isService ? "booking" : "order"}_ ✍️`,
-    buttons: [
+   buttons: [
+      ...(isService ? [{ id: `sup_skip_note_${supplierId}`, title: "⏭ Skip & Send" }] : []),
       { id: `sup_cart_clear_${supplierId}`, title: "✏️ Edit Order" },
       { id: "find_supplier", title: "❌ Cancel" }
-    ]
+    ].slice(0, 3)
   });
 }
 
+// ── Skip contact note — submit booking without address ────────────────────
+if (a.startsWith("sup_skip_note_")) {
+  const supplierId = a.replace("sup_skip_note_", "");
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  const cart = biz?.sessionData?.orderCart || sess?.tempData?.orderCart || [];
+
+  if (!cart.length) return sendText(from, "❌ Your cart is empty.");
+
+  let totalAmount = 0;
+  let pricedCount = 0;
+  const finalItems = cart.map(entry => {
+    const quantity = Number(entry.quantity) || 1;
+    const pricePerUnit = entry.pricePerUnit || null;
+    const total = pricePerUnit ? quantity * pricePerUnit : null;
+    if (total) { totalAmount += total; pricedCount++; }
+    return { product: entry.product, quantity, unit: entry.unit || "job", pricePerUnit, currency: "USD", total };
+  });
+
+  const order = await SupplierOrder.create({
+    supplierId: supplier._id,
+    supplierPhone: supplier.phone,
+    buyerPhone: phone,
+    items: finalItems,
+    totalAmount,
+    currency: "USD",
+    delivery: { required: false, address: "Client visits provider" },
+    status: "pending"
+  });
+
+  await notifySupplierNewOrder(supplier.phone, order, phone, { isBooking: true });
+
+  if (biz) { biz.sessionState = "ready"; biz.sessionData = {}; await saveBizSafe(biz); }
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { $unset: { "tempData.orderState": "", "tempData.orderSupplierId": "", "tempData.orderCart": "", "tempData.orderIsService": "" } },
+    { upsert: true }
+  );
+
+  const itemSummary = finalItems.map(i => `• ${i.product} ×${i.quantity}`).join("\n");
+  await sendText(from,
+`✅ *Booking sent to ${supplier.businessName}!*
+
+${itemSummary}
+📍 You will visit the provider
+${pricedCount > 0 ? `💵 Estimated total: $${totalAmount.toFixed(2)}\n` : ""}📞 Contact: ${supplier.phone}
+
+Supplier will confirm your booking shortly. 🎉`);
+
+  return sendButtons(from, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "find_supplier", title: "🔍 Browse & Shop" },
+      { id: "my_orders", title: "📋 My Orders" }
+    ]
+  });
+}
 // ── Cart: buyer clears cart ───────────────────────────────────────────────
 if (a.startsWith("sup_cart_clear_")) {
   const supplierId = a.replace("sup_cart_clear_", "");
@@ -9709,9 +9770,10 @@ ${isServiceSupplier
 }
 
 _Type your address below and send to complete your ${isServiceSupplier ? "booking" : "order"}_ ✍️`,
-  buttons: [
+ buttons: [
+    ...(isServiceSupplier ? [{ id: `sup_skip_note_${supplierId}`, title: "⏭ Skip & Send" }] : []),
     { id: "find_supplier", title: "❌ Cancel Order" }
-  ]
+  ].slice(0, 3)
 });
 }
 
