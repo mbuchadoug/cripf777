@@ -2139,13 +2139,16 @@ if (
     const results = await runSupplierSearch(searchArgs);
     console.log(`[TRACE-NOBIZ2] runSupplierSearch returned ${results.length} results`);
 
-    const normalizedQuery = normalizeProductName(shortcode.product);
+       const normalizedQuery = normalizeProductName(shortcode.product);
     const directBusinessMatches = results.filter(s => {
       const businessName = normalizeProductName(s.businessName || "");
       return businessName === normalizedQuery || businessName.includes(normalizedQuery);
     });
 
-    if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
+    // BUSINESS-NAME SEARCH:
+    // if there is one clear supplier match, go straight to that supplier,
+    // even when city/suburb was included inline.
+    if (directBusinessMatches.length === 1) {
       const supplier = directBusinessMatches[0];
       const cart = await getCurrentOrderCart({ biz, phone });
 
