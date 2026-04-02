@@ -894,7 +894,7 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
     [
       {
         id: `sup_catalog_page_open_${supplier._id}`,
-        title: "📚 View Supplier Catalogue"
+        title: "📚 View Catalogue"
       },
       {
         id: `sup_catalogue_search_${supplier._id}`,
