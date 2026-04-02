@@ -4859,15 +4859,12 @@ Or pick a category 👇`,
 
 if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   const searchType = a === "sup_search_type_service" ? "service" : "product";
-  const filteredCategories = getSupplierCategoriesForType(searchType);
 
+  // Save search type to session
   if (biz) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
-      supplierSearch: {
-        ...(biz.sessionData?.supplierSearch || {}),
-        type: searchType
-      }
+      supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), type: searchType }
     };
     await saveBizSafe(biz);
   } else {
@@ -4878,45 +4875,115 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
     );
   }
 
- const categoryRows = [
-  ...filteredCategories.slice(0, 8).map(c => ({
-    id: `sup_search_cat_${c.id}`,
-    title: c.label
-  })),
-  {
-    id: "sup_search_all",
-    title: searchType === "service" ? "🔍 Search by service name" : "🔍 Search by product name"
-  },
-  ...(filteredCategories.length > 8
-    ? [{ id: "sup_search_more_categories", title: "➕ More Categories" }]
-    : [])
-];
+  // ── Services: show collar groups first (same as seller registration) ──
+  // WhatsApp list limit is 10 rows — 21 service categories can't fit in one list.
+  if (searchType === "service") {
+    return sendList(from, "🔧 What type of service are you looking for?", [
+      { id: "sup_search_collar_white_collar", title: "💼 Professional Services" },
+      { id: "sup_search_collar_trade",        title: "🔧 Trade & Artisan" },
+      { id: "sup_search_collar_blue_collar",  title: "🧹 General Services" },
+      { id: "sup_search_all",                 title: "🔍 Search by service name" },
+      { id: "find_supplier",                  title: "⬅ Back" }
+    ]);
+  }
 
-  return sendList(
-    from,
-    searchType === "service"
-      ? "🔧 Choose a service category"
-      : "📦 Choose a product category",
-    categoryRows
-  );
+  // ── Products: show first 8 categories + overflow ──
+  const filteredCategories = getSupplierCategoriesForType(searchType);
+  const categoryRows = [
+    ...filteredCategories.slice(0, 8).map(c => ({
+      id: `sup_search_cat_${c.id}`,
+      title: c.label
+    })),
+    { id: "sup_search_all", title: "🔍 Search by product name" },
+    ...(filteredCategories.length > 8
+      ? [{ id: "sup_search_more_categories", title: "➕ More Categories" }]
+      : [])
+  ];
+
+  return sendList(from, "📦 Choose a product category", categoryRows);
 }
 
-if (a === "sup_search_more_categories") {
-  let searchType = biz?.sessionData?.supplierSearch?.type || null;
 
+
+// ── NEW: Service collar group selected by buyer ───────────────────────────────
+// Mirrors the seller registration collar flow — shows only the categories
+// belonging to that collar group (max 10 per group, all fit in one WhatsApp list)
+if (a.startsWith("sup_search_collar_")) {
+  const collarKey = a.replace("sup_search_collar_", "");
+  const validCollars = ["white_collar", "trade", "blue_collar"];
+  if (!validCollars.includes(collarKey)) return startSupplierSearch(from, biz, saveBizSafe);
+
+  const collarLabels = {
+    white_collar: "💼 Professional Services",
+    trade:        "🔧 Trade & Artisan",
+    blue_collar:  "🧹 General Services"
+  };
+
+  const collarCategories = SUPPLIER_CATEGORIES.filter(
+    c => c.types.includes("service") && c.collar === collarKey
+  );
+
+  // Each collar group has ≤ 12 categories — split to stay under WhatsApp's 10-row limit
+  const firstBatch = collarCategories.slice(0, 9);
+  const hasMore    = collarCategories.length > 9;
+
+  const rows = [
+    ...firstBatch.map(c => ({ id: `sup_search_cat_${c.id}`, title: c.label })),
+    ...(hasMore ? [{ id: `sup_search_collar_more_${collarKey}`, title: "➕ More" }] : []),
+    { id: "sup_search_type_service", title: "⬅ Back" }
+  ];
+
+  return sendList(from, collarLabels[collarKey] || "🔧 Choose a category", rows);
+}
+
+// ── NEW: Overflow page for a collar group ─────────────────────────────────────
+if (a.startsWith("sup_search_collar_more_")) {
+  const collarKey = a.replace("sup_search_collar_more_", "");
+
+  const collarCategories = SUPPLIER_CATEGORIES.filter(
+    c => c.types.includes("service") && c.collar === collarKey
+  );
+
+  const rows = [
+    ...collarCategories.slice(9).map(c => ({ id: `sup_search_cat_${c.id}`, title: c.label })),
+    { id: `sup_search_collar_${collarKey}`, title: "⬅ Back" }
+  ];
+
+  return sendList(from, "🔧 More categories", rows);
+}
+
+
+
+
+if (a === "sup_search_more_categories") {
+  // This handler is only reached from the product category list (services use collar flow)
+  let searchType = biz?.sessionData?.supplierSearch?.type || null;
   if (!searchType) {
     const sess = await UserSession.findOne({ phone });
     searchType = sess?.tempData?.supplierSearchType || "product";
   }
 
-  const filteredCategories = getSupplierCategoriesForType(searchType);
+  // If somehow service reaches here, redirect to collar picker
+  if (searchType === "service") {
+    return sendList(from, "🔧 What type of service are you looking for?", [
+      { id: "sup_search_collar_white_collar", title: "💼 Professional Services" },
+      { id: "sup_search_collar_trade",        title: "🔧 Trade & Artisan" },
+      { id: "sup_search_collar_blue_collar",  title: "🧹 General Services" },
+      { id: "sup_search_all",                 title: "🔍 Search by service name" },
+      { id: "find_supplier",                  title: "⬅ Back" }
+    ]);
+  }
 
-  return sendList(from, "🔍 More Categories", [
-    ...filteredCategories.slice(9).map(c => ({
-      id: `sup_search_cat_${c.id}`,
-      title: c.label
-    })),
-    { id: "find_supplier", title: "⬅ Back" }
+  const filteredCategories = getSupplierCategoriesForType(searchType);
+  // WhatsApp max 10 rows — products overflow: items 9–17, capped at 9 + Back
+  const overflowRows = filteredCategories.slice(9, 18).map(c => ({
+    id: `sup_search_cat_${c.id}`,
+    title: c.label
+  }));
+
+  return sendList(from, "📦 More Product Categories", [
+    ...overflowRows,
+    { id: "sup_search_type_product", title: "⬅ Back" }
   ]);
 }
 
