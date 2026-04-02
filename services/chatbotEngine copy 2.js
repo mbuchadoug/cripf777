@@ -1721,22 +1721,6 @@ Reply *menu* to start.`);
   const biz = await getBizForPhone(from);
   const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
 
-  // AUTO-RESET: If a real (non-ghost) supplier's biz is stuck in a registration
-  // payment state but their subscription is already active, clear the stale state.
-  // This happens when payment completes asynchronously and sessionState is never
-  // cleared, leaving the seller's searches routed to the EcoCash handler.
-  if (
-    biz &&
-    !isGhostSupplierBiz &&
-    biz.isSupplier &&
-    biz.subscriptionStatus === "active" &&
-    (biz.sessionState === "supplier_reg_enter_ecocash" ||
-     biz.sessionState === "supplier_reg_payment_pending")
-  ) {
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
-  }
-
   // =========================
   // 🟢 ONBOARDING GATE
   // =========================
@@ -1762,7 +1746,7 @@ const GREETING_WORDS = new Set([
   "help", "start", "menu", "home", "back", "cancel"
 ]);
 
-if (!biz) {
+if (!biz && !ownerRole) {
   const supplierExists = await SupplierProfile.findOne({ phone });
   const sess = await UserSession.findOne({ phone });
 
