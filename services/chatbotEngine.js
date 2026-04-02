@@ -2015,16 +2015,26 @@ if (
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
 
- if (shortcode.city && results.length) {
+if (shortcode.city && results.length) {
       const locationLabel = shortcode.area
         ? `${shortcode.area}, ${shortcode.city}`
         : shortcode.city;
 
-      const offerResults = await runSupplierOfferSearch({
+      // Try offers with city first
+      let offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
+
+      // If city search returned no offers, retry without city constraint
+      if (!offerResults.length) {
+        offerResults = await runSupplierOfferSearch({
+          city: null,
+          product: shortcode.product,
+          area: shortcode.area || null
+        });
+      }
 
       if (offerResults.length) {
         await UserSession.findOneAndUpdate(
@@ -2049,13 +2059,14 @@ if (
           await saveBizSafe(biz);
         }
         const pageOffers = offerResults.slice(0, 9);
-    const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
       }
 
+      // Only reach here if no offers found anywhere — show businesses as last resort
       const pageResults = results.slice(0, 9);
       const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
       if (results.length > 9) {
@@ -4137,11 +4148,22 @@ if (
         { upsert: true }
       );
 
-      const offerResults = await runSupplierOfferSearch({
+   // Try offers with city first
+      let offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
+
+      // If city search returned no offers, retry without city constraint
+      // (same relaxed-fallback logic that runSupplierSearch uses internally)
+      if (!offerResults.length) {
+        offerResults = await runSupplierOfferSearch({
+          city: null,
+          product: shortcode.product,
+          area: shortcode.area || null
+        });
+      }
 
       if (offerResults.length) {
         biz.sessionData = {
@@ -4153,13 +4175,14 @@ if (
         };
         await saveBizSafe(biz);
         const pageOffers = offerResults.slice(0, 9);
-   const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
       }
 
+      // Only reach here if absolutely no offers exist anywhere — show businesses as last resort
       const results = await runSupplierSearch({
         city: shortcode.city,
         product: shortcode.product,
