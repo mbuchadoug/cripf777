@@ -438,8 +438,10 @@ results = results.filter((supplier) => {
     if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
     return passes;
   }
-  const passes = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
-  if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listedProducts=${JSON.stringify(supplier.listedProducts)}`);
+const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+  const hasProducts       = (supplier.products || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+  const passes = hasListedProducts || hasProducts;
+  if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listed=${hasListedProducts} products=${hasProducts}`);
   return passes;
 });
 console.log(`[TRACE-FILTER] before filter: ${preFilterCount}, after filter: ${results.length}`);
@@ -730,8 +732,9 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
   if (matchedItem) matchHint = ` · ${matchedItem}`;
   else matchHint = ` · ${allItems[0] || ""}`.trimEnd();
 } else if (normalizedSearchTerm) {
+      // Allow prices from listedProducts OR products[] (for suppliers without a listed cap)
       const allowedNames = new Set(
-        (s.listedProducts || [])
+        [...(s.listedProducts || []), ...(s.products || [])]
           .map(p => normalizeProductName(p))
           .filter(Boolean)
       );
@@ -746,7 +749,6 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
 
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
     }
-
     return {
       id: `sup_view_${s._id}`,
       title: `${badge}${s.businessName}`,
