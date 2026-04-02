@@ -2008,6 +2008,111 @@ if (
       { upsert: true }
     );
 
+        // INLINE CITY/SUBURB SEARCH MUST BE OFFER-FIRST
+    if (shortcode.city || shortcode.area) {
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city || "Zimbabwe";
+
+      console.log(
+        `[TRACE-NOBIZ-OFFER-FIRST] city="${shortcode.city}" area="${shortcode.area}" product="${shortcode.product}"`
+      );
+
+      // Behave like city-picker flow:
+      // city-level offer search first, without forcing area
+      let offerResults = await runSupplierOfferSearch({
+        city: shortcode.city || null,
+        product: shortcode.product,
+        area: null
+      });
+
+      console.log(`[TRACE-NOBIZ-OFFER-FIRST-RESULT1] offerResults.length=${offerResults.length}`);
+
+      // Retry across all cities, still without forcing area
+      if (!offerResults.length) {
+        offerResults = await runSupplierOfferSearch({
+          city: null,
+          product: shortcode.product,
+          area: null
+        });
+        console.log(`[TRACE-NOBIZ-OFFER-FIRST-RESULT2] offerResults.length=${offerResults.length}`);
+      }
+
+      if (offerResults.length) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": offerResults,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "offers",
+              "tempData.supplierSearchProduct": shortcode.product,
+              ...(shortcode.city ? { "tempData.lastSearchCity": shortcode.city } : {}),
+              ...(shortcode.area ? { "tempData.lastSearchArea": shortcode.area } : {})
+            }
+          },
+          { upsert: true }
+        );
+
+        const pageOffers = offerResults.slice(0, 9);
+        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+
+        if (offerResults.length > 9) {
+          rows.push({
+            id: "sup_search_next_page",
+            title: `➡ More results (${offerResults.length - 9} more)`
+          });
+        }
+
+        return sendList(
+          from,
+          `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`,
+          rows
+        );
+      }
+
+      // Only now fallback to supplier-level results
+      const searchArgs = {
+        ...(shortcode.city ? { city: shortcode.city } : {}),
+        product: shortcode.product,
+        area: shortcode.area || null
+      };
+
+      console.log(`[TRACE-NOBIZ-SUPPLIER-FALLBACK] searchArgs=${JSON.stringify(searchArgs)}`);
+      const results = await runSupplierSearch(searchArgs);
+      console.log(`[TRACE-NOBIZ-SUPPLIER-FALLBACK2] runSupplierSearch returned ${results.length} results`);
+
+      if (results.length) {
+        const rows = formatSupplierResults(
+          results.slice(0, 9),
+          shortcode.city || shortcode.area || "",
+          shortcode.product
+        );
+
+        if (results.length > 9) {
+          rows.push({
+            id: "sup_search_next_page",
+            title: `➡ More results (${results.length - 9} more)`
+          });
+        }
+
+        return sendList(
+          from,
+          `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`,
+          rows
+        );
+      }
+
+      return sendButtons(from, {
+        text: `😕 No results for *${shortcode.product}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry a different city or search term.`,
+        buttons: [
+          { id: "find_supplier", title: "🔍 Search Again" },
+          { id: "sup_search_city_all", title: "📍 Try All Cities" }
+        ]
+      });
+    }
+
+    // NO LOCATION: keep existing supplier-first behavior
     const searchArgs = {
       ...(shortcode.city ? { city: shortcode.city } : {}),
       product: shortcode.product,
@@ -2019,13 +2124,28 @@ if (
     console.log(`[TRACE-NOBIZ2] runSupplierSearch returned ${results.length} results`);
 
     const normalizedQuery = normalizeProductName(shortcode.product);
-  const directBusinessMatches = results.filter(s => {
-  const businessName = normalizeProductName(s.businessName || "");
-  return businessName === normalizedQuery || businessName.includes(normalizedQuery);
-});
+    const directBusinessMatches = results.filter(s => {
+      const businessName = normalizeProductName(s.businessName || "");
+      return businessName === normalizedQuery || businessName.includes(normalizedQuery);
+    });
 
-// ONLY use direct business shortcut when user did NOT include city/suburb.
-// If city or area is present, keep the flow product-first / offer-first.
+    if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
+      const supplier = directBusinessMatches[0];
+      const cart = await getCurrentOrderCart({ biz, phone });
+
+      await persistOrderFlowState({
+        biz,
+        phone,
+        patch: {
+          orderSupplierId: String(supplier._id),
+          orderBrowseMode: "catalogue",
+          orderCataloguePage: 0,
+          orderCatalogueSearch: ""
+        }
+      });
+
+      return _sendSupplierShoppingHub(from, supplier, cart);
+    }
 if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
   const supplier = directBusinessMatches[0];
   const cart = await getCurrentOrderCart({ biz, phone });
