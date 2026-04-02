@@ -766,7 +766,7 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
     }
     return {
-      id: `sup_view_${s._id}`,
+      id: `sup_shop_${s._id}`,
       title: `${badge}${s.businessName}`,
       description: `${delivery}${min}${rating}${matchHint}`
     };
