@@ -425,21 +425,18 @@ let results = await SupplierProfile.find(query)
 
 // AFTER:
 const preFilterCount = results.length;
+
 results = results.filter((supplier) => {
+  const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+  const hasProducts       = (supplier.products || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+
   if (supplier?.profileType === "service") {
     const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-    const hasListedProducts = (supplier.listedProducts || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
-    const hasProducts = (supplier.products || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
     const passes = hasRates || hasListedProducts || hasProducts;
     if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
     return passes;
   }
-const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
-  const hasProducts       = (supplier.products || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
+
   const passes = hasListedProducts || hasProducts;
   if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listed=${hasListedProducts} products=${hasProducts}`);
   return passes;
