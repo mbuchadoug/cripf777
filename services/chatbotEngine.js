@@ -6172,7 +6172,7 @@ if (a.startsWith("sup_subcat_")) {
   biz.sessionState = "supplier_reg_products";
   await saveBizSafe(biz);
 
-  const catId = (biz.sessionData.supplierReg.categories || [])[0];
+ const catId = (biz.sessionData.supplierReg.categories || [])[0];
   const { CATEGORY_SERVICE_EXAMPLES, CATEGORY_PRODUCT_EXAMPLES } = await import("./supplierRegistration.js");
 
   if (profileType === "service") {
@@ -6189,7 +6189,30 @@ if (a.startsWith("sup_subcat_")) {
     });
   }
 
+  // ── Product path: check for admin preset template (same as sup_cat_ handler) ──
+  const { getTemplateForCategoryWithDB } = await import("./supplierProductTemplates.js");
+  const template = await getTemplateForCategoryWithDB(catId);
   const catExamples = CATEGORY_PRODUCT_EXAMPLES[catId] || ["product a", "product b"];
+
+  if (template) {
+    const preview = template.products.slice(0, 6).join(", ");
+    const moreCount = template.products.length - 6;
+
+    return sendButtons(from, {
+      text:
+`✅ *Subcategory saved!*
+
+📦 *Preset available:* _${preview}${moreCount > 0 ? ` + ${moreCount} more` : ""}_
+
+How would you like to add your products?`,
+      buttons: [
+        { id: "sup_request_upload",       title: "📤 Send Us Your List" },
+        { id: "sup_enter_own_products",   title: "✍️ Type My Own" },
+        { id: `sup_load_preset_${catId}`, title: "📦 Use Preset List" }
+      ]
+    });
+  }
+
   return sendButtons(from, {
     text: `✅ *Subcategory saved!*\n\nHow would you like to add your products?\n\n_e.g. ${catExamples.slice(0, 3).join(", ")}_`,
     buttons: [
