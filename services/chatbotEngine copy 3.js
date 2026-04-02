@@ -4393,35 +4393,6 @@ if (shortcode.city) {
       rows
     );
   }
-
-  // Offers exhausted — fall back to supplier-level results before giving up,
-  // mirroring the no-biz and ghost-biz paths exactly.
-  const supplierFallback = await runSupplierSearch({
-    city: shortcode.city || null,
-    product: shortcode.product,
-    area: shortcode.area || null
-  });
-
-  if (supplierFallback.length) {
-    biz.sessionData = {
-      ...(biz.sessionData || {}),
-      supplierSearch: { product: shortcode.product, city: shortcode.city },
-      searchResults: supplierFallback,
-      searchPage: 0,
-      searchResultMode: "suppliers"
-    };
-    await saveBizSafe(biz);
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: { "tempData.searchResults": supplierFallback, "tempData.searchPage": 0, "tempData.searchResultMode": "suppliers" } },
-      { upsert: true }
-    );
-    const supplierRows = formatSupplierResults(supplierFallback.slice(0, 9), shortcode.city || shortcode.area || "", shortcode.product);
-    if (supplierFallback.length > 9) {
-      supplierRows.push({ id: "sup_search_next_page", title: `➡ More results (${supplierFallback.length - 9} more)` });
-    }
-    return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${supplierFallback.length} found`, supplierRows);
-  }
 }
  // City was given but 0 results - show no-results message, NOT city picker
     if (shortcode.city) {
