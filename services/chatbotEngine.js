@@ -4249,41 +4249,44 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       .trim()
       .replace(/\s+/g, " ");
 
-    if (shortcode.city || shortcode.area) {
-      const results = await runSupplierSearch({
+  if (shortcode.city || shortcode.area) {
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city || "Zimbabwe";
+
+      // Try offers with city first
+      let offerResults = await runSupplierOfferSearch({
         city: shortcode.city || null,
         product: cleanProduct,
         area: shortcode.area || null
       });
 
-      if (results.length) {
-        biz.sessionState = "ready";
-        biz.sessionData = {};
-        await saveBizSafe(biz);
-    const offerResults2 = await runSupplierOfferSearch({
-          city: shortcode.city || null,
+      // If empty, retry without city (supplier may be stored under different city variant)
+      if (!offerResults.length) {
+        offerResults = await runSupplierOfferSearch({
+          city: null,
           product: cleanProduct,
           area: shortcode.area || null
         });
-        if (offerResults2.length) {
-          biz.sessionState = "ready";
-          biz.sessionData = {};
-          await saveBizSafe(biz);
-         const rows2 = formatSupplierOfferResults(offerResults2.slice(0, 9), cleanProduct);
-          if (offerResults2.length > 9) rows2.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults2.length - 9} more)` });
-          return sendList(from, `🔍 *${cleanProduct}* in ${shortcode.city || shortcode.area} - ${offerResults2.length} found`, rows2);
-        }
-        const rows = formatSupplierResults(results, shortcode.city || shortcode.area || "", cleanProduct);
-        biz.sessionState = "ready";
-        biz.sessionData = {};
-        await saveBizSafe(biz);
-        return sendList(
-          from,
-          `🔍 *${cleanProduct}*${shortcode.city ? ` in ${shortcode.city}` : ""} - ${results.length} found`,
-          rows
-        );
       }
 
+      if (offerResults.length) {
+        biz.sessionState = "ready";
+        biz.sessionData = {
+          supplierSearch: { product: cleanProduct, city: shortcode.city },
+          searchResults: offerResults,
+          searchPage: 0,
+          searchResultMode: "offers"
+        };
+        await saveBizSafe(biz);
+        const rows = formatSupplierOfferResults(offerResults.slice(0, 9), cleanProduct);
+        if (offerResults.length > 9) {
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      }
+
+      // No offers found anywhere — show no-results message
       biz.sessionData = {
         ...(biz.sessionData || {}),
         supplierSearch: {
@@ -4293,7 +4296,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         }
       };
       await saveBizSafe(biz);
-
       return sendButtons(from, {
         text: `😕 No results for *${cleanProduct}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry searching all of Zimbabwe?`,
         buttons: [
