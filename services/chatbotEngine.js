@@ -2146,6 +2146,99 @@ if (
 
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
+if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
+  const supplier = directBusinessMatches[0];
+  const cart = await getCurrentOrderCart({ biz, phone });
+
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderBrowseMode: "catalogue",
+      orderCataloguePage: 0,
+      orderCatalogueSearch: ""
+    }
+  });
+
+  return _sendSupplierShoppingHub(from, supplier, cart);
+}
+
+if (shortcode.city && results.length) {
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city;
+
+      // Try offers with city first
+      console.log(`[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area="${shortcode.area}"`);
+         // IMPORTANT:
+      // For inline suburb/city text like "find valve mbare",
+      // do NOT force area on offer search.
+      // Use city-level offer search first so this matches the city-picker flow.
+      let offerResults = await runSupplierOfferSearch({
+        city: shortcode.city,
+        product: shortcode.product,
+        area: null
+      });
+
+      // If city-level offer search returns nothing, retry across all cities
+      // but still do NOT force area here.
+      if (!offerResults.length) {
+        offerResults = await runSupplierOfferSearch({
+          city: null,
+          product: shortcode.product,
+          area: null
+        });
+      }
+      if (offerResults.length) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": offerResults,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "offers"
+            }
+          },
+          { upsert: true }
+        );
+        if (biz) {
+          biz.sessionData = {
+            ...(biz.sessionData || {}),
+            supplierSearch: { product: shortcode.product, city: shortcode.city },
+            searchResults: offerResults,
+            searchPage: 0,
+            searchResultMode: "offers"
+          };
+          await saveBizSafe(biz);
+        }
+        const pageOffers = offerResults.slice(0, 9);
+        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+        if (offerResults.length > 9) {
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      }
+
+      // Only reach here if no offers found anywhere — show businesses as last resort
+      const pageResults = results.slice(0, 9);
+      const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
+      if (results.length > 9) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": results,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "suppliers"
+            }
+          },
+          { upsert: true }
+        );
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+      }
+      return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+    }
 
     if (!shortcode.city && directBusinessMatches.length > 0) {
       const pageResults = directBusinessMatches.slice(0, 9);
@@ -4470,17 +4563,74 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         biz.sessionState === "supplier_select_listed_products"
       ) {
         // Do nothing here - fall through to the state handlers below
-      } else {
+     } else {
         // Ghost biz user typed something unrecognised - try as a search first
         const shortcode = parseShortcodeSearch(text);
         if (shortcode) {
-          if (shortcode.city) {
-            const results = await runSupplierSearch({ city: shortcode.city, product: shortcode.product });
-            if (results.length) {
-              const rows = formatSupplierResults(results, shortcode.city, shortcode.product);
-              return sendList(from, `🔍 *${shortcode.product}* in ${shortcode.city} - ${results.length} found`, rows);
+          if (shortcode.city || shortcode.area) {
+            const locationLabel = shortcode.area
+              ? `${shortcode.area}, ${shortcode.city}`
+              : shortcode.city || "Zimbabwe";
+
+            // Offer-first: behave like city-picker flow, do NOT force area on first pass
+            let offerResults = await runSupplierOfferSearch({
+              city: shortcode.city || null,
+              product: shortcode.product,
+              area: null
+            });
+
+            // Retry across all cities if city-level found nothing
+            if (!offerResults.length) {
+              offerResults = await runSupplierOfferSearch({
+                city: null,
+                product: shortcode.product,
+                area: null
+              });
             }
+
+            if (offerResults.length) {
+              await UserSession.findOneAndUpdate(
+                { phone },
+                {
+                  $set: {
+                    "tempData.searchResults": offerResults,
+                    "tempData.searchPage": 0,
+                    "tempData.searchResultMode": "offers",
+                    "tempData.supplierSearchProduct": shortcode.product,
+                    ...(shortcode.city ? { "tempData.lastSearchCity": shortcode.city } : {}),
+                    ...(shortcode.area ? { "tempData.lastSearchArea": shortcode.area } : {})
+                  }
+                },
+                { upsert: true }
+              );
+              const pageOffers = offerResults.slice(0, 9);
+              const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+              if (offerResults.length > 9) {
+                rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+              }
+              return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+            }
+
+            // Offers exhausted — fall back to supplier-level results
+            const results = await runSupplierSearch({ city: shortcode.city || null, product: shortcode.product, area: shortcode.area || null });
+            if (results.length) {
+              const rows = formatSupplierResults(results.slice(0, 9), shortcode.city || shortcode.area || "", shortcode.product);
+              if (results.length > 9) {
+                rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+              }
+              return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+            }
+
+            return sendButtons(from, {
+              text: `😕 No results for *${shortcode.product}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry a different city or search term.`,
+              buttons: [
+                { id: "find_supplier", title: "🔍 Search Again" },
+                { id: "sup_search_city_all", title: "📍 Try All Cities" }
+              ]
+            });
           }
+
+          // No city or area — store product and ask for city (no-location flow unchanged)
           biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
           biz.sessionState = "supplier_search_city";
           await saveBizSafe(biz);
