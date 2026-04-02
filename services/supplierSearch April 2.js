@@ -327,29 +327,32 @@ export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   if (!lower) return [];
 
-  // Category ID slugs (e.g. "medical_health") are not text fields in the DB —
-  // strip them from synonyms so they don't pollute regex searches
-  const isCategorySlug = s => /^[a-z]+_[a-z_]+$/.test(s);
-
-  // Exact match in synonym map
+  // Exact match — return ONLY the original term + close synonyms (same profession/thing)
+  // NO broad medical/category fallbacks. Max 3 synonyms to stay precise.
   if (SEARCH_SYNONYMS[lower]) {
-    const synonyms = SEARCH_SYNONYMS[lower]
-      .filter(s => !isCategorySlug(s))  // drop "medical_health" etc
-      .slice(0, 6);
-    return [lower, ...synonyms];
+    // Filter synonyms: only keep terms that are still about the same specific thing
+    // e.g. "dentist" → ["dental", "teeth cleaning", "fillings"] ✓
+    //      NOT "pharmacy", "medical", "hospital" ✗ (too broad)
+    const closeSynonyms = SEARCH_SYNONYMS[lower]
+      .filter(s => !["medical_health", "health", "medical", "hospital", "clinic"].includes(s))
+      .slice(0, 3);
+    return [lower, ...closeSynonyms];
   }
 
-  // Partial match: keys that start with OR contain the search term
-  const partialMatches = Object.keys(SEARCH_SYNONYMS)
-    .filter(key => key.startsWith(lower) || (lower.length >= 4 && key.includes(lower)))
-    .slice(0, 3);
+  // Partial match: only exact-start matches (not contains) — "dent" → "dental", "dentist"
+  // No contains-match to prevent "ring" matching "catering", "printing" etc.
+  if (lower.length >= 4) {
+    const partialMatches = Object.keys(SEARCH_SYNONYMS)
+      .filter(key => key.startsWith(lower))
+      .slice(0, 2);
 
-  if (partialMatches.length) {
-    const extraSynonyms = partialMatches
-      .flatMap(k => SEARCH_SYNONYMS[k])
-      .filter(s => !isCategorySlug(s))
-      .slice(0, 6);
-    return [lower, ...partialMatches, ...extraSynonyms];
+    if (partialMatches.length) {
+      // Only pull synonyms from the best match, max 2
+      const extraSynonyms = SEARCH_SYNONYMS[partialMatches[0]]
+        .filter(s => !["medical_health", "health", "medical", "hospital"].includes(s))
+        .slice(0, 2);
+      return [lower, ...partialMatches, ...extraSynonyms];
+    }
   }
 
   return [lower];
@@ -378,28 +381,39 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
     const individualWords = product.split(/\s+/).filter(w => w.length > 2);
 
-    const productOr = [
-      { listedProducts: { $regex: product, $options: "i" } },
-      { products: { $regex: product, $options: "i" } },
-      { "rates.service": { $regex: product, $options: "i" } },
-      { categories: { $regex: product, $options: "i" } },
-      { businessName: { $regex: product, $options: "i" } },
+ // AFTER:
+// Priority 1 — exact/close match on what the supplier actually offers
+// (products, rates, listedProducts). These always included.
+const productOr = [
+  { listedProducts: { $regex: product, $options: "i" } },
+  { products:       { $regex: product, $options: "i" } },
+  { "rates.service":{ $regex: product, $options: "i" } },
+];
 
-      ...searchTerms.flatMap(term => [
-        { listedProducts: { $regex: term, $options: "i" } },
-        { products: { $regex: term, $options: "i" } },
-        { "rates.service": { $regex: term, $options: "i" } },
-        { categories: { $regex: term, $options: "i" } },
-        { businessName: { $regex: term, $options: "i" } }
-      ]),
+// Priority 2 — close synonyms on actual offering fields ONLY
+// Never match categories or businessName via synonyms — too noisy
+for (const term of searchTerms) {
+  if (term === product) continue; // already added above
+  productOr.push({ listedProducts:   { $regex: term, $options: "i" } });
+  productOr.push({ products:         { $regex: term, $options: "i" } });
+  productOr.push({ "rates.service":  { $regex: term, $options: "i" } });
+}
 
-      ...individualWords.flatMap(word => [
-        { listedProducts: { $regex: word, $options: "i" } },
-        { products: { $regex: word, $options: "i" } },
-        { "rates.service": { $regex: word, $options: "i" } },
-        { categories: { $regex: word, $options: "i" } }
-      ])
-    ];
+// Priority 3 — individual words from multi-word queries (e.g. "tooth filling" → "filling")
+// Only if the product term is multi-word, to avoid single-word over-broadening
+if (individualWords.length > 1) {
+  for (const word of individualWords) {
+    productOr.push({ listedProducts:  { $regex: word, $options: "i" } });
+    productOr.push({ products:        { $regex: word, $options: "i" } });
+    productOr.push({ "rates.service": { $regex: word, $options: "i" } });
+  }
+}
+
+// Priority 4 — businessName match on the ORIGINAL term only (not synonyms)
+// So "Harare Dental Clinic" still appears when buyer types "dentist"
+productOr.push({ businessName: { $regex: product, $options: "i" } });
+
+query.$and.push({ $or: productOr });
 
     query.$and.push({ $or: productOr });
   }
@@ -515,34 +529,44 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       });
     }
 
-    // 2. No rates set yet — show all items from products[] and listedProducts[],
-    //    sorted so matching items appear first.
-    //    runSupplierSearch already confirmed this supplier matches the query,
-    //    so we show their full offering so buyers can compare and see everything.
+    // 2. No rates set yet — show every item from products[] and listedProducts[]
+    //    Skip the search-term match check: runSupplierSearch already confirmed
+    //    this supplier is relevant to the query.
+// 2. No rates set yet — only show items that actually match the search term
+    //    (or close synonyms). Do NOT dump every service this supplier offers.
     if (offers.length === 0) {
       const seen2 = new Set();
       const searchNorm = normalizeProductName(searchTerm || "");
+      const searchTerms = searchNorm ? expandSearchTerms(searchNorm) : [];
 
       const allServiceItems = [
         ...(supplier.listedProducts || []),
         ...(supplier.products || [])
       ];
 
-      // Sort: items that directly match the search term bubble to the top
-      const sortedItems = [...allServiceItems].sort((a, b) => {
-        const aNorm = normalizeProductName(a || "");
-        const bNorm = normalizeProductName(b || "");
-        const aMatch = searchNorm && (aNorm.includes(searchNorm) || searchNorm.includes(aNorm)) ? 0 : 1;
-        const bMatch = searchNorm && (bNorm.includes(searchNorm) || searchNorm.includes(bNorm)) ? 0 : 1;
-        return aMatch - bMatch;
+      // Only include items that match the search term or a close synonym
+      const matchingItems = allServiceItems.filter(svcName => {
+        if (!svcName || svcName === "pending_upload") return false;
+        const norm = normalizeProductName(svcName);
+        if (!norm) return false;
+        // Direct match
+        if (searchNorm && (norm.includes(searchNorm) || searchNorm.includes(norm))) return true;
+        // Synonym match
+        if (searchTerms.some(t => norm.includes(t) || t.includes(norm))) return true;
+        return false;
       });
 
-      for (const svcName of sortedItems) {
+      // If nothing matched at all, show the supplier's first 2 items as a fallback
+      // (supplier was already confirmed relevant by runSupplierSearch)
+      const itemsToShow = matchingItems.length > 0
+        ? matchingItems
+        : allServiceItems.slice(0, 2);
+
+      for (const svcName of itemsToShow) {
         if (!svcName || svcName === "pending_upload") continue;
         const cleanSvc = String(svcName).trim();
         const norm = normalizeProductName(cleanSvc);
-        if (!norm) continue;
-        if (seen2.has(norm)) continue;
+        if (!norm || seen2.has(norm)) continue;
         seen2.add(norm);
 
         offers.push({
