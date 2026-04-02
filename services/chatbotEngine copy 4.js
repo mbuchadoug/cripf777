@@ -10085,38 +10085,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     biz.sessionState = "ready";
     await saveBizSafe(biz);
 
-    // ── Step 1: Check for a single direct business-name match first ──────────
-    // Mirrors the working sup_search_city_* flow: if exactly 1 supplier's
-    // businessName matches the query, open their shopping hub directly.
-    const allSupplierResults = await runSupplierSearch({
-      city: parsed.city || null,
-      product: cleanProduct,
-      area: parsed.area || null
-    });
-
-    const normalizedQuery = normalizeProductName(cleanProduct);
-    const directBusinessMatches = allSupplierResults.filter(s => {
-      const bn = normalizeProductName(s.businessName || "");
-      return bn === normalizedQuery || bn.includes(normalizedQuery);
-    });
-
-    if (directBusinessMatches.length === 1) {
-      const supplier = directBusinessMatches[0];
-      const cart = await getCurrentOrderCart({ biz, phone });
-      await persistOrderFlowState({
-        biz,
-        phone,
-        patch: {
-          orderSupplierId: String(supplier._id),
-          orderBrowseMode: "catalogue",
-          orderCataloguePage: 0,
-          orderCatalogueSearch: ""
-        }
-      });
-      return _sendSupplierShoppingHub(from, supplier, cart);
-    }
-
-    // ── Step 2: Not a single business-name match — run offer-first search ────
+    // Offer-first: show individual priced products, not just supplier cards
     let offerResults = await runSupplierOfferSearch({ city: parsed.city || null, product: cleanProduct, area: null });
 
     // Retry across all cities if city-level returns nothing
@@ -10146,8 +10115,10 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
     }
 
-    // ── Step 3: No offers — fall back to supplier cards ──────────────────────
-    if (!allSupplierResults.length) {
+    // Offers exhausted — fall back to supplier cards
+    const results = await runSupplierSearch({ city: parsed.city || null, product: cleanProduct, area: parsed.area || null });
+
+    if (!results.length) {
       return sendButtons(from, {
         text: `😕 No results for *${cleanProduct}* in *${locationLabel}*.\n\nTry a different city or search all of Zimbabwe?`,
         buttons: [
@@ -10157,14 +10128,14 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       });
     }
 
-    const pageResults = allSupplierResults.slice(0, 9);
+    const pageResults = results.slice(0, 9);
     const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
-    if (allSupplierResults.length > 9) {
-      biz.sessionData = { ...(biz.sessionData || {}), searchResults: allSupplierResults, searchPage: 0, searchResultMode: "suppliers" };
-      rows.push({ id: "sup_search_next_page", title: `➡ More results (${allSupplierResults.length - 9} more)` });
+    if (results.length > 9) {
+      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0, searchResultMode: "suppliers" };
+      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
       await saveBizSafe(biz);
     }
-    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${allSupplierResults.length} found`, rows);
+    return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${results.length} found`, rows);
   }
 
   // ── No location found — ask for city ───────────────────────────────────
