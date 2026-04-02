@@ -4588,7 +4588,17 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
               });
             }
 
-            if (offerResults.length) {
+        if (offerResults.length) {
+              // Write to BOTH biz.sessionData AND UserSession.tempData so the
+              // sup_search_next_page handler (which branches on biz presence) can
+              // always find the full result set regardless of which branch it takes.
+              biz.sessionData = {
+                ...(biz.sessionData || {}),
+                searchResults: offerResults,
+                searchPage: 0,
+                searchResultMode: "offers"
+              };
+              await saveBizSafe(biz);
               await UserSession.findOneAndUpdate(
                 { phone },
                 {
@@ -4614,13 +4624,30 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
             // Offers exhausted — fall back to supplier-level results
             const results = await runSupplierSearch({ city: shortcode.city || null, product: shortcode.product, area: shortcode.area || null });
             if (results.length) {
+              biz.sessionData = {
+                ...(biz.sessionData || {}),
+                searchResults: results,
+                searchPage: 0,
+                searchResultMode: "suppliers"
+              };
+              await saveBizSafe(biz);
+              await UserSession.findOneAndUpdate(
+                { phone },
+                {
+                  $set: {
+                    "tempData.searchResults": results,
+                    "tempData.searchPage": 0,
+                    "tempData.searchResultMode": "suppliers"
+                  }
+                },
+                { upsert: true }
+              );
               const rows = formatSupplierResults(results.slice(0, 9), shortcode.city || shortcode.area || "", shortcode.product);
               if (results.length > 9) {
                 rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
               }
               return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
             }
-
             return sendButtons(from, {
               text: `😕 No results for *${shortcode.product}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry a different city or search term.`,
               buttons: [
