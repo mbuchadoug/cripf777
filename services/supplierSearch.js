@@ -356,7 +356,8 @@ export function expandSearchTerms(product) {
 }
 
 export async function runSupplierSearch({ city, category, product, profileType, area }) {
-  console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}"`);
+  const _stack = new Error().stack.split('').slice(1,4).join(' | ');
+  console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}" | CALLER: ${_stack}`);
   const query = {
     active: true,
     $and: [
