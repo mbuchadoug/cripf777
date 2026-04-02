@@ -2139,31 +2139,64 @@ if (
     const results = await runSupplierSearch(searchArgs);
     console.log(`[TRACE-NOBIZ2] runSupplierSearch returned ${results.length} results`);
 
-       const normalizedQuery = normalizeProductName(shortcode.product);
+        const normalizedQuery = normalizeProductName(shortcode.product);
     const directBusinessMatches = results.filter(s => {
       const businessName = normalizeProductName(s.businessName || "");
       return businessName === normalizedQuery || businessName.includes(normalizedQuery);
     });
 
     // BUSINESS-NAME SEARCH:
-    // if there is one clear supplier match, go straight to that supplier,
-    // even when city/suburb was included inline.
-    if (directBusinessMatches.length === 1) {
-      const supplier = directBusinessMatches[0];
-      const cart = await getCurrentOrderCart({ biz, phone });
+    // always show a selectable results list first,
+    // even if there is only one clear business match.
+    if (directBusinessMatches.length > 0) {
+      const pageResults = directBusinessMatches.slice(0, 9);
+      const rows = formatSupplierResults(
+        pageResults,
+        shortcode.city || shortcode.area || null,
+        shortcode.product
+      );
 
-      await persistOrderFlowState({
-        biz,
-        phone,
-        patch: {
-          orderSupplierId: String(supplier._id),
-          orderBrowseMode: "catalogue",
-          orderCataloguePage: 0,
-          orderCatalogueSearch: ""
-        }
-      });
+      if (directBusinessMatches.length > 9) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": directBusinessMatches,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "suppliers"
+            }
+          },
+          { upsert: true }
+        );
+        rows.push({
+          id: "sup_search_next_page",
+          title: `➡ More results (${directBusinessMatches.length - 9} more)`
+        });
+      } else {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": directBusinessMatches,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "suppliers"
+            }
+          },
+          { upsert: true }
+        );
+      }
 
-      return _sendSupplierShoppingHub(from, supplier, cart);
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city || null;
+
+      return sendList(
+        from,
+        locationLabel
+          ? `🔍 *${shortcode.product}* in ${locationLabel} - ${directBusinessMatches.length} found`
+          : `🏪 *Business matches for ${shortcode.product}* - ${directBusinessMatches.length} found`,
+        rows
+      );
     }
 if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
   const supplier = directBusinessMatches[0];
