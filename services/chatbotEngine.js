@@ -1808,10 +1808,14 @@ if (parsed.city || parsed.area) {
 
   // STRICT: inline city/suburb searches must behave like city-selection flow
   // Always prefer offer-level results first
+  // IMPORTANT:
+  // For inline "product + suburb/city" searches like "find valve mbare",
+  // do NOT force area on the first offer search.
+  // City-level offer search should behave like the city button flow.
   const offerResults = await runSupplierOfferSearch({
     city: parsed.city || null,
     product: cleanProduct,
-    area: parsed.area || null,
+    area: null,
     profileType: sess?.tempData?.supplierSearchType || null
   });
 
@@ -2046,22 +2050,25 @@ if (shortcode.city && results.length) {
 
       // Try offers with city first
       console.log(`[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area="${shortcode.area}"`);
+         // IMPORTANT:
+      // For inline suburb/city text like "find valve mbare",
+      // do NOT force area on offer search.
+      // Use city-level offer search first so this matches the city-picker flow.
       let offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
-        area: shortcode.area || null
+        area: null
       });
-      console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
 
-      // If city search returned no offers, retry without city constraint
+      // If city-level offer search returns nothing, retry across all cities
+      // but still do NOT force area here.
       if (!offerResults.length) {
         offerResults = await runSupplierOfferSearch({
           city: null,
           product: shortcode.product,
-          area: shortcode.area || null
+          area: null
         });
       }
-
       if (offerResults.length) {
         await UserSession.findOneAndUpdate(
           { phone },
