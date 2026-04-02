@@ -4308,63 +4308,84 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       .replace(/\s+/g, " ");
 
   if (shortcode.city || shortcode.area) {
-      const locationLabel = shortcode.area
-        ? `${shortcode.area}, ${shortcode.city}`
-        : shortcode.city || "Zimbabwe";
+    const locationLabel = shortcode.area
+      ? `${shortcode.area}, ${shortcode.city}`
+      : shortcode.city || "Zimbabwe";
 
-      // Try offers with city first
-      console.log(`[TRACE-D] calling runSupplierOfferSearch city="${shortcode.city}" product="${cleanProduct}" area="${shortcode.area}"`);
-      let offerResults = await runSupplierOfferSearch({
-        city: shortcode.city || null,
+    // IMPORTANT:
+    // In supplier_search_city state, inline text like "find valve mbare"
+    // must behave like the working city-picker flow.
+    // Do NOT force suburb/area on offer search.
+    console.log(
+      `[TRACE-D] calling runSupplierOfferSearch city="${shortcode.city}" product="${cleanProduct}" area=NULL_FIRST_PASS originalArea="${shortcode.area}"`
+    );
+
+    let offerResults = await runSupplierOfferSearch({
+      city: shortcode.city || null,
+      product: cleanProduct,
+      area: null
+    });
+    console.log(`[TRACE-D2] first attempt offerResults.length=${offerResults.length}`);
+
+    // Retry across all cities, still without forcing area
+    if (!offerResults.length) {
+      offerResults = await runSupplierOfferSearch({
+        city: null,
         product: cleanProduct,
-        area: shortcode.area || null
+        area: null
       });
-      console.log(`[TRACE-D2] first attempt offerResults.length=${offerResults.length}`);
+      console.log(`[TRACE-D3] second attempt (no city) offerResults.length=${offerResults.length}`);
+    }
 
-      // If empty, retry without city (supplier may be stored under different city variant)
-      if (!offerResults.length) {
-        offerResults = await runSupplierOfferSearch({
-          city: null,
-          product: cleanProduct,
-          area: shortcode.area || null
-        });
-        console.log(`[TRACE-D3] second attempt (no city) offerResults.length=${offerResults.length}`);
-      }
-
-      if (offerResults.length) {
-        biz.sessionState = "ready";
-        biz.sessionData = {
-          supplierSearch: { product: cleanProduct, city: shortcode.city },
-          searchResults: offerResults,
-          searchPage: 0,
-          searchResultMode: "offers"
-        };
-        await saveBizSafe(biz);
-        const rows = formatSupplierOfferResults(offerResults.slice(0, 9), cleanProduct);
-        if (offerResults.length > 9) {
-          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
-        }
-        return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
-      }
-
-      // No offers found anywhere — show no-results message
+    if (offerResults.length) {
+      biz.sessionState = "ready";
       biz.sessionData = {
         ...(biz.sessionData || {}),
         supplierSearch: {
           product: cleanProduct,
           ...(shortcode.city ? { city: shortcode.city } : {}),
           ...(shortcode.area ? { area: shortcode.area } : {})
-        }
+        },
+        searchResults: offerResults,
+        searchPage: 0,
+        searchResultMode: "offers"
       };
       await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: `😕 No results for *${cleanProduct}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry searching all of Zimbabwe?`,
-        buttons: [
-          { id: "sup_search_city_all", title: "📍 Search All Cities" },
-          { id: "find_supplier", title: "🔍 Search Again" }
-        ]
-      });
+
+      const rows = formatSupplierOfferResults(offerResults.slice(0, 9), cleanProduct);
+      if (offerResults.length > 9) {
+        rows.push({
+          id: "sup_search_next_page",
+          title: `➡ More results (${offerResults.length - 9} more)`
+        });
+      }
+
+      return sendList(
+        from,
+        `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`,
+        rows
+      );
     }
+
+    // No offers found anywhere — show no-results message
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
+        product: cleanProduct,
+        ...(shortcode.city ? { city: shortcode.city } : {}),
+        ...(shortcode.area ? { area: shortcode.area } : {})
+      }
+    };
+    await saveBizSafe(biz);
+
+    return sendButtons(from, {
+      text: `😕 No results for *${cleanProduct}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry searching all of Zimbabwe?`,
+      buttons: [
+        { id: "sup_search_city_all", title: "📍 Search All Cities" },
+        { id: "find_supplier", title: "🔍 Search Again" }
+      ]
+    });
+  }
 
     biz.sessionData = {
       ...(biz.sessionData || {}),
