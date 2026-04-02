@@ -356,7 +356,6 @@ export function expandSearchTerms(product) {
 }
 
 export async function runSupplierSearch({ city, category, product, profileType, area }) {
-  console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}"`);
   const query = {
     active: true,
     $and: [

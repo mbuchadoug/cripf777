@@ -2021,13 +2021,11 @@ if (shortcode.city && results.length) {
         : shortcode.city;
 
       // Try offers with city first
-      console.log(`[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area="${shortcode.area}"`);
       let offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
-      console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
 
       // If city search returned no offers, retry without city constraint
       if (!offerResults.length) {
@@ -4134,7 +4132,6 @@ if (
   !settingsStates.includes(biz.sessionState)
 ) {
   const shortcode = parseShortcodeSearch(text);
-  console.log(`[TRACE-A] biz shortcode handler: text="${text}" sessionState="${biz?.sessionState}" shortcode=${JSON.stringify(shortcode)}`);
   if (shortcode) {
   if (shortcode.city) {
       const locationLabel = shortcode.area
@@ -4152,13 +4149,11 @@ if (
       );
 
    // Try offers with city first
-      console.log(`[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area="${shortcode.area}"`);
       let offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
-      console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
 
       // If city search returned no offers, retry without city constraint
       // (same relaxed-fallback logic that runSupplierSearch uses internally)
@@ -4247,7 +4242,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
  if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
   const shortcode = parseShortcodeSearch(text);
-  console.log(`[TRACE-C] supplier_search_city handler: text="${text}" shortcode=${JSON.stringify(shortcode)}`);
 
   if (shortcode) {
     const cleanProduct = String(shortcode.product || "")
@@ -4261,13 +4255,11 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
         : shortcode.city || "Zimbabwe";
 
       // Try offers with city first
-      console.log(`[TRACE-D] calling runSupplierOfferSearch city="${shortcode.city}" product="${cleanProduct}" area="${shortcode.area}"`);
       let offerResults = await runSupplierOfferSearch({
         city: shortcode.city || null,
         product: cleanProduct,
         area: shortcode.area || null
       });
-      console.log(`[TRACE-D2] first attempt offerResults.length=${offerResults.length}`);
 
       // If empty, retry without city (supplier may be stored under different city variant)
       if (!offerResults.length) {
@@ -4276,7 +4268,6 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
           product: cleanProduct,
           area: shortcode.area || null
         });
-        console.log(`[TRACE-D3] second attempt (no city) offerResults.length=${offerResults.length}`);
       }
 
       if (offerResults.length) {
