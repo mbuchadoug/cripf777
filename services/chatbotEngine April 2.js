@@ -1983,57 +1983,6 @@ if (
       { upsert: true }
     );
 
-    const locationLabel = shortcode.area
-      ? `${shortcode.area}, ${shortcode.city}`
-      : shortcode.city || "Zimbabwe";
-
-    // Always try offer-level results first (individual products/services)
-    // Try with city, then relax to no-city if empty — same logic as runSupplierSearch fallback
-    let offerResults = await runSupplierOfferSearch({
-      ...(shortcode.city ? { city: shortcode.city } : {}),
-      product: shortcode.product,
-      area: shortcode.area || null
-    });
-
-    if (!offerResults.length && shortcode.city) {
-      offerResults = await runSupplierOfferSearch({
-        city: null,
-        product: shortcode.product,
-        area: shortcode.area || null
-      });
-    }
-
-    if (offerResults.length) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.searchResults": offerResults,
-            "tempData.searchPage": 0,
-            "tempData.searchResultMode": "offers"
-          }
-        },
-        { upsert: true }
-      );
-      if (biz) {
-        biz.sessionData = {
-          ...(biz.sessionData || {}),
-          supplierSearch: { product: shortcode.product, city: shortcode.city },
-          searchResults: offerResults,
-          searchPage: 0,
-          searchResultMode: "offers"
-        };
-        await saveBizSafe(biz);
-      }
-      const pageOffers = offerResults.slice(0, 9);
-      const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
-      if (offerResults.length > 9) {
-        rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
-      }
-      return sendList(from, `🔍 *${shortcode.product}*${shortcode.city ? ` in ${locationLabel}` : ""} - ${offerResults.length} found`, rows);
-    }
-
-    // No offer-level results at all — fall back to business display
     const searchArgs = {
       ...(shortcode.city ? { city: shortcode.city } : {}),
       product: shortcode.product,
@@ -2066,7 +2015,65 @@ if (
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
 
-    if (shortcode.city && results.length) {
+ if (shortcode.city && results.length) {
+      const locationLabel = shortcode.area
+        ? `${shortcode.area}, ${shortcode.city}`
+        : shortcode.city;
+
+      const offerResults = await runSupplierOfferSearch({
+        city: shortcode.city,
+        product: shortcode.product,
+        area: shortcode.area || null
+      });
+
+      if (offerResults.length) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": offerResults,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "offers"
+            }
+          },
+          { upsert: true }
+        );
+        if (biz) {
+          biz.sessionData = {
+            ...(biz.sessionData || {}),
+            supplierSearch: { product: shortcode.product, city: shortcode.city },
+            searchResults: offerResults,
+            searchPage: 0,
+            searchResultMode: "offers"
+          };
+          await saveBizSafe(biz);
+        }
+        const pageOffers = offerResults.slice(0, 9);
+    const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+        if (offerResults.length > 9) {
+          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+        }
+        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
+      }
+
+      const pageResults = results.slice(0, 9);
+      const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
+      if (results.length > 9) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.searchResults": results,
+              "tempData.searchPage": 0,
+              "tempData.searchResultMode": "suppliers"
+            }
+          },
+          { upsert: true }
+        );
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
+      }
+      return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
+    }
 
     if (!shortcode.city && directBusinessMatches.length > 0) {
       const pageResults = directBusinessMatches.slice(0, 9);
@@ -4130,22 +4137,11 @@ if (
         { upsert: true }
       );
 
-      // Try offers with city first
-      let offerResults = await runSupplierOfferSearch({
+      const offerResults = await runSupplierOfferSearch({
         city: shortcode.city,
         product: shortcode.product,
         area: shortcode.area || null
       });
-
-      // If no offers found with city, relax the city constraint and try again
-      // (mirrors the relaxedQuery fallback inside runSupplierSearch)
-      if (!offerResults.length) {
-        offerResults = await runSupplierOfferSearch({
-          city: null,
-          product: shortcode.product,
-          area: shortcode.area || null
-        });
-      }
 
       if (offerResults.length) {
         biz.sessionData = {
@@ -4157,14 +4153,13 @@ if (
         };
         await saveBizSafe(biz);
         const pageOffers = offerResults.slice(0, 9);
-        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+   const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
         if (offerResults.length > 9) {
           rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
         }
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
       }
 
-      // Only fall back to business display if absolutely no offers exist anywhere
       const results = await runSupplierSearch({
         city: shortcode.city,
         product: shortcode.product,
@@ -11316,5 +11311,4 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
-}
 }
