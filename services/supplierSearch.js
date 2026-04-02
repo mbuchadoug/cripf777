@@ -427,17 +427,28 @@ let results = await SupplierProfile.find(query)
 const preFilterCount = results.length;
 
 results = results.filter((supplier) => {
-  const hasListedProducts = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
-  const hasProducts       = (supplier.products || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
-
   if (supplier?.profileType === "service") {
     const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
+    const hasListedProducts = (supplier.listedProducts || []).some(p =>
+      p && p !== "pending_upload" && normalizeProductName(p)
+    );
+    const hasProducts = (supplier.products || []).some(p =>
+      p && p !== "pending_upload" && normalizeProductName(p)
+    );
     const passes = hasRates || hasListedProducts || hasProducts;
     if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
     return passes;
   }
+const hasListedProducts = (supplier.listedProducts || []).some(
+  p => p && p !== "pending_upload" && normalizeProductName(p)
+);
+const hasProducts = (supplier.products || []).some(
+  p => p && p !== "pending_upload" && normalizeProductName(p)
+);
 
-  const passes = hasListedProducts || hasProducts;
+// Keep this aligned with offer-building fallback:
+// if listedProducts exists use it, otherwise allow products[].
+const passes = hasListedProducts || hasProducts;
   if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listed=${hasListedProducts} products=${hasProducts}`);
   return passes;
 });
@@ -573,8 +584,18 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
   }
 
   // ── PRODUCT SUPPLIERS ──────────────────────────────────────────────────
+   // STRICT buyer visibility:
+  // use listedProducts when present,
+  // but if listedProducts is still empty for an active supplier,
+  // temporarily fall back to products[] so search does not go blank.
+  const visibleSourceItems = (supplier.listedProducts || []).some(
+    p => p && p !== "pending_upload" && normalizeProductName(p)
+  )
+    ? (supplier.listedProducts || [])
+    : (supplier.products || []);
+
   const allowedNames = new Set(
-    (supplier.listedProducts || [])
+    visibleSourceItems
       .filter(p => p && p !== "pending_upload")
       .map(p => normalizeProductName(p))
       .filter(Boolean)
@@ -586,7 +607,6 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     if (price?.inStock === false) continue;
     if (!allowedNames.has(normalizedPriceProduct)) continue;
     if (!productMatchesSearch(price?.product || "", searchTerm)) continue;
-
     const dedupeKey = `${supplier._id}:${normalizedPriceProduct}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -609,13 +629,13 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     });
   }
 
-  for (const product of (supplier.listedProducts || [])) {
-    const normalizedListedProduct = normalizeProductName(product);
-    if (!normalizedListedProduct) continue;
+  for (const product of visibleSourceItems) {
+    const normalizedVisibleProduct = normalizeProductName(product);
+    if (!normalizedVisibleProduct) continue;
     if (product === "pending_upload") continue;
     if (!productMatchesSearch(product, searchTerm)) continue;
 
-    const dedupeKey = `${supplier._id}:${normalizedListedProduct}`;
+    const dedupeKey = `${supplier._id}:${normalizedVisibleProduct}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
@@ -633,10 +653,9 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       product,
       pricePerUnit: null,
       unit: "each",
-      matchSource: "listedProducts"
+      matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products"
     });
   }
-
   return offers;
 }
 
