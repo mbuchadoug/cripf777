@@ -2198,23 +2198,7 @@ if (
         rows
       );
     }
-if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
-  const supplier = directBusinessMatches[0];
-  const cart = await getCurrentOrderCart({ biz, phone });
 
-  await persistOrderFlowState({
-    biz,
-    phone,
-    patch: {
-      orderSupplierId: String(supplier._id),
-      orderBrowseMode: "catalogue",
-      orderCataloguePage: 0,
-      orderCatalogueSearch: ""
-    }
-  });
-
-  return _sendSupplierShoppingHub(from, supplier, cart);
-}
 
 if (shortcode.city && results.length) {
       const locationLabel = shortcode.area
