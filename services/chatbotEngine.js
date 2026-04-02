@@ -1802,79 +1802,99 @@ function _inlineParseLocation(txt) {
   );
 
 if (parsed.city || parsed.area) {
-    const locationLabel = parsed.area
-      ? `${parsed.area}, ${parsed.city}`
-      : parsed.city;
+  const locationLabel = parsed.area
+    ? `${parsed.area}, ${parsed.city}`
+    : parsed.city;
 
-    // Try offer-level first (individual services/products) — same as sup_search_city_ handler
-    const offerResults = await runSupplierOfferSearch({
-      city: parsed.city || null,
-      product: cleanProduct,
-      area: parsed.area || null,
-      profileType: sess?.tempData?.supplierSearchType || null
-    });
+  // STRICT: inline city/suburb searches must behave like city-selection flow
+  // Always prefer offer-level results first
+  const offerResults = await runSupplierOfferSearch({
+    city: parsed.city || null,
+    product: cleanProduct,
+    area: parsed.area || null,
+    profileType: sess?.tempData?.supplierSearchType || null
+  });
 
-    if (offerResults.length) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.searchResults": offerResults,
-            "tempData.searchPage": 0,
-            "tempData.searchResultMode": "offers"
-          }
-        },
-        { upsert: true }
-      );
-      const pageOffers = offerResults.slice(0, 9);
+  if (Array.isArray(offerResults) && offerResults.length > 0) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.searchResults": offerResults,
+          "tempData.searchPage": 0,
+          "tempData.searchResultMode": "offers"
+        }
+      },
+      { upsert: true }
+    );
+
+    const pageOffers = offerResults.slice(0, 9);
     const rows = formatSupplierOfferResults(pageOffers, cleanProduct);
-      if (offerResults.length > 9) {
-        rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
-      }
-      return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
-    }
 
-    // Fallback to business-level if no offer rows produced
-    const results = await runSupplierSearch({
-      city: parsed.city || null,
-      product: cleanProduct,
-      area: parsed.area || null,
-      profileType: sess?.tempData?.supplierSearchType || null
-    });
-
-    if (!results.length) {
-      return sendButtons(from, {
-        text: `😕 No results for *${cleanProduct}*${parsed.city ? ` in *${parsed.city}*` : ""}.\n\nTry a different city or search term.`,
-        buttons: [
-          { id: "find_supplier", title: "🔍 Search Again" },
-          { id: "sup_search_city_all", title: "📍 Try All Cities" }
-        ]
+    if (offerResults.length > 9) {
+      rows.push({
+        id: "sup_search_next_page",
+        title: `➡ More results (${offerResults.length - 9} more)`
       });
-    }
-
-    const pageResults = results.slice(0, 9);
-    const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
-    if (results.length > 9) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.searchResults": results,
-            "tempData.searchPage": 0,
-            "tempData.searchResultMode": "suppliers"
-          }
-        },
-        { upsert: true }
-      );
-      rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
     }
 
     return sendList(
       from,
-      `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${results.length} found`,
+      `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`,
       rows
     );
   }
+
+  // Only fallback if there are truly no offer-level results
+  const results = await runSupplierSearch({
+    city: parsed.city || null,
+    product: cleanProduct,
+    area: parsed.area || null,
+    profileType: sess?.tempData?.supplierSearchType || null
+  });
+
+  if (!results.length) {
+    return sendButtons(from, {
+      text: `😕 No results for *${cleanProduct}*${parsed.city ? ` in *${parsed.city}*` : ""}.\n\nTry a different city or search term.`,
+      buttons: [
+        { id: "find_supplier", title: "🔍 Search Again" },
+        { id: "sup_search_city_all", title: "📍 Try All Cities" }
+      ]
+    });
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.searchResults": results,
+        "tempData.searchPage": 0,
+        "tempData.searchResultMode": "suppliers"
+      }
+    },
+    { upsert: true }
+  );
+
+  const pageResults = results.slice(0, 9);
+  const rows = formatSupplierResults(
+    pageResults,
+    parsed.city || parsed.area || "",
+    cleanProduct
+  );
+
+  if (results.length > 9) {
+    rows.push({
+      id: "sup_search_next_page",
+      title: `➡ More results (${results.length - 9} more)`
+    });
+  }
+
+  return sendList(
+    from,
+    `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${results.length} found`,
+    rows
+  );
+}
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
     ...SUPPLIER_CITIES.map(c => ({
