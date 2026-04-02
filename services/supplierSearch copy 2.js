@@ -638,21 +638,15 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
 export async function runSupplierOfferSearch({ city, category, product, profileType, area }) {
   const suppliers = await runSupplierSearch({ city, category, product, profileType, area });
 
-  console.log(`[OFFER SEARCH] product="${product}" city="${city}" area="${area}" → ${suppliers.length} suppliers found`);
-  suppliers.forEach(s => {
-    console.log(`  supplier: ${s.businessName} | profileType: ${s.profileType} | rates: ${s.rates?.length || 0} | products: ${JSON.stringify(s.products || [])} | listedProducts: ${JSON.stringify(s.listedProducts || [])}`);
-  });
-
-  const offers = suppliers.flatMap(supplier => {
-    const built = buildProductSearchOffersFromSupplier(supplier, product || category || "");
-    console.log(`  → built ${built.length} offers from ${supplier.businessName}`);
-    return built.map((offer, idx) => ({
+  const offers = suppliers.flatMap(supplier =>
+    buildProductSearchOffersFromSupplier(supplier, product || category || "")
+      .map((offer, idx) => ({
         ...offer,
         sortTierRank: typeof supplier.tierRank === "number" ? supplier.tierRank : 0,
         sortCredibility: typeof supplier.credibilityScore === "number" ? supplier.credibilityScore : 0,
         sortPosition: idx
-      }));
-  });
+      }))
+  );
 
   offers.sort((a, b) => {
     const aHasPrice = a.pricePerUnit !== null ? 0 : 1;
