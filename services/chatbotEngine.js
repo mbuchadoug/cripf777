@@ -4167,74 +4167,95 @@ if (
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-A] biz shortcode handler: text="${text}" sessionState="${biz?.sessionState}" shortcode=${JSON.stringify(shortcode)}`);
   if (shortcode) {
-  if (shortcode.city) {
-      const locationLabel = shortcode.area
-        ? `${shortcode.area}, ${shortcode.city}`
-        : shortcode.city;
+if (shortcode.city) {
+  const locationLabel = shortcode.area
+    ? `${shortcode.area}, ${shortcode.city}`
+    : shortcode.city;
 
-      biz.sessionData = {
-        ...(biz.sessionData || {}),
-        supplierSearch: { product: shortcode.product, city: shortcode.city }
-      };
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.supplierSearchProduct": shortcode.product } },
-        { upsert: true }
-      );
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    supplierSearch: { product: shortcode.product, city: shortcode.city }
+  };
 
-   // Try offers with city first
-      console.log(`[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area="${shortcode.area}"`);
-      let offerResults = await runSupplierOfferSearch({
-        city: shortcode.city,
-        product: shortcode.product,
-        area: shortcode.area || null
-      });
-      console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
-
-      // If city search returned no offers, retry without city constraint
-      // (same relaxed-fallback logic that runSupplierSearch uses internally)
-      if (!offerResults.length) {
-        offerResults = await runSupplierOfferSearch({
-          city: null,
-          product: shortcode.product,
-          area: shortcode.area || null
-        });
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.supplierSearchProduct": shortcode.product,
+        ...(shortcode.city ? { "tempData.lastSearchCity": shortcode.city } : {}),
+        ...(shortcode.area ? { "tempData.lastSearchArea": shortcode.area } : {})
       }
+    },
+    { upsert: true }
+  );
 
-      if (offerResults.length) {
-        biz.sessionData = {
-          ...(biz.sessionData || {}),
-          supplierSearch: { product: shortcode.product, city: shortcode.city },
-          searchResults: offerResults,
-          searchPage: 0,
-          searchResultMode: "offers"
-        };
-        await saveBizSafe(biz);
-        const pageOffers = offerResults.slice(0, 9);
-        const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
-        if (offerResults.length > 9) {
-          rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+  // IMPORTANT:
+  // For inline text like "find valve mbare", behave like city-picker flow.
+  // Do NOT force suburb/area on offer search.
+  console.log(
+    `[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area=NULL_FIRST_PASS originalArea="${shortcode.area}"`
+  );
+
+  let offerResults = await runSupplierOfferSearch({
+    city: shortcode.city,
+    product: shortcode.product,
+    area: null
+  });
+  console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
+
+  // If city-level offer search returns nothing, retry across all cities,
+  // but still do NOT force area here.
+  if (!offerResults.length) {
+    offerResults = await runSupplierOfferSearch({
+      city: null,
+      product: shortcode.product,
+      area: null
+    });
+  }
+
+  if (offerResults.length) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.searchResults": offerResults,
+          "tempData.searchPage": 0,
+          "tempData.searchResultMode": "offers"
         }
-        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
-      }
+      },
+      { upsert: true }
+    );
 
-      // Only reach here if absolutely no offers exist anywhere — show businesses as last resort
-      const results = await runSupplierSearch({
-        city: shortcode.city,
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      supplierSearch: {
         product: shortcode.product,
-        area: shortcode.area || null
+        city: shortcode.city,
+        ...(shortcode.area ? { area: shortcode.area } : {})
+      },
+      searchResults: offerResults,
+      searchPage: 0,
+      searchResultMode: "offers"
+    };
+    await saveBizSafe(biz);
+
+    const pageOffers = offerResults.slice(0, 9);
+    const rows = formatSupplierOfferResults(pageOffers, shortcode.product);
+
+    if (offerResults.length > 9) {
+      rows.push({
+        id: "sup_search_next_page",
+        title: `➡ More results (${offerResults.length - 9} more)`
       });
-      if (results.length) {
-        const pageResults = results.slice(0, 9);
-        const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
-        if (results.length > 9) {
-          biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
-          rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
-        }
-        await saveBizSafe(biz);
-        return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${results.length} found`, rows);
-      }
     }
+
+    return sendList(
+      from,
+      `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`,
+      rows
+    );
+  }
+}
  // City was given but 0 results - show no-results message, NOT city picker
     if (shortcode.city) {
       biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product, city: shortcode.city } };
