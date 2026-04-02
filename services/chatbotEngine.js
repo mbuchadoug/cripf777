@@ -10085,6 +10085,37 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     biz.sessionState = "ready";
     await saveBizSafe(biz);
 
+    // Offer-first: show individual priced products, not just supplier cards
+    let offerResults = await runSupplierOfferSearch({ city: parsed.city || null, product: cleanProduct, area: null });
+
+    // Retry across all cities if city-level returns nothing
+    if (!offerResults.length) {
+      offerResults = await runSupplierOfferSearch({ city: null, product: cleanProduct, area: null });
+    }
+
+    if (offerResults.length) {
+      biz.sessionData = {
+        ...(biz.sessionData || {}),
+        supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct, city: parsed.city },
+        searchResults: offerResults,
+        searchPage: 0,
+        searchResultMode: "offers"
+      };
+      await saveBizSafe(biz);
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.searchResults": offerResults, "tempData.searchPage": 0, "tempData.searchResultMode": "offers" } },
+        { upsert: true }
+      );
+      const pageOffers = offerResults.slice(0, 9);
+      const rows = formatSupplierOfferResults(pageOffers, cleanProduct);
+      if (offerResults.length > 9) {
+        rows.push({ id: "sup_search_next_page", title: `➡ More results (${offerResults.length - 9} more)` });
+      }
+      return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
+    }
+
+    // Offers exhausted — fall back to supplier cards
     const results = await runSupplierSearch({ city: parsed.city || null, product: cleanProduct, area: parsed.area || null });
 
     if (!results.length) {
@@ -10100,7 +10131,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     const pageResults = results.slice(0, 9);
     const rows = formatSupplierResults(pageResults, parsed.city || parsed.area || "", cleanProduct);
     if (results.length > 9) {
-      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0 };
+      biz.sessionData = { ...(biz.sessionData || {}), searchResults: results, searchPage: 0, searchResultMode: "suppliers" };
       rows.push({ id: "sup_search_next_page", title: `➡ More results (${results.length - 9} more)` });
       await saveBizSafe(biz);
     }
