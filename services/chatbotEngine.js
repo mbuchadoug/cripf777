@@ -1991,6 +1991,7 @@ if (
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState)
 ) {
+  console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
   const shortcode = parseShortcodeSearch(text);
 
@@ -4164,6 +4165,7 @@ if (
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState)
 ) {
+  console.log(`[HIT-BIZ-SHORTCODE] text="${text}" sessionState="${biz?.sessionState}"`);
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-A] biz shortcode handler: text="${text}" sessionState="${biz?.sessionState}" shortcode=${JSON.stringify(shortcode)}`);
   if (shortcode) {
@@ -4298,6 +4300,8 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
  if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
+
+  console.log(`[HIT-SUPPLIER-SEARCH-CITY] text="${text}" sessionState="${biz.sessionState}"`);
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-C] supplier_search_city handler: text="${text}" shortcode=${JSON.stringify(shortcode)}`);
 
