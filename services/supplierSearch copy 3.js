@@ -423,7 +423,6 @@ let results = await SupplierProfile.find(query)
   }
 
 // AFTER:
-const preFilterCount = results.length;
 results = results.filter((supplier) => {
   if (supplier?.profileType === "service") {
     const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
@@ -433,15 +432,13 @@ results = results.filter((supplier) => {
     const hasProducts = (supplier.products || []).some(p =>
       p && p !== "pending_upload" && normalizeProductName(p)
     );
-    const passes = hasRates || hasListedProducts || hasProducts;
-    if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
-    return passes;
+    return hasRates || hasListedProducts || hasProducts;
   }
-  const passes = (supplier.listedProducts || []).some(p => p && p !== "pending_upload" && normalizeProductName(p));
-  if (!passes) console.log(`[TRACE-FILTER] REMOVED product supplier: ${supplier.businessName} listedProducts=${JSON.stringify(supplier.listedProducts)}`);
-  return passes;
+
+  return (supplier.listedProducts || []).some(p =>
+    p && p !== "pending_upload" && normalizeProductName(p)
+  );
 });
-console.log(`[TRACE-FILTER] before filter: ${preFilterCount}, after filter: ${results.length}`);
 
   if (area && results.length > 1) {
     const areaLower = area.toLowerCase();
@@ -453,7 +450,6 @@ console.log(`[TRACE-FILTER] before filter: ${preFilterCount}, after filter: ${re
     });
   }
 
-  console.log(`[TRACE-RS-RESULT] returning ${results.length} suppliers: ${results.map(s => s.businessName + '|rates:' + (s.rates||[]).length + '|products:' + JSON.stringify(s.products||[]) + '|listed:' + JSON.stringify(s.listedProducts||[])).join(' || ')}`);
   return results.slice(0, 20);
 }
 

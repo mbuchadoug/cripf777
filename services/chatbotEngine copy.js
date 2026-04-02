@@ -1989,9 +1989,7 @@ if (
       area: shortcode.area || null
     };
 
-    console.log(`[TRACE-NOBIZ] non-biz shortcode path: searchArgs=${JSON.stringify(searchArgs)}`);
     const results = await runSupplierSearch(searchArgs);
-    console.log(`[TRACE-NOBIZ2] runSupplierSearch returned ${results.length} results`);
 
     const normalizedQuery = normalizeProductName(shortcode.product);
     const directBusinessMatches = results.filter(s => {
