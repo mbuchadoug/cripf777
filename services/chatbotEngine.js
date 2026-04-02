@@ -2014,28 +2014,30 @@ if (
     console.log(`[TRACE-NOBIZ2] runSupplierSearch returned ${results.length} results`);
 
     const normalizedQuery = normalizeProductName(shortcode.product);
-    const directBusinessMatches = results.filter(s => {
-      const businessName = normalizeProductName(s.businessName || "");
-      return businessName === normalizedQuery || businessName.includes(normalizedQuery);
-    });
+  const directBusinessMatches = results.filter(s => {
+  const businessName = normalizeProductName(s.businessName || "");
+  return businessName === normalizedQuery || businessName.includes(normalizedQuery);
+});
 
-    if (directBusinessMatches.length === 1) {
-      const supplier = directBusinessMatches[0];
-      const cart = await getCurrentOrderCart({ biz, phone });
+// ONLY use direct business shortcut when user did NOT include city/suburb.
+// If city or area is present, keep the flow product-first / offer-first.
+if (!shortcode.city && !shortcode.area && directBusinessMatches.length === 1) {
+  const supplier = directBusinessMatches[0];
+  const cart = await getCurrentOrderCart({ biz, phone });
 
-      await persistOrderFlowState({
-        biz,
-        phone,
-        patch: {
-          orderSupplierId: String(supplier._id),
-          orderBrowseMode: "catalogue",
-          orderCataloguePage: 0,
-          orderCatalogueSearch: ""
-        }
-      });
-
-      return _sendSupplierShoppingHub(from, supplier, cart);
+  await persistOrderFlowState({
+    biz,
+    phone,
+    patch: {
+      orderSupplierId: String(supplier._id),
+      orderBrowseMode: "catalogue",
+      orderCataloguePage: 0,
+      orderCatalogueSearch: ""
     }
+  });
+
+  return _sendSupplierShoppingHub(from, supplier, cart);
+}
 
 if (shortcode.city && results.length) {
       const locationLabel = shortcode.area
