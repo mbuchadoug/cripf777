@@ -202,7 +202,7 @@ You can also skip this step.`,
 
 
 
-  if (state === "supplier_reg_address") {
+ if (state === "supplier_reg_address") {
     const address = text.trim();
 
     if (!address || address.length < 2) {
@@ -212,6 +212,73 @@ You can also skip this step.`,
 
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.address = address;
+    biz.sessionState = "supplier_reg_contact_details";
+    await saveBiz(biz);
+
+    return sendButtons(from, {
+      text:
+`📞 *Contact Details (Optional)*
+
+Enter any extra contact details buyers should see.
+
+Examples:
+_0772123456 / 0712345678_
+_Call or WhatsApp 0772123456_
+_sales@mybusiness.co.zw_
+
+You can also skip this step.`,
+      buttons: [
+        { id: "sup_contact_skip", title: "⏭ Skip Contact Details" }
+      ]
+    });
+  }
+
+
+
+
+  if (state === "supplier_reg_contact_details") {
+    const contactDetails = text.trim();
+
+    if (!contactDetails || contactDetails.length < 2) {
+      await sendText(from, "❌ Please enter valid contact details, or tap Skip.");
+      return true;
+    }
+
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.contactDetails = contactDetails;
+    biz.sessionState = "supplier_reg_website";
+    await saveBiz(biz);
+
+    return sendButtons(from, {
+      text:
+`🌐 *Website (Optional)*
+
+Enter your website, Facebook page, Instagram page, or business link buyers should see.
+
+Examples:
+_www.mybusiness.co.zw_
+_facebook.com/mybusiness_
+_instagram.com/mybusiness_
+
+You can also skip this step.`,
+      buttons: [
+        { id: "sup_website_skip", title: "⏭ Skip Website" }
+      ]
+    });
+  }
+
+
+
+  if (state === "supplier_reg_website") {
+    const website = text.trim();
+
+    if (!website || website.length < 2) {
+      await sendText(from, "❌ Please enter a valid website/link, or tap Skip.");
+      return true;
+    }
+
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.website = website;
     biz.sessionState = "supplier_reg_type";
     await saveBiz(biz);
 
@@ -219,11 +286,10 @@ You can also skip this step.`,
       text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
       buttons: [
         { id: "reg_type_product", title: "📦 I Sell Products" },
-     { id: "reg_type_service", title: "🧰 I Offer Services" }
+        { id: "reg_type_service", title: "🧰 I Offer Services" }
       ]
     });
   }
-
 
   // ── Step 3: Products ───────────────────────────────────
 if (state === "supplier_reg_products") {

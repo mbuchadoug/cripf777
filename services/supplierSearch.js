@@ -765,11 +765,14 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
 
       if (match) matchHint = ` · $${match.amount}/${match.unit}`;
     }
-    return {
-      id: `sup_shop_${s._id}`,
-      title: `${badge}${s.businessName}`,
-      description: `${delivery}${min}${rating}${matchHint}`
-    };
+  const contactHint = s.contactDetails ? ` • 📞 ${String(s.contactDetails).slice(0, 28)}` : "";
+const websiteHint = s.website ? ` • 🌐 ${String(s.website).slice(0, 28)}` : "";
+
+return {
+  id: `sup_shop_${s._id}`,
+  title: `${badge}${s.businessName}`,
+  description: `${delivery}${min}${rating}${matchHint}${contactHint}${websiteHint}`
+};
   });
 }
 

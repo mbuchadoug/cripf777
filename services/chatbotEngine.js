@@ -885,11 +885,20 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
       ? `Browse this ${isService ? "service provider" : "supplier"} before choosing exact ${isService ? "service" : "item"}.`
       : `Choose how you want to shop from this ${isService ? "provider" : "supplier"}.`;
 
+  const contactLine = supplier.contactDetails
+    ? `\n📞 ${supplier.contactDetails}`
+    : "";
+  const websiteLine = supplier.website
+    ? `\n🌐 ${supplier.website}`
+    : "";
+
   return sendList(
     from,
     `🛍 *${supplier.businessName}*\n` +
-    `📍 ${supplier.location?.area || ""}${supplier.location?.area && supplier.location?.city ? ", " : ""}${supplier.location?.city || ""}\n` +
-    `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}\n\n` +
+    `📍 ${supplier.location?.area || ""}${supplier.location?.area && supplier.location?.city ? ", " : ""}${supplier.location?.city || ""}` +
+    `${contactLine}` +
+    `${websiteLine}` +
+    `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}\n\n` +
     `${subtitle}`,
     [
       {
@@ -1624,6 +1633,8 @@ a.startsWith("sup_load_preset_") ||
 a === "sup_enter_own_products" ||
 a === "sup_request_upload" ||
 a === "sup_addr_skip" ||
+a === "sup_contact_skip" ||
+a === "sup_website_skip" ||
 a === "sup_prices_confirm_yes" ||
 a === "sup_price_update_confirm" ||
 a === "sup_price_confirm_yes" ||
@@ -6922,6 +6933,49 @@ if (a === "sup_addr_skip") {
   });
 }
 
+if (a === "sup_contact_skip") {
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.contactDetails = "";
+  biz.sessionState = "supplier_reg_website";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text:
+`🌐 *Website (Optional)*
+
+Enter your website, Facebook page, Instagram page, or business link buyers should see.
+
+Examples:
+_www.mybusiness.co.zw_
+_facebook.com/mybusiness_
+_instagram.com/mybusiness_
+
+You can also skip this step.`,
+    buttons: [
+      { id: "sup_website_skip", title: "⏭ Skip Website" }
+    ]
+  });
+}
+
+if (a === "sup_website_skip") {
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.website = "";
+  biz.sessionState = "supplier_reg_type";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
+    buttons: [
+      { id: "reg_type_product", title: "📦 I Sell Products" },
+      { id: "reg_type_service", title: "🧰 I Offer Services" }
+    ]
+  });
+}
+
 // ── Supplier requests catalogue upload help ───────────────────────────────────
 if (a === "sup_request_upload") {
   if (!biz) return sendMainMenu(from);
@@ -7060,6 +7114,8 @@ const supplier = await SupplierProfile.create({
       businessId: biz._id,                         // ← LINK TO BUSINESS
       location: { city: reg.city || "Harare", area: reg.area || "" },
       address: reg.address || "",
+      contactDetails: reg.contactDetails || "",
+      website: reg.website || "",
       categories: reg.categories || [],
       products: reg.products || [],
       prices: reg.prices || [],
@@ -7081,6 +7137,12 @@ const supplier = await SupplierProfile.create({
     }
     if (reg.address) {
       biz.address = reg.address;
+    }
+    if (reg.contactDetails) {
+      biz.contactDetails = reg.contactDetails;
+    }
+    if (reg.website) {
+      biz.website = reg.website;
     }
     biz.sessionData.pendingSupplierId = supplier._id.toString();
     biz.sessionState = "supplier_reg_choose_plan";

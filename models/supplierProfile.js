@@ -14,12 +14,15 @@ mainBranchId: {
   ref: "Branch",
   default: null
 },
-  businessName: { type: String, required: true },
-  location: {
-    city: { type: String, required: true },
-    area: { type: String, required: true }
-  },
-  address: { type: String, default: "" },
+ businessName: { type: String, required: true },
+phone: { type: String, required: true },
+location: {
+  city: { type: String, required: true },
+  area: { type: String, required: true }
+},
+address: { type: String, default: "" },
+contactDetails: { type: String, default: "" },
+website: { type: String, default: "" },
   categories: [{ type: String }],
   products: [{ type: String }],
   listedProducts: [{ type: String }],

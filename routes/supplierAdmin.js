@@ -302,6 +302,16 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               <label>Area / Suburb <span style="color:red">*</span></label>
               <input name="area" placeholder="e.g. Borrowdale, Avondale" required />
             </div>
+
+
+            <div class="fg">
+  <label>Contact Details</label>
+  <input name="contactDetails" value="${esc(supplier.contactDetails || "")}" />
+</div>
+<div class="fg">
+  <label>Website</label>
+  <input name="website" value="${esc(supplier.website || "")}" />
+</div>
             <div class="fg">
               <label>Address</label>
               <input name="address" placeholder="e.g. 123 Samora Machel Ave / Shop 12 / Stand 45" />
@@ -739,8 +749,10 @@ const successMsg = req.query.success
           </div>
           <dl class="detail-list">
             <dt>Business Name</dt><dd><strong>${esc(supplier.businessName)}</strong></dd>
-            <dt>Phone</dt><dd>${esc(supplier.phone)}</dd>
-                       <dt>Location</dt><dd>${esc(supplier.location?.area || "")}, ${esc(supplier.location?.city || "")}</dd>
+      <dt>Phone</dt><dd>${esc(supplier.phone)}</dd>
+<dt>Contact Details</dt><dd>${esc(supplier.contactDetails || "-")}</dd>
+<dt>Website</dt><dd>${esc(supplier.website || "-")}</dd>
+<dt>Location</dt><dd>${esc(supplier.location?.area || "")}, ${esc(supplier.location?.city || "")}</dd>
             <dt>Address</dt><dd>${esc(supplier.address || "-")}</dd>
             <dt>Type</dt><dd>${esc(supplier.profileType || "product")}</dd>
             <dt>Categories</dt><dd>${(supplier.categories || []).join(", ") || "-"}</dd>
