@@ -303,14 +303,13 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               <input name="area" placeholder="e.g. Borrowdale, Avondale" required />
             </div>
 
-
-            <div class="fg">
+<div class="fg">
   <label>Contact Details</label>
-  <input name="contactDetails" value="${esc(supplier.contactDetails || "")}" />
+  <input name="contactDetails" placeholder="e.g. 0772123456 / 0712345678 / sales@business.co.zw" />
 </div>
 <div class="fg">
   <label>Website</label>
-  <input name="website" value="${esc(supplier.website || "")}" />
+  <input name="website" placeholder="e.g. www.business.co.zw / facebook.com/business" />
 </div>
             <div class="fg">
               <label>Address</label>
@@ -509,14 +508,14 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
 
 router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
   try {
-    const {
-      businessName, phone, city, area, address, profileType,
-      tier, billingCycle, durationDays, setActive,
-      productCategory, serviceCategory, subcategory,
-      products, prices, rates,
-      deliveryAvailable, travelAvailable, minOrder,
-      currency, adminNote
-    } = req.body;
+const {
+  businessName, phone, city, area, address, contactDetails, website, profileType,
+  tier, billingCycle, durationDays, setActive,
+  productCategory, serviceCategory, subcategory,
+  products, prices, rates,
+  deliveryAvailable, travelAvailable, minOrder,
+  currency, adminNote
+} = req.body;
 
     if (!businessName?.trim()) throw new Error("Business name is required.");
     if (!phone?.trim())        throw new Error("Phone number is required.");
@@ -626,41 +625,43 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     );
 
     // ── 6. Create SupplierProfile linked to the Business ──────────────────
-     const supplier = await SupplierProfile.create({
-      businessName:          businessName.trim(),
-      phone:                 cleanPhone,
-      businessId:            newBiz._id,
-      mainBranchId:          mainBranch._id,
-      location:              { city: city.trim(), area: area.trim() },
-      address:               address?.trim() || "",
-      profileType:           profileType || "product",
-      categories,
-      subcategory:           subcategory || null,
-      products:              productList,
-      listedProducts:        productList,
-      prices:                priceList,
-      rates:                 rateList,
-      tier:                  tier || "basic",
-      tierRank,
-      subscriptionStatus:    "active",
-      subscriptionPlan:      billingCycle || "monthly",
-      subscriptionStartedAt: now,
-      subscriptionEndsAt:    expiresAt,
-      active:                isActive,
-      delivery: {
-        available: profileType === "service" ? false : deliveryAvailable === "true"
-      },
-      travelAvailable:  profileType === "service" ? travelAvailable === "true" : false,
-      minOrder:         Number(minOrder) || 0,
-      rating:           0,
-      reviewCount:      0,
-      completedOrders:  0,
-      monthlyOrders:    0,
-      credibilityScore: 0,
-      adminNote: adminNote?.trim()
-        ? `[Admin registered on ${now.toDateString()}] ${adminNote.trim()}`
-        : `[Admin registered on ${now.toDateString()}]`
-    });
+const supplier = await SupplierProfile.create({
+  businessName:          businessName.trim(),
+  phone:                 cleanPhone,
+  businessId:            newBiz._id,
+  mainBranchId:          mainBranch._id,
+  location:              { city: city.trim(), area: area.trim() },
+  address:               address?.trim() || "",
+  contactDetails:        contactDetails?.trim() || "",
+  website:               website?.trim() || "",
+  profileType:           profileType || "product",
+  categories,
+  subcategory:           subcategory || null,
+  products:              productList,
+  listedProducts:        productList,
+  prices:                priceList,
+  rates:                 rateList,
+  tier:                  tier || "basic",
+  tierRank,
+  subscriptionStatus:    "active",
+  subscriptionPlan:      billingCycle || "monthly",
+  subscriptionStartedAt: now,
+  subscriptionEndsAt:    expiresAt,
+  active:                isActive,
+  delivery: {
+    available: profileType === "service" ? false : deliveryAvailable === "true"
+  },
+  travelAvailable:  profileType === "service" ? travelAvailable === "true" : false,
+  minOrder:         Number(minOrder) || 0,
+  rating:           0,
+  reviewCount:      0,
+  completedOrders:  0,
+  monthlyOrders:    0,
+  credibilityScore: 0,
+  adminNote: adminNote?.trim()
+    ? `[Admin registered on ${now.toDateString()}] ${adminNote.trim()}`
+    : `[Admin registered on ${now.toDateString()}]`
+});
 
     // ── 7. Link SupplierProfile ID back onto the Business ─────────────────
     await Business.findByIdAndUpdate(newBiz._id, {
@@ -914,16 +915,24 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
               <label>City</label>
               <input name="city" value="${esc(supplier.location?.city || "")}" />
             </div>
-                     <div class="fg">
-              <label>Area / Suburb</label>
-              <input name="area" value="${esc(supplier.location?.area || "")}" />
-            </div>
-            <div class="fg">
-              <label>Address</label>
-              <input name="address" value="${esc(supplier.address || "")}" />
-            </div>
-            <div class="fg">
-              <label>Tier</label>
+               <div class="fg">
+  <label>Area / Suburb</label>
+  <input name="area" value="${esc(supplier.location?.area || "")}" />
+</div>
+<div class="fg">
+  <label>Address</label>
+  <input name="address" value="${esc(supplier.address || "")}" />
+</div>
+<div class="fg">
+  <label>Contact Details</label>
+  <input name="contactDetails" value="${esc(supplier.contactDetails || "")}" />
+</div>
+<div class="fg">
+  <label>Website</label>
+  <input name="website" value="${esc(supplier.website || "")}" />
+</div>
+<div class="fg">
+  <label>Tier</label>
               <select name="tier">
                 <option ${supplier.tier === "basic" ? "selected" : ""} value="basic">Basic</option>
                 <option ${supplier.tier === "pro" ? "selected" : ""} value="pro">Pro</option>
@@ -997,19 +1006,21 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
 
 router.post("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
   try {
-   const {
-      businessName, phone, city, area, address, tier, subscriptionStatus,
-      subscriptionExpiresAt, active, minOrder, profileType,
-      products, categories, adminNote, credibilityScore, rating
-    } = req.body;
+const {
+  businessName, phone, city, area, address, contactDetails, website, tier, subscriptionStatus,
+  subscriptionExpiresAt, active, minOrder, profileType,
+  products, categories, adminNote, credibilityScore, rating
+} = req.body;
 
-    const update = {
-       businessName: businessName?.trim(),
-      phone: phone?.trim(),
-      "location.city": city?.trim(),
-      "location.area": area?.trim(),
-      address: address?.trim() || "",
-      tier,
+const update = {
+  businessName: businessName?.trim(),
+  phone: phone?.trim(),
+  "location.city": city?.trim(),
+  "location.area": area?.trim(),
+  address: address?.trim() || "",
+  contactDetails: contactDetails?.trim() || "",
+  website: website?.trim() || "",
+  tier,
       tierRank: tier === "featured" ? 3 : tier === "pro" ? 2 : 1,
       subscriptionStatus,
       active: active === "true",
