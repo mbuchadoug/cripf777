@@ -19,6 +19,7 @@ mainBranchId: {
     city: { type: String, required: true },
     area: { type: String, required: true }
   },
+  address: { type: String, default: "" },
   categories: [{ type: String }],
   products: [{ type: String }],
   listedProducts: [{ type: String }],

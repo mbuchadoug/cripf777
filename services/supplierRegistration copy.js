@@ -179,39 +179,6 @@ if (state === "supplier_reg_area") {
     }
     biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
     biz.sessionData.supplierReg.area = area;
-    biz.sessionState = "supplier_reg_address";
-    await saveBiz(biz);
-
-    return sendButtons(from, {
-      text:
-`📍 *Business Address (Optional)*
-
-Enter your shop/business address, stand number, building name, or street address.
-
-Examples:
-_123 Samora Machel Ave_
-_Stand 45, Mbare Musika_
-_Joina City, Shop 12_
-
-You can also skip this step.`,
-      buttons: [
-        { id: "sup_addr_skip", title: "⏭ Skip Address" }
-      ]
-    });
-  }
-
-
-
-  if (state === "supplier_reg_address") {
-    const address = text.trim();
-
-    if (!address || address.length < 2) {
-      await sendText(from, "❌ Please enter a valid address, or tap Skip.");
-      return true;
-    }
-
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.address = address;
     biz.sessionState = "supplier_reg_type";
     await saveBiz(biz);
 
@@ -223,8 +190,6 @@ You can also skip this step.`,
       ]
     });
   }
-
-
   // ── Step 3: Products ───────────────────────────────────
 if (state === "supplier_reg_products") {
   // ── Guard: if they already chose upload/skip via button, this state

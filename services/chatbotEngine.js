@@ -1620,9 +1620,10 @@ a === "my_orders" ||
       a === "sup_preset_confirm" ||
 a === "sup_preset_prices_yes" ||
 a.startsWith("sup_load_preset_") ||
-a === "sup_skip_products" ||
+      a === "sup_skip_products" ||
 a === "sup_enter_own_products" ||
 a === "sup_request_upload" ||
+a === "sup_addr_skip" ||
 a === "sup_prices_confirm_yes" ||
 a === "sup_price_update_confirm" ||
 a === "sup_price_confirm_yes" ||
@@ -4281,7 +4282,7 @@ const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
 
   // Pass supplier registration states to the state bridge
 const supplierStates = [
-  "supplier_reg_name", "supplier_reg_area", "supplier_reg_products",
+  "supplier_reg_name", "supplier_reg_area", "supplier_reg_address", "supplier_reg_products",
   "supplier_reg_prices", "supplier_update_prices",
   "supplier_edit_products", "supplier_edit_area",
   "supplier_reg_confirm", "supplier_reg_enter_ecocash",
@@ -6903,6 +6904,24 @@ if (a === "sup_skip_products") {
   });
 }
 
+
+if (a === "sup_addr_skip") {
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.address = "";
+  biz.sessionState = "supplier_reg_type";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
+    buttons: [
+      { id: "reg_type_product", title: "📦 I Sell Products" },
+   { id: "reg_type_service", title: "🧰 I Offer Services" }
+    ]
+  });
+}
+
 // ── Supplier requests catalogue upload help ───────────────────────────────────
 if (a === "sup_request_upload") {
   if (!biz) return sendMainMenu(from);
@@ -7040,6 +7059,7 @@ const supplier = await SupplierProfile.create({
       businessName: reg.businessName,
       businessId: biz._id,                         // ← LINK TO BUSINESS
       location: { city: reg.city || "Harare", area: reg.area || "" },
+      address: reg.address || "",
       categories: reg.categories || [],
       products: reg.products || [],
       prices: reg.prices || [],
@@ -7054,10 +7074,13 @@ const supplier = await SupplierProfile.create({
     });
 
     // Link the supplier profile back onto the Business record
-    biz.supplierProfileId = supplier._id;
+      biz.supplierProfileId = supplier._id;
     biz.isSupplier = true;
     if (reg.businessName && (!biz.name || biz.name.startsWith("pending_"))) {
       biz.name = reg.businessName;
+    }
+    if (reg.address) {
+      biz.address = reg.address;
     }
     biz.sessionData.pendingSupplierId = supplier._id.toString();
     biz.sessionState = "supplier_reg_choose_plan";
