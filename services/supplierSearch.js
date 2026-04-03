@@ -487,6 +487,8 @@ function productMatchesSearch(productName = "", searchTerm = "") {
 
   if (!productNorm || !searchNorm) return false;
 
+  if (productNorm === searchNorm) return true;
+
   return productNorm.includes(searchNorm) || searchNorm.includes(productNorm);
 }
 
@@ -535,31 +537,44 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
     //    sorted so matching items appear first.
     //    runSupplierSearch already confirmed this supplier matches the query,
     //    so we show their full offering so buyers can compare and see everything.
+     // 2. No rates set yet — only return matching items from products[] / listedProducts[].
+    // Do NOT expand to the full service catalogue in buyer search results.
     if (offers.length === 0) {
-      const seen2 = new Set();
-      const searchNorm = normalizeProductName(searchTerm || "");
+      const visibleSourceItems = (supplier.listedProducts || []).length
+        ? (supplier.listedProducts || [])
+        : (supplier.products || []);
 
-      const allServiceItems = [
-        ...(supplier.listedProducts || []),
-        ...(supplier.products || [])
-      ];
+      const normalizedSearch = normalizeProductName(searchTerm || "");
+      const exactMatches = [];
+      const partialMatches = [];
 
-      // Sort: items that directly match the search term bubble to the top
-      const sortedItems = [...allServiceItems].sort((a, b) => {
-        const aNorm = normalizeProductName(a || "");
-        const bNorm = normalizeProductName(b || "");
-        const aMatch = searchNorm && (aNorm.includes(searchNorm) || searchNorm.includes(aNorm)) ? 0 : 1;
-        const bMatch = searchNorm && (bNorm.includes(searchNorm) || searchNorm.includes(bNorm)) ? 0 : 1;
-        return aMatch - bMatch;
-      });
+      for (const serviceNameRaw of visibleSourceItems) {
+        const serviceName = String(serviceNameRaw || "").trim();
+        const normalizedServiceName = normalizeProductName(serviceName);
 
-      for (const svcName of sortedItems) {
-        if (!svcName || svcName === "pending_upload") continue;
-        const cleanSvc = String(svcName).trim();
-        const norm = normalizeProductName(cleanSvc);
-        if (!norm) continue;
-        if (seen2.has(norm)) continue;
-        seen2.add(norm);
+        if (!serviceName || !normalizedServiceName) continue;
+        if (serviceName === "pending_upload") continue;
+
+        const dedupeKey = `${supplier._id}:${normalizedServiceName}`;
+        if (seen.has(dedupeKey)) continue;
+
+        if (normalizedSearch && normalizedServiceName === normalizedSearch) {
+          exactMatches.push(serviceName);
+          continue;
+        }
+
+        if (productMatchesSearch(serviceName, searchTerm)) {
+          partialMatches.push(serviceName);
+        }
+      }
+
+      const matchedServices = exactMatches.length ? exactMatches : partialMatches;
+
+      for (const serviceName of matchedServices) {
+        const normalizedServiceName = normalizeProductName(serviceName);
+        const dedupeKey = `${supplier._id}:${normalizedServiceName}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
 
         offers.push({
           supplierId: String(supplier._id),
@@ -572,10 +587,10 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
           supplierRating: typeof supplier.rating === "number" ? supplier.rating : 0,
           profileType: "service",
           deliveryText: supplier.travelAvailable ? "🚗 Mobile service" : "📍 Visit provider",
-          product: cleanSvc,
+          product: serviceName,
           pricePerUnit: null,
           unit: "job",
-          matchSource: "products"
+          matchSource: (supplier.listedProducts || []).length ? "listedProducts" : "products"
         });
       }
     }

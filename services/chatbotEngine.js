@@ -1830,16 +1830,61 @@ function _inlineParseLocation(txt) {
   );
 
 if (parsed.city || parsed.area) {
-  const locationLabel = parsed.area
+   const locationLabel = parsed.area
     ? `${parsed.area}, ${parsed.city}`
     : parsed.city;
 
-  // STRICT: inline city/suburb searches must behave like city-selection flow
-  // Always prefer offer-level results first
-  // IMPORTANT:
-  // For inline "product + suburb/city" searches like "find valve mbare",
-  // do NOT force area on the first offer search.
-  // City-level offer search should behave like the city button flow.
+  // First check supplier/business-name matches in the same city/area context.
+  // This prevents business-name searches like "prime dental avondale"
+  // from being turned into offer-level service results.
+  const supplierResults = await runSupplierSearch({
+    city: parsed.city || null,
+    product: cleanProduct,
+    area: parsed.area || null,
+    profileType: sess?.tempData?.supplierSearchType || null
+  });
+
+  const normalizedQuery = normalizeProductName(cleanProduct);
+  const directBusinessMatches = supplierResults.filter(s => {
+    const businessName = normalizeProductName(s.businessName || "");
+    return businessName === normalizedQuery || businessName.includes(normalizedQuery);
+  });
+
+  if (directBusinessMatches.length > 0) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.searchResults": directBusinessMatches,
+          "tempData.searchPage": 0,
+          "tempData.searchResultMode": "suppliers"
+        }
+      },
+      { upsert: true }
+    );
+
+    const pageResults = directBusinessMatches.slice(0, 9);
+    const rows = formatSupplierResults(
+      pageResults,
+      parsed.city || parsed.area || "",
+      cleanProduct
+    );
+
+    if (directBusinessMatches.length > 9) {
+      rows.push({
+        id: "sup_search_next_page",
+        title: `➡ More results (${directBusinessMatches.length - 9} more)`
+      });
+    }
+
+    return sendList(
+      from,
+      `🏪 *Business matches for ${cleanProduct}* in ${locationLabel} - ${directBusinessMatches.length} found`,
+      rows
+    );
+  }
+
+  // Keep existing offer-first behavior for real item/service searches
   const offerResults = await runSupplierOfferSearch({
     city: parsed.city || null,
     product: cleanProduct,
@@ -1877,15 +1922,7 @@ if (parsed.city || parsed.area) {
     );
   }
 
-  // Only fallback if there are truly no offer-level results
-  const results = await runSupplierSearch({
-    city: parsed.city || null,
-    product: cleanProduct,
-    area: parsed.area || null,
-    profileType: sess?.tempData?.supplierSearchType || null
-  });
-
-  if (!results.length) {
+  if (!supplierResults.length) {
     return sendButtons(from, {
       text: `😕 No results for *${cleanProduct}*${parsed.city ? ` in *${parsed.city}*` : ""}.\n\nTry a different city or search term.`,
       buttons: [
@@ -1899,7 +1936,7 @@ if (parsed.city || parsed.area) {
     { phone },
     {
       $set: {
-        "tempData.searchResults": results,
+        "tempData.searchResults": supplierResults,
         "tempData.searchPage": 0,
         "tempData.searchResultMode": "suppliers"
       }
@@ -1907,23 +1944,23 @@ if (parsed.city || parsed.area) {
     { upsert: true }
   );
 
-  const pageResults = results.slice(0, 9);
+  const pageResults = supplierResults.slice(0, 9);
   const rows = formatSupplierResults(
     pageResults,
     parsed.city || parsed.area || "",
     cleanProduct
   );
 
-  if (results.length > 9) {
+  if (supplierResults.length > 9) {
     rows.push({
       id: "sup_search_next_page",
-      title: `➡ More results (${results.length - 9} more)`
+      title: `➡ More results (${supplierResults.length - 9} more)`
     });
   }
 
   return sendList(
     from,
-    `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${results.length} found`,
+    `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${supplierResults.length} found`,
     rows
   );
 }
