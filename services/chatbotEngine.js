@@ -885,6 +885,10 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
       ? `Browse this ${isService ? "service provider" : "supplier"} before choosing exact ${isService ? "service" : "item"}.`
       : `Choose how you want to shop from this ${isService ? "provider" : "supplier"}.`;
 
+    const addressLine = supplier.address
+    ? `\n📍 ${supplier.address}`
+    : `\n📍 ${supplier.location?.area || ""}${supplier.location?.area && supplier.location?.city ? ", " : ""}${supplier.location?.city || ""}`;
+
   const contactLine = supplier.contactDetails
     ? `\n📞 ${supplier.contactDetails}`
     : "";
@@ -894,8 +898,8 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
 
   return sendList(
     from,
-    `🛍 *${supplier.businessName}*\n` +
-    `📍 ${supplier.location?.area || ""}${supplier.location?.area && supplier.location?.city ? ", " : ""}${supplier.location?.city || ""}` +
+    `🛍 *${supplier.businessName}*` +
+    `${addressLine}` +
     `${contactLine}` +
     `${websiteLine}` +
     `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}\n\n` +
