@@ -298,9 +298,13 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
                 <option value="Other">Other</option>
               </select>
             </div>
-            <div class="fg">
+                    <div class="fg">
               <label>Area / Suburb <span style="color:red">*</span></label>
               <input name="area" placeholder="e.g. Borrowdale, Avondale" required />
+            </div>
+            <div class="fg">
+              <label>Address</label>
+              <input name="address" placeholder="e.g. 123 Samora Machel Ave / Shop 12 / Stand 45" />
             </div>
           </div>
         </div>
@@ -496,7 +500,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
 router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
   try {
     const {
-      businessName, phone, city, area, profileType,
+      businessName, phone, city, area, address, profileType,
       tier, billingCycle, durationDays, setActive,
       productCategory, serviceCategory, subcategory,
       products, prices, rates,
@@ -569,8 +573,9 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     const Product     = (await import("../models/product.js")).default;
 
     // ── 1. Create the Business record ─────────────────────────────────────
-    const newBiz = await Business.create({
+       const newBiz = await Business.create({
       name:                businessName.trim(),
+      address:             address?.trim() || "",
       currency:            currency || "USD",
       package:             isActive ? bizPackage : "trial",
       subscriptionStatus:  isActive ? "active" : "inactive",
@@ -611,12 +616,13 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     );
 
     // ── 6. Create SupplierProfile linked to the Business ──────────────────
-    const supplier = await SupplierProfile.create({
+     const supplier = await SupplierProfile.create({
       businessName:          businessName.trim(),
       phone:                 cleanPhone,
       businessId:            newBiz._id,
       mainBranchId:          mainBranch._id,
       location:              { city: city.trim(), area: area.trim() },
+      address:               address?.trim() || "",
       profileType:           profileType || "product",
       categories,
       subcategory:           subcategory || null,
@@ -734,7 +740,8 @@ const successMsg = req.query.success
           <dl class="detail-list">
             <dt>Business Name</dt><dd><strong>${esc(supplier.businessName)}</strong></dd>
             <dt>Phone</dt><dd>${esc(supplier.phone)}</dd>
-            <dt>Location</dt><dd>${esc(supplier.location?.area || "")}, ${esc(supplier.location?.city || "")}</dd>
+                       <dt>Location</dt><dd>${esc(supplier.location?.area || "")}, ${esc(supplier.location?.city || "")}</dd>
+            <dt>Address</dt><dd>${esc(supplier.address || "-")}</dd>
             <dt>Type</dt><dd>${esc(supplier.profileType || "product")}</dd>
             <dt>Categories</dt><dd>${(supplier.categories || []).join(", ") || "-"}</dd>
             <dt>Tier</dt><dd>${badge(supplier.tier || "basic", tierColor(supplier.tier))}</dd>
@@ -895,9 +902,13 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
               <label>City</label>
               <input name="city" value="${esc(supplier.location?.city || "")}" />
             </div>
-            <div class="fg">
+                     <div class="fg">
               <label>Area / Suburb</label>
               <input name="area" value="${esc(supplier.location?.area || "")}" />
+            </div>
+            <div class="fg">
+              <label>Address</label>
+              <input name="address" value="${esc(supplier.address || "")}" />
             </div>
             <div class="fg">
               <label>Tier</label>
@@ -974,17 +985,18 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
 
 router.post("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
   try {
-    const {
-      businessName, phone, city, area, tier, subscriptionStatus,
+   const {
+      businessName, phone, city, area, address, tier, subscriptionStatus,
       subscriptionExpiresAt, active, minOrder, profileType,
       products, categories, adminNote, credibilityScore, rating
     } = req.body;
 
     const update = {
-      businessName: businessName?.trim(),
+       businessName: businessName?.trim(),
       phone: phone?.trim(),
       "location.city": city?.trim(),
       "location.area": area?.trim(),
+      address: address?.trim() || "",
       tier,
       tierRank: tier === "featured" ? 3 : tier === "pro" ? 2 : 1,
       subscriptionStatus,

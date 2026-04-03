@@ -5234,7 +5234,7 @@ _find car hire_, _find delivery_, _find moving company_
 Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Or browse by category:", [
     { id: "sup_search_type_product", title: "📦 Products" },
-    { id: "sup_search_type_service", title: "🔧 Services" }
+    { id: "sup_search_type_service", title: "🧰 Services" }
   ]));
 }
 
