@@ -137,20 +137,20 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState = "school_reg_facilities";
     await saveBiz(biz);
 
-  // WhatsApp limit: 10 rows. Show facilities in pages of 9 + Done.
-    const facPage = Number(reg.facilitiesPage || 0);
-    const FAC_PAGE_SIZE = 9;
-    const facSlice = SCHOOL_FACILITIES.slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE);
+  // Page 0, PAGE_SIZE=7: worst case is 7 items + More + Done = 9. Middle pages: 7 + Prev + More + Done = 10. Safe.
+    const facPage = 0;
+    reg.facilitiesPage = 0;
+    const FAC_PAGE_SIZE = 7;
+    const facSlice = SCHOOL_FACILITIES.slice(0, FAC_PAGE_SIZE);
     const facRows = facSlice.map(f => ({
       id:    `school_reg_fac_${f.id}`,
-      title: (reg.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+      title: f.label
     }));
-    const hasMoreFac = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
-    if (hasMoreFac) facRows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
-    facRows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
+    facRows.push({ id: "school_reg_fac_page_1", title: "➡ More Facilities" });
+    facRows.push({ id: "school_reg_fac_done",   title: "✅ Done — Save Facilities" });
 
     return sendList(from,
-      `🏊 *Step 10 of 12* — Select facilities *${reg.schoolName}* has.\n\n_Selected so far: ${(reg.facilities || []).length}. Tap Done when finished._`,
+      `🏊 *Step 10 of 12* — Select facilities *${reg.schoolName}* has.\n\n_Tap each one, then Done when finished._`,
       facRows
     );
   }
@@ -350,14 +350,15 @@ Or one number if all terms are equal: *800*`
 
   const selectedCount = (reg.facilities || []).length;
     const facPage = Number(reg.facilitiesPage || 0);
-    const FAC_PAGE_SIZE = 9;
+    const FAC_PAGE_SIZE = 7;
     const facSlice = SCHOOL_FACILITIES.slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE);
     const rows = facSlice.map(f => ({
       id:    `school_reg_fac_${f.id}`,
       title: (reg.facilities.includes(f.id) ? "✅ " : "") + f.label
     }));
     const hasMoreFac = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
-    if (hasMoreFac) rows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
+    if (facPage > 0)  rows.push({ id: `school_reg_fac_page_${facPage - 1}`, title: "⬅ Previous" });
+    if (hasMoreFac)   rows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
     rows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
     return sendList(from, `🏊 *${selectedCount} selected* — tap more or Done:`, rows);
   }
@@ -368,7 +369,7 @@ Or one number if all terms are equal: *800*`
     reg.facilitiesPage = newPage;
     await saveBiz(biz);
 
-    const FAC_PAGE_SIZE = 9;
+    const FAC_PAGE_SIZE = 7;
     const facSlice = SCHOOL_FACILITIES.slice(newPage * FAC_PAGE_SIZE, (newPage + 1) * FAC_PAGE_SIZE);
     const rows = facSlice.map(f => ({
       id:    `school_reg_fac_${f.id}`,
@@ -391,13 +392,13 @@ Or one number if all terms are equal: *800*`
 
  reg.extramuralPage = 0;
     await saveBiz(biz);
-    const EXT_PAGE_SIZE = 9;
+    const EXT_PAGE_SIZE = 7;
     const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(0, EXT_PAGE_SIZE);
     const extRows = extSlice.map(e => ({ id: `school_reg_ext_${e.id}`, title: e.label }));
     extRows.push({ id: "school_reg_ext_page_1", title: "➡ More Activities" });
-    extRows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
+    extRows.push({ id: "school_reg_ext_done",   title: "✅ Done — Save Activities" });
     return sendList(from,
-      `🏃 *Step 11 of 12* — Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1. Tap Done when finished._`,
+      `🏃 *Step 11 of 12* — Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1 of 3. Tap Done when finished._`,
       extRows
     );
   }
@@ -413,9 +414,9 @@ Or one number if all terms are equal: *800*`
     }
     await saveBiz(biz);
 
-   const extSelectedCount = (reg.extramuralActivities || []).length;
+const extSelectedCount = (reg.extramuralActivities || []).length;
     const extPage = Number(reg.extramuralPage || 0);
-    const EXT_PAGE_SIZE = 9;
+    const EXT_PAGE_SIZE = 7;
     const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(extPage * EXT_PAGE_SIZE, (extPage + 1) * EXT_PAGE_SIZE);
     const rows = extSlice.map(e => ({
       id:    `school_reg_ext_${e.id}`,
@@ -434,7 +435,7 @@ Or one number if all terms are equal: *800*`
     reg.extramuralPage = newPage;
     await saveBiz(biz);
 
-    const EXT_PAGE_SIZE = 9;
+    const EXT_PAGE_SIZE = 7;
     const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(newPage * EXT_PAGE_SIZE, (newPage + 1) * EXT_PAGE_SIZE);
     const rows = extSlice.map(e => ({
       id:    `school_reg_ext_${e.id}`,
