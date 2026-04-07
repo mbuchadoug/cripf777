@@ -137,12 +137,21 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState = "school_reg_facilities";
     await saveBiz(biz);
 
-    const rows = SCHOOL_FACILITIES.map(f => ({ id: `school_reg_fac_${f.id}`, title: f.label }));
-    rows.push({ id: "school_reg_fac_done", title: "✅ Done selecting" });
+  // WhatsApp limit: 10 rows. Show facilities in pages of 9 + Done.
+    const facPage = Number(reg.facilitiesPage || 0);
+    const FAC_PAGE_SIZE = 9;
+    const facSlice = SCHOOL_FACILITIES.slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE);
+    const facRows = facSlice.map(f => ({
+      id:    `school_reg_fac_${f.id}`,
+      title: (reg.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+    }));
+    const hasMoreFac = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+    if (hasMoreFac) facRows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
+    facRows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
 
     return sendList(from,
-      `🏊 *Step 10 of 12* — Select all facilities *${reg.schoolName}* has.\n\nTap each facility, then tap ✅ Done.\n\n_Already selected: ${(reg.facilities || []).length}_`,
-      rows
+      `🏊 *Step 10 of 12* — Select facilities *${reg.schoolName}* has.\n\n_Selected so far: ${(reg.facilities || []).length}. Tap Done when finished._`,
+      facRows
     );
   }
 
@@ -217,10 +226,26 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     biz.sessionState   = "school_reg_city";
     await saveBiz(biz);
 
-    return sendList(from, `📍 *Step 3 of 12* — Which city is *${reg.schoolName}* in?`, [
-      ...SCHOOL_CITIES.map(c => ({ id: `school_reg_city_${c.toLowerCase().replace(/\s+/g, "_")}`, title: c })),
-      { id: "school_reg_city_other", title: "📍 Other City" }
-    ]);
+  // WhatsApp hard limit: 10 rows per list. Split 15 cities across two pages.
+    const cityRowsPage1 = SCHOOL_CITIES.slice(0, 8).map(c => ({
+      id: `school_reg_city_${c.toLowerCase().replace(/\s+/g, "_")}`,
+      title: c
+    }));
+    cityRowsPage1.push({ id: "school_reg_city_more", title: "➡ More Cities" });
+    cityRowsPage1.push({ id: "school_reg_city_other", title: "📍 Other City" });
+
+    return sendList(from, `📍 *Step 3 of 12* — Which city is *${reg.schoolName}* in?`, cityRowsPage1);
+  }
+
+  // ── City selected from list ───────────────────────────────────────────────
+// ── More cities page 2 ────────────────────────────────────────────────────
+  if (a === "school_reg_city_more") {
+    const cityRowsPage2 = SCHOOL_CITIES.slice(8).map(c => ({
+      id: `school_reg_city_${c.toLowerCase().replace(/\s+/g, "_")}`,
+      title: c
+    }));
+    cityRowsPage2.push({ id: "school_reg_city_other", title: "📍 Other City" });
+    return sendList(from, `📍 More cities — which city is *${reg.schoolName}* in?`, cityRowsPage2);
   }
 
   // ── City selected from list ───────────────────────────────────────────────
@@ -323,24 +348,57 @@ Or one number if all terms are equal: *800*`
     }
     await saveBiz(biz);
 
-    const selected = reg.facilities.map(id => SCHOOL_FACILITIES.find(f => f.id === id)?.label || id).join(", ") || "None yet";
-    const rows = SCHOOL_FACILITIES.map(f => ({
+  const selectedCount = (reg.facilities || []).length;
+    const facPage = Number(reg.facilitiesPage || 0);
+    const FAC_PAGE_SIZE = 9;
+    const facSlice = SCHOOL_FACILITIES.slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE);
+    const rows = facSlice.map(f => ({
       id:    `school_reg_fac_${f.id}`,
       title: (reg.facilities.includes(f.id) ? "✅ " : "") + f.label
     }));
-    rows.push({ id: "school_reg_fac_done", title: "✅ Done selecting" });
-    return sendList(from, `🏊 Selected: *${selected}*\n\nTap more or Done:`, rows);
+    const hasMoreFac = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+    if (hasMoreFac) rows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
+    rows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
+    return sendList(from, `🏊 *${selectedCount} selected* — tap more or Done:`, rows);
+  }
+
+  // ── Facilities page navigation ────────────────────────────────────────────
+  if (a.startsWith("school_reg_fac_page_")) {
+    const newPage = parseInt(a.replace("school_reg_fac_page_", ""), 10) || 0;
+    reg.facilitiesPage = newPage;
+    await saveBiz(biz);
+
+    const FAC_PAGE_SIZE = 9;
+    const facSlice = SCHOOL_FACILITIES.slice(newPage * FAC_PAGE_SIZE, (newPage + 1) * FAC_PAGE_SIZE);
+    const rows = facSlice.map(f => ({
+      id:    `school_reg_fac_${f.id}`,
+      title: (reg.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+    }));
+    const hasMore = (newPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+    if (newPage > 0) rows.push({ id: `school_reg_fac_page_${newPage - 1}`, title: "⬅ Previous" });
+    if (hasMore)     rows.push({ id: `school_reg_fac_page_${newPage + 1}`, title: "➡ More Facilities" });
+    rows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
+
+    return sendList(from,
+      `🏊 *Facilities (page ${newPage + 1})* — ${(reg.facilities || []).length} selected so far:`,
+      rows
+    );
   }
 
   if (a === "school_reg_fac_done") {
     biz.sessionState   = "school_reg_extramural";
     await saveBiz(biz);
 
-    const rows = SCHOOL_EXTRAMURALACTIVITIES.map(e => ({ id: `school_reg_ext_${e.id}`, title: e.label }));
-    rows.push({ id: "school_reg_ext_done", title: "✅ Done selecting" });
+ reg.extramuralPage = 0;
+    await saveBiz(biz);
+    const EXT_PAGE_SIZE = 9;
+    const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(0, EXT_PAGE_SIZE);
+    const extRows = extSlice.map(e => ({ id: `school_reg_ext_${e.id}`, title: e.label }));
+    extRows.push({ id: "school_reg_ext_page_1", title: "➡ More Activities" });
+    extRows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
     return sendList(from,
-      `🏃 *Step 11 of 12* — Select extramural activities *${reg.schoolName}* offers:\n\n_Tap all that apply, then Done._`,
-      rows
+      `🏃 *Step 11 of 12* — Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1. Tap Done when finished._`,
+      extRows
     );
   }
 
@@ -355,13 +413,42 @@ Or one number if all terms are equal: *800*`
     }
     await saveBiz(biz);
 
-    const selected = reg.extramuralActivities.map(id => SCHOOL_EXTRAMURALACTIVITIES.find(e => e.id === id)?.label || id).join(", ") || "None yet";
-    const rows = SCHOOL_EXTRAMURALACTIVITIES.map(e => ({
+   const extSelectedCount = (reg.extramuralActivities || []).length;
+    const extPage = Number(reg.extramuralPage || 0);
+    const EXT_PAGE_SIZE = 9;
+    const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(extPage * EXT_PAGE_SIZE, (extPage + 1) * EXT_PAGE_SIZE);
+    const rows = extSlice.map(e => ({
       id:    `school_reg_ext_${e.id}`,
       title: (reg.extramuralActivities.includes(e.id) ? "✅ " : "") + e.label
     }));
-    rows.push({ id: "school_reg_ext_done", title: "✅ Done selecting" });
-    return sendList(from, `🏃 Selected: *${selected}*\n\nTap more or Done:`, rows);
+    const hasMoreExt = (extPage + 1) * EXT_PAGE_SIZE < SCHOOL_EXTRAMURALACTIVITIES.length;
+    if (extPage > 0)  rows.push({ id: `school_reg_ext_page_${extPage - 1}`, title: "⬅ Previous" });
+    if (hasMoreExt)   rows.push({ id: `school_reg_ext_page_${extPage + 1}`, title: "➡ More Activities" });
+    rows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
+    return sendList(from, `🏃 *${extSelectedCount} selected* — tap more or Done:`, rows);
+  }
+
+// ── Extramural page navigation ────────────────────────────────────────────
+  if (a.startsWith("school_reg_ext_page_")) {
+    const newPage = parseInt(a.replace("school_reg_ext_page_", ""), 10) || 0;
+    reg.extramuralPage = newPage;
+    await saveBiz(biz);
+
+    const EXT_PAGE_SIZE = 9;
+    const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(newPage * EXT_PAGE_SIZE, (newPage + 1) * EXT_PAGE_SIZE);
+    const rows = extSlice.map(e => ({
+      id:    `school_reg_ext_${e.id}`,
+      title: (reg.extramuralActivities || []).includes(e.id) ? `✅ ${e.label}` : e.label
+    }));
+    const hasMore = (newPage + 1) * EXT_PAGE_SIZE < SCHOOL_EXTRAMURALACTIVITIES.length;
+    if (newPage > 0) rows.push({ id: `school_reg_ext_page_${newPage - 1}`, title: "⬅ Previous" });
+    if (hasMore)     rows.push({ id: `school_reg_ext_page_${newPage + 1}`, title: "➡ More Activities" });
+    rows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
+
+    return sendList(from,
+      `🏃 *Activities (page ${newPage + 1})* — ${(reg.extramuralActivities || []).length} selected so far:`,
+      rows
+    );
   }
 
   if (a === "school_reg_ext_done") {

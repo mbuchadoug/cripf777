@@ -19,13 +19,15 @@ export async function startSchoolSearch(from, biz, saveBiz) {
     await saveBiz(biz);
   }
 
-  return sendList(from, "🏫 *Find a School in Zimbabwe*\n\nWhich city?", [
-    ...SCHOOL_CITIES.map(c => ({
-      id:    `school_search_city_${c.toLowerCase().replace(/\s+/g, "_")}`,
-      title: `📍 ${c}`
-    })),
-    { id: "school_search_city_all", title: "🌍 All Cities" }
-  ]);
+ // WhatsApp limit: 10 rows. Show first 8 cities + More + All Cities.
+  const searchCityRows = SCHOOL_CITIES.slice(0, 8).map(c => ({
+    id:    `school_search_city_${c.toLowerCase().replace(/\s+/g, "_")}`,
+    title: `📍 ${c}`
+  }));
+  searchCityRows.push({ id: "school_search_city_more", title: "➡ More Cities" });
+  searchCityRows.push({ id: "school_search_city_all",  title: "🌍 All Cities" });
+
+  return sendList(from, "🏫 *Find a School in Zimbabwe*\n\nWhich city?", searchCityRows);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +36,15 @@ export async function startSchoolSearch(from, biz, saveBiz) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz }) {
   const search = biz?.sessionData?.schoolSearch || {};
-
+// ── More cities page 2 ────────────────────────────────────────────────────
+  if (a === "school_search_city_more") {
+    const moreCityRows = SCHOOL_CITIES.slice(8).map(c => ({
+      id:    `school_search_city_${c.toLowerCase().replace(/\s+/g, "_")}`,
+      title: `📍 ${c}`
+    }));
+    moreCityRows.push({ id: "school_search_city_all", title: "🌍 All Cities" });
+    return sendList(from, "🏫 *More Cities* — which city?", moreCityRows);
+  }
   // ── Step 1: City selected ─────────────────────────────────────────────────
   if (a.startsWith("school_search_city_")) {
     const cityRaw = a.replace("school_search_city_", "").replace(/_/g, " ");
@@ -83,7 +93,8 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
     }
 
     // Build facility filter list (top 10 most common)
-    const topFacilities = SCHOOL_FACILITIES.slice(0, 10);
+ // WhatsApp limit: 10 rows. Cap at 9 facilities + No Filter.
+    const topFacilities = SCHOOL_FACILITIES.slice(0, 9);
     return sendList(from,
       "🏊 *Filter by facility?* (optional)\n\nPick one must-have facility, or skip:",
       [

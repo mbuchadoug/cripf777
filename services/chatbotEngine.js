@@ -1737,8 +1737,10 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_reg_cur_") ||
       a.startsWith("school_reg_gender_") ||
       a.startsWith("school_reg_boarding_") ||
-      a.startsWith("school_reg_fac_") ||
+    a.startsWith("school_reg_fac_") ||
       a.startsWith("school_reg_ext_") ||
+      a === "school_reg_city_more" ||
+      a === "school_search_city_more" ||
       a.startsWith("school_plan_") ||
       a.startsWith("school_search_city_") ||
       a.startsWith("school_search_type_") ||
@@ -5709,8 +5711,10 @@ if (
   a.startsWith("school_reg_cur_") ||
   a.startsWith("school_reg_gender_") ||
   a.startsWith("school_reg_boarding_") ||
-  a.startsWith("school_reg_fac_") ||
+ a.startsWith("school_reg_fac_") ||
   a.startsWith("school_reg_ext_") ||
+  a === "school_reg_city_more" ||
+  a === "school_search_city_more" ||
   a.startsWith("school_plan_") ||
   a === "school_reg_address_skip" ||
   a === "school_reg_principal_skip" ||
