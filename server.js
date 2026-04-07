@@ -99,6 +99,7 @@ import lmsRoutes from "./routes/lms.js";
 import lmsApiRoutes from "./routes/lms_api.js";
 import adminRoutes from "./routes/admin.js"; // merged admin (includes import/upload UI)
 import supplierAdminRoutes from "./routes/supplierAdmin.js"; // ← ADD THIS
+import schoolAdminRoutes from "./routes/schoolAdmin.js";
 import User from "./models/user.js";
 import adminAttempts from "./routes/admin_attempts.js";
 // org-specific quiz API (if present)
@@ -413,6 +414,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/admin", adminAnalyticsRoutes);
 app.use("/zq-admin", supplierAdminRoutes); // ← ADD THIS
+app.use("/zq-admin", schoolAdminRoutes);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
