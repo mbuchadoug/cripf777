@@ -480,8 +480,9 @@ const extSelectedCount = (reg.extramuralActivities || []).length;
     return _sendSchoolConfirmPrompt(from, reg);
   }
 
-  // ── Confirm: Yes ─────────────────────────────────────────────────────────
+// ── Confirm: Yes ─────────────────────────────────────────────────────────
   if (a === "school_reg_confirm_yes") {
+    const phone = from.replace(/\D+/g, "");
     return _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg);
   }
 
