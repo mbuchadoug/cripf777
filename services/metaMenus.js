@@ -142,8 +142,9 @@ if (supplier?.active) {
 
   // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
 return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-  { id: "register_supplier", title: "🏪 List My Business" },
+  { id: "register_supplier", title: "🏪 List My Business or School" },
   { id: "find_supplier",     title: "🔍 Browse & Shop" },
+  { id: "find_school",       title: "🏫 Find a School" },
   { id: "my_orders",         title: "📋 My Orders" },
 ]);
 }
@@ -787,6 +788,12 @@ export async function sendSupplierUpgradeMenu(to, currentTier) {
 export async function sendSupplierAccountMenu(to, supplierDoc) {
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
   const phone = to.replace(/\D+/g, "");
+
+  // ── School-aware routing: if this phone belongs to a school, show school menu ─
+  const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+  const school = await SchoolProfile.findOne({ phone });
+  if (school) return sendSchoolAccountMenu(to, school);
+
   const supplier = supplierDoc || await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(to);
 

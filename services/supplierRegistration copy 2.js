@@ -94,15 +94,6 @@ function isSupplierRegistrationComplete(supplier) {
 
 export async function startSupplierRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
-
-  // ── School check: if this phone already has a school profile, route there ──
-  const SchoolProfile = (await import("../models/schoolProfile.js")).default;
-  const existingSchool = await SchoolProfile.findOne({ phone });
-  if (existingSchool) {
-    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
-    return sendSchoolAccountMenu(from, existingSchool);
-  }
-
   const existing = await SupplierProfile.findOne({ phone });
 
   if (existing) {
@@ -128,39 +119,32 @@ export async function startSupplierRegistration(from, biz) {
       { upsert: true }
     );
 
- // New user with no biz — ask what type of listing they want first
-    biz.sessionState = "supplier_reg_listing_type";
-    biz.sessionData  = { supplierReg: {} };
-    await (await import("./bizHelpers.js")).saveBizSafe(biz);
+ return sendText(from,
+`📦 *List Your Business*
 
-    return sendList(from, 
-`🏪 *List on ZimQuote*
+Let's get you listed in 2 minutes 👍
 
-What would you like to list?`,
-      [
-        { id: "reg_type_product", title: "📦 I Sell Products" },
-        { id: "reg_type_service", title: "🧰 I Offer Services" },
-        { id: "reg_type_school",  title: "🏫 I Run a School" }
-      ]
+What is your *business name*?
+
+_At any time, type *cancel* to stop and go back to the main menu._`
     );
   }
 
-  biz.sessionState = "supplier_reg_listing_type";
-  biz.sessionData  = { supplierReg: {} };
+  biz.sessionState = "supplier_reg_name";
+  biz.sessionData = { supplierReg: {} };
 
   const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
-  return sendList(from,
-`🏪 *List on ZimQuote*
+ return sendText(from,
+`📦 *List Your Business*
 
-What would you like to list?`,
-    [
-      { id: "reg_type_product", title: "📦 I Sell Products" },
-      { id: "reg_type_service", title: "🧰 I Offer Services" },
-      { id: "reg_type_school",  title: "🏫 I Run a School" }
-    ]
-  );
+Let's get you listed in 2 minutes 👍
+
+What is your *business name*?
+
+_At any time, type *cancel* to stop and go back to the main menu._`
+    );
 }
 
 export async function handleSupplierRegistrationStates({
@@ -169,27 +153,6 @@ export async function handleSupplierRegistrationStates({
   const phone = from.replace(/\D+/g, "");
 
   // ── Step 1: Business Name ──────────────────────────────
- // ── Step 0: Listing type chosen via button (product/service handled in chatbotEngine)
-  // School name free-text entry after "reg_type_school" button
-  if (state === "school_reg_name") {
-    const name = text.trim();
-    if (!name || name.length < 2) {
-      await sendText(from, "❌ Please enter a valid school name:");
-      return true;
-    }
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.schoolName = name;
-    biz.sessionData.supplierReg.profileType = "school";
-    biz.sessionState = "school_reg_type";
-    await saveBiz(biz);
-
-    const { SCHOOL_TYPES } = await import("./schoolPlans.js");
-    return sendList(from, `📗 *What type of school is ${name}?*`, [
-      ...SCHOOL_TYPES.map(t => ({ id: `school_reg_type_${t.id}`, title: t.label }))
-    ]);
-  }
-
-  // ── Step 1: Business Name (products/services) ──────────────────────────────
   if (state === "supplier_reg_name") {
     const name = text.trim();
     if (!name || name.length < 2) {
@@ -201,7 +164,7 @@ export async function handleSupplierRegistrationStates({
     biz.sessionState = "supplier_reg_city";
     await saveBiz(biz);
 
-    return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
+return sendList(from, "📍 Where are you based?\n\n_Not listed? Tap Other_", [
       ...SUPPLIER_CITIES.map(c => ({ id: `sup_city_${c.toLowerCase()}`, title: c })),
       { id: "sup_city_other", title: "📍 Other City" }
     ]);

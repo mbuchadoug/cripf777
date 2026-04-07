@@ -14,44 +14,25 @@ import {
 // ── Helper: get or init registration data from biz session ──────────────────
 function getReg(biz) {
   biz.sessionData = biz.sessionData || {};
-  biz.sessionData.schoolReg = biz.sessionData.schoolReg || {};
-  return biz.sessionData.schoolReg;
+  // Schools use supplierReg key to stay consistent with the shared biz session
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  return biz.sessionData.supplierReg;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ENTRY POINT — called from chatbotEngine when user taps "🏫 Register My School"
 // ─────────────────────────────────────────────────────────────────────────────
+// startSchoolRegistration is deprecated — entry is now via register_supplier → reg_type_school
+// Kept as a safe fallback redirect only.
 export async function startSchoolRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
   const existing = await SchoolProfile.findOne({ phone });
-
-  if (existing?.active) {
+  if (existing) {
     const { sendSchoolAccountMenu } = await import("./metaMenus.js");
     return sendSchoolAccountMenu(from, existing);
   }
-
-  if (existing && !existing.active) {
-    return sendList(from, `🏫 *${existing.schoolName}* is registered but not yet live.`, [
-      { id: "school_pay_plan",  title: "💳 Activate My Listing" },
-      { id: "school_account",   title: "👁 View My Profile" },
-      { id: "main_menu_back",   title: "⬅ Main Menu" }
-    ]);
-  }
-
-  biz.sessionState   = "school_reg_name";
-  biz.sessionData    = { schoolReg: {} };
-  const { saveBizSafe } = await import("./bizHelpers.js");
-  await saveBizSafe(biz);
-
-  return sendText(from,
-`🏫 *Register Your School on ZimQuote*
-
-Let's get your school listed so parents in Zimbabwe can find you.
-
-*Step 1 of 12* — What is your school's full name?
-
-_Type *cancel* at any time to stop._`
-  );
+  // Redirect to the unified listing entry
+  const { sendMainMenu } = await import("./metaMenus.js");
+  return sendMainMenu(from);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

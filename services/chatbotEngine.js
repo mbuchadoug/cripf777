@@ -1640,8 +1640,9 @@ a === "my_orders" ||
       a.startsWith("sup_book_confirm_") ||
       a === "exp_show_categories" ||
       a.startsWith("exp_quick_save_") ||
-   a === "reg_type_product" ||
+  a === "reg_type_product" ||
       a === "reg_type_service" ||
+      a === "reg_type_school" ||
       a.startsWith("sup_collar_") ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
@@ -2041,8 +2042,9 @@ const allowedWithoutBiz =
   a === "my_orders" ||
   a === "sup_upgrade_plan" ||
   a === "sup_renew_plan" ||
-  a === "sup_search_type_product" ||
-  a === "sup_search_type_service" ||
+ a === "sup_search_type_product" ||
+      a === "sup_search_type_service" ||
+      a === "reg_type_school" ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
   a.startsWith("sup_shop_") ||
@@ -4437,8 +4439,30 @@ const supplierStates = [
   "supplier_order_confirm_price",
   "supplier_order_picking",
   "supplier_reg_biz_currency",
- "supplier_select_listed_products",   // ← ADD THIS
-  "supplier_add_listed_products"        // ← ADD THIS (same issue exists here)
+"supplier_select_listed_products",
+  "supplier_add_listed_products",
+  // ── School registration states (go through same biz session machine) ──────
+  "supplier_reg_listing_type",
+  "school_reg_name",
+  "school_reg_city_text",
+  "school_reg_suburb",
+  "school_reg_address",
+  "school_reg_fees",
+  "school_reg_principal",
+  "school_reg_email",
+  "school_reg_enter_ecocash",
+  "school_reg_payment_pending",
+  "school_reg_choose_plan",
+  "school_reg_confirm",
+  "school_reg_type",
+  "school_reg_curriculum",
+  "school_reg_gender",
+  "school_reg_boarding",
+  "school_reg_facilities",
+  "school_reg_extramural",
+  "school_search_city",
+  "school_search_results",
+  "school_admin_update_fees"
 ];
  
 // ── School text-input states (free-text WhatsApp replies during school flow) ─
@@ -6525,7 +6549,41 @@ _Type *cancel* to return to main menu._`
 
   // ── Profile type: Products or Services ───────────────────────────────────
 
+// ── School listing type selected — pivot the entire reg flow into school mode ─
+if (a === "reg_type_school") {
+  if (!biz) {
+    await sendText(from, "❌ Session expired. Type *menu* to start again.");
+    return;
+  }
 
+  // Check if already has a school profile
+  const existingSchool = await SchoolProfile.findOne({ phone });
+  if (existingSchool?.active) {
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, existingSchool);
+  }
+  if (existingSchool && !existingSchool.active) {
+    return sendList(from, `🏫 *${existingSchool.schoolName}* is saved but not yet live.`, [
+      { id: "school_pay_plan",  title: "💳 Activate My Listing" },
+      { id: "school_account",   title: "👁 View My Profile" },
+      { id: "main_menu_back",   title: "⬅ Main Menu" }
+    ]);
+  }
+
+  biz.sessionData = { supplierReg: { profileType: "school" } };
+  biz.sessionState = "school_reg_name";
+  await saveBizSafe(biz);
+
+  return sendText(from,
+`🏫 *Register Your School on ZimQuote*
+
+Parents across Zimbabwe will be able to find your school, view fees, facilities, and apply online.
+
+What is your *school's full name*?
+
+_Type *cancel* at any time to stop._`
+  );
+}
 
 if (a === "reg_type_product" || a === "reg_type_service") {
   if (!biz) return sendMainMenu(from);
