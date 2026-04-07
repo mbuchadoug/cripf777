@@ -104,19 +104,6 @@ import {
 } from "./supplierOrders.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
-import SchoolProfile from "../models/schoolProfile.js";
-import {
-  startSchoolRegistration,
-  handleSchoolRegistrationStates,
-  handleSchoolRegistrationActions
-} from "./schoolRegistration.js";
-import {
-  startSchoolSearch,
-  handleSchoolSearchActions,
-  handleSchoolAdminStates
-} from "./schoolSearch.js";
- 
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
@@ -1713,41 +1700,7 @@ a.startsWith("sup_load_preset_") ||
       a === "exp_bulk_keep_adding" ||
       a.startsWith("paylist_prev_") ||
       a.startsWith("paylist_next_") ||
-      a.startsWith("paylist_search_") ||
-      // ── Schools ────────────────────────────────────────────────────────────
-      a === "find_school" ||
-      a === "school_register" ||
-      a === "school_account" ||
-      a === "school_pay_plan" ||
-      a === "school_search_refine" ||
-      a === "school_toggle_admissions" ||
-      a === "school_update_fees" ||
-      a === "school_reg_confirm_yes" ||
-      a === "school_reg_confirm_no" ||
-      a === "school_reg_address_skip" ||
-      a === "school_reg_principal_skip" ||
-      a === "school_reg_email_skip" ||
-      a === "school_reg_cur_done" ||
-      a === "school_reg_fac_done" ||
-      a === "school_reg_ext_done" ||
-      a === "school_reg_city_other" ||
-      a.startsWith("school_reg_type_") ||
-      a.startsWith("school_reg_city_") ||
-      a.startsWith("school_reg_cur_") ||
-      a.startsWith("school_reg_gender_") ||
-      a.startsWith("school_reg_boarding_") ||
-      a.startsWith("school_reg_fac_") ||
-      a.startsWith("school_reg_ext_") ||
-      a.startsWith("school_plan_") ||
-      a.startsWith("school_search_city_") ||
-      a.startsWith("school_search_type_") ||
-      a.startsWith("school_search_fees_") ||
-      a.startsWith("school_search_fac_") ||
-      a.startsWith("school_search_page_") ||
-      a.startsWith("school_view_") ||
-      a.startsWith("school_dl_profile_") ||
-      a.startsWith("school_apply_") ||
-      a.startsWith("school_contact_")
+      a.startsWith("paylist_search_")
     
     );
   // =========================
@@ -2075,42 +2028,7 @@ a === "sup_search_next_page" ||
   a === "my_supplier_account" ||
   a === "main_menu_back" ||
       a.startsWith("payinv_full_") ||
-    a === "biz_tools_menu" ||
-  // ── Schools ──────────────────────────────────────────────────────────────
-  a === "find_school" ||
-  a === "school_register" ||
-  a === "school_account" ||
-  a === "school_pay_plan" ||
-  a === "school_search_refine" ||
-  a === "school_toggle_admissions" ||
-  a === "school_update_fees" ||
-  a === "school_reg_confirm_yes" ||
-  a === "school_reg_confirm_no" ||
-  a === "school_reg_address_skip" ||
-  a === "school_reg_principal_skip" ||
-  a === "school_reg_email_skip" ||
-  a === "school_reg_cur_done" ||
-  a === "school_reg_fac_done" ||
-  a === "school_reg_ext_done" ||
-  a === "school_reg_city_other" ||
-  a.startsWith("school_reg_type_") ||
-  a.startsWith("school_reg_city_") ||
-  a.startsWith("school_reg_cur_") ||
-  a.startsWith("school_reg_gender_") ||
-  a.startsWith("school_reg_boarding_") ||
-  a.startsWith("school_reg_fac_") ||
-  a.startsWith("school_reg_ext_") ||
-  a.startsWith("school_plan_") ||
-  a.startsWith("school_search_city_") ||
-  a.startsWith("school_search_type_") ||
-  a.startsWith("school_search_fees_") ||
-  a.startsWith("school_search_fac_") ||
-  a.startsWith("school_search_page_") ||
-  a.startsWith("school_view_") ||
-  a.startsWith("school_dl_profile_") ||
-  a.startsWith("school_apply_") ||
-  a.startsWith("school_contact_");
-
+  a === "biz_tools_menu";
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
 
@@ -4437,28 +4355,9 @@ const supplierStates = [
   "supplier_order_confirm_price",
   "supplier_order_picking",
   "supplier_reg_biz_currency",
- "supplier_select_listed_products",   // ← ADD THIS
+  "supplier_select_listed_products",   // ← ADD THIS
   "supplier_add_listed_products"        // ← ADD THIS (same issue exists here)
 ];
- 
-// ── School text-input states (free-text WhatsApp replies during school flow) ─
-const schoolTextStates = [
-  "school_reg_name",
-  "school_reg_city_text",
-  "school_reg_suburb",
-  "school_reg_address",
-  "school_reg_fees",
-  "school_reg_principal",
-  "school_reg_email",
-  "school_reg_enter_ecocash",
-  "school_reg_payment_pending"
-];
- 
-// ── School admin text-input states ───────────────────────────────────────────
-const schoolAdminStates = [
-  "school_admin_update_fees"
-];
- 
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
 // supplier_search_city is excluded from the block - typed text in that state
@@ -4763,28 +4662,13 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
   }
 }
 
-    if (schoolTextStates.includes(biz.sessionState)) {
-      const handled = await handleSchoolRegistrationStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
-      });
-      if (handled) return;
-    }
- 
-    // ── School admin text-input states (e.g. fee updates) ────────────────────
-    if (schoolAdminStates.includes(biz.sessionState)) {
-      const handled = await handleSchoolAdminStates({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
-      });
-      if (handled) return;
-    }
- 
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
         state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
       });
       if (handled) return;
     }
- 
+
     // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
   
    // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
@@ -5598,114 +5482,6 @@ if (a === "register_supplier") {
 // ── Main Menu back button - always goes to start menu ────────────────────
 if (a === "main_menu_back") {
   return sendMainMenu(from);
-}
- 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 🏫 SCHOOLS — Action handlers
-// ═══════════════════════════════════════════════════════════════════════════════
- 
-// ── Parent taps "🏫 Find a School" ───────────────────────────────────────────
-if (a === "find_school") {
-  return startSchoolSearch(from, biz, saveBizSafe.bind(null, biz));
-}
- 
-// ── Parent school search funnel steps (city → type → fees → facility → results)
-if (
-  a.startsWith("school_search_city_") ||
-  a.startsWith("school_search_type_") ||
-  a.startsWith("school_search_fees_") ||
-  a.startsWith("school_search_fac_") ||
-  a.startsWith("school_search_page_") ||
-  a === "school_search_refine"
-) {
-  if (biz) {
-    biz.sessionData = biz.sessionData || {};
-    biz.sessionData.schoolSearch = biz.sessionData.schoolSearch || {};
-  }
-  const handled = await handleSchoolSearchActions({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
-}
- 
-// ── Parent taps a school card (view detail / download / apply / contact) ─────
-if (
-  a.startsWith("school_view_") ||
-  a.startsWith("school_dl_profile_") ||
-  a.startsWith("school_apply_") ||
-  a.startsWith("school_contact_")
-) {
-  const handled = await handleSchoolSearchActions({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
-}
- 
-// ── School admin actions (toggle admissions, update fees) ─────────────────────
-if (a === "school_toggle_admissions" || a === "school_update_fees") {
-  const handled = await handleSchoolSearchActions({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
-}
- 
-// ── School registration entry (tapped from main menu or account) ──────────────
-if (a === "school_register") {
-  return startSchoolRegistration(from, biz);
-}
- 
-// ── School account dashboard (for registered school admins) ──────────────────
-if (a === "school_account") {
-  const schoolPhone = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone: schoolPhone });
-  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
-  return sendSchoolAccountMenu(from, school);
-}
- 
-// ── School plan selection / activation payment ────────────────────────────────
-if (a === "school_pay_plan") {
-  const schoolPhone = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone: schoolPhone });
-  if (!school) return startSchoolRegistration(from, biz);
-  return sendList(from,
-    "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent inquiry alerts on WhatsApp",
-    [
-      { id: "school_plan_basic_monthly",    title: "✅ Basic — $15/month",    description: "Listed in search + profile PDF + application link" },
-      { id: "school_plan_basic_annual",     title: "✅ Basic — $150/year",    description: "Save $30 vs monthly" },
-      { id: "school_plan_featured_monthly", title: "🔥 Featured — $35/month", description: "Top of results + verified badge + analytics" },
-      { id: "school_plan_featured_annual",  title: "🔥 Featured — $350/year", description: "Save $70 vs monthly" }
-    ]
-  );
-}
- 
-// ── School registration button taps (multi-select steps, confirm, plan pick) ──
-if (
-  a.startsWith("school_reg_type_") ||
-  a.startsWith("school_reg_city_") ||
-  a.startsWith("school_reg_cur_") ||
-  a.startsWith("school_reg_gender_") ||
-  a.startsWith("school_reg_boarding_") ||
-  a.startsWith("school_reg_fac_") ||
-  a.startsWith("school_reg_ext_") ||
-  a.startsWith("school_plan_") ||
-  a === "school_reg_address_skip" ||
-  a === "school_reg_principal_skip" ||
-  a === "school_reg_email_skip" ||
-  a === "school_reg_cur_done" ||
-  a === "school_reg_fac_done" ||
-  a === "school_reg_ext_done" ||
-  a === "school_reg_city_other" ||
-  a === "school_reg_confirm_yes" ||
-  a === "school_reg_confirm_no"
-) {
-  if (!biz) {
-    await sendText(from, "❌ Session expired. Type *menu* to start again.");
-    return;
-  }
-  const handled = await handleSchoolRegistrationActions({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
 }
 
 if (a === "my_supplier_account") {
