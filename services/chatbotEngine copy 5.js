@@ -1604,8 +1604,6 @@ const isMetaAction =
       a.startsWith("sup_plan_") ||
 a.startsWith("sup_accept_") ||
       a.startsWith("sup_decline_") ||
-      a.startsWith("sup_view_order_") ||
-      a.startsWith("sup_contact_buyer_") ||
       a.startsWith("dec_out_of_stock") ||
       a.startsWith("dec_min_not_met") ||
       a.startsWith("dec_no_delivery") ||
@@ -2011,10 +2009,8 @@ const allowedWithoutBiz =
   a.startsWith("sup_order_") ||
   a.startsWith("sup_save_") ||
   a.startsWith("rate_order_") ||
-a.startsWith("sup_accept_") ||
+  a.startsWith("sup_accept_") ||
   a.startsWith("sup_decline_") ||
-  a.startsWith("sup_view_order_") ||
-  a.startsWith("sup_contact_buyer_") ||
   a.startsWith("sup_cart_add_") ||
   a.startsWith("sup_cart_confirm_") ||
   a.startsWith("sup_cart_clear_") ||
@@ -6067,10 +6063,11 @@ _Type *cancel* to go back to your account._`
     );
   }
 
-if (a === "sup_my_orders") {
+ if (a === "sup_my_orders") {
   const supplier = await SupplierProfile.findOne({ phone });
   if (!supplier) return sendSuppliersMenu(from);
 
+  // Gate: must be active to see incoming orders
   if (!supplier.active) {
     await sendText(from,
 `🔒 *Activate your listing first.*
@@ -6082,125 +6079,63 @@ Once your listing is live, buyers will start sending you orders. Choose a plan t
 
   const SupplierOrder = (await import("../models/supplierOrder.js")).default;
   const orders = await SupplierOrder.find({ supplierId: supplier._id })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+  // ... rest of the handler unchanged
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
 
-  if (!orders.length) {
+    if (!orders.length) {
+      return sendButtons(from, {
+        text: "📦 *Orders From Buyers*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
+
+        buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+      });
+    }
+
+    const lines = orders.map((o) => {
+      const statusIcon = {
+        pending: "⏳",
+        accepted: "✅",
+        declined: "❌",
+        completed: "🏁"
+      }[o.status] || "•";
+
+      const date = new Date(o.createdAt).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short"
+      });
+
+      const orderRef = String(o._id).slice(-6).toUpperCase();
+
+      const itemSummary = Array.isArray(o.items) && o.items.length
+        ? o.items.map(item => {
+            const name = item.product || "Item";
+            const qty = item.quantity ?? 1;
+            const unitSuffix = item.unit && item.unit !== "units" ? ` ${item.unit}` : "";
+            const lineTotal = typeof item.total === "number" ? ` - $${item.total.toFixed(2)}` : "";
+            return `• ${name} x${qty}${unitSuffix}${lineTotal}`;
+          }).join("\n")
+        : "• Order items not available";
+
+      const amount = typeof o.totalAmount === "number" ? o.totalAmount : 0;
+
+      const deliveryLine = o.delivery?.required
+        ? `🚚 Delivery: ${o.delivery.address || "Address not provided"}`
+        : "🏠 Collection";
+
+      return `${statusIcon} *Order #${orderRef}* (${date})
+${itemSummary}
+${deliveryLine}
+💵 Total: $${amount.toFixed(2)}
+📌 Status: ${o.status}`;
+    }).join("\n\n");
+
     return sendButtons(from, {
-      text: "📦 *My Orders*\n\nNo orders yet. Make sure your listing is active so buyers can find you!",
+   text: `📦 *Incoming Orders (From Buyers)* - last ${orders.length}\n\n${lines}`,
+
       buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
     });
   }
-
-  // Show list of orders — each tappable to drill into
-  const rows = orders.map((o) => {
-    const statusIcon = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" }[o.status] || "•";
-    const date = new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    const orderRef = String(o._id).slice(-6).toUpperCase();
-    const amount = typeof o.totalAmount === "number" ? ` · $${o.totalAmount.toFixed(2)}` : "";
-    const itemCount = Array.isArray(o.items) ? o.items.length : 0;
-    return {
-      id: `sup_view_order_${o._id}`,
-      title: `${statusIcon} #${orderRef} (${date})`,
-      description: `${itemCount} item${itemCount !== 1 ? "s" : ""}${amount} · ${o.status}`
-    };
-  });
-
-  rows.push({ id: "my_supplier_account", title: "⬅ Back" });
-
-  return sendList(from, `📦 *My Orders* — last ${orders.length}`, rows);
-}
-
-// ── Supplier drills into a single order ───────────────────────────────────────
-if (a.startsWith("sup_view_order_")) {
-  const orderId = a.replace("sup_view_order_", "");
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-
-  const SupplierOrder = (await import("../models/supplierOrder.js")).default;
-  const order = await SupplierOrder.findById(orderId).lean();
-  if (!order) {
-    await sendText(from, "❌ Order not found.");
-    return sendSupplierAccountMenu(from, supplier);
-  }
-
-  const isService = supplier.profileType === "service";
-  const orderRef = String(order._id).slice(-6).toUpperCase();
-  const date = new Date(order.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const statusIcon = { pending: "⏳", accepted: "✅", declined: "❌", completed: "🏁" }[order.status] || "•";
-
-  const itemLines = Array.isArray(order.items) && order.items.length
-    ? order.items.map(item => {
-        const name = item.product || "Item";
-        const qty = item.quantity ?? 1;
-        const unitSuffix = item.unit && item.unit !== "units" ? ` ${item.unit}` : "";
-        const lineTotal = typeof item.total === "number" ? ` = $${item.total.toFixed(2)}` : "";
-        const unitPrice = typeof item.pricePerUnit === "number" ? ` @ $${item.pricePerUnit.toFixed(2)}` : "";
-        return `• ${name} x${qty}${unitSuffix}${unitPrice}${lineTotal}`;
-      }).join("\n")
-    : "• No items";
-
-  const deliveryLine = order.delivery?.required
-    ? `🚚 Delivery: ${order.delivery.address || "Address not provided"}`
-    : isService
-      ? `📍 Service location: ${order.delivery?.address || "Not specified"}`
-      : "🏠 Collection";
-
-  const amount = typeof order.totalAmount === "number" ? `$${order.totalAmount.toFixed(2)}` : "Pending pricing";
-
-  const detailText =
-    `${statusIcon} *Order #${orderRef}*\n` +
-    `📅 ${date}\n\n` +
-    `${itemLines}\n\n` +
-    `${deliveryLine}\n` +
-    `💵 Total: ${amount}\n` +
-    `📞 Buyer: ${order.buyerPhone}\n` +
-    `📌 Status: *${order.status}*`;
-
-  // Pending orders get Accept / Decline / Contact buttons
-  if (order.status === "pending") {
-    return sendButtons(from, {
-      text: detailText,
-      buttons: [
-        { id: `sup_accept_${order._id}`, title: isService ? "✅ Accept Booking" : "✅ Accept" },
-        { id: `sup_decline_${order._id}`, title: "❌ Decline" },
-        { id: `sup_contact_buyer_${order._id}`, title: "📞 Contact Buyer" }
-      ]
-    });
-  }
-
-  // Accepted / other statuses — contact + back
-  return sendButtons(from, {
-    text: detailText,
-    buttons: [
-      { id: `sup_contact_buyer_${order._id}`, title: "📞 Contact Buyer" },
-      { id: "sup_my_orders", title: "⬅ My Orders" }
-    ]
-  });
-}
-
-// ── Supplier contacts buyer from order detail view ────────────────────────────
-if (a.startsWith("sup_contact_buyer_")) {
-  const orderId = a.replace("sup_contact_buyer_", "");
-  const SupplierOrder = (await import("../models/supplierOrder.js")).default;
-  const order = await SupplierOrder.findById(orderId).lean();
-  if (!order) {
-    await sendText(from, "❌ Order not found.");
-    return sendSupplierAccountMenu(from, null);
-  }
-  const orderRef = String(order._id).slice(-6).toUpperCase();
-  return sendButtons(from, {
-    text:
-      `📞 *Contact Buyer*\n\n` +
-      `Order #${orderRef}\n` +
-      `Buyer's WhatsApp number: *${order.buyerPhone}*\n\n` +
-      `You can call or message them directly on WhatsApp.`,
-    buttons: [
-      { id: `sup_view_order_${order._id}`, title: "⬅ Back to Order" }
-    ]
-  });
-}
 
 if (a === "sup_my_earnings") {
   const supplier = await SupplierProfile.findOne({ phone });
