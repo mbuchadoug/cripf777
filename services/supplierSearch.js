@@ -861,6 +861,7 @@ const SUBURB_TO_CITY = {
   "cowdray park": "Bulawayo",
   "cowdray": "Bulawayo",
   "magwegwe": "Bulawayo",
+  "mahatshula":"Bulawayo",
   "selbourne": "Bulawayo",
   "hillside": "Bulawayo",
   "suburbs": "Bulawayo",
