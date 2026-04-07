@@ -747,7 +747,7 @@ function getSupplierCatalogueSourceItems(supplier) {
   if (!supplier) return [];
 
   if (supplier.profileType === "service") {
-    // Use rates[] if available — they have prices
+    // Use rates[] if available - they have prices
     const rateItems = (supplier.rates || [])
       .filter(r => normalizeProductName(r?.service || ""))
       .map(r => ({
@@ -759,7 +759,7 @@ function getSupplierCatalogueSourceItems(supplier) {
 
     if (rateItems.length) return rateItems;
 
-    // No rates yet — fall back to products[] and listedProducts[]
+    // No rates yet - fall back to products[] and listedProducts[]
     const seen = new Set();
     const fallbackItems = [];
     const allServiceItems = [
@@ -2309,7 +2309,7 @@ if (shortcode.city && results.length) {
         return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
       }
 
-      // Only reach here if no offers found anywhere — show businesses as last resort
+      // Only reach here if no offers found anywhere - show businesses as last resort
       const pageResults = results.slice(0, 9);
       const rows = formatSupplierResults(pageResults, shortcode.city, shortcode.product);
       if (results.length > 9) {
@@ -4467,7 +4467,7 @@ if (shortcode.city) {
     );
   }
 
-  // Offers exhausted — fall back to supplier-level results before giving up,
+  // Offers exhausted - fall back to supplier-level results before giving up,
   // mirroring the no-biz and ghost-biz paths exactly.
   const supplierFallback = await runSupplierSearch({
     city: shortcode.city || null,
@@ -4609,7 +4609,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
       );
     }
 
-    // No offers found anywhere — show no-results message
+    // No offers found anywhere - show no-results message
     biz.sessionData = {
       ...(biz.sessionData || {}),
       supplierSearch: {
@@ -4739,7 +4739,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
               return sendList(from, `🔍 *${shortcode.product}* in ${locationLabel} - ${offerResults.length} found`, rows);
             }
 
-            // Offers exhausted — fall back to supplier-level results
+            // Offers exhausted - fall back to supplier-level results
             const results = await runSupplierSearch({ city: shortcode.city || null, product: shortcode.product, area: shortcode.area || null });
             if (results.length) {
               biz.sessionData = {
@@ -4775,7 +4775,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
             });
           }
 
-          // No city or area — store product and ask for city (no-location flow unchanged)
+          // No city or area - store product and ask for city (no-location flow unchanged)
           biz.sessionData = { ...(biz.sessionData || {}), supplierSearch: { product: shortcode.product } };
           biz.sessionState = "supplier_search_city";
           await saveBizSafe(biz);
@@ -5309,7 +5309,7 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   }
 
   // ── Services: show collar groups first (same as seller registration) ──
-  // WhatsApp list limit is 10 rows — 21 service categories can't fit in one list.
+  // WhatsApp list limit is 10 rows - 21 service categories can't fit in one list.
   if (searchType === "service") {
     return sendList(from, "🔧 What type of service are you looking for?", [
       { id: "sup_search_collar_white_collar", title: "💼 Professional Services" },
@@ -5339,7 +5339,7 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
 
 
 // ── NEW: Service collar group selected by buyer ───────────────────────────────
-// Mirrors the seller registration collar flow — shows only the categories
+// Mirrors the seller registration collar flow - shows only the categories
 // belonging to that collar group (max 10 per group, all fit in one WhatsApp list)
 if (a.startsWith("sup_search_collar_")) {
   const collarKey = a.replace("sup_search_collar_", "");
@@ -5356,7 +5356,7 @@ if (a.startsWith("sup_search_collar_")) {
     c => c.types.includes("service") && c.collar === collarKey
   );
 
-  // Each collar group has ≤ 12 categories — split to stay under WhatsApp's 10-row limit
+  // Each collar group has ≤ 12 categories - split to stay under WhatsApp's 10-row limit
   const firstBatch = collarCategories.slice(0, 9);
   const hasMore    = collarCategories.length > 9;
 
@@ -5408,7 +5408,7 @@ if (a === "sup_search_more_categories") {
   }
 
   const filteredCategories = getSupplierCategoriesForType(searchType);
-  // WhatsApp max 10 rows — products overflow: items 9–17, capped at 9 + Back
+  // WhatsApp max 10 rows - products overflow: items 9–17, capped at 9 + Back
   const overflowRows = filteredCategories.slice(9, 18).map(c => ({
     id: `sup_search_cat_${c.id}`,
     title: c.label
@@ -5871,10 +5871,10 @@ if (a === "sup_view_products") {
     await sendSupplierItemsInChunks(
       from,
       unlisted,
-      `⚪ Unlisted ${label} (${unlisted.length} — not visible to buyers)`
+      `⚪ Unlisted ${label} (${unlisted.length} - not visible to buyers)`
     );
   } else {
-    await sendText(from, `⚪ *Unlisted ${label}:* None — all items are live.`);
+    await sendText(from, `⚪ *Unlisted ${label}:* None - all items are live.`);
   }
 
   return sendList(from, "What would you like to do next?", [
@@ -7516,7 +7516,7 @@ if (a.startsWith("sup_offer_pick_")) {
     }
   });
 
-// For services, skip qty picker — default to 1 and go straight to preview
+// For services, skip qty picker - default to 1 and go straight to preview
   if (supplier.profileType === "service") {
     return _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart, {
       quantity: 1,
@@ -7797,7 +7797,7 @@ await UserSession.findOneAndUpdate(
       const isLast  = i + CHUNK >= lines.length;
       await sendText(from,
         isFirst
-          ? `⚪ *Unlisted ${isService ? "Services" : "Products"} (${unlistedProducts.length} — not visible to buyers)*\n\n${chunk}${isLast ? "" : "\n_(continued...)_"}`
+          ? `⚪ *Unlisted ${isService ? "Services" : "Products"} (${unlistedProducts.length} - not visible to buyers)*\n\n${chunk}${isLast ? "" : "\n_(continued...)_"}`
           : `${chunk}${isLast ? "" : "\n_(continued...)_"}`
       );
     }
@@ -9272,7 +9272,7 @@ if (a.startsWith("sup_order_")) {
 
 // For service suppliers, only pre-filter by search term if the supplier
   // actually has a service whose name contains that term.
-  // Otherwise open full catalogue — the search found them via synonym/category match,
+  // Otherwise open full catalogue - the search found them via synonym/category match,
   // not a literal service name match.
   let effectiveSearch = searchedProduct;
   if (isService && searchedProduct) {
@@ -9621,7 +9621,7 @@ if (a.startsWith("sup_cart_add_")) {
     }
   });
 
-// For services, quantity is always 1 — skip the qty picker entirely
+// For services, quantity is always 1 - skip the qty picker entirely
   if (isService) {
     selectedItem.quantity = 1;
     selectedItem.total =
@@ -9973,7 +9973,7 @@ _Type your address below and send to complete your ${isService ? "booking" : "or
   });
 }
 
-// ── Skip contact note — submit booking without address ────────────────────
+// ── Skip contact note - submit booking without address ────────────────────
 if (a.startsWith("sup_skip_note_")) {
   const supplierId = a.replace("sup_skip_note_", "");
   const supplier = await SupplierProfile.findById(supplierId).lean();
@@ -10262,7 +10262,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       return _sendSupplierShoppingHub(from, supplier, cart);
     }
 
-    // ── Step 2: Not a single business-name match — run offer-first search ────
+    // ── Step 2: Not a single business-name match - run offer-first search ────
     let offerResults = await runSupplierOfferSearch({ city: parsed.city || null, product: cleanProduct, area: null });
 
     // Retry across all cities if city-level returns nothing
@@ -10292,7 +10292,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
       return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`, rows);
     }
 
-    // ── Step 3: No offers — fall back to supplier cards ──────────────────────
+    // ── Step 3: No offers - fall back to supplier cards ──────────────────────
     if (!allSupplierResults.length) {
       return sendButtons(from, {
         text: `😕 No results for *${cleanProduct}* in *${locationLabel}*.\n\nTry a different city or search all of Zimbabwe?`,
@@ -10313,7 +10313,7 @@ if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
     return sendList(from, `🔍 *${cleanProduct}* in ${locationLabel} - ${allSupplierResults.length} found`, rows);
   }
 
-  // ── No location found — ask for city ───────────────────────────────────
+  // ── No location found - ask for city ───────────────────────────────────
   biz.sessionData = {
     ...(biz.sessionData || {}),
     supplierSearch: { ...(biz.sessionData?.supplierSearch || {}), product: cleanProduct }

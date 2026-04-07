@@ -1,4 +1,4 @@
-{{!-- admin/org_manage.hbs — Professional Admin Panel --}}
+{{!-- admin/org_manage.hbs - Professional Admin Panel --}}
 <!doctype html>
 <html lang="en">
 <head>
@@ -489,7 +489,7 @@
       .form-grid-3 { grid-template-columns:1fr 1fr; }
     }
 
-    /* ─── RESPONSIVE 768px — tablet/mobile ─── */
+    /* ─── RESPONSIVE 768px - tablet/mobile ─── */
     @media(max-width:768px) {
 
       /* Sidebar: hidden off-screen by default, slides in as drawer */
@@ -521,7 +521,7 @@
       .top-hdr { padding:0 14px; gap:10px; }
       .hdr-title { font-size:15px; }
       .hdr-sub { display:none; }
-      /* Hide badge + header buttons on mobile — space is precious */
+      /* Hide badge + header buttons on mobile - space is precious */
       .hdr-right-items { display:none; }
 
       /* Stats 2×2 */
@@ -581,7 +581,7 @@
       .alert { font-size:12.5px; }
     }
 
-    /* ─── RESPONSIVE 480px — small phones ─── */
+    /* ─── RESPONSIVE 480px - small phones ─── */
     @media(max-width:480px) {
       .page { padding:12px 10px; gap:12px; padding-bottom:76px; }
       .stats-row { gap:8px; }
@@ -600,7 +600,7 @@
       .modal { padding:18px 14px 22px; }
     }
 
-    /* ─── RESPONSIVE 360px — smallest phones ─── */
+    /* ─── RESPONSIVE 360px - smallest phones ─── */
     @media(max-width:360px) {
       .stats-row { grid-template-columns:1fr; }
       .page { padding:10px 8px; padding-bottom:74px; }
@@ -641,7 +641,7 @@
 
 
     /* ═══════════════════════════════════════════════════
-       CLASSIFICATION MANAGER — Grid-based, zero overflow
+       CLASSIFICATION MANAGER - Grid-based, zero overflow
     ═══════════════════════════════════════════════════ */
 
     /* The classify page: standard page padding */
@@ -650,7 +650,7 @@
       box-sizing:border-box;
     }
 
-    /* Wrapper card — full width of its flex-column parent */
+    /* Wrapper card - full width of its flex-column parent */
     #clf-card {
       background:var(--surface);
       border:1px solid var(--border);
@@ -660,7 +660,7 @@
       /* width is 100% because it's a block element in a flex column */
     }
 
-    /* The two-column shell uses CSS Grid — EXACT sizes, no ambiguity */
+    /* The two-column shell uses CSS Grid - EXACT sizes, no ambiguity */
     .clf-shell {
       display:grid;
       grid-template-columns:160px 1fr; /* sidebar=fixed, main=ALL remaining */
@@ -726,7 +726,7 @@
 
     /* QUIZ ROW
        Three children: [chk][info flex:1 min-width:0][actions flex-shrink:0]
-       The info section MUST have min-width:0 — this is what makes text truncate
+       The info section MUST have min-width:0 - this is what makes text truncate
        instead of pushing the Edit button off screen. */
     .clf-row {
       display:flex;
@@ -754,7 +754,7 @@
       margin-top:2px; display:flex; gap:4px; flex-wrap:wrap; align-items:center;
     }
 
-    /* Edit button column: NEVER shrinks — always fully visible */
+    /* Edit button column: NEVER shrinks - always fully visible */
     .clf-row-actions { flex-shrink:0; }
 
     .clf-edit-btn {
@@ -798,7 +798,7 @@
     }
     .clf-filter:hover  { background:rgba(0,0,0,.04); }
     .clf-filter.active { color:var(--blue); background:var(--blue-bg); font-weight:600; }
-    /* Label text inside filter — truncates if too long */
+    /* Label text inside filter - truncates if too long */
     .clf-fi {
       flex:1;
       min-width:0;
@@ -979,7 +979,7 @@
         <div class="sb-brand-name">CRIPF<em>Cnt</em></div>
         <div class="sb-brand-sub">Admin Console</div>
       </div>
-      <!-- Close button — only visible on mobile -->
+      <!-- Close button - only visible on mobile -->
       <button id="sb-close-btn" onclick="closeSidebar()"
         style="display:flex;align-items:center;justify-content:center;
                width:32px;height:32px;border:none;border-radius:7px;
@@ -1076,7 +1076,7 @@
         <span></span><span></span><span></span>
       </button>
 
-      <!-- Desktop sidebar toggle — always visible, collapses/expands the nav -->
+      <!-- Desktop sidebar toggle - always visible, collapses/expands the nav -->
       <button id="sb-toggle-btn" onclick="toggleSidebarDesktop()" title="Toggle navigation" aria-label="Toggle sidebar">
         ☰
       </button>
@@ -1118,15 +1118,15 @@
           <button class="btn btn-o btn-sm" onclick="clfReload()">↻ Refresh</button>
         </div>
 
-        <!-- clf-shell sits directly in card — no card-body padding around it -->
+        <!-- clf-shell sits directly in card - no card-body padding around it -->
         <div class="clf-shell">
 
-          <!-- ── LEFT: Pillar filter sidebar (FIXED — never scrolls with list) ── -->
+          <!-- ── LEFT: Pillar filter sidebar (FIXED - never scrolls with list) ── -->
           <div class="clf-sidebar">
             <div class="clf-sb-section">Show</div>
             <button class="clf-filter active" id="clf-f-all" onclick="clfSetFilter('all')">
               <span class="clf-fi">📋 All</span>
-              <span class="clf-filter-count" id="clf-count-all">—</span>
+              <span class="clf-filter-count" id="clf-count-all">-</span>
             </button>
             <button class="clf-filter" id="clf-f-unclassified" onclick="clfSetFilter('unclassified')">
               <span class="clf-fi">⚠️ Unclassified</span>
@@ -1134,48 +1134,48 @@
             </button>
             <button class="clf-filter" id="clf-f-locked" onclick="clfSetFilter('locked')">
               <span class="clf-fi">🔒 Locked</span>
-              <span class="clf-filter-count" id="clf-count-locked">—</span>
+              <span class="clf-filter-count" id="clf-count-locked">-</span>
             </button>
             <div class="clf-sb-section">Pillar</div>
             <button class="clf-filter" onclick="clfSetFilter('pillar','consciousness')">
               <span class="clf-dot" style="background:#7c3aed"></span>
               <span class="clf-fi">Consciousness</span>
-              <span class="clf-filter-count" id="clf-p-consciousness">—</span>
+              <span class="clf-filter-count" id="clf-p-consciousness">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','responsibility')">
               <span class="clf-dot" style="background:#0d9488"></span>
               <span class="clf-fi">Responsibility</span>
-              <span class="clf-filter-count" id="clf-p-responsibility">—</span>
+              <span class="clf-filter-count" id="clf-p-responsibility">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','interpretation')">
               <span class="clf-dot" style="background:#4f46e5"></span>
               <span class="clf-fi">Interprete</span>
-              <span class="clf-filter-count" id="clf-p-interpretation">—</span>
+              <span class="clf-filter-count" id="clf-p-interpretation">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','purpose')">
               <span class="clf-dot" style="background:#d97706"></span>
               <span class="clf-fi">Purpose</span>
-              <span class="clf-filter-count" id="clf-p-purpose">—</span>
+              <span class="clf-filter-count" id="clf-p-purpose">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','frequencies')">
               <span class="clf-dot" style="background:#e11d48"></span>
               <span class="clf-fi">Frequencies</span>
-              <span class="clf-filter-count" id="clf-p-frequencies">—</span>
+              <span class="clf-filter-count" id="clf-p-frequencies">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','civilization')">
               <span class="clf-dot" style="background:#059669"></span>
               <span class="clf-fi">Civilization</span>
-              <span class="clf-filter-count" id="clf-p-civilization">—</span>
+              <span class="clf-filter-count" id="clf-p-civilization">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','negotiation')">
               <span class="clf-dot" style="background:#ea580c"></span>
               <span class="clf-fi">Negotiation</span>
-              <span class="clf-filter-count" id="clf-p-negotiation">—</span>
+              <span class="clf-filter-count" id="clf-p-negotiation">-</span>
             </button>
             <button class="clf-filter" onclick="clfSetFilter('pillar','technology')">
               <span class="clf-dot" style="background:#2563eb"></span>
               <span class="clf-fi">Technology</span>
-              <span class="clf-filter-count" id="clf-p-technology">—</span>
+              <span class="clf-filter-count" id="clf-p-technology">-</span>
             </button>
           </div>
 
@@ -1215,7 +1215,7 @@
             <div class="clf-bulk-bar" id="clf-bulk-bar">
               <span class="clf-bulk-label" id="clf-bulk-label">0 selected</span>
               <select id="clf-bulk-pillar" onchange="clfBulkPillarChange()">
-                <option value="">— Pillar —</option>
+                <option value="">- Pillar -</option>
                 <option value="consciousness">Consciousness</option>
                 <option value="responsibility">Responsibility</option>
                 <option value="interpretation">Interpretation</option>
@@ -1226,7 +1226,7 @@
                 <option value="technology">Technology</option>
               </select>
               <select id="clf-bulk-category" disabled>
-                <option value="">— Category —</option>
+                <option value="">- Category -</option>
               </select>
               <button class="btn btn-p btn-sm" onclick="clfBulkApply()"
                 id="clf-bulk-apply-btn" disabled style="flex-shrink:0">Apply</button>
@@ -1244,7 +1244,7 @@
     <div class="clf-panel" id="clfPanel">
       <div class="clf-panel-hdr">
         <div class="clf-panel-title">🏷️ Classify Quiz</div>
-        <div class="clf-panel-sub" id="clf-panel-sub">—</div>
+        <div class="clf-panel-sub" id="clf-panel-sub">-</div>
       </div>
       <div class="clf-panel-body">
         <input type="hidden" id="clf-panel-quizId">
@@ -1674,7 +1674,7 @@
             <div class="fld">
               <label>Select Member</label>
               <select id="cred-member" class="cred-input">
-                <option value="">— select —</option>
+                <option value="">- select -</option>
                 {{#each groups.staff}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">👤 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
                 {{#each groups.teachers}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">📖 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
                 {{#each groups.students}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">🎓 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.studentId}}({{this.user.studentId}}){{/if}}</option>{{/each}}
@@ -1724,7 +1724,7 @@
                 <tbody id="bulk-cred-tbody"></tbody>
               </table>
             </div>
-            <p style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">⚠️ Passwords shown once only — export before closing.</p>
+            <p style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">⚠️ Passwords shown once only - export before closing.</p>
           </div>
         </div>
       </div>
@@ -1756,7 +1756,7 @@
               <div class="fld" id="gradeWrap">
                 <label>Grade</label>
                 <select id="gradeSelect" name="grade">
-                  <option value="">— select grade —</option>
+                  <option value="">- select grade -</option>
                   <option value="0">Grade 0</option><option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option><option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option><option value="7">Grade 7</option><option value="8">Grade 8</option><option value="9">Grade 9</option><option value="10">Grade 10</option><option value="11">Grade 11</option><option value="12">Grade 12</option><option value="13">Grade 13</option>
                 </select>
               </div>
@@ -1814,9 +1814,9 @@
               </div>
 
               <div class="fld">
-                <label>Passage / Quiz <span style="font-weight:400">(optional — overrides module sampling)</span></label>
+                <label>Passage / Quiz <span style="font-weight:400">(optional - overrides module sampling)</span></label>
                 <select id="passageSelect" name="passageId">
-                  <option value="">— No passage (random from module) —</option>
+                  <option value="">- No passage (random from module) -</option>
                   {{#each passages}}
                   <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
                     {{this.title}} ({{this.childCount}} q)
@@ -1904,7 +1904,7 @@
       <div class="card">
         <div class="card-hdr">
           <div class="card-hdr-title">📝 Create Passage Quiz</div>
-          <div class="card-hdr-sub">Paste a reading passage and its questions — saves as a comprehension quiz for this org</div>
+          <div class="card-hdr-sub">Paste a reading passage and its questions - saves as a comprehension quiz for this org</div>
         </div>
         <div class="card-body">
           <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
@@ -2149,14 +2149,14 @@
 <div class="modal-overlay" id="assignModal">
   <div class="modal">
     <div class="modal-title">📋 Assign Quiz</div>
-    <div class="modal-sub" id="assignModal-sub">Assigning to: —</div>
+    <div class="modal-sub" id="assignModal-sub">Assigning to: -</div>
     <input type="hidden" id="assignModal-uid">
 
     <div class="gap-12">
       <div class="fld">
         <label>Quiz / Passage</label>
         <select id="assignModal-passage">
-          <option value="">— Random from module (no specific passage) —</option>
+          <option value="">- Random from module (no specific passage) -</option>
           {{#each passages}}
           <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
             {{this.title}} ({{this.childCount}} q)
@@ -2196,7 +2196,7 @@
 <div class="modal-overlay" id="credModal">
   <div class="modal" style="max-width:560px">
     <div class="modal-title">🔑 Credentials</div>
-    <div class="modal-sub" id="credModal-sub">—</div>
+    <div class="modal-sub" id="credModal-sub">-</div>
     <input type="hidden" id="credModal-uid">
     <input type="hidden" id="credModal-role">
 
@@ -2262,7 +2262,7 @@
       <div class="cred-ctab-pane" id="ctab-username" style="display:none">
         <div class="fld" style="margin-bottom:14px">
           <label>Username</label>
-          <input type="text" id="credModal-username" placeholder="e.g. johsmi2048 — leave blank to auto-generate" autocomplete="off">
+          <input type="text" id="credModal-username" placeholder="e.g. johsmi2048 - leave blank to auto-generate" autocomplete="off">
           <div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Lowercase letters and numbers only. Min 3 characters. Leave blank to auto-generate.</div>
         </div>
         <div class="result-toast" id="credModal-user-result"></div>
@@ -2335,7 +2335,7 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
-/* Desktop sidebar toggle — collapses/expands without overlay */
+/* Desktop sidebar toggle - collapses/expands without overlay */
 function toggleSidebarDesktop() {
   if (window.innerWidth <= 768) {
     // On mobile, use the drawer open/close
@@ -2469,7 +2469,7 @@ async function doAssignModal() {
   }
 }
 
-/* ── Credential modal — three tabs: view, change-password, edit-username ── */
+/* ── Credential modal - three tabs: view, change-password, edit-username ── */
 
 // State kept in module scope so tabs can share it
 let _credData = null;
@@ -2533,7 +2533,7 @@ function renderCredInfo(data) {
 
   const pwStatus = data.hasPassword
     ? `<span class="cred-status-has">● Password is set</span>${data.needsPasswordSetup ? ' <span style="font-size:11.5px;color:var(--amber)">(user should change it)</span>' : ''}`
-    : `<span class="cred-status-none">○ No password — user cannot log in yet</span>`;
+    : `<span class="cred-status-none">○ No password - user cannot log in yet</span>`;
 
   container.innerHTML = `
     ${row('Username', data.username, true)}
@@ -2559,7 +2559,7 @@ function escAttr(s) {
 function clipCopy(val, label) {
   navigator.clipboard?.writeText(val)
     .then(() => toast('credModal-result', true, `✅ ${label} copied to clipboard`))
-    .catch(() => toast('credModal-result', false, 'Copy failed — please copy manually: ' + val));
+    .catch(() => toast('credModal-result', false, 'Copy failed - please copy manually: ' + val));
 }
 
 function copyCredentials() {
@@ -3088,7 +3088,7 @@ document.addEventListener('DOMContentLoaded', () => {
           badge.textContent = n === 0
             ? `No results for "${_search}"`
             : n === _totalAll
-            ? `⚠ ${n} results — all quizzes match, search may not be filtering`
+            ? `⚠ ${n} results - all quizzes match, search may not be filtering`
             : `${n} result${n !== 1 ? 's' : ''} for "${_search}"`;
         } else {
           badge.style.color = 'var(--ink-muted)';
@@ -3101,9 +3101,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateSidebarCounts() {
-    // Total — always from server total, not current filtered list
+    // Total - always from server total, not current filtered list
     document.getElementById('clf-count-all').textContent = _totalAll || _quizzes.length;
-    // Unclassified + locked — derive from server _counts (none key = unclassified)
+    // Unclassified + locked - derive from server _counts (none key = unclassified)
     const unclassifiedTotal = (_counts['__none__'] || 0) + (_counts[''] || 0)
       + (_counts['null'] || 0) + (_counts['out-of-scope'] || 0);
     document.getElementById('clf-count-unclassified').textContent = unclassifiedTotal || 
@@ -3200,7 +3200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn = document.getElementById('clf-search-clear');
     if (clearBtn) clearBtn.style.display = _search ? 'block' : 'none';
     clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(clfReload, 500); // 500ms debounce — avoids mid-word hits
+    _searchTimer = setTimeout(clfReload, 500); // 500ms debounce - avoids mid-word hits
   }
 
   // Immediate search on Enter key
@@ -3263,7 +3263,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function clfBulkPillarChange() {
     const p = document.getElementById('clf-bulk-pillar').value;
     const catSel = document.getElementById('clf-bulk-category');
-    catSel.innerHTML = '<option value="">— Select Category —</option>';
+    catSel.innerHTML = '<option value="">- Select Category -</option>';
     catSel.disabled  = !p;
     document.getElementById('clf-bulk-apply-btn').disabled = true;
     if (p && PILLARS[p]) {

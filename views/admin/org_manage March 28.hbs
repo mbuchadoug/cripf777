@@ -224,7 +224,7 @@
       <div>
         <label class="cred-label" for="cred-member">Member</label>
         <select id="cred-member" class="cred-input cred-select">
-          <option value="">— select a member —</option>
+          <option value="">- select a member -</option>
           {{!-- Students --}}
           {{#each groups.students}}
             {{#if this.user}}
@@ -405,7 +405,7 @@
       const data = await resp.json();
       if (data.ok) {
         showResult('single-result', true,
-          `✅ Done! Username: ${data.username} — Password issued. Share these login details with the user.`
+          `✅ Done! Username: ${data.username} - Password issued. Share these login details with the user.`
         );
         // Clear fields
         document.getElementById('cred-username-inp').value = '';
@@ -446,8 +446,8 @@
         data.credentials.forEach(c => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${c.name || '—'}</td>
-            <td>${c.role || '—'}</td>
+            <td>${c.name || '-'}</td>
+            <td>${c.role || '-'}</td>
             <td class="mono">${c.username}</td>
             <td class="pw-cell">${c.tempPassword}</td>
             <td><button class="copy-btn" onclick="copyRow('${c.username}','${c.tempPassword}')">Copy</button></td>
@@ -498,7 +498,7 @@
   };
 
   /* ── Add data-org-slug to body for JS to read ── */
-  // (org_manage.hbs renders with {{org.slug}} — this script reads it)
+  // (org_manage.hbs renders with {{org.slug}} - this script reads it)
   document.body.setAttribute('data-org-slug', '{{org.slug}}');
 
 })();

@@ -1,4 +1,4 @@
-{{!-- admin/org_manage.hbs — Professional Admin Panel --}}
+{{!-- admin/org_manage.hbs - Professional Admin Panel --}}
 <!doctype html>
 <html lang="en">
 <head>
@@ -919,7 +919,7 @@
             <div class="fld">
               <label>Select Member</label>
               <select id="cred-member" class="cred-input">
-                <option value="">— select —</option>
+                <option value="">- select -</option>
                 {{#each groups.staff}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">👤 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
                 {{#each groups.teachers}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">📖 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.email}}({{this.user.email}}){{/if}}</option>{{/each}}
                 {{#each groups.students}}<option value="{{this.user._id}}" data-name="{{this.user.firstName}} {{this.user.lastName}}">🎓 {{this.user.firstName}} {{this.user.lastName}} {{#if this.user.studentId}}({{this.user.studentId}}){{/if}}</option>{{/each}}
@@ -969,7 +969,7 @@
                 <tbody id="bulk-cred-tbody"></tbody>
               </table>
             </div>
-            <p style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">⚠️ Passwords shown once only — export before closing.</p>
+            <p style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">⚠️ Passwords shown once only - export before closing.</p>
           </div>
         </div>
       </div>
@@ -1001,7 +1001,7 @@
               <div class="fld" id="gradeWrap">
                 <label>Grade</label>
                 <select id="gradeSelect" name="grade">
-                  <option value="">— select grade —</option>
+                  <option value="">- select grade -</option>
                   <option value="0">Grade 0</option><option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option><option value="4">Grade 4</option><option value="5">Grade 5</option><option value="6">Grade 6</option><option value="7">Grade 7</option><option value="8">Grade 8</option><option value="9">Grade 9</option><option value="10">Grade 10</option><option value="11">Grade 11</option><option value="12">Grade 12</option><option value="13">Grade 13</option>
                 </select>
               </div>
@@ -1059,9 +1059,9 @@
               </div>
 
               <div class="fld">
-                <label>Passage / Quiz <span style="font-weight:400">(optional — overrides module sampling)</span></label>
+                <label>Passage / Quiz <span style="font-weight:400">(optional - overrides module sampling)</span></label>
                 <select id="passageSelect" name="passageId">
-                  <option value="">— No passage (random from module) —</option>
+                  <option value="">- No passage (random from module) -</option>
                   {{#each passages}}
                   <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
                     {{this.title}} ({{this.childCount}} q)
@@ -1149,7 +1149,7 @@
       <div class="card">
         <div class="card-hdr">
           <div class="card-hdr-title">📝 Create Passage Quiz</div>
-          <div class="card-hdr-sub">Paste a reading passage and its questions — saves as a comprehension quiz for this org</div>
+          <div class="card-hdr-sub">Paste a reading passage and its questions - saves as a comprehension quiz for this org</div>
         </div>
         <div class="card-body">
           <form id="createPassageForm" method="post" action="/admin/orgs/{{org.slug}}/passages">
@@ -1394,14 +1394,14 @@
 <div class="modal-overlay" id="assignModal">
   <div class="modal">
     <div class="modal-title">📋 Assign Quiz</div>
-    <div class="modal-sub" id="assignModal-sub">Assigning to: —</div>
+    <div class="modal-sub" id="assignModal-sub">Assigning to: -</div>
     <input type="hidden" id="assignModal-uid">
 
     <div class="gap-12">
       <div class="fld">
         <label>Quiz / Passage</label>
         <select id="assignModal-passage">
-          <option value="">— Random from module (no specific passage) —</option>
+          <option value="">- Random from module (no specific passage) -</option>
           {{#each passages}}
           <option value="{{this._id}}" data-child-count="{{this.childCount}}" data-module="{{this.module}}">
             {{this.title}} ({{this.childCount}} q)
@@ -1441,7 +1441,7 @@
 <div class="modal-overlay" id="credModal">
   <div class="modal">
     <div class="modal-title">🔑 Issue Credentials</div>
-    <div class="modal-sub" id="credModal-sub">—</div>
+    <div class="modal-sub" id="credModal-sub">-</div>
     <input type="hidden" id="credModal-uid">
     <input type="hidden" id="credModal-role">
 

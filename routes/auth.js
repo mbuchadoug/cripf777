@@ -153,7 +153,7 @@ router.get(
       if (req.user && !req.user.username) {
         const membership = await OrgMembership.findOne({ user: req.user._id }).lean();
         if (membership) {
-          // School member — give them a username and flag password setup
+          // School member - give them a username and flag password setup
           try {
             const newUsername = await User.createUniqueUsername(
               req.user.firstName || req.user.displayName?.split(" ")[0] || "user",
@@ -326,7 +326,7 @@ router.post("/school", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// SET PASSWORD  (for school users — Google sign-ins + admin-issued accounts)
+// SET PASSWORD  (for school users - Google sign-ins + admin-issued accounts)
 // GET  /auth/set-password   → show form
 // POST /auth/set-password   → save password, generate username if missing
 // ─────────────────────────────────────────────────────────────────────

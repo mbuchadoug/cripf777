@@ -1973,7 +1973,7 @@ router.get("/contacts", requireSupplierAdmin, async (req, res) => {
                   <strong style="font-size:13px">${esc(c.phone)}</strong>
                 </td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">
-                  ${c.firstMessage ? esc(c.firstMessage).slice(0, 60) : "<em>—</em>"}
+                  ${c.firstMessage ? esc(c.firstMessage).slice(0, 60) : "<em>-</em>"}
                 </td>
                 <td>
                   <span class="badge badge-blue" style="font-size:10px">${esc(c.channel || "whatsapp")}</span>
@@ -2050,7 +2050,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     <div class="panel" style="max-width:860px">
       <div class="panel-head">
         <h3>➕ Register New Supplier / Service Provider</h3>
-        <span style="font-size:12px;color:var(--muted)">Admin-created listing — bypasses WhatsApp flow</span>
+        <span style="font-size:12px;color:var(--muted)">Admin-created listing - bypasses WhatsApp flow</span>
       </div>
 
       <form method="POST" action="/zq-admin/suppliers/new" class="edit-form">
@@ -2101,9 +2101,9 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             <div class="fg">
               <label>Tier / Plan <span style="color:red">*</span></label>
               <select name="tier" required>
-                <option value="basic">Basic — up to 20 items</option>
-                <option value="pro">Pro — up to 60 items</option>
-                <option value="featured">Featured — up to 150 items</option>
+                <option value="basic">Basic - up to 20 items</option>
+                <option value="pro">Pro - up to 60 items</option>
+                <option value="featured">Featured - up to 150 items</option>
               </select>
             </div>
           </div>
@@ -2149,13 +2149,13 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             <label id="pricesLabel">Prices (one per line: <code>product, amount, unit</code>)</label>
             <textarea name="prices" rows="4"
               placeholder="cooking oil, 4.50, litre&#10;rice, 8.00, 5kg bag&#10;sugar, 1.20, kg"></textarea>
-            <span style="font-size:11px;color:var(--muted)">Optional — leave blank to let supplier set prices later.</span>
+            <span style="font-size:11px;color:var(--muted)">Optional - leave blank to let supplier set prices later.</span>
           </div>
           <div class="fg full" id="ratesWrap" style="display:none;margin-bottom:12px">
             <label>Service Rates (one per line: <code>service name, rate</code>)</label>
             <textarea name="rates" rows="4"
               placeholder="burst pipe repair, 30/job&#10;geyser installation, 80/job&#10;blocked drain, 25/hr"></textarea>
-            <span style="font-size:11px;color:var(--muted)">Optional — format: <code>service name, amount/unit</code></span>
+            <span style="font-size:11px;color:var(--muted)">Optional - format: <code>service name, amount/unit</code></span>
           </div>
         </div>
 
@@ -2206,8 +2206,8 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             <div class="fg">
               <label>Set Active Immediately?</label>
               <select name="setActive">
-                <option value="true">✅ Yes — visible to buyers now</option>
-                <option value="false">⏸ No — save as inactive</option>
+                <option value="true">✅ Yes - visible to buyers now</option>
+                <option value="false">⏸ No - save as inactive</option>
               </select>
             </div>
             <div class="fg">
@@ -2328,7 +2328,7 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       .map(p => p.trim().toLowerCase())
       .filter(Boolean);
 
-    // ── Parse prices (product, amount, unit — one per line) ────────────────
+    // ── Parse prices (product, amount, unit - one per line) ────────────────
     const priceList = [];
     if (prices && profileType === "product") {
       for (const line of prices.split("\n")) {
@@ -2342,7 +2342,7 @@ router.post("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       }
     }
 
-    // ── Parse service rates (service, rate — one per line) ─────────────────
+    // ── Parse service rates (service, rate - one per line) ─────────────────
     const rateList = [];
     if (rates && profileType === "service") {
       for (const line of rates.split("\n")) {

@@ -327,7 +327,7 @@ export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   if (!lower) return [];
 
-  // Category ID slugs (e.g. "medical_health") are not text fields in the DB —
+  // Category ID slugs (e.g. "medical_health") are not text fields in the DB -
   // strip them from synonyms so they don't pollute regex searches
   const isCategorySlug = s => /^[a-z]+_[a-z_]+$/.test(s);
 
@@ -533,11 +533,11 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       });
     }
 
-    // 2. No rates set yet — show all items from products[] and listedProducts[],
+    // 2. No rates set yet - show all items from products[] and listedProducts[],
     //    sorted so matching items appear first.
     //    runSupplierSearch already confirmed this supplier matches the query,
     //    so we show their full offering so buyers can compare and see everything.
-     // 2. No rates set yet — only return matching items from products[] / listedProducts[].
+     // 2. No rates set yet - only return matching items from products[] / listedProducts[].
     // Do NOT expand to the full service catalogue in buyer search results.
     if (offers.length === 0) {
       const visibleSourceItems = (supplier.listedProducts || []).length
@@ -754,7 +754,7 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
   });
   if (match) matchHint = ` · ${match.service} ${match.rate}`;
 } else if (normalizedSearchTerm && s.profileType === "service" && !s.rates?.length) {
-  // No rates yet — show a matching product/service name as the hint
+  // No rates yet - show a matching product/service name as the hint
   const allItems = [...(s.listedProducts || []), ...(s.products || [])];
   const matchedItem = allItems.find(p => {
     const norm = normalizeProductName(p || "");
@@ -913,7 +913,7 @@ function toTitleCase(value = "") {
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// Lives here - AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare",
 //          "find dentist avondale", "find cleaner borrowdale harare",

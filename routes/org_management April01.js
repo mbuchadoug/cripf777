@@ -756,7 +756,7 @@ router.get(
 // REPLACE the dashboard route in routes/org_management.js
 
 // ═══════════════════════════════════════════════════════════════════
-//  PATCH FILE — replace only the dashboard route in org_management.js
+//  PATCH FILE - replace only the dashboard route in org_management.js
 //  Find the existing  router.get("/org/:slug/dashboard", ...)  block
 //  (starts around line 729) and replace it in full with this.
 // ═══════════════════════════════════════════════════════════════════
@@ -790,18 +790,18 @@ router.get(
 //  ─ Now we: (a) aggregate topics from ALL question types to count how
 //    many questions match each suggested category; (b) map each category
 //    slug to a set of topic keywords; (c) when a category filter is active,
-//    match quizzes whose topics overlap with those keywords — no DB
+//    match quizzes whose topics overlap with those keywords - no DB
 //    schema changes, no re-running AI, works with existing 15k questions.
 // ═══════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════
-//  COMPLETE DASHBOARD ROUTE — copy-paste this entire block into
+//  COMPLETE DASHBOARD ROUTE - copy-paste this entire block into
 //  routes/org_management.js, replacing the existing
 //  router.get("/org/:slug/dashboard", ...) block.
 // ═══════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════
-//  DASHBOARD ROUTE — replace the existing router.get("/org/:slug/dashboard")
+//  DASHBOARD ROUTE - replace the existing router.get("/org/:slug/dashboard")
 //  block in routes/org_management.js with this entire block.
 //
 //  KEY FIXES:
@@ -814,7 +814,7 @@ router.get(
 
 // routes/org/dashboard.js
 // ─────────────────────────────────────────────────────────────────────────────
-// CRIPFCNT SCHOOL DASHBOARD ROUTE — CATEGORY-FIRST REWRITE
+// CRIPFCNT SCHOOL DASHBOARD ROUTE - CATEGORY-FIRST REWRITE
 //
 // WHAT CHANGED FROM ORIGINAL:
 //
@@ -849,7 +849,7 @@ router.get(
 //   • admin flows, role-based access, non-cripfcnt-school orgs
 //   • quizzesBySeries, quizzesByModule, quizzesByPillarArray structure
 //   • all existing Handlebars helpers and template variables
-//   • backward-compatible — all previously existing template vars still present
+//   • backward-compatible - all previously existing template vars still present
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -954,7 +954,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     let allCategories = [];
 
     if (isCripfcntSchool) {
-      // IMPORTANT: aggregate() does NOT auto-cast ObjectId — must wrap explicitly
+      // IMPORTANT: aggregate() does NOT auto-cast ObjectId - must wrap explicitly
       const orgOid = new mongoose.Types.ObjectId(String(org._id));
 
       const rawCats = await Question.aggregate([
@@ -3059,7 +3059,7 @@ router.post(
 
       // ── Username handling ──────────────────────────────────────
       if (username) {
-        // Admin supplied a custom username — validate and check uniqueness
+        // Admin supplied a custom username - validate and check uniqueness
         username = String(username).toLowerCase().trim().replace(/[^a-z0-9_.\-]/g, "");
         if (username.length < 3) {
           return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
@@ -3084,7 +3084,7 @@ router.post(
 
       await user.save();
 
-      console.log(`[credentials] Admin issued credentials to ${user.email || user._id} — username: ${user.username}`);
+      console.log(`[credentials] Admin issued credentials to ${user.email || user._id} - username: ${user.username}`);
 
       return res.json({
         ok: true,
@@ -3177,7 +3177,7 @@ router.post(
 );
 
 /* ------------------------------------------------------------------ */
-/*  USER: Get own credentials (username only — password never sent)    */
+/*  USER: Get own credentials (username only - password never sent)    */
 /*  GET /org/:slug/my-credentials                                      */
 /* ------------------------------------------------------------------ */
 router.get(
@@ -3325,7 +3325,7 @@ router.post(
 //  Paste immediately BEFORE the final  export default router;  line.
 //
 //  Route 1: GET  /admin/orgs/:slug/members/:userId/credentials
-//    → Returns current username, IDs, hasPassword — for admin preview
+//    → Returns current username, IDs, hasPassword - for admin preview
 //
 //  Route 2: POST /admin/orgs/:slug/members/:userId/username
 //    → Changes only the username, leaves password untouched
@@ -3380,11 +3380,11 @@ router.get(
 );
 
 /* ------------------------------------------------------------------ */
-/*  ADMIN: Update username only — password is NOT touched              */
+/*  ADMIN: Update username only - password is NOT touched              */
 /*  POST /admin/orgs/:slug/members/:userId/username                    */
 /*                                                                      */
 /*  Body: { username?, generate? }                                      */
-/*    – username: custom slug (optional — validated for uniqueness)     */
+/*    – username: custom slug (optional - validated for uniqueness)     */
 /*    – generate: true  → auto-generate if username is blank/omitted    */
 /* ------------------------------------------------------------------ */
 router.post(
@@ -3406,7 +3406,7 @@ router.post(
       if (!user) return res.status(404).json({ ok: false, error: "User not found" });
 
       if (username) {
-        // Custom username provided — sanitise and check uniqueness
+        // Custom username provided - sanitise and check uniqueness
         username = String(username).toLowerCase().trim().replace(/[^a-z0-9_\-\.]/g, "");
         if (username.length < 3) {
           return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
@@ -3423,7 +3423,7 @@ router.post(
           user.lastName  || user.displayName?.split(" ").slice(1).join("") || ""
         );
       } else {
-        // Nothing to do — user already has a username and no new one was supplied
+        // Nothing to do - user already has a username and no new one was supplied
         return res.json({ ok: true, username: user.username, message: "Username unchanged" });
       }
 
@@ -3571,7 +3571,7 @@ router.patch(
       quiz.category          = category;
       quiz.meta              = quiz.meta || {};
       quiz.meta.aiPillar     = pillar;
-      quiz.meta.manualOverride = lock !== false; // default true — admin edits lock the record
+      quiz.meta.manualOverride = lock !== false; // default true - admin edits lock the record
       quiz.meta.aiCategorised  = true;
       quiz.meta.isOutOfScope   = false;
       if (series) quiz.series = series;
@@ -3625,7 +3625,7 @@ router.post(
 
       const pillar = CLASSIFY_CATEGORY_TO_PILLAR[category];
 
-      // Build bulk ops — skip manualOverride-locked items
+      // Build bulk ops - skip manualOverride-locked items
       const ids   = quizIds.map(id => new mongoose.Types.ObjectId(id));
       const setObj = {
         category,

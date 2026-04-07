@@ -727,7 +727,7 @@ router.get(
 // REPLACE the dashboard route in routes/org_management.js
 
 // ═══════════════════════════════════════════════════════════════════
-//  PATCH FILE — replace only the dashboard route in org_management.js
+//  PATCH FILE - replace only the dashboard route in org_management.js
 //  Find the existing  router.get("/org/:slug/dashboard", ...)  block
 //  (starts around line 729) and replace it in full with this.
 // ═══════════════════════════════════════════════════════════════════
@@ -761,7 +761,7 @@ router.get(
 //  ─ Now we: (a) aggregate topics from ALL question types to count how
 //    many questions match each suggested category; (b) map each category
 //    slug to a set of topic keywords; (c) when a category filter is active,
-//    match quizzes whose topics overlap with those keywords — no DB
+//    match quizzes whose topics overlap with those keywords - no DB
 //    schema changes, no re-running AI, works with existing 15k questions.
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -811,7 +811,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     //
     //  Solution: define which topic keywords map to each display category.
     //  This lets us (a) count questions per category and (b) filter by
-    //  category — all without any DB schema changes.
+    //  category - all without any DB schema changes.
     //
     //  Rule: a question "belongs to" a category if ANY of its topics
     //  contains one of the category's keywords as a substring.
@@ -1045,7 +1045,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const suggestedSlugs = ROLE_SUGGESTED[normalizedRole] || ROLE_SUGGESTED.professional;
 
     // ══════════════════════════════════════════════════════════════════
-    //  STEP 1 — Count questions per category using topic keyword matching
+    //  STEP 1 - Count questions per category using topic keyword matching
     //
     //  We do ONE aggregation that unwinds the `topics` array and counts
     //  how many questions have at least one topic matching each category.
@@ -1187,7 +1187,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     );
 
     // ══════════════════════════════════════════════════════════════════
-    //  STEP 2 — Load exams / quizzes
+    //  STEP 2 - Load exams / quizzes
     // ══════════════════════════════════════════════════════════════════
     let exams = [];
 
@@ -1248,7 +1248,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       ]);
 
     } else {
-      // Non-admin — load assigned exams + enrich from source Question docs
+      // Non-admin - load assigned exams + enrich from source Question docs
       const rawExams = await ExamInstance.find({
         org: org._id, userId: req.user._id
       }).sort({ createdAt: -1 }).lean();
@@ -1304,7 +1304,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    //  STEP 3 — Apply filters
+    //  STEP 3 - Apply filters
     //  KEY FIX for categoryFilter: if no exact category match,
     //  fall back to topic keyword matching using CATEGORY_TOPIC_KEYWORDS
     // ══════════════════════════════════════════════════════════════════
@@ -1453,7 +1453,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     for (const s of Object.values(quizzesBySeries))
       s.quizzes.sort((a, b) => (a.seriesOrder || 99) - (b.seriesOrder || 99));
 
-    // These come from the DB-scan above — always complete, filter-independent
+    // These come from the DB-scan above - always complete, filter-independent
     const allSeries     = allSeriesSlugs.length
       ? allSeriesSlugs
       : [...new Set(Object.keys(quizzesBySeries))].sort();
@@ -3323,7 +3323,7 @@ router.post(
 
       // ── Username handling ──────────────────────────────────────
       if (username) {
-        // Admin supplied a custom username — validate and check uniqueness
+        // Admin supplied a custom username - validate and check uniqueness
         username = String(username).toLowerCase().trim().replace(/[^a-z0-9_.\-]/g, "");
         if (username.length < 3) {
           return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
@@ -3348,7 +3348,7 @@ router.post(
 
       await user.save();
 
-      console.log(`[credentials] Admin issued credentials to ${user.email || user._id} — username: ${user.username}`);
+      console.log(`[credentials] Admin issued credentials to ${user.email || user._id} - username: ${user.username}`);
 
       return res.json({
         ok: true,
@@ -3441,7 +3441,7 @@ router.post(
 );
 
 /* ------------------------------------------------------------------ */
-/*  USER: Get own credentials (username only — password never sent)    */
+/*  USER: Get own credentials (username only - password never sent)    */
 /*  GET /org/:slug/my-credentials                                      */
 /* ------------------------------------------------------------------ */
 router.get(
@@ -3589,7 +3589,7 @@ router.post(
 //  Paste immediately BEFORE the final  export default router;  line.
 //
 //  Route 1: GET  /admin/orgs/:slug/members/:userId/credentials
-//    → Returns current username, IDs, hasPassword — for admin preview
+//    → Returns current username, IDs, hasPassword - for admin preview
 //
 //  Route 2: POST /admin/orgs/:slug/members/:userId/username
 //    → Changes only the username, leaves password untouched
@@ -3644,11 +3644,11 @@ router.get(
 );
 
 /* ------------------------------------------------------------------ */
-/*  ADMIN: Update username only — password is NOT touched              */
+/*  ADMIN: Update username only - password is NOT touched              */
 /*  POST /admin/orgs/:slug/members/:userId/username                    */
 /*                                                                      */
 /*  Body: { username?, generate? }                                      */
-/*    – username: custom slug (optional — validated for uniqueness)     */
+/*    – username: custom slug (optional - validated for uniqueness)     */
 /*    – generate: true  → auto-generate if username is blank/omitted    */
 /* ------------------------------------------------------------------ */
 router.post(
@@ -3670,7 +3670,7 @@ router.post(
       if (!user) return res.status(404).json({ ok: false, error: "User not found" });
 
       if (username) {
-        // Custom username provided — sanitise and check uniqueness
+        // Custom username provided - sanitise and check uniqueness
         username = String(username).toLowerCase().trim().replace(/[^a-z0-9_\-\.]/g, "");
         if (username.length < 3) {
           return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
@@ -3687,7 +3687,7 @@ router.post(
           user.lastName  || user.displayName?.split(" ").slice(1).join("") || ""
         );
       } else {
-        // Nothing to do — user already has a username and no new one was supplied
+        // Nothing to do - user already has a username and no new one was supplied
         return res.json({ ok: true, username: user.username, message: "Username unchanged" });
       }
 

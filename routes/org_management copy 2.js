@@ -727,7 +727,7 @@ router.get(
 // REPLACE the dashboard route in routes/org_management.js
 
 // ═══════════════════════════════════════════════════════════════════
-//  PATCH FILE — replace only the dashboard route in org_management.js
+//  PATCH FILE - replace only the dashboard route in org_management.js
 //  Find the existing  router.get("/org/:slug/dashboard", ...)  block
 //  (starts around line 729) and replace it in full with this.
 // ═══════════════════════════════════════════════════════════════════
@@ -776,12 +776,12 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
        KEY CHANGE: for non-admin enrolled users we now look up the
        source Question doc for each ExamInstance so the AI-assigned
        fields (category, series, level, meta.aiPillar) are always
-       present — even for exams created before categorisation ran.
+       present - even for exams created before categorisation ran.
     ══════════════════════════════════════════════════════════════ */
     let exams = [];
 
     if (isCripfcntSchool && isAdmin) {
-      /* ADMIN — load every comprehension quiz from the org */
+      /* ADMIN - load every comprehension quiz from the org */
       const allQuizzes = await Question.find({
         organization: org._id,
         type: "comprehension"
@@ -819,7 +819,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       }
 
     } else if (isAdmin) {
-      /* ADMIN — non-cripfcnt org: show assigned quizzes */
+      /* ADMIN - non-cripfcnt org: show assigned quizzes */
       exams = await ExamInstance.aggregate([
         { $match: { org: new mongoose.Types.ObjectId(org._id) } },
         { $match: { assignmentId: { $exists: true, $ne: null }, isOnboarding: { $ne: true } } },
@@ -842,7 +842,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       ]);
 
     } else {
-      /* NON-ADMIN — load this user's assigned exams */
+      /* NON-ADMIN - load this user's assigned exams */
       const rawExams = await ExamInstance.find({
         org:    org._id,
         userId: req.user._id
@@ -1048,7 +1048,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     )].sort();
 
     /* ══════════════════════════════════════════════════════════════
-       BUILD categoryMeta — the discovery strip data
+       BUILD categoryMeta - the discovery strip data
        This gives every category a friendly label, icon, pillar
        colour, and quiz count so the front-end can render the
        horizontal "Browse by Professional Area" tiles without
@@ -1133,7 +1133,7 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       const cat = seriesData.category;
       if (!cat) continue;
       catCounts[cat] = (catCounts[cat] || 0) + seriesData.quizzes.length;
-      // track pillar — first one wins (good enough for icon colouring)
+      // track pillar - first one wins (good enough for icon colouring)
       if (!catPillar[cat]) catPillar[cat] = seriesData.pillar;
     }
 

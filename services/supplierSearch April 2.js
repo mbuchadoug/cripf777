@@ -327,7 +327,7 @@ export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   if (!lower) return [];
 
-  // Exact match — return ONLY the original term + close synonyms (same profession/thing)
+  // Exact match - return ONLY the original term + close synonyms (same profession/thing)
   // NO broad medical/category fallbacks. Max 3 synonyms to stay precise.
   if (SEARCH_SYNONYMS[lower]) {
     // Filter synonyms: only keep terms that are still about the same specific thing
@@ -339,7 +339,7 @@ export function expandSearchTerms(product) {
     return [lower, ...closeSynonyms];
   }
 
-  // Partial match: only exact-start matches (not contains) — "dent" → "dental", "dentist"
+  // Partial match: only exact-start matches (not contains) - "dent" → "dental", "dentist"
   // No contains-match to prevent "ring" matching "catering", "printing" etc.
   if (lower.length >= 4) {
     const partialMatches = Object.keys(SEARCH_SYNONYMS)
@@ -382,7 +382,7 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     const individualWords = product.split(/\s+/).filter(w => w.length > 2);
 
  // AFTER:
-// Priority 1 — exact/close match on what the supplier actually offers
+// Priority 1 - exact/close match on what the supplier actually offers
 // (products, rates, listedProducts). These always included.
 const productOr = [
   { listedProducts: { $regex: product, $options: "i" } },
@@ -390,8 +390,8 @@ const productOr = [
   { "rates.service":{ $regex: product, $options: "i" } },
 ];
 
-// Priority 2 — close synonyms on actual offering fields ONLY
-// Never match categories or businessName via synonyms — too noisy
+// Priority 2 - close synonyms on actual offering fields ONLY
+// Never match categories or businessName via synonyms - too noisy
 for (const term of searchTerms) {
   if (term === product) continue; // already added above
   productOr.push({ listedProducts:   { $regex: term, $options: "i" } });
@@ -399,7 +399,7 @@ for (const term of searchTerms) {
   productOr.push({ "rates.service":  { $regex: term, $options: "i" } });
 }
 
-// Priority 3 — individual words from multi-word queries (e.g. "tooth filling" → "filling")
+// Priority 3 - individual words from multi-word queries (e.g. "tooth filling" → "filling")
 // Only if the product term is multi-word, to avoid single-word over-broadening
 if (individualWords.length > 1) {
   for (const word of individualWords) {
@@ -409,7 +409,7 @@ if (individualWords.length > 1) {
   }
 }
 
-// Priority 4 — businessName match on the ORIGINAL term only (not synonyms)
+// Priority 4 - businessName match on the ORIGINAL term only (not synonyms)
 // So "Harare Dental Clinic" still appears when buyer types "dentist"
 productOr.push({ businessName: { $regex: product, $options: "i" } });
 
@@ -529,10 +529,10 @@ function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
       });
     }
 
-    // 2. No rates set yet — show every item from products[] and listedProducts[]
+    // 2. No rates set yet - show every item from products[] and listedProducts[]
     //    Skip the search-term match check: runSupplierSearch already confirmed
     //    this supplier is relevant to the query.
-// 2. No rates set yet — only show items that actually match the search term
+// 2. No rates set yet - only show items that actually match the search term
     //    (or close synonyms). Do NOT dump every service this supplier offers.
     if (offers.length === 0) {
       const seen2 = new Set();
@@ -733,7 +733,7 @@ if (normalizedSearchTerm && s.profileType === "service" && s.rates?.length) {
   });
   if (match) matchHint = ` · ${match.service} ${match.rate}`;
 } else if (normalizedSearchTerm && s.profileType === "service" && !s.rates?.length) {
-  // No rates yet — show a matching product/service name as the hint
+  // No rates yet - show a matching product/service name as the hint
   const allItems = [...(s.listedProducts || []), ...(s.products || [])];
   const matchedItem = allItems.find(p => {
     const norm = normalizeProductName(p || "");
@@ -888,7 +888,7 @@ function toTitleCase(value = "") {
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// Lives here - AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare",
 //          "find dentist avondale", "find cleaner borrowdale harare",

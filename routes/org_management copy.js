@@ -800,7 +800,7 @@ exams.push({
   quizTitle:     quiz.quizTitle || quiz.text || 'Quiz',
   module:        quiz.module || 'general',
   modules:       quizModules,
-  series:        quiz.series   || null,       // NEW — read directly
+  series:        quiz.series   || null,       // NEW - read directly
   category:      quiz.category || null,       // NEW
   level:         quiz.level    || 'foundation', // NEW
   seriesOrder:   quiz.seriesOrder || 99,      // NEW
@@ -927,7 +927,7 @@ if (searchQuery || moduleFilter || topicFilter || seriesFilter || categoryFilter
        BUILD DASHBOARD DATA
     -------------------------------- */
    /* -------------------------------
-   BUILD DASHBOARD DATA — grouped by series
+   BUILD DASHBOARD DATA - grouped by series
 -------------------------------- */
 const quizzesBySeries = {};  // NEW: keyed by series slug
 const now = new Date();
@@ -1137,7 +1137,7 @@ return res.render("org/dashboard", {
   membership,
   modules,
   quizzesByModule,       // kept for backward compat
-  quizzesBySeries,       // NEW — used by updated dashboard
+  quizzesBySeries,       // NEW - used by updated dashboard
   hasAssignedQuizzes: Object.values(quizzesBySeries).some(s => s.quizzes.length > 0),
   attemptRows,
   certRows,

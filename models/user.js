@@ -43,7 +43,7 @@ const UserSchema = new mongoose.Schema({
   // 🔑 USERNAME  (unique login handle for school users)
   //    Auto-generated on first save for school members.
   //    Format: first 3 chars of firstName + last name + 4-digit number
-  //    e.g. "johsmith1042" — always lowercase
+  //    e.g. "johsmith1042" - always lowercase
   //    Google-signup users also get one assigned automatically.
   // ─────────────────────────────────────────────
   username: {

@@ -132,7 +132,7 @@
     .sl{font-size:11px;color:var(--ink-muted);margin-top:2px;font-weight:500}
 
     /* ═══════════════════════════════════════════════════
-       CATEGORY CARDS — PRIMARY TOP NAVIGATION
+       CATEGORY CARDS - PRIMARY TOP NAVIGATION
        Categories are the main browsing layer.
        Pillar is a compact dropdown filter only.
     ═══════════════════════════════════════════════════ */
@@ -431,10 +431,10 @@
 
     {{!-- ══════════════════════════════════════════════════
          SIDEBAR HIERARCHY: CATEGORY-FIRST
-         Level 1: Professional Areas (categories) — primary
+         Level 1: Professional Areas (categories) - primary
          Level 2: Series (shown under active category)
          ── separator ──
-         Level 3: Framework Pillars — secondary filter
+         Level 3: Framework Pillars - secondary filter
     ══════════════════════════════════════════════════ --}}
 
     {{#if allCategoryMeta.length}}
@@ -540,17 +540,17 @@
       <div class="stats">
         <div class="sc"><div class="sci sci-b">📝</div><div><div class="sv">{{attemptRows.length}}</div><div class="sl">Assessments Taken</div></div></div>
         <div class="sc"><div class="sci sci-v">🏆</div><div><div class="sv">{{certRows.length}}</div><div class="sl">Certificates Earned</div></div></div>
-        <div class="sc"><div class="sci sci-t">📊</div><div><div class="sv">{{#if attemptRows.length}}{{math (sum attemptRows "percentage") "/" attemptRows.length}}%{{else}}—{{/if}}</div><div class="sl">Avg Score</div></div></div>
+        <div class="sc"><div class="sci sci-t">📊</div><div><div class="sv">{{#if attemptRows.length}}{{math (sum attemptRows "percentage") "/" attemptRows.length}}%{{else}}-{{/if}}</div><div class="sl">Avg Score</div></div></div>
       </div>
       {{/if}}
 
       {{#if isCripfcntSchool}}
 
       {{!-- ═══════════════════════════════════════════════════════════════
-           PROFESSIONAL AREA CARDS — PRIMARY TOP NAVIGATION
+           PROFESSIONAL AREA CARDS - PRIMARY TOP NAVIGATION
            ---------------------------------------------------------------
            • Category cards are the main browsing layer (horizontal scroll)
-           • Pillars are a COMPACT DROPDOWN only — not big top cards
+           • Pillars are a COMPACT DROPDOWN only - not big top cards
            • Only categories with count > 0 are rendered
            • When a pillar is active in the dropdown, cards narrow to that pillar
            • Clicking a category card sets ?category= and clears series
@@ -748,7 +748,7 @@
       </div>
 
       {{!-- ══════════════════════════════════════════════════════════════
-           QUIZ LIBRARY — cripfcnt-school
+           QUIZ LIBRARY - cripfcnt-school
       ══════════════════════════════════════════════════════════════ --}}
       {{#if isCripfcntSchool}}
         {{#if hasAssignedQuizzes}}
@@ -864,7 +864,7 @@
           {{!-- END VIEW A --}}
 
           {{!-- ── VIEW B: No pillar filter, OR category/series filter active ──
-               Flat series list — also used for:
+               Flat series list - also used for:
                  • no filter at all (show everything)
                  • category filter only
                  • series filter (narrowest view)
@@ -1300,7 +1300,7 @@ function clearAllFilters(){
 }
 function applyPillarFilter(value){
   var url=new URL(window.location.href);
-  // Selecting a pillar via the dropdown clears category + series — fresh pillar browse
+  // Selecting a pillar via the dropdown clears category + series - fresh pillar browse
   url.searchParams.delete('category');
   url.searchParams.delete('series');
   if(value)url.searchParams.set('pillar',value);
@@ -1333,7 +1333,7 @@ function liveSearch(q){
       }
     });
     var vc=document.getElementById('vis-cnt');
-    if(vc)vc.textContent=term?' — '+total+' result'+(total!==1?'s':''):'';
+    if(vc)vc.textContent=term?' - '+total+' result'+(total!==1?'s':''):'';
     var nr=document.getElementById('no-results'),lib=document.getElementById('quiz-lib');
     if(nr&&lib){var any=Array.from(blocks).some(function(b){return b.style.display!=='none';});nr.classList.toggle('jh',!term||any);}
   },150);

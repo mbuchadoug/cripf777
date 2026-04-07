@@ -42,11 +42,11 @@ const ALL_VALID_CATEGORIES = Object.values(PILLAR_CATEGORIES).flat();
 const QUIZ_SYSTEM_PROMPT = `
 You are a content analyst for the CRIPFCNT organisational intelligence framework.
 
-CRIPFCNT pillars — pick EXACTLY ONE:
+CRIPFCNT pillars - pick EXACTLY ONE:
   consciousness | responsibility | interpretation | purpose |
   frequencies | civilization | negotiation | technology | general
 
-ALLOWED CATEGORIES — pick the MOST SPECIFIC one that fits:
+ALLOWED CATEGORIES - pick the MOST SPECIFIC one that fits:
 
   consciousness  → consciousness-studies | philosophical-inquiry | systems-thinking | critical-thinking | narrative-framing
   responsibility → governance | institutional-accountability | public-sector-ethics | rule-of-law | financial-accountability | structural-responsibility | social-contract | responsibility-frameworks
@@ -58,11 +58,11 @@ ALLOWED CATEGORIES — pick the MOST SPECIFIC one that fits:
   technology     → technology-governance | digital-ethics
   general        → professional-development | education-reform | performance-metrics | institutional-trust | scoi-fundamentals
 
-══ DISAMBIGUATION — READ CAREFULLY ══
+══ DISAMBIGUATION - READ CAREFULLY ══
 
 "governance" = ONLY for content about how governments/institutions are structured,
   constitutional design, separation of powers, cabinet systems, federalism.
-  Do NOT use for auditing, ethics, finance, law, or leadership — use the
+  Do NOT use for auditing, ethics, finance, law, or leadership - use the
   specific category for those topics instead.
 
 "institutional-accountability" = oversight of public bodies, anti-corruption
@@ -157,19 +157,19 @@ ethics/society link → set pillar="out-of-scope" and category="out-of-scope".
 ══ OUTPUT ══
 
 Return a JSON array with one object per quiz. Fields:
-1. "id"           — the quiz _id exactly as given
-2. "pillar"       — one of the 9 pillars OR "out-of-scope"
-3. "category"     — most specific allowed category OR "out-of-scope"
-4. "series"       — lowercase-hyphenated learning track (NOT the quiz title).
+1. "id"           - the quiz _id exactly as given
+2. "pillar"       - one of the 9 pillars OR "out-of-scope"
+3. "category"     - most specific allowed category OR "out-of-scope"
+4. "series"       - lowercase-hyphenated learning track (NOT the quiz title).
                     Quizzes on the same theme MUST share the same series slug.
                     Good examples: "governing-with-integrity",
                     "public-finance-accountability", "rule-of-law-foundations",
                     "ethics-in-public-service", "leadership-and-strategy",
                     "consciousness-and-leadership", "electoral-systems-in-practice"
-5. "seriesOrder"  — integer 1–10 by complexity within the series
-6. "level"        — foundation | intermediate | advanced | expert
-7. "title"        — clean professional display title, max 8 words
-8. "confidence"   — 0.0 to 1.0
+5. "seriesOrder"  - integer 1–10 by complexity within the series
+6. "level"        - foundation | intermediate | advanced | expert
+7. "title"        - clean professional display title, max 8 words
+8. "confidence"   - 0.0 to 1.0
 
 Return ONLY a JSON array. No prose, no markdown, no backtick fences.
 [{"id":"<id>","pillar":"responsibility","category":"financial-accountability","series":"public-finance-accountability","seriesOrder":2,"level":"intermediate","title":"Budget Oversight in Public Institutions","confidence":0.96}]
@@ -218,7 +218,7 @@ function makeSlug(str) {
 function resolveCategory(aiCategory, pillar) {
   const slug = makeSlug(aiCategory || '');
   if (ALL_VALID_CATEGORIES.includes(slug)) return slug;
-  // AI went off-list — use first valid category for this pillar
+  // AI went off-list - use first valid category for this pillar
   return (PILLAR_CATEGORIES[pillar] || PILLAR_CATEGORIES.general)[0];
 }
 
@@ -331,7 +331,7 @@ async function categorizeQuizzes(stats) {
         const avgConf = (results.reduce((s, r) => s + (r?.confidence || 0), 0) / results.length).toFixed(2);
         console.log(`    ✓ ${ops.length} written | avg confidence: ${avgConf}`);
         results.slice(0, 3).forEach(r =>
-          console.log(`      [${r.pillar}] ${r.category} → "${r.series}" — ${r.title}`)
+          console.log(`      [${r.pillar}] ${r.category} → "${r.series}" - ${r.title}`)
         );
       }
 
@@ -402,7 +402,7 @@ async function run() {
   await propagateToChildren(stats);
 
   console.log('\n═══════════════════════════════════════════════════════════════');
-  console.log('  RE-CATEGORISATION COMPLETE — VERIFY DISTRIBUTION BEFORE GOING LIVE');
+  console.log('  RE-CATEGORISATION COMPLETE - VERIFY DISTRIBUTION BEFORE GOING LIVE');
   console.log('═══════════════════════════════════════════════════════════════');
   console.log(`  Quizzes categorised : ${stats.quizzesModified}`);
   console.log(`  Out-of-scope flagged: ${stats.outOfScope}`);

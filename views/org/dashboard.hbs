@@ -463,16 +463,16 @@
       <div class="stats">
         <div class="sc"><div class="sci sci-b">📝</div><div><div class="sv">{{attemptRows.length}}</div><div class="sl">Assessments Taken</div></div></div>
         <div class="sc"><div class="sci sci-v">🏆</div><div><div class="sv">{{certRows.length}}</div><div class="sl">Certificates Earned</div></div></div>
-        <div class="sc"><div class="sci sci-t">📊</div><div><div class="sv">{{#if attemptRows.length}}{{math (sum attemptRows "percentage") "/" attemptRows.length}}%{{else}}—{{/if}}</div><div class="sl">Avg Score</div></div></div>
+        <div class="sc"><div class="sci sci-t">📊</div><div><div class="sv">{{#if attemptRows.length}}{{math (sum attemptRows "percentage") "/" attemptRows.length}}%{{else}}-{{/if}}</div><div class="sl">Avg Score</div></div></div>
       </div>
       {{/if}}
 
       {{!-- ════════════════════════════════════════════════════════════════
            CATEGORY BROWSE STRIP
-           — directly after stats / parent-hub, BEFORE search bar
-           — only rendered for cripfcnt-school when categories exist
-           — categories come from DB (route), sorted desc by quiz count
-           — zero-count categories are never passed from the route
+           - directly after stats / parent-hub, BEFORE search bar
+           - only rendered for cripfcnt-school when categories exist
+           - categories come from DB (route), sorted desc by quiz count
+           - zero-count categories are never passed from the route
       ════════════════════════════════════════════════════════════════ --}}
       {{#if isCripfcntSchool}}
       <div class="cat-browse" id="cat-browse-section">
@@ -544,7 +544,7 @@
       {{/if}}{{!-- /isCripfcntSchool --}}
       {{!-- END CATEGORY BROWSE STRIP --}}
 
-      {{!-- ── Search bar — always below category strip ── --}}
+      {{!-- ── Search bar - always below category strip ── --}}
       {{#if isCripfcntSchool}}
       <form class="search-bar" method="GET" action="/org/{{org.slug}}/dashboard" id="sf">
         {{!-- Preserve active category across text search submissions --}}
@@ -639,7 +639,7 @@
         {{#if hasAssignedQuizzes}}
         <div id="quiz-lib">
 
-          {{!-- Flat series list — works for: no filter, category filter, series filter, combined --}}
+          {{!-- Flat series list - works for: no filter, category filter, series filter, combined --}}
           {{#each quizzesBySeries}}
           <div class="series-block" id="sb-{{this.seriesSlug}}"
             data-pillar="{{this.pillar}}" data-category="{{this.category}}" data-series="{{this.seriesSlug}}">
@@ -748,7 +748,7 @@
         <div class="empty">
           <div class="empty-ic">📚</div>
           <h3>No Assessments Available</h3>
-          <p>{{#if categoryFilter}}No assessments found in this area — try another category{{else if searchQuery}}Try different search terms{{else}}Check back soon for new content{{/if}}</p>
+          <p>{{#if categoryFilter}}No assessments found in this area - try another category{{else if searchQuery}}Try different search terms{{else}}Check back soon for new content{{/if}}</p>
         </div>
         {{/if}}
 
@@ -943,7 +943,7 @@ function liveSearch(q){
       }
     });
     var vc=document.getElementById('vis-cnt');
-    if(vc)vc.textContent=term?' — '+total+' result'+(total!==1?'s':''):'';
+    if(vc)vc.textContent=term?' - '+total+' result'+(total!==1?'s':''):'';
     var nr=document.getElementById('no-results'),lib=document.getElementById('quiz-lib');
     if(nr&&lib){var any=Array.from(blocks).some(function(b){return b.style.display!=='none';});nr.classList.toggle('jh',!term||any);}
   },150);
@@ -1010,7 +1010,7 @@ function closeMobSidebar(e,force){
       if (!isDown) return;
       isDown = false;
       scroll.classList.remove('is-dragging');
-      /* if the mouse barely moved, treat as a click — do nothing extra */
+      /* if the mouse barely moved, treat as a click - do nothing extra */
       /* if it moved, prevent the click event on child buttons */
       if (moved) {
         var stop = function(ev) { ev.stopPropagation(); ev.preventDefault(); };

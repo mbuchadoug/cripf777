@@ -18,17 +18,17 @@ const VALID_PILLARS = [
   'frequencies', 'civilization', 'negotiation', 'technology', 'general'
 ];
 
-const QUESTION_SYSTEM_PROMPT = `You are a categorization engine for the CRIPFCNT framework — an organizational intelligence and transformation methodology.
+const QUESTION_SYSTEM_PROMPT = `You are a categorization engine for the CRIPFCNT framework - an organizational intelligence and transformation methodology.
 
-CRIPFCNT pillars (FIXED — always pick from this exact list only):
+CRIPFCNT pillars (FIXED - always pick from this exact list only):
   consciousness | responsibility | interpretation | purpose |
   frequencies | civilization | negotiation | technology | general
 
 For each question assign:
 
-1. "pillar" — the CRIPFCNT pillar. MUST be one of the 9 values above, no exceptions.
+1. "pillar" - the CRIPFCNT pillar. MUST be one of the 9 values above, no exceptions.
 
-2. "category" — the specific professional domain or subject this question addresses.
+2. "category" - the specific professional domain or subject this question addresses.
    Be SPECIFIC. Use the question's actual content to decide.
    Use lowercase-hyphenated format. 2–3 words ideal.
    Examples: "institutional-accountability", "language-recalibration",
@@ -36,7 +36,7 @@ For each question assign:
    "social-contract", "governance-reform", "digital-ethics", "media-literacy",
    "community-leadership", "economic-justice", "conflict-resolution"
 
-3. "series" — a named learning track this question belongs to.
+3. "series" - a named learning track this question belongs to.
    Name it based on what the question is teaching. Be meaningful and descriptive.
    If multiple questions share a theme, give them the SAME series name.
    Use lowercase-hyphenated format.
@@ -44,41 +44,41 @@ For each question assign:
    "accountability-in-practice", "conscious-leadership", "civilisation-and-society",
    "frequencies-of-influence", "negotiating-change", "technology-and-governance"
 
-4. "confidence" — 0.0 to 1.0
+4. "confidence" - 0.0 to 1.0
 
 Return ONLY a valid JSON array. No prose, no markdown, no backticks.
 [{"id":"<id>","pillar":"responsibility","category":"institutional-accountability","series":"accountability-in-practice","confidence":0.93}]`;
 
-const QUIZ_SYSTEM_PROMPT = `You are a categorization engine for the CRIPFCNT framework — an organizational intelligence and transformation methodology.
+const QUIZ_SYSTEM_PROMPT = `You are a categorization engine for the CRIPFCNT framework - an organizational intelligence and transformation methodology.
 
-CRIPFCNT pillars (FIXED — always pick from this exact list only):
+CRIPFCNT pillars (FIXED - always pick from this exact list only):
   consciousness | responsibility | interpretation | purpose |
   frequencies | civilization | negotiation | technology | general
 
-You are categorizing QUIZZES — each quiz is a passage or comprehension piece that contains multiple questions. The "text" field is the quiz title or passage opening.
+You are categorizing QUIZZES - each quiz is a passage or comprehension piece that contains multiple questions. The "text" field is the quiz title or passage opening.
 
 For each quiz assign:
 
-1. "pillar" — the primary CRIPFCNT pillar. MUST be one of the 9 values above.
+1. "pillar" - the primary CRIPFCNT pillar. MUST be one of the 9 values above.
 
-2. "category" — the specific professional domain this quiz addresses.
+2. "category" - the specific professional domain this quiz addresses.
    Be SPECIFIC and grounded in the quiz content.
    Use lowercase-hyphenated format. 2–3 words ideal.
 
-3. "series" — the learning series or course track this quiz belongs to.
+3. "series" - the learning series or course track this quiz belongs to.
    Think of it as a course name. Be descriptive and meaningful.
    Quizzes covering related themes should share the same series name.
    Use lowercase-hyphenated format.
 
-4. "seriesOrder" — an integer (1, 2, 3...) suggesting where this quiz sits within
+4. "seriesOrder" - an integer (1, 2, 3...) suggesting where this quiz sits within
    its series based on complexity or logical progression. Use 1 if unsure.
 
-5. "level" — the difficulty/depth level:
+5. "level" - the difficulty/depth level:
    foundation | intermediate | advanced | expert
 
-6. "title" — a clean, professional display title for this quiz. Max 8 words.
+6. "title" - a clean, professional display title for this quiz. Max 8 words.
 
-7. "confidence" — 0.0 to 1.0
+7. "confidence" - 0.0 to 1.0
 
 Return ONLY a valid JSON array. No prose, no markdown, no backticks.
 [{"id":"<id>","pillar":"responsibility","category":"institutional-accountability","series":"accountability-in-practice","seriesOrder":1,"level":"intermediate","title":"Accountability in Public Institutions","confidence":0.91}]`;
@@ -117,19 +117,19 @@ async function callClaude(systemPrompt, userContent, retries = 6) {
 
     const errText = await response.text();
 
-    // Overloaded (529) or rate limited (429) — wait and retry
+    // Overloaded (529) or rate limited (429) - wait and retry
     if (response.status === 529 || response.status === 429) {
       const wait = attempt * 15000; // 15s, 30s, 45s, 60s, 75s, 90s
-      console.log(`    ⏳ API busy (${response.status}), attempt ${attempt}/${retries} — waiting ${wait / 1000}s...`);
+      console.log(`    ⏳ API busy (${response.status}), attempt ${attempt}/${retries} - waiting ${wait / 1000}s...`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
 
-    // Any other error — throw immediately
+    // Any other error - throw immediately
     throw new Error(`API error ${response.status}: ${errText}`);
   }
 
-  throw new Error(`API still overloaded after ${retries} attempts — skipping batch`);
+  throw new Error(`API still overloaded after ${retries} attempts - skipping batch`);
 }
 
 function normaliseSlug(str) {
@@ -137,7 +137,7 @@ function normaliseSlug(str) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASS 1 — Individual questions
+// PASS 1 - Individual questions
 // ─────────────────────────────────────────────────────────────────────────────
 async function categorizeQuestions(stats) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -234,7 +234,7 @@ async function categorizeQuestions(stats) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASS 2 — Quizzes (comprehension parents)
+// PASS 2 - Quizzes (comprehension parents)
 // ─────────────────────────────────────────────────────────────────────────────
 async function categorizeQuizzes(stats) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -341,7 +341,7 @@ async function categorizeQuizzes(stats) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASS 3 — Propagate quiz series/category down to child questions
+// PASS 3 - Propagate quiz series/category down to child questions
 // ─────────────────────────────────────────────────────────────────────────────
 async function propagateQuizCategoriesToChildren(stats) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

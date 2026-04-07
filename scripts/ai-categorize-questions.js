@@ -8,7 +8,7 @@
 //    doesn't appear as 3 separate series (e.g. "governance-series",
 //    "governance-foundations", "governance-1" → "governance-foundations")
 //  - New --report-only flag: query DB and print category/pillar breakdown
-//    with zero-count warnings — NO API calls, NO DB writes
+//    with zero-count warnings - NO API calls, NO DB writes
 //  - Admin review JSON export: writes review/low-confidence-items.json on run
 //  - Confidence threshold configurable via CONFIDENCE_THRESHOLD env var (default 0.6)
 //  - All other v5 safeguards preserved:
@@ -20,17 +20,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // EXECUTION
 // ─────────────────────────────────────────────────────────────────────────────
-//   # Step 1 — dry-run (no DB writes, shows what WOULD happen):
+//   # Step 1 - dry-run (no DB writes, shows what WOULD happen):
 //   node scripts/ai-recategorize-clean.js --dry-run
 //
-//   # Step 2 — live run (writes to DB):
+//   # Step 2 - live run (writes to DB):
 //   node scripts/ai-recategorize-clean.js
 //
-//   # Step 3 — report only (reads DB, no API calls):
+//   # Step 3 - report only (reads DB, no API calls):
 //   node scripts/ai-recategorize-clean.js --report-only
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// ROLLBACK (emergency — restores state before script ran)
+// ROLLBACK (emergency - restores state before script ran)
 // ─────────────────────────────────────────────────────────────────────────────
 //   db.questions.updateMany(
 //     { "meta.aiCategorised": true, "meta.manualOverride": { $ne: true } },
@@ -154,7 +154,7 @@ for (const [pillar, cats] of Object.entries(PILLAR_CATEGORIES)) {
 const QUIZ_SYSTEM_PROMPT = `
 You are a content analyst for the CRIPFCNT organisational intelligence framework.
 
-CRIPFCNT has EXACTLY 8 pillars — pick ONE:
+CRIPFCNT has EXACTLY 8 pillars - pick ONE:
   consciousness | responsibility | interpretation | purpose |
   frequencies | civilization | negotiation | technology
 
@@ -193,12 +193,12 @@ technology →
   technology-governance | digital-ethics | ai-governance |
   risk-and-compliance | innovation
 
-══ DISAMBIGUATION — READ CAREFULLY ══
+══ DISAMBIGUATION - READ CAREFULLY ══
 
 "governance" = ONLY for content about how governments/institutions are
   constitutionally structured: separation of powers, cabinet systems,
   federalism, parliamentary design. NOT for auditing, ethics, finance,
-  leadership, or law — use the specific category for those.
+  leadership, or law - use the specific category for those.
 
 "institutional-accountability" = oversight of public bodies, anti-corruption
   mechanisms, parliamentary scrutiny, public watchdogs, ombudsman offices,
@@ -218,7 +218,7 @@ technology →
   policy analysis, macroeconomics. Pillar = negotiation.
 
 "law" = statutes, jurisprudence, comparative law, legal analysis, international
-  law, commercial law — NOT constitutional/judicial (that is rule-of-law).
+  law, commercial law - NOT constitutional/judicial (that is rule-of-law).
   Pillar = civilization.
 
 "public-policy" = policy design, legislation, regulation, regulatory frameworks,
@@ -352,7 +352,7 @@ technology →
 
 ══ SERIES NAMING RULES ══
 
-A series is a LEARNING TRACK — a slug grouping 2+ quizzes on the same theme.
+A series is a LEARNING TRACK - a slug grouping 2+ quizzes on the same theme.
   • Use lowercase-hyphenated slugs: "governing-with-integrity"
   • Max 5 words
   • Quizzes on the same professional theme MUST share a series slug
@@ -381,14 +381,14 @@ facts, basic history dates → set pillar="out-of-scope", category="out-of-scope
 Return ONLY a JSON array. No prose, no markdown, no backtick fences.
 One object per quiz with EXACTLY these fields:
 
-1. "id"           — the quiz _id exactly as given
-2. "pillar"       — one of the 8 pillars OR "out-of-scope"
-3. "category"     — most specific allowed category OR "out-of-scope"
-4. "series"       — lowercase-hyphenated learning track (NOT the quiz title)
-5. "seriesOrder"  — integer 1–10 by complexity within the series
-6. "level"        — foundation | intermediate | advanced | expert
-7. "title"        — clean professional display title (max 8 words, title case)
-8. "confidence"   — float 0.0 to 1.0
+1. "id"           - the quiz _id exactly as given
+2. "pillar"       - one of the 8 pillars OR "out-of-scope"
+3. "category"     - most specific allowed category OR "out-of-scope"
+4. "series"       - lowercase-hyphenated learning track (NOT the quiz title)
+5. "seriesOrder"  - integer 1–10 by complexity within the series
+6. "level"        - foundation | intermediate | advanced | expert
+7. "title"        - clean professional display title (max 8 words, title case)
+8. "confidence"   - float 0.0 to 1.0
 
 Example:
 [{"id":"64a1b2c3d4e5f6a7b8c9d0e1","pillar":"responsibility","category":"financial-accountability","series":"public-finance-accountability","seriesOrder":2,"level":"intermediate","title":"Budget Oversight in Public Institutions","confidence":0.96}]
@@ -513,7 +513,7 @@ async function categorizeQuizzes(stats) {
     const childMap = {};
     for (const c of childDocs) childMap[String(c._id)] = c.text || '';
 
-    // Build prompt content — richer v6: includes quizTitle, tags, module
+    // Build prompt content - richer v6: includes quizTitle, tags, module
     const userContent = quizzes.map(q => {
       const title      = (q.quizTitle || q.text || '').slice(0, 200);
       const passage    = (q.passage   || '').slice(0, 700);
@@ -609,7 +609,7 @@ async function categorizeQuizzes(stats) {
 
       // Log sample results
       results.slice(0, 3).forEach(r => {
-        if (r) console.log(`      [${r.pillar}] ${r.category} → "${r.series}" — ${r.title}`);
+        if (r) console.log(`      [${r.pillar}] ${r.category} → "${r.series}" - ${r.title}`);
       });
 
       await new Promise(r => setTimeout(r, 3000));
@@ -661,9 +661,9 @@ async function propagateToChildren(stats) {
   console.log(`  ✅ Propagated to ${propagated} child questions.\n`);
 }
 
-// ── Step 3: Report-only — read DB and print breakdown ────────────────────────
+// ── Step 3: Report-only - read DB and print breakdown ────────────────────────
 async function reportOnly() {
-  console.log('━━━ REPORT-ONLY MODE — Reading current DB state ━━━\n');
+  console.log('━━━ REPORT-ONLY MODE - Reading current DB state ━━━\n');
 
   const total = await Question.countDocuments({ organization: ORG_ID, type: 'comprehension' });
   const classified = await Question.countDocuments({
@@ -738,7 +738,7 @@ async function reportOnly() {
 
   console.log(`\n  ── LOW-CONFIDENCE ITEMS (< ${CONFIDENCE_THRESHOLD}) ─────────────────────────`);
   if (!lowConf.length) {
-    console.log('  (none — all items above threshold)');
+    console.log('  (none - all items above threshold)');
   } else {
     lowConf.slice(0, 20).forEach(d =>
       console.log(`  [${(d.meta?.aiConfidence ?? 0).toFixed(2)}] ${d.meta?.aiPillar}/${d.category} → "${d.quizTitle || d.text?.slice(0, 60)}" (${d._id})`)
@@ -758,8 +758,8 @@ async function reportOnly() {
 function printRunReport(stats) {
   console.log('\n═══════════════════════════════════════════════════════════════');
   console.log(stats.dryRun
-    ? '  DRY-RUN CLASSIFICATION REPORT — NO DATA WAS WRITTEN'
-    : '  RE-CATEGORISATION COMPLETE — VERIFY BEFORE GOING LIVE'
+    ? '  DRY-RUN CLASSIFICATION REPORT - NO DATA WAS WRITTEN'
+    : '  RE-CATEGORISATION COMPLETE - VERIFY BEFORE GOING LIVE'
   );
   console.log('═══════════════════════════════════════════════════════════════');
   console.log(`  Quizzes processed   : ${stats.quizzesModified}`);
@@ -790,7 +790,7 @@ function printRunReport(stats) {
     .forEach(([k, v]) => console.log(`    ${String(v).padStart(4)}×  ${k}`));
 
   if (stats.lowConfidence.length) {
-    console.log(`\n  ── LOW-CONFIDENCE ITEMS (< ${CONFIDENCE_THRESHOLD}) — MANUAL REVIEW NEEDED ──`);
+    console.log(`\n  ── LOW-CONFIDENCE ITEMS (< ${CONFIDENCE_THRESHOLD}) - MANUAL REVIEW NEEDED ──`);
     stats.lowConfidence.slice(0, 30).forEach(item =>
       console.log(`    [${(item.confidence || 0).toFixed(2)}] ${item.pillar}/${item.category} → "${item.title}" (${item.id})`)
     );
@@ -813,13 +813,13 @@ function printRunReport(stats) {
   const unseenCategories = ALL_VALID_CATEGORIES.filter(c => !stats.categorySeen[c]);
   console.log('\n  ── CATEGORIES WITH ZERO QUIZZES (missing from DB) ───────────');
   if (unseenCategories.length === 0) {
-    console.log('    (all categories have at least 1 quiz — good coverage)');
+    console.log('    (all categories have at least 1 quiz - good coverage)');
   } else {
-    unseenCategories.forEach(c => console.log(`    ⚠  ${c}  (0 quizzes — will not appear in dashboard)`));
+    unseenCategories.forEach(c => console.log(`    ⚠  ${c}  (0 quizzes - will not appear in dashboard)`));
   }
 
   if (stats.dryRun) {
-    console.log('\n⚠️  DRY-RUN COMPLETE — No data was written to the database.');
+    console.log('\n⚠️  DRY-RUN COMPLETE - No data was written to the database.');
     console.log('   Review the distribution above, then run without --dry-run to apply.\n');
   } else {
     console.log('\n✅ Done. Review the distribution above before going live.\n');
@@ -841,7 +841,7 @@ async function run() {
   }
 
   if (DRY_RUN) {
-    console.log('⚠️  DRY-RUN MODE — scanning and classifying but NO writes will occur.\n');
+    console.log('⚠️  DRY-RUN MODE - scanning and classifying but NO writes will occur.\n');
   }
 
   const stats = {

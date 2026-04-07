@@ -317,7 +317,7 @@ export function expandSearchTerms(product) {
   const lower = (product || "").toLowerCase().trim();
   if (!lower) return [];
 
-  // Exact match in synonym map — use it directly
+  // Exact match in synonym map - use it directly
   if (SEARCH_SYNONYMS[lower]) {
     return [lower, ...SEARCH_SYNONYMS[lower].slice(0, 6)];
   }
@@ -773,7 +773,7 @@ function toTitleCase(value = "") {
 
 // ── Parse shortcode search from raw text ─────────────────────────────────────
 // Handles: "find cement", "find plumber harare", "find cement mbare" etc.
-// Lives here — AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
+// Lives here - AFTER SUBURB_TO_CITY (const) and toTitleCase so both are defined.
 export function parseShortcodeSearch(input = "") {
   const raw = String(input || "")
     .toLowerCase()

@@ -223,7 +223,7 @@ const SERIES_TO_CATEGORY = {
   'frequencies-and-influence':                     'frequencies-and-influence',
 };
 
-// ── FINAL OVERRIDE: remove wrong dup — credibility-and-authority picks strategic-leadership ──
+// ── FINAL OVERRIDE: remove wrong dup - credibility-and-authority picks strategic-leadership ──
 SERIES_TO_CATEGORY['credibility-and-authority'] = 'institutional-accountability';
 
 const CATEGORY_TO_PILLAR = {
@@ -314,7 +314,7 @@ async function run() {
   }
 
   if (DRY_RUN) {
-    console.log('\n⚠️  DRY-RUN — run without --dry-run to apply.\n');
+    console.log('\n⚠️  DRY-RUN - run without --dry-run to apply.\n');
 
     // Show what categories would be created
     const catCount = {};
@@ -346,7 +346,7 @@ async function run() {
   }
 
   await mongoose.disconnect();
-  console.log('\nDone. Restart your server — category cards will appear.');
+  console.log('\nDone. Restart your server - category cards will appear.');
 }
 
 run().catch(e => { console.error(e); process.exit(1); });

@@ -113,7 +113,7 @@ async function run() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('✅ Connected to MongoDB\n');
 
-  if (DRY_RUN) console.log('⚠️  DRY-RUN — no writes\n');
+  if (DRY_RUN) console.log('⚠️  DRY-RUN - no writes\n');
 
   // ── Step 1: diagnose current state ────────────────────────────────────────
   const total       = await Question.countDocuments({ type: 'comprehension' });
@@ -127,7 +127,7 @@ async function run() {
   console.log(`category is null         : ${nullCat}\n`);
 
   if (withCat > 0) {
-    // Categories already set — show breakdown
+    // Categories already set - show breakdown
     const catBreakdown = await Question.aggregate([
       { $match: { type: 'comprehension', category: { $nin: [null, '', 'out-of-scope'] } } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -135,7 +135,7 @@ async function run() {
     ]);
     console.log('Categories already in DB:');
     catBreakdown.forEach(c => console.log(`  ${String(c.count).padStart(4)}×  ${c._id}`));
-    console.log('\n✅ Categories look good — no fix needed. Check your route aggregate instead.\n');
+    console.log('\n✅ Categories look good - no fix needed. Check your route aggregate instead.\n');
     console.log('The issue is likely that Question.organization is stored as a STRING');
     console.log(`("${ORG_ID_STR}") but your aggregate filters by ObjectId.`);
     console.log('Use the triple-fallback route provided, or run this in Mongo shell:');
@@ -144,7 +144,7 @@ async function run() {
     return;
   }
 
-  // ── Step 2: nullCat > 0 — rebuild from series ────────────────────────────
+  // ── Step 2: nullCat > 0 - rebuild from series ────────────────────────────
   console.log('category is null on all docs. Rebuilding from series slugs...\n');
 
   const docs = await Question.find({
@@ -192,7 +192,7 @@ async function run() {
     const result = await Question.bulkWrite(ops);
     console.log(`\n✅ Updated ${result.modifiedCount} documents.`);
   } else if (DRY_RUN) {
-    console.log('\n⚠️  DRY-RUN complete — run without --dry-run to apply.');
+    console.log('\n⚠️  DRY-RUN complete - run without --dry-run to apply.');
   }
 
   // ── Step 3: show unmatched series ─────────────────────────────────────────

@@ -12,7 +12,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const ORG_ID    = new mongoose.Types.ObjectId('693b3d8d8004ece0477340c7');
-const BATCH_SIZE = 15;   // smaller — we're sending more text per quiz
+const BATCH_SIZE = 15;   // smaller - we're sending more text per quiz
 
 const VALID_PILLARS = [
   'consciousness','responsibility','interpretation','purpose',
@@ -33,13 +33,13 @@ CRIPFCNT pillars (you MUST pick exactly one):
 YOUR TASK:
 Read the quiz passage and its comprehension questions carefully.
 Classify the quiz based ONLY on what the text is actually about.
-IGNORE any existing category, module, or series label — treat the text as if you are seeing it for the first time.
+IGNORE any existing category, module, or series label - treat the text as if you are seeing it for the first time.
 
 IMPORTANT RULES:
 1. If the passage is a high-school or university academic subject
    (mathematics, algebra, geometry, calculus, biology, chemistry, physics,
    English grammar, literature analysis, geography facts, history dates)
-   that has NO connection to governance, leadership, ethics, or society —
+   that has NO connection to governance, leadership, ethics, or society -
    set pillar="out-of-scope" and category="out-of-scope".
    
 2. Only assign a CRIPFCNT pillar if the text genuinely addresses
@@ -51,19 +51,19 @@ IMPORTANT RULES:
 
 For each quiz return:
 
-1. "pillar" — one of the 9 pillars above, OR "out-of-scope"
-2. "category" — specific professional domain in lowercase-hyphenated format.
+1. "pillar" - one of the 9 pillars above, OR "out-of-scope"
+2. "category" - specific professional domain in lowercase-hyphenated format.
    Examples: "institutional-accountability", "governance-reform",
    "digital-ethics", "frequencies-of-influence", "strategic-leadership"
    If out-of-scope: "out-of-scope"
-3. "series" — named learning track, lowercase-hyphenated.
+3. "series" - named learning track, lowercase-hyphenated.
    Examples: "governing-with-purpose", "accountability-in-practice",
    "consciousness-and-leadership", "technology-and-society"
    If out-of-scope: "out-of-scope"
-4. "seriesOrder" — integer 1-10 (position within series by complexity)
-5. "level" — foundation | intermediate | advanced | expert
-6. "title" — clean professional display title ≤8 words
-7. "confidence" — 0.0 to 1.0
+4. "seriesOrder" - integer 1-10 (position within series by complexity)
+5. "level" - foundation | intermediate | advanced | expert
+6. "title" - clean professional display title ≤8 words
+7. "confidence" - 0.0 to 1.0
 
 Return ONLY a JSON array. No prose. No markdown. No backticks.
 [{"id":"<id>","pillar":"responsibility","category":"institutional-accountability","series":"accountability-in-practice","seriesOrder":1,"level":"intermediate","title":"Accountability in Public Institutions","confidence":0.91}]
@@ -97,7 +97,7 @@ async function callClaude(userContent, retries = 6) {
 
     if ([429, 529].includes(res.status)) {
       const wait = attempt * 20_000;
-      console.log(`  ⏳ API busy (${res.status}), attempt ${attempt}/${retries} — waiting ${wait/1000}s…`);
+      console.log(`  ⏳ API busy (${res.status}), attempt ${attempt}/${retries} - waiting ${wait/1000}s…`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
