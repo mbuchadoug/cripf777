@@ -5718,7 +5718,7 @@ if (a === "main_menu_back") {
 }
  
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🏫 SCHOOLS — Action handlers
+// 🏫 SCHOOLS - Action handlers
 // ═══════════════════════════════════════════════════════════════════════════════
  
 // ── Parent taps "🏫 Find a School" ───────────────────────────────────────────
@@ -5833,7 +5833,7 @@ if (a === "school_my_facilities") {
   facRows.push({ id: "school_fac_page_1", title: "➡ More Facilities" });
   facRows.push({ id: "school_account",    title: "💾 Done" });
   await sendText(from, `🏊 *Your Current Facilities:*\n\n${selected}\n\nTap to add or remove:`);
-  return sendList(from, "🏊 *Manage Facilities* — tap to toggle:", facRows);
+  return sendList(from, "🏊 *Manage Facilities* - tap to toggle:", facRows);
 }
 
 // ── Facility toggle (school admin toggling their own facilities) ───────────────
@@ -5859,7 +5859,7 @@ if (a.startsWith("school_fac_toggle_")) {
   if (facPage > 0) facRows.push({ id: `school_fac_page_${facPage - 1}`, title: "⬅ Previous" });
   if (hasMore)     facRows.push({ id: `school_fac_page_${facPage + 1}`, title: "➡ More" });
   facRows.push({ id: "school_account", title: "💾 Done" });
-  return sendList(from, `🏊 *${school.facilities.length} selected* — tap to toggle:`, facRows);
+  return sendList(from, `🏊 *${school.facilities.length} selected* - tap to toggle:`, facRows);
 }
 
 // ── Facility page navigation (school admin) ────────────────────────────────────
@@ -5878,7 +5878,7 @@ if (a.startsWith("school_fac_page_")) {
   if (newPage > 0) facRows.push({ id: `school_fac_page_${newPage - 1}`, title: "⬅ Previous" });
   if (hasMore)     facRows.push({ id: `school_fac_page_${newPage + 1}`, title: "➡ More" });
   facRows.push({ id: "school_account", title: "💾 Done" });
-  return sendList(from, `🏊 *Facilities (page ${newPage + 1})* — ${school.facilities.length} selected:`, facRows);
+  return sendList(from, `🏊 *Facilities (page ${newPage + 1})* - ${school.facilities.length} selected:`, facRows);
 }
 
 // ── Update fees ────────────────────────────────────────────────────────────────
@@ -5907,7 +5907,7 @@ No reviews yet.
 
 Once parents interact with your listing and submit ratings, they will appear here.
 
-💡 Tip: Make sure your admissions are open and your profile is complete — parents are more likely to rate schools they engaged with.`
+💡 Tip: Make sure your admissions are open and your profile is complete - parents are more likely to rate schools they engaged with.`
     );
     return sendSchoolAccountMenu(from, school);
   }
@@ -5917,7 +5917,7 @@ Once parents interact with your listing and submit ratings, they will appear her
 Rating: ${school.rating.toFixed(1)} / 5
 Total reviews: ${school.reviewCount}
 
-${school.verified ? "🏅 Your school is Verified — this builds parent trust." : "💡 Tip: A verified badge from ZimQuote boosts parent confidence. Contact support to apply."}`
+${school.verified ? "🏅 Your school is Verified - this builds parent trust." : "💡 Tip: A verified badge from ZimQuote boosts parent confidence. Contact support to apply."}`
   );
   return sendSchoolAccountMenu(from, school);
 }
@@ -5938,7 +5938,7 @@ Every time a parent taps "Contact School", "Apply Online", or "Download Profile"
 💡 *Tips to get more inquiries:*
 - Keep admissions marked as 🟢 Open when accepting
 - Add your online application link so parents can apply instantly
-- Complete your facilities list — parents filter by swimming pool, lab, etc.
+- Complete your facilities list - parents filter by swimming pool, lab, etc.
 - Ask parents to rate your school after interactions`
   );
   return sendSchoolAccountMenu(from, school);
@@ -5988,10 +5988,10 @@ if (a === "school_pay_plan") {
   return sendList(from,
     "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent inquiry alerts on WhatsApp",
     [
-      { id: "school_plan_basic_monthly",    title: "✅ Basic — $15/month",    description: "Listed in search + profile PDF + application link" },
-      { id: "school_plan_basic_annual",     title: "✅ Basic — $150/year",    description: "Save $30 vs monthly" },
-      { id: "school_plan_featured_monthly", title: "🔥 Featured — $35/month", description: "Top of results + verified badge + analytics" },
-      { id: "school_plan_featured_annual",  title: "🔥 Featured — $350/year", description: "Save $70 vs monthly" }
+      { id: "school_plan_basic_monthly",    title: "✅ Basic - $15/month",    description: "Listed in search + profile PDF + application link" },
+      { id: "school_plan_basic_annual",     title: "✅ Basic - $150/year",    description: "Save $30 vs monthly" },
+      { id: "school_plan_featured_monthly", title: "🔥 Featured - $35/month", description: "Top of results + verified badge + analytics" },
+      { id: "school_plan_featured_annual",  title: "🔥 Featured - $350/year", description: "Save $70 vs monthly" }
     ]
   );
 }
@@ -6845,7 +6845,7 @@ _Type *cancel* to return to main menu._`
 
   // ── Profile type: Products or Services ───────────────────────────────────
 
-// ── School listing type selected — pivot the entire reg flow into school mode ─
+// ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
   if (!biz) {
     await sendText(from, "❌ Session expired. Type *menu* to start again.");

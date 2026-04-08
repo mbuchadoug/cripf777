@@ -2,7 +2,7 @@
 // ─── ZimQuote School Admin Panel ─────────────────────────────────────────────
 // Mirrors supplierAdmin.js patterns exactly.
 // Mount at: app.use("/zq-admin", schoolAdminRouter) in your main app file
-// (same router as supplierAdmin — just add the routes below to the existing
+// (same router as supplierAdmin - just add the routes below to the existing
 //  supplierAdmin router OR import and use separately with the same session auth)
 
 import express from "express";
@@ -45,7 +45,7 @@ function tierColor(t) {
   return { basic: "blue", featured: "orange" }[t] || "gray";
 }
 
-// ─── Shared layout (same CSS as supplierAdmin — reuses the sidebar nav) ────────
+// ─── Shared layout (same CSS as supplierAdmin - reuses the sidebar nav) ────────
 function layout(title, content) {
 const nav = [
     { href: "/zq-admin",                label: "📊 Dashboard",        match: title === "Dashboard" },
@@ -316,7 +316,7 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
     <div class="panel" style="max-width:900px">
       <div class="panel-head">
         <h3>🏫 Register New School</h3>
-        <span style="font-size:12px;color:var(--muted)">Admin-created listing — bypasses WhatsApp flow</span>
+        <span style="font-size:12px;color:var(--muted)">Admin-created listing - bypasses WhatsApp flow</span>
       </div>
 
       <form method="POST" action="/zq-admin/schools/new" class="edit-form">
@@ -456,8 +456,8 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
             <div class="fg">
               <label>Plan / Tier</label>
               <select name="tier" required>
-                <option value="basic">✅ Basic — $15/month</option>
-                <option value="featured">🔥 Featured — $35/month</option>
+                <option value="basic">✅ Basic - $15/month</option>
+                <option value="featured">🔥 Featured - $35/month</option>
               </select>
             </div>
             <div class="fg">
@@ -474,22 +474,22 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
             <div class="fg">
               <label>Set Active Immediately?</label>
               <select name="setActive">
-                <option value="true">✅ Yes — visible to parents now</option>
-                <option value="false">⏸ No — save as inactive</option>
+                <option value="true">✅ Yes - visible to parents now</option>
+                <option value="false">⏸ No - save as inactive</option>
               </select>
             </div>
             <div class="fg">
               <label>Admissions Open?</label>
               <select name="admissionsOpen">
-                <option value="true">🟢 Yes — currently accepting</option>
-                <option value="false">🔴 No — closed</option>
+                <option value="true">🟢 Yes - currently accepting</option>
+                <option value="false">🔴 No - closed</option>
               </select>
             </div>
             <div class="fg">
               <label>Mark as Verified?</label>
               <select name="verified">
                 <option value="false">No</option>
-                <option value="true">✅ Yes — show verified badge</option>
+                <option value="true">✅ Yes - show verified badge</option>
               </select>
             </div>
           </div>
@@ -864,8 +864,8 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="fg">
               <label>Plan</label>
               <select name="tier">
-                <option value="basic"    ${school.tier === "basic"    ? "selected" : ""}>Basic — $15/month</option>
-                <option value="featured" ${school.tier === "featured" ? "selected" : ""}>Featured — $35/month</option>
+                <option value="basic"    ${school.tier === "basic"    ? "selected" : ""}>Basic - $15/month</option>
+                <option value="featured" ${school.tier === "featured" ? "selected" : ""}>Featured - $35/month</option>
               </select>
             </div>
             <div class="fg">
@@ -1036,7 +1036,7 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
     res.send(layout(`Activate: ${esc(school.schoolName)}`, `
       <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to Profile</a>
       <div class="panel" style="max-width:600px">
-        <h3>🎁 Manual Activation — ${esc(school.schoolName)}</h3>
+        <h3>🎁 Manual Activation - ${esc(school.schoolName)}</h3>
         <p style="color:var(--muted);margin-bottom:20px;font-size:13px">
           Activate this school listing without requiring EcoCash payment.
           Use for manual arrangements, free trials, or cash payments.
@@ -1047,8 +1047,8 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
               <label>Plan / Tier</label>
               <select name="tier" required>
                 <option value="">Select a plan...</option>
-                <option value="basic">✅ Basic — $15/month</option>
-                <option value="featured">🔥 Featured — $35/month</option>
+                <option value="basic">✅ Basic - $15/month</option>
+                <option value="featured">🔥 Featured - $35/month</option>
               </select>
             </div>
             <div class="fg">
@@ -1070,15 +1070,15 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
           <div class="fg full" style="margin-bottom:16px">
             <label>Also set listing Active?</label>
             <select name="setActive">
-              <option value="true">Yes — make listing visible to parents now</option>
-              <option value="false">No — activate subscription only</option>
+              <option value="true">Yes - make listing visible to parents now</option>
+              <option value="false">No - activate subscription only</option>
             </select>
           </div>
           <div class="fg full" style="margin-bottom:16px">
             <label>Mark as Verified?</label>
             <select name="setVerified">
               <option value="false">No</option>
-              <option value="true">✅ Yes — add verified badge</option>
+              <option value="true">✅ Yes - add verified badge</option>
             </select>
           </div>
           <div class="form-actions">

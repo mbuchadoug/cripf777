@@ -1,5 +1,5 @@
 // services/schoolSearch.js
-// ─── ZimQuote Schools — Parent Search Engine ──────────────────────────────────
+// ─── ZimQuote Schools - Parent Search Engine ──────────────────────────────────
 
 import SchoolProfile from "../models/schoolProfile.js";
 import { sendText, sendList, sendButtons } from "./metaSender.js";
@@ -10,7 +10,7 @@ import {
 } from "./schoolPlans.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY POINT — called when parent taps "🏫 Find a School"
+// ENTRY POINT - called when parent taps "🏫 Find a School"
 // ─────────────────────────────────────────────────────────────────────────────
 export async function startSchoolSearch(from, biz, saveBiz) {
   if (biz) {
@@ -31,7 +31,7 @@ export async function startSchoolSearch(from, biz, saveBiz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTION ROUTER — handles all school_search_* button taps
+// ACTION ROUTER - handles all school_search_* button taps
 // Returns true if handled, false to fall through.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz }) {
@@ -43,7 +43,7 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
       title: `📍 ${c}`
     }));
     moreCityRows.push({ id: "school_search_city_all", title: "🌍 All Cities" });
-    return sendList(from, "🏫 *More Cities* — which city?", moreCityRows);
+    return sendList(from, "🏫 *More Cities* - which city?", moreCityRows);
   }
   // ── Step 1: City selected ─────────────────────────────────────────────────
   if (a.startsWith("school_search_city_")) {
@@ -57,7 +57,7 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
     }
 
     return sendList(from,
-      `🏫 *${city || "All Cities"}* — What type of school?`,
+      `🏫 *${city || "All Cities"}* - What type of school?`,
       [
         ...SCHOOL_TYPES.map(t => ({ id: `school_search_type_${t.id}`, title: t.label })),
         { id: "school_search_type_any", title: "🔍 Any Type" }
@@ -294,7 +294,7 @@ async function _runSchoolSearch(from, search = {}) {
 
 Filters: ${filterSummary}
 
-Try broadening your search — remove the facility filter or select "Any Type".`
+Try broadening your search - remove the facility filter or select "Any Type".`
     );
     return sendButtons(from, {
       text: "What would you like to do?",
@@ -432,7 +432,7 @@ async function _downloadSchoolProfile(from, schoolId) {
     const filename = `${school.schoolName.replace(/\s+/g, "_")}_Profile.pdf`;
     await sendDocument(from, { link: school.profilePdfUrl, filename });
     return sendButtons(from, {
-      text: `📄 *${school.schoolName} — School Profile*\n\nDownloading now... If it doesn't open, tap the link above.`,
+      text: `📄 *${school.schoolName} - School Profile*\n\nDownloading now... If it doesn't open, tap the link above.`,
       buttons: [
         { id: `school_apply_${schoolId}`,   title: "📝 Apply Online" },
         { id: "school_search_refine",        title: "🔄 More Schools" }
@@ -440,7 +440,7 @@ async function _downloadSchoolProfile(from, schoolId) {
     });
   }
 
-  // PDF not yet generated — generate on demand
+  // PDF not yet generated - generate on demand
   try {
     const { generateSchoolProfilePDF } = await import("./schoolPdfGenerator.js");
     const pdfResult = await generateSchoolProfilePDF(school);
@@ -514,7 +514,7 @@ After submitting, the school will contact you directly.`,
     });
   }
 
-  // No online link — fall back to contact
+  // No online link - fall back to contact
   return sendButtons(from, {
     text:
 `📝 *Apply to ${school.schoolName}*

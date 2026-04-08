@@ -1,5 +1,5 @@
 // services/schoolPlans.js
-// ─── ZimQuote Schools Module — Plans, Cities, Facilities & Constants ─────────
+// ─── ZimQuote Schools Module - Plans, Cities, Facilities & Constants ─────────
 
 export const SCHOOL_CITIES = [
   "Harare", "Bulawayo", "Mutare", "Gweru", "Masvingo",

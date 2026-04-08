@@ -107,8 +107,8 @@ export async function sendMainMenu(to) {
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
 
-  // ── Case 0: School admin — always takes priority ──────────────────────────
-// ── Case 0: School admin — always takes priority ──────────────────────────
+  // ── Case 0: School admin - always takes priority ──────────────────────────
+// ── Case 0: School admin - always takes priority ──────────────────────────
 const school = await SchoolProfile.findOne({ phone });
   if (school) {
     // Dynamic import avoids hoisting issues
@@ -867,7 +867,7 @@ export async function sendSupplierMoreOptionsMenu(to, supplierDoc) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCHOOL ACCOUNT MENU — shown to school admins instead of supplier menu
+// SCHOOL ACCOUNT MENU - shown to school admins instead of supplier menu
 // ─────────────────────────────────────────────────────────────────────────────
 export async function sendSchoolAccountMenu(to, schoolDoc) {
   const SchoolProfile = (await import("../models/schoolProfile.js")).default;
@@ -875,7 +875,7 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   const school = schoolDoc || await SchoolProfile.findOne({ phone });
 
  if (!school) {
-  // No school profile — send back to registration
+  // No school profile - send back to registration
   return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
     { id: "register_supplier", title: "🏪 List My Business" },
     { id: "find_supplier",     title: "🔍 Browse & Shop" },
@@ -895,10 +895,10 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   const curriculumText  = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
 
 if (!school.active) {
-  // Inactive school — prompt activation
+  // Inactive school - prompt activation
   return sendList(to,
     `🏫 *${school.schoolName}*${verifiedBadge}\n` +
-    `🔴 *Not yet live* — parents cannot find you yet.\n` +
+    `🔴 *Not yet live* - parents cannot find you yet.\n` +
     `📍 ${school.suburb || ""}, ${school.city}\n` +
     `📚 ${curriculumText}\n\n` +
     `_Choose a plan to activate your listing._`,

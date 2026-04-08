@@ -1,5 +1,5 @@
 // services/schoolRegistration.js
-// ─── ZimQuote Schools — WhatsApp Registration State Machine ──────────────────
+// ─── ZimQuote Schools - WhatsApp Registration State Machine ──────────────────
 
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
@@ -19,9 +19,9 @@ function getReg(biz) {
   return biz.sessionData.supplierReg;
 }
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY POINT — called from chatbotEngine when user taps "🏫 Register My School"
+// ENTRY POINT - called from chatbotEngine when user taps "🏫 Register My School"
 // ─────────────────────────────────────────────────────────────────────────────
-// startSchoolRegistration is deprecated — entry is now via register_supplier → reg_type_school
+// startSchoolRegistration is deprecated - entry is now via register_supplier → reg_type_school
 // Kept as a safe fallback redirect only.
 export async function startSchoolRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
@@ -36,7 +36,7 @@ export async function startSchoolRegistration(from, biz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATE MACHINE — called from chatbotEngine for every school_reg_* state
+// STATE MACHINE - called from chatbotEngine for every school_reg_* state
 // Returns true if it handled the state, false to fall through.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolRegistrationStates({ state, from, text, biz, saveBiz }) {
@@ -54,12 +54,12 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState   = "school_reg_type";
     await saveBiz(biz);
 
-    return sendList(from, `📗 *Step 2 of 12* — What type of school is *${name}*?`, [
+    return sendList(from, `📗 *Step 2 of 12* - What type of school is *${name}*?`, [
       ...SCHOOL_TYPES.map(t => ({ id: `school_reg_type_${t.id}`, title: t.label }))
     ]);
   }
 
-  // ── Step 2: Type — handled via action button (school_reg_type_*)
+  // ── Step 2: Type - handled via action button (school_reg_type_*)
   // (see handleSchoolRegistrationActions below)
 
   // ── Step 3: City ─────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState   = "school_reg_suburb";
     await saveBiz(biz);
     return sendText(from,
-      `📍 *Step 4 of 12* — What suburb or area is *${reg.schoolName}* located in?\n\n_e.g. Borrowdale, Avondale, Hillside_`
+      `📍 *Step 4 of 12* - What suburb or area is *${reg.schoolName}* located in?\n\n_e.g. Borrowdale, Avondale, Hillside_`
     );
   }
 
@@ -88,7 +88,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState   = "school_reg_address";
     await saveBiz(biz);
     return sendButtons(from, {
-      text: `🏠 *Step 5 of 12* — What is the physical address of *${reg.schoolName}*?\n\n_e.g. 15 Churchill Ave, Borrowdale_`,
+      text: `🏠 *Step 5 of 12* - What is the physical address of *${reg.schoolName}*?\n\n_e.g. 15 Churchill Ave, Borrowdale_`,
       buttons: [{ id: "school_reg_address_skip", title: "⏭ Skip Address" }]
     });
   }
@@ -102,12 +102,12 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     const rows = SCHOOL_CURRICULA.map(c => ({ id: `school_reg_cur_${c.id}`, title: c.label }));
     rows.push({ id: "school_reg_cur_done", title: "✅ Done selecting" });
     return sendList(from,
-      `📚 *Step 6 of 12* — Which curriculum(s) does *${reg.schoolName}* offer?\n\nTap all that apply, then tap ✅ Done.`,
+      `📚 *Step 6 of 12* - Which curriculum(s) does *${reg.schoolName}* offer?\n\nTap all that apply, then tap ✅ Done.`,
       rows
     );
   }
 
-  // ── Step 6: Curriculum — handled via actions
+  // ── Step 6: Curriculum - handled via actions
 
   // ── Step 7: Gender ───────────────────────────────────────────────────────
   // (handled via action school_reg_gender_*)
@@ -147,17 +147,17 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
       title: f.label
     }));
     facRows.push({ id: "school_reg_fac_page_1", title: "➡ More Facilities" });
-    facRows.push({ id: "school_reg_fac_done",   title: "✅ Done — Save Facilities" });
+    facRows.push({ id: "school_reg_fac_done",   title: "✅ Done - Save Facilities" });
 
     return sendList(from,
-      `🏊 *Step 10 of 12* — Select facilities *${reg.schoolName}* has.\n\n_Tap each one, then Done when finished._`,
+      `🏊 *Step 10 of 12* - Select facilities *${reg.schoolName}* has.\n\n_Tap each one, then Done when finished._`,
       facRows
     );
   }
 
-  // ── Step 10: Facilities — handled via actions
+  // ── Step 10: Facilities - handled via actions
 
-  // ── Step 11: Extramural — handled via actions
+  // ── Step 11: Extramural - handled via actions
 
   // ── Step 12: Principal name ───────────────────────────────────────────────
   if (state === "school_reg_principal") {
@@ -165,7 +165,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     biz.sessionState   = "school_reg_email";
     await saveBiz(biz);
     return sendButtons(from, {
-      text: `📧 *Almost done!* — What is the school's email address?\n\n_e.g. admin@stjohns.ac.zw_`,
+      text: `📧 *Almost done!* - What is the school's email address?\n\n_e.g. admin@stjohns.ac.zw_`,
       buttons: [{ id: "school_reg_email_skip", title: "⏭ Skip Email" }]
     });
   }
@@ -213,7 +213,7 @@ _Type *cancel* to start over._`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTION HANDLERS — called from chatbotEngine for school_reg_* button taps
+// ACTION HANDLERS - called from chatbotEngine for school_reg_* button taps
 // Returns true if handled.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolRegistrationActions({ action: a, from, biz, saveBiz }) {
@@ -234,7 +234,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     cityRowsPage1.push({ id: "school_reg_city_more", title: "➡ More Cities" });
     cityRowsPage1.push({ id: "school_reg_city_other", title: "📍 Other City" });
 
-    return sendList(from, `📍 *Step 3 of 12* — Which city is *${reg.schoolName}* in?`, cityRowsPage1);
+    return sendList(from, `📍 *Step 3 of 12* - Which city is *${reg.schoolName}* in?`, cityRowsPage1);
   }
 
   // ── City selected from list ───────────────────────────────────────────────
@@ -245,7 +245,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
       title: c
     }));
     cityRowsPage2.push({ id: "school_reg_city_other", title: "📍 Other City" });
-    return sendList(from, `📍 More cities — which city is *${reg.schoolName}* in?`, cityRowsPage2);
+    return sendList(from, `📍 More cities - which city is *${reg.schoolName}* in?`, cityRowsPage2);
   }
 
   // ── City selected from list ───────────────────────────────────────────────
@@ -260,7 +260,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     biz.sessionState   = "school_reg_suburb";
     await saveBiz(biz);
     return sendText(from,
-      `📍 *Step 4 of 12* — What suburb or area is *${reg.schoolName}* in?\n\n_e.g. Borrowdale, Hillside, Glen View_`
+      `📍 *Step 4 of 12* - What suburb or area is *${reg.schoolName}* in?\n\n_e.g. Borrowdale, Hillside, Glen View_`
     );
   }
 
@@ -273,7 +273,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     const rows = SCHOOL_CURRICULA.map(c => ({ id: `school_reg_cur_${c.id}`, title: c.label }));
     rows.push({ id: "school_reg_cur_done", title: "✅ Done selecting" });
     return sendList(from,
-      `📚 *Step 6 of 12* — Which curriculum(s) does *${reg.schoolName}* offer?\n\nTap all that apply, then tap ✅ Done.`,
+      `📚 *Step 6 of 12* - Which curriculum(s) does *${reg.schoolName}* offer?\n\nTap all that apply, then tap ✅ Done.`,
       rows
     );
   }
@@ -307,7 +307,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     }
     biz.sessionState = "school_reg_gender";
     await saveBiz(biz);
-    return sendList(from, `👫 *Step 7 of 12* — Is *${reg.schoolName}* for boys, girls or mixed?`, [
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
       ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
     ]);
   }
@@ -317,7 +317,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     reg.gender         = a.replace("school_reg_gender_", "");
     biz.sessionState   = "school_reg_boarding";
     await saveBiz(biz);
-    return sendList(from, `🏠 *Step 8 of 12* — Is *${reg.schoolName}* a day school or boarding school?`, [
+    return sendList(from, `🏠 *Step 8 of 12* - Is *${reg.schoolName}* a day school or boarding school?`, [
       ...SCHOOL_BOARDING.map(b => ({ id: `school_reg_boarding_${b.id}`, title: b.label }))
     ]);
   }
@@ -328,7 +328,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     biz.sessionState   = "school_reg_fees";
     await saveBiz(biz);
     return sendText(from,
-`💵 *Step 9 of 12* — What are the school fees per term (in USD)?
+`💵 *Step 9 of 12* - What are the school fees per term (in USD)?
 
 Enter as: *term1, term2, term3*
 Example: *800, 800, 750*
@@ -359,8 +359,8 @@ Or one number if all terms are equal: *800*`
     const hasMoreFac = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
     if (facPage > 0)  rows.push({ id: `school_reg_fac_page_${facPage - 1}`, title: "⬅ Previous" });
     if (hasMoreFac)   rows.push({ id: `school_reg_fac_page_${facPage + 1}`, title: "➡ More Facilities" });
-    rows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
-    return sendList(from, `🏊 *${selectedCount} selected* — tap more or Done:`, rows);
+    rows.push({ id: "school_reg_fac_done", title: "✅ Done - Save Facilities" });
+    return sendList(from, `🏊 *${selectedCount} selected* - tap more or Done:`, rows);
   }
 
   // ── Facilities page navigation ────────────────────────────────────────────
@@ -378,10 +378,10 @@ Or one number if all terms are equal: *800*`
     const hasMore = (newPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
     if (newPage > 0) rows.push({ id: `school_reg_fac_page_${newPage - 1}`, title: "⬅ Previous" });
     if (hasMore)     rows.push({ id: `school_reg_fac_page_${newPage + 1}`, title: "➡ More Facilities" });
-    rows.push({ id: "school_reg_fac_done", title: "✅ Done — Save Facilities" });
+    rows.push({ id: "school_reg_fac_done", title: "✅ Done - Save Facilities" });
 
     return sendList(from,
-      `🏊 *Facilities (page ${newPage + 1})* — ${(reg.facilities || []).length} selected so far:`,
+      `🏊 *Facilities (page ${newPage + 1})* - ${(reg.facilities || []).length} selected so far:`,
       rows
     );
   }
@@ -396,9 +396,9 @@ Or one number if all terms are equal: *800*`
     const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(0, EXT_PAGE_SIZE);
     const extRows = extSlice.map(e => ({ id: `school_reg_ext_${e.id}`, title: e.label }));
     extRows.push({ id: "school_reg_ext_page_1", title: "➡ More Activities" });
-    extRows.push({ id: "school_reg_ext_done",   title: "✅ Done — Save Activities" });
+    extRows.push({ id: "school_reg_ext_done",   title: "✅ Done - Save Activities" });
     return sendList(from,
-      `🏃 *Step 11 of 12* — Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1 of 3. Tap Done when finished._`,
+      `🏃 *Step 11 of 12* - Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1 of 3. Tap Done when finished._`,
       extRows
     );
   }
@@ -425,8 +425,8 @@ const extSelectedCount = (reg.extramuralActivities || []).length;
     const hasMoreExt = (extPage + 1) * EXT_PAGE_SIZE < SCHOOL_EXTRAMURALACTIVITIES.length;
     if (extPage > 0)  rows.push({ id: `school_reg_ext_page_${extPage - 1}`, title: "⬅ Previous" });
     if (hasMoreExt)   rows.push({ id: `school_reg_ext_page_${extPage + 1}`, title: "➡ More Activities" });
-    rows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
-    return sendList(from, `🏃 *${extSelectedCount} selected* — tap more or Done:`, rows);
+    rows.push({ id: "school_reg_ext_done", title: "✅ Done - Save Activities" });
+    return sendList(from, `🏃 *${extSelectedCount} selected* - tap more or Done:`, rows);
   }
 
 // ── Extramural page navigation ────────────────────────────────────────────
@@ -444,10 +444,10 @@ const extSelectedCount = (reg.extramuralActivities || []).length;
     const hasMore = (newPage + 1) * EXT_PAGE_SIZE < SCHOOL_EXTRAMURALACTIVITIES.length;
     if (newPage > 0) rows.push({ id: `school_reg_ext_page_${newPage - 1}`, title: "⬅ Previous" });
     if (hasMore)     rows.push({ id: `school_reg_ext_page_${newPage + 1}`, title: "➡ More Activities" });
-    rows.push({ id: "school_reg_ext_done", title: "✅ Done — Save Activities" });
+    rows.push({ id: "school_reg_ext_done", title: "✅ Done - Save Activities" });
 
     return sendList(from,
-      `🏃 *Activities (page ${newPage + 1})* — ${(reg.extramuralActivities || []).length} selected so far:`,
+      `🏃 *Activities (page ${newPage + 1})* - ${(reg.extramuralActivities || []).length} selected so far:`,
       rows
     );
   }
@@ -456,7 +456,7 @@ const extSelectedCount = (reg.extramuralActivities || []).length;
     biz.sessionState = "school_reg_principal";
     await saveBiz(biz);
     return sendButtons(from, {
-      text: `👤 *Step 12 of 12* — What is the name of the school principal?\n\n_e.g. Mrs J. Moyo_`,
+      text: `👤 *Step 12 of 12* - What is the name of the school principal?\n\n_e.g. Mrs J. Moyo_`,
       buttons: [{ id: "school_reg_principal_skip", title: "⏭ Skip" }]
     });
   }
@@ -512,7 +512,7 @@ const extSelectedCount = (reg.extramuralActivities || []).length;
     await saveBiz(biz);
 
     return sendText(from,
-`💳 *${plan.name} Plan — ${planDetail.label}*
+`💳 *${plan.name} Plan - ${planDetail.label}*
 
 To activate your listing, pay via EcoCash.
 
@@ -603,10 +603,10 @@ Now choose a plan to go live and start receiving parent inquiries.`
   );
 
   return sendList(from, "💳 *Choose Your Plan*\n\nAll plans include:\n✅ Listed in parent search\n✅ Downloadable school profile PDF\n✅ Online application link\n✅ Parent inquiry alerts on WhatsApp", [
-    { id: "school_plan_basic_monthly",   title: "✅ Basic — $15/month",  description: "Listed in search + profile PDF + application link" },
-    { id: "school_plan_basic_annual",    title: "✅ Basic — $150/year",  description: "Save $30 vs monthly" },
-    { id: "school_plan_featured_monthly",title: "🔥 Featured — $35/month", description: "Top of results + verified badge + analytics" },
-    { id: "school_plan_featured_annual", title: "🔥 Featured — $350/year", description: "Save $70 vs monthly" }
+    { id: "school_plan_basic_monthly",   title: "✅ Basic - $15/month",  description: "Listed in search + profile PDF + application link" },
+    { id: "school_plan_basic_annual",    title: "✅ Basic - $150/year",  description: "Save $30 vs monthly" },
+    { id: "school_plan_featured_monthly",title: "🔥 Featured - $35/month", description: "Top of results + verified badge + analytics" },
+    { id: "school_plan_featured_annual", title: "🔥 Featured - $350/year", description: "Save $70 vs monthly" }
   ]);
 }
 
