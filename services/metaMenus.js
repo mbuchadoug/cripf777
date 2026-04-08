@@ -103,8 +103,15 @@ const { branches } = await ensureDefaultBranch(biz._id);
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
   const SupplierProfile = (await import("../models/supplierProfile.js")).default;
+  const SchoolProfile   = (await import("../models/schoolProfile.js")).default;
   const phone = to.replace(/\D+/g, "");
   const supplier = await SupplierProfile.findOne({ phone });
+
+  // ── Case 0: School admin — always takes priority ──────────────────────────
+  const school = await SchoolProfile.findOne({ phone });
+  if (school) {
+    return sendSchoolAccountMenu(to, school);
+  }
 
   // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
 if (supplier?.active) {
@@ -849,5 +856,91 @@ export async function sendSupplierMoreOptionsMenu(to, supplierDoc) {
     { id: "sup_my_reviews", title: "⭐ My Reviews" },
     { id: "sup_renew_plan", title: "🔄 Renew Subscription" },
     { id: "my_supplier_account", title: "⬅ Back" }
+  ]);
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHOOL ACCOUNT MENU — shown to school admins instead of supplier menu
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendSchoolAccountMenu(to, schoolDoc) {
+  const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+  const phone  = to.replace(/\D+/g, "");
+  const school = schoolDoc || await SchoolProfile.findOne({ phone });
+
+  if (!school) {
+    // No school profile — send back to registration
+    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+      { id: "register_supplier", title: "🏪 List My Business or School" },
+      { id: "find_supplier",     title: "🔍 Browse & Shop" },
+      { id: "find_school",       title: "🏫 Find a School" },
+      { id: "my_orders",         title: "📋 My Orders" },
+    ]);
+  }
+
+  const statusIcon    = school.active   ? "🟢" : "🔴";
+  const verifiedBadge = school.verified ? " ✅" : "";
+  const tierLabel     = { basic: "Basic $15/mo", featured: "Featured $35/mo" }[school.tier] || "No Plan";
+  const renewDate     = school.subscriptionEndsAt
+    ? new Date(school.subscriptionEndsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "Not active";
+  const admissionsLabel = school.admissionsOpen ? "🟢 Open" : "🔴 Closed";
+  const facilityCount   = (school.facilities || []).length;
+  const curriculumText  = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
+
+  if (!school.active) {
+    // Inactive school — prompt activation
+    return sendList(to,
+      `🏫 *${school.schoolName}*${verifiedBadge}\n` +
+      `🔴 *Not yet live* — parents cannot find you yet.\n` +
+      `📍 ${school.suburb || ""}, ${school.city}\n` +
+      `📚 ${curriculumText}\n\n` +
+      `_Choose a plan to activate your listing._`,
+      [
+        { id: "school_pay_plan",    title: "💳 Activate My Listing" },
+        { id: "school_my_profile",  title: "👁 View My Profile" },
+        { id: "find_school",        title: "🔍 Preview School Search" },
+        { id: "main_menu_back",     title: "⬅ Main Menu" }
+      ]
+    );
+  }
+
+  return sendList(
+    to,
+    `🏫 *${school.schoolName}*${verifiedBadge}\n` +
+    `${statusIcon} Active · ${tierLabel}\n` +
+    `📍 ${school.suburb || ""}, ${school.city}\n` +
+    `📚 ${curriculumText}\n` +
+    `📝 Admissions: ${admissionsLabel}\n` +
+    `🏊 Facilities: ${facilityCount}\n` +
+    `⭐ ${(school.rating || 0).toFixed(1)} (${school.reviewCount || 0} reviews)\n` +
+    `🗓 Renews: ${renewDate}\n` +
+    `👀 Views: ${school.monthlyViews || 0} · 📬 Inquiries: ${school.inquiries || 0}`,
+    [
+      { id: "school_my_profile",       title: "📋 My School Profile" },
+      { id: "school_my_facilities",    title: "🏊 Manage Facilities" },
+      { id: "school_my_fees",          title: "💵 Update Fees" },
+      { id: "school_my_reviews",       title: "⭐ My Reviews" },
+      { id: "school_my_inquiries",     title: "📬 Parent Inquiries" },
+      { id: "school_more_options",     title: "⚙️ More Options" },
+      { id: "main_menu_back",          title: "⬅ Main Menu" }
+    ]
+  );
+}
+
+// ── School "More Options" menu ────────────────────────────────────────────────
+export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
+  const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+  const phone  = to.replace(/\D+/g, "");
+  const school = schoolDoc || await SchoolProfile.findOne({ phone });
+  if (!school) return sendSchoolAccountMenu(to, null);
+
+  return sendList(to, "⚙️ *School Settings*", [
+    { id: "school_toggle_admissions", title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions" },
+    { id: "school_update_reg_link",   title: "🔗 Update Application Link" },
+    { id: "school_update_email",      title: "📧 Update Email" },
+    { id: "school_update_website",    title: "🌐 Update Website" },
+    { id: "school_pay_plan",          title: "⬆️ Upgrade / Renew Plan" },
+    { id: "school_account",           title: "⬅ Back" }
   ]);
 }

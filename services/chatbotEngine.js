@@ -1748,9 +1748,18 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_search_fac_") ||
       a.startsWith("school_search_page_") ||
       a.startsWith("school_view_") ||
-      a.startsWith("school_dl_profile_") ||
+    a.startsWith("school_dl_profile_") ||
       a.startsWith("school_apply_") ||
-      a.startsWith("school_contact_")
+      a.startsWith("school_contact_") ||
+      a === "school_my_profile" ||
+      a === "school_my_facilities" ||
+      a === "school_my_fees" ||
+      a === "school_my_reviews" ||
+      a === "school_my_inquiries" ||
+      a === "school_more_options" ||
+      a === "school_update_reg_link" ||
+      a === "school_update_email" ||
+      a === "school_update_website"
     
     );
   // =========================
@@ -2111,9 +2120,18 @@ a === "sup_search_next_page" ||
   a.startsWith("school_search_fac_") ||
   a.startsWith("school_search_page_") ||
   a.startsWith("school_view_") ||
-  a.startsWith("school_dl_profile_") ||
+ a.startsWith("school_dl_profile_") ||
   a.startsWith("school_apply_") ||
-  a.startsWith("school_contact_");
+  a.startsWith("school_contact_") ||
+  a === "school_my_profile" ||
+  a === "school_my_facilities" ||
+  a === "school_my_fees" ||
+  a === "school_my_reviews" ||
+  a === "school_my_inquiries" ||
+  a === "school_more_options" ||
+  a === "school_update_reg_link" ||
+  a === "school_update_email" ||
+  a === "school_update_website";
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
@@ -4482,9 +4500,11 @@ const schoolTextStates = [
  
 // ── School admin text-input states ───────────────────────────────────────────
 const schoolAdminStates = [
-  "school_admin_update_fees"
+  "school_admin_update_fees",
+  "school_admin_update_reg_link",
+  "school_admin_update_email",
+  "school_admin_update_website"
 ];
- 
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
 // supplier_search_city is excluded from the block - typed text in that state
@@ -5686,6 +5706,206 @@ if (a === "school_account") {
   const school = await SchoolProfile.findOne({ phone: schoolPhone });
   const { sendSchoolAccountMenu } = await import("./metaMenus.js");
   return sendSchoolAccountMenu(from, school);
+}
+
+// ── School profile summary ────────────────────────────────────────────────────
+if (a === "school_my_profile") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } = await import("./schoolPlans.js");
+  const typeLabels    = { primary: "Primary (ECD–Grade 7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
+  const genderLabels  = { mixed: "Mixed (Co-ed)", boys: "Boys Only", girls: "Girls Only" };
+  const boardingLabels= { day: "Day School", boarding: "Boarding", both: "Day & Boarding" };
+  const curricText    = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
+  const facList       = (school.facilities || []).map(id => SCHOOL_FACILITIES.find(f => f.id === id)?.label || id).join("\n  ") || "None added";
+  const extList       = (school.extramuralActivities || []).slice(0, 8).map(id => SCHOOL_EXTRAMURALACTIVITIES.find(e => e.id === id)?.label || id).join(", ") || "None added";
+  const feeLine       = school.fees?.term1 ? `$${school.fees.term1} / $${school.fees.term2} / $${school.fees.term3} per term (USD)` : "Not set";
+  await sendText(from,
+`🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}
+📍 ${school.suburb || ""}, ${school.city}${school.address ? "\n🏠 " + school.address : ""}
+${school.principalName ? "👤 Principal: " + school.principalName : ""}
+📧 ${school.email || "No email set"}
+🌐 ${school.website || "No website set"}
+
+📗 *Type:* ${typeLabels[school.type] || school.type}
+📚 *Curriculum:* ${curricText}
+👫 *Gender:* ${genderLabels[school.gender] || school.gender}
+🏠 *Boarding:* ${boardingLabels[school.boarding] || school.boarding}
+📐 *Grades:* ${school.grades?.from || "ECD A"} – ${school.grades?.to || "Form 6"}
+
+💵 *Fees:* ${feeLine}
+
+🏊 *Facilities (${(school.facilities || []).length}):*
+  ${facList}
+
+🏃 *Extramural:* ${extList}
+
+📝 *Admissions:* ${school.admissionsOpen ? "🟢 Currently OPEN" : "🔴 Currently CLOSED"}
+🔗 *Apply link:* ${school.registrationLink || "Not set"}`
+  );
+  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+  return sendSchoolAccountMenu(from, school);
+}
+
+// ── School facilities manager ─────────────────────────────────────────────────
+if (a === "school_my_facilities") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { SCHOOL_FACILITIES } = await import("./schoolPlans.js");
+  const selected = (school.facilities || []).map(id => SCHOOL_FACILITIES.find(f => f.id === id)?.label || id).join("\n") || "None selected yet";
+  const FAC_PAGE_SIZE = 7;
+  const facRows = SCHOOL_FACILITIES.slice(0, FAC_PAGE_SIZE).map(f => ({
+    id:    `school_fac_toggle_${f.id}`,
+    title: (school.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+  }));
+  facRows.push({ id: "school_fac_page_1", title: "➡ More Facilities" });
+  facRows.push({ id: "school_account",    title: "💾 Done" });
+  await sendText(from, `🏊 *Your Current Facilities:*\n\n${selected}\n\nTap to add or remove:`);
+  return sendList(from, "🏊 *Manage Facilities* — tap to toggle:", facRows);
+}
+
+// ── Facility toggle (school admin toggling their own facilities) ───────────────
+if (a.startsWith("school_fac_toggle_")) {
+  const facId = a.replace("school_fac_toggle_", "");
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  school.facilities = school.facilities || [];
+  if (school.facilities.includes(facId)) {
+    school.facilities = school.facilities.filter(f => f !== facId);
+  } else {
+    school.facilities.push(facId);
+  }
+  await school.save();
+  const { SCHOOL_FACILITIES } = await import("./schoolPlans.js");
+  const FAC_PAGE_SIZE = 7;
+  const facPage = Number(biz?.sessionData?.schoolFacPage || 0);
+  const facRows = SCHOOL_FACILITIES.slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE).map(f => ({
+    id:    `school_fac_toggle_${f.id}`,
+    title: school.facilities.includes(f.id) ? `✅ ${f.label}` : f.label
+  }));
+  const hasMore = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+  if (facPage > 0) facRows.push({ id: `school_fac_page_${facPage - 1}`, title: "⬅ Previous" });
+  if (hasMore)     facRows.push({ id: `school_fac_page_${facPage + 1}`, title: "➡ More" });
+  facRows.push({ id: "school_account", title: "💾 Done" });
+  return sendList(from, `🏊 *${school.facilities.length} selected* — tap to toggle:`, facRows);
+}
+
+// ── Facility page navigation (school admin) ────────────────────────────────────
+if (a.startsWith("school_fac_page_")) {
+  const newPage = parseInt(a.replace("school_fac_page_", ""), 10) || 0;
+  if (biz) { biz.sessionData = { ...(biz.sessionData || {}), schoolFacPage: newPage }; await saveBizSafe(biz); }
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { SCHOOL_FACILITIES } = await import("./schoolPlans.js");
+  const FAC_PAGE_SIZE = 7;
+  const facRows = SCHOOL_FACILITIES.slice(newPage * FAC_PAGE_SIZE, (newPage + 1) * FAC_PAGE_SIZE).map(f => ({
+    id:    `school_fac_toggle_${f.id}`,
+    title: school.facilities.includes(f.id) ? `✅ ${f.label}` : f.label
+  }));
+  const hasMore = (newPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+  if (newPage > 0) facRows.push({ id: `school_fac_page_${newPage - 1}`, title: "⬅ Previous" });
+  if (hasMore)     facRows.push({ id: `school_fac_page_${newPage + 1}`, title: "➡ More" });
+  facRows.push({ id: "school_account", title: "💾 Done" });
+  return sendList(from, `🏊 *Facilities (page ${newPage + 1})* — ${school.facilities.length} selected:`, facRows);
+}
+
+// ── Update fees ────────────────────────────────────────────────────────────────
+if (a === "school_my_fees") {
+  if (biz) { biz.sessionState = "school_admin_update_fees"; await saveBizSafe(biz); }
+  return sendText(from,
+`💵 *Update School Fees*
+
+Enter your fees per term in USD as: *term1, term2, term3*
+Example: *900, 900, 850*
+
+Or one amount if all terms are equal: *900*`
+  );
+}
+
+// ── Reviews summary ───────────────────────────────────────────────────────────
+if (a === "school_my_reviews") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+  if (!school.reviewCount) {
+    await sendText(from,
+`⭐ *My Reviews*
+
+No reviews yet.
+
+Once parents interact with your listing and submit ratings, they will appear here.
+
+💡 Tip: Make sure your admissions are open and your profile is complete — parents are more likely to rate schools they engaged with.`
+    );
+    return sendSchoolAccountMenu(from, school);
+  }
+  await sendText(from,
+`⭐ *My Reviews*
+
+Rating: ${school.rating.toFixed(1)} / 5
+Total reviews: ${school.reviewCount}
+
+${school.verified ? "🏅 Your school is Verified — this builds parent trust." : "💡 Tip: A verified badge from ZimQuote boosts parent confidence. Contact support to apply."}`
+  );
+  return sendSchoolAccountMenu(from, school);
+}
+
+// ── Inquiries summary ─────────────────────────────────────────────────────────
+if (a === "school_my_inquiries") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+  await sendText(from,
+`📬 *Parent Inquiries*
+
+Total inquiries received: *${school.inquiries || 0}*
+Profile views this month: *${school.monthlyViews || 0}*
+
+Every time a parent taps "Contact School", "Apply Online", or "Download Profile" on your listing, it counts as an inquiry.
+
+💡 *Tips to get more inquiries:*
+- Keep admissions marked as 🟢 Open when accepting
+- Add your online application link so parents can apply instantly
+- Complete your facilities list — parents filter by swimming pool, lab, etc.
+- Ask parents to rate your school after interactions`
+  );
+  return sendSchoolAccountMenu(from, school);
+}
+
+// ── More options menu ─────────────────────────────────────────────────────────
+if (a === "school_more_options") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+  return sendSchoolMoreOptionsMenu(from, school);
+}
+
+// ── Update online application link ────────────────────────────────────────────
+if (a === "school_update_reg_link") {
+  if (biz) { biz.sessionState = "school_admin_update_reg_link"; await saveBizSafe(biz); }
+  return sendText(from,
+`🔗 *Online Application Link*
+
+Enter the link parents should use to apply online.
+
+Example:
+_https://forms.gle/abc123_
+_https://yourschool.ac.zw/apply_
+
+This link will be sent to parents who tap "Apply Online" when they find your school.`
+  );
+}
+
+// ── Update email ──────────────────────────────────────────────────────────────
+if (a === "school_update_email") {
+  if (biz) { biz.sessionState = "school_admin_update_email"; await saveBizSafe(biz); }
+  return sendText(from, "📧 *Update Email*\n\nEnter your school's email address:\n\n_e.g. admin@stjohns.ac.zw_");
+}
+
+// ── Update website ────────────────────────────────────────────────────────────
+if (a === "school_update_website") {
+  if (biz) { biz.sessionState = "school_admin_update_website"; await saveBizSafe(biz); }
+  return sendText(from, "🌐 *Update Website*\n\nEnter your school's website:\n\n_e.g. www.stjohns.ac.zw_");
 }
  
 // ── School plan selection / activation payment ────────────────────────────────

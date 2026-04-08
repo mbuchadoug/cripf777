@@ -223,6 +223,48 @@ export async function handleSchoolAdminStates({ state, from, text, biz, saveBiz 
   return false;
 }
 
+
+
+if (state === "school_admin_update_reg_link") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+    const link = text.trim();
+    if (!link.startsWith("http")) {
+      await sendText(from, "❌ Please enter a valid link starting with https://\n\nExample: *https://forms.gle/abc123*");
+      return true;
+    }
+    school.registrationLink = link;
+    await school.save();
+    if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+    await sendText(from, `✅ *Application link updated!*\n\nParents will now see:\n${link}`);
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, school);
+  }
+
+  if (state === "school_admin_update_email") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+    school.email = text.trim();
+    await school.save();
+    if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+    await sendText(from, `✅ *Email updated to:* ${school.email}`);
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, school);
+  }
+
+  if (state === "school_admin_update_website") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+    school.website = text.trim();
+    await school.save();
+    if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+    await sendText(from, `✅ *Website updated to:* ${school.website}`);
+    const { sendSchoolAccountMenu } = await import("./metaMenus.js");
+    return sendSchoolAccountMenu(from, school);
+  }
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE: run the MongoDB query and format results
 // ─────────────────────────────────────────────────────────────────────────────
