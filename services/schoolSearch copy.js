@@ -220,8 +220,12 @@ export async function handleSchoolAdminStates({ state, from, text, biz, saveBiz 
     const { sendSchoolAccountMenu } = await import("./metaMenus.js");
     return sendSchoolAccountMenu(from, school);
   }
+  return false;
+}
 
-  if (state === "school_admin_update_reg_link") {
+
+
+if (state === "school_admin_update_reg_link") {
     const phone  = from.replace(/\D+/g, "");
     const school = await SchoolProfile.findOne({ phone });
     if (!school) return false;
@@ -261,10 +265,6 @@ export async function handleSchoolAdminStates({ state, from, text, biz, saveBiz 
     const { sendSchoolAccountMenu } = await import("./metaMenus.js");
     return sendSchoolAccountMenu(from, school);
   }
-
-  return false;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE: run the MongoDB query and format results
 // ─────────────────────────────────────────────────────────────────────────────
