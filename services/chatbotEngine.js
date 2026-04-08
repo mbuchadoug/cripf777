@@ -5720,29 +5720,30 @@ if (a === "school_my_profile") {
   const facList       = (school.facilities || []).map(id => SCHOOL_FACILITIES.find(f => f.id === id)?.label || id).join("\n  ") || "None added";
   const extList       = (school.extramuralActivities || []).slice(0, 8).map(id => SCHOOL_EXTRAMURALACTIVITIES.find(e => e.id === id)?.label || id).join(", ") || "None added";
   const feeLine       = school.fees?.term1 ? `$${school.fees.term1} / $${school.fees.term2} / $${school.fees.term3} per term (USD)` : "Not set";
-  await sendText(from,
-`🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}
-📍 ${school.suburb || ""}, ${school.city}${school.address ? "\n🏠 " + school.address : ""}
-${school.principalName ? "👤 Principal: " + school.principalName : ""}
-📧 ${school.email || "No email set"}
-🌐 ${school.website || "No website set"}
-
-📗 *Type:* ${typeLabels[school.type] || school.type}
-📚 *Curriculum:* ${curricText}
-👫 *Gender:* ${genderLabels[school.gender] || school.gender}
-🏠 *Boarding:* ${boardingLabels[school.boarding] || school.boarding}
-📐 *Grades:* ${school.grades?.from || "ECD A"} – ${school.grades?.to || "Form 6"}
-
-💵 *Fees:* ${feeLine}
-
-🏊 *Facilities (${(school.facilities || []).length}):*
-  ${facList}
-
-🏃 *Extramural:* ${extList}
-
-📝 *Admissions:* ${school.admissionsOpen ? "🟢 Currently OPEN" : "🔴 Currently CLOSED"}
-🔗 *Apply link:* ${school.registrationLink || "Not set"}`
-  );
+const profileMsg = [
+    `🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}`,
+    `📍 ${school.suburb || ""}, ${school.city}${school.address ? "\n🏠 " + school.address : ""}`,
+    school.principalName ? `👤 Principal: ${school.principalName}` : "",
+    `📧 ${school.email || "No email set"}`,
+    `🌐 ${school.website || "No website set"}`,
+    "",
+    `📗 *Type:* ${typeLabels[school.type] || school.type}`,
+    `📚 *Curriculum:* ${curricText}`,
+    `👫 *Gender:* ${genderLabels[school.gender] || school.gender}`,
+    `🏠 *Boarding:* ${boardingLabels[school.boarding] || school.boarding}`,
+    `📐 *Grades:* ${school.grades?.from || "ECD A"} – ${school.grades?.to || "Form 6"}`,
+    "",
+    `💵 *Fees:* ${feeLine}`,
+    "",
+    `🏊 *Facilities (${(school.facilities || []).length}):*`,
+    `  ${facList}`,
+    "",
+    `🏃 *Extramural:* ${extList}`,
+    "",
+    `📝 *Admissions:* ${school.admissionsOpen ? "🟢 Currently OPEN" : "🔴 Currently CLOSED"}`,
+    `🔗 *Apply link:* ${school.registrationLink || "Not set"}`
+  ].filter(l => l !== null).join("\n");
+  await sendText(from, profileMsg);
   const { sendSchoolAccountMenu } = await import("./metaMenus.js");
   return sendSchoolAccountMenu(from, school);
 }
