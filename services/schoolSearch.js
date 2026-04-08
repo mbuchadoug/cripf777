@@ -510,6 +510,57 @@ export async function handleSchoolAdminStates({ state, from, text, biz, saveBiz 
     return sendSchoolAccountMenu(from, school);
   }
 
+// ── Brochure upload: school sends a PDF document ──────────────────────────
+  if (state === "school_admin_awaiting_brochure") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    // Allow cancellation
+    if ((text || "").trim().toLowerCase() === "cancel") {
+      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+      const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+      return sendSchoolMoreOptionsMenu(from, school);
+    }
+
+    // The actual PDF URL is set by the webhook route before calling handleIncomingMessage.
+    // It is stored on biz.sessionData.pendingDocumentUrl by the webhook handler.
+    const docUrl = biz?.sessionData?.pendingDocumentUrl;
+
+    if (!docUrl) {
+      await sendText(from,
+`📄 *Waiting for your PDF...*
+
+Please send your school brochure as a *PDF file* (tap the 📎 attachment icon in WhatsApp).
+
+Type *cancel* to go back.`
+      );
+      return true;
+    }
+
+    // Save the PDF URL on the school profile
+    school.profilePdfUrl = docUrl;
+    await school.save();
+
+    // Clear pending doc from session
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), pendingDocumentUrl: null };
+      biz.sessionState = "ready";
+      await saveBiz(biz);
+    }
+
+    await sendText(from,
+`✅ *Brochure uploaded successfully!*
+
+Parents who tap "📄 Download Profile" on your listing will now receive this PDF.
+
+You can upload a new one anytime from ⚙️ More Options.`
+    );
+
+    const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+    return sendSchoolMoreOptionsMenu(from, school);
+  }
+
   return false;
 }
 

@@ -944,12 +944,16 @@ export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
   const school = schoolDoc || await SchoolProfile.findOne({ phone });
   if (!school) return sendSchoolAccountMenu(to, null);
 
+ const docStatus = school.profilePdfUrl ? "✅ Brochure uploaded" : "📄 No brochure yet";
+  const regStatus = school.registrationLink ? "✅ Form link set" : "📝 No form link yet";
+
   return sendList(to, "⚙️ *School Settings*", [
-    { id: "school_toggle_admissions", title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions" },
-    { id: "school_update_reg_link",   title: "🔗 Update Application Link" },
-    { id: "school_update_email",      title: "📧 Update Email" },
-    { id: "school_update_website",    title: "🌐 Update Website" },
-    { id: "school_pay_plan",          title: "⬆️ Upgrade / Renew Plan" },
-    { id: "school_account",           title: "⬅ Back" }
+    { id: "school_toggle_admissions",  title: school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions" },
+    { id: "school_upload_brochure",    title: `📄 Upload School Brochure (${docStatus})` },
+    { id: "school_update_reg_link",    title: `🔗 Registration Form Link (${regStatus})` },
+    { id: "school_update_email",       title: "📧 Update Email" },
+    { id: "school_update_website",     title: "🌐 Update Website" },
+    { id: "school_pay_plan",           title: "⬆️ Upgrade / Renew Plan" },
+    { id: "school_account",            title: "⬅ Back" }
   ]);
 }

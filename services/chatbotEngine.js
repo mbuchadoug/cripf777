@@ -1758,9 +1758,10 @@ a.startsWith("sup_load_preset_") ||
       a === "school_my_reviews" ||
       a === "school_my_inquiries" ||
       a === "school_more_options" ||
-      a === "school_update_reg_link" ||
+   a === "school_update_reg_link" ||
       a === "school_update_email" ||
-      a === "school_update_website"
+      a === "school_update_website" ||
+      a === "school_upload_brochure"
     
     );
   // =========================
@@ -4528,7 +4529,8 @@ const supplierStates = [
   "school_reg_extramural",
   "school_search_city",
   "school_search_results",
-  "school_admin_update_fees"
+"school_admin_update_fees",
+  "school_admin_awaiting_brochure"
 ];
  
 // ── School text-input states (free-text WhatsApp replies during school flow) ─
@@ -4549,7 +4551,8 @@ const schoolAdminStates = [
   "school_admin_update_fees",
   "school_admin_update_reg_link",
   "school_admin_update_email",
-  "school_admin_update_website"
+  "school_admin_update_website",
+  "school_admin_awaiting_brochure"
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
@@ -5961,17 +5964,24 @@ if (a === "school_more_options") {
 
 // ── Update online application link ────────────────────────────────────────────
 if (a === "school_update_reg_link") {
+  const school = await SchoolProfile.findOne({ phone });
   if (biz) { biz.sessionState = "school_admin_update_reg_link"; await saveBizSafe(biz); }
+  const currentLink = school?.registrationLink
+    ? `\n\n_Current link:_ ${school.registrationLink}\n\nSend a new link to replace it, or type *cancel* to keep the current one.`
+    : "";
   return sendText(from,
-`🔗 *Online Application Link*
+`🔗 *Online Registration Form Link*
 
-Enter the link parents should use to apply online.
+Enter the URL of your school's online application form.${currentLink}
 
-Example:
-_https://forms.gle/abc123_
-_https://yourschool.ac.zw/apply_
+_Accepted formats:_
+- Google Form: _https://forms.gle/abc123_
+- School website: _https://stdavids.ac.zw/apply_
+- Any form builder link
 
-This link will be sent to parents who tap "Apply Online" when they find your school.`
+Parents tap "📝 Apply Online" and are sent directly to this link.
+
+Type *cancel* to go back.`
   );
 }
 
@@ -5987,6 +5997,17 @@ if (a === "school_update_website") {
   return sendText(from, "🌐 *Update Website*\n\nEnter your school's website:\n\n_e.g. www.stjohns.ac.zw_");
 }
  
+
+// ── Upload school brochure / prospectus ───────────────────────────────────────
+if (a === "school_upload_brochure") {
+  const school = await SchoolProfile.findOne({ phone });
+  if (!school) return sendMainMenu(from);
+  if (biz) { biz.sessionState = "school_admin_awaiting_brochure"; await saveBizSafe(biz); }
+  const currentStatus = school.profilePdfUrl
+    ? `✅ *You already have a brochure uploaded.*\n\nSend a new PDF to replace it, or type *cancel* to keep the current one.`
+    : `📄 *Upload Your School Brochure*\n\nSend your school prospectus or brochure as a *PDF file*.\n\nParents will be able to download it when they find your school.\n\nType *cancel* to go back.`;
+  return sendText(from, currentStatus);
+}
 // ── School plan selection / activation payment ────────────────────────────────
 if (a === "school_pay_plan") {
   const schoolPhone = from.replace(/\D+/g, "");

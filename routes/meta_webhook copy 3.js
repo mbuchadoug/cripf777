@@ -238,68 +238,11 @@ await sendText(from, "✅ Logo updated successfully.");
 // ===============================
 // 🚫 DOCUMENTS DISABLED (PASTE-ONLY MODE)
 // ===============================
-// ===============================
-// 📄 DOCUMENT UPLOAD (school brochure PDF)
-// ===============================
 if (msg.type === "document") {
   const from = msg.from;
-  const mimeType = msg.document?.mime_type || "";
-  const mediaId  = msg.document?.id;
-
-  // Only handle PDFs — everything else still blocked
-  if (mimeType !== "application/pdf" || !mediaId) {
-    await sendText(from, "⚠️ Please send your school brochure as a *PDF file*.");
-    return;
-  }
-
-  const biz = await getBizForPhone(from);
-
-  // Only accept when school admin is in brochure-upload state
-  if (!biz || biz.sessionState !== "school_admin_awaiting_brochure") {
-    return; // ignore PDFs outside of that flow
-  }
-
-  try {
-    // 1. Get the Meta CDN download URL
-    const mediaUrl = await getMetaMediaUrl(mediaId);
-    if (!mediaUrl) throw new Error("No media URL returned from Meta");
-
-    // 2. Download the PDF binary
-    const token = process.env.META_ACCESS_TOKEN;
-    const fileRes = await axios.get(mediaUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-      responseType: "arraybuffer"
-    });
-    const pdfBuffer = Buffer.from(fileRes.data);
-
-    // 3. Upload to Cloudinary as a raw file (same account used for logos)
-    const cloudinary = (await import("cloudinary")).v2;
-    const pdfUrl = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: "raw",
-          folder:        "school_brochures",
-          format:        "pdf",
-          public_id:     `brochure_${from}_${Date.now()}`
-        },
-        (err, result) => err ? reject(err) : resolve(result.secure_url)
-      );
-      stream.end(pdfBuffer);
-    });
-
-    // 4. Store the URL in biz session so the state handler can read it
-    biz.sessionData = { ...(biz.sessionData || {}), pendingDocumentUrl: pdfUrl };
-    await biz.save();
-
-    // 5. Route through the engine — state handler picks up pendingDocumentUrl
-    await handleIncomingMessage({ from, action: "__document_uploaded__" });
-
-  } catch (err) {
-    console.error("[School Brochure Upload] Error:", err.message);
-    await sendText(from, "❌ Failed to upload your PDF. Please try again or send a smaller file.");
-  }
-
-  return; // 🚫 STOP - do not continue to text handling
+  // Optional: if you want a friendly message:
+  // await sendText(from, "📄 File uploads are disabled. Please use Paste list to add items.");
+  return;
 }
 
 
