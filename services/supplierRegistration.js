@@ -119,21 +119,22 @@ export async function startSupplierRegistration(from, biz) {
     // incomplete suppliers continue below
   }
 
+  // ── No business object yet: do NOT touch biz here ─────────────────────────
   if (!biz) {
     const UserSession = (await import("../models/userSession.js")).default;
 
     await UserSession.findOneAndUpdate(
       { phone },
-      { phone, supplierRegState: "supplier_reg_name", supplierRegData: {} },
+      {
+        phone,
+        supplierRegState: "supplier_reg_listing_type",
+        supplierRegData: {}
+      },
       { upsert: true }
     );
 
- // New user with no biz — ask what type of listing they want first
-    biz.sessionState = "supplier_reg_listing_type";
-    biz.sessionData  = { supplierReg: {} };
-    await (await import("./bizHelpers.js")).saveBizSafe(biz);
-
-    return sendList(from, 
+    return sendList(
+      from,
 `🏪 *List on ZimQuote*
 
 What would you like to list?`,
@@ -145,13 +146,16 @@ What would you like to list?`,
     );
   }
 
+  // ── Existing/new biz: keep registration data container on biz ────────────
   biz.sessionState = "supplier_reg_listing_type";
-  biz.sessionData  = { supplierReg: {} };
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
 
   const { saveBizSafe } = await import("./bizHelpers.js");
   await saveBizSafe(biz);
 
-  return sendList(from,
+  return sendList(
+    from,
 `🏪 *List on ZimQuote*
 
 What would you like to list?`,

@@ -5611,14 +5611,14 @@ if (a === "register_supplier") {
 
   // No supplier profile yet - create pending business and start registration
   if (!biz) {
-  const newBiz = await Business.create({
+ const newBiz = await Business.create({
   name: "pending_supplier_" + phone,
   currency: "USD",
   package: "trial",
   subscriptionStatus: "inactive",
-  isSupplier: false,         // ← will become true after payment
-  sessionState: "supplier_reg_name",
-  sessionData: {},
+  isSupplier: false,
+  sessionState: "supplier_reg_listing_type",
+  sessionData: { supplierReg: {} },
   ownerPhone: phone
 });
 
