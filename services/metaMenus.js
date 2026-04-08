@@ -108,11 +108,13 @@ export async function sendMainMenu(to) {
   const supplier = await SupplierProfile.findOne({ phone });
 
   // ── Case 0: School admin — always takes priority ──────────────────────────
-  const school = await SchoolProfile.findOne({ phone });
+// ── Case 0: School admin — always takes priority ──────────────────────────
+const school = await SchoolProfile.findOne({ phone });
   if (school) {
-    return sendSchoolAccountMenu(to, school);
+    // Dynamic import avoids hoisting issues
+    const { sendSchoolAccountMenu: _schoolMenu } = await import("./metaMenus.js");
+    return _schoolMenu(to, school);
   }
-
   // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
 if (supplier?.active) {
     const items = [
