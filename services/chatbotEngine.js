@@ -4558,7 +4558,14 @@ const schoolAdminStates = [
 const shortcodeBlockedStates = supplierStates.filter(s => 
   s !== "supplier_search_city" && 
   s !== "supplier_order_product" &&
-  s !== "supplier_order_enter_price"
+  s !== "supplier_order_enter_price" &&
+  // ── School search states must NOT block shortcode search ──────────────────
+  // When sessionState is school_search_city or school_search_results, the user
+  // is a parent mid-search. Typed shortcuts like "find primary borrowdale"
+  // must still fire. These states belong in supplierStates for the state
+  // machine but must be excluded here so the shortcode gate passes.
+  s !== "school_search_city" &&
+  s !== "school_search_results"
   // supplier_order_address: intentionally blocked - address free-text must
   // never be intercepted by shortcode search, it belongs to the address handler
   // supplier_order_picking: intentionally blocked - NxQ input belongs to the catalogue parser

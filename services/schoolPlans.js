@@ -40,7 +40,7 @@ export const SCHOOL_SUBURB_TO_CITY = {
   "nketa": "Bulawayo", "iminyela": "Bulawayo",
   "mabutweni": "Bulawayo", "makhandeni": "Bulawayo",
   "waterford": "Bulawayo", "whitestone": "Bulawayo",
-  "ascot": "Bulawayo",
+ "ascot bulawayo": "Bulawayo",
   // Mutare
 "sakubva": "Mutare", "dangamvura": "Mutare", "chikanga": "Mutare",
   "hobhouse": "Mutare", "yeovil": "Mutare", "palmerston": "Mutare",
@@ -55,8 +55,6 @@ export const SCHOOL_SUBURB_TO_CITY = {
   "chinhoyi cbd": "Chinhoyi", "hunyani": "Chinhoyi",
   // Bindura
   "chipadze": "Bindura",
-  // Masvingo
-  "mucheke": "Masvingo", "rujeko": "Masvingo", "eastvale": "Masvingo"
 };
 
 // ── School facilities (shown as multi-select checklist during registration) ───
