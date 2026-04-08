@@ -6816,49 +6816,19 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   const profileType = a === "reg_type_service" ? "service" : "product";
 
   biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-  biz.sessionData.supplierReg.profileType = profileType;
 
-  // FIRST make sure business name is captured before category flow.
-  // This is what was missing and causing "Registration data missing" at confirm.
-  if (!biz.sessionData.supplierReg.businessName) {
-    biz.sessionState = "supplier_reg_name";
-    await saveBizSafe(biz);
+  // reset broken/incomplete reg flow and force business name first
+  biz.sessionData.supplierReg = {
+    profileType
+  };
 
-    return sendText(
-      from,
-      `🏪 *What is your business name?*\n\nType your business/shop/company name.\n\nExample: *Mudziyashe Hardware*\n\n_Type *cancel* at any time to stop._`
-    );
-  }
-
-  // If business name already exists, continue to category flow
-  if (profileType === "service") {
-    biz.sessionState = "supplier_reg_collar";
-    await saveBizSafe(biz);
-
-    return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
-      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
-      { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
-      { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
-    ]);
-  }
-
-  biz.sessionState = "supplier_reg_category";
+  biz.sessionState = "supplier_reg_name";
   await saveBizSafe(biz);
 
-  const filteredCategories = getSupplierCategoriesForType(profileType);
-
-  const categoryRows = [
-    ...filteredCategories.slice(0, 9).map(c => ({
-      id: `sup_cat_${c.id}`,
-      title: c.label
-    })),
-    ...(filteredCategories.length > 9
-      ? [{ id: "sup_cat_more", title: "➕ More Categories" }]
-      : [])
-  ];
-
-  return sendList(from, "🗂 What product do you mainly offer?", categoryRows);
+  return sendText(
+    from,
+    `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`
+  );
 }
 
 
