@@ -100,7 +100,58 @@ export const SCHOOL_EXTRAMURALACTIVITIES = [
   { id: "scouts",        label: "⚜️ Scouts / Guides" },
   { id: "environmental", label: "🌿 Environmental Club" },
   { id: "coding",        label: "💻 Coding Club" },
-  { id: "science_club",  label: "🔬 Science Club" }
+{ id: "science_club",  label: "🔬 Science Club" }
+];
+
+// ── Facility quick-select bundles ─────────────────────────────────────────────
+export const SCHOOL_FACILITY_BUNDLES = [
+  {
+    id:  "fac_all",
+    label: "⭐ Select All Facilities",
+    ids: ["swimming_pool","science_lab","computer_lab","library","sports_fields",
+          "tennis_courts","basketball_court","gymnasium","auditorium","chapel",
+          "boarding_house","cafeteria","transport","wifi","art_room",
+          "music_room","drama_studio","home_economics","agriculture","medical_centre"]
+  },
+  {
+    id:  "fac_private",
+    label: "🏫 Typical Private School",
+    ids: ["swimming_pool","science_lab","computer_lab","library",
+          "sports_fields","auditorium","transport","wifi"]
+  },
+  {
+    id:  "fac_none",
+    label: "⏭ None / Skip",
+    ids: []
+  }
+];
+
+// ── Extramural quick-select bundles ───────────────────────────────────────────
+export const SCHOOL_EXTRAMURAL_BUNDLES = [
+  {
+    id:  "ext_all",
+    label: "⭐ All Sports & Activities",
+    ids: ["football","netball","cricket","athletics","swimming","tennis",
+          "basketball","volleyball","chess","debating","music","drama",
+          "dance","art","scouts","environmental","coding","science_club"]
+  },
+  {
+    id:  "ext_sports",
+    label: "⚽ All Sports Only",
+    ids: ["football","netball","cricket","athletics","swimming",
+          "tennis","basketball","volleyball"]
+  },
+  {
+    id:  "ext_arts",
+    label: "🎭 Arts & Clubs Only",
+    ids: ["chess","debating","music","drama","dance","art",
+          "scouts","environmental","coding","science_club"]
+  },
+  {
+    id:  "ext_none",
+    label: "⏭ None / Skip",
+    ids: []
+  }
 ];
 
 // ── Curriculum options ────────────────────────────────────────────────────────
