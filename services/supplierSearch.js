@@ -805,6 +805,7 @@ const SUBURB_TO_CITY = {
   "cbd":"Harare",
   "kuwadzana": "Harare",
   "dzivarasekwa": "Harare",
+ "dzivarasekwa extension": "Harare",
   "hatfield": "Harare",
   "greendale": "Harare",
   "msasa": "Harare",

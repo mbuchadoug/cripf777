@@ -7,6 +7,7 @@ import { sendText, sendButtons, sendList } from "./metaSender.js";
 import {
   SCHOOL_CITIES, SCHOOL_TYPES, SCHOOL_CURRICULA, SCHOOL_GENDERS,
   SCHOOL_BOARDING, SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES,
+  SCHOOL_FACILITY_BUNDLES, SCHOOL_EXTRAMURAL_BUNDLES,
   SCHOOL_PLANS, SCHOOL_GRADE_FROM, SCHOOL_GRADE_TO,
   computeSchoolFeeRange
 } from "./schoolPlans.js";
@@ -138,21 +139,10 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     await saveBiz(biz);
 
   // Page 0, PAGE_SIZE=7: worst case is 7 items + More + Done = 9. Middle pages: 7 + Prev + More + Done = 10. Safe.
-    const facPage = 0;
-    reg.facilitiesPage = 0;
-    const FAC_PAGE_SIZE = 7;
-    const facSlice = SCHOOL_FACILITIES.slice(0, FAC_PAGE_SIZE);
-    const facRows = facSlice.map(f => ({
-      id:    `school_reg_fac_${f.id}`,
-      title: f.label
-    }));
-    facRows.push({ id: "school_reg_fac_page_1", title: "➡ More Facilities" });
-    facRows.push({ id: "school_reg_fac_done",   title: "✅ Done - Save Facilities" });
-
-    return sendList(from,
-      `🏊 *Step 10 of 12* - Select facilities *${reg.schoolName}* has.\n\n_Tap each one, then Done when finished._`,
-      facRows
-    );
+  reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
   }
 
   // ── Step 10: Facilities - handled via actions
@@ -279,23 +269,66 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
   }
 
   // ── Curriculum multi-select ───────────────────────────────────────────────
+// ── Curriculum multi-select ───────────────────────────────────────────────
+  // Quick-select actions: school_reg_cur_quick_cambridge / _zimsec / _both
+  if (a === "school_reg_cur_quick_cambridge") {
+    reg.curriculum = ["cambridge"];
+    biz.sessionState = "school_reg_gender";
+    await saveBiz(biz);
+    await sendText(from, "✅ Curriculum set to *Cambridge (IGCSE/A-Level)*.");
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
+      ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
+    ]);
+  }
+
+  if (a === "school_reg_cur_quick_zimsec") {
+    reg.curriculum = ["zimsec"];
+    biz.sessionState = "school_reg_gender";
+    await saveBiz(biz);
+    await sendText(from, "✅ Curriculum set to *ZIMSEC*.");
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
+      ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
+    ]);
+  }
+
+  if (a === "school_reg_cur_quick_both") {
+    reg.curriculum = ["zimsec", "cambridge"];
+    biz.sessionState = "school_reg_gender";
+    await saveBiz(biz);
+    await sendText(from, "✅ Curriculum set to *ZIMSEC + Cambridge*.");
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
+      ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
+    ]);
+  }
+
   if (a.startsWith("school_reg_cur_") && a !== "school_reg_cur_done") {
     const curId = a.replace("school_reg_cur_", "");
-    reg.curriculum     = reg.curriculum || [];
+    reg.curriculum = reg.curriculum || [];
     if (!reg.curriculum.includes(curId)) {
       reg.curriculum.push(curId);
     } else {
-      reg.curriculum = reg.curriculum.filter(c => c !== curId); // toggle off
+      reg.curriculum = reg.curriculum.filter(c => c !== curId);
     }
     await saveBiz(biz);
 
     const selected = reg.curriculum.map(id => SCHOOL_CURRICULA.find(c => c.id === id)?.label || id).join(", ") || "None yet";
-    const rows     = SCHOOL_CURRICULA.map(c => ({
+    const rows = SCHOOL_CURRICULA.map(c => ({
       id:    `school_reg_cur_${c.id}`,
       title: (reg.curriculum.includes(c.id) ? "✅ " : "") + c.label
     }));
     rows.push({ id: "school_reg_cur_done", title: "✅ Done selecting" });
-    return sendList(from, `📚 Curriculum selected: *${selected}*\n\nTap more or tap Done:`, rows);
+    return sendList(from, `📚 Selected: *${selected}*\n\nTap more or Done:`, rows);
+  }
+
+  if (a === "school_reg_cur_done") {
+    if (!reg.curriculum?.length) {
+      return _sendCurriculumStep(from, reg.schoolName);
+    }
+    biz.sessionState = "school_reg_gender";
+    await saveBiz(biz);
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
+      ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
+    ]);
   }
 
   if (a === "school_reg_cur_done") {
@@ -336,7 +369,31 @@ Example: *800, 800, 750*
 Or one number if all terms are equal: *800*`
     );
   }
-
+// ── Facilities bundle quick-select ────────────────────────────────────────
+  if (a.startsWith("school_reg_fac_bundle_")) {
+    const bundleId = a.replace("school_reg_fac_bundle_", "");
+    const bundle   = SCHOOL_FACILITY_BUNDLES.find(b => b.id === bundleId);
+    if (!bundle) return false;
+    reg.facilities     = [...bundle.ids];
+    reg.facilitiesPage = 0;
+    await saveBiz(biz);
+    if (bundle.ids.length === 0) {
+      // Skip — go straight to extramural bundles
+      biz.sessionState = "school_reg_extramural";
+      reg.extramuralActivities = [];
+      reg.extramuralPage       = 0;
+      await saveBiz(biz);
+      return _sendExtBundles(from, reg.schoolName);
+    }
+    const count = bundle.ids.length;
+    return sendList(from,
+      `✅ *${count} facilities selected!* Confirm or adjust individually:`,
+      [
+        { id: "school_reg_fac_done",        title: "✅ Confirm & Continue" },
+        { id: "school_reg_fac_page_0",      title: "🔧 Adjust Manually" }
+      ]
+    );
+  }
   // ── Facilities multi-select ───────────────────────────────────────────────
   if (a.startsWith("school_reg_fac_") && a !== "school_reg_fac_done") {
     const facId        = a.replace("school_reg_fac_", "");
@@ -386,23 +443,41 @@ Or one number if all terms are equal: *800*`
     );
   }
 
-  if (a === "school_reg_fac_done") {
-    biz.sessionState   = "school_reg_extramural";
+if (a === "school_reg_fac_done") {
+    biz.sessionState         = "school_reg_extramural";
+    reg.extramuralPage       = 0;
+    reg.extramuralActivities = reg.extramuralActivities || [];
     await saveBiz(biz);
-
- reg.extramuralPage = 0;
-    await saveBiz(biz);
-    const EXT_PAGE_SIZE = 7;
-    const extSlice = SCHOOL_EXTRAMURALACTIVITIES.slice(0, EXT_PAGE_SIZE);
-    const extRows = extSlice.map(e => ({ id: `school_reg_ext_${e.id}`, title: e.label }));
-    extRows.push({ id: "school_reg_ext_page_1", title: "➡ More Activities" });
-    extRows.push({ id: "school_reg_ext_done",   title: "✅ Done - Save Activities" });
-    return sendList(from,
-      `🏃 *Step 11 of 12* - Select extramural activities *${reg.schoolName}* offers:\n\n_Page 1 of 3. Tap Done when finished._`,
-      extRows
-    );
+    return _sendExtBundles(from, reg.schoolName);
   }
 
+
+  // ── Extramural bundle quick-select ────────────────────────────────────────
+  if (a.startsWith("school_reg_ext_bundle_")) {
+    const bundleId = a.replace("school_reg_ext_bundle_", "");
+    const bundle   = SCHOOL_EXTRAMURAL_BUNDLES.find(b => b.id === bundleId);
+    if (!bundle) return false;
+    reg.extramuralActivities = [...bundle.ids];
+    reg.extramuralPage       = 0;
+    await saveBiz(biz);
+    if (bundle.ids.length === 0) {
+      // Skip — go to principal step
+      biz.sessionState = "school_reg_principal";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: `👤 *Step 12 of 12* - What is the name of the school principal?\n\n_e.g. Mrs J. Moyo_`,
+        buttons: [{ id: "school_reg_principal_skip", title: "⏭ Skip" }]
+      });
+    }
+    const count = bundle.ids.length;
+    return sendList(from,
+      `✅ *${count} activities selected!* Confirm or adjust individually:`,
+      [
+        { id: "school_reg_ext_done",    title: "✅ Confirm & Continue" },
+        { id: "school_reg_ext_page_0",  title: "🔧 Adjust Manually" }
+      ]
+    );
+  }
   // ── Extramural multi-select ───────────────────────────────────────────────
   if (a.startsWith("school_reg_ext_") && a !== "school_reg_ext_done") {
     const extId             = a.replace("school_reg_ext_", "");
@@ -527,6 +602,71 @@ _e.g. 0771234567_`
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIVATE: send curriculum selection step
+// ─────────────────────────────────────────────────────────────────────────────
+function _sendCurriculumStep(from, schoolName) {
+  // WhatsApp limit: 10 rows.
+  // 3 quick-selects + 4 full SCHOOL_CURRICULA options + Done = 8. Safe.
+  return sendList(from,
+    `📚 *Step 6 of 12* - Which curriculum does *${schoolName}* offer?\n\n_Most private schools use Cambridge. Tap one quick option or select manually below:_`,
+    [
+      { id: "school_reg_cur_quick_cambridge", title: "🎓 Cambridge only" },
+      { id: "school_reg_cur_quick_zimsec",    title: "📘 ZIMSEC only" },
+      { id: "school_reg_cur_quick_both",      title: "📚 Both ZIMSEC + Cambridge" },
+      ...SCHOOL_CURRICULA.map(c => ({ id: `school_reg_cur_${c.id}`, title: c.label })),
+      { id: "school_reg_cur_done",            title: "✅ Done selecting" }
+    ]
+  );
+}
+
+
+// ── Private: curriculum step with quick-selects ───────────────────────────────
+function _sendCurriculumStep(from, schoolName) {
+  // 3 quick-selects + 4 manual options + Done = 8 rows. Under WhatsApp limit of 10.
+  return sendList(from,
+    `📚 *Step 6 of 12* - Which curriculum does *${schoolName}* offer?\n\n_Most private schools use Cambridge — tap one option below:_`,
+    [
+      { id: "school_reg_cur_cambridge", title: "🎓 Cambridge only"         },
+      { id: "school_reg_cur_zimsec",    title: "📘 ZIMSEC only"            },
+      { id: "school_reg_cur_both",      title: "📚 ZIMSEC + Cambridge"     },
+      { id: "school_reg_cur_ib",        title: "🌍 IB (International Baccalaureate)" },
+      { id: "school_reg_cur_done",      title: "✅ Done selecting"         }
+    ]
+  );
+}
+
+// ── Private: facilities bundle step ──────────────────────────────────────────
+function _sendFacilityBundles(from, schoolName) {
+  // 3 bundles + Choose manually = 4 rows. Well under limit.
+  return sendList(from,
+    `🏊 *Step 10 of 12* - What facilities does *${schoolName}* have?\n\n_Tap a quick option or choose individually:_`,
+    [
+      { id: "school_reg_fac_bundle_fac_all",     title: "⭐ Select All Facilities"    },
+      { id: "school_reg_fac_bundle_fac_private",  title: "🏫 Typical Private School"  },
+      { id: "school_reg_fac_bundle_fac_none",     title: "⏭ None / Skip"             },
+      { id: "school_reg_fac_page_0",              title: "🔧 Choose Manually"         }
+    ]
+  );
+}
+
+// ── Private: extramural bundle step ──────────────────────────────────────────
+function _sendExtBundles(from, schoolName) {
+  // 4 bundles + Choose manually = 5 rows. Well under limit.
+  return sendList(from,
+    `🏃 *Step 11 of 12* - Extramural activities at *${schoolName}*?\n\n_Tap a quick option or choose individually:_`,
+    [
+      { id: "school_reg_ext_bundle_ext_all",    title: "⭐ All Sports & Activities" },
+      { id: "school_reg_ext_bundle_ext_sports", title: "⚽ All Sports Only"         },
+      { id: "school_reg_ext_bundle_ext_arts",   title: "🎭 Arts & Clubs Only"       },
+      { id: "school_reg_ext_bundle_ext_none",   title: "⏭ None / Skip"             },
+      { id: "school_reg_ext_page_0",            title: "🔧 Choose Manually"         }
+    ]
+  );
+}
+
 
 async function _sendSchoolConfirmPrompt(from, reg) {
   const typeLabels   = { primary: "Primary (ECD–Grade 7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
