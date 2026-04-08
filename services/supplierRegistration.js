@@ -310,27 +310,46 @@ You can also skip this step.`,
 
 
 
-  if (state === "supplier_reg_website") {
-    const website = text.trim();
+if (state === "supplier_reg_website") {
+  const website = text.trim();
 
-    if (!website || website.length < 2) {
-      await sendText(from, "❌ Please enter a valid website/link, or tap Skip.");
-      return true;
-    }
+  if (!website || website.length < 2) {
+    await sendText(from, "❌ Please enter a valid website/link, or tap Skip.");
+    return true;
+  }
 
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.website = website;
-    biz.sessionState = "supplier_reg_type";
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+  biz.sessionData.supplierReg.website = website;
+
+  const profileType = biz.sessionData.supplierReg.profileType || "product";
+
+  if (profileType === "service") {
+    biz.sessionState = "supplier_reg_collar";
     await saveBiz(biz);
 
-    return sendButtons(from, {
-      text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
-      buttons: [
-        { id: "reg_type_product", title: "📦 I Sell Products" },
-        { id: "reg_type_service", title: "🧰 I Offer Services" }
-      ]
-    });
+    return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
+      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
+      { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
+      { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
+    ]);
   }
+
+  biz.sessionState = "supplier_reg_category";
+  await saveBiz(biz);
+
+  return sendList(from, "🗂 What product do you mainly offer?", [
+    ...SUPPLIER_CATEGORIES
+      .filter(c => Array.isArray(c.types) ? c.types.includes(profileType) : true)
+      .slice(0, 9)
+      .map(c => ({ id: `sup_cat_${c.id}`, title: c.label })),
+    ...(
+      SUPPLIER_CATEGORIES.filter(c => Array.isArray(c.types) ? c.types.includes(profileType) : true).length > 9
+        ? [{ id: "sup_cat_more", title: "➕ More Categories" }]
+        : []
+    )
+  ]);
+}
 
   // ── Step 3: Products ───────────────────────────────────
 if (state === "supplier_reg_products") {

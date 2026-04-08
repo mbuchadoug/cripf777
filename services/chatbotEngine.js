@@ -6819,9 +6819,20 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.profileType = profileType;
 
-  // ── Services: show collar group picker first, then category ──────────────
+  // FIRST make sure business name is captured before category flow.
+  // This is what was missing and causing "Registration data missing" at confirm.
+  if (!biz.sessionData.supplierReg.businessName) {
+    biz.sessionState = "supplier_reg_name";
+    await saveBizSafe(biz);
+
+    return sendText(
+      from,
+      `🏪 *What is your business name?*\n\nType your business/shop/company name.\n\nExample: *Mudziyashe Hardware*\n\n_Type *cancel* at any time to stop._`
+    );
+  }
+
+  // If business name already exists, continue to category flow
   if (profileType === "service") {
-    const { SERVICE_COLLAR_GROUPS } = await import("./supplierPlans.js");
     biz.sessionState = "supplier_reg_collar";
     await saveBizSafe(biz);
 
@@ -6832,7 +6843,6 @@ if (a === "reg_type_product" || a === "reg_type_service") {
     ]);
   }
 
-  // ── Products: go straight to category as before ───────────────────────────
   biz.sessionState = "supplier_reg_category";
   await saveBizSafe(biz);
 
@@ -7534,14 +7544,23 @@ if (a === "sup_addr_skip") {
 
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.address = "";
-  biz.sessionState = "supplier_reg_type";
+  biz.sessionState = "supplier_reg_contact_details";
   await saveBizSafe(biz);
 
   return sendButtons(from, {
-    text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
+    text:
+`📞 *Contact Details (Optional)*
+
+Enter any extra contact details buyers should see.
+
+Examples:
+_0772123456 / 0712345678_
+_Call or WhatsApp 0772123456_
+_sales@mybusiness.co.zw_
+
+You can also skip this step.`,
     buttons: [
-      { id: "reg_type_product", title: "📦 I Sell Products" },
-   { id: "reg_type_service", title: "🧰 I Offer Services" }
+      { id: "sup_contact_skip", title: "⏭ Skip Contact Details" }
     ]
   });
 }
@@ -7575,18 +7594,39 @@ You can also skip this step.`,
 if (a === "sup_website_skip") {
   if (!biz) return sendMainMenu(from);
 
+  biz.sessionData = biz.sessionData || {};
   biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
   biz.sessionData.supplierReg.website = "";
-  biz.sessionState = "supplier_reg_type";
+
+  const profileType = biz.sessionData.supplierReg.profileType || "product";
+
+  if (profileType === "service") {
+    biz.sessionState = "supplier_reg_collar";
+    await saveBizSafe(biz);
+
+    return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
+      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
+      { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
+      { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
+    ]);
+  }
+
+  biz.sessionState = "supplier_reg_category";
   await saveBizSafe(biz);
 
-  return sendButtons(from, {
-    text: "📦 *What type of business are you?*\n\nThis helps buyers find the right kind of supplier.",
-    buttons: [
-      { id: "reg_type_product", title: "📦 I Sell Products" },
-      { id: "reg_type_service", title: "🧰 I Offer Services" }
-    ]
-  });
+  const filteredCategories = getSupplierCategoriesForType(profileType);
+
+  const categoryRows = [
+    ...filteredCategories.slice(0, 9).map(c => ({
+      id: `sup_cat_${c.id}`,
+      title: c.label
+    })),
+    ...(filteredCategories.length > 9
+      ? [{ id: "sup_cat_more", title: "➕ More Categories" }]
+      : [])
+  ];
+
+  return sendList(from, "🗂 What product do you mainly offer?", categoryRows);
 }
 
 // ── Supplier requests catalogue upload help ───────────────────────────────────
