@@ -124,16 +124,34 @@ function _findSchoolCurriculum(text = "") {
   return null;
 }
 
+// schoolSearch.js — replace the entire _parseSchoolShortcodeSearch function
+
+const SCHOOL_PARSE_TRIGGERS = [
+  "find school", "find schools", "find a school",
+  "find primary", "find secondary", "find combined",
+  "find preschool", "find ecd", "find kindergarten",
+  "find boarding", "find day school",
+  "find girls school", "find boys school", "find mixed school",
+  "find budget school", "find affordable school", "find cheap school", "find premium school",
+  "find cambridge", "find zimsec",
+  "school in", "schools in", "primary school in", "secondary school in",
+  "look for school", "search school"
+];
+
 function _parseSchoolShortcodeSearch(text = "") {
   const raw = String(text || "").trim();
   const normalized = _normSchoolText(raw);
 
-  if (
-    !normalized.startsWith("find school") &&
-    !normalized.startsWith("find schools")
-  ) {
-    return null;
-  }
+  // Accept if it starts with any known trigger phrase OR contains "school" + location hint
+  const isSchoolTrigger =
+    SCHOOL_PARSE_TRIGGERS.some(p => normalized.startsWith(p) || normalized.includes(p)) ||
+    (normalized.includes("school") && (
+      _findSchoolCity(normalized) ||
+      _findSchoolSuburb(normalized) ||
+      Object.keys(SCHOOL_TYPE_ALIASES).some(k => _includesWholePhrase(normalized, k))
+    ));
+
+  if (!isSchoolTrigger) return null;
 
   const search = {
     city: null,
@@ -144,65 +162,62 @@ function _parseSchoolShortcodeSearch(text = "") {
     curriculum: null,
     gender: null,
     boarding: null,
+    keyword: null,
     admissionsOpen: null,
     page: 0
   };
 
+  // Suburb first (more specific)
   const suburbMatch = _findSchoolSuburb(normalized);
   if (suburbMatch) {
     search.suburb = suburbMatch.suburb;
     if (suburbMatch.city) search.city = suburbMatch.city;
   }
 
+  // City
   const cityMatch = _findSchoolCity(normalized);
   if (cityMatch && !search.city) search.city = cityMatch;
 
+  // Type
   for (const [word, value] of Object.entries(SCHOOL_TYPE_ALIASES)) {
-    if (_includesWholePhrase(normalized, word)) {
-      search.type = value;
-      break;
-    }
+    if (_includesWholePhrase(normalized, word)) { search.type = value; break; }
   }
 
+  // Fee range
   for (const [word, value] of Object.entries(SCHOOL_FEE_ALIASES)) {
-    if (_includesWholePhrase(normalized, word)) {
-      search.feeRange = value;
-      break;
-    }
+    if (_includesWholePhrase(normalized, word)) { search.feeRange = value; break; }
   }
 
+  // Facility
   search.facility = _findSchoolFacility(normalized);
+
+  // Curriculum
   search.curriculum = _findSchoolCurriculum(normalized);
 
+  // Gender
   for (const [word, value] of Object.entries(SCHOOL_GENDER_ALIASES)) {
-    if (_includesWholePhrase(normalized, word)) {
-      search.gender = value;
-      break;
-    }
+    if (_includesWholePhrase(normalized, word)) { search.gender = value; break; }
   }
 
+  // Boarding
   for (const [word, value] of Object.entries(SCHOOL_BOARDING_ALIASES)) {
-    if (_includesWholePhrase(normalized, word)) {
-      search.boarding = value;
-      break;
-    }
+    if (_includesWholePhrase(normalized, word)) { search.boarding = value; break; }
   }
 
-  if (_includesWholePhrase(normalized, "admissions open") || _includesWholePhrase(normalized, "open admissions")) {
+  // Grade/level
+  if (_includesWholePhrase(normalized, "grade 1") || _includesWholePhrase(normalized, "form 1")) search.type = "primary";
+  if (_includesWholePhrase(normalized, "o level") || _includesWholePhrase(normalized, "a level")) search.type = "secondary";
+
+  // Admissions
+  if (_includesWholePhrase(normalized, "admissions open") || _includesWholePhrase(normalized, "open admissions") || _includesWholePhrase(normalized, "accepting")) {
     search.admissionsOpen = true;
   } else if (_includesWholePhrase(normalized, "admissions closed") || _includesWholePhrase(normalized, "closed admissions")) {
     search.admissionsOpen = false;
   }
 
   const hasFilters = Boolean(
-    search.city ||
-    search.suburb ||
-    search.type ||
-    search.feeRange ||
-    search.facility ||
-    search.curriculum ||
-    search.gender ||
-    search.boarding ||
+    search.city || search.suburb || search.type || search.feeRange ||
+    search.facility || search.curriculum || search.gender || search.boarding ||
     typeof search.admissionsOpen === "boolean"
   );
 
@@ -247,17 +262,20 @@ export async function startSchoolSearch(from, biz, saveBiz) {
   searchCityRows.push({ id: "school_search_city_all",  title: "🌍 All Cities" });
 
  return sendList(
-  from,
-  `🏫 *Find a School in Zimbabwe*
+    from,
+    `🏫 *Find a School in Zimbabwe*
 
-Which city?
+Which city? Or type a shortcut:
 
-You can also type shortcuts like:
-_find school harare_
-_find school primary harare_
-_find school budget pool harare_`,
-  searchCityRows
-);
+_find primary borrowdale_
+_find secondary glen view_
+_find boarding school bulawayo_
+_find cambridge girls harare_
+_find budget primary kuwadzana_
+_find school with pool highlands_
+_find schools admissions open_`,
+    searchCityRows
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

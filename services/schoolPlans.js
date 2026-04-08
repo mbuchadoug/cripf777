@@ -22,21 +22,41 @@ export const SCHOOL_SUBURB_TO_CITY = {
   "budiriro": "Harare", "kuwadzana": "Harare", "mabelreign": "Harare",
   "glen norah": "Harare", "dzivarasekwa": "Harare", "tafara": "Harare",
   "mabvuku": "Harare", "norton": "Harare", "kambuzuma": "Harare",
+  "epworth": "Harare", "belvedere": "Harare", "westgate": "Harare",
+  "sunridge": "Harare", "whitecliff": "Harare", "prospect": "Harare",
+  "mbare west": "Harare", "houghton park": "Harare", "tynwald": "Harare",
+  "marlborough": "Harare", "borrowdale brooke": "Harare",
+  "greystone park": "Harare", "chishawasha": "Harare",
+  "mount hampden": "Harare", "ruwa east": "Harare",
+  "zengeza": "Harare", "seke": "Harare",
   // Bulawayo
   "nkulumane": "Bulawayo", "luveve": "Bulawayo", "entumbane": "Bulawayo",
   "njube": "Bulawayo", "mpopoma": "Bulawayo", "lobengula": "Bulawayo",
   "makokoba": "Bulawayo", "tshabalala": "Bulawayo", "pumula": "Bulawayo",
   "cowdray park": "Bulawayo", "magwegwe": "Bulawayo", "hillside": "Bulawayo",
-  "white city": "Bulawayo", "suburbs": "Bulawayo",
+ "white city": "Bulawayo", "suburbs": "Bulawayo",
+  "famona": "Bulawayo", "barham green": "Bulawayo",
+  "queenspark": "Bulawayo", "selbourne park": "Bulawayo",
+  "nketa": "Bulawayo", "iminyela": "Bulawayo",
+  "mabutweni": "Bulawayo", "makhandeni": "Bulawayo",
+  "waterford": "Bulawayo", "whitestone": "Bulawayo",
+  "ascot": "Bulawayo",
   // Mutare
-  "sakubva": "Mutare", "dangamvura": "Mutare", "chikanga": "Mutare",
-  "hobhouse": "Mutare",
+"sakubva": "Mutare", "dangamvura": "Mutare", "chikanga": "Mutare",
+  "hobhouse": "Mutare", "yeovil": "Mutare", "palmerston": "Mutare",
+  "murambi": "Mutare",
   // Gweru
   "mambo": "Gweru", "mkoba": "Gweru", "senga": "Gweru", "ascot": "Gweru",
   // Masvingo
   "mucheke": "Masvingo", "rujeko": "Masvingo", "eastvale": "Masvingo",
   // Kwekwe
-  "mbizo": "Kwekwe", "amaveni": "Kwekwe"
+ "mbizo": "Kwekwe", "amaveni": "Kwekwe", "redcliff": "Kwekwe",
+  // Chinhoyi
+  "chinhoyi cbd": "Chinhoyi", "hunyani": "Chinhoyi",
+  // Bindura
+  "chipadze": "Bindura",
+  // Masvingo
+  "mucheke": "Masvingo", "rujeko": "Masvingo", "eastvale": "Masvingo"
 };
 
 // ── School facilities (shown as multi-select checklist during registration) ───

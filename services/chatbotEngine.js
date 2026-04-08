@@ -2503,7 +2503,52 @@ if (shortcode.city && results.length) {
     
   ]);
 }
+
+
 }
+
+// =========================
+// 🏫 NO-BIZ SCHOOL SHORTCODE SEARCH
+// Parents searching without a business account (pure consumers)
+// =========================
+if (!isMetaAction && !biz && text.trim().length > 2) {
+  const alNoBiz = text.toLowerCase();
+  const isSchoolQuery =
+    alNoBiz.startsWith("find school") ||
+    alNoBiz.startsWith("find schools") ||
+    alNoBiz.startsWith("find a school") ||
+    alNoBiz.startsWith("find primary") ||
+    alNoBiz.startsWith("find secondary") ||
+    alNoBiz.startsWith("find combined") ||
+    alNoBiz.startsWith("find preschool") ||
+    alNoBiz.startsWith("find ecd") ||
+    alNoBiz.startsWith("find kindergarten") ||
+    alNoBiz.startsWith("find boarding school") ||
+    alNoBiz.startsWith("find boarding") ||
+    alNoBiz.startsWith("find day school") ||
+    alNoBiz.startsWith("find girls school") ||
+    alNoBiz.startsWith("find girls") ||
+    alNoBiz.startsWith("find boys school") ||
+    alNoBiz.startsWith("find boys") ||
+    alNoBiz.startsWith("find cambridge") ||
+    alNoBiz.startsWith("find zimsec") ||
+    alNoBiz.startsWith("find budget school") ||
+    alNoBiz.startsWith("find affordable school") ||
+    alNoBiz.startsWith("find premium school") ||
+    alNoBiz.includes("school in ") ||
+    alNoBiz.includes("schools in ");
+
+  if (isSchoolQuery) {
+    const handled = await runSchoolShortcodeSearch({
+      from,
+      text,
+      biz: null,
+      saveBiz: async () => {}   // no-op: no biz session to persist
+    });
+    if (handled !== false) return handled;
+  }
+}
+
 
 
 // =========================
@@ -4528,12 +4573,20 @@ if (
 ) {
 
   // ── School shortcode search: "find school ..." ─────────────────────────────
+// ── School shortcode search: "find school / find primary / find boarding ..." ─
+const SCHOOL_TRIGGER_PHRASES = [
+  "find school", "find schools",
+  "find primary", "find secondary", "find combined", "find preschool",
+  "find ecd", "find kindergarten", "find boarding school", "find day school",
+  "find girls school", "find boys school", "find mixed school",
+  "find budget school", "find affordable school", "find cheap school",
+  "find premium school", "find cambridge school", "find zimsec school",
+  "school in ", "schools in ", "primary school in ", "secondary school in ",
+  "find a school", "look for school", "search school"
+];
 if (
   typeof action === "string" &&
-  (
-    al.startsWith("find school") ||
-    al.startsWith("find schools")
-  )
+  SCHOOL_TRIGGER_PHRASES.some(phrase => al.startsWith(phrase) || al.includes(phrase))
 ) {
   const handled = await runSchoolShortcodeSearch({
     from,
@@ -4541,7 +4594,6 @@ if (
     biz,
     saveBiz: saveBizSafe
   });
-
   if (handled !== false) return handled;
 }
   console.log(`[HIT-BIZ-SHORTCODE] text="${text}" sessionState="${biz?.sessionState}"`);
