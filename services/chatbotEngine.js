@@ -6816,8 +6816,6 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   const profileType = a === "reg_type_service" ? "service" : "product";
 
   biz.sessionData = biz.sessionData || {};
-
-  // reset broken/incomplete reg flow and force business name first
   biz.sessionData.supplierReg = {
     profileType
   };
@@ -7530,7 +7528,7 @@ _sales@mybusiness.co.zw_
 
 You can also skip this step.`,
     buttons: [
-      { id: "sup_contact_skip", title: "⏭ Skip Contact Details" }
+      { id: "sup_contact_skip", title: "⏭ Skip Contact" }
     ]
   });
 }
