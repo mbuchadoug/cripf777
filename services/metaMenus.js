@@ -120,8 +120,9 @@ if (supplier?.active) {
     const items = [
       { id: "my_supplier_account", title: "🏪 My Store" },
       { id: "biz_tools_menu",      title: "📊 Business Tools" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },    
-        { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" },
+      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "my_orders",           title: "📋 My Orders (Buyer)" },
     ];
     // Hide Business Tools for trial users
     const filtered = (biz && biz.package === "trial")
@@ -131,27 +132,30 @@ if (supplier?.active) {
   }
 
   // ── Case 2: Registered supplier but not yet paid ──────────────────────────
-  if (supplier && !supplier.active) {
-    return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-      { id: "my_supplier_account", title: "🏪 My Store" },      // ← TOP, renamed
-      { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
-      { id: "find_supplier",       title: "🔍 Browse & Shop" },    ]);
-  }
+ if (supplier && !supplier.active) {
+  return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
+    { id: "my_supplier_account", title: "🏪 My Store" },
+    { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
+    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_school",         title: "🏫 Find a School" },
+  ]);
+}
 
   // ── Case 3: Has a business but no supplier profile ────────────────────────
-  if (biz && !biz.name?.startsWith("pending_supplier_")) {
+if (biz && !biz.name?.startsWith("pending_supplier_")) {
   const items = [
-  { id: "my_supplier_account", title: "🏪 My Store" },
-  { id: "find_supplier",       title: "🔍 Browse & Shop" },
-  { id: "my_orders",           title: "📋 My Orders" },
-];
+    { id: "my_supplier_account", title: "🏪 My Store" },
+    { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "my_orders",           title: "📋 My Orders" },
+  ];
     const filtered = await filterMenuByRole({ from: to, biz, items });
    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
-  }
+}
 
   // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
 return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-  { id: "register_supplier", title: "🏪 List My Business or School" },
+  { id: "register_supplier", title: "🏪 List My Business" },
   { id: "find_supplier",     title: "🔍 Browse & Shop" },
   { id: "find_school",       title: "🏫 Find a School" },
   { id: "my_orders",         title: "📋 My Orders" },
@@ -870,15 +874,15 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   const phone  = to.replace(/\D+/g, "");
   const school = schoolDoc || await SchoolProfile.findOne({ phone });
 
-  if (!school) {
-    // No school profile — send back to registration
-    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-      { id: "register_supplier", title: "🏪 List My Business or School" },
-      { id: "find_supplier",     title: "🔍 Browse & Shop" },
-      { id: "find_school",       title: "🏫 Find a School" },
-      { id: "my_orders",         title: "📋 My Orders" },
-    ]);
-  }
+ if (!school) {
+  // No school profile — send back to registration
+  return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
+    { id: "register_supplier", title: "🏪 List My Business" },
+    { id: "find_supplier",     title: "🔍 Browse & Shop" },
+    { id: "find_school",       title: "🏫 Find a School" },
+    { id: "my_orders",         title: "📋 My Orders" },
+  ]);
+}
 
   const statusIcon    = school.active   ? "🟢" : "🔴";
   const verifiedBadge = school.verified ? " ✅" : "";
@@ -890,44 +894,47 @@ export async function sendSchoolAccountMenu(to, schoolDoc) {
   const facilityCount   = (school.facilities || []).length;
   const curriculumText  = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
 
-  if (!school.active) {
-    // Inactive school — prompt activation
-    return sendList(to,
-      `🏫 *${school.schoolName}*${verifiedBadge}\n` +
-      `🔴 *Not yet live* — parents cannot find you yet.\n` +
-      `📍 ${school.suburb || ""}, ${school.city}\n` +
-      `📚 ${curriculumText}\n\n` +
-      `_Choose a plan to activate your listing._`,
-      [
-        { id: "school_pay_plan",    title: "💳 Activate My Listing" },
-        { id: "school_my_profile",  title: "👁 View My Profile" },
-        { id: "find_school",        title: "🔍 Preview School Search" },
-        { id: "main_menu_back",     title: "⬅ Main Menu" }
-      ]
-    );
-  }
-
-  return sendList(
-    to,
+if (!school.active) {
+  // Inactive school — prompt activation
+  return sendList(to,
     `🏫 *${school.schoolName}*${verifiedBadge}\n` +
-    `${statusIcon} Active · ${tierLabel}\n` +
+    `🔴 *Not yet live* — parents cannot find you yet.\n` +
     `📍 ${school.suburb || ""}, ${school.city}\n` +
-    `📚 ${curriculumText}\n` +
-    `📝 Admissions: ${admissionsLabel}\n` +
-    `🏊 Facilities: ${facilityCount}\n` +
-    `⭐ ${(school.rating || 0).toFixed(1)} (${school.reviewCount || 0} reviews)\n` +
-    `🗓 Renews: ${renewDate}\n` +
-    `👀 Views: ${school.monthlyViews || 0} · 📬 Inquiries: ${school.inquiries || 0}`,
+    `📚 ${curriculumText}\n\n` +
+    `_Choose a plan to activate your listing._`,
     [
-      { id: "school_my_profile",       title: "📋 My School Profile" },
-      { id: "school_my_facilities",    title: "🏊 Manage Facilities" },
-      { id: "school_my_fees",          title: "💵 Update Fees" },
-      { id: "school_my_reviews",       title: "⭐ My Reviews" },
-      { id: "school_my_inquiries",     title: "📬 Parent Inquiries" },
-      { id: "school_more_options",     title: "⚙️ More Options" },
-      { id: "main_menu_back",          title: "⬅ Main Menu" }
+      { id: "school_pay_plan",    title: "💳 Activate My Listing" },
+      { id: "school_my_profile",  title: "👁 View My Profile" },
+      { id: "find_supplier",      title: "🔍 Browse & Shop" },
+      { id: "find_school",        title: "🏫 Preview Schools" },
+      { id: "main_menu_back",     title: "⬅ Main Menu" }
     ]
   );
+}
+
+ return sendList(
+  to,
+  `🏫 *${school.schoolName}*${verifiedBadge}\n` +
+  `${statusIcon} Active · ${tierLabel}\n` +
+  `📍 ${school.suburb || ""}, ${school.city}\n` +
+  `📚 ${curriculumText}\n` +
+  `📝 Admissions: ${admissionsLabel}\n` +
+  `🏊 Facilities: ${facilityCount}\n` +
+  `⭐ ${(school.rating || 0).toFixed(1)} (${school.reviewCount || 0} reviews)\n` +
+  `🗓 Renews: ${renewDate}\n` +
+  `👀 Views: ${school.monthlyViews || 0} · 📬 Inquiries: ${school.inquiries || 0}`,
+  [
+    { id: "school_my_profile",       title: "📋 My School Profile" },
+    { id: "school_my_facilities",    title: "🏊 Manage Facilities" },
+    { id: "school_my_fees",          title: "💵 Update Fees" },
+    { id: "find_supplier",           title: "🔍 Browse & Shop" },
+    { id: "find_school",             title: "🏫 Find a School" },
+    { id: "school_my_reviews",       title: "⭐ My Reviews" },
+    { id: "school_my_inquiries",     title: "📬 Parent Inquiries" },
+    { id: "school_more_options",     title: "⚙️ More Options" },
+    { id: "main_menu_back",          title: "⬅ Main Menu" }
+  ]
+);
 }
 
 // ── School "More Options" menu ────────────────────────────────────────────────
