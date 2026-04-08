@@ -81,4 +81,9 @@ schoolProfileSchema.index({ feeRange: 1, active: 1 });
 schoolProfileSchema.index({ type: 1, active: 1 });
 schoolProfileSchema.index({ facilities: 1, active: 1 });
 
+schoolProfileSchema.index({ curriculum: 1, active: 1 });
+schoolProfileSchema.index({ gender: 1, active: 1 });
+schoolProfileSchema.index({ boarding: 1, active: 1 });
+schoolProfileSchema.index({ city: 1, type: 1, feeRange: 1, active: 1 });
+
 export default mongoose.model("SchoolProfile", schoolProfileSchema);

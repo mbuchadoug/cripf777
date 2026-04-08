@@ -9,6 +9,225 @@ import {
   SCHOOL_GENDERS, SCHOOL_BOARDING, feeRangeLabel, facilityIcon
 } from "./schoolPlans.js";
 
+
+
+
+const SCHOOL_TYPE_ALIASES = {
+  primary: "primary",
+  secondary: "secondary",
+  combined: "combined",
+  preschool: "primary",
+  kindergarten: "primary",
+  ecd: "primary",
+  highschool: "secondary",
+  "high school": "secondary"
+};
+
+const SCHOOL_FEE_ALIASES = {
+  budget: "budget",
+  cheap: "budget",
+  affordable: "budget",
+  low: "budget",
+  mid: "mid",
+  middle: "mid",
+  medium: "mid",
+  average: "mid",
+  premium: "premium",
+  elite: "premium",
+  expensive: "premium"
+};
+
+const SCHOOL_GENDER_ALIASES = {
+  boys: "boys",
+  girls: "girls",
+  mixed: "mixed",
+  coed: "mixed",
+  "co-ed": "mixed"
+};
+
+const SCHOOL_BOARDING_ALIASES = {
+  day: "day",
+  boarding: "boarding",
+  boarder: "boarding",
+  both: "both"
+};
+
+function _normSchoolText(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function _includesWholePhrase(haystack = "", phrase = "") {
+  const h = ` ${_normSchoolText(haystack)} `;
+  const p = ` ${_normSchoolText(phrase)} `;
+  return h.includes(p);
+}
+
+function _findSchoolCity(text = "") {
+  const normalized = _normSchoolText(text);
+  const cities = [...SCHOOL_CITIES].sort((a, b) => b.length - a.length);
+  for (const city of cities) {
+    if (_includesWholePhrase(normalized, city)) return city;
+  }
+  return null;
+}
+
+function _findSchoolSuburb(text = "") {
+  const normalized = _normSchoolText(text);
+  const suburbs = Object.keys(SCHOOL_SUBURB_TO_CITY || {}).sort((a, b) => b.length - a.length);
+  for (const suburb of suburbs) {
+    if (_includesWholePhrase(normalized, suburb)) {
+      return {
+        suburb: _titleCase(suburb),
+        city: SCHOOL_SUBURB_TO_CITY[suburb] || null
+      };
+    }
+  }
+  return null;
+}
+
+function _findSchoolFacility(text = "") {
+  const normalized = _normSchoolText(text);
+
+  for (const fac of SCHOOL_FACILITIES) {
+    if (_includesWholePhrase(normalized, fac.id)) return fac.id;
+    if (_includesWholePhrase(normalized, fac.label)) return fac.id;
+
+    const shortLabel = _normSchoolText(fac.label).replace(/^.*?\s/, "");
+    if (shortLabel && _includesWholePhrase(normalized, shortLabel)) return fac.id;
+  }
+
+  if (_includesWholePhrase(normalized, "pool")) return "swimming_pool";
+  if (_includesWholePhrase(normalized, "lab")) return "science_lab";
+  if (_includesWholePhrase(normalized, "computer")) return "computer_lab";
+  if (_includesWholePhrase(normalized, "wifi")) return "wifi";
+  if (_includesWholePhrase(normalized, "bus")) return "school_bus";
+  if (_includesWholePhrase(normalized, "boarding")) return null;
+
+  return null;
+}
+
+function _findSchoolCurriculum(text = "") {
+  const normalized = _normSchoolText(text);
+
+  for (const cur of SCHOOL_CURRICULA) {
+    if (_includesWholePhrase(normalized, cur.id)) return cur.id;
+    if (_includesWholePhrase(normalized, cur.label)) return cur.id;
+  }
+
+  if (_includesWholePhrase(normalized, "cambridge")) return "cambridge";
+  if (_includesWholePhrase(normalized, "zimsec")) return "zimsec";
+
+  return null;
+}
+
+function _parseSchoolShortcodeSearch(text = "") {
+  const raw = String(text || "").trim();
+  const normalized = _normSchoolText(raw);
+
+  if (
+    !normalized.startsWith("find school") &&
+    !normalized.startsWith("find schools")
+  ) {
+    return null;
+  }
+
+  const search = {
+    city: null,
+    suburb: null,
+    type: null,
+    feeRange: null,
+    facility: null,
+    curriculum: null,
+    gender: null,
+    boarding: null,
+    admissionsOpen: null,
+    page: 0
+  };
+
+  const suburbMatch = _findSchoolSuburb(normalized);
+  if (suburbMatch) {
+    search.suburb = suburbMatch.suburb;
+    if (suburbMatch.city) search.city = suburbMatch.city;
+  }
+
+  const cityMatch = _findSchoolCity(normalized);
+  if (cityMatch && !search.city) search.city = cityMatch;
+
+  for (const [word, value] of Object.entries(SCHOOL_TYPE_ALIASES)) {
+    if (_includesWholePhrase(normalized, word)) {
+      search.type = value;
+      break;
+    }
+  }
+
+  for (const [word, value] of Object.entries(SCHOOL_FEE_ALIASES)) {
+    if (_includesWholePhrase(normalized, word)) {
+      search.feeRange = value;
+      break;
+    }
+  }
+
+  search.facility = _findSchoolFacility(normalized);
+  search.curriculum = _findSchoolCurriculum(normalized);
+
+  for (const [word, value] of Object.entries(SCHOOL_GENDER_ALIASES)) {
+    if (_includesWholePhrase(normalized, word)) {
+      search.gender = value;
+      break;
+    }
+  }
+
+  for (const [word, value] of Object.entries(SCHOOL_BOARDING_ALIASES)) {
+    if (_includesWholePhrase(normalized, word)) {
+      search.boarding = value;
+      break;
+    }
+  }
+
+  if (_includesWholePhrase(normalized, "admissions open") || _includesWholePhrase(normalized, "open admissions")) {
+    search.admissionsOpen = true;
+  } else if (_includesWholePhrase(normalized, "admissions closed") || _includesWholePhrase(normalized, "closed admissions")) {
+    search.admissionsOpen = false;
+  }
+
+  const hasFilters = Boolean(
+    search.city ||
+    search.suburb ||
+    search.type ||
+    search.feeRange ||
+    search.facility ||
+    search.curriculum ||
+    search.gender ||
+    search.boarding ||
+    typeof search.admissionsOpen === "boolean"
+  );
+
+  return { search, hasFilters };
+}
+
+export async function runSchoolShortcodeSearch({ from, text, biz, saveBiz }) {
+  const parsed = _parseSchoolShortcodeSearch(text);
+  if (!parsed) return false;
+
+  if (!parsed.hasFilters) {
+    return startSchoolSearch(from, biz, saveBiz);
+  }
+
+  if (biz) {
+    biz.sessionState = "school_search_results";
+    biz.sessionData = {
+      ...(biz.sessionData || {}),
+      schoolSearch: parsed.search
+    };
+    await saveBiz(biz);
+  }
+
+  return _runSchoolSearch(from, parsed.search);
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // ENTRY POINT — called when parent taps "🏫 Find a School"
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +246,18 @@ export async function startSchoolSearch(from, biz, saveBiz) {
   searchCityRows.push({ id: "school_search_city_more", title: "➡ More Cities" });
   searchCityRows.push({ id: "school_search_city_all",  title: "🌍 All Cities" });
 
-  return sendList(from, "🏫 *Find a School in Zimbabwe*\n\nWhich city?", searchCityRows);
+ return sendList(
+  from,
+  `🏫 *Find a School in Zimbabwe*
+
+Which city?
+
+You can also type shortcuts like:
+_find school harare_
+_find school primary harare_
+_find school budget pool harare_`,
+  searchCityRows
+);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,12 +503,18 @@ async function _runSchoolSearch(from, search = {}) {
   const page      = search.page || 0;
   const skip      = page * PAGE_SIZE;
 
-  const query = { active: true };
-  if (search.city)     query.city     = new RegExp(`^${search.city}$`, "i");
-  if (search.suburb)   query.suburb   = new RegExp(search.suburb, "i");
-  if (search.type)     query.type     = search.type;
-  if (search.feeRange) query.feeRange = search.feeRange;
-  if (search.facility) query.facilities = search.facility;
+const query = { active: true };
+if (search.city)            query.city            = new RegExp(`^${search.city}$`, "i");
+if (search.suburb)          query.suburb          = new RegExp(search.suburb, "i");
+if (search.type)            query.type            = search.type;
+if (search.feeRange)        query.feeRange        = search.feeRange;
+if (search.facility)        query.facilities      = search.facility;
+if (search.curriculum)      query.curriculum      = search.curriculum;
+if (search.gender)          query.gender          = search.gender;
+if (search.boarding)        query.boarding        = search.boarding;
+if (typeof search.admissionsOpen === "boolean") {
+  query.admissionsOpen = search.admissionsOpen;
+}
 
   const total   = await SchoolProfile.countDocuments(query);
   const schools = await SchoolProfile.find(query)
@@ -580,10 +816,31 @@ function _buildFilterSummary(search = {}) {
   if (search.suburb)   parts.push(search.suburb);
   if (search.type)     parts.push({ primary: "Primary", secondary: "Secondary", combined: "Combined" }[search.type] || search.type);
   if (search.feeRange) parts.push(feeRangeLabel(search.feeRange));
+
   if (search.facility) {
     const fac = SCHOOL_FACILITIES.find(f => f.id === search.facility);
     if (fac) parts.push(fac.label);
   }
+
+  if (search.curriculum) {
+    const cur = SCHOOL_CURRICULA.find(c => c.id === search.curriculum);
+    if (cur) parts.push(cur.label);
+  }
+
+  if (search.gender) {
+    const g = SCHOOL_GENDERS.find(x => x.id === search.gender);
+    if (g) parts.push(g.label);
+  }
+
+  if (search.boarding) {
+    const b = SCHOOL_BOARDING.find(x => x.id === search.boarding);
+    if (b) parts.push(b.label);
+  }
+
+  if (typeof search.admissionsOpen === "boolean") {
+    parts.push(search.admissionsOpen ? "Admissions Open" : "Admissions Closed");
+  }
+
   return parts.length ? parts.join(" · ") : "All Schools";
 }
 

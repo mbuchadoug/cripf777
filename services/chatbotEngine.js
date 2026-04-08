@@ -113,7 +113,8 @@ import {
 import {
   startSchoolSearch,
   handleSchoolSearchActions,
-  handleSchoolAdminStates
+  handleSchoolAdminStates,
+  runSchoolShortcodeSearch
 } from "./schoolSearch.js";
  
 
@@ -4525,6 +4526,24 @@ if (
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState)
 ) {
+
+  // ── School shortcode search: "find school ..." ─────────────────────────────
+if (
+  typeof action === "string" &&
+  (
+    al.startsWith("find school") ||
+    al.startsWith("find schools")
+  )
+) {
+  const handled = await runSchoolShortcodeSearch({
+    from,
+    text,
+    biz,
+    saveBiz: saveBizSafe
+  });
+
+  if (handled !== false) return handled;
+}
   console.log(`[HIT-BIZ-SHORTCODE] text="${text}" sessionState="${biz?.sessionState}"`);
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-A] biz shortcode handler: text="${text}" sessionState="${biz?.sessionState}" shortcode=${JSON.stringify(shortcode)}`);
