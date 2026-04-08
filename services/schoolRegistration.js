@@ -623,20 +623,7 @@ function _sendCurriculumStep(from, schoolName) {
 }
 
 
-// ── Private: curriculum step with quick-selects ───────────────────────────────
-function _sendCurriculumStep(from, schoolName) {
-  // 3 quick-selects + 4 manual options + Done = 8 rows. Under WhatsApp limit of 10.
-  return sendList(from,
-    `📚 *Step 6 of 12* - Which curriculum does *${schoolName}* offer?\n\n_Most private schools use Cambridge — tap one option below:_`,
-    [
-      { id: "school_reg_cur_cambridge", title: "🎓 Cambridge only"         },
-      { id: "school_reg_cur_zimsec",    title: "📘 ZIMSEC only"            },
-      { id: "school_reg_cur_both",      title: "📚 ZIMSEC + Cambridge"     },
-      { id: "school_reg_cur_ib",        title: "🌍 IB (International Baccalaureate)" },
-      { id: "school_reg_cur_done",      title: "✅ Done selecting"         }
-    ]
-  );
-}
+
 
 // ── Private: facilities bundle step ──────────────────────────────────────────
 function _sendFacilityBundles(from, schoolName) {
