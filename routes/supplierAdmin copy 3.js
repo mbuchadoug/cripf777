@@ -1121,29 +1121,11 @@ router.post("/suppliers/:id/toggle-active", requireSupplierAdmin, async (req, re
       });
 
       // Set activeBusinessId in UserSession
-  await UserSession.findOneAndUpdate(
+      await UserSession.findOneAndUpdate(
         { phone: cleanPhone },
         { phone: cleanPhone, activeBusinessId: bizRecord._id },
         { upsert: true }
       );
-
-      // ── Notify seller on WhatsApp ─────────────────────────────────────────
-      try {
-        const { sendText } = await import("../services/metaSender.js");
-        await sendText(supplier.phone,
-`✅ *Your listing is now LIVE on ZimQuote!*
-
-🏪 *${supplier.businessName}*
-📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}
-⭐ Plan: *${supplier.tier?.toUpperCase() || "Basic"}*
-
-Buyers can now find you when they search on WhatsApp.
-
-Type *menu* to access your seller dashboard.`
-        );
-      } catch (notifyErr) {
-        console.error("[Admin Toggle] WhatsApp notify failed:", notifyErr.message);
-      }
     }
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
@@ -1382,28 +1364,6 @@ router.post("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) =>
       paidAt:        now,
       ecocashPhone:  "manual-admin"
     });
-
-   // ── Notify seller on WhatsApp ─────────────────────────────────────────
-    if (isActive) {
-      try {
-        const { sendText } = await import("../services/metaSender.js");
-        const planLabel = plan === "annual" ? "Annual" : "Monthly";
-        await sendText(supplier.phone,
-`✅ *Your listing is now LIVE on ZimQuote!*
-
-🏪 *${supplier.businessName}*
-📍 ${supplier.location?.area || ""}, ${supplier.location?.city || ""}
-⭐ Plan: *${tier.charAt(0).toUpperCase() + tier.slice(1)} (${planLabel})*
-📅 Active until: *${expiresAt.toDateString()}*
-
-Buyers can now find you when they search on WhatsApp.
-
-Type *menu* to access your seller dashboard, manage your products and receive orders.`
-        );
-      } catch (notifyErr) {
-        console.error("[Admin Activate] WhatsApp notify failed:", notifyErr.message);
-      }
-    }
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}?success=${encodeURIComponent("Supplier activated! Business account and WhatsApp access are ready.")}`);
   } catch (err) {
