@@ -793,14 +793,13 @@ if (school.profilePdfUrl) {
     }
 
     // Always send the direct link as text too - so parent can tap it even if document delivery fails
-    return sendButtons(from, {
+ return sendButtons(from, {
       text:
 `📄 *${school.schoolName} - School Profile*
 
-Tap the link below to open or download the school profile:
-${school.profilePdfUrl}
+Your download has been sent above as a PDF file. Tap it to open.
 
-_If the link above doesn't work, tap 📞 Contact School for a copy._`,
+_Can't see it? Scroll up or tap 📞 Contact School for a copy._`,
       buttons: [
         { id: `school_apply_${schoolId}`,   title: "📝 Apply Online" },
         { id: "school_search_refine",        title: "🔄 More Schools" }
@@ -822,14 +821,14 @@ _If the link above doesn't work, tap 📞 Contact School for a copy._`,
         console.error("[School DL] sendDocument (generated) failed:", docErr.message, "url:", pdfResult.url);
       }
 
-      return sendButtons(from, {
+    return sendButtons(from, {
         text:
 `📄 *${school.schoolName} - School Profile*
 
-Tap the link below to open or download the school profile:
-${pdfResult.url}
+Your download has been sent above as a PDF file. Tap it to open.
 
-_If the link above doesn't work, tap 📞 Contact School for a copy._`,
+_Can't see it? Scroll up or tap 📞 Contact School for a copy._`,
+
         buttons: [
           { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
           { id: "school_search_refine",      title: "🔄 More Schools" }
