@@ -219,10 +219,29 @@ export const SUPPLIER_CATEGORIES = [
     presetKey: "agriculture"
   },
 
-  {
+{
     id: "electronics",
     label: "📱 Electronics & Gadgets",
     types: ["product"],
+    presetKey: null
+  },
+
+  {
+    id: "appliances",
+    label: "🏠 Household & Kitchen Appliances",
+    types: ["product"],
+    subcats: [
+      { id: "fridges_freezers",   label: "Fridges & Freezers" },
+      { id: "stoves_cookers",     label: "Stoves & Cookers" },
+      { id: "washing_machines",   label: "Washing Machines & Dryers" },
+      { id: "microwaves",         label: "Microwaves & Ovens" },
+      { id: "water_heaters",      label: "Water Heaters & Geysers" },
+      { id: "blenders_mixers",    label: "Blenders, Juicers & Mixers" },
+      { id: "air_conditioners",   label: "Air Conditioners & Fans" },
+      { id: "vacuum_cleaners",    label: "Vacuum Cleaners & Floor Care" },
+      { id: "small_appliances",   label: "Small Kitchen Appliances" },
+      { id: "appliance_parts",    label: "Appliance Spare Parts" }
+    ],
     presetKey: null
   },
 

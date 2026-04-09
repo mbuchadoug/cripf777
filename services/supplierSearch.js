@@ -124,9 +124,14 @@ const SEARCH_SYNONYMS = {
   "television": ["tv", "smart tv", "flat screen", "electronics", "appliances"],
   "solar": ["solar panels", "solar system", "inverter", "batteries", "electronics", "energy"],
   "inverter": ["solar", "ups", "power backup", "electronics", "energy"],
-  "appliances": ["fridge", "stove", "microwave", "washing machine", "electronics", "home appliances"],
-  "fridge": ["refrigerator", "freezer", "appliances", "electronics"],
-  "stove": ["cooker", "gas stove", "electric stove", "appliances", "electronics"],
+ "appliances": ["fridge", "stove", "microwave", "washing machine", "home appliances", "household appliances", "kitchen appliances"],
+  "fridge": ["refrigerator", "freezer", "appliances", "fridge freezer"],
+  "stove": ["cooker", "gas stove", "electric stove", "appliances"],
+  "microwave": ["oven", "microwave oven", "appliances"],
+  "washing machine": ["washer", "dryer", "laundry", "appliances"],
+  "blender": ["juicer", "mixer", "kitchen appliances", "appliances"],
+  "air conditioner": ["ac", "aircon", "cooling", "fan", "appliances"],
+  "geyser": ["water heater", "hot water", "appliances"],
 
   // ── CROSS-BORDER GOODS ────────────────────────────────────────────────────
   "cross border": ["imports", "foreign goods", "imported goods", "crossborder", "south africa goods", "china goods"],
