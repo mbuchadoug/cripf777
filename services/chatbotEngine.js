@@ -2497,12 +2497,12 @@ if (shortcode.city && results.length) {
 
  
 
-  if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
-  return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's business platform.", [
-    { id: "find_supplier", title: "🔍 Browse & Shop" },
-    { id: "my_orders", title: "📋 My Orders" },
-    { id: "register_supplier", title: "📦 List My Business" },
-    
+ if (!supplierExists && al !== "join" && !allowedWithoutBiz && !hasActiveBuyerFlow) {
+  return sendList(from, "👋 *Welcome to ZimQuote!*\n\nZimbabwe's marketplace for products & services.", [
+    { id: "find_supplier",    title: "🔍 Browse & Shop" },
+    { id: "find_school",      title: "🏫 Find a School" },
+    { id: "my_orders",        title: "📋 My Orders" },
+    { id: "register_supplier",title: "📦 List My Business" },
   ]);
 }
 
