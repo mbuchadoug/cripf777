@@ -1610,7 +1610,8 @@ export async function handleIncomingMessage({ from, action }) {
 const isMetaAction =
     typeof action === "string" &&
     (
-      Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
+ Object.values(ACTIONS).some(v => (v || "").toLowerCase() === a) ||
+      a === "__document_uploaded__" ||
        a === "expense_generate_receipt" ||
       a.startsWith("report_branch_") ||
       a.startsWith("sup_") ||

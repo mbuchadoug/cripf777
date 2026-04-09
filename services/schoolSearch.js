@@ -561,9 +561,58 @@ You can upload a new one anytime from ⚙️ More Options.`
     return sendSchoolMoreOptionsMenu(from, school);
   }
 
+ // ── School admin: brochure upload state ──────────────────────────────────
+  if (state === "school_admin_awaiting_brochure") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    // Cancel command
+    if ((text || "").trim().toLowerCase() === "cancel") {
+      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+      const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+      return sendSchoolMoreOptionsMenu(from, school);
+    }
+
+    // The PDF URL was stored in biz.sessionData by the webhook before calling engine
+    const docUrl = biz?.sessionData?.pendingDocumentUrl;
+
+    if (!docUrl) {
+      // No PDF received yet — remind them
+      await sendText(from,
+`📄 *Waiting for your PDF...*
+
+Please send your school brochure as a *PDF file* using the 📎 attachment icon in WhatsApp.
+
+Type *cancel* to go back.`
+      );
+      return true;
+    }
+
+    // Save the uploaded PDF URL on the school profile
+    school.profilePdfUrl = docUrl;
+    await school.save();
+
+    // Clear the pending URL from session and reset state
+    if (biz) {
+      biz.sessionData  = { ...(biz.sessionData || {}), pendingDocumentUrl: null };
+      biz.sessionState = "ready";
+      await saveBiz(biz);
+    }
+
+    await sendText(from,
+`✅ *School brochure uploaded successfully!*
+
+Parents who tap "📄 Download Profile" on your listing will now receive this PDF.
+
+You can replace it anytime from ⚙️ More Options → 📄 Upload School Brochure.`
+    );
+    const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+    return sendSchoolMoreOptionsMenu(from, school);
+  }
+
   return false;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE: run the MongoDB query and format results
 // ─────────────────────────────────────────────────────────────────────────────
