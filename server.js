@@ -149,6 +149,7 @@ app.use((req, res, next) => {
   express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
 });
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/docs", express.static(path.join(__dirname, "docs")));
 app.use(cookieParser());
 // Compatibility shim: ensure res.render callbacks that call req.next won't crash
 app.use((req, res, next) => {
