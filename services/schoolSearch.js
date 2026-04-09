@@ -781,12 +781,26 @@ async function _downloadSchoolProfile(from, schoolId) {
   // Track inquiry
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
 
-  if (school.profilePdfUrl) {
+if (school.profilePdfUrl) {
     const { sendDocument } = await import("./metaSender.js");
     const filename = `${school.schoolName.replace(/\s+/g, "_")}_Profile.pdf`;
-    await sendDocument(from, { link: school.profilePdfUrl, filename });
+
+    // Try to send as WhatsApp document — log error if Meta rejects it
+    try {
+      await sendDocument(from, { link: school.profilePdfUrl, filename });
+    } catch (docErr) {
+      console.error("[School DL] sendDocument failed:", docErr.message, "url:", school.profilePdfUrl);
+    }
+
+    // Always send the direct link as text too — so parent can tap it even if document delivery fails
     return sendButtons(from, {
-      text: `📄 *${school.schoolName} - School Profile*\n\nDownloading now... If it doesn't open, tap the link above.`,
+      text:
+`📄 *${school.schoolName} - School Profile*
+
+Tap the link below to open or download the school profile:
+${school.profilePdfUrl}
+
+_If the link above doesn't work, tap 📞 Contact School for a copy._`,
       buttons: [
         { id: `school_apply_${schoolId}`,   title: "📝 Apply Online" },
         { id: "school_search_refine",        title: "🔄 More Schools" }
@@ -798,12 +812,24 @@ async function _downloadSchoolProfile(from, schoolId) {
   try {
     const { generateSchoolProfilePDF } = await import("./schoolPdfGenerator.js");
     const pdfResult = await generateSchoolProfilePDF(school);
-    if (pdfResult?.url) {
+ if (pdfResult?.url) {
       await SchoolProfile.findByIdAndUpdate(schoolId, { profilePdfUrl: pdfResult.url });
       const { sendDocument } = await import("./metaSender.js");
-      await sendDocument(from, { link: pdfResult.url, filename: pdfResult.filename });
+
+      try {
+        await sendDocument(from, { link: pdfResult.url, filename: pdfResult.filename });
+      } catch (docErr) {
+        console.error("[School DL] sendDocument (generated) failed:", docErr.message, "url:", pdfResult.url);
+      }
+
       return sendButtons(from, {
-        text: `📄 Here is the *${school.schoolName}* school profile.`,
+        text:
+`📄 *${school.schoolName} - School Profile*
+
+Tap the link below to open or download the school profile:
+${pdfResult.url}
+
+_If the link above doesn't work, tap 📞 Contact School for a copy._`,
         buttons: [
           { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
           { id: "school_search_refine",      title: "🔄 More Schools" }
