@@ -378,7 +378,7 @@ Or one number if all terms are equal: *800*`
     reg.facilitiesPage = 0;
     await saveBiz(biz);
     if (bundle.ids.length === 0) {
-      // Skip — go straight to extramural bundles
+      // Skip - go straight to extramural bundles
       biz.sessionState = "school_reg_extramural";
       reg.extramuralActivities = [];
       reg.extramuralPage       = 0;
@@ -461,7 +461,7 @@ if (a === "school_reg_fac_done") {
     reg.extramuralPage       = 0;
     await saveBiz(biz);
     if (bundle.ids.length === 0) {
-      // Skip — go to principal step
+      // Skip - go to principal step
       biz.sessionState = "school_reg_principal";
       await saveBiz(biz);
       return sendButtons(from, {

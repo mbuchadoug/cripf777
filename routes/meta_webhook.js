@@ -250,7 +250,7 @@ if (msg.type === "document") {
   const mediaUrl = msg.document?.url;        // Meta sends direct URL in webhook payload
   const mediaId  = msg.document?.id;
 
-  // Only handle PDFs — everything else ignored silently
+  // Only handle PDFs - everything else ignored silently
   if (mimeType !== "application/pdf") {
     return;
   }
@@ -263,7 +263,7 @@ if (msg.type === "document") {
   }
 
   try {
-    // 1. Get the download URL — use webhook URL if present, else fetch from Meta
+    // 1. Get the download URL - use webhook URL if present, else fetch from Meta
     const token      = process.env.META_ACCESS_TOKEN;
     const dlUrl      = mediaUrl || await getMetaMediaUrl(mediaId);
     if (!dlUrl) throw new Error("No media URL available");
@@ -275,7 +275,7 @@ if (msg.type === "document") {
     });
     const pdfBuffer = Buffer.from(fileRes.data);
 
-    // 3. Save to local filesystem — same folder used by generatePDF
+    // 3. Save to local filesystem - same folder used by generatePDF
     const fs       = await import("fs");
     const path     = await import("path");
     const filename = `brochure_${from}_${Date.now()}.pdf`;
@@ -285,7 +285,7 @@ if (msg.type === "document") {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, filename), pdfBuffer);
 
-    // 4. Build the public URL — same pattern as schoolPdfGenerator.js
+    // 4. Build the public URL - same pattern as schoolPdfGenerator.js
     const site   = (process.env.SITE_URL || "").replace(/\/$/, "");
     const pdfUrl = `${site}/docs/generated/orders/${filename}`;
 
@@ -293,7 +293,7 @@ if (msg.type === "document") {
     biz.sessionData = { ...(biz.sessionData || {}), pendingDocumentUrl: pdfUrl };
     await biz.save();
 
-    // 6. Route through the engine — state machine handles confirmation
+    // 6. Route through the engine - state machine handles confirmation
     await handleIncomingMessage({ from, action: "__document_uploaded__" });
 
   } catch (err) {

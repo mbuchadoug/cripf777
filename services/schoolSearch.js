@@ -578,7 +578,7 @@ You can upload a new one anytime from ⚙️ More Options.`
     const docUrl = biz?.sessionData?.pendingDocumentUrl;
 
     if (!docUrl) {
-      // No PDF received yet — remind them
+      // No PDF received yet - remind them
       await sendText(from,
 `📄 *Waiting for your PDF...*
 
@@ -785,14 +785,14 @@ if (school.profilePdfUrl) {
     const { sendDocument } = await import("./metaSender.js");
     const filename = `${school.schoolName.replace(/\s+/g, "_")}_Profile.pdf`;
 
-    // Try to send as WhatsApp document — log error if Meta rejects it
+    // Try to send as WhatsApp document - log error if Meta rejects it
     try {
       await sendDocument(from, { link: school.profilePdfUrl, filename });
     } catch (docErr) {
       console.error("[School DL] sendDocument failed:", docErr.message, "url:", school.profilePdfUrl);
     }
 
-    // Always send the direct link as text too — so parent can tap it even if document delivery fails
+    // Always send the direct link as text too - so parent can tap it even if document delivery fails
     return sendButtons(from, {
       text:
 `📄 *${school.schoolName} - School Profile*
