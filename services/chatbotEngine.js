@@ -5516,20 +5516,22 @@ if (a === "find_supplier") {
     },
     { upsert: true }
   );
-
 return sendText(from,
 `🔍 *Find Suppliers on ZimQuote*
 
-Type what you need.
+Type what you need. Add a suburb or city to narrow results.
 
 *📦 Products:*
-_find cement_, _find cooking oil_, _find mealie meal_, _find tyres_, _find school uniforms_, _find solar panels_
+_find cement harare_, _find cooking oil bulawayo_, _find mealie meal borrowdale_, _find tyres avondale_, _find school uniforms glen view_, _find solar panels highlands_
+
+*🧹 Cleaning Services:*
+_find deep cleaning harare_, _find house cleaning borrowdale_, _find office cleaning harare_, _find industrial cleaning harare_, _find restaurant cleaning harare_, _find carpet cleaning highlands_, _find end of tenancy cleaning harare_
 
 *🔧 Services:*
-_find plumber_, _find electrician_, _find teacher_, _find tutor_, _find cleaner_, _find painter_, _find welder_, _find catering_, _find photographer_, _find it support_
+_find plumber highlands_, _find electrician borrowdale_, _find teacher harare_, _find tutor glen view_, _find painter avondale_, _find welder harare_, _find catering harare_, _find photographer bulawayo_, _find it support harare_
 
 *🚗 Transport:*
-_find car hire_, _find delivery_, _find moving company_
+_find car hire harare_, _find delivery bulawayo_, _find moving company harare_
 
 Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Or browse by category:", [
