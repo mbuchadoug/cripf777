@@ -156,15 +156,18 @@ export const SCHOOL_EXTRAMURAL_BUNDLES = [
 
 // ── Curriculum options ────────────────────────────────────────────────────────
 export const SCHOOL_CURRICULA = [
-  { id: "zimsec",     label: "📘 ZIMSEC" },
-  { id: "cambridge",  label: "🎓 Cambridge (IGCSE/A-Level)" },
-  { id: "ib",         label: "🌍 IB (International Baccalaureate)" },
-  { id: "combined",   label: "📚 ZIMSEC + Cambridge" }
+  { id: "zimsec",             label: "📘 ZIMSEC" },
+  { id: "cambridge",          label: "🎓 Cambridge (IGCSE/A-Level)" },
+  { id: "cambridge_primary",  label: "🎓 Cambridge Checkpoint" },
+  { id: "ib",                 label: "🌍 IB " },
+  { id: "combined",           label: "📚 ZIMSEC + Cambridge" }
 ];
 
 // ── School types ──────────────────────────────────────────────────────────────
 export const SCHOOL_TYPES = [
-  { id: "primary",   label: "📗 Primary (ECD–Grade 7)" },
+  { id: "ecd",       label: "🌱 ECD / Preschool Only (ECD A–B)" },
+  { id: "primary",   label: "📗 Primary (Grade 1–7)" },
+  { id: "ecd_primary", label: "📗 ECD + Primary (ECD A–Grade 7)" },
   { id: "secondary", label: "📙 Secondary (Form 1–6)" },
   { id: "combined",  label: "📘 Combined (ECD–Form 6)" }
 ];

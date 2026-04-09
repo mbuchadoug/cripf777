@@ -268,6 +268,17 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     );
   }
 
+
+  // ── Cambridge Primary quick-select ────────────────────────────────────────
+  if (a === "school_reg_cur_cambridge_primary") {
+    reg.curriculum = ["cambridge_primary"];
+    biz.sessionState = "school_reg_gender";
+    await saveBiz(biz);
+    await sendText(from, "✅ Curriculum set to *Cambridge Primary / Checkpoint*.");
+    return sendList(from, `👫 *Step 7 of 12* - Is *${reg.schoolName}* for boys, girls or mixed?`, [
+      ...SCHOOL_GENDERS.map(g => ({ id: `school_reg_gender_${g.id}`, title: g.label }))
+    ]);
+  }
   // ── Curriculum multi-select ───────────────────────────────────────────────
 // ── Curriculum multi-select ───────────────────────────────────────────────
   // Quick-select actions: school_reg_cur_quick_cambridge / _zimsec / _both
@@ -608,16 +619,16 @@ _e.g. 0771234567_`
 // PRIVATE: send curriculum selection step
 // ─────────────────────────────────────────────────────────────────────────────
 function _sendCurriculumStep(from, schoolName) {
-  // WhatsApp limit: 10 rows.
-  // 3 quick-selects + 4 full SCHOOL_CURRICULA options + Done = 8. Safe.
+  // WhatsApp limit: 10 rows. 7 rows here. Safe.
   return sendList(from,
-    `📚 *Step 6 of 12* - Which curriculum does *${schoolName}* offer?\n\n_Most private schools use Cambridge. Tap one quick option or select manually below:_`,
+    `📚 *Step 6 of 12* - Which curriculum does *${schoolName}* offer?\n\n_Cambridge Primary is used by many preparatory and junior schools. Tap your option:_`,
     [
-      { id: "school_reg_cur_quick_cambridge", title: "🎓 Cambridge only" },
-      { id: "school_reg_cur_quick_zimsec",    title: "📘 ZIMSEC only" },
-      { id: "school_reg_cur_quick_both",      title: "📚 Both ZIMSEC + Cambridge" },
-      ...SCHOOL_CURRICULA.map(c => ({ id: `school_reg_cur_${c.id}`, title: c.label })),
-      { id: "school_reg_cur_done",            title: "✅ Done selecting" }
+      { id: "school_reg_cur_quick_cambridge",  title: "🎓 Cambridge (IGCSE/A-Level)" },
+      { id: "school_reg_cur_cambridge_primary",title: "🎓 Cambridge  Checkpoint" },
+      { id: "school_reg_cur_quick_zimsec",     title: "📘 ZIMSEC" },
+      { id: "school_reg_cur_quick_both",       title: "📚 ZIMSEC + Cambridge" },
+      { id: "school_reg_cur_ib",               title: "🌍 IB " },
+      { id: "school_reg_cur_done",             title: "✅ Done selecting" }
     ]
   );
 }
@@ -656,7 +667,7 @@ function _sendExtBundles(from, schoolName) {
 
 
 async function _sendSchoolConfirmPrompt(from, reg) {
-  const typeLabels   = { primary: "Primary (ECD–Grade 7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
+ const typeLabels   = { ecd: "ECD / Preschool Only", ecd_primary: "ECD + Primary", primary: "Primary (Grade 1–7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
   const genderLabels = { mixed: "Mixed (Co-ed)", boys: "Boys Only", girls: "Girls Only" };
   const boardLabels  = { day: "Day School", boarding: "Boarding", both: "Day & Boarding" };
 

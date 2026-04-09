@@ -5797,7 +5797,7 @@ if (a === "school_my_profile") {
   const school = await SchoolProfile.findOne({ phone });
   if (!school) return sendMainMenu(from);
   const { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } = await import("./schoolPlans.js");
-  const typeLabels    = { primary: "Primary (ECD–Grade 7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
+ const typeLabels    = { ecd: "ECD / Preschool Only", ecd_primary: "ECD + Primary", primary: "Primary (Grade 1–7)", secondary: "Secondary (Form 1–6)", combined: "Combined (ECD–Form 6)" };
   const genderLabels  = { mixed: "Mixed (Co-ed)", boys: "Boys Only", girls: "Girls Only" };
   const boardingLabels= { day: "Day School", boarding: "Boarding", both: "Day & Boarding" };
   const curricText    = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
