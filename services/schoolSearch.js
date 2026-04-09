@@ -16,9 +16,13 @@ const SCHOOL_TYPE_ALIASES = {
   primary: "primary",
   secondary: "secondary",
   combined: "combined",
-  preschool: "primary",
-  kindergarten: "primary",
-  ecd: "primary",
+  preschool: "ecd",
+  kindergarten: "ecd",
+  ecd: "ecd",
+  "ecd only": "ecd",
+  "ecd primary": "ecd_primary",
+  preparatory: "ecd_primary",
+  prep: "ecd_primary",
   highschool: "secondary",
   "high school": "secondary"
 };
@@ -622,14 +626,24 @@ async function _runSchoolSearch(from, search = {}) {
   const skip      = page * PAGE_SIZE;
 
 const query = { active: true };
-if (search.city)            query.city            = new RegExp(`^${search.city}$`, "i");
-if (search.suburb)          query.suburb          = new RegExp(search.suburb, "i");
-if (search.type)            query.type            = search.type;
-if (search.feeRange)        query.feeRange        = search.feeRange;
-if (search.facility)        query.facilities      = search.facility;
-if (search.curriculum)      query.curriculum      = search.curriculum;
-if (search.gender)          query.gender          = search.gender;
-if (search.boarding)        query.boarding        = search.boarding;
+if (search.city)     query.city    = new RegExp(`^${search.city}$`, "i");
+if (search.suburb)   query.suburb  = new RegExp(search.suburb, "i");
+if (search.type) {
+  // ecd search returns both "ecd" and "ecd_primary" schools
+  // primary search also includes "ecd_primary" since those schools teach primary grades
+  if (search.type === "ecd") {
+    query.type = { $in: ["ecd", "ecd_primary"] };
+  } else if (search.type === "primary") {
+    query.type = { $in: ["primary", "ecd_primary"] };
+  } else {
+    query.type = search.type;
+  }
+}
+if (search.feeRange)  query.feeRange   = search.feeRange;
+if (search.facility)  query.facilities = search.facility;
+if (search.curriculum) query.curriculum = search.curriculum;
+if (search.gender)    query.gender     = search.gender;
+if (search.boarding)  query.boarding   = search.boarding;
 if (typeof search.admissionsOpen === "boolean") {
   query.admissionsOpen = search.admissionsOpen;
 }
@@ -712,7 +726,7 @@ async function _showSchoolDetail(from, schoolId, biz) {
   const featuredBadge  = school.tier === "featured" ? " 🔥 *Featured*" : "";
   const admissions     = school.admissionsOpen ? "🟢 *Admissions Open*" : "🔴 *Admissions Closed*";
 
-  const typeLabels     = { primary: "Primary", secondary: "Secondary", combined: "Combined" };
+ const typeLabels     = { ecd: "ECD / Preschool", ecd_primary: "ECD + Primary", primary: "Primary", secondary: "Secondary", combined: "Combined" };
   const genderLabels   = { mixed: "Mixed (Co-ed)", boys: "Boys Only", girls: "Girls Only" };
   const boardLabels    = { day: "Day School", boarding: "Boarding", both: "Day & Boarding" };
 
@@ -957,7 +971,7 @@ function _buildFilterSummary(search = {}) {
   const parts = [];
   if (search.city)     parts.push(search.city);
   if (search.suburb)   parts.push(search.suburb);
-  if (search.type)     parts.push({ primary: "Primary", secondary: "Secondary", combined: "Combined" }[search.type] || search.type);
+ if (search.type)     parts.push({ ecd: "ECD / Preschool", ecd_primary: "ECD + Primary", primary: "Primary", secondary: "Secondary", combined: "Combined" }[search.type] || search.type);
   if (search.feeRange) parts.push(feeRangeLabel(search.feeRange));
 
   if (search.facility) {
