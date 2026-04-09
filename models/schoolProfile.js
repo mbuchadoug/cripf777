@@ -17,7 +17,7 @@ const schoolProfileSchema = new mongoose.Schema({
   address: { type: String, default: "" },
 
   // ── Academic profile ──────────────────────────────────────────────────────
-  type:        { type: String, enum: ["primary", "secondary", "combined"], default: "combined" },
+type:        { type: String, enum: ["ecd", "ecd_primary", "primary", "secondary", "combined"], default: "combined" },
   curriculum:  { type: [String], default: [] },      // ["zimsec","cambridge"]
   gender:      { type: String, enum: ["mixed","boys","girls"], default: "mixed" },
   boarding:    { type: String, enum: ["day","boarding","both"], default: "day" },
