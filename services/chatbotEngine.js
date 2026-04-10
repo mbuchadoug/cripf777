@@ -1842,6 +1842,25 @@ const GREETING_WORDS = new Set([
   "help", "start", "menu", "home", "back", "cancel"
 ]);
 
+// ── Global greeting/menu guard ─────────────────────────────────────────────
+if (
+  GREETING_WORDS.has(al) &&
+  !isMetaAction &&
+  (!biz || biz.sessionState === "ready" || biz.sessionState === "supplier_search_city")
+) {
+  if (biz && biz.sessionState !== "ready") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+  }
+
+  if (al === "help") {
+    await sendText(from, "👋 Welcome to ZimQuote. Choose an option below:");
+  }
+
+  return sendMainMenu(from);
+}
+
 if (!biz) {
   const supplierExists = await SupplierProfile.findOne({ phone });
   const sess = await UserSession.findOne({ phone });
