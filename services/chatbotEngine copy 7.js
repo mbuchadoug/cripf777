@@ -4875,16 +4875,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     ]);
   }
 
- const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
-
-  // Greetings/reset words while in search-city state → drop state, go to main menu
-  if (GREETING_WORDS.has(productQuery)) {
-    biz.sessionState = "ready";
-    biz.sessionData  = { ...(biz.sessionData || {}), supplierSearch: {} };
-    await saveBizSafe(biz);
-    return sendMainMenu(from);
-  }
-
+  const productQuery = text.trim().toLowerCase().replace(/\s+/g, " ");
   if (productQuery.length > 1) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
