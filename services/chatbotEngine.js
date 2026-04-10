@@ -5687,7 +5687,9 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
 
 // ── NEW: Service collar group selected by buyer ───────────────────────────────
 // Mirrors the seller registration collar flow - shows only the categories
-// belonging to that collar group (max 10 per group, all fit in one WhatsApp list)
+// ── NEW: Service collar group selected by buyer ───────────────────────────────
+// Shows only service categories in the chosen collar group
+// WhatsApp list max is 10 rows, so reserve space for More/Back when needed
 if (a.startsWith("sup_search_collar_")) {
   const collarKey = a.replace("sup_search_collar_", "");
   const validCollars = ["white_collar", "trade", "blue_collar"];
@@ -5703,9 +5705,14 @@ if (a.startsWith("sup_search_collar_")) {
     c => c.types.includes("service") && c.collar === collarKey
   );
 
-  // Each collar group has ≤ 12 categories - split to stay under WhatsApp's 10-row limit
-  const firstBatch = collarCategories.slice(0, 9);
-  const hasMore    = collarCategories.length > 9;
+  const hasMore = collarCategories.length > 8;
+
+  // If there is a More button, only show 8 categories here:
+  // 8 categories + More + Back = 10 rows max
+  // If there is no More button, show up to 9 categories + Back = 10 rows max
+  const firstBatch = hasMore
+    ? collarCategories.slice(0, 8)
+    : collarCategories.slice(0, 9);
 
   const rows = [
     ...firstBatch.map(c => ({ id: `sup_search_cat_${c.id}`, title: c.label })),
@@ -5725,7 +5732,10 @@ if (a.startsWith("sup_search_collar_more_")) {
   );
 
   const rows = [
-    ...collarCategories.slice(9).map(c => ({ id: `sup_search_cat_${c.id}`, title: c.label })),
+    ...collarCategories.slice(8, 17).map(c => ({
+      id: `sup_search_cat_${c.id}`,
+      title: c.label
+    })),
     { id: `sup_search_collar_${collarKey}`, title: "⬅ Back" }
   ];
 
