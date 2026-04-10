@@ -4771,12 +4771,20 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     }
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
- if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
+if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
 
   console.log(`[HIT-SUPPLIER-SEARCH-CITY] text="${text}" sessionState="${biz.sessionState}"`);
+
+  // ── Greeting while in city-picker → reset and show main menu ─────────────
+  if (GREETING_WORDS.has(text.trim().toLowerCase())) {
+    biz.sessionState = "ready";
+    biz.sessionData  = { ...(biz.sessionData || {}), supplierSearch: {} };
+    await saveBizSafe(biz);
+    return sendMainMenu(from);
+  }
+
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-C] supplier_search_city handler: text="${text}" shortcode=${JSON.stringify(shortcode)}`);
-
   if (shortcode) {
     const cleanProduct = String(shortcode.product || "")
       .toLowerCase()
