@@ -994,9 +994,15 @@ function _buildFilterSummary(search = {}) {
     if (fac) parts.push(fac.label);
   }
 
-  if (search.curriculum) {
-    const cur = SCHOOL_CURRICULA.find(c => c.id === search.curriculum);
-    if (cur) parts.push(cur.label);
+ if (search.curriculum) {
+    // When search.curriculum is "cambridge", it also matches cambridge_primary schools.
+    // Show a broader label so parents aren't confused when they see cambridge_primary results.
+    if (search.curriculum === "cambridge") {
+      parts.push("🎓 Cambridge (all levels)");
+    } else {
+      const cur = SCHOOL_CURRICULA.find(c => c.id === search.curriculum);
+      if (cur) parts.push(cur.label);
+    }
   }
 
   if (search.gender) {
