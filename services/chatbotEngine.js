@@ -4934,11 +4934,9 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
  
     // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
   
-   // Only pass to Twilio for real businesses - ghost supplier biz returns "Access denied"
-      if (!biz.name?.startsWith("pending_supplier_")) {
-      const handled = await continueTwilioFlow({ from, text });
-      if (handled) return;
-    } else {
+    // Business-tool text states are now handled earlier, before marketplace free-text search.
+    // Keep only the ghost-supplier-biz bypass here.
+    if (biz.name?.startsWith("pending_supplier_")) {
       // ── If ghost biz user is mid-order or mid-listed-selection, let handlers below process it ──
       if (
         biz.sessionState === "supplier_order_product" ||
@@ -10905,6 +10903,13 @@ if (biz) {
 
 
 
+
+    // ── IMPORTANT: business-tools text states must be handled BEFORE marketplace free-text search
+  // This prevents expense/sales/product-entry text from being hijacked by supplier city search.
+  if (!isMetaAction && biz && !biz.name?.startsWith("pending_supplier_")) {
+    const handled = await continueTwilioFlow({ from, text });
+    if (handled) return;
+  }
 
   // ── Buyer: free-text product search ──────────────────────────────────────
 if (biz?.sessionState === "supplier_search_product" && !isMetaAction) {
