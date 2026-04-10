@@ -3611,8 +3611,27 @@ if (a === "expense_generate_receipt") {
 if (a.startsWith("expense_branch_")) {
     if (!biz) return sendMainMenu(from);
     const branchId = a.replace("expense_branch_", "");
+
     biz.sessionState = "expense_smart_entry";
-    biz.sessionData  = { targetBranchId: branchId, bulkExpenses: [] };
+    biz.sessionData  = {
+      targetBranchId: branchId,
+      bulkExpenses: []
+    };
+
+    // clear any stale marketplace search context
+    delete biz.sessionData.supplierSearch;
+    delete biz.sessionData.searchResults;
+    delete biz.sessionData.searchPage;
+    delete biz.sessionData.orderSupplierId;
+    delete biz.sessionData.orderCart;
+    delete biz.sessionData.orderItems;
+    delete biz.sessionData.orderProduct;
+    delete biz.sessionData.orderQuantity;
+    delete biz.sessionData.orderIsService;
+    delete biz.sessionData.orderBrowseMode;
+    delete biz.sessionData.orderCataloguePage;
+    delete biz.sessionData.orderCatalogueSearch;
+
     await saveBizSafe(biz);
     return sendButtons(from, {
       text:
@@ -4559,28 +4578,46 @@ const schoolAdminStates = [
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
 // supplier_search_city is excluded from the block - typed text in that state
-// should be treated as a new shortcode search, not passed to the state machine
-const shortcodeBlockedStates = supplierStates.filter(s => 
-  s !== "supplier_search_city" && 
-  s !== "supplier_order_product" &&
-  s !== "supplier_order_enter_price" &&
-  // ── School search states must NOT block shortcode search ──────────────────
-  // When sessionState is school_search_city or school_search_results, the user
-  // is a parent mid-search. Typed shortcuts like "find primary borrowdale"
-  // must still fire. These states belong in supplierStates for the state
-  // machine but must be excluded here so the shortcode gate passes.
-  s !== "school_search_city" &&
-  s !== "school_search_results"
-  // supplier_order_address: intentionally blocked - address free-text must
-  // never be intercepted by shortcode search, it belongs to the address handler
-  // supplier_order_picking: intentionally blocked - NxQ input belongs to the catalogue parser
-);
+// ── Shortcode search for any user (runs BEFORE state machine) ─────────────
+// IMPORTANT:
+// Business-tools free-text states must NEVER be intercepted here.
+// They belong to continueTwilioFlow(...), not marketplace shortcode search.
+const shortcodeBlockedStates = [
+  ...supplierStates.filter(s =>
+    s !== "supplier_search_city" &&
+    s !== "supplier_order_product" &&
+    s !== "supplier_order_enter_price"
+  ),
+
+  // Business tools text-entry states
+  "expense_smart_entry",
+  "expense_bulk_confirm",
+  "bulk_expense_input",
+  "payment_amount",
+  "payment_method",
+  "expense_amount",
+  "expense_category",
+  "cash_set_opening_balance",
+  "cash_payout_amount",
+  "cash_payout_reason",
+  "sales_doc_search",
+  "sales_doc_list",
+  "sales_doc_filter",
+  "client_statement_generate",
+  "settings_currency",
+  "settings_terms",
+  "settings_inv_prefix",
+  "settings_qt_prefix",
+  "settings_rcpt_prefix",
+  "branch_add_name",
+  "invite_user_phone"
+];
+
 if (
   !isMetaAction &&
   biz &&
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
-  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState)
 ) {
