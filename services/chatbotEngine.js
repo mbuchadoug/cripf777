@@ -4589,7 +4589,7 @@ const shortcodeBlockedStates = [
     s !== "supplier_order_enter_price"
   ),
 
-  // Business tools text-entry states
+ // Business tools text-entry states
   "expense_smart_entry",
   "expense_bulk_confirm",
   "bulk_expense_input",
@@ -4604,13 +4604,37 @@ const shortcodeBlockedStates = [
   "sales_doc_list",
   "sales_doc_filter",
   "client_statement_generate",
+
+  // Invoice / quote / receipt text-entry states
+  "creating_invoice_new_client",
+  "creating_invoice_new_client_phone",
+  "invoice_quick_add_product_name",
+  "invoice_quick_add_product_price",
+  "creating_invoice_add_items",
+  "creating_invoice_qty",
+  "creating_invoice_add_item_text",
+
+  "quote_quick_add_product_name",
+  "quote_quick_add_product_price",
+  "receipt_quick_add_product_name",
+  "receipt_quick_add_product_price",
+
+  // Products & services text-entry states
+  "product_add_name",
+  "product_add_price",
+  "product_edit_name",
+  "product_edit_price",
+
+  // Clients / branches / settings
   "settings_currency",
   "settings_terms",
   "settings_inv_prefix",
   "settings_qt_prefix",
   "settings_rcpt_prefix",
   "branch_add_name",
-  "invite_user_phone"
+  "invite_user_phone",
+  "add_client_name",
+  "add_client_phone"
 ];
 
 if (
