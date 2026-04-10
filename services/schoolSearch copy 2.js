@@ -117,13 +117,6 @@ function _findSchoolFacility(text = "") {
 function _findSchoolCurriculum(text = "") {
   const normalized = _normSchoolText(text);
 
-  // Check cambridge_primary first (more specific) before cambridge
-  if (_includesWholePhrase(normalized, "cambridge primary") ||
-      _includesWholePhrase(normalized, "cambridge checkpoint") ||
-      _includesWholePhrase(normalized, "cambridge_primary")) {
-    return "cambridge_primary";
-  }
-
   for (const cur of SCHOOL_CURRICULA) {
     if (_includesWholePhrase(normalized, cur.id)) return cur.id;
     if (_includesWholePhrase(normalized, cur.label)) return cur.id;
@@ -648,15 +641,7 @@ if (search.type) {
 }
 if (search.feeRange)  query.feeRange   = search.feeRange;
 if (search.facility)  query.facilities = search.facility;
-if (search.curriculum) {
-  // "cambridge" search should find both cambridge (IGCSE) AND cambridge_primary schools
-  // "cambridge_primary" search finds only cambridge_primary schools
-  if (search.curriculum === "cambridge") {
-    query.curriculum = { $in: ["cambridge", "cambridge_primary"] };
-  } else {
-    query.curriculum = search.curriculum;
-  }
-}
+if (search.curriculum) query.curriculum = search.curriculum;
 if (search.gender)    query.gender     = search.gender;
 if (search.boarding)  query.boarding   = search.boarding;
 if (typeof search.admissionsOpen === "boolean") {
