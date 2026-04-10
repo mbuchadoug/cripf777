@@ -4486,7 +4486,8 @@ Next due date: *${freshBiz.subscriptionEndsAt ? freshBiz.subscriptionEndsAt.toDa
 
   // ── Pass text to Twilio state machine ─────────────────────────────────────
 
-const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
+//const escapeWords = ["menu", "hi", "hello", "start", "cancel"];
+const escapeWords = ["menu", "hi", "hie", "hey", "hello", "helo", "howzit", "help", "start", "cancel", "yo", "sup"];
 
   // Pass supplier registration states to the state bridge
 const supplierStates = [
