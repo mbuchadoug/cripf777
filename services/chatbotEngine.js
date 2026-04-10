@@ -4579,6 +4579,7 @@ if (
   biz &&
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
+  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState)
 ) {
