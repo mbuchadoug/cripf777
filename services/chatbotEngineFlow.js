@@ -292,6 +292,33 @@ export async function handleIncomingMessage({ from, action }) {
       a.startsWith("cashbal_branch_")
     );
 
+    // ── GLOBAL school shortcode trigger ──────────────────────────────────────
+  // Must run before supplier shortcode search and before no-biz early returns,
+  // but only after isMetaAction and biz are available.
+  const SCHOOL_TRIGGER_PHRASES = [
+    "find school", "find schools",
+    "find primary", "find secondary", "find combined", "find preschool",
+    "find ecd", "find kindergarten", "find boarding school", "find day school",
+    "find girls school", "find boys school", "find mixed school",
+    "find budget school", "find affordable school", "find cheap school",
+    "find premium school", "find cambridge school", "find zimsec school",
+    "find a school", "look for school", "search school",
+    "school in ", "schools in ", "primary school in ", "secondary school in "
+  ];
+
+  const isSchoolShortcodeQuery =
+    typeof action === "string" &&
+    SCHOOL_TRIGGER_PHRASES.some(phrase => al.startsWith(phrase) || al.includes(phrase));
+
+  if (!isMetaAction && text.trim().length > 2 && isSchoolShortcodeQuery) {
+    const handled = await runSchoolShortcodeSearch({
+      from,
+      text,
+      biz,
+      saveBiz: biz ? saveBizSafe : async () => {}
+    });
+    if (handled !== false) return handled;
+  }
   // =========================
   // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
   // =========================
