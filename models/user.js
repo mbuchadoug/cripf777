@@ -16,7 +16,7 @@ const UserSchema = new mongoose.Schema({
     default: null
   },
 
-  role: {
+role: {
     type: String,
     enum: [
       "student",
@@ -25,7 +25,8 @@ const UserSchema = new mongoose.Schema({
       "org_admin",
       "super_admin",
       "private_teacher",
-      "parent"
+      "parent",
+      "readonly_admin"   // ← NEW: can view all, edit only quiz classification
     ],
     default: "parent"
   },

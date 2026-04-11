@@ -123,7 +123,6 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
   try {
     if (isPlatformAdmin(req)) return next();
 
-    // not platform admin -> check org membership role
     const slug = String(req.params.slug || "").trim();
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -132,11 +131,38 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
     if (!membership) return res.status(403).send("Admins only (org membership required)");
 
     const role = String(membership.role || "").toLowerCase();
-    if (role === "manager" || role === "admin") return next();
+    // readonly_admin is allowed through here too — individual routes gate writes separately
+    if (["manager", "admin", "readonly_admin"].includes(role)) return next();
 
     return res.status(403).send("Admins only (insufficient role)");
   } catch (e) {
     console.error("[allowPlatformAdminOrOrgManager] error:", e && (e.stack || e));
+    return res.status(500).send("server error");
+  }
+}
+
+
+
+/* ------------------------------------------------------------------ */
+/*  Guard: blocks readonly_admin from write operations                 */
+/*  Apply this AFTER allowPlatformAdminOrOrgManager on mutating routes */
+/* ------------------------------------------------------------------ */
+async function denyReadOnly(req, res, next) {
+  if (isPlatformAdmin(req)) return next(); // platform admins always pass
+
+  const slug = String(req.params.slug || "").trim();
+  try {
+    const org = await Organization.findOne({ slug }).lean();
+    if (!org) return next(); // let the main handler 404
+
+    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+    const role = String(membership?.role || "").toLowerCase();
+    if (role === "readonly_admin") {
+      return res.status(403).json({ ok: false, error: "Read-only admins cannot perform this action" });
+    }
+    return next();
+  } catch (e) {
+    console.error("[denyReadOnly]", e);
     return res.status(500).send("server error");
   }
 }
@@ -3040,6 +3066,7 @@ router.post(
   "/admin/orgs/:slug/members/:userId/credentials",
   ensureAuth,
   allowPlatformAdminOrOrgManager,
+  denyReadOnly,               // ← ADD THIS LINE
   async (req, res) => {
     try {
       const { slug, userId } = req.params;
@@ -3462,7 +3489,7 @@ router.post(
 router.get(
   "/admin/orgs/:slug/classify/quizzes",
   ensureAuth,
-  ensureAdminEmails,
+ allowPlatformAdminOrOrgManager,   // ← was ensureAdminEmails
   async (req, res) => {
     try {
       const org = await Organization.findOne({ slug: req.params.slug }).lean();
@@ -3594,7 +3621,7 @@ const CLASSIFY_ALL_CATEGORIES = Object.values(CLASSIFY_PILLAR_CATEGORIES).flat()
 router.patch(
   "/admin/orgs/:slug/classify/quiz/:quizId",
   ensureAuth,
-  ensureAdminEmails,
+  allowPlatformAdminOrOrgManager,   // ← was ensureAdminEmails
   async (req, res) => {
     try {
       const { slug, quizId } = req.params;
@@ -3654,7 +3681,7 @@ router.patch(
 router.post(
   "/admin/orgs/:slug/classify/bulk",
   ensureAuth,
-  ensureAdminEmails,
+  allowPlatformAdminOrOrgManager,   // ← was ensureAdminEmails
   async (req, res) => {
     try {
       const { slug }  = req.params;
@@ -3705,6 +3732,156 @@ router.post(
     } catch (err) {
       console.error("[classify bulk]", err);
       return res.status(500).json({ ok: false, error: "Server error" });
+    }
+  }
+);
+
+
+
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Manually add a new member to an org (no invite required)   */
+/*  POST /admin/orgs/:slug/members/add                                */
+/*                                                                     */
+/*  Body: { firstName, lastName, email?, role?, customUsername?,      */
+/*          customPassword? }                                          */
+/*  Returns: { ok, userId, username, tempPassword, loginUrl }         */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/add",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  async (req, res) => {
+    try {
+      const { slug } = req.params;
+      let {
+        firstName,
+        lastName,
+        email,
+        role = "employee",
+        customUsername,
+        customPassword,
+      } = req.body;
+
+      if (!firstName || !lastName) {
+        return res.status(400).json({ ok: false, error: "firstName and lastName are required" });
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      // Normalise inputs
+      firstName = String(firstName).trim();
+      lastName  = String(lastName).trim();
+      email     = email ? String(email).toLowerCase().trim() : null;
+
+      // Valid membership roles for cripfcnt-school
+      const ALLOWED_ROLES = ["employee", "teacher", "admin", "manager", "readonly_admin"];
+      const membershipRole = ALLOWED_ROLES.includes(role) ? role : "employee";
+
+      // User.role enum mapping
+      const USER_ROLE_MAP = {
+        employee:      "employee",
+        teacher:       "teacher",
+        admin:         "employee",          // org_admin in membership, not User.role
+        manager:       "employee",
+        readonly_admin:"employee",
+      };
+      const userRole = USER_ROLE_MAP[membershipRole] || "employee";
+
+      // Check for duplicate email
+      if (email) {
+        const emailExists = await User.findOne({ email }).lean();
+        if (emailExists) {
+          return res.status(409).json({ ok: false, error: `A user with email "${email}" already exists` });
+        }
+      }
+
+      // ── Generate username ─────────────────────────────────────
+      let username;
+      if (customUsername) {
+        username = String(customUsername).toLowerCase().trim().replace(/[^a-z0-9_\-.]/g, "");
+        if (username.length < 3) {
+          return res.status(400).json({ ok: false, error: "Username must be at least 3 characters" });
+        }
+        const taken = await User.findOne({ username }).lean();
+        if (taken) {
+          return res.status(409).json({ ok: false, error: `Username "${username}" is already taken` });
+        }
+      } else {
+        username = await User.createUniqueUsername(firstName, lastName);
+      }
+
+      // ── Generate password ─────────────────────────────────────
+      let tempPassword;
+      if (customPassword && String(customPassword).length >= 8) {
+        tempPassword = String(customPassword);
+      } else {
+        // Format: FirstName + 4-digit PIN + !  e.g.  John4821!
+        const pin   = String(Math.floor(1000 + Math.random() * 9000));
+        const first = firstName.replace(/[^a-zA-Z]/g, "");
+        tempPassword = first + pin + "!";
+      }
+
+      // ── Create user ───────────────────────────────────────────
+      const newUser = new User({
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`,
+        email,
+        username,
+        role:              userRole,
+        organization:      org._id,
+        needsPasswordSetup: true,   // prompt them to change on first login
+        createdAt:         new Date(),
+        lastLogin:         null,
+        // subscription defaults are handled by schema
+      });
+      await newUser.setPassword(tempPassword);
+      await newUser.save();
+
+      // ── Create org membership ─────────────────────────────────
+      await OrgMembership.findOneAndUpdate(
+        { org: org._id, user: newUser._id },
+        {
+          $set: {
+            role:      membershipRole,
+            joinedAt:  new Date(),
+            isOnboardingComplete: false,
+          }
+        },
+        { upsert: true }
+      );
+
+      // ── For employee: set trial subscription fields ───────────
+      if (membershipRole === "employee" || membershipRole === "teacher") {
+        await User.updateOne(
+          { _id: newUser._id },
+          {
+            $set: {
+              employeeSubscriptionStatus: "trial",
+              employeeSubscriptionPlan:   "none",
+            }
+          }
+        );
+      }
+
+      console.log(`[add-member] Created ${username} (${membershipRole}) in ${slug}`);
+
+      return res.json({
+        ok:           true,
+        userId:       String(newUser._id),
+        username,
+        tempPassword,
+        role:         membershipRole,
+        loginUrl:     "/auth/school",
+        message:      `User created. They can log in at /auth/school with username "${username}" and the provided password.`,
+        note:         "Share these credentials securely. The user should change their password on first login."
+      });
+
+    } catch (err) {
+      console.error("[add-member]", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "Failed to create member" });
     }
   }
 );
