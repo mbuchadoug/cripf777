@@ -313,11 +313,46 @@ router.post("/school", async (req, res) => {
         return res.render("auth/school_login", { error: "Login failed" });
       }
       const membership = await OrgMembership.findOne({ user: user._id }).populate("org").lean();
-      if (!membership || !membership.org?.slug) {
-        return res.render("auth/school_login", { error: "No school assigned to this account" });
-      }
-      if (user.role === "student") return res.redirect("/student/dashboard");
-      return res.redirect(`/org/${membership.org.slug}/dashboard`);
+     if (!membership || !membership.org?.slug) {
+  return res.render("auth/school_login", { error: "No school assigned to this account" });
+}
+if (user.role === "student") {
+  console.log("[/auth/school] student login -> /student/dashboard", {
+    userId: String(user._id),
+    username: user.username
+  });
+  return res.redirect("/student/dashboard");
+}
+
+if (user.role === "private_teacher") {
+  const td = await User.findById(user._id)
+    .select("needsProfileSetup schoolLevelsEnabled")
+    .lean();
+
+  console.log("[/auth/school] private teacher login", {
+    userId: String(user._id),
+    username: user.username,
+    needsProfileSetup: !!td?.needsProfileSetup,
+    schoolLevelsEnabled: td?.schoolLevelsEnabled || []
+  });
+
+  if (td?.needsProfileSetup || !td?.schoolLevelsEnabled?.length) {
+    console.log("[/auth/school] redirect -> /teacher/setup");
+    return res.redirect("/teacher/setup");
+  }
+
+  console.log("[/auth/school] redirect -> /teacher/dashboard");
+  return res.redirect("/teacher/dashboard");
+}
+
+console.log("[/auth/school] fallback org redirect", {
+  userId: String(user._id),
+  username: user.username,
+  role: user.role,
+  orgSlug: membership.org.slug
+});
+
+return res.redirect(`/org/${membership.org.slug}/dashboard`);
     });
   } catch (e) {
     console.error("[school login]", e);

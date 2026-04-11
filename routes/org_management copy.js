@@ -604,6 +604,88 @@ return res.redirect(`/org/${org.slug}/dashboard`);
   }
 });
 
+
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Activate member                                            */
+/*  POST /admin/orgs/:slug/members/:userId/activate                   */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/:userId/activate",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  denyReadOnly,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").trim();
+      const userId = String(req.params.userId || "").trim();
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) {
+        return res.status(404).json({ ok: false, error: "org not found" });
+      }
+
+      const membership = await OrgMembership.findOne({
+        org: org._id,
+        user: userId
+      }).lean();
+
+      if (!membership) {
+        return res.status(404).json({ ok: false, error: "membership not found" });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ ok: false, error: "user not found" });
+      }
+
+      const role = String(membership.role || user.role || "").toLowerCase();
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setDate(expiresAt.getDate() + 30);
+
+      // private teacher activation
+      if (role === "private_teacher" || user.role === "private_teacher") {
+        user.teacherSubscriptionStatus = "paid";
+        user.teacherSubscriptionPlan = "starter";
+        user.teacherSubscriptionExpiresAt = expiresAt;
+        user.teacherPaidAt = now;
+        user.aiQuizCredits = 20;
+        user.aiQuizCreditsResetAt = now;
+        user.consumerEnabled = true;
+
+        await user.save();
+
+        return res.json({
+          ok: true,
+          activated: true,
+          memberType: "private_teacher",
+          plan: "starter",
+          expiresAt
+        });
+      }
+
+      // default employee/staff activation
+      user.employeeSubscriptionStatus = "paid";
+      user.employeeSubscriptionPlan = "full_access";
+      user.employeeSubscriptionExpiresAt = expiresAt;
+      user.employeePaidAt = now;
+
+      await user.save();
+
+      return res.json({
+        ok: true,
+        activated: true,
+        memberType: "employee",
+        plan: "full_access",
+        expiresAt
+      });
+    } catch (err) {
+      console.error("[admin activate member] error:", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "activation failed" });
+    }
+  }
+);
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Member actions (promote/demote/remove)                     */
 /*  POST /admin/orgs/:slug/members/:userId                            */

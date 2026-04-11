@@ -724,7 +724,11 @@ if (role === "student" && !newUser.studentId) {
 
 if (role === "private_teacher") {
   newUser.consumerEnabled = true;
-  newUser.needsProfileSetup = true;
+
+  // Admin-created teachers should be able to log in immediately
+  newUser.needsProfileSetup = false;
+  newUser.schoolLevelsEnabled = ["junior", "high"];
+
   newUser.teacherSubscriptionStatus = "trial";
   newUser.teacherSubscriptionPlan = "none";
   newUser.teacherSubscriptionExpiresAt = null;
@@ -3462,6 +3466,16 @@ router.post(
     }
   }
 );
+
+
+async function activateTeacher(userId, btn) {
+  const r = await api(`/admin/orgs/${ORG}/members/${userId}/activate`, 'POST', {});
+  if (r.ok) {
+    btn.outerHTML = '<span class="btn-activate active">✓ Active</span>';
+  } else {
+    alert(r.data?.error || 'Activation failed');
+  }
+}
 
 
 

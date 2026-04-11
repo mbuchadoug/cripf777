@@ -3110,12 +3110,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="fld">
           <label>Role</label>
-       <select name="role" required>
-  <option value="employee">Employee</option>
-  <option value="student">Student</option>
-  <option value="teacher">Teacher</option>
-  <option value="private_teacher">Private Teacher</option>
-  <option value="readonly_admin">Read Only Admin</option>
+    <select name="role" required>
+  {{#if isHomeSchool}}
+    <option value="private_teacher">Private Teacher</option>
+    <option value="student">Student</option>
+    <option value="teacher">Teacher</option>
+    <option value="readonly_admin">Read Only Admin</option>
+  {{else}}
+    <option value="employee">Employee</option>
+    <option value="student">Student</option>
+    <option value="teacher">Teacher</option>
+    <option value="readonly_admin">Read Only Admin</option>
+  {{/if}}
 </select>
         </div>
 
