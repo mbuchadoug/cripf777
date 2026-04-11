@@ -5,7 +5,6 @@ import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 const schoolProfileSchema = new mongoose.Schema({
   // ── Identity ──────────────────────────────────────────────────────────────
   phone:          { type: String, required: true, unique: true, index: true },
-  contactPhone:   { type: String, default: "" },   // public-facing number shown to parents
   schoolName:     { type: String, required: true },
   principalName:  { type: String, default: "" },
   email:          { type: String, default: "" },
@@ -18,7 +17,7 @@ const schoolProfileSchema = new mongoose.Schema({
   address: { type: String, default: "" },
 
   // ── Academic profile ──────────────────────────────────────────────────────
-  type:        { type: String, enum: ["ecd", "ecd_primary", "primary", "secondary", "combined"], default: "combined" },
+type:        { type: String, enum: ["ecd", "ecd_primary", "primary", "secondary", "combined"], default: "combined" },
   curriculum:  { type: [String], default: [] },      // ["zimsec","cambridge"]
   gender:      { type: String, enum: ["mixed","boys","girls"], default: "mixed" },
   boarding:    { type: String, enum: ["day","boarding","both"], default: "day" },
@@ -81,6 +80,7 @@ schoolProfileSchema.index({ city: 1, suburb: 1, active: 1 });
 schoolProfileSchema.index({ feeRange: 1, active: 1 });
 schoolProfileSchema.index({ type: 1, active: 1 });
 schoolProfileSchema.index({ facilities: 1, active: 1 });
+
 schoolProfileSchema.index({ curriculum: 1, active: 1 });
 schoolProfileSchema.index({ gender: 1, active: 1 });
 schoolProfileSchema.index({ boarding: 1, active: 1 });

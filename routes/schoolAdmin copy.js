@@ -362,12 +362,6 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
               <label>Principal Name</label>
               <input name="principalName" placeholder="e.g. Mrs J. Moyo" />
             </div>
-            <div class="fg">
-              <label>Contact Phone (shown to parents)</label>
-              <input name="contactPhone" placeholder="e.g. 0242123456 or 0772123456"
-                     title="This number appears on the school profile card. Leave blank to hide." />
-              <span style="font-size:11px;color:var(--muted)">Office landline, bursar, or admissions number — shown publicly on the WhatsApp profile card.</span>
-            </div>
           </div>
         </div>
 
@@ -524,7 +518,7 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
 router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
   try {
     const {
-      schoolName, phone, contactPhone, city, suburb, address, email, website,
+      schoolName, phone, city, suburb, address, email, website,
       principalName, type, gender, boarding, gradesFrom, gradesTo,
       capacity, curriculum, facilities, extramuralActivities,
       feesTerm1, feesTerm2, feesTerm3,
@@ -568,7 +562,6 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
     const school = await SchoolProfile.create({
       schoolName:           schoolName.trim(),
       phone:                cleanPhone,
-      contactPhone:         contactPhone?.trim() || "",
       city:                 city.trim(),
       suburb:               suburb.trim(),
       address:              address?.trim() || "",
@@ -669,8 +662,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
           </div>
           <dl class="detail-list">
             <dt>School Name</dt><dd><strong>${esc(school.schoolName)}</strong>${school.verified ? " ✅ Verified" : ""}</dd>
-            <dt>Phone (login)</dt><dd>${esc(school.phone)}</dd>
-            <dt>Contact Phone</dt><dd>${esc(school.contactPhone || "-")}</dd>
+            <dt>Phone</dt><dd>${esc(school.phone)}</dd>
             <dt>Email</dt><dd>${esc(school.email || "-")}</dd>
             <dt>Website</dt><dd>${esc(school.website || "-")}</dd>
             <dt>Location</dt><dd>${esc(school.suburb || "")}, ${esc(school.city)}</dd>
@@ -819,8 +811,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;margin-top:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Basic Info</p>
           <div class="form-grid">
             <div class="fg"><label>School Name</label><input name="schoolName" value="${esc(school.schoolName)}" required /></div>
-            <div class="fg"><label>Phone (login / WhatsApp)</label><input name="phone" value="${esc(school.phone)}" required /></div>
-            <div class="fg"><label>Contact Phone (shown to parents)</label><input name="contactPhone" value="${esc(school.contactPhone || "")}" placeholder="e.g. 0242123456" /></div>
+            <div class="fg"><label>Phone</label><input name="phone" value="${esc(school.phone)}" required /></div>
             <div class="fg">
               <label>City</label>
               <select name="city" required>
@@ -934,7 +925,7 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     if (!school) return res.redirect("/zq-admin/schools");
 
     const {
-      schoolName, phone, contactPhone, city, suburb, address, email, website,
+      schoolName, phone, city, suburb, address, email, website,
       principalName, type, gender, boarding, gradesFrom, gradesTo,
       capacity, curriculum, facilities, extramuralActivities,
       feesTerm1, feesTerm2, feesTerm3,
@@ -955,7 +946,6 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
 
     school.schoolName           = schoolName?.trim() || school.schoolName;
     school.phone                = phone?.trim().replace(/\s+/g, "") || school.phone;
-    school.contactPhone         = contactPhone?.trim() || "";
     school.city                 = city?.trim() || school.city;
     school.suburb               = suburb?.trim() || school.suburb;
     school.address              = address?.trim() || "";

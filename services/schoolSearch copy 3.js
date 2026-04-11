@@ -786,7 +786,7 @@ ${admissions}
 
 🏃 *Extramural:* ${extraList}
 
-${school.principalName ? `👤 *Principal:* ${school.principalName}\n` : ""}${school.contactPhone ? `📞 *Contact:* ${school.contactPhone}\n` : ""}${school.email ? `📧 ${school.email}\n` : ""}
+${school.principalName ? `👤 *Principal:* ${school.principalName}\n` : ""}${school.email ? `📧 ${school.email}\n` : ""}
 ${rating}
 👀 ${school.monthlyViews || 0} views this month`;
 
@@ -947,12 +947,10 @@ async function _contactSchool(from, schoolId) {
 
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
 
-  const displayPhone = school.contactPhone || school.phone;
-
   const contactText =
 `📞 *Contact ${school.schoolName}*
 
-📱 Phone: *${displayPhone}*
+📱 WhatsApp/Phone: *${school.phone}*
 ${school.email    ? `📧 Email: ${school.email}\n`   : ""}${school.address  ? `🏠 Address: ${school.address}\n` : ""}${school.website  ? `🌐 Website: ${school.website}\n` : ""}
 📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}
 
