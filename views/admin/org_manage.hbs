@@ -1405,18 +1405,25 @@
   </button>
 </div>
         <!-- Tabs -->
-        <div class="m-tabs">
-          {{#if groups.students.length}}
-            <button class="m-tab active" data-mtab="m-students" onclick="switchMTab('m-students',this)">🎓 Students ({{groups.students.length}})</button>
-          {{/if}}
-          {{#if groups.teachers.length}}
-            <button class="m-tab {{#unless groups.students.length}}active{{/unless}}" data-mtab="m-teachers" onclick="switchMTab('m-teachers',this)">📖 Teachers ({{groups.teachers.length}})</button>
-          {{/if}}
-          <button class="m-tab {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" data-mtab="m-staff" onclick="switchMTab('m-staff',this)">👤 Staff / Employees ({{groups.staff.length}})</button>
-          {{#if groups.admins.length}}
-            <button class="m-tab" data-mtab="m-admins" onclick="switchMTab('m-admins',this)">⭐ Admins ({{groups.admins.length}})</button>
-          {{/if}}
-        </div>
+      <div class="m-tabs">
+  {{#if groups.students.length}}
+    <button class="m-tab active" data-mtab="m-students" onclick="switchMTab('m-students',this)">🎓 Students ({{groups.students.length}})</button>
+  {{/if}}
+
+  {{#if groups.teachers.length}}
+    <button class="m-tab {{#unless groups.students.length}}active{{/unless}}" data-mtab="m-teachers" onclick="switchMTab('m-teachers',this)">📖 Teachers ({{groups.teachers.length}})</button>
+  {{/if}}
+
+  {{#if groups.privateTeachers.length}}
+    <button class="m-tab {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" data-mtab="m-private-teachers" onclick="switchMTab('m-private-teachers',this)">👨‍🏫 Private Teachers ({{groups.privateTeachers.length}})</button>
+  {{/if}}
+
+  <button class="m-tab {{#unless (or groups.students.length groups.teachers.length groups.privateTeachers.length)}}active{{/unless}}" data-mtab="m-staff" onclick="switchMTab('m-staff',this)">👤 Staff / Employees ({{groups.staff.length}})</button>
+
+  {{#if groups.admins.length}}
+    <button class="m-tab" data-mtab="m-admins" onclick="switchMTab('m-admins',this)">⭐ Admins ({{groups.admins.length}})</button>
+  {{/if}}
+</div>
         <div class="m-search">
           <input type="text" id="memberSearch" placeholder="Search by name, email, ID…" oninput="filterMembers(this.value)">
         </div>
@@ -1503,6 +1510,63 @@
           </div>
         </div>
         {{/if}}
+
+        {{#if groups.privateTeachers.length}}
+<div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-private-teachers">
+  <div class="scroll-wrap">
+    <table class="mem-table">
+      <thead>
+        <tr>
+          <th>Private Teacher</th>
+          <th class="col-hide-xs">Username</th>
+          <th class="col-hide-sm">Subscription</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each groups.privateTeachers}}
+        {{#if this.user}}
+        <tr class="mem-row" data-uid="{{this.user._id}}">
+          <td>
+            <div style="display:flex;align-items:center">
+              <div class="avatar" style="background:var(--teal)">{{#if this.user.firstName}}{{substring this.user.firstName 0 1}}{{else}}T{{/if}}</div>
+              <div>
+                <div class="user-name">{{this.user.firstName}} {{this.user.lastName}}</div>
+                <div class="user-email">{{this.user.email}}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            {{#if this.user.username}}<div class="mono">@{{this.user.username}}</div>{{else}}<span style="color:var(--ink-faint);font-size:12px">None</span>{{/if}}
+            {{#if this.user.passwordHash}}<div style="font-size:10.5px;color:var(--emerald);margin-top:2px">● Has password</div>{{else}}<div style="font-size:10.5px;color:var(--ink-faint);margin-top:2px">○ No password</div>{{/if}}
+          </td>
+          <td>
+            {{#if (eq this.user.teacherSubscriptionStatus "paid")}}
+              <span class="badge badge-paid">✓ Active</span>
+            {{else}}
+              <span class="badge badge-trial">Trial</span>
+            {{/if}}
+          </td>
+          <td>
+            <div class="act-row">
+              {{#if (eq this.user.teacherSubscriptionStatus "trial")}}
+              <button class="btn-activate" onclick="activateTeacher('{{this.user._id}}',this)">✓ Activate</button>
+              {{else}}
+              <span class="btn-activate active">✓ Active</span>
+              {{/if}}
+              <button class="btn btn-xs btn-o" onclick="openCredModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}','private_teacher')">🔑 Creds</button>
+              <button class="btn btn-xs btn-o" onclick="openAssignModal('{{this.user._id}}','{{this.user.firstName}} {{this.user.lastName}}')">📋 Assign</button>
+              <button class="btn btn-xs btn-r" onclick="memberAction(this,'{{../org.slug}}','{{this.user._id}}','remove')">✕</button>
+            </div>
+          </td>
+        </tr>
+        {{/if}}
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{/if}}
 
         <!-- STAFF / EMPLOYEES -->
         <div class="m-pane {{#unless (or groups.students.length groups.teachers.length)}}active{{/unless}}" id="m-staff">
@@ -3046,12 +3110,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="fld">
           <label>Role</label>
-          <select name="role" required>
-            <option value="employee">Employee</option>
-            <option value="student">Student</option>
-            <option value="teacher">Teacher</option>
-            <option value="readonly_admin">Read Only Admin</option>
-          </select>
+       <select name="role" required>
+  <option value="employee">Employee</option>
+  <option value="student">Student</option>
+  <option value="teacher">Teacher</option>
+  <option value="private_teacher">Private Teacher</option>
+  <option value="readonly_admin">Read Only Admin</option>
+</select>
         </div>
 
       </div>

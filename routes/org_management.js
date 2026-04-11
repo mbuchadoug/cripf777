@@ -320,6 +320,7 @@ if (org.slug === "cripfcnt-home" || org.slug === "cripfcnt-school") {
 const groups = {
   students: [],
   teachers: [],
+  privateTeachers: [],
   staff: [],
   admins: []
 };
@@ -333,13 +334,14 @@ for (const m of membershipsRaw) {
     groups.students.push(m);
   } else if (role === "teacher") {
     groups.teachers.push(m);
+  } else if (role === "private_teacher") {
+    groups.privateTeachers.push(m);
   } else if (role === "employee" || role === "staff") {
     groups.staff.push(m);
-   } else if (["admin", "manager", "org_admin", "readonly_admin"].includes(role)) {
+  } else if (["admin", "manager", "org_admin", "readonly_admin"].includes(role)) {
     groups.admins.push(m);
   }
 }
-
       const modules = await OrgModule.find({ org: org._id }).lean();
 console.log("ORG ID:", org._id.toString());
 
@@ -684,11 +686,10 @@ router.post(
         return res.status(400).json({ ok: false, error: "First name and last name are required" });
       }
 
-      const allowedRoles = ["employee", "student", "teacher", "readonly_admin"];
-      if (!allowedRoles.includes(role)) {
-        return res.status(400).json({ ok: false, error: "Invalid role" });
-      }
-
+    const allowedRoles = ["employee", "student", "teacher", "readonly_admin", "private_teacher"];
+if (!allowedRoles.includes(role)) {
+  return res.status(400).json({ ok: false, error: "Invalid role" });
+}
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
 
@@ -705,22 +706,32 @@ router.post(
       const pin = String(Math.floor(1000 + Math.random() * 9000));
       const tempPassword = `${firstClean}${pin}!`;
 
-      const newUser = new User({
-        firstName,
-        lastName,
-        displayName: `${firstName} ${lastName}`.trim(),
-        email: emailRaw || undefined,
-        username,
-        role
-      });
+    const newUser = new User({
+  firstName,
+  lastName,
+  displayName: `${firstName} ${lastName}`.trim(),
+  email: emailRaw || undefined,
+  username,
+  role
+});
 
-      await newUser.setPassword(tempPassword);
-      newUser.needsPasswordSetup = false;
+await newUser.setPassword(tempPassword);
+newUser.needsPasswordSetup = false;
 
-      if (role === "student" && !newUser.studentId) {
-        newUser.studentId = `STU${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
-      }
+if (role === "student" && !newUser.studentId) {
+  newUser.studentId = `STU${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
+}
 
+if (role === "private_teacher") {
+  newUser.consumerEnabled = true;
+  newUser.needsProfileSetup = true;
+  newUser.teacherSubscriptionStatus = "trial";
+  newUser.teacherSubscriptionPlan = "none";
+  newUser.teacherSubscriptionExpiresAt = null;
+  newUser.teacherPaidAt = null;
+  newUser.aiQuizCredits = 0;
+  newUser.aiQuizCreditsResetAt = null;
+}
       await newUser.save();
 
       await OrgMembership.create({
@@ -3389,6 +3400,7 @@ router.post(
   "/admin/orgs/:slug/members/:userId/activate",
   ensureAuth,
   allowPlatformAdminOrOrgManager,
+  denyReadOnly,
   async (req, res) => {
     try {
       const { slug, userId } = req.params;
@@ -3396,35 +3408,56 @@ router.post(
       const org = await Organization.findOne({ slug }).lean();
       if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
 
-      // Verify user is actually a member of this org
       const membership = await OrgMembership.findOne({ org: org._id, user: userId }).lean();
-      if (!membership) return res.status(404).json({ ok: false, error: "User is not a member of this org" });
+      if (!membership) {
+        return res.status(404).json({ ok: false, error: "User is not a member of this org" });
+      }
 
       const user = await User.findById(userId);
       if (!user) return res.status(404).json({ ok: false, error: "User not found" });
 
-      // Set 1-year expiry from today (adjust as needed)
-      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setDate(expiresAt.getDate() + 30);
 
-      await User.findByIdAndUpdate(userId, {
-        $set: {
-          employeeSubscriptionStatus:   "paid",
-          employeeSubscriptionPlan:     "full_access",
-          employeePaidAt:               new Date(),
-          employeeSubscriptionExpiresAt: expiresAt
-        }
-      });
+      // private teacher activation
+      if (user.role === "private_teacher" || membership.role === "private_teacher") {
+        user.teacherSubscriptionStatus = "paid";
+        user.teacherSubscriptionPlan = "starter";
+        user.teacherSubscriptionExpiresAt = expiresAt;
+        user.teacherPaidAt = now;
+        user.aiQuizCredits = 20;
+        user.aiQuizCreditsResetAt = now;
+        user.consumerEnabled = true;
 
-      console.log(`[activate] Admin activated ${user.email || userId} in org ${slug}`);
+        await user.save();
+
+        return res.json({
+          ok: true,
+          activated: true,
+          type: "private_teacher",
+          plan: "starter",
+          expiresAt
+        });
+      }
+
+      // default employee activation
+      user.employeeSubscriptionStatus = "paid";
+      user.employeeSubscriptionPlan = "full_access";
+      user.employeeSubscriptionExpiresAt = expiresAt;
+      user.employeePaidAt = now;
+
+      await user.save();
 
       return res.json({
-        ok:        true,
-        userId:    String(userId),
-        expiresAt: expiresAt.toISOString()
+        ok: true,
+        activated: true,
+        type: "employee",
+        plan: "full_access",
+        expiresAt
       });
-
     } catch (err) {
-      console.error("[activate member]", err && (err.stack || err));
+      console.error("[admin activate member]", err && (err.stack || err));
       return res.status(500).json({ ok: false, error: "Activation failed" });
     }
   }
