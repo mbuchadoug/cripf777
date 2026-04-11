@@ -661,6 +661,90 @@ return res.redirect(`/org/${org.slug}/dashboard`);
   }
 });
 
+
+
+/* ------------------------------------------------------------------ */
+/*  ADMIN: Create member + generate username/password                  */
+/*  POST /admin/orgs/:slug/members/add                                 */
+/* ------------------------------------------------------------------ */
+router.post(
+  "/admin/orgs/:slug/members/add",
+  ensureAuth,
+  allowPlatformAdminOrOrgManager,
+  denyReadOnly,
+  async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").trim();
+      const firstName = String(req.body.firstName || "").trim();
+      const lastName  = String(req.body.lastName || "").trim();
+      const emailRaw  = String(req.body.email || "").trim().toLowerCase();
+      const role      = String(req.body.role || "employee").trim().toLowerCase();
+
+      if (!firstName || !lastName) {
+        return res.status(400).json({ ok: false, error: "First name and last name are required" });
+      }
+
+      const allowedRoles = ["employee", "student", "teacher", "readonly_admin"];
+      if (!allowedRoles.includes(role)) {
+        return res.status(400).json({ ok: false, error: "Invalid role" });
+      }
+
+      const org = await Organization.findOne({ slug }).lean();
+      if (!org) return res.status(404).json({ ok: false, error: "Org not found" });
+
+      if (emailRaw) {
+        const existingEmail = await User.findOne({ email: emailRaw }).lean();
+        if (existingEmail) {
+          return res.status(409).json({ ok: false, error: "A user with that email already exists" });
+        }
+      }
+
+      const username = await User.createUniqueUsername(firstName, lastName);
+
+      const firstClean = firstName.replace(/[^a-zA-Z]/g, "") || "User";
+      const pin = String(Math.floor(1000 + Math.random() * 9000));
+      const tempPassword = `${firstClean}${pin}!`;
+
+      const newUser = new User({
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`.trim(),
+        email: emailRaw || undefined,
+        username,
+        role
+      });
+
+      await newUser.setPassword(tempPassword);
+      newUser.needsPasswordSetup = false;
+
+      if (role === "student" && !newUser.studentId) {
+        newUser.studentId = `STU${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
+      }
+
+      await newUser.save();
+
+      await OrgMembership.create({
+        org: org._id,
+        user: newUser._id,
+        role,
+        joinedAt: new Date()
+      });
+
+      return res.json({
+        ok: true,
+        userId: String(newUser._id),
+        username,
+        tempPassword,
+        role,
+        loginUrl: "/auth/school",
+        message: `User created. Login with username "${username}" at /auth/school`
+      });
+    } catch (err) {
+      console.error("[admin create member] error:", err && (err.stack || err));
+      return res.status(500).json({ ok: false, error: "Failed to create user" });
+    }
+  }
+);
 /* ------------------------------------------------------------------ */
 /*  ADMIN: Member actions (promote/demote/remove)                     */
 /*  POST /admin/orgs/:slug/members/:userId                            */
