@@ -3468,14 +3468,7 @@ router.post(
 );
 
 
-async function activateTeacher(userId, btn) {
-  const r = await api(`/admin/orgs/${ORG}/members/${userId}/activate`, 'POST', {});
-  if (r.ok) {
-    btn.outerHTML = '<span class="btn-activate active">✓ Active</span>';
-  } else {
-    alert(r.data?.error || 'Activation failed');
-  }
-}
+
 
 
 

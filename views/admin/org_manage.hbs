@@ -2503,6 +2503,33 @@ async function memberAction(btn, slug, userId, action, role) {
   }
 }
 
+/* ── Activate private teacher / employee ── */
+async function activateTeacher(userId, btn) {
+  btn.disabled = true;
+  const oldHtml = btn.innerHTML;
+  btn.innerHTML = '⏳ Activating...';
+
+  const r = await api(`/admin/orgs/${ORG}/members/${userId}/activate`, 'POST', {});
+  const fb = document.getElementById('memberFeedback');
+
+  if (r.ok) {
+    btn.outerHTML = '<span class="btn-activate active">✓ Active</span>';
+    if (fb) {
+      fb.innerHTML = '<span style="color:var(--emerald)">✓ Activated successfully</span>';
+      setTimeout(() => fb.innerHTML = '', 3000);
+    }
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+    if (fb) {
+      fb.innerHTML = '<span style="color:var(--rose)">✗ ' + (r.data?.error || 'Activation failed') + '</span>';
+      setTimeout(() => fb.innerHTML = '', 5000);
+    } else {
+      alert(r.data?.error || 'Activation failed');
+    }
+  }
+}
+
 /* ── Modal helpers ── */
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
