@@ -293,7 +293,7 @@ router.post(
 router.get(
   "/admin/orgs/:slug/manage",
   ensureAuth,
-  ensureAdminEmails,
+  allowPlatformAdminOrOrgManager,
   async (req, res) => {
     try {
       const slug = String(req.params.slug || "");
@@ -335,7 +335,7 @@ for (const m of membershipsRaw) {
     groups.teachers.push(m);
   } else if (role === "employee" || role === "staff") {
     groups.staff.push(m);
-  } else if (["admin", "manager", "org_admin"].includes(role)) {
+   } else if (["admin", "manager", "org_admin", "readonly_admin"].includes(role)) {
     groups.admins.push(m);
   }
 }
@@ -3751,6 +3751,7 @@ router.post(
   "/admin/orgs/:slug/members/add",
   ensureAuth,
   allowPlatformAdminOrOrgManager,
+  denyReadOnly,
   async (req, res) => {
     try {
       const { slug } = req.params;

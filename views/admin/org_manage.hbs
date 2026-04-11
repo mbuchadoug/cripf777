@@ -1395,10 +1395,15 @@
     ════════════════════════════ -->
     <section class="page" id="page-members">
       <div class="card">
-        <div class="card-hdr">
-          <div class="card-hdr-title">All Members</div>
-          <div class="card-hdr-sp"></div>
-        </div>
+       <div class="card-hdr">
+  <div class="card-hdr-title">All Members</div>
+  <div class="card-hdr-sp"></div>
+
+  <!-- ✅ ADD THIS BUTTON -->
+  <button class="btn btn-p btn-sm" onclick="openCreateUserModal()">
+    ➕ Add User
+  </button>
+</div>
         <!-- Tabs -->
         <div class="m-tabs">
           {{#if groups.students.length}}
@@ -2944,7 +2949,53 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </nav>
 
+<!-- ════════════════════════════
+     CREATE USER MODAL
+════════════════════════════ -->
+<div class="modal-overlay" id="createUserModal">
+  <div class="modal">
+    <div class="modal-title">➕ Create User</div>
+    <div class="modal-sub">Add employee or student and generate login credentials</div>
 
+    <form id="createUserForm">
+      <div class="form-grid form-grid-2">
+
+        <div class="fld">
+          <label>First Name</label>
+          <input type="text" name="firstName" required>
+        </div>
+
+        <div class="fld">
+          <label>Last Name</label>
+          <input type="text" name="lastName" required>
+        </div>
+
+        <div class="fld">
+          <label>Email (optional)</label>
+          <input type="email" name="email">
+        </div>
+
+        <div class="fld">
+          <label>Role</label>
+          <select name="role" required>
+            <option value="employee">Employee</option>
+            <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
+            <option value="readonly_admin">Read Only Admin</option>
+          </select>
+        </div>
+
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-o" onclick="closeCreateUserModal()">Cancel</button>
+        <button type="submit" class="btn btn-p">Create User</button>
+      </div>
+    </form>
+
+    <div id="createUserResult" class="result-toast"></div>
+  </div>
+</div>
 
 
 <script>
@@ -3413,6 +3464,52 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Utilities ──
   function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function escAttr(s) { return String(s||'').replace(/'/g,"\\'"); }
+
+
+  function openCreateUserModal() {
+  document.getElementById('createUserModal').classList.add('open');
+}
+
+function closeCreateUserModal() {
+  document.getElementById('createUserModal').classList.remove('open');
+}
+
+document.getElementById('createUserForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const form = new FormData(this);
+  const data = Object.fromEntries(form.entries());
+
+  const orgSlug = document.body.dataset.orgSlug;
+
+  const res = await fetch(`/admin/orgs/${orgSlug}/members/add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  const result = await res.json();
+
+  const box = document.getElementById('createUserResult');
+
+  if (result.ok) {
+    box.className = 'result-toast ok';
+    box.style.display = 'block';
+
+    box.innerHTML = `
+      ✅ User Created<br><br>
+      Username: <strong>${result.username}</strong><br>
+      Password: <strong>${result.tempPassword}</strong><br>
+      Login: /auth/school
+    `;
+
+    this.reset();
+  } else {
+    box.className = 'result-toast err';
+    box.style.display = 'block';
+    box.textContent = result.error || 'Failed to create user';
+  }
+});
 })();
 </script>
 
@@ -3446,6 +3543,8 @@ router.post(
   }
 );
 ══ END BACKEND NOTE ══ -->
+
+
 
 </body>
 </html>

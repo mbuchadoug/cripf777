@@ -612,7 +612,8 @@ return res.redirect(`/org/${org.slug}/dashboard`);
 router.post(
   "/admin/orgs/:slug/members/:userId",
   ensureAuth,
-  ensureAdminEmails,
+  allowPlatformAdminOrOrgManager,
+  denyReadOnly,
   async (req, res) => {
     try {
       const slug = String(req.params.slug || "");
