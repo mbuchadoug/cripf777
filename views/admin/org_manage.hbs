@@ -2447,6 +2447,75 @@ document.querySelectorAll('.modal-overlay').forEach(ov => {
   ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); });
 });
 
+
+
+/* ── Create User modal ── */
+function openCreateUserModal() {
+  const box = document.getElementById('createUserResult');
+  if (box) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    box.className = 'result-toast';
+  }
+  openModal('createUserModal');
+}
+
+function closeCreateUserModal() {
+  closeModal('createUserModal');
+}
+
+(function wireCreateUserForm() {
+  const form = document.getElementById('createUserForm');
+  if (!form || form.dataset.wired === '1') return;
+  form.dataset.wired = '1';
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    const firstName = (form.firstName?.value || '').trim();
+    const lastName  = (form.lastName?.value  || '').trim();
+    const email     = (form.email?.value     || '').trim();
+    const role      = (form.role?.value      || '').trim();
+
+    const box = document.getElementById('createUserResult');
+
+    if (!firstName || !lastName || !role) {
+      box.className = 'result-toast err';
+      box.style.display = 'block';
+      box.textContent = 'First name, last name, and role are required';
+      return;
+    }
+
+    const r = await api(`/admin/orgs/${ORG}/members/add`, 'POST', {
+      firstName,
+      lastName,
+      email,
+      role
+    });
+
+    if (!r.ok) {
+      box.className = 'result-toast err';
+      box.style.display = 'block';
+      box.textContent = '✗ ' + (r.data?.error || 'Failed to create user');
+      return;
+    }
+
+    box.className = 'result-toast ok';
+    box.style.display = 'block';
+    box.innerHTML = `
+      ✅ User created successfully<br><br>
+      <strong>Username:</strong> ${r.data.username}<br>
+      <strong>Password:</strong> ${r.data.tempPassword}<br>
+      <strong>Login:</strong> ${r.data.loginUrl || '/auth/school'}
+    `;
+
+    form.reset();
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
+  });
+})();
 /* ── Assign modal ── */
 function openAssignModal(uid, name) {
   document.getElementById('assignModal-uid').value = uid;
