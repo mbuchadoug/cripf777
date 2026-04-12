@@ -127,6 +127,13 @@ export const SUPPLIER_CATEGORIES = [
   // ── PRODUCT CATEGORIES ──────────────────────────────────────────────────────
 
   {
+  id: "industrial_equipment",
+  label: "🏭 Industrial Equipment",
+  types: ["product"],
+  presetKey: null
+},
+
+  {
     id: "building_materials",
     label: "🧱 Building Materials",
     types: ["product"],
@@ -460,7 +467,20 @@ export const SUPPLIER_CATEGORIES = [
     ],
     presetKey: "plumbing_services"
   },
-
+{
+  id: "engineering_services",
+  label: "🛠 Engineering Services",
+  types: ["service"],
+  collar: "white_collar",
+  subcats: [
+    { id: "mechanical", label: "Mechanical Engineering" },
+    { id: "electrical_eng", label: "Electrical Engineering" },
+    { id: "civil_eng", label: "Civil Engineering" },
+    { id: "industrial_eng", label: "Industrial Engineering" },
+    { id: "consulting_eng", label: "Engineering Consulting" }
+  ],
+  presetKey: null
+},
   {
     id: "electrical",
     label: "⚡ Electrical Services",

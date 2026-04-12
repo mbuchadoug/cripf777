@@ -7,6 +7,7 @@ import { SUPPLIER_CITIES, SUPPLIER_CATEGORIES } from "./supplierPlans.js";
 // ── Category-specific product/service examples ────────────────────────────
 export const CATEGORY_PRODUCT_EXAMPLES = {
   // ── New categories ─────────────────────────────────────────────────────────
+  industrial_equipment: ["generator 5kVA", "compressor", "lathe machine", "water pump industrial", "welding machine"],
   building_materials:  ["Portland cement 50kg", "river sand", "face brick", "IBR roofing sheet 3m", "steel bar Y12"],
   hardware_tools:      ["hammer", "nails 3 inch", "padlock 50mm", "angle grinder 115mm", "spirit level"],
   plumbing_supplies:   ["PVC pipe 20mm", "gate valve 20mm", "water tank 1000L", "electric geyser 100L", "toilet suite"],
@@ -44,6 +45,7 @@ export const CATEGORY_SERVICE_EXAMPLES = {
   architecture_design: ["architectural plans", "structural engineering", "interior design", "quantity surveying"],
   medical_health:      ["GP consultation", "dental services", "physiotherapy", "home nursing", "nutrition counselling"],
   real_estate:         ["property sales", "property management", "property valuations", "tenant finding"],
+  engineering_services: ["structural design", "electrical installation design", "machine design", "project engineering", "site supervision"],
   events_management:   ["event planning", "wedding coordination", "MC services", "DJ hire", "tent & decor hire"],
   // ── Blue Collar / General ──────────────────────────────────────────────────
   other_services:      ["handyman", "pest control", "laundry & dry cleaning", "pool maintenance"],
