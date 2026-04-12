@@ -23,9 +23,7 @@ import {
   computeSchoolFeeRange
 } from "../services/schoolPlans.js";
 
-function tierColor(t) {
-  return { basic: "blue", featured: "orange" }[t] || "gray";
-}
+
 
 
 function getSchoolPlanAmount(tier, plan) {
