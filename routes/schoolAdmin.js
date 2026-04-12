@@ -9,6 +9,8 @@ import express from "express";
 import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
+import { sendDocument, sendText } from "../services/metaSender.js";
+import { generatePDF } from "../routes/twilio_biz.js";
 import {
   SCHOOL_CITIES,
   SCHOOL_FACILITIES,
@@ -20,6 +22,23 @@ import {
   SCHOOL_PLANS,
   computeSchoolFeeRange
 } from "../services/schoolPlans.js";
+
+function tierColor(t) {
+  return { basic: "blue", featured: "orange" }[t] || "gray";
+}
+
+
+function getSchoolPlanAmount(tier, plan) {
+  const t = String(tier || "basic").toLowerCase();
+  const p = String(plan || "monthly").toLowerCase();
+
+  const PRICE_MAP = {
+    basic:    { monthly: 15, annual: 150 },
+    featured: { monthly: 35, annual: 350 }
+  };
+
+  return PRICE_MAP[t]?.[p] ?? PRICE_MAP.basic.monthly;
+}
 
 const router = express.Router();
 router.use(express.json());
@@ -734,17 +753,25 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
         <h3>💳 Subscription Payments</h3>
         ${payments.length ? `
         <table>
-          <thead><tr><th>Plan</th><th>Amount</th><th>Status</th><th>Paid</th><th>Expires</th></tr></thead>
-          <tbody>
-            ${payments.map(p => `
-            <tr>
-              <td>${esc(p.tier)} / ${esc(p.plan)}</td>
-              <td>$${p.amount}</td>
-              <td>${badge(p.status, p.status === "paid" ? "green" : "gray")}</td>
-              <td>${p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "-"}</td>
-              <td>${p.endsAt ? new Date(p.endsAt).toLocaleDateString() : "-"}</td>
-            </tr>`).join("")}
-          </tbody>
+         <thead><tr><th>Plan</th><th>Amount</th><th>Status</th><th>Paid</th><th>Expires</th><th>Receipt</th></tr></thead>
+<tbody>
+  ${payments.map(p => `
+  <tr>
+    <td>${esc(p.tier)} / ${esc(p.plan)}</td>
+    <td>
+      $${Number(p.amount || 0).toFixed(2)}
+      ${p.discountPercent ? `<div style="font-size:11px;color:var(--muted)">-${Number(p.discountPercent).toFixed(2)}% discount</div>` : ""}
+    </td>
+    <td>${badge(p.status, p.status === "paid" ? "green" : "gray")}</td>
+    <td>${p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "-"}</td>
+    <td>${p.endsAt ? new Date(p.endsAt).toLocaleDateString() : "-"}</td>
+    <td>
+      ${p.receiptUrl
+        ? `<a href="${esc(p.receiptUrl)}" target="_blank" class="btn-link">View Receipt</a>`
+        : "-"}
+    </td>
+  </tr>`).join("")}
+</tbody>
         </table>` : "<em class='muted'>No payments yet.</em>"}
       </div>
     `));
@@ -1045,12 +1072,13 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
 
     res.send(layout(`Activate: ${esc(school.schoolName)}`, `
       <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to Profile</a>
-      <div class="panel" style="max-width:600px">
+      <div class="panel" style="max-width:700px">
         <h3>🎁 Manual Activation - ${esc(school.schoolName)}</h3>
         <p style="color:var(--muted);margin-bottom:20px;font-size:13px">
           Activate this school listing without requiring EcoCash payment.
           Use for manual arrangements, free trials, or cash payments.
         </p>
+
         <form method="POST" action="/zq-admin/schools/${school._id}/activate" class="edit-form">
           <div class="form-grid">
             <div class="fg">
@@ -1061,6 +1089,7 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
                 <option value="featured">🔥 Featured - $35/month</option>
               </select>
             </div>
+
             <div class="fg">
               <label>Billing Cycle</label>
               <select name="plan">
@@ -1068,15 +1097,33 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
                 <option value="annual">Annual</option>
               </select>
             </div>
+
             <div class="fg">
               <label>Duration (days)</label>
               <input type="number" name="durationDays" value="30" min="1" max="365" />
             </div>
+
             <div class="fg">
               <label>Reason / Note</label>
               <input name="reason" placeholder="e.g. Paid cash, free trial, partner deal..." />
             </div>
+
+            <div class="fg">
+              <label>Discount (%)</label>
+              <input type="number" name="discountPercent" value="0" min="0" max="100" step="0.01" />
+            </div>
+
+            <div class="fg">
+              <label>Payment Method</label>
+              <select name="paymentMethod">
+                <option value="cash">Cash</option>
+                <option value="ecocash">EcoCash</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
           </div>
+
           <div class="fg full" style="margin-bottom:16px">
             <label>Also set listing Active?</label>
             <select name="setActive">
@@ -1084,6 +1131,7 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
               <option value="false">No - activate subscription only</option>
             </select>
           </div>
+
           <div class="fg full" style="margin-bottom:16px">
             <label>Mark as Verified?</label>
             <select name="setVerified">
@@ -1091,6 +1139,12 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
               <option value="true">✅ Yes - add verified badge</option>
             </select>
           </div>
+
+          <div class="fg full" style="margin-bottom:16px">
+            <label>Receipt Note (optional)</label>
+            <input name="receiptNote" placeholder="e.g. Cash received by admin, discounted partner rate" />
+          </div>
+
           <div class="form-actions">
             <button type="submit" class="btn btn-green">✅ Activate Now</button>
             <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
@@ -1109,7 +1163,17 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
   try {
-    const { tier, plan, durationDays, reason, setActive, setVerified } = req.body;
+    const {
+      tier,
+      plan,
+      durationDays,
+      reason,
+      setActive,
+      setVerified,
+      discountPercent,
+      paymentMethod,
+      receiptNote
+    } = req.body;
 
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
@@ -1119,43 +1183,125 @@ router.post("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const isActive  = setActive === "true";
 
+    const safeTier = String(tier || "basic").toLowerCase();
+    const safePlan = String(plan || "monthly").toLowerCase();
+
+    const baseAmount = getSchoolPlanAmount(safeTier, safePlan);
+    const pct = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    const discountAmount = Number((baseAmount * (pct / 100)).toFixed(2));
+    const finalAmount = Number((baseAmount - discountAmount).toFixed(2));
+
     // Update the school profile
-    school.tier               = tier || "basic";
-    school.subscriptionPlan   = plan || "monthly";
+    school.tier               = safeTier;
+    school.subscriptionPlan   = safePlan;
     school.subscriptionEndsAt = expiresAt;
     school.active             = isActive;
     if (setVerified === "true") school.verified = true;
-    if (reason?.trim()) {
+
+    const noteBits = [];
+    if (reason?.trim()) noteBits.push(reason.trim());
+    if (pct > 0) noteBits.push(`discount ${pct}% (-$${discountAmount.toFixed(2)})`);
+    if (paymentMethod?.trim()) noteBits.push(`method: ${paymentMethod.trim()}`);
+    if (receiptNote?.trim()) noteBits.push(receiptNote.trim());
+
+    if (noteBits.length) {
       school.adminNote = (school.adminNote ? school.adminNote + " | " : "") +
-        `[Activated on ${now.toDateString()}: ${reason.trim()}]`;
+        `[Activated on ${now.toDateString()}: ${noteBits.join(" | ")}]`;
     }
+
     await school.save();
 
-    // Log a $0 payment record for the audit trail
-    await SchoolSubscriptionPayment.create({
+    const reference = `ADMIN_ACT_${school._id}_${Date.now()}`;
+
+    // Log payment record using FINAL paid amount
+    const payment = await SchoolSubscriptionPayment.create({
       phone:     school.phone,
       schoolId:  school._id,
-      tier:      tier || "basic",
-      plan:      plan || "monthly",
-      amount:    0,
+      tier:      safeTier,
+      plan:      safePlan,
+      amount:    finalAmount,
       currency:  "USD",
-      reference: `ADMIN_ACT_${school._id}_${Date.now()}`,
+      reference,
       status:    "paid",
       paidAt:    now,
-      endsAt:    expiresAt
+      endsAt:    expiresAt,
+
+      // Safe extras if schema already supports them
+      originalAmount:  baseAmount,
+      discountPercent: pct,
+      discountAmount,
+      paymentMethod:   paymentMethod || "cash"
     });
 
-    // Notify the school via WhatsApp
+    // Generate and send receipt PDF
     try {
-      const { sendText } = await import("../services/metaSender.js");
-      await sendText(school.phone,
+      const receiptNumber = `SCH-${reference.slice(-8).toUpperCase()}`;
+
+      const receiptItems = [
+        {
+          item: `ZimQuote School ${safeTier === "featured" ? "Featured" : "Basic"} Plan (${safePlan})`,
+          qty: 1,
+          unit: baseAmount,
+          total: baseAmount
+        }
+      ];
+
+      if (discountAmount > 0) {
+        receiptItems.push({
+          item: `Discount (${pct}%)`,
+          qty: 1,
+          unit: -discountAmount,
+          total: -discountAmount
+        });
+      }
+
+      const { filename } = await generatePDF({
+        type: "receipt",
+        number: receiptNumber,
+        date: now,
+        billingTo: school.schoolName,
+        items: receiptItems,
+        bizMeta: {
+          name: "ZimQuote",
+          logoUrl: "",
+          address: "ZimQuote School Platform",
+          _id: String(school._id),
+          status: "paid"
+        }
+      });
+
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      const receiptUrl = `${site}/docs/generated/receipts/${filename}`;
+
+      await SchoolSubscriptionPayment.findByIdAndUpdate(payment._id, {
+        $set: {
+          receiptUrl,
+          receiptFilename: filename
+        }
+      });
+
+      await sendDocument(school.phone, { link: receiptUrl, filename });
+    } catch (pdfErr) {
+      console.error("[School Activation] receipt PDF generation failed:", pdfErr.message);
+    }
+
+    // Notify school
+    try {
+      const planLabel = safeTier === "featured" ? "🔥 Featured" : "✅ Basic";
+      const discountLine = pct > 0
+        ? `\nDiscount: *${pct}%* (-$${discountAmount.toFixed(2)})`
+        : "";
+
+      await sendText(
+        school.phone,
 `🎉 *Your school listing is now LIVE on ZimQuote!*
 
 🏫 *${school.schoolName}*
-Plan: *${tier === "featured" ? "🔥 Featured" : "✅ Basic"}*
+Plan: *${planLabel}*
+Paid: *$${finalAmount.toFixed(2)}*${discountLine}
 Active until: *${expiresAt.toDateString()}*
 
-Parents across Zimbabwe can now find your school and make inquiries.
+We've sent your payment receipt above.
 
 Type *menu* to manage your listing. 🎓`
       );
@@ -1165,12 +1311,11 @@ Type *menu* to manage your listing. 🎓`
 
     res.redirect(
       `/zq-admin/schools/${school._id}?success=${encodeURIComponent(
-        `School activated on ${tier} plan until ${expiresAt.toDateString()}.${isActive ? " Listing is now visible to parents." : ""}`
+        `School activated on ${safeTier} plan until ${expiresAt.toDateString()}. Paid $${finalAmount.toFixed(2)}${pct > 0 ? ` after ${pct}% discount` : ""}.${isActive ? " Listing is now visible to parents." : ""}`
       )}`
     );
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
   }
 });
-
 export default router;
