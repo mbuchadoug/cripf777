@@ -63,7 +63,9 @@ Your trial listing on ZimQuote is ending.
 
 To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} per ${cycleLabel} if payment is made by ${dueLabel}.
 
-Once activated, your school stays visible on the platform and parents can continue finding and contacting you.
+Once activated, your school stays visible and can remain on the first page when parents search for schools.
+
+I've also attached the invoice showing the discounted fee.
 
 Reply here if you want us to activate it for you.`;
 }
@@ -1233,7 +1235,54 @@ router.post("/schools/:id/offer", requireSupplierAdmin, async (req, res) => {
     }
 
     const pct = Number((((baseAmount - targetAmount) / baseAmount) * 100).toFixed(4));
+    const discountAmount = Number((baseAmount - targetAmount).toFixed(2));
 
+    // 1) Generate invoice PDF and send it first
+    try {
+      const offerRef = `SCH-OFFER-${Date.now()}`;
+
+      const invoiceItems = [
+        {
+          item: `ZimQuote School ${safeTier === "featured" ? "Featured" : "Basic"} Plan (${safePlan})`,
+          qty: 1,
+          unit: baseAmount,
+          total: baseAmount
+        }
+      ];
+
+      if (discountAmount > 0) {
+        invoiceItems.push({
+          item: `Discount (${pct.toFixed(2)}%)`,
+          qty: 1,
+          unit: -discountAmount,
+          total: -discountAmount
+        });
+      }
+
+      const { filename } = await generatePDF({
+        type: "invoice",
+        number: offerRef,
+        date: new Date(),
+        billingTo: school.schoolName,
+        items: invoiceItems,
+        bizMeta: {
+          name: "ZimQuote",
+          logoUrl: "",
+          address: "ZimQuote School Platform",
+          _id: String(school._id),
+          status: "offer"
+        }
+      });
+
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      const invoiceUrl = `${site}/docs/generated/invoices/${filename}`;
+
+      await sendDocument(school.phone, { link: invoiceUrl, filename });
+    } catch (pdfErr) {
+      console.error("[School Offer] invoice PDF generation failed:", pdfErr.message);
+    }
+
+    // 2) Send WhatsApp offer message after the invoice
     const msg = buildSchoolOfferMessage({
       schoolName: school.schoolName,
       tier: safeTier,
@@ -1245,12 +1294,12 @@ router.post("/schools/:id/offer", requireSupplierAdmin, async (req, res) => {
     await sendText(school.phone, msg);
 
     school.adminNote = (school.adminNote ? school.adminNote + " | " : "") +
-      `[Offer sent ${new Date().toDateString()}: ${safeTier}/${safePlan} target $${fmtUsd(targetAmount)} by ${dueText} (${pct}%)]`;
+      `[Offer sent ${new Date().toDateString()}: ${safeTier}/${safePlan} base $${fmtUsd(baseAmount)} target $${fmtUsd(targetAmount)} discount $${fmtUsd(discountAmount)} by ${dueText} (${pct}%)]`;
 
     await school.save();
 
     return res.redirect(
-      `/zq-admin/schools/${school._id}?success=${encodeURIComponent(`Offer sent: $${fmtUsd(targetAmount)} ${safePlan} ${safeTier} by ${dueText}.`)}`
+      `/zq-admin/schools/${school._id}?success=${encodeURIComponent(`Offer sent with invoice: $${fmtUsd(targetAmount)} ${safePlan} ${safeTier} by ${dueText}.`)}`
     );
   } catch (err) {
     return res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
