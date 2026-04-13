@@ -118,11 +118,12 @@ const school = await SchoolProfile.findOne({ phone });
   // ── Case 1: Active supplier (paid) - may also have full biz tools ─────────
 if (supplier?.active) {
     const items = [
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "biz_tools_menu",      title: "📊 Business Tools" },
       { id: "find_supplier",       title: "🔍 Browse & Shop" },
-      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "my_orders",           title: "📋 My Orders (Buyer)" },
+      { id: "find_school",         title: "🏫 Find a School" },
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "biz_tools_menu",      title: "📊 Business Tools" }
     ];
     // Hide Business Tools for trial users
     const filtered = (biz && biz.package === "trial")
@@ -134,20 +135,23 @@ if (supplier?.active) {
   // ── Case 2: Registered supplier but not yet paid ──────────────────────────
  if (supplier && !supplier.active) {
   return sendList(to, "👋 *Welcome to ZimQuote!*\n\nYour listing is saved but not yet live.", [
-    { id: "my_supplier_account", title: "🏪 My Store" },
-    { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
+    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+    { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🏫 Find a School" },
+    { id: "my_supplier_account", title: "🏪 My Store" },
+    { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" }
   ]);
 }
 
   // ── Case 3: Has a business but no supplier profile ────────────────────────
 if (biz && !biz.name?.startsWith("pending_supplier_")) {
   const items = [
-    { id: "my_supplier_account", title: "🏪 My Store" },
     { id: "find_supplier",       title: "🔍 Browse & Shop" },
-    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "sup_request_sellers", title: "⚡ Request Sellers" },
     { id: "my_orders",           title: "📋 My Orders" },
+    { id: "find_school",         title: "🏫 Find a School" },
+    { id: "my_supplier_account", title: "🏪 My Store" }
   ];
     const filtered = await filterMenuByRole({ from: to, biz, items });
    return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", filtered);
@@ -155,10 +159,11 @@ if (biz && !biz.name?.startsWith("pending_supplier_")) {
 
   // ── Case 4: Brand new user - no biz, no supplier ──────────────────────────
 return sendList(to, "👋 *Welcome to ZimQuote!*\nZimbabwe's marketplace for products & services.", [
-  { id: "register_supplier", title: "🏪 List My Business" },
-  { id: "find_supplier",     title: "🔍 Browse & Shop" },
-  { id: "find_school",       title: "🏫 Find a School" },
-  { id: "my_orders",         title: "📋 My Orders" },
+  { id: "find_supplier",       title: "🔍 Browse & Shop" },
+  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  { id: "my_orders",           title: "📋 My Orders" },
+  { id: "find_school",         title: "🏫 Find a School" },
+  { id: "register_supplier",   title: "🏪 List My Business" }
 ]);
 }
 

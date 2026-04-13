@@ -1437,6 +1437,47 @@ function parseBuyerRequestLocationInput(text = "") {
   };
 }
 
+
+
+function parseInlineSimpleBuyerRequest(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return {
+      items: [],
+      city: null,
+      area: null,
+      itemText: ""
+    };
+  }
+
+  const parsedLocation = parseBuyerRequestLocationInput(raw);
+
+  let itemText = raw;
+
+  if (parsedLocation.city) {
+    const cityPattern = new RegExp(`\\b${parsedLocation.city}\\b`, "i");
+    itemText = itemText.replace(cityPattern, " ");
+
+    if (parsedLocation.area) {
+      const escapedArea = parsedLocation.area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const areaPattern = new RegExp(`\\b${escapedArea}\\b`, "i");
+      itemText = itemText.replace(areaPattern, " ");
+    }
+
+    itemText = itemText.replace(/\bin\b/gi, " ");
+    itemText = itemText.replace(/[,\-]+/g, " ");
+    itemText = itemText.replace(/\s+/g, " ").trim();
+  }
+
+  const items = parseBuyerRequestItems(itemText);
+
+  return {
+    items,
+    city: parsedLocation.city,
+    area: parsedLocation.area,
+    itemText
+  };
+}
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null, profileType = null }) {
   const scoreMap = new Map();
   const topItems = items.slice(0, 5);
@@ -2447,54 +2488,108 @@ Reply *menu* to start.`);
       });
     }
 
-    if (buyerRequestState === "awaiting_items") {
-      if (al === "cancel") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          {
-            $unset: {
-              "tempData.buyerRequestState": "",
-              "tempData.pendingBuyerRequest": "",
-              "tempData.buyerRequestMode": ""
-            }
-          },
-          { upsert: true }
-        );
-        return sendButtons(from, {
-          text: "✅ Request cancelled.",
-          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
-        });
-      }
+ if (buyerRequestState === "awaiting_items") {
+  if (al === "cancel") {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.buyerRequestState": "",
+          "tempData.pendingBuyerRequest": "",
+          "tempData.buyerRequestMode": ""
+        }
+      },
+      { upsert: true }
+    );
+    return sendButtons(from, {
+      text: "✅ Request cancelled.",
+      buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+    });
+  }
 
-      const items = parseBuyerRequestItems(text);
-      if (!items.length) {
-        return sendText(
-          from,
-          `❌ Please send the items you need.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10, elbow 5_\n\nFor big lists, send one item per line.\n\nType *cancel* to stop.`
-        );
-      }
+  const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.buyerRequestState": "awaiting_location",
-            "tempData.pendingBuyerRequest": {
-              ...(pendingBuyerRequest || {}),
-              items,
-              rawText: text,
-              profileType: "product"
-            }
-          }
-        },
-        { upsert: true }
-      );
+  // SIMPLE MODE = one-line item + suburb/city
+  if (requestMode === "simple") {
+    const parsedInline = parseInlineSimpleBuyerRequest(text);
 
+    if (!parsedInline.items.length) {
       return sendText(
         from,
-        `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_`
+        `❌ Please send item + suburb/city in one line.\n\nExamples:\n_cement 20 mbare harare_\n_river sand 2 borrowdale harare_\n_roofing sheets 20 chitungwiza_\n\nType *cancel* to stop.`
       );
     }
+
+    if (!parsedInline.city) {
+      return sendText(
+        from,
+        `❌ Please include the *city* in the same line.\n\nExamples:\n_cement 20 mbare harare_\n_river sand 2 borrowdale harare_\n_roofing sheets 20 chitungwiza_`
+      );
+    }
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState": "awaiting_delivery",
+          "tempData.pendingBuyerRequest": {
+            ...(pendingBuyerRequest || {}),
+            requestType: "simple",
+            items: parsedInline.items,
+            rawText: text,
+            profileType: "product",
+            city: parsedInline.city,
+            area: parsedInline.area
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendButtons(from, {
+      text:
+        `✅ *Request captured*\n\n` +
+        `${formatBuyerRequestItems(parsedInline.items, 10)}\n\n` +
+        `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
+        `🚚 Do you need delivery?`,
+      buttons: [
+        { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+        { id: "sup_request_delivery_no", title: "🏠 No, collection" }
+      ]
+    });
+  }
+
+  // BULK MODE = item list first, location second
+  const items = parseBuyerRequestItems(text);
+  if (!items.length) {
+    return sendText(
+      from,
+      `❌ Please send the items you need.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 5_\n\nFor long lists, send one item per line.\n\nType *cancel* to stop.`
+    );
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.buyerRequestState": "awaiting_location",
+        "tempData.pendingBuyerRequest": {
+          ...(pendingBuyerRequest || {}),
+          requestType: "bulk",
+          items,
+          rawText: text,
+          profileType: "product"
+        }
+      }
+    },
+    { upsert: true }
+  );
+
+  return sendText(
+    from,
+    `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_`
+  );
+}
 
     if (buyerRequestState === "awaiting_location") {
       if (al === "cancel") {
@@ -11914,11 +12009,37 @@ isService
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
 if (a === "sup_request_sellers") {
-  return sendList(from, "⚡ *Request from Sellers*\n\nTell sellers what you need and they will respond in the chatbot.", [
-    { id: "sup_request_mode_simple", title: "🛒 Simple Item Request" },
-    { id: "sup_request_mode_bulk", title: "📋 Bulk / Long List Request" },
-    { id: "find_supplier", title: "⬅ Back" }
-  ]);
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.buyerRequestState": "awaiting_items",
+        "tempData.buyerRequestMode": "simple",
+        "tempData.pendingBuyerRequest": {
+          requestType: "simple",
+          profileType: "product",
+          items: []
+        }
+      }
+    },
+    { upsert: true }
+  );
+
+  return sendButtons(from, {
+    text:
+      `⚡ *Request Sellers*\n\n` +
+      `Send what you need in *one line* with suburb/city.\n\n` +
+      `Examples:\n` +
+      `_cement 20 mbare harare_\n` +
+      `_25mm pvc pipe 10 borrowdale harare_\n` +
+      `_river sand 2 chitungwiza_\n` +
+      `_plumber avondale harare_\n\n` +
+      `For long lists, use Bulk Request instead.`,
+    buttons: [
+      { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
+      { id: "find_supplier", title: "🔍 Browse & Shop" }
+    ]
+  });
 }
 
 if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
@@ -11943,8 +12064,8 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Send your full item list*\n\nYou can send many items, one per line or comma-separated.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 15_\n_solvent cement 5_\n\nType *cancel* to stop.`
-      : `🛒 *What do you need?*\n\nExamples:\n_cement 20_\n_river sand 2_\n_roofing sheets 20_\n\nType *cancel* to stop.`
+      ? `📋 *Bulk Request*\n\nSend your full item list.\nYou can send one per line or comma-separated.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 15_\n_solvent cement 5_\n\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nSend what you need in one line with suburb/city.\n\nExamples:\n_cement 20 mbare harare_\n_25mm pvc pipe 10 borrowdale harare_\n_river sand 2 chitungwiza_\n_plumber avondale harare_\n\nType *cancel* to stop.`
   );
 }
 
