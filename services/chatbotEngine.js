@@ -1359,32 +1359,139 @@ async function notifySuppliersOfLiveDemand({
 
 
 
+function isBuyerRequestHeadingLine(line = "") {
+  const raw = String(line || "").trim();
+  if (!raw) return true;
+
+  const clean = raw
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!clean) return true;
+
+  if (/^stage\s*\d+/i.test(clean)) return true;
+  if (/^(bonding material|remainder waste fittings|appliances\/setting|water\/tubing|sewer\/drainlaying)$/i.test(clean)) return true;
+
+  // short label-style headings without qty
+  if (
+    clean.length <= 40 &&
+    !/(?:x\s*\d+|\d+\s*(?:length|lengths|pair|pairs|bag|bags|tonne|tonnes|kg|g|mm|ml|mls|job|hr|hours?))/i.test(clean) &&
+    !/\d/.test(clean)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeBuyerRequestLine(line = "") {
+  return String(line || "")
+    .replace(/[’′`]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[•▪◦●]/g, "")
+    .replace(/\s*x\s*/gi, " x")
+    .replace(/\)\s*x/gi, ") x")
+    .replace(/,+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSingleBuyerRequestLine(line = "") {
+  const clean = normalizeBuyerRequestLine(line);
+  if (!clean || isBuyerRequestHeadingLine(clean)) return null;
+
+  // examples:
+  // 110 Access tees x2
+  // Vent valves x2
+  // 15mm cu elbws x 78
+  // Bath tub(standard) x1
+  // Cement x2 bags
+  // Pitsand x1 tonne
+  const m =
+    clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$/i) ||
+    clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/i);
+
+  if (!m) {
+    return {
+      product: clean,
+      quantity: 1,
+      unitLabel: "units",
+      notes: "",
+      valid: false
+    };
+  }
+
+  const product = String(m[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
+  const quantity = Number(m[2] || 1);
+  const unitLabel = String(m[3] || "units").trim().toLowerCase() || "units";
+
+  if (!product) return null;
+
+  return {
+    product,
+    quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+    unitLabel,
+    notes: "",
+    valid: true
+  };
+}
+
 function parseBuyerRequestItems(text = "") {
   const raw = String(text || "").trim();
   if (!raw) return [];
 
-  const parsed = parseBulkOrderInput(raw);
-  const valid = parsed.filter(i => i && normalizeProductName(i.product || ""));
+  const rawLines = raw
+    .split(/\n+/)
+    .map(line => normalizeBuyerRequestLine(line))
+    .filter(Boolean);
 
-  if (valid.length) {
-    return valid.map(i => ({
-      product: String(i.product || "").trim(),
-      quantity: Number(i.quantity || 1),
-      unitLabel: i.unitLabel || "units",
-      notes: ""
-    }));
+  const mergedLines = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    let current = rawLines[i];
+    if (isBuyerRequestHeadingLine(current)) continue;
+
+    const currentHasQty = /\bx\s*\d+/i.test(current);
+
+    // join wrapped lines like:
+    // "22mm cu to cu"
+    // "couplings x6"
+    if (!currentHasQty && i + 1 < rawLines.length) {
+      const next = rawLines[i + 1];
+      if (next && !isBuyerRequestHeadingLine(next) && /\bx\s*\d+/i.test(next)) {
+        current = `${current} ${next}`.replace(/\s+/g, " ").trim();
+        i += 1;
+      }
+    }
+
+    mergedLines.push(current);
   }
 
-  return raw
-    .split(/\n+/)
-    .map(line => line.trim())
+  const parsed = mergedLines
+    .map(parseSingleBuyerRequestLine)
     .filter(Boolean)
-    .map(line => ({
-      product: line,
-      quantity: 1,
-      unitLabel: "units",
-      notes: ""
-    }));
+    .filter(item => normalizeProductName(item.product || ""));
+
+  // fallback for very small comma-style input
+  if (!parsed.length) {
+    const loose = parseBulkOrderInput(raw)
+      .filter(i => i && normalizeProductName(i.product || ""))
+      .map(i => ({
+        product: String(i.product || "").trim(),
+        quantity: Number(i.quantity || 1),
+        unitLabel: i.unitLabel || "units",
+        notes: ""
+      }));
+
+    return loose;
+  }
+
+  return parsed.map(item => ({
+    product: item.product,
+    quantity: Number(item.quantity || 1),
+    unitLabel: item.unitLabel || "units",
+    notes: item.notes || ""
+  }));
 }
 
 function formatBuyerRequestItems(items = [], limit = 15) {
@@ -1616,6 +1723,60 @@ function buildBuyerRequestRef(request) {
   return `REQ-${String(request._id).slice(-6).toUpperCase()}`;
 }
 
+
+async function sendBuyerQuotePdf({ request, supplier, response }) {
+  try {
+    if (!response || !Array.isArray(response.items) || !response.items.length) {
+      return null;
+    }
+
+    const ref = buildBuyerRequestRef(request);
+    const supplierName = supplier?.businessName || response?.supplierName || "Supplier";
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+
+    const deliveryNote = response.deliveryAvailable === true
+      ? "Delivery available"
+      : response.deliveryAvailable === false
+        ? "Collection / delivery to confirm"
+        : "Delivery / collection to confirm";
+
+    const { filename } = await generatePDF({
+      type: "quote",
+      number: ref,
+      date: new Date(),
+      billingTo:
+        `Buyer Request: ${ref}\n` +
+        `Area: ${request.area || "-"}\n` +
+        `City: ${request.city || "-"}\n` +
+        `${deliveryNote}`,
+      items: (response.items || []).map(i => ({
+        item: i.product,
+        qty: Number(i.quantity || 1),
+        unit: Number(i.pricePerUnit || 0),
+        total: Number(i.total || 0)
+      })),
+      bizMeta: {
+        name: supplierName,
+        logoUrl: "",
+        address: `${supplier?.location?.area || ""}, ${supplier?.location?.city || ""}`,
+        _id: String(request._id),
+        status: "quotation"
+      }
+    });
+
+    const link = `${site}/docs/generated/orders/${filename}`;
+
+    await sendDocument(request.buyerPhone, {
+      link,
+      filename
+    });
+
+    return link;
+  } catch (err) {
+    console.error("[BUYER QUOTE PDF]", err.message);
+    return null;
+  }
+}
 async function buildAutoQuoteForSupplier({ supplier, items = [] }) {
   const responseItems = [];
   let matchedCount = 0;
@@ -1732,7 +1893,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   const noteLine = response.message ? `\n📝 ${response.message}` : "";
   const etaLine = response.etaText ? `\n⏱ ${response.etaText}` : "";
 
-  return sendButtons(request.buyerPhone, {
+  await sendButtons(request.buyerPhone, {
     text:
       `📨 *New Seller Response* (${ref})\n\n` +
       `🏪 ${supplierName}\n\n` +
@@ -1746,8 +1907,14 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
       { id: "my_orders", title: "📋 My Orders" }
     ]
   });
-}
 
+  // Send PDF quotation only when there are actual quoted line items
+  if (Array.isArray(response.items) && response.items.length) {
+    await sendBuyerQuotePdf({ request, supplier, response });
+  }
+
+  return;
+}
 async function notifySuppliersOfBuyerRequest(request) {
   const suppliers = await findSuppliersForBuyerRequest({
     items: request.items || [],
@@ -1769,12 +1936,12 @@ async function notifySuppliersOfBuyerRequest(request) {
           : `📍 Zimbabwe`;
 
       await sendButtons(supplier.phone, {
-        text:
+             text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
           `${itemLines}\n\n` +
           `${locationLine}\n` +
-          `${request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / location to confirm"}\n` +
-          `📞 Buyer: ${request.buyerPhone}\n\n` +
+          `${request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / location to confirm"}\n\n` +
+          `Buyer contact is hidden.\n` +
           `Respond through the chatbot now.`,
         buttons: [
           { id: `req_auto_${request._id}`, title: "⚡ Auto Quote" },
@@ -12273,14 +12440,19 @@ if (a.startsWith("req_offer_")) {
     { upsert: true }
   );
 
-  return sendText(
+   return sendText(
     from,
     `💬 *Send your offer / quotation*\n\n` +
-      `${formatBuyerRequestItems(request.items || [], 15)}\n\n` +
-      `You can reply in either format:\n\n` +
-      `*Fast price format:*\n_12, 8.5, 3_\n\n` +
-      `*Named format:*\n_cement: 12_\n_pvc pipe: 8.5_\n_solvent cement: 3_\n\n` +
-      `Or type a normal message if you want to send a custom offer.\n\n` +
+      `${formatBuyerRequestItems(request.items || [], 20)}\n\n` +
+      `You can reply in any of these ways:\n\n` +
+      `*1. Fast prices in order*\n` +
+      `_12, 8.5, 3, 4.2_\n\n` +
+      `*2. Named prices*\n` +
+      `_110 access tees: 12_\n_vent valves: 8.5_\n_gulley traps: 3_\n\n` +
+      `*3. Partial quote only*\n` +
+      `_110 access tees: 12_\n_vent valves: 8.5_\nOnly these are available now._\n\n` +
+      `*4. Normal text offer*\n` +
+      `_We have most of the items. We can quote fully tomorrow morning._\n\n` +
       `Type *cancel* to stop.`
   );
 }
@@ -12353,12 +12525,12 @@ if (a.startsWith("req_auto_")) {
   await sendBuyerRequestResponseToBuyer({ request, supplier, response });
 
   return sendButtons(from, {
-    text:
+     text:
       autoQuote.fullyPriced
-        ? "✅ Auto quotation sent to the buyer."
+        ? "✅ Full auto quotation sent to the buyer as chat + PDF."
         : autoQuote.responseItems.length
-          ? "✅ Partial auto quotation + matching suggestions sent to the buyer."
-          : "✅ Matching variant suggestions sent to the buyer.",
+          ? "✅ Partial auto quotation sent to the buyer as chat + PDF. You can still send a manual follow-up."
+          : "✅ Matching variant suggestions sent to the buyer. Send a manual offer if needed.",
     buttons: [
       { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
       { id: "my_supplier_account", title: "🏪 My Store" },
