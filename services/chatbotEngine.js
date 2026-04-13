@@ -78,6 +78,7 @@ import axios from "axios";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
+import BuyerRequest from "../models/buyerRequest.js";
 import {
   SUPPLIER_PLANS,
   SUPPLIER_CITIES,
@@ -1358,7 +1359,288 @@ async function notifySuppliersOfLiveDemand({
 
 
 
+function parseBuyerRequestItems(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
 
+  const parsed = parseBulkOrderInput(raw);
+  const valid = parsed.filter(i => i && normalizeProductName(i.product || ""));
+
+  if (valid.length) {
+    return valid.map(i => ({
+      product: String(i.product || "").trim(),
+      quantity: Number(i.quantity || 1),
+      unitLabel: i.unitLabel || "units",
+      notes: ""
+    }));
+  }
+
+  return raw
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => ({
+      product: line,
+      quantity: 1,
+      unitLabel: "units",
+      notes: ""
+    }));
+}
+
+function formatBuyerRequestItems(items = [], limit = 15) {
+  const visible = items.slice(0, limit);
+  const lines = visible.map((item, idx) => {
+    const qty = Number(item.quantity || 1);
+    const unitLabel = item.unitLabel || "units";
+    return `${idx + 1}. ${item.product} x${qty}${unitLabel && unitLabel !== "units" ? ` ${unitLabel}` : ""}`;
+  });
+
+  if (items.length > limit) {
+    lines.push(`… and ${items.length - limit} more item${items.length - limit === 1 ? "" : "s"}`);
+  }
+
+  return lines.join("\n");
+}
+
+function parseBuyerRequestLocationInput(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return { city: null, area: null };
+
+  const lower = raw.toLowerCase();
+  const matchedCity = SUPPLIER_CITIES.find(c => lower.includes(String(c).toLowerCase())) || null;
+
+  let area = null;
+  if (matchedCity) {
+    area = raw
+      .replace(new RegExp(matchedCity, "i"), "")
+      .replace(/^[,\-\s]+|[,\-\s]+$/g, "")
+      .trim() || null;
+  }
+
+  if (!matchedCity && raw.includes(",")) {
+    const parts = raw.split(",").map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const cityCandidate = parts[parts.length - 1];
+      const exactCity = SUPPLIER_CITIES.find(c => c.toLowerCase() === cityCandidate.toLowerCase()) || null;
+      if (exactCity) {
+        return {
+          city: exactCity,
+          area: parts.slice(0, -1).join(", ").trim() || null
+        };
+      }
+    }
+  }
+
+  return {
+    city: matchedCity,
+    area
+  };
+}
+
+async function findSuppliersForBuyerRequest({ items = [], city = null, area = null, profileType = null }) {
+  const scoreMap = new Map();
+  const topItems = items.slice(0, 5);
+
+  for (const item of topItems) {
+    const results = await runSupplierSearch({
+      city: city || null,
+      product: item.product,
+      area: area || null,
+      profileType: profileType || null
+    });
+
+    for (const supplier of results || []) {
+      const key = String(supplier._id);
+      const current = scoreMap.get(key) || { supplier, score: 0 };
+      current.score += 1;
+      scoreMap.set(key, current);
+    }
+  }
+
+  return [...scoreMap.values()]
+    .sort((a, b) => b.score - a.score)
+    .map(entry => entry.supplier)
+    .filter(s => s && s.active)
+    .slice(0, 10);
+}
+
+function buildBuyerRequestRef(request) {
+  return `REQ-${String(request._id).slice(-6).toUpperCase()}`;
+}
+
+async function buildAutoQuoteForSupplier({ supplier, items = [] }) {
+  const responseItems = [];
+  let matchedCount = 0;
+  let totalAmount = 0;
+
+  for (const item of items) {
+    const match = findMatchingSupplierPrice(supplier, item.product);
+
+    if (!match || typeof match.amount !== "number" || Number.isNaN(match.amount)) {
+      continue;
+    }
+
+    const qty = Number(item.quantity || 1);
+    const total = Number((qty * Number(match.amount)).toFixed(2));
+
+    responseItems.push({
+      product: match.product || item.product,
+      quantity: qty,
+      unit: match.unit || item.unitLabel || "each",
+      pricePerUnit: Number(match.amount),
+      total,
+      available: true
+    });
+
+    matchedCount += 1;
+    totalAmount += total;
+  }
+
+  return {
+    matchedCount,
+    responseItems,
+    totalAmount: responseItems.length ? Number(totalAmount.toFixed(2)) : null,
+    fullyPriced: responseItems.length === items.length && items.length > 0
+  };
+}
+
+async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) {
+  const supplierName = supplier?.businessName || response?.supplierName || "Supplier";
+  const ref = buildBuyerRequestRef(request);
+
+  if (response.mode === "unavailable") {
+    return sendButtons(request.buyerPhone, {
+      text:
+        `📭 *Response for ${ref}*\n\n` +
+        `🏪 ${supplierName}\n` +
+        `This seller is not available for your request right now.`,
+      buttons: [
+        { id: "find_supplier", title: "🔍 Browse & Shop" },
+        { id: "my_orders", title: "📋 My Orders" }
+      ]
+    });
+  }
+
+  const itemLines = (response.items || []).length
+    ? response.items.map(i =>
+        `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)}/${i.unit || "each"} = $${Number(i.total || 0).toFixed(2)}`
+      ).join("\n")
+    : "• Seller sent a custom offer";
+
+  const totalLine =
+    typeof response.totalAmount === "number"
+      ? `\n💵 Total: $${Number(response.totalAmount).toFixed(2)}`
+      : "";
+
+  const noteLine = response.message ? `\n📝 ${response.message}` : "";
+  const etaLine = response.etaText ? `\n⏱ ${response.etaText}` : "";
+
+  return sendButtons(request.buyerPhone, {
+    text:
+      `📨 *New Seller Response* (${ref})\n\n` +
+      `🏪 ${supplierName}\n\n` +
+      `${itemLines}` +
+      `${totalLine}` +
+      `${etaLine}` +
+      `${noteLine}\n\n` +
+      `📞 Contact: ${response.supplierPhone}`,
+    buttons: [
+      { id: "suppliers_home", title: "🛒 Marketplace" },
+      { id: "my_orders", title: "📋 My Orders" }
+    ]
+  });
+}
+
+async function notifySuppliersOfBuyerRequest(request) {
+  const suppliers = await findSuppliersForBuyerRequest({
+    items: request.items || [],
+    city: request.city || null,
+    area: request.area || null,
+    profileType: request.profileType || null
+  });
+
+  const notifiedIds = [];
+
+  for (const supplier of suppliers) {
+    try {
+      const ref = buildBuyerRequestRef(request);
+      const itemLines = formatBuyerRequestItems(request.items || [], 12);
+      const locationLine = request.area
+        ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}`
+        : request.city
+          ? `📍 ${request.city}`
+          : `📍 Zimbabwe`;
+
+      await sendButtons(supplier.phone, {
+        text:
+          `🔥 *New Buyer Request* (${ref})\n\n` +
+          `${itemLines}\n\n` +
+          `${locationLine}\n` +
+          `${request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / location to confirm"}\n` +
+          `📞 Buyer: ${request.buyerPhone}\n\n` +
+          `Respond through the chatbot now.`,
+        buttons: [
+          { id: `req_auto_${request._id}`, title: "⚡ Auto Quote" },
+          { id: `req_offer_${request._id}`, title: "💬 Send Offer" },
+          { id: `req_unavail_${request._id}`, title: "❌ Not Available" }
+        ]
+      });
+
+      notifiedIds.push(supplier._id);
+    } catch (err) {
+      console.error("[BUYER REQUEST NOTIFY]", err.message);
+    }
+  }
+
+  request.notifiedSuppliers = notifiedIds;
+  await request.save();
+
+  return notifiedIds.length;
+}
+
+async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, deliveryRequired = false }) {
+  const request = await BuyerRequest.create({
+    buyerPhone: from,
+    requestType: pendingRequest.requestType || "simple",
+    profileType: pendingRequest.profileType || "product",
+    rawText: pendingRequest.rawText || "",
+    items: pendingRequest.items || [],
+    city: pendingRequest.city || null,
+    area: pendingRequest.area || null,
+    deliveryRequired: Boolean(deliveryRequired),
+    status: "open"
+  });
+
+  const sentCount = await notifySuppliersOfBuyerRequest(request);
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.buyerRequestState": "",
+        "tempData.pendingBuyerRequest": "",
+        "tempData.buyerRequestMode": ""
+      }
+    },
+    { upsert: true }
+  );
+
+  const ref = buildBuyerRequestRef(request);
+
+  return sendButtons(from, {
+    text:
+      `✅ *Request sent* (${ref})\n\n` +
+      `${formatBuyerRequestItems(request.items || [], 10)}\n\n` +
+      `${request.area ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}\n` : request.city ? `📍 ${request.city}\n` : ""}` +
+      `${deliveryRequired ? "🚚 Delivery required\n" : ""}` +
+      `📣 Sent to ${sentCount} matching seller${sentCount === 1 ? "" : "s"}.\n\n` +
+      `You will receive offers here in the chatbot.`,
+    buttons: [
+      { id: "find_supplier", title: "🔍 Browse & Shop" },
+      { id: "my_orders", title: "📋 My Orders" }
+    ]
+  });
+}
 
 
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
@@ -1876,6 +2158,18 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("sup_request_quote_supplier_") ||
       a.startsWith("sup_ask_availability_") ||
 
+
+
+      a === "sup_request_sellers" ||
+      a === "sup_request_mode_simple" ||
+      a === "sup_request_mode_bulk" ||
+      a === "sup_request_delivery_yes" ||
+      a === "sup_request_delivery_no" ||
+      a.startsWith("req_offer_") ||
+      a.startsWith("req_auto_") ||
+      a.startsWith("req_unavail_") ||
+
+
         a.startsWith("view_invoices_page_") ||
       a.startsWith("view_quotes_page_") ||
         a.startsWith("view_receipts_page_") ||
@@ -2035,6 +2329,227 @@ Reply *menu* to start.`);
     biz.sessionState = "ready";
     await saveBizSafe(biz);
   }
+
+  // =========================
+  // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
+  // =========================
+  if (!isMetaAction) {
+    const flowSess = await UserSession.findOne({ phone });
+    const buyerRequestState = flowSess?.tempData?.buyerRequestState || null;
+    const pendingBuyerRequest = flowSess?.tempData?.pendingBuyerRequest || null;
+    const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
+    const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
+
+    if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
+      if (al === "cancel") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendSupplierAccountMenu(from, await SupplierProfile.findOne({ phone }));
+      }
+
+      const request = await BuyerRequest.findById(sellerRequestId);
+      if (!request) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendText(from, "❌ Request not found or expired.");
+      }
+
+      const supplier = await SupplierProfile.findOne({ phone }).lean();
+      if (!supplier) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendText(from, "❌ Supplier profile not found.");
+      }
+
+      const requestedProducts = (request.items || []).map(i => i.product);
+      const parsed = parseSupplierPriceInput(text, requestedProducts, supplier.profileType === "service");
+
+      let responseItems = [];
+      let totalAmount = null;
+      let message = "";
+
+      if (parsed.updated.length) {
+        const updatedMap = new Map(
+          parsed.updated.map(u => [normalizeProductName(u.product), u])
+        );
+
+        responseItems = (request.items || [])
+          .map(item => {
+            const match = updatedMap.get(normalizeProductName(item.product));
+            if (!match) return null;
+
+            const qty = Number(item.quantity || 1);
+            const unitPrice = Number(match.amount || 0);
+            const total = Number((qty * unitPrice).toFixed(2));
+
+            return {
+              product: item.product,
+              quantity: qty,
+              unit: match.unit || item.unitLabel || "each",
+              pricePerUnit: unitPrice,
+              total,
+              available: true
+            };
+          })
+          .filter(Boolean);
+
+        if (responseItems.length) {
+          totalAmount = Number(
+            responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+          );
+        }
+
+        if (parsed.failed.length) {
+          message = `Some parts of your message were skipped: ${parsed.failed.slice(0, 3).join(", ")}`;
+        }
+      } else {
+        message = String(text || "").trim();
+      }
+
+      const response = {
+        supplierId: supplier._id,
+        supplierPhone: supplier.phone,
+        supplierName: supplier.businessName,
+        mode: "manual_offer",
+        message,
+        items: responseItems,
+        totalAmount,
+        deliveryAvailable: supplier.delivery?.available ?? null,
+        etaText: ""
+      };
+
+      request.responses.push(response);
+      await request.save();
+
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+        { upsert: true }
+      );
+
+      await sendBuyerRequestResponseToBuyer({ request, supplier, response });
+
+      return sendButtons(from, {
+        text: "✅ Your offer has been sent to the buyer.",
+        buttons: [
+          { id: "my_supplier_account", title: "🏪 My Store" },
+          { id: "suppliers_home", title: "🛒 Marketplace" }
+        ]
+      });
+    }
+
+    if (buyerRequestState === "awaiting_items") {
+      if (al === "cancel") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $unset: {
+              "tempData.buyerRequestState": "",
+              "tempData.pendingBuyerRequest": "",
+              "tempData.buyerRequestMode": ""
+            }
+          },
+          { upsert: true }
+        );
+        return sendButtons(from, {
+          text: "✅ Request cancelled.",
+          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+        });
+      }
+
+      const items = parseBuyerRequestItems(text);
+      if (!items.length) {
+        return sendText(
+          from,
+          `❌ Please send the items you need.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10, elbow 5_\n\nFor big lists, send one item per line.\n\nType *cancel* to stop.`
+        );
+      }
+
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.buyerRequestState": "awaiting_location",
+            "tempData.pendingBuyerRequest": {
+              ...(pendingBuyerRequest || {}),
+              items,
+              rawText: text,
+              profileType: "product"
+            }
+          }
+        },
+        { upsert: true }
+      );
+
+      return sendText(
+        from,
+        `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_`
+      );
+    }
+
+    if (buyerRequestState === "awaiting_location") {
+      if (al === "cancel") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $unset: {
+              "tempData.buyerRequestState": "",
+              "tempData.pendingBuyerRequest": "",
+              "tempData.buyerRequestMode": ""
+            }
+          },
+          { upsert: true }
+        );
+        return sendButtons(from, {
+          text: "✅ Request cancelled.",
+          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+        });
+      }
+
+      const parsedLocation = parseBuyerRequestLocationInput(text);
+      if (!parsedLocation.city) {
+        return sendText(
+          from,
+          `❌ Please include at least the *city*.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Avondale, Harare_`
+        );
+      }
+
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.buyerRequestState": "awaiting_delivery",
+            "tempData.pendingBuyerRequest": {
+              ...(pendingBuyerRequest || {}),
+              city: parsedLocation.city,
+              area: parsedLocation.area
+            }
+          }
+        },
+        { upsert: true }
+      );
+
+      return sendButtons(from, {
+        text:
+          `🚚 *Do you need delivery?*\n\n` +
+          `${parsedLocation.area ? `📍 ${parsedLocation.area}, ${parsedLocation.city}` : `📍 ${parsedLocation.city}`}`,
+        buttons: [
+          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+          { id: "sup_request_delivery_no", title: "🏠 No, collection" }
+        ]
+      });
+    }
+  }
+
 
   // =========================
   // 🟢 ONBOARDING GATE
@@ -2417,6 +2932,18 @@ a.startsWith("sup_accept_") ||
   a.startsWith("paylist_prev_") ||
       a.startsWith("paylist_next_") ||
       a.startsWith("paylist_search_") ||
+
+
+  a === "sup_request_sellers" ||
+  a === "sup_request_mode_simple" ||
+  a === "sup_request_mode_bulk" ||
+  a === "sup_request_delivery_yes" ||
+  a === "sup_request_delivery_no" ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_auto_") ||
+  a.startsWith("req_unavail_") ||
+
+
 a === "sup_search_next_page" ||
   a === "sup_search_prev_page" ||
   a === "my_supplier_account" ||
@@ -6074,10 +6601,12 @@ _find plumber highlands_, _find electrician borrowdale_, _find teacher harare_, 
 _find car hire harare_, _find delivery bulawayo_, _find moving company harare_
 
 Or pick a category 👇`,
-  ).then(() => sendList(from, "📂 Or browse by category:", [
-    { id: "sup_search_type_product", title: "📦 Products" },
-    { id: "sup_search_type_service", title: "🧰 Services" }
+  ).then(() => sendList(from, "📂 Choose how you want to buy:", [
+    { id: "sup_search_type_product", title: "📦 Browse Products" },
+    { id: "sup_search_type_service", title: "🧰 Browse Services" },
+    { id: "sup_request_sellers", title: "⚡ Request from Sellers" }
   ]));
+
 }
 
 if (a === "sup_search_type_product" || a === "sup_search_type_service") {
@@ -11381,6 +11910,189 @@ isService
   : `✍️ *Type item name + quantity*\n\nExamples:\n_cement 10_\n_river sand 2, pit sand 1_\n_roofing sheets 20_\n\nType *cancel* to go back.`
   );
 }
+
+
+// ── Buyer request lane: entry menu ───────────────────────────────────────────
+if (a === "sup_request_sellers") {
+  return sendList(from, "⚡ *Request from Sellers*\n\nTell sellers what you need and they will respond in the chatbot.", [
+    { id: "sup_request_mode_simple", title: "🛒 Simple Item Request" },
+    { id: "sup_request_mode_bulk", title: "📋 Bulk / Long List Request" },
+    { id: "find_supplier", title: "⬅ Back" }
+  ]);
+}
+
+if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
+  const requestType = a === "sup_request_mode_bulk" ? "bulk" : "simple";
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.buyerRequestState": "awaiting_items",
+        "tempData.buyerRequestMode": requestType,
+        "tempData.pendingBuyerRequest": {
+          requestType,
+          profileType: "product",
+          items: []
+        }
+      }
+    },
+    { upsert: true }
+  );
+
+  return sendText(
+    from,
+    requestType === "bulk"
+      ? `📋 *Send your full item list*\n\nYou can send many items, one per line or comma-separated.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 15_\n_solvent cement 5_\n\nType *cancel* to stop.`
+      : `🛒 *What do you need?*\n\nExamples:\n_cement 20_\n_river sand 2_\n_roofing sheets 20_\n\nType *cancel* to stop.`
+  );
+}
+
+if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
+  const reqSess = await UserSession.findOne({ phone });
+  const pendingBuyerRequest = reqSess?.tempData?.pendingBuyerRequest || null;
+
+  if (!pendingBuyerRequest?.items?.length) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.buyerRequestState": "",
+          "tempData.pendingBuyerRequest": "",
+          "tempData.buyerRequestMode": ""
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendButtons(from, {
+      text: "❌ Request session expired. Please start again.",
+      buttons: [{ id: "sup_request_sellers", title: "⚡ Request from Sellers" }]
+    });
+  }
+
+  return finalizeBuyerRequestSubmission({
+    from,
+    phone,
+    pendingRequest: pendingBuyerRequest,
+    deliveryRequired: a === "sup_request_delivery_yes"
+  });
+}
+
+if (a.startsWith("req_offer_")) {
+  const requestId = a.replace("req_offer_", "");
+  const request = await BuyerRequest.findById(requestId);
+  if (!request) return sendText(from, "❌ Request not found or expired.");
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.sellerRequestReplyState": "awaiting_offer",
+        "tempData.sellerRequestId": requestId
+      }
+    },
+    { upsert: true }
+  );
+
+  return sendText(
+    from,
+    `💬 *Send your offer / quotation*\n\n` +
+      `${formatBuyerRequestItems(request.items || [], 15)}\n\n` +
+      `You can reply in either format:\n\n` +
+      `*Fast price format:*\n_12, 8.5, 3_\n\n` +
+      `*Named format:*\n_cement: 12_\n_pvc pipe: 8.5_\n_solvent cement: 3_\n\n` +
+      `Or type a normal message if you want to send a custom offer.\n\n` +
+      `Type *cancel* to stop.`
+  );
+}
+
+if (a.startsWith("req_auto_")) {
+  const requestId = a.replace("req_auto_", "");
+  const request = await BuyerRequest.findById(requestId);
+  if (!request) return sendText(from, "❌ Request not found or expired.");
+
+  const supplier = await SupplierProfile.findOne({ phone }).lean();
+  if (!supplier) return sendText(from, "❌ Supplier profile not found.");
+
+  const autoQuote = await buildAutoQuoteForSupplier({
+    supplier,
+    items: request.items || []
+  });
+
+  if (!autoQuote.responseItems.length) {
+    return sendButtons(from, {
+      text: `❌ No matching priced items were found in your catalogue for this request.`,
+      buttons: [
+        { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
+        { id: "my_supplier_account", title: "🏪 My Store" }
+      ]
+    });
+  }
+
+  const response = {
+    supplierId: supplier._id,
+    supplierPhone: supplier.phone,
+    supplierName: supplier.businessName,
+    mode: "auto_quote",
+    message: autoQuote.fullyPriced
+      ? "Auto-quotation generated from your current priced catalogue."
+      : `Auto-quotation generated for ${autoQuote.matchedCount}/${(request.items || []).length} items.`,
+    items: autoQuote.responseItems,
+    totalAmount: autoQuote.totalAmount,
+    deliveryAvailable: supplier.delivery?.available ?? null,
+    etaText: ""
+  };
+
+  request.responses.push(response);
+  await request.save();
+
+  await sendBuyerRequestResponseToBuyer({ request, supplier, response });
+
+  return sendButtons(from, {
+    text: "✅ Auto quotation sent to the buyer.",
+    buttons: [
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "suppliers_home", title: "🛒 Marketplace" }
+    ]
+  });
+}
+
+if (a.startsWith("req_unavail_")) {
+  const requestId = a.replace("req_unavail_", "");
+  const request = await BuyerRequest.findById(requestId);
+  if (!request) return sendText(from, "❌ Request not found or expired.");
+
+  const supplier = await SupplierProfile.findOne({ phone }).lean();
+  if (!supplier) return sendText(from, "❌ Supplier profile not found.");
+
+  const response = {
+    supplierId: supplier._id,
+    supplierPhone: supplier.phone,
+    supplierName: supplier.businessName,
+    mode: "unavailable",
+    message: "",
+    items: [],
+    totalAmount: null,
+    deliveryAvailable: supplier.delivery?.available ?? null,
+    etaText: ""
+  };
+
+  request.responses.push(response);
+  await request.save();
+
+  await sendBuyerRequestResponseToBuyer({ request, supplier, response });
+
+  return sendButtons(from, {
+    text: "✅ Buyer has been notified that you are unavailable.",
+    buttons: [
+      { id: "my_supplier_account", title: "🏪 My Store" },
+      { id: "suppliers_home", title: "🛒 Marketplace" }
+    ]
+  });
+}
+
+
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
 
