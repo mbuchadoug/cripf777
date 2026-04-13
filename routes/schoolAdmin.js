@@ -52,8 +52,9 @@ function buildSchoolOfferMessage({
   const planLabel =
     String(tier).toLowerCase() === "featured" ? "Featured" : "Basic";
 
-  const cycleLabel =
-    String(plan).toLowerCase() === "annual" ? "year" : "month";
+  const isAnnual = String(plan).toLowerCase() === "annual";
+
+const cycleLabel = isAnnual ? "for 1 full year" : "per month";
 
   const dueLabel = String(dueText || "").trim() || "today";
 
@@ -61,7 +62,7 @@ function buildSchoolOfferMessage({
 
 Your trial listing on ZimQuote is ending.
 
-To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} per ${cycleLabel} if payment is made by ${dueLabel}.
+To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} ${cycleLabel} if payment is made by ${dueLabel}.
 
 Once activated, your school stays visible and can remain on the first page when parents search for schools.
 
