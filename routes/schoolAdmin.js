@@ -75,6 +75,8 @@ Once activated, your school stays visible and can remain on the first page when 
 
 I've also attached the invoice showing the discounted fee.
 
+To arrange payment, contact 0789901058.
+
 Reply here if you want us to activate it for you.`;
 }
 
