@@ -305,10 +305,10 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
               <td>${badge(s.active ? "Active" : "Inactive", s.active ? "green" : "gray")}</td>
               <td>${s.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</td>
               <td>⭐ ${(s.rating || 0).toFixed(1)}</td>
-             <td>
+     <td>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <a href="/zq-admin/schools/${s._id}" class="btn-link">Manage →</a>
-    ${!s.active ? `<a href="/zq-admin/schools/${s._id}/offer" class="btn-link">Send Offer</a>` : ""}
+    <a href="/zq-admin/schools/${s._id}/offer" class="btn-link">Send Offer</a>
   </div>
 </td>
             </tr>`).join("") : `
