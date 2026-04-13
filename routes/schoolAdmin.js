@@ -1186,8 +1186,14 @@ router.post("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
 
     const baseAmount = getSchoolPlanAmount(safeTier, safePlan);
     const pct = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-    const discountAmount = Number((baseAmount * (pct / 100)).toFixed(2));
-    const finalAmount = Number((baseAmount - discountAmount).toFixed(2));
+  const rawDiscount = baseAmount * (pct / 100);
+const rawFinal = baseAmount - rawDiscount;
+
+// ✅ Round FINAL first (this fixes 49.99 issue)
+const finalAmount = Number(rawFinal.toFixed(2));
+
+// ✅ Then derive discount from final (keeps math consistent)
+const discountAmount = Number((baseAmount - finalAmount).toFixed(2));
 
     // Update the school profile
     school.tier               = safeTier;
