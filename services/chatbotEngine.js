@@ -78,7 +78,7 @@ import axios from "axios";
 import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
-import BuyerRequest from "../models/buyerRequest.js";
+import BuyerRequest from "../models/buyerRequest2.js";
 import {
   SUPPLIER_PLANS,
   SUPPLIER_CITIES,
