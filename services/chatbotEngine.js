@@ -899,7 +899,7 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
       ? `Browse this ${isService ? "service provider" : "supplier"} before choosing exact ${isService ? "service" : "item"}.`
       : `Choose how you want to shop from this ${isService ? "provider" : "supplier"}.`;
 
-    const addressLine = supplier.address
+  const addressLine = supplier.address
     ? `\n📍 ${supplier.address}`
     : `\n📍 ${supplier.location?.area || ""}${supplier.location?.area && supplier.location?.city ? ", " : ""}${supplier.location?.city || ""}`;
 
@@ -910,36 +910,46 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
     ? `\n🌐 ${supplier.website}`
     : "";
 
+  const rows = [
+    {
+      id: `sup_catalog_page_open_${supplier._id}`,
+      title: "📚 View Catalogue"
+    },
+    {
+      id: `sup_catalogue_search_${supplier._id}`,
+      title: isService ? "🔎 Search Services" : "🔎 Search Products"
+    },
+    {
+      id: `sup_number_page_open_${supplier._id}`,
+      title: "⚡ Quick Order by Number"
+    },
+    {
+      id: `sup_request_quote_supplier_${supplier._id}`,
+      title: "📋 Request Quote"
+    },
+    {
+      id: `sup_ask_availability_${supplier._id}`,
+      title: isService ? "❓ Ask Availability" : "❓ Ask Stock"
+    },
+    {
+      id: `sup_cart_view_${supplier._id}`,
+      title: `🛒 View Cart${cartCount ? ` (${cartCount})` : ""}`
+    },
+    {
+      id: "sup_back_to_search_results",
+      title: "⬅ Back to Results"
+    }
+  ];
+
   return sendList(
     from,
     `🛍 *${supplier.businessName}*` +
-    `${addressLine}` +
-    `${contactLine}` +
-    `${websiteLine}` +
-    `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}\n\n` +
-    `${subtitle}`,
-    [
-      {
-        id: `sup_catalog_page_open_${supplier._id}`,
-        title: "📚 View Catalogue"
-      },
-      {
-        id: `sup_catalogue_search_${supplier._id}`,
-        title: isService ? "🔎 Search Services" : "🔎 Search Products"
-      },
-      {
-        id: `sup_number_page_open_${supplier._id}`,
-        title: "⚡ Quick Order by Number"
-      },
-      {
-        id: `sup_cart_view_${supplier._id}`,
-        title: `🛒 View Cart${cartCount ? ` (${cartCount})` : ""}`
-      },
-      {
-        id: "sup_back_to_search_results",
-        title: "⬅ Back to Results"
-      }
-    ]
+      `${addressLine}` +
+      `${contactLine}` +
+      `${websiteLine}` +
+      `\n🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}\n\n` +
+      `${subtitle}`,
+    rows
   );
 }
 function upsertCartItemToFront(cart = [], nextItem = {}) {
@@ -988,14 +998,14 @@ async function _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart
   const moreMatchesId = opts.moreMatchesId || "find_supplier";
   const fullCatalogueId = `sup_catalog_page_open_${supplier._id}`;
 
-  return sendList(
+  await sendList(
     from,
     `✅ *Selected ${isService ? "Service" : "Item"}*\n\n` +
-    `🏪 Supplier: ${supplier.businessName}\n` +
-    `${isService ? "🔧" : "📦"} ${selectedItem.product}\n` +
-    `${priceLine}\n` +
-    `🔢 Quantity: ${Number(selectedItem.quantity || 1)}\n` +
-    `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}`,
+      `🏪 Supplier: ${supplier.businessName}\n` +
+      `${isService ? "🔧" : "📦"} ${selectedItem.product}\n` +
+      `${priceLine}\n` +
+      `🔢 Quantity: ${Number(selectedItem.quantity || 1)}\n` +
+      `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}`,
     [
       {
         id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
@@ -1003,7 +1013,7 @@ async function _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart
       },
       {
         id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
-        title: isService ? "⚡ Order This Now" : "⚡ Order This Now"
+        title: "⚡ Order This Now"
       },
       {
         id: moreMatchesId,
@@ -1019,6 +1029,8 @@ async function _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart
       }
     ]
   );
+
+  return _sendSelectedItemExtraActions(from, supplier, selectedItem, opts);
 }
 async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, cart = [], opts = {}) {
   const isService = supplier?.profileType === "service";
@@ -1031,7 +1043,7 @@ async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, ca
   const cartCount = Array.isArray(cart) ? cart.length : 0;
   const searchTerm = opts.searchTerm || "";
 
-  return sendButtons(from, {
+  await sendButtons(from, {
     text:
       `✅ *Selected ${isService ? "Service" : "Item"}*\n\n` +
       `🏪 Supplier: ${supplier.businessName}\n` +
@@ -1041,12 +1053,23 @@ async function _sendSelectedSupplierItemPreview(from, supplier, selectedItem, ca
       `🛒 Cart: ${cartCount} item${cartCount === 1 ? "" : "s"}` +
       (searchTerm ? `\n🔎 Search: ${searchTerm}` : "") +
       `\n\nWhat would you like to do next?`,
-buttons: [
-      { id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "✅ Confirm Booking" : "✅ Place Order" },
-      { id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`, title: isService ? "➕ Add Service" : "➕ Add to Cart" },
-      { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
+    buttons: [
+      {
+        id: `sup_item_preview_order_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: isService ? "✅ Confirm Booking" : "✅ Place Order"
+      },
+      {
+        id: `sup_item_preview_add_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: isService ? "➕ Add Service" : "➕ Add to Cart"
+      },
+      {
+        id: `sup_cart_view_${supplier._id}`,
+        title: "🛒 View Cart"
+      }
     ]
   });
+
+  return _sendSelectedItemExtraActions(from, supplier, selectedItem, opts);
 }
 
 
@@ -1171,6 +1194,167 @@ async function clearBuyerOrderContext({ biz, phone, keepSupplierSearch = true })
   );
 }
 
+
+
+async function _sendPostSearchActions(from, opts = {}) {
+  const isOfferResults = opts.resultMode === "offers";
+  const label = opts.product ? ` for *${opts.product}*` : "";
+
+  return sendButtons(from, {
+    text:
+      `What would you like to do next${label}?`,
+    buttons: [
+      {
+        id: isOfferResults ? "sup_request_quote_search" : "sup_request_quote_search",
+        title: "📋 Request Quote"
+      },
+      {
+        id: "sup_save_search_current",
+        title: "💾 Save Search"
+      },
+      {
+        id: "find_supplier",
+        title: "🔍 Search Again"
+      }
+    ]
+  });
+}
+
+async function _sendSelectedItemExtraActions(from, supplier, selectedItem, opts = {}) {
+  const isService = supplier?.profileType === "service";
+
+  return sendButtons(from, {
+    text:
+      `${isService ? "Need pricing first or want to ask before ordering?" : "Need pricing first or want to ask before ordering?"}`,
+    buttons: [
+      {
+        id: `sup_request_quote_supplier_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: "📋 Request Quote"
+      },
+      {
+        id: `sup_ask_availability_${supplier._id}_${encodeURIComponent(selectedItem.product)}`,
+        title: isService ? "❓ Ask Availability" : "❓ Ask Stock"
+      },
+      {
+        id: `sup_cart_view_${supplier._id}`,
+        title: "🛒 View Cart"
+      }
+    ]
+  });
+}
+
+async function _saveCurrentSearchForBuyer({ phone, biz, fallback = {} }) {
+  const product =
+    biz?.sessionData?.supplierSearch?.product ||
+    fallback.product ||
+    null;
+
+  const city =
+    biz?.sessionData?.supplierSearch?.city ||
+    fallback.city ||
+    null;
+
+  const area =
+    biz?.sessionData?.supplierSearch?.area ||
+    fallback.area ||
+    null;
+
+  const profileType =
+    biz?.sessionData?.supplierSearch?.type ||
+    fallback.profileType ||
+    null;
+
+  const payload = {
+    product,
+    city,
+    area,
+    profileType,
+    savedAt: new Date()
+  };
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $push: {
+        "tempData.savedSearches": {
+          $each: [payload],
+          $slice: -20
+        }
+      }
+    },
+    { upsert: true }
+  );
+
+  return payload;
+}
+
+async function notifySuppliersOfLiveDemand({
+  product,
+  city = null,
+  area = null,
+  profileType = null,
+  results = []
+}) {
+  try {
+    const cleanProduct = normalizeProductName(product || "");
+    if (!cleanProduct) return;
+
+    const supplierIds = [
+      ...new Set(
+        (results || [])
+          .map(r =>
+            r?.supplierId ||
+            r?.supplier?._id ||
+            r?._id ||
+            null
+          )
+          .filter(Boolean)
+          .map(String)
+      )
+    ];
+
+    if (!supplierIds.length) return;
+
+    const suppliers = await SupplierProfile.find({
+      _id: { $in: supplierIds },
+      active: true
+    }).lean();
+
+    for (const supplier of suppliers) {
+      try {
+        const locationLine = area
+          ? `📍 ${area}${city ? `, ${city}` : ""}`
+          : city
+            ? `📍 ${city}`
+            : `📍 Zimbabwe`;
+
+        const typeLine =
+          profileType === "service"
+            ? "\n🔧 Buyer is searching for a service"
+            : profileType === "product"
+              ? "\n📦 Buyer is searching for a product"
+              : "";
+
+        await sendButtons(supplier.phone, {
+          text:
+            `🔥 *New Buyer Search*\n\n` +
+            `🔎 ${product}\n` +
+            `${locationLine}` +
+            `${typeLine}\n\n` +
+            `A buyer is actively searching on ZimQuote right now.`,
+          buttons: [
+            { id: "my_supplier_account", title: "🏪 My Store" },
+            { id: "suppliers_home", title: "🛒 Marketplace" }
+          ]
+        });
+      } catch (innerErr) {
+        console.error("[LIVE DEMAND ALERT]", innerErr.message);
+      }
+    }
+  } catch (err) {
+    console.error("[notifySuppliersOfLiveDemand]", err.message);
+  }
+}
 
 
 
@@ -1686,6 +1870,12 @@ a.startsWith("sup_load_preset_") ||
       a === "biz_tools_menu" ||
        a.startsWith("inv_cat_page_") ||
 
+
+             a === "sup_request_quote_search" ||
+      a === "sup_save_search_current" ||
+      a.startsWith("sup_request_quote_supplier_") ||
+      a.startsWith("sup_ask_availability_") ||
+
         a.startsWith("view_invoices_page_") ||
       a.startsWith("view_quotes_page_") ||
         a.startsWith("view_receipts_page_") ||
@@ -1993,11 +2183,42 @@ if (parsed.city || parsed.area) {
       });
     }
 
-    return sendList(
+        await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.currentSearchContext": {
+            product: cleanProduct,
+            city: parsed.city || null,
+            area: parsed.area || null,
+            profileType: sess?.tempData?.supplierSearchType || null,
+            resultMode: "suppliers"
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    await sendList(
       from,
       `🏪 *Business matches for ${cleanProduct}* in ${locationLabel} - ${directBusinessMatches.length} found`,
       rows
     );
+
+    await _sendPostSearchActions(from, {
+      product: cleanProduct,
+      resultMode: "suppliers"
+    });
+
+    notifySuppliersOfLiveDemand({
+      product: cleanProduct,
+      city: parsed.city || null,
+      area: parsed.area || null,
+      profileType: sess?.tempData?.supplierSearchType || null,
+      results: directBusinessMatches
+    }).catch(err => console.error("[LIVE DEMAND DIRECT MATCH]", err.message));
+
+    return;
   }
 
   // Keep existing offer-first behavior for real item/service searches
@@ -2031,11 +2252,42 @@ if (parsed.city || parsed.area) {
       });
     }
 
-    return sendList(
+     await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.currentSearchContext": {
+            product: cleanProduct,
+            city: parsed.city || null,
+            area: parsed.area || null,
+            profileType: sess?.tempData?.supplierSearchType || null,
+            resultMode: "offers"
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    await sendList(
       from,
       `🔍 *${cleanProduct}* in ${locationLabel} - ${offerResults.length} found`,
       rows
     );
+
+    await _sendPostSearchActions(from, {
+      product: cleanProduct,
+      resultMode: "offers"
+    });
+
+    notifySuppliersOfLiveDemand({
+      product: cleanProduct,
+      city: parsed.city || null,
+      area: parsed.area || null,
+      profileType: sess?.tempData?.supplierSearchType || null,
+      results: offerResults
+    }).catch(err => console.error("[LIVE DEMAND OFFER MATCH]", err.message));
+
+    return;
   }
 
   if (!supplierResults.length) {
@@ -2074,11 +2326,42 @@ if (parsed.city || parsed.area) {
     });
   }
 
-  return sendList(
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.currentSearchContext": {
+          product: cleanProduct,
+          city: parsed.city || null,
+          area: parsed.area || null,
+          profileType: sess?.tempData?.supplierSearchType || null,
+          resultMode: "suppliers"
+        }
+      }
+    },
+    { upsert: true }
+  );
+
+  await sendList(
     from,
     `🔍 *${cleanProduct}*${parsed.city ? ` in ${parsed.city}` : ""} - ${supplierResults.length} found`,
     rows
   );
+
+  await _sendPostSearchActions(from, {
+    product: cleanProduct,
+    resultMode: "suppliers"
+  });
+
+  notifySuppliersOfLiveDemand({
+    product: cleanProduct,
+    city: parsed.city || null,
+    area: parsed.area || null,
+    profileType: sess?.tempData?.supplierSearchType || null,
+    results: supplierResults
+  }).catch(err => console.error("[LIVE DEMAND SUPPLIER MATCH]", err.message));
+
+  return;
 }
 
   return sendList(from, `🔍 Looking for: *${cleanProduct}*\n\nWhich city?`, [
@@ -2140,6 +2423,12 @@ a === "sup_search_next_page" ||
   a === "main_menu_back" ||
       a.startsWith("payinv_full_") ||
     a === "biz_tools_menu" ||
+
+
+      a === "sup_request_quote_search" ||
+  a === "sup_save_search_current" ||
+  a.startsWith("sup_request_quote_supplier_") ||
+  a.startsWith("sup_ask_availability_") ||
   // ── Schools ──────────────────────────────────────────────────────────────
   a === "find_school" ||
   a === "school_register" ||
@@ -2555,6 +2844,195 @@ if (shortcode.city && results.length) {
 }
 
 
+}
+
+
+
+if (a === "sup_save_search_current") {
+  const sess = await UserSession.findOne({ phone });
+  const ctx = sess?.tempData?.currentSearchContext || {};
+
+  const saved = await _saveCurrentSearchForBuyer({
+    phone,
+    biz,
+    fallback: ctx
+  });
+
+  return sendButtons(from, {
+    text:
+      `✅ Search saved.\n\n` +
+      `🔎 ${saved.product || "Search"}\n` +
+      `${saved.area ? `📍 ${saved.area}${saved.city ? `, ${saved.city}` : ""}\n` : saved.city ? `📍 ${saved.city}\n` : ""}` +
+      `You can search again anytime.`,
+    buttons: [
+      { id: "find_supplier", title: "🔍 Search Again" },
+      { id: "suppliers_home", title: "🛒 Marketplace" }
+    ]
+  });
+}
+
+
+
+
+if (a === "sup_request_quote_search") {
+  const sess = await UserSession.findOne({ phone });
+  const ctx = sess?.tempData?.currentSearchContext || {};
+  const results = sess?.tempData?.searchResults || [];
+
+  if (!results.length) {
+    return sendButtons(from, {
+      text: "❌ Search session expired. Please search again.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+    });
+  }
+
+  const uniqueSupplierIds = [
+    ...new Set(
+      results
+        .map(r => String(r?.supplierId || r?._id || r?.supplier?._id || ""))
+        .filter(Boolean)
+    )
+  ].slice(0, 5);
+
+  const suppliers = await SupplierProfile.find({
+    _id: { $in: uniqueSupplierIds }
+  }).lean();
+
+  if (!suppliers.length) {
+    return sendButtons(from, {
+      text: "❌ No suppliers available for quote request right now.",
+      buttons: [{ id: "find_supplier", title: "🔍 Search Again" }]
+    });
+  }
+
+  for (const supplier of suppliers) {
+    try {
+      await sendButtons(supplier.phone, {
+        text:
+          `📋 *New Quote Request*\n\n` +
+          `🔎 Item/Service: ${ctx.product || "Not specified"}\n` +
+          `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
+          `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
+          `📞 Buyer: ${from}\n\n` +
+          `Buyer wants pricing before placing an order.`,
+        buttons: [
+          { id: "my_supplier_account", title: "🏪 My Store" },
+          { id: "suppliers_home", title: "🛒 Marketplace" }
+        ]
+      });
+    } catch (err) {
+      console.error("[QUOTE REQUEST SEARCH NOTIFY]", err.message);
+    }
+  }
+
+  return sendButtons(from, {
+    text:
+      `✅ Quote request sent to matching suppliers for *${ctx.product || "your search"}*.\n\n` +
+      `Suppliers can now respond to you directly.`,
+    buttons: [
+      { id: "my_orders", title: "📋 My Orders" },
+      { id: "find_supplier", title: "🔍 Search Again" }
+    ]
+  });
+}
+
+
+
+
+if (a.startsWith("sup_request_quote_supplier_")) {
+  const raw = a.replace("sup_request_quote_supplier_", "");
+  const parts = raw.split("_");
+  const supplierId = parts.shift();
+  const productName = parts.length ? decodeURIComponent(parts.join("_")) : null;
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  const ctx = sess?.tempData?.currentSearchContext || {};
+  const requestedItem =
+    productName ||
+    ctx.product ||
+    sess?.tempData?.supplierSearchProduct ||
+    "item/service";
+
+  try {
+    await sendButtons(supplier.phone, {
+      text:
+        `📋 *New Quote Request*\n\n` +
+        `🏪 Buyer selected your business\n` +
+        `🔎 Requested: ${requestedItem}\n` +
+        `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
+        `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
+        `📞 Buyer: ${from}\n\n` +
+        `Buyer wants your price before ordering.`,
+      buttons: [
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "suppliers_home", title: "🛒 Marketplace" }
+      ]
+    });
+  } catch (err) {
+    console.error("[QUOTE REQUEST SINGLE SUPPLIER]", err.message);
+  }
+
+  return sendButtons(from, {
+    text:
+      `✅ Quote request sent to *${supplier.businessName}* for *${requestedItem}*.`,
+    buttons: [
+      { id: `sup_view_${supplier._id}`, title: "🏪 View Supplier" },
+      { id: "find_supplier", title: "🔍 Search Again" }
+    ]
+  });
+}
+
+
+
+
+if (a.startsWith("sup_ask_availability_")) {
+  const raw = a.replace("sup_ask_availability_", "");
+  const parts = raw.split("_");
+  const supplierId = parts.shift();
+  const productName = parts.length ? decodeURIComponent(parts.join("_")) : null;
+
+  const supplier = await SupplierProfile.findById(supplierId).lean();
+  if (!supplier) return sendText(from, "❌ Supplier not found.");
+
+  const sess = await UserSession.findOne({ phone });
+  const ctx = sess?.tempData?.currentSearchContext || {};
+  const requestedItem =
+    productName ||
+    ctx.product ||
+    sess?.tempData?.supplierSearchProduct ||
+    "item/service";
+
+  try {
+    await sendButtons(supplier.phone, {
+      text:
+        `❓ *Buyer Availability Check*\n\n` +
+        `🔎 Requested: ${requestedItem}\n` +
+        `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
+        `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
+        `📞 Buyer: ${from}\n\n` +
+        `${supplier.profileType === "service"
+          ? "Buyer wants to know if you are available."
+          : "Buyer wants to know if this is in stock / available."}`,
+      buttons: [
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "suppliers_home", title: "🛒 Marketplace" }
+      ]
+    });
+  } catch (err) {
+    console.error("[ASK AVAILABILITY]", err.message);
+  }
+
+  return sendButtons(from, {
+    text:
+      `✅ Your availability request was sent to *${supplier.businessName}*.`,
+    buttons: [
+      { id: `sup_view_${supplier._id}`, title: "🏪 View Supplier" },
+      { id: "find_supplier", title: "🔍 Search Again" }
+    ]
+  });
 }
 
 
