@@ -1107,8 +1107,11 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
             </div>
 
             <div class="fg">
-              <label>Discount (%)</label>
-              <input type="number" name="discountPercent" value="0" min="0" max="100" step="0.01" />
+             <label>Target Amount ($)</label>
+<input type="number" id="targetAmount" placeholder="e.g. 50" step="0.01" />
+
+<label>Discount (%)</label>
+<input type="number" id="discountPercent" name="discountPercent" value="0" min="0" max="100" step="0.01" readonly />
             </div>
 
             <div class="fg">
@@ -1147,6 +1150,44 @@ router.get("/schools/:id/activate", requireSupplierAdmin, async (req, res) => {
             <button type="submit" class="btn btn-green">✅ Activate Now</button>
             <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
           </div>
+
+
+          <script>
+(function() {
+  const targetInput = document.getElementById('targetAmount');
+  const discountInput = document.getElementById('discountPercent');
+
+  const tierSelect = document.querySelector('[name="tier"]');
+  const planSelect = document.querySelector('[name="plan"]');
+
+  function getBaseAmount() {
+    const tier = (tierSelect.value || 'basic').toLowerCase();
+    const plan = (planSelect.value || 'monthly').toLowerCase();
+
+    if (tier === 'featured') {
+      return plan === 'annual' ? 350 : 35;
+    }
+    return plan === 'annual' ? 150 : 15;
+  }
+
+  function calculateDiscount() {
+    const base = getBaseAmount();
+    const target = parseFloat(targetInput.value);
+
+    if (!target || target <= 0 || target >= base) {
+      discountInput.value = 0;
+      return;
+    }
+
+    const pct = ((base - target) / base) * 100;
+    discountInput.value = pct.toFixed(4); // high precision
+  }
+
+  targetInput.addEventListener('input', calculateDiscount);
+  tierSelect.addEventListener('change', calculateDiscount);
+  planSelect.addEventListener('change', calculateDiscount);
+})();
+</script>
         </form>
       </div>
     `));
