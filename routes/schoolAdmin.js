@@ -38,6 +38,36 @@ function getSchoolPlanAmount(tier, plan) {
   return PRICE_MAP[t]?.[p] ?? PRICE_MAP.basic.monthly;
 }
 
+function fmtUsd(n) {
+  return Number(n || 0).toFixed(2);
+}
+
+function buildSchoolOfferMessage({
+  schoolName,
+  tier,
+  plan,
+  targetAmount,
+  dueText
+}) {
+  const planLabel =
+    String(tier).toLowerCase() === "featured" ? "Featured" : "Basic";
+
+  const cycleLabel =
+    String(plan).toLowerCase() === "annual" ? "year" : "month";
+
+  const dueLabel = String(dueText || "").trim() || "today";
+
+  return `Hi ${schoolName},
+
+Your trial listing on ZimQuote is ending.
+
+To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} per ${cycleLabel} if payment is made by ${dueLabel}.
+
+Once activated, your school stays visible on the platform and parents can continue finding and contacting you.
+
+Reply here if you want us to activate it for you.`;
+}
+
 const router = express.Router();
 router.use(express.json());
 
@@ -275,7 +305,12 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
               <td>${badge(s.active ? "Active" : "Inactive", s.active ? "green" : "gray")}</td>
               <td>${s.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</td>
               <td>⭐ ${(s.rating || 0).toFixed(1)}</td>
-              <td><a href="/zq-admin/schools/${s._id}" class="btn-link">Manage →</a></td>
+             <td>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <a href="/zq-admin/schools/${s._id}" class="btn-link">Manage →</a>
+    ${!s.active ? `<a href="/zq-admin/schools/${s._id}/offer" class="btn-link">Send Offer</a>` : ""}
+  </div>
+</td>
             </tr>`).join("") : `
             <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No schools found.</td></tr>`}
           </tbody>
@@ -1059,6 +1094,168 @@ router.post("/schools/:id/toggle-verified", requireSupplierAdmin, async (req, re
   res.redirect(`/zq-admin/schools/${req.params.id}`);
 });
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEND OFFER (GET form)
+// GET /zq-admin/schools/:id/offer
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/schools/:id/offer", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const errorMsg = req.query.error
+  ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>`
+  : "";
+
+    res.send(layout(`Send Offer: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools" class="back-link">← Back to Schools</a>
+ ${errorMsg}
+
+      <div class="panel" style="max-width:700px">
+        <h3>💬 Send Discount Offer - ${esc(school.schoolName)}</h3>
+        <p style="color:var(--muted);margin-bottom:20px;font-size:13px">
+          Send a WhatsApp offer message to this school admin.
+        </p>
+
+        <form method="POST" action="/zq-admin/schools/${school._id}/offer" class="edit-form">
+          <div class="form-grid">
+            <div class="fg">
+              <label>Plan / Tier</label>
+              <select name="tier" id="offerTier" required>
+                <option value="basic">✅ Basic - $15/month</option>
+                <option value="featured">🔥 Featured - $35/month</option>
+              </select>
+            </div>
+
+            <div class="fg">
+              <label>Billing Cycle</label>
+              <select name="plan" id="offerPlan">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+
+            <div class="fg">
+              <label>Target Amount ($)</label>
+              <input type="number" name="targetAmount" id="offerTargetAmount" placeholder="e.g. 50" step="0.01" min="0" required />
+            </div>
+
+            <div class="fg">
+              <label>Discount (%)</label>
+              <input type="number" name="discountPercent" id="offerDiscountPercent" value="0" step="0.0001" readonly />
+            </div>
+
+            <div class="fg">
+              <label>Pay By</label>
+              <select name="dueText" required>
+                <option value="today">Today</option>
+                <option value="tomorrow">Tomorrow</option>
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-green">📨 Send Offer</button>
+            <a href="/zq-admin/schools" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <script>
+      (function() {
+        const tierEl = document.getElementById("offerTier");
+        const planEl = document.getElementById("offerPlan");
+        const targetEl = document.getElementById("offerTargetAmount");
+        const discountEl = document.getElementById("offerDiscountPercent");
+
+        function getBaseAmount() {
+          const tier = (tierEl.value || "basic").toLowerCase();
+          const plan = (planEl.value || "monthly").toLowerCase();
+
+          if (tier === "featured") {
+            return plan === "annual" ? 350 : 35;
+          }
+          return plan === "annual" ? 150 : 15;
+        }
+
+        function recalc() {
+          const base = getBaseAmount();
+          const target = parseFloat(targetEl.value);
+
+          if (!target || target <= 0 || target >= base) {
+            discountEl.value = "0";
+            return;
+          }
+
+          const pct = ((base - target) / base) * 100;
+          discountEl.value = pct.toFixed(4);
+        }
+
+        tierEl.addEventListener("change", recalc);
+        planEl.addEventListener("change", recalc);
+        targetEl.addEventListener("input", recalc);
+      })();
+      </script>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEND OFFER (POST)
+// POST /zq-admin/schools/:id/offer
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/schools/:id/offer", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const safeTier = String(req.body.tier || "basic").toLowerCase();
+    const safePlan = String(req.body.plan || "monthly").toLowerCase();
+    const dueText = String(req.body.dueText || "today").trim();
+    const targetAmount = Number(req.body.targetAmount || 0);
+
+    const baseAmount = getSchoolPlanAmount(safeTier, safePlan);
+    if (!targetAmount || targetAmount <= 0 || targetAmount >= baseAmount) {
+      return res.redirect(
+        `/zq-admin/schools/${school._id}/offer?error=${encodeURIComponent("Enter a valid target amount below the normal price.")}`
+      );
+    }
+
+    const pct = Number((((baseAmount - targetAmount) / baseAmount) * 100).toFixed(4));
+
+    const msg = buildSchoolOfferMessage({
+      schoolName: school.schoolName,
+      tier: safeTier,
+      plan: safePlan,
+      targetAmount,
+      dueText
+    });
+
+    await sendText(school.phone, msg);
+
+    school.adminNote = (school.adminNote ? school.adminNote + " | " : "") +
+      `[Offer sent ${new Date().toDateString()}: ${safeTier}/${safePlan} target $${fmtUsd(targetAmount)} by ${dueText} (${pct}%)]`;
+
+    await school.save();
+
+    return res.redirect(
+      `/zq-admin/schools/${school._id}?success=${encodeURIComponent(`Offer sent: $${fmtUsd(targetAmount)} ${safePlan} ${safeTier} by ${dueText}.`)}`
+    );
+  } catch (err) {
+    return res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // MANUAL ACTIVATION (GET form)
 // GET /zq-admin/schools/:id/activate
