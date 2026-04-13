@@ -1512,6 +1512,79 @@ function parseInlineSimpleBuyerRequest(text = "") {
 }
 
 
+function tokenizeProductText(value = "") {
+  return normalizeProductName(value)
+    .split(" ")
+    .map(t => t.trim())
+    .filter(Boolean)
+    .filter(t => t.length > 1);
+}
+
+function scoreVariantCandidate(requestedProduct = "", candidateName = "") {
+  const req = normalizeProductName(requestedProduct);
+  const cand = normalizeProductName(candidateName);
+
+  if (!req || !cand) return 0;
+  if (req === cand) return 100;
+
+  let score = 0;
+
+  if (cand.startsWith(req)) score += 40;
+  if (cand.includes(req)) score += 25;
+  if (req.includes(cand)) score += 10;
+
+  const reqTokens = tokenizeProductText(req);
+  const candTokens = tokenizeProductText(cand);
+
+  for (const token of reqTokens) {
+    if (candTokens.includes(token)) score += 8;
+    else if (cand.includes(token)) score += 4;
+  }
+
+  if (reqTokens.length === 1 && candTokens.length > 1 && cand.includes(reqTokens[0])) {
+    score += 12;
+  }
+
+  return score;
+}
+
+function getSupplierVariantMatches(supplier, requestedProduct = "", opts = {}) {
+  const limit = Number(opts.limit || 5);
+
+  const catalogueItems = getSupplierCatalogueSourceItems(supplier) || [];
+  const scored = catalogueItems
+    .map(item => ({
+      ...item,
+      score: scoreVariantCandidate(requestedProduct, item.name)
+    }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+
+      const aPriced = typeof a.rawPrice === "number" ? 1 : 0;
+      const bPriced = typeof b.rawPrice === "number" ? 1 : 0;
+      if (bPriced !== aPriced) return bPriced - aPriced;
+
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+  return scored.slice(0, limit);
+}
+
+function isStrongSingleVariantMatch(matches = []) {
+  if (!matches.length) return false;
+  if (matches.length === 1) return true;
+
+  const first = matches[0];
+  const second = matches[1];
+
+  if (!first) return false;
+  if (!second) return true;
+
+  // clear winner if score gap is good enough
+  return (first.score - second.score) >= 12;
+}
+
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null, profileType = null }) {
   const scoreMap = new Map();
   const topItems = items.slice(0, 5);
@@ -1548,34 +1621,83 @@ async function buildAutoQuoteForSupplier({ supplier, items = [] }) {
   let matchedCount = 0;
   let totalAmount = 0;
 
-  for (const item of items) {
-    const match = findMatchingSupplierPrice(supplier, item.product);
+  const ambiguousItems = [];
+  const unmatchedItems = [];
 
-    if (!match || typeof match.amount !== "number" || Number.isNaN(match.amount)) {
+  for (const item of items) {
+    const requestedName = item.product;
+
+    // 1) try current exact/partial priced match logic first
+    const directMatch = findMatchingSupplierPrice(supplier, requestedName);
+
+    if (directMatch && typeof directMatch.amount === "number" && !Number.isNaN(directMatch.amount)) {
+      const qty = Number(item.quantity || 1);
+      const total = Number((qty * Number(directMatch.amount)).toFixed(2));
+
+      responseItems.push({
+        product: directMatch.product || requestedName,
+        quantity: qty,
+        unit: directMatch.unit || item.unitLabel || "each",
+        pricePerUnit: Number(directMatch.amount),
+        total,
+        available: true
+      });
+
+      matchedCount += 1;
+      totalAmount += total;
       continue;
     }
 
-    const qty = Number(item.quantity || 1);
-    const total = Number((qty * Number(match.amount)).toFixed(2));
+    // 2) try broader catalogue variant matching
+    const variantMatches = getSupplierVariantMatches(supplier, requestedName, { limit: 5 });
 
-    responseItems.push({
-      product: match.product || item.product,
-      quantity: qty,
-      unit: match.unit || item.unitLabel || "each",
-      pricePerUnit: Number(match.amount),
-      total,
-      available: true
-    });
+    // only auto-use if there is one strong clear winner AND it has a price
+    if (isStrongSingleVariantMatch(variantMatches)) {
+      const best = variantMatches[0];
 
-    matchedCount += 1;
-    totalAmount += total;
+      if (typeof best.rawPrice === "number" && !Number.isNaN(best.rawPrice)) {
+        const qty = Number(item.quantity || 1);
+        const total = Number((qty * Number(best.rawPrice)).toFixed(2));
+
+        responseItems.push({
+          product: best.name || requestedName,
+          quantity: qty,
+          unit: best.unit || item.unitLabel || "each",
+          pricePerUnit: Number(best.rawPrice),
+          total,
+          available: true
+        });
+
+        matchedCount += 1;
+        totalAmount += total;
+        continue;
+      }
+    }
+
+    // 3) multiple possible matches = ambiguous, do not fail silently
+    if (variantMatches.length) {
+      ambiguousItems.push({
+        requested: requestedName,
+        suggestions: variantMatches.slice(0, 3).map(v => ({
+          name: v.name,
+          priced: typeof v.rawPrice === "number" && !Number.isNaN(v.rawPrice),
+          priceLabel: v.priceLabel || ""
+        }))
+      });
+      continue;
+    }
+
+    // 4) nothing similar found
+    unmatchedItems.push(requestedName);
   }
 
   return {
     matchedCount,
     responseItems,
     totalAmount: responseItems.length ? Number(totalAmount.toFixed(2)) : null,
-    fullyPriced: responseItems.length === items.length && items.length > 0
+    fullyPriced: responseItems.length === items.length && items.length > 0,
+    ambiguousItems,
+    unmatchedItems
   };
 }
 
@@ -12176,24 +12298,49 @@ if (a.startsWith("req_auto_")) {
     items: request.items || []
   });
 
-  if (!autoQuote.responseItems.length) {
+  // nothing priced + no useful variants = manual needed
+  if (!autoQuote.responseItems.length && !autoQuote.ambiguousItems.length) {
     return sendButtons(from, {
-      text: `❌ No matching priced items were found in your catalogue for this request.`,
+      text: `❌ No matching priced items or close catalogue variants were found for this request.`,
       buttons: [
         { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
+        { id: `req_unavail_${request._id}`, title: "❌ Not Available" },
         { id: "my_supplier_account", title: "🏪 My Store" }
       ]
     });
   }
+
+  const ambiguityLines = (autoQuote.ambiguousItems || []).length
+    ? autoQuote.ambiguousItems
+        .map(entry => {
+          const suggestions = (entry.suggestions || [])
+            .map(s => s.priceLabel ? `${s.name} (${s.priceLabel})` : s.name)
+            .join(", ");
+
+          return `For *${entry.requested}*, possible matches: ${suggestions}`;
+        })
+        .join("\n")
+    : "";
+
+  const unmatchedLine = (autoQuote.unmatchedItems || []).length
+    ? `\nNo close match found for: ${(autoQuote.unmatchedItems || []).join(", ")}`
+    : "";
+
+  const responseMessage =
+    autoQuote.fullyPriced
+      ? "Auto-quotation generated from your current priced catalogue."
+      : autoQuote.responseItems.length
+        ? `Auto-quotation generated for ${autoQuote.matchedCount}/${(request.items || []).length} items.` +
+          (ambiguityLines ? `\n${ambiguityLines}` : "") +
+          unmatchedLine
+        : ambiguityLines || `Supplier could not auto-price the request exactly.`;
 
   const response = {
     supplierId: supplier._id,
     supplierPhone: supplier.phone,
     supplierName: supplier.businessName,
     mode: "auto_quote",
-    message: autoQuote.fullyPriced
-      ? "Auto-quotation generated from your current priced catalogue."
-      : `Auto-quotation generated for ${autoQuote.matchedCount}/${(request.items || []).length} items.`,
+    message: responseMessage,
     items: autoQuote.responseItems,
     totalAmount: autoQuote.totalAmount,
     deliveryAvailable: supplier.delivery?.available ?? null,
@@ -12206,8 +12353,14 @@ if (a.startsWith("req_auto_")) {
   await sendBuyerRequestResponseToBuyer({ request, supplier, response });
 
   return sendButtons(from, {
-    text: "✅ Auto quotation sent to the buyer.",
+    text:
+      autoQuote.fullyPriced
+        ? "✅ Auto quotation sent to the buyer."
+        : autoQuote.responseItems.length
+          ? "✅ Partial auto quotation + matching suggestions sent to the buyer."
+          : "✅ Matching variant suggestions sent to the buyer.",
     buttons: [
+      { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
       { id: "my_supplier_account", title: "🏪 My Store" },
       { id: "suppliers_home", title: "🛒 Marketplace" }
     ]
