@@ -47,7 +47,8 @@ function buildSchoolOfferMessage({
   tier,
   plan,
   targetAmount,
-  dueText
+  dueText,
+  discountPercent
 }) {
   const planLabel =
     String(tier).toLowerCase() === "featured" ? "Featured" : "Basic";
@@ -58,11 +59,17 @@ const cycleLabel = isAnnual ? "for 1 full year" : "per month";
 
   const dueLabel = String(dueText || "").trim() || "today";
 
-  return `Hi ${schoolName},
+const hasDiscount = Number(discountPercent || 0) > 0;
+
+const discountExpiryLine = hasDiscount
+  ? `\n\n⚠️ This discounted price is only valid if payment is made by ${dueLabel}.`
+  : "";
+
+return `Hi ${schoolName},
 
 Your trial listing on ZimQuote is ending.
 
-To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} ${cycleLabel} if payment is made by ${dueLabel}.
+To stay visible to parents searching on WhatsApp, we can activate your ${planLabel} plan for just $${fmtUsd(targetAmount)} ${cycleLabel} if payment is made by ${dueLabel}.${discountExpiryLine}
 
 Once activated, your school stays visible and can remain on the first page when parents search for schools.
 
@@ -1285,12 +1292,13 @@ router.post("/schools/:id/offer", requireSupplierAdmin, async (req, res) => {
 
     // 2) Send WhatsApp offer message after the invoice
     const msg = buildSchoolOfferMessage({
-      schoolName: school.schoolName,
-      tier: safeTier,
-      plan: safePlan,
-      targetAmount,
-      dueText
-    });
+  schoolName: school.schoolName,
+  tier: safeTier,
+  plan: safePlan,
+  targetAmount,
+  dueText,
+  discountPercent: pct
+});
 
     await sendText(school.phone, msg);
 
