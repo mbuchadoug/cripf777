@@ -44,7 +44,7 @@ export const SCHOOL_SUBURB_TO_CITY = {
   // Mutare
 "sakubva": "Mutare", "dangamvura": "Mutare", "chikanga": "Mutare",
   "hobhouse": "Mutare", "yeovil": "Mutare", "palmerston": "Mutare",
-  "murambi": "Mutare",
+  "cbd":"Mutare","murambi": "Mutare",
   // Gweru
   "mambo": "Gweru", "mkoba": "Gweru", "senga": "Gweru", "ascot": "Gweru",
   // Masvingo
