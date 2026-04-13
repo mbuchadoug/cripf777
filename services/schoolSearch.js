@@ -737,6 +737,22 @@ async function _showSchoolDetail(from, schoolId, biz) {
   // Track views
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1 } });
 
+  // Notify school admin that a parent opened/clicked their school
+  try {
+    const { sendText: notify } = await import("./metaSender.js");
+    await notify(
+      school.phone,
+`👀 *New School Profile View!*
+
+A parent clicked on *${school.schoolName}* on ZimQuote and opened your school profile.
+
+📞 Parent number: ${from}
+💬 Message: A parent is viewing your school profile and may be interested in your school.
+
+Please follow up with them if needed.`
+    );
+  } catch (e) { /* non-critical */ }
+
   const verifiedBadge  = school.verified  ? " ✅ *Verified*"   : "";
   const featuredBadge  = school.tier === "featured" ? " 🔥 *Featured*" : "";
   const admissions     = school.admissionsOpen ? "🟢 *Admissions Open*" : "🔴 *Admissions Closed*";
