@@ -1437,8 +1437,6 @@ function parseBuyerRequestLocationInput(text = "") {
   };
 }
 
-
-
 function parseInlineSimpleBuyerRequest(text = "") {
   const raw = String(text || "").trim();
   if (!raw) {
@@ -1450,34 +1448,70 @@ function parseInlineSimpleBuyerRequest(text = "") {
     };
   }
 
-  const parsedLocation = parseBuyerRequestLocationInput(raw);
+  // Reuse the same shortcode parser used by Browse & Shop
+  const parsed =
+    parseShortcodeSearch(raw) ||
+    parseShortcodeSearch(raw.startsWith("find ") ? raw : `find ${raw}`);
 
-  let itemText = raw;
-
-  if (parsedLocation.city) {
-    const cityPattern = new RegExp(`\\b${parsedLocation.city}\\b`, "i");
-    itemText = itemText.replace(cityPattern, " ");
-
-    if (parsedLocation.area) {
-      const escapedArea = parsedLocation.area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const areaPattern = new RegExp(`\\b${escapedArea}\\b`, "i");
-      itemText = itemText.replace(areaPattern, " ");
-    }
-
-    itemText = itemText.replace(/\bin\b/gi, " ");
-    itemText = itemText.replace(/[,\-]+/g, " ");
-    itemText = itemText.replace(/\s+/g, " ").trim();
+  if (!parsed || !parsed.product) {
+    return {
+      items: [],
+      city: null,
+      area: null,
+      itemText: raw
+    };
   }
 
-  const items = parseBuyerRequestItems(itemText);
+  let productText = String(parsed.product || "").trim();
 
+  // Optional quantity at the end of product text:
+  // "valve 5" => product "valve", quantity 5
+  // "25mm pvc pipe 10" => product "25mm pvc pipe", quantity 10
+  let quantity = 1;
+  const qtyMatch = productText.match(/^(.+?)\s+(?:x\s*)?(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+
+  if (qtyMatch) {
+    const maybeProduct = String(qtyMatch[1] || "").trim();
+    const maybeQty = Number(qtyMatch[2] || 1);
+    const maybeUnit = String(qtyMatch[3] || "").trim();
+
+    if (maybeProduct) {
+      productText = maybeProduct;
+      quantity = Number.isFinite(maybeQty) && maybeQty > 0 ? maybeQty : 1;
+
+      return {
+        items: [
+          {
+            product: productText,
+            quantity,
+            unitLabel: maybeUnit || "units",
+            notes: ""
+          }
+        ],
+        city: parsed.city || null,
+        area: parsed.area || null,
+        itemText: productText
+      };
+    }
+  }
+
+  // No quantity provided — still valid
   return {
-    items,
-    city: parsedLocation.city,
-    area: parsedLocation.area,
-    itemText
+    items: [
+      {
+        product: productText,
+        quantity: 1,
+        unitLabel: "units",
+        notes: ""
+      }
+    ],
+    city: parsed.city || null,
+    area: parsed.area || null,
+    itemText: productText
   };
 }
+
+
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null, profileType = null }) {
   const scoreMap = new Map();
   const topItems = items.slice(0, 5);
@@ -2513,17 +2547,17 @@ Reply *menu* to start.`);
   if (requestMode === "simple") {
     const parsedInline = parseInlineSimpleBuyerRequest(text);
 
-    if (!parsedInline.items.length) {
+      if (!parsedInline.items.length) {
       return sendText(
         from,
-        `❌ Please send item + suburb/city in one line.\n\nExamples:\n_cement 20 mbare harare_\n_river sand 2 borrowdale harare_\n_roofing sheets 20 chitungwiza_\n\nType *cancel* to stop.`
+        `❌ Please use the request search format.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n\nType *cancel* to stop.`
       );
     }
 
-    if (!parsedInline.city) {
+      if (!parsedInline.city) {
       return sendText(
         from,
-        `❌ Please include the *city* in the same line.\n\nExamples:\n_cement 20 mbare harare_\n_river sand 2 borrowdale harare_\n_roofing sheets 20 chitungwiza_`
+        `❌ Please include the *city* in the same request line.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_`
       );
     }
 
@@ -12028,12 +12062,13 @@ if (a === "sup_request_sellers") {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `Send what you need in *one line* with suburb/city.\n\n` +
+      `Use the same search style as Browse & Shop:\n\n` +
       `Examples:\n` +
-      `_cement 20 mbare harare_\n` +
-      `_25mm pvc pipe 10 borrowdale harare_\n` +
-      `_river sand 2 chitungwiza_\n` +
-      `_plumber avondale harare_\n\n` +
+      `_find valve harare_\n` +
+      `_find valve mbare harare_\n` +
+      `_find valve 5 harare_\n` +
+      `_find 25mm pvc pipe 10 borrowdale harare_\n\n` +
+      `Quantity is optional.\n\n` +
       `For long lists, use Bulk Request instead.`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
@@ -12065,7 +12100,7 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
     from,
     requestType === "bulk"
       ? `📋 *Bulk Request*\n\nSend your full item list.\nYou can send one per line or comma-separated.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 15_\n_solvent cement 5_\n\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
-      : `⚡ *Request Sellers*\n\nSend what you need in one line with suburb/city.\n\nExamples:\n_cement 20 mbare harare_\n_25mm pvc pipe 10 borrowdale harare_\n_river sand 2 chitungwiza_\n_plumber avondale harare_\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n\nType *cancel* to stop.`
   );
 }
 
