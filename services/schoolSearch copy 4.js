@@ -398,27 +398,10 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
     return _sendApplicationLink(from, schoolId);
   }
 
-  // ── Send Enquiry: parent taps button → bot asks for their message ────────
-  if (a.startsWith("school_enquiry_")) {
-    const schoolId = a.replace("school_enquiry_", "");
-    const school   = await SchoolProfile.findById(schoolId).lean();
-    if (!school) return false;
-
-    if (biz) {
-      biz.sessionState = "school_parent_enquiry";
-      biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: schoolId };
-      await saveBiz(biz);
-    }
-
-    return sendText(from,
-`✉️ *Send an Enquiry to ${school.schoolName}*
-
-Type your question or message below and we will send it to the school on your behalf.
-
-_Example: "Do you have space for Grade 3 in 2026?" or "What are your boarding fees?"_
-
-Type *cancel* to go back.`
-    );
+  // ── Contact school ────────────────────────────────────────────────────────
+  if (a.startsWith("school_contact_")) {
+    const schoolId = a.replace("school_contact_", "");
+    return _contactSchool(from, schoolId);
   }
 
   // ── Refine search ─────────────────────────────────────────────────────────
@@ -777,66 +760,6 @@ You can replace it anytime from ⚙️ More Options → 📄 Upload School Broch
     return sendSchoolMoreOptionsMenu(from, school);
   }
 
-  // ── Parent typed their enquiry message ──────────────────────────────────
-  if (state === "school_parent_enquiry") {
-    const message = (text || "").trim();
-
-    if (message.toLowerCase() === "cancel") {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-      return sendButtons(from, {
-        text: "❌ Enquiry cancelled.",
-        buttons: [{ id: "school_search_refine", title: "🔄 Back to Schools" }]
-      });
-    }
-
-    if (!message || message.length < 3) {
-      await sendText(from, "❌ Please type your question or message (at least 3 characters).");
-      return true;
-    }
-
-    const schoolId = biz?.sessionData?.enquirySchoolId;
-    if (!schoolId) {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-      return false;
-    }
-
-    const school = await SchoolProfile.findById(schoolId).lean();
-    if (!school) {
-      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-      return false;
-    }
-
-    // Increment enquiry counter
-    await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
-
-    // Notify school with the actual parent message via template
-    notifySchoolEnquiry(school.phone, school.schoolName, from, message).catch(() => {});
-
-    // Reset session
-    if (biz) {
-      biz.sessionState = "ready";
-      biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: null };
-      await saveBiz(biz);
-    }
-
-    // Confirm to parent
-    return sendButtons(from, {
-      text:
-`✅ *Enquiry Sent to ${school.schoolName}!*
-
-Your message:
-_${message}_
-
-The school has been notified and will contact you on this WhatsApp number.
-
-📞 ${school.contactPhone || school.phone}`,
-      buttons: [
-        { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
-        { id: "school_search_refine",         title: "🔄 More Schools" }
-      ]
-    });
-  }
-
   return false;
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1014,7 +937,7 @@ ${rating}
     buttons: [
       { id: `school_dl_profile_${schoolId}`,  title: "📄 Download Profile" },
       { id: `school_apply_${schoolId}`,        title: "📝 Apply Online" },
-      { id: `school_enquiry_${schoolId}`,      title: "✉️ Send Enquiry" }
+      { id: `school_contact_${schoolId}`,      title: "📞 Contact School" }
     ]
   });
 }
@@ -1090,7 +1013,7 @@ _Can't see it? Scroll up or tap 📞 Contact School for a copy._`,
   return sendButtons(from, {
     text: `⚠️ The school profile PDF for *${school.schoolName}* is not yet available. Please contact the school directly.`,
     buttons: [
-      { id: `school_enquiry_${schoolId}`, title: "✉️ Send Enquiry" },
+      { id: `school_contact_${schoolId}`, title: "📞 Contact School" },
       { id: "school_search_refine",        title: "🔄 More Schools" }
     ]
   });
@@ -1140,7 +1063,7 @@ ${admissionsText}
 This school does not have an online application form yet.
 Contact them directly to request an application form.`,
     buttons: [
-      { id: `school_enquiry_${schoolId}`, title: "✉️ Send Enquiry" },
+      { id: `school_contact_${schoolId}`, title: "📞 Contact School" },
       { id: "school_search_refine",        title: "🔄 More Schools" }
     ]
   });

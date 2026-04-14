@@ -2801,7 +2801,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_view_") ||
     a.startsWith("school_dl_profile_") ||
       a.startsWith("school_apply_") ||
-      a.startsWith("school_enquiry_") ||
+      a.startsWith("school_contact_") ||
       a === "school_my_profile" ||
       a === "school_my_facilities" ||
       a === "school_my_fees" ||
@@ -3646,7 +3646,7 @@ a === "sup_search_next_page" ||
   a.startsWith("school_view_") ||
  a.startsWith("school_dl_profile_") ||
   a.startsWith("school_apply_") ||
-  a.startsWith("school_enquiry_") ||
+  a.startsWith("school_contact_") ||
   a === "school_my_profile" ||
   a === "school_my_facilities" ||
   a === "school_my_fees" ||
@@ -6221,8 +6221,7 @@ const supplierStates = [
   "school_search_city",
   "school_search_results",
 "school_admin_update_fees",
-  "school_admin_awaiting_brochure",
-  "school_parent_enquiry"
+  "school_admin_awaiting_brochure"
 ];
  
 // ── School text-input states (free-text WhatsApp replies during school flow) ─
@@ -6244,8 +6243,7 @@ const schoolAdminStates = [
   "school_admin_update_reg_link",
   "school_admin_update_email",
   "school_admin_update_website",
-  "school_admin_awaiting_brochure",
-  "school_parent_enquiry"
+  "school_admin_awaiting_brochure"
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
@@ -6306,15 +6304,7 @@ const shortcodeBlockedStates = [
   "branch_add_name",
   "invite_user_phone",
   "add_client_name",
-  "add_client_phone",
-
-  // School parent enquiry text input
-  "school_parent_enquiry",
-  "school_admin_update_fees",
-  "school_admin_update_reg_link",
-  "school_admin_update_email",
-  "school_admin_update_website",
-  "school_admin_awaiting_brochure"
+  "add_client_phone"
 ];
 
 if (
@@ -7525,7 +7515,7 @@ if (
   a.startsWith("school_view_") ||
   a.startsWith("school_dl_profile_") ||
   a.startsWith("school_apply_") ||
-  a.startsWith("school_enquiry_")
+  a.startsWith("school_contact_")
 ) {
   const handled = await handleSchoolSearchActions({
     action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)

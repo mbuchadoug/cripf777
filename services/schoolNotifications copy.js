@@ -90,54 +90,32 @@ This is an automated activity alert from ZimQuote.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent sent a typed enquiry message
+// PUBLIC: Notify school — a parent tapped Contact School
 // Template body (submitted to Meta):
 //   New parent enquiry received on ZimQuote.
 //   School: {{1}}
 //   Parent number: {{2}}
-//   Message: {{3}}
-//   Time: {{4}}
+//   Time: {{3}}
 //   This is an automated activity alert from ZimQuote.
-//
-// NOTE: Template was originally approved with 3 variables (no message field).
-// If the 4-variable template is not yet re-approved, the catch block falls
-// back to sendText which includes the full message regardless.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function notifySchoolEnquiry(schoolPhone, schoolName, parentPhone, message = "") {
+export async function notifySchoolEnquiry(schoolPhone, schoolName, parentPhone) {
   const ts = _timestamp();
-
-  // Full text used for fallback (plain sendText) — always includes message
-  const fallbackBody = message
-    ? `New parent enquiry received on ZimQuote.
-
-School: ${schoolName}
-Parent number: ${parentPhone}
-Message: ${message}
-Time: ${ts}
-
-This is an automated activity alert from ZimQuote.`
-    : `New parent enquiry received on ZimQuote.
-
-School: ${schoolName}
-Parent number: ${parentPhone}
-Time: ${ts}
-
-This is an automated activity alert from ZimQuote.`;
-
   try {
-    // Try 4-variable template first (re-submitted with Message field)
-    // Falls back to 3-variable if not yet approved
-    await _sendTemplate(schoolPhone, "school_new_enquiry", [
-      schoolName,
-      parentPhone,
-      message || "(no message)",
-      ts
-    ]);
+    await _sendTemplate(schoolPhone, "school_new_enquiry", [schoolName, parentPhone, ts]);
     console.log(`[School Notify] school_new_enquiry sent to ${schoolPhone}`);
   } catch (err) {
     console.warn(`[School Notify] template failed (${err.message}), falling back to sendText`);
     try {
-      await sendText(schoolPhone, fallbackBody);
+      await sendText(
+        schoolPhone,
+`New parent enquiry received on ZimQuote.
+
+School: ${schoolName}
+Parent number: ${parentPhone}
+Time: ${ts}
+
+This is an automated activity alert from ZimQuote.`
+      );
     } catch (e) { /* non-critical */ }
   }
 }
