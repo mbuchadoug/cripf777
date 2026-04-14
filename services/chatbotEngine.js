@@ -194,6 +194,149 @@ function normalizeProductName(value = "") {
 }
 
 
+const GENERIC_REQUEST_TERMS = new Set([
+  "item",
+  "items",
+  "product",
+  "products",
+  "service",
+  "services",
+  "thing",
+  "things",
+  "material",
+  "materials",
+  "equipment",
+  "supplies",
+  "parts",
+  "spares",
+  "uniform",
+  "uniforms",
+  "laptop",
+  "laptops",
+  "phone",
+  "phones",
+  "tv",
+  "tvs",
+  "fridge",
+  "fridges",
+  "stove",
+  "stoves",
+  "pipe",
+  "pipes",
+  "valve",
+  "valves",
+  "tap",
+  "taps",
+  "tile",
+  "tiles",
+  "cement",
+  "sand",
+  "paint",
+  "chair",
+  "chairs",
+  "table",
+  "tables",
+  "desk",
+  "desks",
+  "bed",
+  "beds",
+  "sofa",
+  "sofas",
+  "shoe",
+  "shoes",
+  "dress",
+  "dresses",
+  "shirt",
+  "shirts",
+  "builder",
+  "builders",
+  "plumber",
+  "plumbers",
+  "electrician",
+  "electricians",
+  "welder",
+  "welders",
+  "carpenter",
+  "carpenters",
+  "cleaner",
+  "cleaners",
+  "mechanic",
+  "mechanics",
+  "lawyer",
+  "lawyers",
+  "accountant",
+  "accountants",
+  "doctor",
+  "doctors",
+  "dentist",
+  "dentists",
+  "transport",
+  "delivery"
+]);
+
+const REQUEST_FILLER_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "for",
+  "of",
+  "and",
+  "with",
+  "in",
+  "on",
+  "to",
+  "my",
+  "need",
+  "want",
+  "looking"
+]);
+
+function getBuyerRequestLabel(item = {}) {
+  return String(item?.product || item?.service || item?.raw || "").trim();
+}
+
+function getMeaningfulRequestTokens(value = "") {
+  return normalizeProductName(value)
+    .split(" ")
+    .filter(Boolean)
+    .filter(token => !REQUEST_FILLER_WORDS.has(token));
+}
+
+function isGenericBuyerRequestName(value = "") {
+  const normalized = normalizeProductName(value);
+  if (!normalized) return true;
+
+  const tokens = getMeaningfulRequestTokens(normalized);
+
+  if (!tokens.length) return true;
+  if (tokens.length === 1 && GENERIC_REQUEST_TERMS.has(tokens[0])) return true;
+  if (tokens.length === 1) return true;
+
+  return false;
+}
+
+function getVagueBuyerRequestItems(items = []) {
+  return (items || []).filter(item => isGenericBuyerRequestName(getBuyerRequestLabel(item)));
+}
+
+function buildBuyerSpecificityPrompt(vagueItems = []) {
+  const vagueLines = vagueItems.length
+    ? vagueItems.map(i => `• ${getBuyerRequestLabel(i)}`).join("\n")
+    : "• Your request";
+
+  return (
+    `❌ *Please use the full product or service name.*\n\n` +
+    `These are too general for sellers to quote correctly:\n` +
+    `${vagueLines}\n\n` +
+    `Please include type, size, model, brand, class, material, or exact service needed.\n\n` +
+    `Examples:\n` +
+    `_ball valve brass 20mm harare_\n` +
+    `_school uniform size 8 chitungwiza_\n` +
+    `_hp laptop core i7 cbd harare_\n` +
+    `_geyser installation avondale harare_`
+  );
+}
+
 function parseSupplierItemsInput(text = "") {
   return String(text || "")
     .split(/[,\n]+/)
@@ -1993,8 +2136,8 @@ async function notifySuppliersOfBuyerRequest(request) {
           ? `📍 ${request.city}`
           : `📍 Zimbabwe`;
 
-      await sendButtons(supplier.phone, {
-             text:
+           await sendButtons(supplier.phone, {
+        text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
           `${itemLines}\n\n` +
           `${locationLine}\n` +
@@ -2002,7 +2145,6 @@ async function notifySuppliersOfBuyerRequest(request) {
           `Buyer contact is hidden.\n` +
           `Respond through the chatbot now.`,
         buttons: [
-          { id: `req_auto_${request._id}`, title: "⚡ Auto Quote" },
           { id: `req_offer_${request._id}`, title: "💬 Send Offer" },
           { id: `req_unavail_${request._id}`, title: "❌ Not Available" }
         ]
@@ -2049,7 +2191,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
 
   const ref = buildBuyerRequestRef(request);
 
-  return sendButtons(from, {
+   return sendButtons(from, {
     text:
       `✅ *Request sent* (${ref})\n\n` +
       `${formatBuyerRequestItems(request.items || [], 10)}\n\n` +
@@ -2058,12 +2200,12 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
       `📣 Sent to ${sentCount} matching seller${sentCount === 1 ? "" : "s"}.\n\n` +
       `You will receive offers here in the chatbot.`,
     buttons: [
-      { id: "find_supplier", title: "🔍 Browse & Shop" },
-      { id: "my_orders", title: "📋 My Orders" }
+      { id: "sup_request_sellers", title: "⚡ Request Sellers Again" },
+      { id: "my_orders", title: "📋 My Orders" },
+      { id: "find_supplier", title: "🔍 Browse & Shop" }
     ]
   });
 }
-
 
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
   const searchTerm = opts.searchTerm || "";
@@ -2891,20 +3033,26 @@ Reply *menu* to start.`);
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
   // SIMPLE MODE = one-line item + suburb/city
+   // SIMPLE MODE = one-line item + suburb/city
   if (requestMode === "simple") {
     const parsedInline = parseInlineSimpleBuyerRequest(text);
 
-      if (!parsedInline.items.length) {
+    if (!parsedInline.items.length) {
       return sendText(
         from,
-        `❌ Please use the request search format.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n\nType *cancel* to stop.`
+        `❌ Please use the request search format.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nType *cancel* to stop.`
       );
     }
 
-      if (!parsedInline.city) {
+    const vagueItems = getVagueBuyerRequestItems(parsedInline.items || []);
+    if (vagueItems.length) {
+      return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
+    }
+
+    if (!parsedInline.city) {
       return sendText(
         from,
-        `❌ Please include the *city* in the same request line.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_`
+        `❌ Please include the *city* in the same request line.\n\nExamples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_`
       );
     }
 
@@ -2941,11 +3089,21 @@ Reply *menu* to start.`);
   }
 
   // BULK MODE = item list first, location second
+   // BULK MODE = item list first, location second
   const items = parseBuyerRequestItems(text);
   if (!items.length) {
     return sendText(
       from,
-      `❌ Please send the items you need.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 5_\n\nFor long lists, send one item per line.\n\nType *cancel* to stop.`
+      `❌ Please send the items you need.\n\nExamples:\n_ball valve brass 20mm 5_\n_hp laptop core i7 3_\n_school uniform size 8 10_\n_geyser installation 2_\n\nFor long lists, send one item per line.\n\nType *cancel* to stop.`
+    );
+  }
+
+  const vagueItems = getVagueBuyerRequestItems(items || []);
+  if (vagueItems.length) {
+    return sendText(
+      from,
+      buildBuyerSpecificityPrompt(vagueItems) +
+        `\n\nFor bulk requests, fix the vague lines first, then send the full list again.`
     );
   }
 
@@ -3409,14 +3567,12 @@ a.startsWith("sup_accept_") ||
       a.startsWith("paylist_next_") ||
       a.startsWith("paylist_search_") ||
 
-
   a === "sup_request_sellers" ||
   a === "sup_request_mode_simple" ||
   a === "sup_request_mode_bulk" ||
   a === "sup_request_delivery_yes" ||
   a === "sup_request_delivery_no" ||
   a.startsWith("req_offer_") ||
-  a.startsWith("req_auto_") ||
   a.startsWith("req_unavail_") ||
 
 
@@ -12409,13 +12565,17 @@ if (a === "sup_request_sellers") {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `Use the same search style as Browse & Shop:\n\n` +
-      `Examples:\n` +
+      `Ask multiple sellers to quote the *exact* product or service you need.\n\n` +
+      `Please type the full name so sellers can quote correctly.\n\n` +
+      `Good examples:\n` +
+      `_find ball valve brass 20mm harare_\n` +
+      `_find hp laptop core i7 cbd harare_\n` +
+      `_find school uniform size 8 chitungwiza_\n` +
+      `_find geyser installation avondale harare_\n\n` +
+      `Avoid general requests like:\n` +
       `_find valve harare_\n` +
-      `_find valve mbare harare_\n` +
-      `_find valve 5 harare_\n` +
-      `_find 25mm pvc pipe 10 borrowdale harare_\n\n` +
-      `Quantity is optional.\n\n` +
+      `_find laptop harare_\n` +
+      `_find plumber harare_\n\n` +
       `For long lists, use Bulk Request instead.`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
@@ -12446,8 +12606,8 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Bulk Request*\n\nSend your full item list.\nYou can send one item per line or comma-separated.\n\nExamples:\n_110 access tees x2_\n_vent valves x2_\n_90 plain bends x3_\n_15mm female couplings x6_\n_22mm cu tees x8_\n_bath tub standard x1_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
-      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n_find laptop cbd harare_\n_find school uniform 3 chitungwiza_\n_find plumber avondale harare_\n\nType *cancel* to stop.`
+      ? `📋 *Bulk Request*\n\nSend your full item list.\nUse one item per line or comma-separated.\n\nPlease make each line specific enough for quoting.\n\nGood examples:\n_110 access tees x2_\n_ball valve brass 20mm x5_\n_hp laptop core i7 x3_\n_school uniform size 8 x10_\n_geyser installation x2_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop, but type the *full* product or service name.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nAvoid vague requests like:\n_find valve harare_\n_find laptop harare_\n_find plumber harare_\n\nType *cancel* to stop.`
   );
 }
 
@@ -12523,81 +12683,13 @@ if (a.startsWith("req_auto_")) {
   const request = await BuyerRequest.findById(requestId);
   if (!request) return sendText(from, "❌ Request not found or expired.");
 
-  const supplier = await SupplierProfile.findOne({ phone }).lean();
-  if (!supplier) return sendText(from, "❌ Supplier profile not found.");
-
-  const autoQuote = await buildAutoQuoteForSupplier({
-    supplier,
-    items: request.items || []
-  });
-
-  // nothing priced + no useful variants = manual needed
-  if (!autoQuote.responseItems.length && !autoQuote.ambiguousItems.length) {
   return sendButtons(from, {
-      text:
-        `❌ Auto Quote could not find one strong priced match for this request.\n\n` +
-        `Use manual offer to price the items yourself, or mark not available.`,
-      buttons: [
-        { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
-        { id: `req_unavail_${request._id}`, title: "❌ Not Available" },
-        { id: "my_supplier_account", title: "🏪 My Store" }
-      ]
-    });
-  }
-
-  const ambiguityLines = (autoQuote.ambiguousItems || []).length
-    ? autoQuote.ambiguousItems
-        .map(entry => {
-          const suggestions = (entry.suggestions || [])
-            .map(s => s.priceLabel ? `${s.name} (${s.priceLabel})` : s.name)
-            .join(", ");
-
-          return `For *${entry.requested}*, possible matches: ${suggestions}`;
-        })
-        .join("\n")
-    : "";
-
-  const unmatchedLine = (autoQuote.unmatchedItems || []).length
-    ? `\nNo close match found for: ${(autoQuote.unmatchedItems || []).join(", ")}`
-    : "";
-
-  const responseMessage =
-    autoQuote.fullyPriced
-      ? "Auto-quotation generated from your current priced catalogue."
-      : autoQuote.responseItems.length
-        ? `Auto-quotation generated for ${autoQuote.matchedCount}/${(request.items || []).length} items.` +
-          (ambiguityLines ? `\n${ambiguityLines}` : "") +
-          unmatchedLine
-        : ambiguityLines || `Supplier could not auto-price the request exactly.`;
-
-  const response = {
-    supplierId: supplier._id,
-    supplierPhone: supplier.phone,
-    supplierName: supplier.businessName,
-    mode: "auto_quote",
-    message: responseMessage,
-    items: autoQuote.responseItems,
-    totalAmount: autoQuote.totalAmount,
-    deliveryAvailable: supplier.delivery?.available ?? null,
-    etaText: ""
-  };
-
-  request.responses.push(response);
-  await request.save();
-
-  await sendBuyerRequestResponseToBuyer({ request, supplier, response });
-
-  return sendButtons(from, {
-     text:
-      autoQuote.fullyPriced
-        ? "✅ Full auto quotation sent to the buyer as chat + PDF."
-        : autoQuote.responseItems.length
-          ? "✅ Partial auto quotation sent to the buyer as chat + PDF. You can still send a manual follow-up."
-          : "✅ Matching variant suggestions sent to the buyer. Send a manual offer if needed.",
+    text:
+      `⚠️ Auto Quote has been removed for Request Sellers.\n\n` +
+      `Please send a manual quotation so the buyer gets the correct item and price.`,
     buttons: [
-      { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "suppliers_home", title: "🛒 Marketplace" }
+      { id: `req_offer_${requestId}`, title: "💬 Send Offer" },
+      { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
     ]
   });
 }
