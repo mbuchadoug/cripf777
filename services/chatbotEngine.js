@@ -7807,14 +7807,26 @@ if (
   // school admin actions
   if (
     a === "school_admin_manage_facilities" ||
+    a.startsWith("school_fac_page_") ||
+    a.startsWith("school_fac_toggle_")
+  ) {
+    const handled = await handleSchoolSearchActions({
+      action: a,
+      from,
+      biz,
+      saveBiz: saveBizSafe
+    });
+    if (handled) return;
+  }
+
+  // other school admin actions
+  if (
     a === "school_admin_manage_extramural" ||
     a === "school_admin_edit_fees" ||
     a === "school_admin_edit_reg_link" ||
     a === "school_admin_edit_email" ||
     a === "school_admin_edit_website" ||
     a === "school_admin_upload_brochure" ||
-    a.startsWith("school_fac_page_") ||
-    a.startsWith("school_fac_toggle_") ||
     a.startsWith("school_ext_page_") ||
     a.startsWith("school_ext_toggle_")
   ) {
