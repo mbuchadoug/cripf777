@@ -6323,9 +6323,7 @@ if (
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
-  !settingsStates.includes(biz.sessionState) &&
-  !schoolAdminStates.includes(biz.sessionState) &&
-  !schoolTextStates.includes(biz.sessionState)
+  !settingsStates.includes(biz.sessionState)
 ) {
 
 
@@ -6492,7 +6490,7 @@ if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !se
     }
 
     // ── If in supplier_search_city state and user types a shortcode, treat as new search ──
-if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdminStates.includes(biz.sessionState)) {
+if (biz.sessionState === "supplier_search_city" && !isMetaAction) {
 
   console.log(`[HIT-SUPPLIER-SEARCH-CITY] text="${text}" sessionState="${biz.sessionState}"`);
 
