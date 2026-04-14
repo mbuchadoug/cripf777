@@ -6067,12 +6067,13 @@ const settingsStates = [
       ecocashPhone, status: "pending"
     });
 
-    if (!response.success) {
-      biz.sessionState = "ready"; biz.sessionData = {};
-      await saveBizSafe(biz);
-      await sendText(from, "❌ Failed to start EcoCash payment. Try again.");
-      return sendMainMenu(from);
-    }
+   if (!response.success || !response.pollUrl) {
+  biz.sessionState = "subscription_enter_ecocash";
+  biz.sessionData = { ...(biz.sessionData || {}), ecocashPhone };
+  await saveBizSafe(biz);
+  await sendText(from, "❌ Failed to start EcoCash payment.\n\nPlease enter your EcoCash number again.\nSend like: 0772123456\nOr type *same* to use this WhatsApp number.");
+  return;
+}
 
     biz.sessionData.paynow = { reference, pollUrl: response.pollUrl };
     await saveBizSafe(biz);

@@ -778,11 +778,29 @@ async function _initiateSchoolPayment(from, biz, saveBiz, phone, ecocash, planDa
   biz.sessionState = "school_reg_payment_pending";
   await saveBiz(biz);
 
-  try {
-    const result = await paynow.sendMobile(
-      paynow.createPayment(reference, `school@zimquote.co.zw`),
-      ecocash,
-      "ecocash"
+   try {
+    const payment = paynow.createPayment(reference, `school@zimquote.co.zw`);
+    payment.currency = "USD";
+    payment.add(`ZimQuote School ${planData.tier} (${planData.period})`, planData.price);
+
+    const result = await paynow.sendMobile(payment, ecocash, "ecocash");
+
+    if (!result?.success || !result?.pollUrl) {
+      biz.sessionState = "school_reg_enter_ecocash";
+      await saveBiz(biz);
+
+      await sendText(from,
+`❌ EcoCash payment failed to start.
+
+Please check the number and try again:
+*0771234567*`
+      );
+      return true;
+    }
+
+    await SchoolSubscriptionPayment.findOneAndUpdate(
+      { reference },
+      { $set: { pollUrl: result.pollUrl, ecocashPhone: ecocash } }
     );
 
     await sendText(from,
@@ -797,7 +815,7 @@ Your listing will activate automatically once payment is confirmed. ✅`
     );
 
     // Poll for payment confirmation
-    const Business = (await import("../models/business.js")).default;
+    const Business = (await import("./models/business.js")).default;
     const MAX_ATTEMPTS = 18;
     let attempts = 0;
 
@@ -877,10 +895,17 @@ Otherwise type *menu* and try again from your school account.`
       }
     }, 10000);
 
-  } catch (err) {
-    console.error("[School Payment] Error:", err);
-    biz.sessionState = "ready";
-    await saveBiz(biz);
-    await sendText(from, "❌ Something went wrong starting your payment. Please try again.");
-  }
+} catch (err) {
+  console.error("[School Payment] Error:", err);
+  biz.sessionState = "school_reg_enter_ecocash";
+  await saveBiz(biz);
+
+  await sendText(from,
+`❌ Something went wrong starting your payment.
+
+Please enter your EcoCash number again:
+*0771234567*`
+  );
+  return true;
+}
 }

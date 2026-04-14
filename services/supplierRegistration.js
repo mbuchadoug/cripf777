@@ -954,19 +954,27 @@ Or type *same* to use this WhatsApp number (${waDigits}).`
 
       const response = await paynow.sendMobile(payment, normalized, "ecocash");
 
-      if (!response.success) {
-        biz.sessionState = "supplier_reg_enter_ecocash";
-        await saveBiz(biz);
-        await sendText(from,
+      if (!response.success || !response.pollUrl) {
+  biz.sessionState = "supplier_reg_enter_ecocash";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    supplierPayment: {
+      ...(biz.sessionData?.supplierPayment || {}),
+      ecocashPhone: normalized
+    }
+  };
+  await saveBiz(biz);
+
+  await sendText(from,
 `❌ EcoCash payment failed to start.
 
 Make sure your number is correct and try again:
 *0772123456*
 
 Or type *same* to use this WhatsApp number.`
-        );
-        return true;
-      }
+  );
+  return true;
+}
 
       // Save pending payment record
     // Save pending payment record
@@ -1242,15 +1250,28 @@ Need help? Contact support.`
         }
       }, 10000);
 
-    } catch (err) {
-      console.error("[Supplier Payment] Error:", err);
-      biz.sessionState = "ready";
-      biz.sessionData = {};
-      await saveBiz(biz);
-      await sendText(from, "❌ Something went wrong starting your payment. Please try again.");
-      const { sendSuppliersMenu } = await import("./metaMenus.js");
-      return sendSuppliersMenu(from);
+   } catch (err) {
+  console.error("[Supplier Payment] Error:", err);
+  biz.sessionState = "supplier_reg_enter_ecocash";
+  biz.sessionData = {
+    ...(biz.sessionData || {}),
+    supplierPayment: {
+      ...(biz.sessionData?.supplierPayment || {}),
+      ecocashPhone: normalized
     }
+  };
+  await saveBiz(biz);
+
+  await sendText(from,
+`❌ Something went wrong starting your payment.
+
+Please enter your EcoCash number again:
+*0772123456*
+
+Or type *same* to use this WhatsApp number.`
+  );
+  return true;
+}
 
     return true;
   }
