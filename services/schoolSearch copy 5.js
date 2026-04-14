@@ -299,31 +299,7 @@ _find schools admissions open_`,
 // Returns true if handled, false to fall through.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz }) {
-  // For non-biz users, load search state from UserSession
-  let _userSess = null;
-  if (!biz) {
-    const { default: UserSession } = await import("../models/userSession.js");
-    const phone = from.replace(/\D+/g, "");
-    _userSess = await UserSession.findOne({ phone });
-  }
-
-  const search = biz?.sessionData?.schoolSearch || _userSess?.tempData?.schoolSearch || {};
-
-  // Helper: persist search for both biz and non-biz users
-  async function _saveSearch(updatedSearch) {
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: updatedSearch };
-      await saveBiz(biz);
-    } else {
-      const { default: UserSession } = await import("../models/userSession.js");
-      const phone = from.replace(/\D+/g, "");
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.schoolSearch": updatedSearch } },
-        { upsert: true }
-      );
-    }
-  }
+  const search = biz?.sessionData?.schoolSearch || {};
 // ── More cities page 2 ────────────────────────────────────────────────────
   if (a === "school_search_city_more") {
     const moreCityRows = SCHOOL_CITIES.slice(8).map(c => ({
@@ -339,7 +315,10 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
     const city    = cityRaw === "all" ? null : _titleCase(cityRaw);
 
     search.city   = city;
-    await _saveSearch(search);
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: search };
+      await saveBiz(biz);
+    }
 
     return sendList(from,
       `🏫 *${city || "All Cities"}* - What type of school?`,
@@ -354,7 +333,10 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   if (a.startsWith("school_search_type_")) {
     const typeId  = a.replace("school_search_type_", "");
     search.type   = typeId === "any" ? null : typeId;
-    await _saveSearch(search);
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: search };
+      await saveBiz(biz);
+    }
 
     return sendList(from,
       "💵 *Fees range per term?*",
@@ -369,7 +351,10 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   if (a.startsWith("school_search_fees_")) {
     const feeId       = a.replace("school_search_fees_", "");
     search.feeRange   = feeId === "any" ? null : feeId;
-    await _saveSearch(search);
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: search };
+      await saveBiz(biz);
+    }
 
     // Build facility filter list (top 10 most common)
  // WhatsApp limit: 10 rows. Cap at 9 facilities + No Filter.
@@ -387,8 +372,11 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   if (a.startsWith("school_search_fac_")) {
     const facId       = a.replace("school_search_fac_", "");
     search.facility   = facId === "any" ? null : facId;
-    await _saveSearch(search);
-    if (biz) biz.sessionState = "school_search_results";
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: search };
+      biz.sessionState = "school_search_results";
+      await saveBiz(biz);
+    }
     return _runSchoolSearch(from, search);
   }
 
@@ -457,7 +445,10 @@ Type *cancel* to go back.`
   if (a.startsWith("school_search_page_")) {
     const page = parseInt(a.replace("school_search_page_", ""), 10) || 0;
     search.page = page;
-    await _saveSearch(search);
+    if (biz) {
+      biz.sessionData = { ...(biz.sessionData || {}), schoolSearch: search };
+      await saveBiz(biz);
+    }
     return _runSchoolSearch(from, search);
   }
 
