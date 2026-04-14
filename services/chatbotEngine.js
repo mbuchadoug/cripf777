@@ -7464,6 +7464,21 @@ if (a === "find_school") {
   return startSchoolSearch(from, biz, saveBizSafe.bind(null, biz));
 }
  
+
+// ── School admin: facility toggle & paging (must come BEFORE parent search block)
+if (
+  a === "school_admin_manage_facilities" ||
+  a.startsWith("school_fac_toggle_") ||
+  a.startsWith("school_fac_page_")
+) {
+  const handled = await handleSchoolSearchActions({
+    action: a,
+    from,
+    biz,
+    saveBiz: saveBizSafe.bind(null, biz)
+  });
+  if (handled) return;
+}
 // ── Parent school search funnel steps (city → type → fees → facility → results)
 if (
   a.startsWith("school_search_city_") ||
@@ -7805,7 +7820,7 @@ if (
   }
 
   // school admin actions
-  if (
+if (
     a === "school_admin_manage_facilities" ||
     a.startsWith("school_fac_page_") ||
     a.startsWith("school_fac_toggle_")
@@ -7814,11 +7829,10 @@ if (
       action: a,
       from,
       biz,
-      saveBiz: saveBizSafe
+      saveBiz: saveBizSafe.bind(null, biz)   // ← FIXED
     });
     if (handled) return;
   }
-
   // other school admin actions
   if (
     a === "school_admin_manage_extramural" ||
