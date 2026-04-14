@@ -9,6 +9,11 @@ import {
   SCHOOL_GENDERS, SCHOOL_BOARDING, feeRangeLabel, facilityIcon
 } from "./schoolPlans.js";
 
+import {
+  notifySchoolProfileView,
+  notifySchoolEnquiry,
+  notifySchoolApplicationInterest
+} from "./schoolNotifications.js";
 
 
 
@@ -871,20 +876,8 @@ async function _showSchoolDetail(from, schoolId, biz) {
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1 } });
 
   // Notify school admin that a parent opened/clicked their school
-  try {
-    const { sendText: notify } = await import("./metaSender.js");
-    await notify(
-      school.phone,
-`👀 *New School Profile View!*
-
-A parent clicked on *${school.schoolName}* on ZimQuote and opened your school profile.
-
-📞 Parent number: ${from}
-💬 Message: A parent is viewing your school profile and may be interested in your school.
-
-Please follow up with them if needed.`
-    );
-  } catch (e) { /* non-critical */ }
+// Notify school admin — uses Meta template for out-of-session delivery
+  notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
 
   const verifiedBadge  = school.verified  ? " ✅ *Verified*"   : "";
   const featuredBadge  = school.tier === "featured" ? " 🔥 *Featured*" : "";
@@ -1040,18 +1033,7 @@ async function _sendApplicationLink(from, schoolId) {
     : "🔴 *Admissions are currently CLOSED.* You can still submit an expression of interest.";
 
   // Notify the school that a parent wants to apply
-  try {
-    const { sendText: notify } = await import("./metaSender.js");
-    await notify(school.phone,
-`📝 *New Application Interest!*
-
-A parent is interested in applying to *${school.schoolName}*.
-
-They have been given your application link. Please be ready to follow up.
-
-📞 Parent number: ${from}`
-    );
-  } catch (e) { /* non-critical */ }
+notifySchoolApplicationInterest(school.phone, school.schoolName, from).catch(() => {});
 
   if (school.registrationLink) {
     return sendButtons(from, {
@@ -1108,18 +1090,7 @@ ${school.email    ? `📧 Email: ${school.email}\n`   : ""}${school.address  ? `
 You can message or call the school directly on their number above.`;
 
   // Notify school of interest
-  try {
-    const { sendText: notify } = await import("./metaSender.js");
-    await notify(school.phone,
-`📞 *Parent Inquiry!*
-
-A parent is trying to contact *${school.schoolName}* via ZimQuote.
-
-Parent number: ${from}
-
-Please reach out to them.`
-    );
-  } catch (e) { /* non-critical */ }
+notifySchoolEnquiry(school.phone, school.schoolName, from).catch(() => {});
 
   return sendButtons(from, {
     text: contactText,
