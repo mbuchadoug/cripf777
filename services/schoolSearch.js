@@ -399,16 +399,31 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   }
 
   // ── Send Enquiry: parent taps button → bot asks for their message ────────
-  if (a.startsWith("school_enquiry_")) {
+if (a.startsWith("school_enquiry_")) {
     const schoolId = a.replace("school_enquiry_", "");
     const school   = await SchoolProfile.findById(schoolId).lean();
     if (!school) return false;
 
+    // Store in biz session if available
     if (biz) {
       biz.sessionState = "school_parent_enquiry";
       biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: schoolId };
       await saveBiz(biz);
     }
+
+    // ALWAYS store in UserSession so non-biz parents are covered
+    const phone = from.replace(/\D+/g, "");
+    const { default: UserSession } = await import("../models/userSession.js");
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.schoolEnquiryState": "school_parent_enquiry",
+          "tempData.enquirySchoolId":    schoolId
+        }
+      },
+      { upsert: true }
+    );
 
     return sendText(from,
 `✉️ *Send an Enquiry to ${school.schoolName}*

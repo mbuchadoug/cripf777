@@ -3241,6 +3241,90 @@ if (
   return sendMainMenu(from);
 }
 
+// ── Non-biz parent: handle typed school enquiry message ──────────────────────
+if (!isMetaAction && !biz) {
+  const _enquirySess = await UserSession.findOne({ phone });
+  if (_enquirySess?.tempData?.schoolEnquiryState === "school_parent_enquiry") {
+    const message  = (text || "").trim();
+    const schoolId = _enquirySess.tempData.enquirySchoolId;
+
+    if (message.toLowerCase() === "cancel") {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text: "❌ Enquiry cancelled.",
+        buttons: [{ id: "school_search_refine", title: "🔄 Back to Schools" }]
+      });
+    }
+
+    if (!message || message.length < 3) {
+      await sendText(from, "❌ Please type your question or message (at least 3 characters).");
+      return;
+    }
+
+    if (!schoolId) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text: "❌ Session expired. Please search for the school again.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
+    }
+
+    const { default: SchoolProfile } = await import("../models/schoolProfile.js");
+    const school = await SchoolProfile.findById(schoolId).lean();
+
+    if (!school) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text: "❌ School not found. Please search again.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
+    }
+
+    // Increment enquiry counter
+    await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
+
+    // Send notification to school with parent's message
+    const { notifySchoolEnquiry } = await import("./schoolNotifications.js");
+    notifySchoolEnquiry(school.phone, school.schoolName, from, message).catch(() => {});
+
+    // Clear the enquiry session state
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+      { upsert: true }
+    );
+
+    // Confirm to parent
+    return sendButtons(from, {
+      text:
+`✅ *Enquiry Sent to ${school.schoolName}!*
+
+Your message:
+_${message}_
+
+The school has been notified and will contact you on this WhatsApp number.
+
+📞 ${school.contactPhone || school.phone}`,
+      buttons: [
+        { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
+        { id: "school_search_refine",      title: "🔄 More Schools" }
+      ]
+    });
+  }
+}
+
 if (!biz) {
   const supplierExists = await SupplierProfile.findOne({ phone });
   const sess = await UserSession.findOne({ phone });
@@ -3686,11 +3770,14 @@ const _orderBlockedStates = new Set([
 ]);
 
 // AFTER:
+const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
+
 if (
   !isMetaAction &&
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
-  !_orderBlockedStates.has(_activeOrderState)
+  !_orderBlockedStates.has(_activeOrderState) &&
+  _schoolEnquiryState !== "school_parent_enquiry"
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
