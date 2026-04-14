@@ -3538,9 +3538,22 @@ const allowedWithoutBiz =
   a === "sup_renew_plan" ||
  a === "sup_search_type_product" ||
       a === "sup_search_type_service" ||
-      a === "reg_type_school" ||
+     a === "reg_type_school" ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
+
+  // ── school admin actions must not fall through to marketplace search ──
+  a === "school_admin_manage_facilities" ||
+  a === "school_admin_manage_extramural" ||
+  a === "school_admin_edit_fees" ||
+  a === "school_admin_edit_reg_link" ||
+  a === "school_admin_edit_email" ||
+  a === "school_admin_edit_website" ||
+  a === "school_admin_upload_brochure" ||
+  a.startsWith("school_fac_page_") ||
+  a.startsWith("school_fac_toggle_") ||
+  a.startsWith("school_ext_page_") ||
+  a.startsWith("school_ext_toggle_") ||
   a.startsWith("sup_shop_") ||
   a === "sup_back_to_search_results" ||
   a.startsWith("sup_number_full_") ||
@@ -6218,7 +6231,9 @@ const schoolAdminStates = [
   "school_admin_update_reg_link",
   "school_admin_update_email",
   "school_admin_update_website",
-  "school_admin_awaiting_brochure"
+  "school_admin_awaiting_brochure",
+  "school_admin_manage_facilities",
+  "school_admin_manage_extramural"
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
@@ -7740,13 +7755,14 @@ if (a === "school_pay_plan") {
 }
  
 // ── School registration button taps (multi-select steps, confirm, plan pick) ──
+// ── School registration + school admin actions (buttons/lists, incl. plan pick) ──
 if (
   a.startsWith("school_reg_type_") ||
   a.startsWith("school_reg_city_") ||
   a.startsWith("school_reg_cur_") ||
   a.startsWith("school_reg_gender_") ||
   a.startsWith("school_reg_boarding_") ||
- a.startsWith("school_reg_fac_") ||
+  a.startsWith("school_reg_fac_") ||
   a.startsWith("school_reg_ext_") ||
   a === "school_reg_city_more" ||
   a === "school_search_city_more" ||
@@ -7759,16 +7775,61 @@ if (
   a === "school_reg_ext_done" ||
   a === "school_reg_city_other" ||
   a === "school_reg_confirm_yes" ||
-  a === "school_reg_confirm_no"
+  a === "school_reg_confirm_no" ||
+
+  // ── school admin actions ───────────────────────────────────────────────
+  a === "school_admin_manage_facilities" ||
+  a === "school_admin_manage_extramural" ||
+  a === "school_admin_edit_fees" ||
+  a === "school_admin_edit_reg_link" ||
+  a === "school_admin_edit_email" ||
+  a === "school_admin_edit_website" ||
+  a === "school_admin_upload_brochure" ||
+  a.startsWith("school_fac_page_") ||
+  a.startsWith("school_fac_toggle_") ||
+  a.startsWith("school_ext_page_") ||
+  a.startsWith("school_ext_toggle_")
 ) {
   if (!biz) {
     await sendText(from, "❌ Session expired. Type *menu* to start again.");
     return;
   }
-  const handled = await handleSchoolRegistrationActions({
-    action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
-  });
-  if (handled) return;
+
+  // school registration actions
+  if (
+    a.startsWith("school_reg_") ||
+    a.startsWith("school_plan_")
+  ) {
+    const handled = await handleSchoolRegistrationActions({
+      action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz)
+    });
+    if (handled) return;
+  }
+
+  // school admin actions
+  if (
+    a === "school_admin_manage_facilities" ||
+    a === "school_admin_manage_extramural" ||
+    a === "school_admin_edit_fees" ||
+    a === "school_admin_edit_reg_link" ||
+    a === "school_admin_edit_email" ||
+    a === "school_admin_edit_website" ||
+    a === "school_admin_upload_brochure" ||
+    a.startsWith("school_fac_page_") ||
+    a.startsWith("school_fac_toggle_") ||
+    a.startsWith("school_ext_page_") ||
+    a.startsWith("school_ext_toggle_")
+  ) {
+    const handled = await handleSchoolAdminStates({
+      state: biz.sessionState,
+      from,
+      text: "",
+      action: a,
+      biz,
+      saveBiz: saveBizSafe
+    });
+    if (handled) return;
+  }
 }
 
 if (a === "my_supplier_account") {
