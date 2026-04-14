@@ -6480,7 +6480,7 @@ if (shortcode.city) {
 }
 
 
-if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState)) {
+if (!isMetaAction && biz && biz.sessionState && !escapeWords.includes(al) && !settingsStates.includes(biz.sessionState) && !schoolAdminStates.includes(biz.sessionState) && !schoolTextStates.includes(biz.sessionState)) {
     if (al === "cancel" && supplierStates.includes(biz.sessionState)) {
       biz.sessionState = "ready";
       biz.sessionData = {};
