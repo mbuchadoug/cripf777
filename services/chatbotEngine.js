@@ -626,10 +626,37 @@ function formatSupplierRateDisplay(rate = "") {
 
   return raw;
 }
+function scoreLooseMatch(a = "", b = "") {
+  const left = normalizeProductName(a);
+  const right = normalizeProductName(b);
+
+  if (!left || !right) return 0;
+  if (left === right) return 100;
+
+  const leftTokens = left.split(" ").filter(Boolean);
+  const rightTokens = right.split(" ").filter(Boolean);
+
+  let score = 0;
+
+  if (left.includes(right) || right.includes(left)) {
+    score += 40;
+  }
+
+  const overlap = leftTokens.filter(t => rightTokens.includes(t)).length;
+  if (overlap) {
+    score += Math.round((overlap / Math.max(leftTokens.length, rightTokens.length)) * 50);
+  }
+
+  if (leftTokens[0] && rightTokens[0] && leftTokens[0] === rightTokens[0]) {
+    score += 10;
+  }
+
+  return score;
+}
+
 function findMatchingSupplierPrice(supplier, requestedProduct) {
   if (!requestedProduct || !supplier) return null;
 
-  const wanted = normalizeProductName(requestedProduct);
   const isServiceSupplier = supplier?.profileType === "service";
 
   if (isServiceSupplier) {
@@ -638,29 +665,34 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
       return serviceName;
     });
 
-    let match = validRates.find(r =>
-      normalizeProductName(r.service) === wanted
+    let exact = validRates.find(r =>
+      normalizeProductName(r.service) === normalizeProductName(requestedProduct)
     );
 
-    if (match) {
+    if (exact) {
       return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
+        product: exact.service,
+        amount: parseSupplierRateValue(exact.rate),
+        unit: parseSupplierRateUnit(exact.rate),
         source: "rates"
       };
     }
 
-    match = validRates.find(r => {
-      const candidate = normalizeProductName(r.service);
-      return candidate.includes(wanted) || wanted.includes(candidate);
-    });
+    const scored = validRates
+      .map(r => ({
+        row: r,
+        score: scoreLooseMatch(r.service, requestedProduct)
+      }))
+      .sort((a, b) => b.score - a.score);
 
-    if (match) {
+    const best = scored[0];
+    const second = scored[1];
+
+    if (best && best.score >= 55 && (!second || best.score - second.score >= 10)) {
       return {
-        product: match.service,
-        amount: parseSupplierRateValue(match.rate),
-        unit: parseSupplierRateUnit(match.rate),
+        product: best.row.service,
+        amount: parseSupplierRateValue(best.row.rate),
+        unit: parseSupplierRateUnit(best.row.rate),
         source: "rates"
       };
     }
@@ -681,29 +713,34 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
     return productName && p?.inStock !== false && allowedNames.has(productName);
   });
 
-  let match = validPrices.find(p =>
-    normalizeProductName(p.product) === wanted
+  let exact = validPrices.find(p =>
+    normalizeProductName(p.product) === normalizeProductName(requestedProduct)
   );
 
-  if (match) {
+  if (exact) {
     return {
-      product: match.product,
-      amount: Number(match.amount),
-      unit: match.unit || "each",
+      product: exact.product,
+      amount: Number(exact.amount),
+      unit: exact.unit || "each",
       source: "prices"
     };
   }
 
-  match = validPrices.find(p => {
-    const candidate = normalizeProductName(p.product);
-    return candidate.includes(wanted) || wanted.includes(candidate);
-  });
+  const scored = validPrices
+    .map(p => ({
+      row: p,
+      score: scoreLooseMatch(p.product, requestedProduct)
+    }))
+    .sort((a, b) => b.score - a.score);
 
-  if (match) {
+  const best = scored[0];
+  const second = scored[1];
+
+  if (best && best.score >= 55 && (!second || best.score - second.score >= 10)) {
     return {
-      product: match.product,
-      amount: Number(match.amount),
-      unit: match.unit || "each",
+      product: best.row.product,
+      amount: Number(best.row.amount),
+      unit: best.row.unit || "each",
       source: "prices"
     };
   }
@@ -712,40 +749,61 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
 }
 
 function parseBulkOrderInput(text = "") {
-  const raw = String(text).trim();
+  const raw = String(text || "").trim();
   if (!raw) return [];
 
-  return raw
-    .split(/[|\n,]+/)
+  const lines = raw
+    .split(/\n+/)
     .map(s => s.trim())
     .filter(Boolean)
-    .map(part => {
-      // examples:
-      // sugar 2
-      // cooking oil x3
-      // rice 5kg
-      // bread 4 loaves
-      const m = part.match(/^(.+?)\s+(?:x\s*)?(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
-      if (!m) {
-        return {
-          raw: part,
-          product: part,
-          quantity: 1,
-          unitLabel: "units",
-          valid: false
-        };
-      }
+    .filter(line => {
+      const normalized = line.toLowerCase();
 
-      return {
-        raw: part,
-        product: m[1].trim(),
-        quantity: Number(m[2]),
-        unitLabel: m[3]?.trim() || "units",
-        valid: true
-      };
+      // ignore headings / section labels
+      if (/^stage\s*\d+\b/i.test(normalized)) return false;
+      if (/^section\s*\d+\b/i.test(normalized)) return false;
+      if (/^phase\s*\d+\b/i.test(normalized)) return false;
+      if (/^[a-z\s]+material\s*:?$/i.test(normalized)) return false;
+      if (/^[a-z\s]+items?\s*:?$/i.test(normalized)) return false;
+
+      return true;
     });
-}
 
+  return lines.map(part => {
+    const clean = part
+      .replace(/^[-•*]\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // examples:
+    // 110 access tees x2
+    // vent valves x 2
+    // cement 20 bags
+    // rice 5kg
+    // bath tub standard x1
+    let m =
+      clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$/i) ||
+      clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$/i);
+
+    if (!m) {
+      return {
+        raw: clean,
+        product: clean,
+        quantity: 1,
+        unitLabel: "units",
+        valid: false
+      };
+    }
+
+    return {
+      raw: clean,
+      product: m[1].trim(),
+      quantity: Number(m[2]),
+      unitLabel: (m[3] || "units").trim(),
+      valid: true
+    };
+  });
+}
 
 
 function normalizeEcocashNumber(input, fallbackWhatsApp) {
@@ -1902,8 +1960,8 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
       `${etaLine}` +
       `${noteLine}\n\n` +
       `📞 Contact: ${response.supplierPhone}`,
-    buttons: [
-      { id: "suppliers_home", title: "🛒 Marketplace" },
+buttons: [
+      { id: "find_supplier", title: "🛒 Marketplace" },
       { id: "my_orders", title: "📋 My Orders" }
     ]
   });
@@ -12388,8 +12446,8 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Bulk Request*\n\nSend your full item list.\nYou can send one per line or comma-separated.\n\nExamples:\n_cement 20_\n_25mm pvc pipe 10_\n_elbow 15_\n_solvent cement 5_\n\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
-      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n\nType *cancel* to stop.`
+      ? `📋 *Bulk Request*\n\nSend your full item list.\nYou can send one item per line or comma-separated.\n\nExamples:\n_110 access tees x2_\n_vent valves x2_\n_90 plain bends x3_\n_15mm female couplings x6_\n_22mm cu tees x8_\n_bath tub standard x1_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop.\n\nExamples:\n_find valve harare_\n_find valve mbare harare_\n_find valve 5 harare_\n_find 25mm pvc pipe 10 borrowdale harare_\n_find laptop cbd harare_\n_find school uniform 3 chitungwiza_\n_find plumber avondale harare_\n\nType *cancel* to stop.`
   );
 }
 
@@ -12440,19 +12498,22 @@ if (a.startsWith("req_offer_")) {
     { upsert: true }
   );
 
-   return sendText(
+ return sendText(
     from,
     `💬 *Send your offer / quotation*\n\n` +
       `${formatBuyerRequestItems(request.items || [], 20)}\n\n` +
       `You can reply in any of these ways:\n\n` +
-      `*1. Fast prices in order*\n` +
-      `_12, 8.5, 3, 4.2_\n\n` +
-      `*2. Named prices*\n` +
-      `_110 access tees: 12_\n_vent valves: 8.5_\n_gulley traps: 3_\n\n` +
-      `*3. Partial quote only*\n` +
+      `*1. Numbered pricing*\n` +
+      `_1x12, 2x8.5, 3x4.20_\n\n` +
+      `*2. Prices in order*\n` +
+      `_12, 8.5, 4.20, 16_\n\n` +
+      `*3. Named prices*\n` +
+      `_110 access tees: 12_\n_vent valves: 8.5_\n_bath tub standard: 95_\n\n` +
+      `*4. Partial quote*\n` +
       `_110 access tees: 12_\n_vent valves: 8.5_\nOnly these are available now._\n\n` +
-      `*4. Normal text offer*\n` +
-      `_We have most of the items. We can quote fully tomorrow morning._\n\n` +
+      `*5. Normal text offer*\n` +
+      `_We have most items. Full quote tomorrow morning._\n\n` +
+      `You can also add availability or delivery note.\n\n` +
       `Type *cancel* to stop.`
   );
 }
@@ -12472,8 +12533,10 @@ if (a.startsWith("req_auto_")) {
 
   // nothing priced + no useful variants = manual needed
   if (!autoQuote.responseItems.length && !autoQuote.ambiguousItems.length) {
-    return sendButtons(from, {
-      text: `❌ No matching priced items or close catalogue variants were found for this request.`,
+  return sendButtons(from, {
+      text:
+        `❌ Auto Quote could not find one strong priced match for this request.\n\n` +
+        `Use manual offer to price the items yourself, or mark not available.`,
       buttons: [
         { id: `req_offer_${request._id}`, title: "💬 Send Manual Offer" },
         { id: `req_unavail_${request._id}`, title: "❌ Not Available" },

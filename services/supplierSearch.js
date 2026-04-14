@@ -486,17 +486,74 @@ function normalizeProductName(value = "") {
     .replace(/\s+/g, " ");
 }
 
-function productMatchesSearch(productName = "", searchTerm = "") {
+
+
+function tokenizeProductName(value = "") {
+  return normalizeProductName(value)
+    .split(" ")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function getExpandedSearchTerms(searchTerm = "") {
+  const base = normalizeProductName(searchTerm);
+  if (!base) return [];
+
+  const expanded = new Set([base]);
+
+  for (const [key, values] of Object.entries(SEARCH_SYNONYMS || {})) {
+    const normKey = normalizeProductName(key);
+    const normValues = (values || []).map(v => normalizeProductName(v));
+
+    if (base === normKey || normValues.includes(base) || base.includes(normKey) || normKey.includes(base)) {
+      expanded.add(normKey);
+      normValues.forEach(v => expanded.add(v));
+    }
+  }
+
+  return [...expanded].filter(Boolean);
+}
+
+function scoreProductMatch(productName = "", searchTerm = "") {
   const productNorm = normalizeProductName(productName);
   const searchNorm = normalizeProductName(searchTerm);
 
-  if (!productNorm || !searchNorm) return false;
+  if (!productNorm || !searchNorm) return 0;
 
-  if (productNorm === searchNorm) return true;
+  if (productNorm === searchNorm) return 100;
 
-  return productNorm.includes(searchNorm) || searchNorm.includes(productNorm);
+  const expandedTerms = getExpandedSearchTerms(searchNorm);
+  const productTokens = tokenizeProductName(productNorm);
+  const scores = [];
+
+  for (const term of expandedTerms) {
+    const termTokens = tokenizeProductName(term);
+    if (!termTokens.length) continue;
+
+    let score = 0;
+
+    if (productNorm.includes(term) || term.includes(productNorm)) {
+      score += 40;
+    }
+
+    const overlap = termTokens.filter(t => productTokens.includes(t)).length;
+    if (overlap) {
+      score += Math.round((overlap / Math.max(termTokens.length, productTokens.length)) * 50);
+    }
+
+    if (productTokens[0] && termTokens[0] && productTokens[0] === termTokens[0]) {
+      score += 10;
+    }
+
+    scores.push(score);
+  }
+
+  return scores.length ? Math.max(...scores) : 0;
 }
 
+function productMatchesSearch(productName = "", searchTerm = "") {
+  return scoreProductMatch(productName, searchTerm) >= 45;
+}
 function buildProductSearchOffersFromSupplier(supplier, searchTerm = "") {
   const offers = [];
   const seen = new Set();
