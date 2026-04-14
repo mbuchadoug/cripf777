@@ -6231,9 +6231,7 @@ const schoolAdminStates = [
   "school_admin_update_reg_link",
   "school_admin_update_email",
   "school_admin_update_website",
-  "school_admin_awaiting_brochure",
-  "school_admin_manage_facilities",
-  "school_admin_manage_extramural"
+  "school_admin_awaiting_brochure"
 ];
 
 // ── Shortcode search for any user (runs BEFORE state machine) ─────────────
