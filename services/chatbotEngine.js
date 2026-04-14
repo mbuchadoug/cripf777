@@ -2808,10 +2808,22 @@ a.startsWith("sup_load_preset_") ||
       a === "school_my_reviews" ||
       a === "school_my_inquiries" ||
       a === "school_more_options" ||
-   a === "school_update_reg_link" ||
+ a === "school_update_reg_link" ||
       a === "school_update_email" ||
       a === "school_update_website" ||
-      a === "school_upload_brochure"
+      a === "school_upload_brochure" ||
+      // ── school admin facility/extramural toggles ──
+      a === "school_admin_manage_facilities" ||
+      a === "school_admin_manage_extramural" ||
+      a === "school_admin_edit_fees" ||
+      a === "school_admin_edit_reg_link" ||
+      a === "school_admin_edit_email" ||
+      a === "school_admin_edit_website" ||
+      a === "school_admin_upload_brochure" ||
+      a.startsWith("school_fac_toggle_") ||
+      a.startsWith("school_fac_page_") ||
+      a.startsWith("school_ext_toggle_") ||
+      a.startsWith("school_ext_page_")
     
     );
   // =========================
