@@ -432,6 +432,7 @@ export async function handleSchoolSearchActions({ action: a, from, biz, saveBiz 
   }
 
   // ── Update fees (school admin) ────────────────────────────────────────────
+  // ── Update fees (school admin) ────────────────────────────────────────────
   if (a === "school_update_fees") {
     if (biz) {
       biz.sessionState = "school_admin_update_fees";
@@ -444,6 +445,138 @@ Enter the new fee per term as: *term1, term2, term3*
 Example: *900, 900, 850*
 
 Or one number for equal terms: *900*`
+    );
+  }
+
+  // ── School admin: open facilities manager ────────────────────────────────
+  if (a === "school_admin_manage_facilities") {
+    const phone = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    if (biz) {
+      biz.sessionState = "school_admin_manage_facilities";
+      biz.sessionData = { ...(biz.sessionData || {}), schoolFacPage: 0 };
+      await saveBiz(biz);
+    }
+
+    const FAC_PAGE_SIZE = 7;
+
+    const selected = (school.facilities || [])
+      .map(id => SCHOOL_FACILITIES.find(f => f.id === id)?.label || id)
+      .join("\n") || "None selected yet";
+
+    const facRows = SCHOOL_FACILITIES
+      .slice(0, FAC_PAGE_SIZE)
+      .map(f => ({
+        id: `school_fac_toggle_${f.id}`,
+        title: (school.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+      }));
+
+    if (SCHOOL_FACILITIES.length > FAC_PAGE_SIZE) {
+      facRows.push({ id: "school_fac_page_1", title: "➡ More Facilities" });
+    }
+
+    facRows.push({ id: "school_account", title: "💾 Done" });
+
+    await sendText(
+      from,
+      `🏊 *Your Current Facilities:*\n\n${selected}\n\nTap to add or remove:`
+    );
+
+    return sendList(from, "🏊 *Manage Facilities* - tap to toggle:", facRows);
+  }
+
+  // ── School admin: toggle facility ────────────────────────────────────────
+  if (a.startsWith("school_fac_toggle_")) {
+    const phone = from.replace(/\D+/g, "");
+    const facId = a.replace("school_fac_toggle_", "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    school.facilities = Array.isArray(school.facilities) ? school.facilities : [];
+
+    if (school.facilities.includes(facId)) {
+      school.facilities = school.facilities.filter(f => f !== facId);
+    } else {
+      school.facilities.push(facId);
+    }
+
+    await school.save();
+
+    const FAC_PAGE_SIZE = 7;
+    const facPage = Number(biz?.sessionData?.schoolFacPage || 0);
+
+    if (biz) {
+      biz.sessionState = "school_admin_manage_facilities";
+      biz.sessionData = { ...(biz.sessionData || {}), schoolFacPage: facPage };
+      await saveBiz(biz);
+    }
+
+    const facRows = SCHOOL_FACILITIES
+      .slice(facPage * FAC_PAGE_SIZE, (facPage + 1) * FAC_PAGE_SIZE)
+      .map(f => ({
+        id: `school_fac_toggle_${f.id}`,
+        title: school.facilities.includes(f.id) ? `✅ ${f.label}` : f.label
+      }));
+
+    const hasMore = (facPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+
+    if (facPage > 0) {
+      facRows.push({ id: `school_fac_page_${facPage - 1}`, title: "⬅ Previous" });
+    }
+
+    if (hasMore) {
+      facRows.push({ id: `school_fac_page_${facPage + 1}`, title: "➡ More" });
+    }
+
+    facRows.push({ id: "school_account", title: "💾 Done" });
+
+    return sendList(
+      from,
+      `🏊 *Manage Facilities* - ${(school.facilities || []).length} selected:`,
+      facRows
+    );
+  }
+
+  // ── School admin: facilities paging ──────────────────────────────────────
+  if (a.startsWith("school_fac_page_")) {
+    const phone = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    const newPage = parseInt(a.replace("school_fac_page_", ""), 10) || 0;
+    const FAC_PAGE_SIZE = 7;
+
+    if (biz) {
+      biz.sessionState = "school_admin_manage_facilities";
+      biz.sessionData = { ...(biz.sessionData || {}), schoolFacPage: newPage };
+      await saveBiz(biz);
+    }
+
+    const facRows = SCHOOL_FACILITIES
+      .slice(newPage * FAC_PAGE_SIZE, (newPage + 1) * FAC_PAGE_SIZE)
+      .map(f => ({
+        id: `school_fac_toggle_${f.id}`,
+        title: (school.facilities || []).includes(f.id) ? `✅ ${f.label}` : f.label
+      }));
+
+    const hasMore = (newPage + 1) * FAC_PAGE_SIZE < SCHOOL_FACILITIES.length;
+
+    if (newPage > 0) {
+      facRows.push({ id: `school_fac_page_${newPage - 1}`, title: "⬅ Previous" });
+    }
+
+    if (hasMore) {
+      facRows.push({ id: `school_fac_page_${newPage + 1}`, title: "➡ More" });
+    }
+
+    facRows.push({ id: "school_account", title: "💾 Done" });
+
+    return sendList(
+      from,
+      `🏊 *Manage Facilities* - page ${newPage + 1}:`,
+      facRows
     );
   }
 
