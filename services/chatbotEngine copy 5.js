@@ -109,7 +109,6 @@ import {
   formatBuyerQuoteComparison,
   formatRequestSummary
 } from "./buyerRequests.js";
-import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -2166,36 +2165,21 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? `1=12.50`
         : Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
  
-      // Build compact item summary for the template (single line, max 1024 chars)
-      const _templateItemSummary = (request.items || [])
-        .map((item, i) => {
-          const qty  = Number(item.quantity || 1);
-          const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-          return `${i + 1}. ${item.product} (${qty}${unit})`;
-        })
-        .join(", ")
-        .slice(0, 900);
-
-      const _templateLocation = request.area
-        ? `${request.area}${request.city ? `, ${request.city}` : ""}`
-        : request.city || "Zimbabwe";
-
-      const _deliveryLine = request.deliveryRequired
-        ? "Delivery to buyer needed"
-        : "Collection / flexible";
-
-      // Use Meta template — reaches supplier even outside 24-hour session window.
-      // Falls back to sendButtons automatically if template fails (within session).
-      await notifySupplierNewRequestTemplate({
-        supplierPhone: supplier.phone,
-        requestId:     String(request._id),
-        ref,
-        locationText:  _templateLocation,
-        itemSummary:   _templateItemSummary,
-        deliveryLine:  _deliveryLine,
-        // Pass full item lines + reply guide for the in-session fallback message
-        fullItemLines: _notifItemLines,
-        replyExamples: _notifExamples
+      await sendButtons(supplier.phone, {
+        text:
+          `🔥 *New Buyer Request* (${ref})\n\n` +
+          `${locationLine}\n\n` +
+          `📦 Items needed:\n${_notifItemLines}\n\n` +
+          `${request.deliveryRequired ? "🚚 Delivery to buyer needed" : "🏠 Collection / flexible"}\n\n` +
+          `*How to reply (tap Send Offer):*\n` +
+          `• Price by number: _${_notifExamples}_\n` +
+          `• Skip an item: _skip 2_\n` +
+          `• Message: _msg I can do tomorrow_\n\n` +
+          `⚡ Respond now — first quote wins buyer attention.`,
+        buttons: [
+          { id: `req_offer_${request._id}`,   title: "💬 Send Offer" },
+          { id: `req_unavail_${request._id}`, title: "❌ Not Available" }
+        ]
       });
 
       notifiedIds.push(supplier._id);
@@ -14844,4 +14828,4 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
-}s
+}

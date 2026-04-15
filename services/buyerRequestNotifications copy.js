@@ -13,7 +13,7 @@
 import axios   from "axios";
 import { sendButtons, sendText } from "./metaSender.js";
 
-const GRAPH_API_VERSION = "v24.0";
+const GRAPH_API_VERSION = "v19.0";
 const PHONE_NUMBER_ID   =
   process.env.WHATSAPP_PHONE_NUMBER_ID ||
   process.env.META_PHONE_NUMBER_ID     ||
@@ -21,6 +21,8 @@ const PHONE_NUMBER_ID   =
 const ACCESS_TOKEN =
   process.env.META_ACCESS_TOKEN ||
   process.env.WHATSAPP_ACCESS_TOKEN;
+
+  
 
 // ─── Low-level: send a pre-approved Meta template message ─────────────────────
 async function _sendTemplate(to, templateName, variables = []) {
@@ -84,10 +86,7 @@ export async function notifySupplierNewRequestTemplate({
   requestId,
   ref,
   locationText,
-  itemSummary,
-  deliveryLine  = "Collection / flexible",
-  fullItemLines = null,
-  replyExamples = "1=12.50"
+  itemSummary
 }) {
   try {
     await _sendTemplate(supplierPhone, "supplier_new_buyer_request", [
@@ -97,21 +96,15 @@ export async function notifySupplierNewRequestTemplate({
     ]);
     console.log(`[BUY REQ TPL] supplier_new_buyer_request → ${supplierPhone} (${ref})`);
   } catch (err) {
-    console.warn(`[BUY REQ TPL] template failed for ${supplierPhone}: ${err.message}. Falling back to sendButtons.`);
-    // Fallback: rich interactive message (works within 24-hour session window)
+    console.warn(`[BUY REQ TPL] template failed for ${supplierPhone}: ${err.message}. Falling back.`);
+    // Fallback: plain sendButtons (only works within 24h session window)
     try {
-      const itemDisplay = fullItemLines || itemSummary;
       await sendButtons(supplierPhone, {
         text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
           `📍 ${locationText}\n\n` +
-          `📦 Items needed:\n${itemDisplay}\n\n` +
-          `${deliveryLine}\n\n` +
-          `*How to reply (tap Send Offer):*\n` +
-          `• Price by number: _${replyExamples}_\n` +
-          `• Skip an item: _skip 2_\n` +
-          `• Message: _msg I can do tomorrow_\n\n` +
-          `Respond now — buyers pick the first good quote.`,
+          `📦 Items: ${itemSummary}\n\n` +
+          `Open ZimQuote and tap *Send Offer* to quote this buyer.`,
         buttons: [
           { id: `req_offer_${requestId}`,   title: "💬 Send Offer" },
           { id: `req_unavail_${requestId}`, title: "❌ Not Available" }
