@@ -140,7 +140,7 @@ if (supplier?.active) {
     { id: "my_orders",           title: "📋 My Orders" },
     { id: "find_school",         title: "🏫 Find a School" },
     { id: "my_supplier_account", title: "🏪 My Store" },
-    { id: "sup_upgrade_plan",    title: "💳 Activate Listing" }
+    { id: "sup_upgrade_plan",    title: "💳 Activate My Listing" }
   ]);
 }
 
@@ -776,7 +776,7 @@ if (supplier && !supplier.active) {
     [
       { id: "find_supplier",       title: "🔍 Browse & Shop" },      { id: "my_supplier_account", title: "🏪 My Supplier Account" },
       complete
-        ? { id: "sup_upgrade_plan",  title: "💳 Activate Listing" }
+        ? { id: "sup_upgrade_plan",  title: "💳 Activate My Listing" }
         : { id: "register_supplier", title: "⏳ Finish Registration" },
       { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
         title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
@@ -912,9 +912,8 @@ if (!school.active) {
     `📚 ${curriculumText}\n\n` +
     `_Choose a plan to activate your listing._`,
     [
-      { id: "school_pay_plan",    title: "💳 Activate Listing" },
+      { id: "school_pay_plan",    title: "💳 Activate My Listing" },
       { id: "school_my_profile",  title: "👁 View My Profile" },
-      { id: "sup_request_sellers", title: "⚡ Request Sellers" },
       { id: "find_supplier",      title: "🔍 Browse & Shop" },
       { id: "find_school",        title: "🏫 Preview Schools" },
       { id: "main_menu_back",     title: "⬅ Main Menu" }
@@ -937,7 +936,6 @@ if (!school.active) {
     { id: "school_my_profile",       title: "📋 My School Profile" },
     { id: "school_my_facilities",    title: "🏊 Manage Facilities" },
     { id: "school_my_fees",          title: "💵 Update Fees" },
-    { id: "sup_request_sellers",     title: "⚡ Request Sellers" },
     { id: "find_supplier",           title: "🔍 Browse & Shop" },
     { id: "find_school",             title: "🏫 Find a School" },
     { id: "school_my_reviews",       title: "⭐ My Reviews" },
