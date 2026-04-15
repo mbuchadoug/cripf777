@@ -93,7 +93,10 @@ priceUpdatedAt: { type: Date },
   // Analytics
   viewCount: { type: Number, default: 0 },
   monthlyViews: { type: Number, default: 0 },
-  monthlyOrders: { type: Number, default: 0 },
+ monthlyOrders:        { type: Number, default: 0    },
+  responseCount:        { type: Number, default: 0    },   // ← ADD
+  avgResponseMinutes:   { type: Number, default: null },   // ← ADD
+  lastRespondedAt:      { type: Date,   default: null },   // ← ADD
   monthlyRevenue: { type: Number, default: 0 },
 profileType:     { type: String, enum: ['product', 'service'], default: 'product' },
 rates: {

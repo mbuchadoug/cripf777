@@ -112,7 +112,8 @@ import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
 import { ensureAuth } from "./middleware/authGuard.js";
 import webReceipts from "./routes/web_receipts.js";
-
+import cron from "node-cron";
+import { autoCloseExpiredRequests } from "../services/buyerRequests.js";
 
 dotenv.config();
 
@@ -126,7 +127,60 @@ const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 
 // ⚠️ STRIPE WEBHOOK - MUST COME FIRST
 
+// cron/buyerRequestCron.js
+// ─── Auto-close expired buyer requests ───────────────────────────────────────
+//
+// SETUP:
+//   npm install node-cron   (if not already installed)
+//
+// USAGE — add this to your server.js or app.js ONCE:
+//
+//   import "./cron/buyerRequestCron.js";
+//
+// That's it. The cron starts automatically when your server boots.
+//
+// ─────────────────────────────────────────────────────────────────────────────
 
+
+// ── Run every 5 minutes ───────────────────────────────────────────────────────
+// Closes requests older than 15 minutes and notifies buyers.
+// The 15-minute window gives suppliers time to respond.
+// Adjust timeoutMinutes to change the window (5 = fast, 30 = relaxed).
+
+const TIMEOUT_MINUTES = 15;
+
+cron.schedule("*/5 * * * *", async () => {
+  try {
+    const closed = await autoCloseExpiredRequests({
+      timeoutMinutes: TIMEOUT_MINUTES,
+      notifyBuyer:    true
+    });
+    if (closed > 0) {
+      console.log(`[CRON ${new Date().toISOString()}] Auto-closed ${closed} expired buyer request(s)`);
+    }
+  } catch (err) {
+    console.error("[CRON AUTO-CLOSE ERROR]", err.message);
+  }
+}, {
+  timezone: "Africa/Harare"   // adjust if your server runs in UTC
+});
+
+console.log("[CRON] Buyer request auto-close cron started (every 5 min, timeout: 15 min)");
+
+
+// ─── ALTERNATIVE: Serverless / no cron (trigger on every message) ─────────────
+//
+// If you're on Railway, Heroku, or another platform where cron is unreliable,
+// add this ONE line at the very TOP of your handleIncoming() function in
+// chatbotEngine.js, before any other logic:
+//
+//   autoCloseExpiredRequests({ timeoutMinutes: 15, notifyBuyer: true })
+//     .catch(err => console.error("[AUTO-CLOSE BG]", err.message));
+//
+// This fires on every inbound WhatsApp message, is non-blocking, and costs
+// one MongoDB query per message. At low volume this is fine.
+//
+// ─────────────────────────────────────────────────────────────────────────────
 // Normal parsers for everything else
 /*app.use(express.json());
 app.use(express.urlencoded({ extended: true }));*/

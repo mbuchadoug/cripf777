@@ -755,7 +755,9 @@ const searchTip = "\n\n";
 if (supplier?.active) {
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
   { id: "find_supplier",       title: "🔍 Browse & Shop" },
-  { id: "my_orders",           title: "📋 My Orders" },
+  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  { id: "buyer_my_requests",   title: "📋 My Quote Requests" },
+  { id: "my_orders",           title: "🛒 My Orders" },
   { id: "my_supplier_account", title: "🏪 My Store" },
   { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business",
     title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }
@@ -784,6 +786,8 @@ if (supplier && !supplier.active) {
 
 return sendList(to, `🛒 *ZimQuote Marketplace*${searchTip}`, [
   { id: "find_supplier",     title: "🔍 Browse & Shop" },
+  { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+  { id: "buyer_my_requests", title: "📋 My Quote Requests" },
   { id: "register_supplier", title: "🏪 List My Business" },
   { id: "my_orders",         title: "📋 My Orders" },
   { id: hasRealBiz ? ACTIONS.MAIN_MENU : "onboard_business", title: hasRealBiz ? "🏠 Main Menu" : "🧾 Run My Business" }

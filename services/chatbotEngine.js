@@ -103,6 +103,12 @@ import {
   handleOrderDeclined,
   handleBookingAccepted
 } from "./supplierOrders.js";
+import {
+  trackSupplierResponseSpeed,
+  getBuyerOpenRequests,
+  formatBuyerQuoteComparison,
+  formatRequestSummary
+} from "./buyerRequests.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -2094,18 +2100,29 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   const noteLine = response.message ? `\n📝 ${response.message}` : "";
   const etaLine = response.etaText ? `\n⏱ ${response.etaText}` : "";
 
+ // Count valid quotes received so far including this one
+  const _quoteCount = (request.responses || []).filter(
+    r => r.mode !== "unavailable" && (r.items?.length || r.message)
+  ).length;
+ 
+  const _moreComingLine = request.status === "open"
+    ? `\n_Request still open — more quotes may arrive._`
+    : "";
+ 
   await sendButtons(request.buyerPhone, {
     text:
-      `📨 *New Seller Response* (${ref})\n\n` +
-      `🏪 ${supplierName}\n\n` +
+      `📨 *New Seller Quote* (${ref})\n` +
+      `💬 ${_quoteCount} quote${_quoteCount === 1 ? "" : "s"} received so far\n\n` +
+      `🏪 *${supplierName}*\n\n` +
       `${itemLines}` +
       `${totalLine}` +
       `${etaLine}` +
       `${noteLine}\n\n` +
-      `📞 Contact: ${response.supplierPhone}`,
-buttons: [
-      { id: "find_supplier", title: "🛒 Marketplace" },
-      { id: "my_orders", title: "📋 My Orders" }
+      `📞 Contact: ${response.supplierPhone}` +
+      `${_moreComingLine}`,
+    buttons: [
+      { id: `buyer_view_all_quotes_${request._id}`, title: "📊 Compare All Quotes" },
+      { id: "find_supplier",                        title: "🛒 Marketplace" }
     ]
   });
 
@@ -2136,16 +2153,31 @@ async function notifySuppliersOfBuyerRequest(request) {
           ? `📍 ${request.city}`
           : `📍 Zimbabwe`;
 
-           await sendButtons(supplier.phone, {
+        // Build numbered item list with quick-reply guidance
+      const _notifItemLines = (request.items || []).map((item, i) => {
+        const qty  = Number(item.quantity || 1);
+        const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+        return `${i + 1}. ${item.product} (${qty}${unit})`;
+      }).join("\n");
+ 
+      const _notifItemCount  = (request.items || []).length;
+      const _notifExamples   = _notifItemCount === 1
+        ? `1=12.50`
+        : Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
+ 
+      await sendButtons(supplier.phone, {
         text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
-          `${itemLines}\n\n` +
-          `${locationLine}\n` +
-          `${request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / location to confirm"}\n\n` +
-          `Buyer contact is hidden.\n` +
-          `Respond through the chatbot now.`,
+          `${locationLine}\n\n` +
+          `📦 Items needed:\n${_notifItemLines}\n\n` +
+          `${request.deliveryRequired ? "🚚 Delivery to buyer needed" : "🏠 Collection / flexible"}\n\n` +
+          `*How to reply (tap Send Offer):*\n` +
+          `• Price by number: _${_notifExamples}_\n` +
+          `• Skip an item: _skip 2_\n` +
+          `• Message: _msg I can do tomorrow_\n\n` +
+          `⚡ Respond now — first quote wins buyer attention.`,
         buttons: [
-          { id: `req_offer_${request._id}`, title: "💬 Send Offer" },
+          { id: `req_offer_${request._id}`,   title: "💬 Send Offer" },
           { id: `req_unavail_${request._id}`, title: "❌ Not Available" }
         ]
       });
@@ -2730,8 +2762,9 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_request_delivery_yes" ||
       a === "sup_request_delivery_no" ||
       a.startsWith("req_offer_") ||
-      a.startsWith("req_auto_") ||
       a.startsWith("req_unavail_") ||
+      a.startsWith("buyer_view_all_quotes_") ||
+      a === "buyer_my_requests" ||
 
 
         a.startsWith("view_invoices_page_") ||
@@ -3003,22 +3036,38 @@ Reply *menu* to start.`);
         etaText: ""
       };
 
-      request.responses.push(response);
+    request.responses.push(response);
       await request.save();
-
+ 
       await UserSession.findOneAndUpdate(
         { phone },
         { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
         { upsert: true }
       );
-
+ 
+      // Track supplier response speed (non-blocking — never delays the buyer notification)
+      trackSupplierResponseSpeed(supplier.phone, request.createdAt).catch(err =>
+        console.error("[RESPONSE SPEED]", err.message)
+      );
+ 
       await sendBuyerRequestResponseToBuyer({ request, supplier, response });
-
+ 
+      // Tell supplier how many others have also quoted
+      const _otherQuoteCount = (request.responses || []).filter(
+        r => String(r.supplierPhone) !== String(supplier.phone) &&
+             r.mode !== "unavailable" &&
+             (r.items?.length || r.message)
+      ).length;
+ 
+      const _competitionLine = _otherQuoteCount > 0
+        ? `\n_${_otherQuoteCount} other seller${_otherQuoteCount === 1 ? "" : "s"} also quoted this buyer._`
+        : `\n_⚡ You're the first to respond — great timing!_`;
+ 
       return sendButtons(from, {
-        text: "✅ Your offer has been sent to the buyer.",
+        text: `✅ *Your offer has been sent to the buyer.*${_competitionLine}`,
         buttons: [
           { id: "my_supplier_account", title: "🏪 My Store" },
-          { id: "suppliers_home", title: "🛒 Marketplace" }
+          { id: "suppliers_home",      title: "🛒 Marketplace" }
         ]
       });
     }
@@ -3683,6 +3732,8 @@ a.startsWith("sup_accept_") ||
   a === "sup_request_delivery_no" ||
   a.startsWith("req_offer_") ||
   a.startsWith("req_unavail_") ||
+  a.startsWith("buyer_view_all_quotes_") ||
+  a === "buyer_my_requests" ||
 
 
 a === "sup_search_next_page" ||
@@ -12855,23 +12906,30 @@ if (a.startsWith("req_offer_")) {
     { upsert: true }
   );
 
- return sendText(
+  // Build numbered item list so supplier sees exactly what to price
+  const _offerItemLines = (request.items || []).map((item, i) => {
+    const qty  = Number(item.quantity || 1);
+    const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+    return `${i + 1}. ${item.product} × ${qty}${unit}`;
+  }).join("\n");
+ 
+  // Generate concrete example prices from the actual item count
+  const _offerCount   = Math.min((request.items || []).length, 3);
+  const _offerExample = Array.from({ length: _offerCount }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
+ 
+  return sendText(
     from,
-    `💬 *Send your offer / quotation*\n\n` +
-      `${formatBuyerRequestItems(request.items || [], 20)}\n\n` +
-      `You can reply in any of these ways:\n\n` +
-      `*1. Numbered pricing*\n` +
-      `_1x12, 2x8.5, 3x4.20_\n\n` +
-      `*2. Prices in order*\n` +
-      `_12, 8.5, 4.20, 16_\n\n` +
-      `*3. Named prices*\n` +
-      `_110 access tees: 12_\n_vent valves: 8.5_\n_bath tub standard: 95_\n\n` +
-      `*4. Partial quote*\n` +
-      `_110 access tees: 12_\n_vent valves: 8.5_\nOnly these are available now._\n\n` +
-      `*5. Normal text offer*\n` +
-      `_We have most items. Full quote tomorrow morning._\n\n` +
-      `You can also add availability or delivery note.\n\n` +
-      `Type *cancel* to stop.`
+    `💬 *Send Your Quote*\n\n` +
+    `📋 Buyer needs:\n${_offerItemLines}\n\n` +
+    `─────────────────\n` +
+    `*Fastest — number=price:*\n` +
+    `_${_offerExample}_\n\n` +
+    `*Other options:*\n` +
+    `• Skip item: _skip 2_  or  _skip 2, 3_\n` +
+    `• By name: _cement: 12.50_\n` +
+    `• Message only: _msg I have most items, can deliver tomorrow_\n\n` +
+    `You can mix pricing and a message in one reply.\n\n` +
+    `Type *cancel* to go back.`
   );
 }
 
@@ -12925,7 +12983,92 @@ if (a.startsWith("req_unavail_")) {
   });
 }
 
-
+if (a.startsWith("buyer_view_all_quotes_")) {
+  const _bvqRequestId = a.replace("buyer_view_all_quotes_", "");
+  const _bvqRequest   = await BuyerRequest.findById(_bvqRequestId).lean();
+ 
+  if (!_bvqRequest) {
+    return sendButtons(from, {
+      text: "❌ Request not found or has expired.",
+      buttons: [
+        { id: "sup_request_sellers", title: "⚡ New Request" },
+        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+      ]
+    });
+  }
+ 
+  const _bvqQuotes = (_bvqRequest.responses || []).filter(
+    r => r.mode !== "unavailable" && (r.items?.length || r.message)
+  );
+ 
+  if (!_bvqQuotes.length) {
+    const _bvqRef = `REQ-${String(_bvqRequest._id).slice(-4).toUpperCase()}`;
+    return sendButtons(from, {
+      text:
+        `📭 *No quotes yet* (${_bvqRef})\n\n` +
+        `${formatBuyerRequestItems(_bvqRequest.items || [], 10)}\n\n` +
+        `${_bvqRequest.status === "open" ? "🟢 Sellers have been notified. Check back soon." : "🔴 This request is closed with no quotes."}`,
+      buttons: [
+        { id: "sup_request_sellers", title: "⚡ New Request" },
+        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+      ]
+    });
+  }
+ 
+  // Send full comparison as text (can be long — plain text handles it best)
+  const _bvqComparison = formatBuyerQuoteComparison(_bvqRequest);
+  await sendText(from, _bvqComparison);
+ 
+  return sendButtons(from, {
+    text: "What would you like to do next?",
+    buttons: [
+      { id: "sup_request_sellers", title: "⚡ New Request" },
+      { id: "find_supplier",       title: "🔍 Browse & Shop" }
+    ]
+  });
+}
+ 
+// ── View buyer's request history ──────────────────────────────────────────────
+if (a === "buyer_my_requests") {
+  const _bmrPhone    = from.replace(/\D+/g, "");
+  const _bmrRequests = await getBuyerOpenRequests(_bmrPhone, 10);
+ 
+  if (!_bmrRequests.length) {
+    return sendButtons(from, {
+      text:
+        `📋 *My Quote Requests*\n\n` +
+        `You haven't submitted any requests yet.\n\n` +
+        `Use Request Sellers to ask multiple sellers to quote your exact item.`,
+      buttons: [
+        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
+        { id: "find_supplier",       title: "🔍 Browse & Shop" }
+      ]
+    });
+  }
+ 
+  const _bmrRows = _bmrRequests.slice(0, 7).map(req => {
+    const quoteCount   = (req.responses || []).filter(
+      r => r.mode !== "unavailable" && (r.items?.length || r.message)
+    ).length;
+    const statusIcon   = req.status === "open" ? "🟢" : "🔴";
+    const firstProduct = (req.items || [])[0]?.product || "Request";
+    const ref          = `REQ-${String(req._id).slice(-4).toUpperCase()}`;
+    return {
+      id:          `buyer_view_all_quotes_${req._id}`,
+      title:       firstProduct.slice(0, 24),
+      description: `${statusIcon} ${ref} · ${quoteCount} quote${quoteCount === 1 ? "" : "s"}`
+    };
+  });
+ 
+  _bmrRows.push({ id: "sup_request_sellers", title: "⚡ New Request" });
+  _bmrRows.push({ id: "find_supplier",       title: "🔍 Browse & Shop" });
+ 
+  return sendList(
+    from,
+    `📋 *My Quote Requests* (${_bmrRequests.length} recent)\n_Tap any request to compare quotes_`,
+    _bmrRows
+  );
+}
   // ── sup_search_all: buyer wants to search by product name (free text) ─────
   if (a === "sup_search_all") {
 
