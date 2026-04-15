@@ -113,7 +113,7 @@ import orgManagementRoutes from "./routes/org_management.js";
 import { ensureAuth } from "./middleware/authGuard.js";
 import webReceipts from "./routes/web_receipts.js";
 import cron from "node-cron";
-import { autoCloseExpiredRequests } from "./services/buyerRequests.js";
+import { autoCloseExpiredRequests } from "../services/buyerRequests.js";
 
 dotenv.config();
 
