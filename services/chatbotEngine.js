@@ -6318,7 +6318,8 @@ const escapeWords = ["menu", "hi", "hie", "hey", "hello", "helo", "howzit", "hel
 
   // Pass supplier registration states to the state bridge
 const supplierStates = [
-  "supplier_reg_name", "supplier_reg_area", "supplier_reg_address", "supplier_reg_products",
+ "supplier_reg_name", "supplier_reg_area", "supplier_reg_address", "supplier_reg_products",
+  "supplier_reg_contact_details", "supplier_reg_website", "supplier_reg_collar", "supplier_reg_subcat",
   "supplier_reg_prices", "supplier_update_prices",
   "supplier_edit_products", "supplier_edit_area",
   "supplier_reg_confirm", "supplier_reg_enter_ecocash",
