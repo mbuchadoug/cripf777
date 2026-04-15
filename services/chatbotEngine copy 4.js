@@ -1129,7 +1129,7 @@ async function _sendSupplierShoppingHub(from, supplier, cart = [], opts = {}) {
     },
     {
       id: `sup_number_page_open_${supplier._id}`,
-      title: "⚡ Quick Order"
+      title: "⚡ Quick Order by Number"
     },
     {
       id: `sup_request_quote_supplier_${supplier._id}`,
@@ -1229,7 +1229,7 @@ async function _sendSelectedSearchItemPreview(from, supplier, selectedItem, cart
       },
       {
         id: fullCatalogueId,
-        title: "📚 Full Catalogue"
+        title: "📚 View Full Catalogue"
       },
       {
         id: `sup_cart_view_${supplier._id}`,
@@ -2232,7 +2232,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
       `📣 Sent to ${sentCount} matching seller${sentCount === 1 ? "" : "s"}.\n\n` +
       `You will receive offers here in the chatbot.`,
     buttons: [
-      { id: "sup_request_sellers", title: "⚡ Request Again" },
+      { id: "sup_request_sellers", title: "⚡ Request Sellers Again" },
       { id: "my_orders", title: "📋 My Orders" },
       { id: "find_supplier", title: "🔍 Browse & Shop" }
     ]
@@ -2287,11 +2287,11 @@ async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {
   }
 
   if (page === 0 && opts.selectionMode === "search_pick") {
-    rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" });
+    rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" });
   }
 
   if (page === 0) {
-    rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order" });
+    rows.push({ id: `sup_number_page_open_${supplier._id}`, title: "⚡ Quick Order by Number" });
   }
 
   rows.push({ id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" });
@@ -2326,7 +2326,7 @@ async function _sendSupplierNumberedCatalogueText(from, supplier, cart = [], opt
         (searchTerm ? ` for *${searchTerm}*.` : "."),
       buttons: [
         { id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Again" },
-        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Full Catalogue" },
+        { id: `sup_catalog_page_open_${supplier._id}`, title: "📚 View Full Catalogue" },
         { id: `sup_cart_view_${supplier._id}`, title: "🛒 View Cart" }
       ]
     });
@@ -2384,7 +2384,7 @@ _12x2, 15x1, 18x6_`
   const utilityButtons = [];
 
   if (searchTerm) {
-    utilityButtons.push({ id: `sup_number_full_${supplier._id}`, title: "📚 Full Catalogue" });
+    utilityButtons.push({ id: `sup_number_full_${supplier._id}`, title: "📚 View Full Catalogue" });
   } else {
     utilityButtons.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Browse Catalogue" });
   }
@@ -2427,12 +2427,12 @@ async function _sendSupplierCartMenu(from, supplier, cart = []) {
 
   rows.push({
     id: `sup_cart_confirm_${supplier._id}`,
-    title: supplier.profileType === "service" ? "✅ Confirm Booking" : "✅ Confirm & Send Order"
+    title: supplier.profileType === "service" ? "✅ Confirm & Send Booking" : "✅ Confirm & Send Order"
   });
 
   rows.push({ id: `sup_cart_clear_${supplier._id}`, title: "🗑 Clear Cart" });
   rows.push({ id: `sup_catalog_page_open_${supplier._id}`, title: "📚 Add More Items" });
-  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search Supplier" });
+  rows.push({ id: `sup_catalogue_search_${supplier._id}`, title: "🔎 Search This Supplier" });
   rows.push({ id: `sup_cart_custom_${supplier._id}`, title: "✍ Type Custom Item" });
 
   const summary = cart
@@ -5166,11 +5166,11 @@ Or tap to pick a category:`,
     await saveBizSafe(biz);
     return sendList(from, "📂 Select Category", [
       { id: "exp_cat_rent",        title: "🏢 Rent" },
-      { id: "exp_cat_utilities",   title: "💡 Utilities" },
+      { id: "exp_cat_utilities",   title: "💡 Utilities (ZESA, water, airtime)" },
       { id: "exp_cat_transport",   title: "🚗 Transport & Fuel" },
       { id: "exp_cat_supplies",    title: "📦 Supplies & Stock" },
       { id: "exp_cat_salaries",    title: "👷 Salaries & Wages" },
-      { id: "exp_cat_maintenance", title: "🔧 Maintenance" },
+      { id: "exp_cat_maintenance", title: "🔧 Maintenance & Repairs" },
       { id: "exp_cat_other",       title: "📝 Other" }
     ]);
   }
@@ -5577,7 +5577,7 @@ if (a.startsWith("vdoc_prev_") || a.startsWith("vdoc_next_")) {
       { id: `vdoc_date_${docType}_${branchCode}_last_7`,     title: "📅 Last 7 Days" },
       { id: `vdoc_date_${docType}_${branchCode}_this_year`,  title: "📅 This Year" },
       { id: `vdoc_date_${docType}_${branchCode}_none`,       title: "📋 All Time" },
-      { id: `vdoc_search_${docType}_${branchCode}`,         title: "🔍 Search Docs" }
+      { id: `vdoc_search_${docType}_${branchCode}`,         title: "🔍 Search by Name/Number" }
     ]);
   }
 
@@ -5770,7 +5770,7 @@ Type *done* to save`,
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "add_another_product", title: "➕ Add Product" },
+        { id: "add_another_product", title: "➕ Add another product" },
         { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
     });
@@ -7412,7 +7412,7 @@ Or pick a category 👇`,
   ).then(() => sendList(from, "📂 Choose how you want to buy:", [
     { id: "sup_search_type_product", title: "📦 Browse Products" },
     { id: "sup_search_type_service", title: "🧰 Browse Services" },
-    { id: "sup_request_sellers", title: "⚡ Request Sellers" }
+    { id: "sup_request_sellers", title: "⚡ Request from Sellers" }
   ]));
 
 }
@@ -7439,10 +7439,10 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
   // WhatsApp list limit is 10 rows - 21 service categories can't fit in one list.
   if (searchType === "service") {
     return sendList(from, "🔧 What type of service are you looking for?", [
-      { id: "sup_search_collar_white_collar", title: "💼 Professional" },
+      { id: "sup_search_collar_white_collar", title: "💼 Professional Services" },
       { id: "sup_search_collar_trade",        title: "🔧 Trade & Artisan" },
       { id: "sup_search_collar_blue_collar",  title: "🧹 General Services" },
-      { id: "sup_search_all",                 title: "🔍 Search Services" },
+      { id: "sup_search_all",                 title: "🔍 Search by service name" },
       { id: "find_supplier",                  title: "⬅ Back" }
     ]);
   }
@@ -7454,7 +7454,7 @@ if (a === "sup_search_type_product" || a === "sup_search_type_service") {
       id: `sup_search_cat_${c.id}`,
       title: c.label
     })),
-    { id: "sup_search_all", title: "🔍 Search Products" },
+    { id: "sup_search_all", title: "🔍 Search by product name" },
     ...(filteredCategories.length > 8
       ? [{ id: "sup_search_more_categories", title: "➕ More Categories" }]
       : [])
@@ -7536,10 +7536,10 @@ if (a === "sup_search_more_categories") {
   // If somehow service reaches here, redirect to collar picker
   if (searchType === "service") {
     return sendList(from, "🔧 What type of service are you looking for?", [
-      { id: "sup_search_collar_white_collar", title: "💼 Professional" },
+      { id: "sup_search_collar_white_collar", title: "💼 Professional Services" },
       { id: "sup_search_collar_trade",        title: "🔧 Trade & Artisan" },
       { id: "sup_search_collar_blue_collar",  title: "🧹 General Services" },
-      { id: "sup_search_all",                 title: "🔍 Search Services" },
+      { id: "sup_search_all",                 title: "🔍 Search by service name" },
       { id: "find_supplier",                  title: "⬅ Back" }
     ]);
   }
@@ -7924,8 +7924,8 @@ if (a === "school_pay_plan") {
     [
       { id: "school_plan_basic_monthly",    title: "✅ Basic - $15/month",    description: "Listed in search + profile PDF + application link" },
       { id: "school_plan_basic_annual",     title: "✅ Basic - $150/year",    description: "Save $30 vs monthly" },
-      { id: "school_plan_featured_monthly", title: "🔥 Featured $35/mo", description: "Top of results + verified badge + analytics" },
-      { id: "school_plan_featured_annual",  title: "🔥 Featured $350/yr", description: "Save $70 vs monthly" }
+      { id: "school_plan_featured_monthly", title: "🔥 Featured - $35/month", description: "Top of results + verified badge + analytics" },
+      { id: "school_plan_featured_annual",  title: "🔥 Featured - $350/year", description: "Save $70 vs monthly" }
     ]
   );
 }
@@ -8788,7 +8788,7 @@ if (a === "sup_upgrade_plan" || a === "sup_renew_plan") {
         { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year", description: "Up to 20 live items · save $10" },
         { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
         { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year", description: "Up to 60 live items · save $24" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Up to 150 live items + featured badge" }
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Up to 150 live items + featured badge" }
       ]
     );
   }
@@ -8850,7 +8850,7 @@ if (a === "reg_type_school") {
   }
   if (existingSchool && !existingSchool.active) {
     return sendList(from, `🏫 *${existingSchool.schoolName}* is saved but not yet live.`, [
-      { id: "school_pay_plan",  title: "💳 Activate Listing" },
+      { id: "school_pay_plan",  title: "💳 Activate My Listing" },
       { id: "school_account",   title: "👁 View My Profile" },
       { id: "main_menu_back",   title: "⬅ Main Menu" }
     ]);
@@ -8964,13 +8964,13 @@ if (a === "sup_cat_more") {
   // For services, "More Categories" should return service groups, not a huge flat list
   if (profileType === "service") {
     return sendList(from, "🗂 Service Groups", [
-      { id: "sup_grp_trades_technical", title: "🛠️ Trades" },
+      { id: "sup_grp_trades_technical", title: "🛠️ Trades & Technical" },
       { id: "sup_grp_home_property", title: "🏠 Home & Property" },
-      { id: "sup_grp_professional_corporate", title: "💼 Professional" },
-      { id: "sup_grp_health_personal", title: "🩺 Health & Care" },
-      { id: "sup_grp_creative_events_media", title: "🎨 Creative & Media" },
-      { id: "sup_grp_education_digital", title: "💻 Education" },
-      { id: "sup_grp_transport_logistics", title: "🚚 Transport" },
+      { id: "sup_grp_professional_corporate", title: "💼 Professional & Corporate" },
+      { id: "sup_grp_health_personal", title: "🩺 Health & Personal Care" },
+      { id: "sup_grp_creative_events_media", title: "🎨 Creative, Events & Media" },
+      { id: "sup_grp_education_digital", title: "💻 Education & Digital" },
+      { id: "sup_grp_transport_logistics", title: "🚚 Transport & Logistics" },
       { id: "sup_grp_other_services_group", title: "🧰 Other Services" }
     ]);
   }
@@ -9058,7 +9058,7 @@ if (a.startsWith("sup_grp_")) {
       title: c.label
     }));
 
-  rows.push({ id: "reg_type_service", title: "⬅ Service Groups" });
+  rows.push({ id: "reg_type_service", title: "⬅ Back to Service Groups" });
 
   return sendList(from, group.label, rows);
 }
@@ -9634,7 +9634,7 @@ if (a === "sup_website_skip") {
     await saveBizSafe(biz);
 
     return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
-      { id: "sup_collar_white_collar", title: "💼 Professional" },
+      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
       { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
       { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
     ]);
@@ -9840,10 +9840,10 @@ To go live and start receiving orders, you need to choose a plan and pay. It's l
 💳 *Choose a plan below to activate your listing:*`,
       [
         { id: "sup_plan_basic_monthly", title: "✅ Basic - $5/month", description: "Up to 20 live items. Good to start." },
-        { id: "sup_plan_basic_annual", title: "✅ Basic $50/yr", description: "Pay once for the whole year" },
+        { id: "sup_plan_basic_annual", title: "✅ Basic - $50/year (save $10)", description: "Pay once for the whole year" },
         { id: "sup_plan_pro_monthly", title: "⭐ Pro - $12/month", description: "Up to 60 live items" },
-        { id: "sup_plan_pro_annual", title: "⭐ Pro $120/yr", description: "Most popular choice" },
-        { id: "sup_plan_featured_monthly", title: "🔥 Featured $25/mo", description: "Top of search - buyers see you first" }
+        { id: "sup_plan_pro_annual", title: "⭐ Pro - $120/year (save $24)", description: "Most popular choice" },
+        { id: "sup_plan_featured_monthly", title: "🔥 Featured - $25/month", description: "Top of search - buyers see you first" }
       ]
     );
   }
@@ -12878,7 +12878,7 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
 
     return sendButtons(from, {
       text: "❌ Request session expired. Please start again.",
-      buttons: [{ id: "sup_request_sellers", title: "⚡ Request Sellers" }]
+      buttons: [{ id: "sup_request_sellers", title: "⚡ Request from Sellers" }]
     });
   }
 
@@ -14550,7 +14550,7 @@ _1x5, sand 2, 6x20_
       });
       actionRows.push({
         id: `sup_cart_clear_${supplier._id}`,
-        title: "🗑 Clear Cart"
+        title: "🗑 Clear Cart & Start Over"
       });
       actionRows.push({
         id: "find_supplier",
@@ -14560,11 +14560,11 @@ _1x5, sand 2, 6x20_
       // No cart yet -just show guidance rows
       actionRows.push({
         id: `sup_cart_custom_${supplier._id}`,
-        title: "✍️ Type Your Order"
+        title: "✍️ Type order above ↑"
       });
       actionRows.push({
         id: "find_supplier",
-        title: "🔍 Other Suppliers"
+        title: "🔍 Find Different Supplier"
       });
       actionRows.push({
         id: `sup_cart_clear_${supplier._id}`,
@@ -14594,7 +14594,7 @@ _1x5, sand 2, 6x20_
         title: `➖ Remove: ${c.product.slice(0, 18)}`
       });
     });
-    rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm Order" });
+    rows.push({ id: `sup_cart_confirm_${supplier._id}`, title: "✅ Confirm & Send Order" });
     rows.push({ id: `sup_cart_clear_${supplier._id}`,   title: "🗑 Clear Cart" });
   }
 

@@ -271,7 +271,7 @@ _sales@mybusiness.co.zw_
 
 You can also skip this step.`,
       buttons: [
-        { id: "sup_contact_skip", title: "⏭ Skip Contact" }
+        { id: "sup_contact_skip", title: "⏭ Skip Contact Details" }
       ]
     });
   }
@@ -331,7 +331,7 @@ if (state === "supplier_reg_website") {
     await saveBiz(biz);
 
     return sendList(from, "🧑‍💼 *What type of services do you offer?*\n\nThis helps buyers find you faster.", [
-      { id: "sup_collar_white_collar", title: "💼 Professional" },
+      { id: "sup_collar_white_collar", title: "💼 Professional Services" },
       { id: "sup_collar_trade",        title: "🔧 Trade & Artisan" },
       { id: "sup_collar_blue_collar",  title: "🧹 General Services" }
     ]);
