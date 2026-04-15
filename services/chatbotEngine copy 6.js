@@ -3306,7 +3306,7 @@ if (
   return sendMainMenu(from);
 }
 
-// ── All users: handle typed school enquiry message (biz and non-biz) ───────────
+// ── Non-biz parent: handle typed school enquiry message ──────────────────────
 if (!isMetaAction) {
   const _enquirySess = await UserSession.findOne({ phone });
   if (_enquirySess?.tempData?.schoolEnquiryState === "school_parent_enquiry") {
@@ -3364,19 +3364,12 @@ if (!isMetaAction) {
     const { notifySchoolEnquiry } = await import("./schoolNotifications.js");
     notifySchoolEnquiry(school.phone, school.schoolName, from, message).catch(() => {});
 
-    // Clear the enquiry session state (UserSession for all users)
+    // Clear the enquiry session state
     await UserSession.findOneAndUpdate(
       { phone },
       { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
       { upsert: true }
     );
-
-    // Also reset biz.sessionState if user has a biz account (e.g. a supplier browsing schools)
-    if (biz && biz.sessionState === "school_parent_enquiry") {
-      biz.sessionState = "ready";
-      biz.sessionData  = { ...(biz.sessionData || {}), enquirySchoolId: null };
-      await saveBizSafe(biz);
-    }
 
     // Confirm to parent
     return sendButtons(from, {

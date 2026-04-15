@@ -11,7 +11,7 @@
 import axios from "axios";
 import { sendText } from "./metaSender.js";
 
-const GRAPH_API_VERSION = "v19.0";
+const GRAPH_API_VERSION = "v24.0";
 const PHONE_NUMBER_ID   = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const ACCESS_TOKEN      = process.env.WHATSAPP_ACCESS_TOKEN;
 
