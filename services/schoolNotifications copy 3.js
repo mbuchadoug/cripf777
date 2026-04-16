@@ -15,26 +15,6 @@ const GRAPH_API_VERSION = "v24.0";
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
 
-// ── Guard: warn loudly at startup if env vars are missing ────────────────────
-if (!PHONE_NUMBER_ID) {
-  console.error("[School Notify] ⚠️  No PHONE_NUMBER_ID found in environment (checked WHATSAPP_PHONE_NUMBER_ID, META_PHONE_NUMBER_ID, PHONE_NUMBER_ID). Template notifications will fail.");
-}
-if (!ACCESS_TOKEN) {
-  console.error("[School Notify] ⚠️  No ACCESS_TOKEN found in environment (checked META_ACCESS_TOKEN, WHATSAPP_ACCESS_TOKEN). Template notifications will fail.");
-}
-
-// ── Helper: normalize Zimbabwean phone numbers to international format ────────
-// Handles:  0771234567  → 263771234567
-//           263771234567 → 263771234567  (already correct, no change)
-//           +263771234567 → 263771234567 (strips the +)
-function _normalizeZimPhone(raw = "") {
-  let phone = String(raw).replace(/\D+/g, ""); // strip everything except digits
-  if (phone.startsWith("0") && phone.length === 10) {
-    phone = "263" + phone.slice(1);            // 0771234567 → 263771234567
-  }
-  return phone;
-}
-
 // ── Helper: current timestamp in readable format ──────────────────────────────
 function _timestamp() {
   return new Date().toLocaleString("en-GB", {
@@ -48,7 +28,7 @@ function _timestamp() {
 
 // ── Low-level: send a pre-approved Meta template message ──────────────────────
 async function _sendTemplate(to, templateName, variables = []) {
-  const phone = _normalizeZimPhone(to); // ← was: String(to).replace(/\D+/g, "")
+  const phone = String(to).replace(/\D+/g, "");
 
   const components = variables.length
     ? [{
@@ -88,16 +68,15 @@ async function _sendTemplate(to, templateName, variables = []) {
 //   This is an automated activity alert from ZimQuote.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySchoolProfileView(schoolPhone, schoolName, parentPhone) {
-  const ts           = _timestamp();
-  const normalizedTo = _normalizeZimPhone(schoolPhone);
+  const ts = _timestamp();
   try {
-    await _sendTemplate(normalizedTo, "school_profile_view", [schoolName, parentPhone, ts]);
-    console.log(`[School Notify] school_profile_view sent to ${normalizedTo}`);
+    await _sendTemplate(schoolPhone, "school_profile_view", [schoolName, parentPhone, ts]);
+    console.log(`[School Notify] school_profile_view sent to ${schoolPhone}`);
   } catch (err) {
-    console.warn(`[School Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(`[School Notify] template failed (${err.message}), falling back to sendText`);
     try {
       await sendText(
-        normalizedTo,
+        schoolPhone,
 `New school profile view on ZimQuote.
 
 School: ${schoolName}
@@ -106,9 +85,7 @@ Time: ${ts}
 
 This is an automated activity alert from ZimQuote.`
       );
-    } catch (e) {
-      console.warn(`[School Notify] fallback sendText also failed for ${normalizedTo}: ${e.message}`);
-    }
+    } catch (e) { /* non-critical */ }
   }
 }
 
@@ -127,8 +104,7 @@ This is an automated activity alert from ZimQuote.`
 // back to sendText which includes the full message regardless.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySchoolEnquiry(schoolPhone, schoolName, parentPhone, message = "") {
-  const ts           = _timestamp();
-  const normalizedTo = _normalizeZimPhone(schoolPhone);
+  const ts = _timestamp();
 
   // Full text used for fallback (plain sendText) — always includes message
   const fallbackBody = message
@@ -151,20 +127,18 @@ This is an automated activity alert from ZimQuote.`;
   try {
     // Try 4-variable template first (re-submitted with Message field)
     // Falls back to 3-variable if not yet approved
-    await _sendTemplate(normalizedTo, "school_new_enquiry", [
+    await _sendTemplate(schoolPhone, "school_new_enquiry", [
       schoolName,
       parentPhone,
       message || "(no message)",
       ts
     ]);
-    console.log(`[School Notify] school_new_enquiry sent to ${normalizedTo}`);
+    console.log(`[School Notify] school_new_enquiry sent to ${schoolPhone}`);
   } catch (err) {
-    console.warn(`[School Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(`[School Notify] template failed (${err.message}), falling back to sendText`);
     try {
-      await sendText(normalizedTo, fallbackBody);
-    } catch (e) {
-      console.warn(`[School Notify] fallback sendText also failed for ${normalizedTo}: ${e.message}`);
-    }
+      await sendText(schoolPhone, fallbackBody);
+    } catch (e) { /* non-critical */ }
   }
 }
 
@@ -178,16 +152,15 @@ This is an automated activity alert from ZimQuote.`;
 //   This is an automated activity alert from ZimQuote.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySchoolApplicationInterest(schoolPhone, schoolName, parentPhone) {
-  const ts           = _timestamp();
-  const normalizedTo = _normalizeZimPhone(schoolPhone);
+  const ts = _timestamp();
   try {
-    await _sendTemplate(normalizedTo, "school_application_interest", [schoolName, parentPhone, ts]);
-    console.log(`[School Notify] school_application_interest sent to ${normalizedTo}`);
+    await _sendTemplate(schoolPhone, "school_application_interest", [schoolName, parentPhone, ts]);
+    console.log(`[School Notify] school_application_interest sent to ${schoolPhone}`);
   } catch (err) {
-    console.warn(`[School Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(`[School Notify] template failed (${err.message}), falling back to sendText`);
     try {
       await sendText(
-        normalizedTo,
+        schoolPhone,
 `New application interest received on ZimQuote.
 
 School: ${schoolName}
@@ -196,8 +169,6 @@ Time: ${ts}
 
 This is an automated activity alert from ZimQuote.`
       );
-    } catch (e) {
-      console.warn(`[School Notify] fallback sendText also failed for ${normalizedTo}: ${e.message}`);
-    }
+    } catch (e) { /* non-critical */ }
   }
 }
