@@ -2173,7 +2173,7 @@ async function notifySuppliersOfBuyerRequest(request) {
           const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
           return `${i + 1}. ${item.product} (${qty}${unit})`;
         })
-        .join(", ")
+      .join("\n")
         .slice(0, 900);
 
       const _templateLocation = request.area
