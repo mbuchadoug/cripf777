@@ -2167,13 +2167,14 @@ async function notifySuppliersOfBuyerRequest(request) {
         : Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
  
       // Build compact item summary for the template (single line, max 1024 chars)
+ // Template variable must be single-line — no newlines allowed
       const _templateItemSummary = (request.items || [])
         .map((item, i) => {
           const qty  = Number(item.quantity || 1);
           const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
           return `${i + 1}. ${item.product} (${qty}${unit})`;
         })
-      .join("\n")
+        .join(" | ")
         .slice(0, 900);
 
       const _templateLocation = request.area
