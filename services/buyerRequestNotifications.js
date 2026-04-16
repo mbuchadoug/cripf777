@@ -22,9 +22,21 @@ const ACCESS_TOKEN =
   process.env.META_ACCESS_TOKEN ||
   process.env.WHATSAPP_ACCESS_TOKEN;
 
+// ── Helper: normalize Zimbabwean phone numbers to international format ─────────
+// Handles:  0771234567  → 263771234567
+//           263771234567 → 263771234567  (already correct)
+//           +263771234567 → 263771234567 (strips the +)
+function _normalizeZimPhone(raw = "") {
+  let phone = String(raw).replace(/\D+/g, "");
+  if (phone.startsWith("0") && phone.length === 10) {
+    phone = "263" + phone.slice(1);
+  }
+  return phone;
+}
+
 // ─── Low-level: send a pre-approved Meta template message ─────────────────────
 async function _sendTemplate(to, templateName, variables = []) {
-  const phone = String(to).replace(/\D+/g, "");
+  const phone = _normalizeZimPhone(to); // ← fixed: was String(to).replace(/\D+/g, "") + passed raw `to`
 
   const components = variables.length
     ? [{
@@ -37,7 +49,7 @@ async function _sendTemplate(to, templateName, variables = []) {
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: "whatsapp",
-      to,
+      to:       phone,           // ← fixed: was `to` (raw), now `phone` (normalized)
       type:     "template",
       template: {
         name:       templateName,
@@ -89,19 +101,19 @@ export async function notifySupplierNewRequestTemplate({
   fullItemLines = null,
   replyExamples = "1=12.50"
 }) {
+  const normalizedPhone = _normalizeZimPhone(supplierPhone);
   try {
-    await _sendTemplate(supplierPhone, "supplier_new_buyer_request", [
+    await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
       ref,
       locationText,
       itemSummary
     ]);
-    console.log(`[BUY REQ TPL] supplier_new_buyer_request → ${supplierPhone} (${ref})`);
+    console.log(`[BUY REQ TPL] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
   } catch (err) {
-    console.warn(`[BUY REQ TPL] template failed for ${supplierPhone}: ${err.message}. Falling back to sendButtons.`);
-    // Fallback: rich interactive message (works within 24-hour session window)
+    console.warn(`[BUY REQ TPL] template failed for ${normalizedPhone}: ${err.message}. Falling back to sendButtons.`);
     try {
       const itemDisplay = fullItemLines || itemSummary;
-      await sendButtons(supplierPhone, {
+      await sendButtons(normalizedPhone, {
         text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
           `📍 ${locationText}\n\n` +
@@ -118,7 +130,7 @@ export async function notifySupplierNewRequestTemplate({
         ]
       });
     } catch (fallbackErr) {
-      console.error(`[BUY REQ TPL] fallback also failed: ${fallbackErr.message}`);
+      console.error(`[BUY REQ TPL] fallback also failed for ${normalizedPhone}: ${fallbackErr.message}`);
     }
   }
 }
@@ -145,24 +157,27 @@ export async function remindSupplierOfPendingRequest({
   itemSummary,
   minutesRemaining = 10
 }) {
+  const normalizedPhone = _normalizeZimPhone(supplierPhone);
   try {
-    await _sendTemplate(supplierPhone, "supplier_request_reminder", [
+    await _sendTemplate(normalizedPhone, "supplier_request_reminder", [
       ref,
       itemSummary,
       String(minutesRemaining)
     ]);
-    console.log(`[BUY REQ REMIND] supplier_request_reminder → ${supplierPhone} (${ref})`);
+    console.log(`[BUY REQ REMIND] supplier_request_reminder → ${normalizedPhone} (${ref})`);
   } catch (err) {
-    console.warn(`[BUY REQ REMIND] template failed: ${err.message}`);
+    console.warn(`[BUY REQ REMIND] template failed for ${normalizedPhone}: ${err.message}`);
     try {
       await sendText(
-        supplierPhone,
+        normalizedPhone,
         `⏰ *Reminder!*\n\n` +
         `A buyer is still waiting for a quote (${ref}).\n` +
         `📦 ${itemSummary}\n\n` +
         `This request closes in ${minutesRemaining} minutes.\n` +
         `Type *menu* → Marketplace → My Store to respond.`
       );
-    } catch (e) { /* non-critical */ }
+    } catch (e) {
+      console.warn(`[BUY REQ REMIND] fallback sendText also failed for ${normalizedPhone}: ${e.message}`);
+    }
   }
 }
