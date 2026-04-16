@@ -106,7 +106,8 @@ export async function notifySupplierNewRequestTemplate({
     await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
       ref,
       locationText,
-      itemSummary
+      itemSummary,
+      deliveryLine   // {{4}} — e.g. "🚚 Delivery to buyer needed" or "🏠 Collection / flexible"
     ]);
     console.log(`[BUY REQ TPL] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
   } catch (err) {
