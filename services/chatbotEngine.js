@@ -2218,20 +2218,18 @@ async function notifySuppliersOfBuyerRequest(request) {
         { length: Math.min(_notifItemCount, 4) },
         (_, i) => i === 1 ? "0" : (i * 4 + 8).toFixed(2)
       ).join(", ");
-
-      try {
+try {
         await sendText(_normalizedSupplierPhone,
           `📦 *${ref} — ${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed*\n` +
           `📍 ${_templateLocation} · ${_deliveryLine}\n` +
           `─────────────────\n` +
           `${_notifItemLines}\n` +
           `─────────────────\n\n` +
-          `💬 *Reply with prices in order, comma-separated:*\n` +
-          `_${_exPrices}_\n\n` +
-          `• Type *0* for items you cannot supply\n` +
-          `• Add a note: _msg delivering tomorrow_\n\n` +
-          `_System calculates totals. PDF quote sent to buyer automatically._\n` +
-          `Type *cancel* to go back.`
+          `💬 *Reply here with prices using: item number x price*\n` +
+          `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
+          `Only include items you can supply — skip the rest.\n` +
+          `Add a note: _msg delivering tomorrow_\n\n` +
+          `_PDF quote sent to buyer automatically._`
         );
       } catch (followupErr) {
         console.warn(`[BUYER REQ FOLLOWUP] failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
@@ -13011,12 +13009,11 @@ if (a.startsWith("req_offer_")) {
     `─────────────────\n` +
     `${_itemLines}\n` +
     `─────────────────\n\n` +
-    `💬 *Reply with prices in order, comma-separated:*\n` +
-    `_${_exPrices}_\n\n` +
-    `• Type *0* for items you cannot supply\n` +
-    `• Add a note: _msg delivering tomorrow_\n\n` +
-    `_System calculates totals. PDF quote sent to buyer automatically._\n` +
-    `Type *cancel* to go back.`
+    `💬 *Reply here with prices using: item number x price*\n` +
+    `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
+    `Only include items you can supply — skip the rest.\n` +
+    `Add a note: _msg delivering tomorrow_\n\n` +
+    `_PDF quote sent to buyer automatically._`
   );
 }
 
