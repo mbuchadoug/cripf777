@@ -2198,52 +2198,44 @@ async function notifySuppliersOfBuyerRequest(request) {
       const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
-      const _exEq = Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
-      const _exX  = Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}x${(i * 5 + 10).toFixed(2)}`).join(" ");
-      const _skipNote = _notifItemCount > 1 ? `• Can't supply an item? Type: _skip 2_\n` : "";
+     // Step 2: Pre-set awaiting_offer state so supplier can type prices immediately
+      // Then send item list as plain text — works after template opens the session
+      await UserSession.findOneAndUpdate(
+        { phone: _normalizedSupplierPhone },
+        {
+          $set: {
+            "tempData.sellerRequestReplyState": "awaiting_offer",
+            "tempData.sellerRequestId":         String(request._id)
+          }
+        },
+        { upsert: true }
+      );
 
-     // Small delay to let Meta register the template session
-      await new Promise(r => setTimeout(r, 2000));
+      // Delay 3s so Meta registers the template session before the follow-up
+      await new Promise(r => setTimeout(r, 3000));
+
+      const _exPrices = Array.from(
+        { length: Math.min(_notifItemCount, 4) },
+        (_, i) => i === 1 ? "0" : (i * 4 + 8).toFixed(2)
+      ).join(", ");
 
       try {
-        await sendButtons(_normalizedSupplierPhone, {
-          text:
-            `📦 *Full Item List — ${ref}*\n` +
-            `📍 ${_templateLocation} · ${_deliveryLine}\n` +
-            `─────────────────\n` +
-            `${_notifItemLines}\n` +
-            `─────────────────\n\n` +
-            `*Set your price per unit, in order:*\n` +
-            `Using = : _${_exEq}_\n` +
-            `Using x : _${_exX}_\n\n` +
-            `${_skipNote}` +
-            `• Add a note: _msg can deliver tomorrow_\n\n` +
-            `_System multiplies unit price × qty. PDF quote sent to buyer instantly._`,
-          buttons: [
-            { id: `req_offer_${String(request._id)}`,   title: "💬 Send My Prices" },
-            { id: `req_unavail_${String(request._id)}`, title: "❌ Not Available" }
-          ]
-        });
+        await sendText(_normalizedSupplierPhone,
+          `📦 *${ref} — ${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed*\n` +
+          `📍 ${_templateLocation} · ${_deliveryLine}\n` +
+          `─────────────────\n` +
+          `${_notifItemLines}\n` +
+          `─────────────────\n\n` +
+          `💬 *Reply with prices in order, comma-separated:*\n` +
+          `_${_exPrices}_\n\n` +
+          `• Type *0* for items you cannot supply\n` +
+          `• Add a note: _msg delivering tomorrow_\n\n` +
+          `_System calculates totals. PDF quote sent to buyer automatically._\n` +
+          `Type *cancel* to go back.`
+        );
       } catch (followupErr) {
-        // If interactive fails, send plain text as fallback so supplier still sees the list
-        try {
-          await sendText(_normalizedSupplierPhone,
-            `📦 *Full Item List — ${ref}*\n` +
-            `📍 ${_templateLocation} · ${_deliveryLine}\n` +
-            `─────────────────\n` +
-            `${_notifItemLines}\n` +
-            `─────────────────\n\n` +
-            `*To quote:* type prices in order\n` +
-            `Using = : _${_exEq}_\n` +
-            `Using x : _${_exX}_\n\n` +
-            `${_skipNote}` +
-            `Type *cancel* to go back.`
-          );
-        } catch (textErr) {
-          console.warn(`[BUYER REQ FOLLOWUP] both interactive and text failed for ${_normalizedSupplierPhone}: ${textErr.message}`);
-        }
+        console.warn(`[BUYER REQ FOLLOWUP] failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
       }
-
       notifiedIds.push(supplier._id);
     } catch (err) {
       console.error("[BUYER REQUEST NOTIFY]", err.message);
@@ -3041,9 +3033,10 @@ Reply *menu* to start.`);
         return sendText(from, "❌ Supplier profile not found.");
       }
 
-      const requestedProducts = (request.items || []).map(i => i.product);
-      const parsed = parseSupplierPriceInput(text, requestedProducts, supplier.profileType === "service");
-
+     const requestedProducts = (request.items || []).map(i => i.product);
+      // Treat "0" entries as "skip" — sellers use 0 to mean "can't supply this item"
+      const _priceText = String(text || "").replace(/(?<![.\d])0(?![.\d])/g, "skip");
+      const parsed = parseSupplierPriceInput(_priceText, requestedProducts, supplier.profileType === "service");
       let responseItems = [];
       let totalAmount = null;
       let message = "";
@@ -12998,43 +12991,33 @@ if (a.startsWith("req_offer_")) {
     { upsert: true }
   );
 
-  // Build numbered item list so supplier sees exactly what to price
-  const _offerItemLines = (request.items || []).map((item, i) => {
+  const _items     = (request.items || []);
+  const _itemLines = _items.map((item, i) => {
     const qty  = Number(item.quantity || 1);
     const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
     return `${i + 1}. ${item.product} × ${qty}${unit}`;
   }).join("\n");
- 
-  // Generate concrete example prices from the actual item count
-  const _offerCount   = Math.min((request.items || []).length, 3);
-  const _offerExample = Array.from({ length: _offerCount }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
- 
-  // Build example using actual item count
-  const _offerCountFull = (request.items || []).length;
-  const _exampleEq  = Array.from({ length: Math.min(_offerCountFull, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
-  const _exampleX   = Array.from({ length: Math.min(_offerCountFull, 3) }, (_, i) => `${i + 1}x${(i * 5 + 10).toFixed(2)}`).join(" ");
-  const _skipNote   = _offerCountFull > 1 ? `• Can't supply item 2? Type: _skip 2_\n` : "";
 
-  return sendButtons(from, {
-    text:
-      `🔥 *New Request (${ref || ""})*\n\n` +
-      `📍 ${request.city || ""}${request.area ? ` · ${request.area}` : ""}\n\n` +
-      `📦 *Items — set your price per unit:*\n` +
-      `─────────────────\n` +
-      `${_offerItemLines}\n` +
-      `─────────────────\n\n` +
-      `*Reply with prices in order:*\n` +
-      `Using = : _${_exampleEq}_\n` +
-      `Using x : _${_exampleX}_\n\n` +
-      `${_skipNote}` +
-      `• Add a note: _msg I can deliver tomorrow_\n\n` +
-      `_The system multiplies unit price × qty automatically._\n` +
-      `_PDF quote sent to buyer instantly after you reply._`,
-    buttons: [
-      { id: `req_offer_confirm_${requestId}`, title: "✅ I'm Sending Prices" },
-      { id: `req_unavail_${requestId}`,       title: "❌ Not Available" }
-    ]
-  });
+  const _exPrices = Array.from(
+    { length: Math.min(_items.length, 4) },
+    (_, i) => i === 1 ? "0" : (i * 4 + 8).toFixed(2)
+  ).join(", ");
+
+  const _reqRef = buildBuyerRequestRef(request);
+
+  return sendText(from,
+    `📦 *${_reqRef} — ${_items.length} item${_items.length === 1 ? "" : "s"} needed*\n` +
+    `📍 ${request.city || ""}${request.area ? ` · ${request.area}` : ""}\n` +
+    `─────────────────\n` +
+    `${_itemLines}\n` +
+    `─────────────────\n\n` +
+    `💬 *Reply with prices in order, comma-separated:*\n` +
+    `_${_exPrices}_\n\n` +
+    `• Type *0* for items you cannot supply\n` +
+    `• Add a note: _msg delivering tomorrow_\n\n` +
+    `_System calculates totals. PDF quote sent to buyer automatically._\n` +
+    `Type *cancel* to go back.`
+  );
 }
 
 if (a.startsWith("req_auto_")) {
