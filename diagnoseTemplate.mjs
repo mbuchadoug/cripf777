@@ -88,9 +88,9 @@ try {
       console.log(`  - ${t.name} [${t.status}]`);
     });
     if (!templates.find(t => t.name === "school_profile_view")) {
-      console.warn("  ⚠️  school_profile_view NOT found in this token's WABA — WABA mismatch confirmed!");
+      console.warn("  ⚠️  school_profile_view NOT found in this token's WABA - WABA mismatch confirmed!");
     } else {
-      console.log("  ✅ school_profile_view found in this WABA — template is accessible");
+      console.log("  ✅ school_profile_view found in this WABA - template is accessible");
     }
   }
 } catch (e) {
@@ -136,19 +136,19 @@ try {
 
   const msg = res.data?.messages?.[0];
   if (msg) {
-    console.log(`\n✅ Meta accepted — message_id: ${msg.id}, status: ${msg.message_status}`);
+    console.log(`\n✅ Meta accepted - message_id: ${msg.id}, status: ${msg.message_status}`);
     console.log("Watch your WhatsApp for delivery. If you get the message, templates work.");
     console.log("If you don't receive it within 60 seconds, the issue is on Meta's delivery side.");
   }
 
 } catch (e) {
   const errData = e.response?.data;
-  console.error("Step 4 FAILED — HTTP", e.response?.status);
+  console.error("Step 4 FAILED - HTTP", e.response?.status);
   console.error("Meta error response:", JSON.stringify(errData, null, 2));
   if (errData?.error?.code === 190) {
     console.error("→ Token is invalid or expired (code 190)");
   } else if (errData?.error?.code === 100) {
-    console.error("→ Invalid parameter — likely wrong PHONE_NUMBER_ID or template name mismatch");
+    console.error("→ Invalid parameter - likely wrong PHONE_NUMBER_ID or template name mismatch");
   } else if (errData?.error?.code === 131030) {
     console.error("→ Recipient phone not on WhatsApp");
   } else if (errData?.error?.code === 132001) {

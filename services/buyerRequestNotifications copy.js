@@ -1,5 +1,5 @@
 // services/buyerRequestNotifications.js
-// ─── Buyer Request — Meta Template Notifications ─────────────────────────────
+// ─── Buyer Request - Meta Template Notifications ─────────────────────────────
 //
 // Sends WhatsApp template messages to suppliers so they are reached even
 // when they haven't messaged the bot in the last 24 hours.

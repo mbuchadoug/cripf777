@@ -1,5 +1,5 @@
 // services/buyerRequestNotifications.js
-// ─── Buyer Request — Meta Template Notifications ─────────────────────────────
+// ─── Buyer Request - Meta Template Notifications ─────────────────────────────
 //
 // Strategy: Template is a SHORT PING only (ref + item count + location).
 // Full item list + pricing form is shown when supplier taps into the chatbot.
@@ -108,7 +108,7 @@ export async function notifySupplierNewRequestTemplate({
           `Enter prices as: _${replyExamples}_\n` +
           `Or use x: _1x12.50, 2x11.00_\n` +
           `Skip items: _skip 2_ or _skip 2,3_\n\n` +
-          `Respond now — buyers pick the first good quote.`,
+          `Respond now - buyers pick the first good quote.`,
         buttons: [
           { id: `req_offer_${requestId}`,   title: "💬 Send Offer" },
           { id: `req_unavail_${requestId}`, title: "❌ Not Available" }

@@ -1565,7 +1565,7 @@ function isBuyerRequestHeadingLine(line = "") {
   if (!raw) return true;
 
   const clean = raw
-    .replace(/[–—]/g, "-")
+    .replace(/[–-]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1803,7 +1803,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // No quantity provided — still valid
+  // No quantity provided - still valid
   return {
     items: [
       {

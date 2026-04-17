@@ -1572,7 +1572,7 @@ function isBuyerRequestHeadingLine(line = "") {
   if (!raw) return true;
 
   const clean = raw
-    .replace(/[–—]/g, "-")
+    .replace(/[–-]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1810,7 +1810,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // No quantity provided — still valid
+  // No quantity provided - still valid
   return {
     items: [
       {
@@ -2107,7 +2107,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   ).length;
  
   const _moreComingLine = request.status === "open"
-    ? `\n_Request still open — more quotes may arrive._`
+    ? `\n_Request still open - more quotes may arrive._`
     : "";
  
   await sendButtons(request.buyerPhone, {
@@ -2184,7 +2184,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? "Delivery to buyer needed"
         : "Collection / flexible";
 
-      // Use Meta template — reaches supplier even outside 24-hour session window.
+      // Use Meta template - reaches supplier even outside 24-hour session window.
       // Falls back to sendButtons automatically if template fails (within session).
       await notifySupplierNewRequestTemplate({
         supplierPhone: supplier.phone,
@@ -3061,7 +3061,7 @@ Reply *menu* to start.`);
         { upsert: true }
       );
  
-      // Track supplier response speed (non-blocking — never delays the buyer notification)
+      // Track supplier response speed (non-blocking - never delays the buyer notification)
       trackSupplierResponseSpeed(supplier.phone, request.createdAt).catch(err =>
         console.error("[RESPONSE SPEED]", err.message)
       );
@@ -3077,7 +3077,7 @@ Reply *menu* to start.`);
  
       const _competitionLine = _otherQuoteCount > 0
         ? `\n_${_otherQuoteCount} other seller${_otherQuoteCount === 1 ? "" : "s"} also quoted this buyer._`
-        : `\n_⚡ You're the first to respond — great timing!_`;
+        : `\n_⚡ You're the first to respond - great timing!_`;
  
       return sendButtons(from, {
         text: `✅ *Your offer has been sent to the buyer.*${_competitionLine}`,
@@ -12939,7 +12939,7 @@ if (a.startsWith("req_offer_")) {
     `💬 *Send Your Quote*\n\n` +
     `📋 Buyer needs:\n${_offerItemLines}\n\n` +
     `─────────────────\n` +
-    `*Fastest — number=price:*\n` +
+    `*Fastest - number=price:*\n` +
     `_${_offerExample}_\n\n` +
     `*Other options:*\n` +
     `• Skip item: _skip 2_  or  _skip 2, 3_\n` +
@@ -13032,7 +13032,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
     });
   }
  
-  // Send full comparison as text (can be long — plain text handles it best)
+  // Send full comparison as text (can be long - plain text handles it best)
   const _bvqComparison = formatBuyerQuoteComparison(_bvqRequest);
   await sendText(from, _bvqComparison);
  

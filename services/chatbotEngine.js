@@ -1572,7 +1572,7 @@ function isBuyerRequestHeadingLine(line = "") {
   if (!raw) return true;
 
   const clean = raw
-    .replace(/[–—]/g, "-")
+    .replace(/[–-]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1810,7 +1810,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // No quantity provided — still valid
+  // No quantity provided - still valid
   return {
     items: [
       {
@@ -2107,7 +2107,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   ).length;
  
   const _moreComingLine = request.status === "open"
-    ? `\n_Request still open — more quotes may arrive._`
+    ? `\n_Request still open - more quotes may arrive._`
     : "";
  
   await sendButtons(request.buyerPhone, {
@@ -2167,8 +2167,8 @@ async function notifySuppliersOfBuyerRequest(request) {
         : Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
  
       // Build compact item summary for the template (single line, max 1024 chars)
- // Template variable must be single-line — no newlines allowed
-     // Template ping only — full item list shown when supplier taps into chatbot
+ // Template variable must be single-line - no newlines allowed
+     // Template ping only - full item list shown when supplier taps into chatbot
       const _templateItemCount = (request.items || []).length;
 
       const _templateLocation = request.area
@@ -2179,7 +2179,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? "Delivery to buyer needed"
         : "Collection / flexible";
 
-   // Step 1: Send template ping — reaches supplier even outside 24-hour window
+   // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
         supplierPhone: supplier.phone,
         requestId:     String(request._id),
@@ -2192,14 +2192,14 @@ async function notifySuppliersOfBuyerRequest(request) {
         replyExamples: _notifExamples
       });
 
-      // Step 2: Immediately send interactive pricing form — template opens the session
+      // Step 2: Immediately send interactive pricing form - template opens the session
       // so this sendButtons is always deliverable right after the template ping.
       const _supplierPhone = String(supplier.phone).replace(/\D+/g, "");
       const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
      // Step 2: Pre-set awaiting_offer state so supplier can type prices immediately
-      // Then send item list as plain text — works after template opens the session
+      // Then send item list as plain text - works after template opens the session
       await UserSession.findOneAndUpdate(
         { phone: _normalizedSupplierPhone },
         {
@@ -2220,14 +2220,14 @@ async function notifySuppliersOfBuyerRequest(request) {
       ).join(", ");
 try {
         await sendText(_normalizedSupplierPhone,
-          `📦 *${ref} — ${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed*\n` +
+          `📦 *${ref} - ${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed*\n` +
           `📍 ${_templateLocation} · ${_deliveryLine}\n` +
           `─────────────────\n` +
           `${_notifItemLines}\n` +
           `─────────────────\n\n` +
           `💬 *Reply here with prices using: item number x price*\n` +
           `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
-          `Only include items you can supply — skip the rest.\n` +
+          `Only include items you can supply - skip the rest.\n` +
           `Add a note: _msg delivering tomorrow_\n\n` +
           `_PDF quote sent to buyer automatically._`
         );
@@ -3032,7 +3032,7 @@ Reply *menu* to start.`);
       }
 
      const requestedProducts = (request.items || []).map(i => i.product);
-      // Treat "0" entries as "skip" — sellers use 0 to mean "can't supply this item"
+      // Treat "0" entries as "skip" - sellers use 0 to mean "can't supply this item"
       const _priceText = String(text || "").replace(/(?<![.\d])0(?![.\d])/g, "skip");
       const parsed = parseSupplierPriceInput(_priceText, requestedProducts, supplier.profileType === "service");
       let responseItems = [];
@@ -3098,7 +3098,7 @@ Reply *menu* to start.`);
         { upsert: true }
       );
  
-      // Track supplier response speed (non-blocking — never delays the buyer notification)
+      // Track supplier response speed (non-blocking - never delays the buyer notification)
       trackSupplierResponseSpeed(supplier.phone, request.createdAt).catch(err =>
         console.error("[RESPONSE SPEED]", err.message)
       );
@@ -3114,7 +3114,7 @@ Reply *menu* to start.`);
  
       const _competitionLine = _otherQuoteCount > 0
         ? `\n_${_otherQuoteCount} other seller${_otherQuoteCount === 1 ? "" : "s"} also quoted this buyer._`
-        : `\n_⚡ You're the first to respond — great timing!_`;
+        : `\n_⚡ You're the first to respond - great timing!_`;
  
       return sendButtons(from, {
         text: `✅ *Your offer has been sent to the buyer.*${_competitionLine}`,
@@ -12952,7 +12952,7 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
 }
 
 if (a.startsWith("req_offer_confirm_")) {
-  // Treat same as req_offer_ — just set awaiting_offer state
+  // Treat same as req_offer_ - just set awaiting_offer state
   const requestId = a.replace("req_offer_confirm_", "");
   const request = await BuyerRequest.findById(requestId);
   if (!request) return sendText(from, "❌ Request not found or expired.");
@@ -13004,14 +13004,14 @@ if (a.startsWith("req_offer_")) {
   const _reqRef = buildBuyerRequestRef(request);
 
   return sendText(from,
-    `📦 *${_reqRef} — ${_items.length} item${_items.length === 1 ? "" : "s"} needed*\n` +
+    `📦 *${_reqRef} - ${_items.length} item${_items.length === 1 ? "" : "s"} needed*\n` +
     `📍 ${request.city || ""}${request.area ? ` · ${request.area}` : ""}\n` +
     `─────────────────\n` +
     `${_itemLines}\n` +
     `─────────────────\n\n` +
     `💬 *Reply here with prices using: item number x price*\n` +
     `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
-    `Only include items you can supply — skip the rest.\n` +
+    `Only include items you can supply - skip the rest.\n` +
     `Add a note: _msg delivering tomorrow_\n\n` +
     `_PDF quote sent to buyer automatically._`
   );
@@ -13099,7 +13099,7 @@ if (a.startsWith("buyer_view_all_quotes_")) {
     });
   }
  
-  // Send full comparison as text (can be long — plain text handles it best)
+  // Send full comparison as text (can be long - plain text handles it best)
   const _bvqComparison = formatBuyerQuoteComparison(_bvqRequest);
   await sendText(from, _bvqComparison);
  

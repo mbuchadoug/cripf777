@@ -133,7 +133,7 @@ const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@cripfcnt.com";
 // SETUP:
 //   npm install node-cron   (if not already installed)
 //
-// USAGE — add this to your server.js or app.js ONCE:
+// USAGE - add this to your server.js or app.js ONCE:
 //
 //   import "./cron/buyerRequestCron.js";
 //

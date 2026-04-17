@@ -60,7 +60,7 @@ export async function autoCloseExpiredRequests({
         const topQuotes = validQuotes.slice(0, 3).map((q, i) => {
           const name      = q.supplierName || `Supplier ${i + 1}`;
           const totalLine = typeof q.totalAmount === "number"
-            ? ` — $${Number(q.totalAmount).toFixed(2)}`
+            ? ` - $${Number(q.totalAmount).toFixed(2)}`
             : "";
           return `${i + 1}. 🏪 ${name}${totalLine}`;
         }).join("\n");
@@ -160,7 +160,7 @@ export async function trackSupplierResponseSpeed(supplierPhone, requestCreatedAt
       `[RESP SPEED] ${supplierPhone}: ${minutesTaken} min | new avg: ${newAvg} min | count: ${prevCount + 1}`
     );
   } catch (err) {
-    // Non-critical — never throw
+    // Non-critical - never throw
     console.error("[RESP SPEED TRACK]", err.message);
   }
 }
@@ -187,7 +187,7 @@ export function formatRequestSummary(request) {
       : `📍 Location not specified`;
 
   const statusIcon  = request.status === "open" ? "🟢" : "🔴";
-  const statusLabel = request.status === "open"  ? "Open — waiting for quotes"
+  const statusLabel = request.status === "open"  ? "Open - waiting for quotes"
     : request.status === "closed"                ? "Closed"
     : "Expired";
 
@@ -271,7 +271,7 @@ export function formatBuyerQuoteComparison(request) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL: build a short human-readable reference like REQ-A1B2
-// (mirrors the same logic in chatbotEngine.js — keep in sync)
+// (mirrors the same logic in chatbotEngine.js - keep in sync)
 // ─────────────────────────────────────────────────────────────────────────────
 function _buildRef(request) {
   if (!request?._id) return "REQ-????";
