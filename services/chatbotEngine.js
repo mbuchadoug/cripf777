@@ -2179,8 +2179,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? "Delivery to buyer needed"
         : "Collection / flexible";
 
-      // Use Meta template — reaches supplier even outside 24-hour session window.
-      // Falls back to sendButtons automatically if template fails (within session).
+   // Step 1: Send template ping — reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
         supplierPhone: supplier.phone,
         requestId:     String(request._id),
@@ -2192,6 +2191,39 @@ async function notifySuppliersOfBuyerRequest(request) {
         fullItemLines: _notifItemLines,
         replyExamples: _notifExamples
       });
+
+      // Step 2: Immediately send interactive pricing form — template opens the session
+      // so this sendButtons is always deliverable right after the template ping.
+      const _supplierPhone = String(supplier.phone).replace(/\D+/g, "");
+      const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
+        ? "263" + _supplierPhone.slice(1) : _supplierPhone;
+
+      const _exEq = Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
+      const _exX  = Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}x${(i * 5 + 10).toFixed(2)}`).join(" ");
+      const _skipNote = _notifItemCount > 1 ? `• Can't supply an item? Type: _skip 2_\n` : "";
+
+      try {
+        await sendButtons(_normalizedSupplierPhone, {
+          text:
+            `📦 *Full Item List — ${ref}*\n` +
+            `📍 ${_templateLocation} · ${_deliveryLine}\n` +
+            `─────────────────\n` +
+            `${_notifItemLines}\n` +
+            `─────────────────\n\n` +
+            `*Set your price per unit, in order:*\n` +
+            `Using = : _${_exEq}_\n` +
+            `Using x : _${_exX}_\n\n` +
+            `${_skipNote}` +
+            `• Add a note: _msg can deliver tomorrow_\n\n` +
+            `_System multiplies unit price × qty. PDF quote sent to buyer instantly._`,
+          buttons: [
+            { id: `req_offer_${String(request._id)}`,   title: "💬 Send My Prices" },
+            { id: `req_unavail_${String(request._id)}`, title: "❌ Not Available" }
+          ]
+        });
+      } catch (followupErr) {
+        console.warn(`[BUYER REQ FOLLOWUP] interactive form failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
+      }
 
       notifiedIds.push(supplier._id);
     } catch (err) {
