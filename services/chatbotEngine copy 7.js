@@ -2168,8 +2168,14 @@ async function notifySuppliersOfBuyerRequest(request) {
  
       // Build compact item summary for the template (single line, max 1024 chars)
  // Template variable must be single-line — no newlines allowed
-     // Template ping only — full item list shown when supplier taps into chatbot
-      const _templateItemCount = (request.items || []).length;
+      const _templateItemSummary = (request.items || [])
+        .map((item, i) => {
+          const qty  = Number(item.quantity || 1);
+          const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+          return `${i + 1}. ${item.product} (${qty}${unit})`;
+        })
+        .join(" | ")
+        .slice(0, 900);
 
       const _templateLocation = request.area
         ? `${request.area}${request.city ? `, ${request.city}` : ""}`
@@ -2186,9 +2192,9 @@ async function notifySuppliersOfBuyerRequest(request) {
         requestId:     String(request._id),
         ref,
         locationText:  _templateLocation,
-        itemCount:     _templateItemCount,
-        itemSummary:   _notifItemLines,
+        itemSummary:   _templateItemSummary,
         deliveryLine:  _deliveryLine,
+        // Pass full item lines + reply guide for the in-session fallback message
         fullItemLines: _notifItemLines,
         replyExamples: _notifExamples
       });
@@ -12909,28 +12915,6 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
   });
 }
 
-if (a.startsWith("req_offer_confirm_")) {
-  // Treat same as req_offer_ — just set awaiting_offer state
-  const requestId = a.replace("req_offer_confirm_", "");
-  const request = await BuyerRequest.findById(requestId);
-  if (!request) return sendText(from, "❌ Request not found or expired.");
-
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.sellerRequestReplyState": "awaiting_offer",
-        "tempData.sellerRequestId": requestId
-      }
-    },
-    { upsert: true }
-  );
-
-  return sendText(from, `✅ *Ready!* Now type your prices.\n\nFormat: _1=12.50, 2=8.00_ or _1x12.50 2x8.00_\n\nType *cancel* to go back.`);
-}
-
-
-
 if (a.startsWith("req_offer_")) {
   const requestId = a.replace("req_offer_", "");
   const request = await BuyerRequest.findById(requestId);
@@ -12958,32 +12942,20 @@ if (a.startsWith("req_offer_")) {
   const _offerCount   = Math.min((request.items || []).length, 3);
   const _offerExample = Array.from({ length: _offerCount }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
  
-  // Build example using actual item count
-  const _offerCountFull = (request.items || []).length;
-  const _exampleEq  = Array.from({ length: Math.min(_offerCountFull, 3) }, (_, i) => `${i + 1}=${(i * 5 + 10).toFixed(2)}`).join(", ");
-  const _exampleX   = Array.from({ length: Math.min(_offerCountFull, 3) }, (_, i) => `${i + 1}x${(i * 5 + 10).toFixed(2)}`).join(" ");
-  const _skipNote   = _offerCountFull > 1 ? `• Can't supply item 2? Type: _skip 2_\n` : "";
-
-  return sendButtons(from, {
-    text:
-      `🔥 *New Request (${ref || ""})*\n\n` +
-      `📍 ${request.city || ""}${request.area ? ` · ${request.area}` : ""}\n\n` +
-      `📦 *Items — set your price per unit:*\n` +
-      `─────────────────\n` +
-      `${_offerItemLines}\n` +
-      `─────────────────\n\n` +
-      `*Reply with prices in order:*\n` +
-      `Using = : _${_exampleEq}_\n` +
-      `Using x : _${_exampleX}_\n\n` +
-      `${_skipNote}` +
-      `• Add a note: _msg I can deliver tomorrow_\n\n` +
-      `_The system multiplies unit price × qty automatically._\n` +
-      `_PDF quote sent to buyer instantly after you reply._`,
-    buttons: [
-      { id: `req_offer_confirm_${requestId}`, title: "✅ I'm Sending Prices" },
-      { id: `req_unavail_${requestId}`,       title: "❌ Not Available" }
-    ]
-  });
+  return sendText(
+    from,
+    `💬 *Send Your Quote*\n\n` +
+    `📋 Buyer needs:\n${_offerItemLines}\n\n` +
+    `─────────────────\n` +
+    `*Fastest — number=price:*\n` +
+    `_${_offerExample}_\n\n` +
+    `*Other options:*\n` +
+    `• Skip item: _skip 2_  or  _skip 2, 3_\n` +
+    `• By name: _cement: 12.50_\n` +
+    `• Message only: _msg I have most items, can deliver tomorrow_\n\n` +
+    `You can mix pricing and a message in one reply.\n\n` +
+    `Type *cancel* to go back.`
+  );
 }
 
 if (a.startsWith("req_auto_")) {

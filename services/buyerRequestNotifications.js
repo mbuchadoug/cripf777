@@ -1,14 +1,11 @@
 // services/buyerRequestNotifications.js
 // ─── Buyer Request — Meta Template Notifications ─────────────────────────────
 //
-// Sends WhatsApp template messages to suppliers so they are reached even
-// when they haven't messaged the bot in the last 24 hours.
+// Strategy: Template is a SHORT PING only (ref + item count + location).
+// Full item list + pricing form is shown when supplier taps into the chatbot.
+// This avoids the Meta template single-line variable limitation entirely.
 //
-// Template must be pre-approved in Meta Business Manager before use.
-// See README / implementation guide for template submission details.
-//
-// Falls back to a regular sendButtons() call if the template fails
-// (works within the 24-hour session window).
+// Falls back to sendButtons() if template fails (within 24-hour session window).
 
 import axios   from "axios";
 import { sendButtons, sendText } from "./metaSender.js";
@@ -23,9 +20,6 @@ const ACCESS_TOKEN =
   process.env.WHATSAPP_ACCESS_TOKEN;
 
 // ── Helper: normalize Zimbabwean phone numbers to international format ─────────
-// Handles:  0771234567  → 263771234567
-//           263771234567 → 263771234567  (already correct)
-//           +263771234567 → 263771234567 (strips the +)
 function _normalizeZimPhone(raw = "") {
   let phone = String(raw).replace(/\D+/g, "");
   if (phone.startsWith("0") && phone.length === 10) {
@@ -36,7 +30,7 @@ function _normalizeZimPhone(raw = "") {
 
 // ─── Low-level: send a pre-approved Meta template message ─────────────────────
 async function _sendTemplate(to, templateName, variables = []) {
-  const phone = _normalizeZimPhone(to); // ← fixed: was String(to).replace(/\D+/g, "") + passed raw `to`
+  const phone = _normalizeZimPhone(to);
 
   const components = variables.length
     ? [{
@@ -49,7 +43,7 @@ async function _sendTemplate(to, templateName, variables = []) {
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: "whatsapp",
-      to:       phone,           // ← fixed: was `to` (raw), now `phone` (normalized)
+      to:       phone,
       type:     "template",
       template: {
         name:       templateName,
@@ -70,44 +64,33 @@ async function _sendTemplate(to, templateName, variables = []) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify a supplier of a new buyer request
-// ─────────────────────────────────────────────────────────────────────────────
 //
-// Submit this template body to Meta Business Manager:
-//
-//   Template name: supplier_new_buyer_request
-//   Category:      UTILITY
-//   Language:      English (en)
-//
-//   Body text:
-//   "🔥 New buyer request on ZimQuote!\n
-//   Reference: {{1}}\n
-//   Location: {{2}}\n
-//   Items: {{3}}\n
-//   Open the ZimQuote chatbot now to send your quote and win this customer."
-//
-// Variables:
-//   {{1}} = REQ-XXXX
-//   {{2}} = e.g. "Avondale, Harare"
-//   {{3}} = e.g. "Cement (10 bags), River sand (2 trips)"
-//
+// Template {{3}} = short count summary e.g. "6 items requested"
+// Full item list shown when supplier taps Send Offer in chatbot.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierNewRequestTemplate({
   supplierPhone,
   requestId,
   ref,
   locationText,
+  itemCount,
   itemSummary,
   deliveryLine  = "Collection / flexible",
   fullItemLines = null,
   replyExamples = "1=12.50"
 }) {
   const normalizedPhone = _normalizeZimPhone(supplierPhone);
+
+  const templateItemSummary = itemCount
+    ? `${itemCount} item${itemCount === 1 ? "" : "s"} requested`
+    : itemSummary || "Items requested";
+
   try {
     await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
       ref,
       locationText,
-      itemSummary,
-      deliveryLine   // {{4}} — e.g. "🚚 Delivery to buyer needed" or "🏠 Collection / flexible"
+      templateItemSummary,
+      deliveryLine
     ]);
     console.log(`[BUY REQ TPL] supplier_new_buyer_request → ${normalizedPhone} (${ref})`);
   } catch (err) {
@@ -117,13 +100,14 @@ export async function notifySupplierNewRequestTemplate({
       await sendButtons(normalizedPhone, {
         text:
           `🔥 *New Buyer Request* (${ref})\n\n` +
-          `📍 ${locationText}\n\n` +
-          `📦 Items needed:\n${itemDisplay}\n\n` +
+          `📍 ${locationText}\n` +
           `${deliveryLine}\n\n` +
-          `*How to reply (tap Send Offer):*\n` +
-          `• Price by number: _${replyExamples}_\n` +
-          `• Skip an item: _skip 2_\n` +
-          `• Message: _msg I can do tomorrow_\n\n` +
+          `📦 *Items needed:*\n${itemDisplay}\n\n` +
+          `─────────────────\n` +
+          `*To quote, tap Send Offer below.*\n` +
+          `Enter prices as: _${replyExamples}_\n` +
+          `Or use x: _1x12.50, 2x11.00_\n` +
+          `Skip items: _skip 2_ or _skip 2,3_\n\n` +
           `Respond now — buyers pick the first good quote.`,
         buttons: [
           { id: `req_offer_${requestId}`,   title: "💬 Send Offer" },
@@ -138,18 +122,6 @@ export async function notifySupplierNewRequestTemplate({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Remind supplier of unanswered request (5 min nudge)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-//   Template name: supplier_request_reminder
-//   Category:      UTILITY
-//   Language:      English (en)
-//
-//   Body text:
-//   "⏰ Reminder: A buyer is waiting for your quote on ZimQuote!\n
-//   Reference: {{1}}\n
-//   Items: {{2}}\n
-//   This request closes in {{3}} minutes. Tap to respond now."
-//
 // ─────────────────────────────────────────────────────────────────────────────
 export async function remindSupplierOfPendingRequest({
   supplierPhone,
