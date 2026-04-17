@@ -2202,6 +2202,9 @@ async function notifySuppliersOfBuyerRequest(request) {
       const _exX  = Array.from({ length: Math.min(_notifItemCount, 3) }, (_, i) => `${i + 1}x${(i * 5 + 10).toFixed(2)}`).join(" ");
       const _skipNote = _notifItemCount > 1 ? `• Can't supply an item? Type: _skip 2_\n` : "";
 
+     // Small delay to let Meta register the template session
+      await new Promise(r => setTimeout(r, 2000));
+
       try {
         await sendButtons(_normalizedSupplierPhone, {
           text:
@@ -2222,7 +2225,23 @@ async function notifySuppliersOfBuyerRequest(request) {
           ]
         });
       } catch (followupErr) {
-        console.warn(`[BUYER REQ FOLLOWUP] interactive form failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
+        // If interactive fails, send plain text as fallback so supplier still sees the list
+        try {
+          await sendText(_normalizedSupplierPhone,
+            `📦 *Full Item List — ${ref}*\n` +
+            `📍 ${_templateLocation} · ${_deliveryLine}\n` +
+            `─────────────────\n` +
+            `${_notifItemLines}\n` +
+            `─────────────────\n\n` +
+            `*To quote:* type prices in order\n` +
+            `Using = : _${_exEq}_\n` +
+            `Using x : _${_exX}_\n\n` +
+            `${_skipNote}` +
+            `Type *cancel* to go back.`
+          );
+        } catch (textErr) {
+          console.warn(`[BUYER REQ FOLLOWUP] both interactive and text failed for ${_normalizedSupplierPhone}: ${textErr.message}`);
+        }
       }
 
       notifiedIds.push(supplier._id);
