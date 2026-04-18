@@ -97,7 +97,11 @@ export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, o
       ? `💵 Partial total: $${Number(totals.totalAmount || 0).toFixed(2)} • ${totals.unpricedItems.length} item${totals.unpricedItems.length === 1 ? "" : "s"} still need pricing`
       : `💵 Total: Pending - set your price when accepting`;
 
-  await sendButtons(supplierPhone, {
+  const normalizedPhone = String(supplierPhone).replace(/\D+/g, "");
+  const fullPhone = normalizedPhone.startsWith("0") && normalizedPhone.length === 10
+    ? "263" + normalizedPhone.slice(1) : normalizedPhone;
+
+  const interactiveMsg = {
     text:
       `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "New Booking Request!" : "New Order!"}*\n\n` +
       `${itemLines}\n\n` +
@@ -108,7 +112,70 @@ export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, o
       { id: `sup_accept_${order._id}`, title: isServiceSupplier ? "✅ Accept Booking" : "✅ Accept" },
       { id: `sup_decline_${order._id}`, title: "❌ Decline" }
     ]
-  });
+  };
+
+  // Try interactive sendButtons first (works within 24hr session window)
+  try {
+    await sendButtons(fullPhone, interactiveMsg);
+    return;
+  } catch (err) {
+    console.warn(`[ORDER NOTIFY] sendButtons failed for ${fullPhone}: ${err.message} — trying template fallback`);
+  }
+
+  // Outside 24hr window — send template ping first to open the session,
+  // then follow up with the full order details via sendText
+  try {
+    const axios = (await import("axios")).default;
+    const GRAPH_API_VERSION = "v24.0";
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+    const ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+
+    const itemCount = (order.items || []).length;
+    const deliveryShort = order.delivery?.required ? "Delivery needed" : "Collection / flexible";
+    const orderRef = `ORD-${String(order._id).slice(-6).toUpperCase()}`;
+
+    // Send template ping using existing supplier_new_buyer_request template
+    await axios.post(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: fullPhone,
+        type: "template",
+        template: {
+          name: "supplier_new_buyer_request",
+          language: { code: "en" },
+          components: [{
+            type: "body",
+            parameters: [
+              { type: "text", text: orderRef },
+              { type: "text", text: supplier?.location?.city || "Zimbabwe" },
+              { type: "text", text: `${itemCount} item${itemCount === 1 ? "" : "s"} ordered` },
+              { type: "text", text: deliveryShort }
+            ]
+          }]
+        }
+      },
+      { headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" } }
+    );
+
+    console.log(`[ORDER NOTIFY] template ping sent to ${fullPhone} (${orderRef})`);
+
+    // Wait 5s for Meta to register the session then send full order details
+    await new Promise(r => setTimeout(r, 5000));
+
+    await sendText(fullPhone,
+      `${isServiceSupplier ? "📅" : "🛒"} *${isServiceSupplier ? "New Booking Request!" : "New Order!"} (${orderRef})*\n\n` +
+      `${itemLines}\n\n` +
+      `${totalLine}\n` +
+      `${deliveryLine}\n` +
+      `📞 Buyer: ${buyerPhone || order.buyerPhone}\n\n` +
+      `Reply *accept ${orderRef}* to accept or *decline ${orderRef}* to decline.\n` +
+      `Or open the ZimQuote chatbot and tap Accept/Decline from your orders.`
+    );
+
+  } catch (templateErr) {
+    console.error(`[ORDER NOTIFY] template fallback also failed for ${fullPhone}: ${templateErr.message}`);
+  }
 }
 
 export async function handleOrderAccepted(from, orderId, biz, saveBiz) {

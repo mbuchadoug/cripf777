@@ -2998,6 +2998,29 @@ Reply *menu* to start.`);
     const flowSess = await UserSession.findOne({ phone });
     const buyerRequestState = flowSess?.tempData?.buyerRequestState || null;
     const pendingBuyerRequest = flowSess?.tempData?.pendingBuyerRequest || null;
+
+    // Handle plain text "accept ORD-XXXXXX" or "decline ORD-XXXXXX" replies
+    // from suppliers who received the template outside the 24hr window
+    const _orderReplyMatch = al.match(/^(accept|decline)\s+(ord-[a-f0-9]+)$/i);
+    if (_orderReplyMatch) {
+      const _action = _orderReplyMatch[1].toLowerCase();
+      const _orderRefSuffix = _orderReplyMatch[2].replace("ord-", "").toLowerCase();
+      const _matchedOrder = await SupplierOrder.findOne({
+        supplierPhone: { $in: [from, phone] },
+        status: "pending"
+      }).sort({ createdAt: -1 }).lean();
+
+      if (_matchedOrder && String(_matchedOrder._id).slice(-6).toLowerCase() === _orderRefSuffix) {
+        if (_action === "accept") {
+          return handleOrderAccepted(from, String(_matchedOrder._id), biz, saveBiz);
+        } else {
+          return handleOrderDeclined(from, String(_matchedOrder._id), biz, saveBiz);
+        }
+      }
+      return sendText(from, `❌ Order not found. Please open the chatbot menu to view your orders.`);
+    }
+
+    s
     const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
     const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
 
