@@ -2037,15 +2037,17 @@ function tierColor(t) {
 
 function layout(title, content) {
 const nav = [
-    { href: "/zq-admin",                label: "📊 Dashboard",         match: title === "Dashboard" },
-    { href: "/zq-admin/suppliers",      label: "🏪 Suppliers",          match: title === "Suppliers" || title.includes("Edit") || title.includes("Activate") || title.includes("Profile") },
-    { href: "/zq-admin/suppliers/new",  label: "➕ Register Supplier",  match: title === "Register Supplier" },
-    { href: "/zq-admin/orders",         label: "📦 Orders",             match: title === "Orders" },
-    { href: "/zq-admin/payments",       label: "💳 Payments",           match: title === "Payments" },
-    { href: "/zq-admin/contacts",       label: "👥 Contacts",           match: title === "Contacts" },
-    { href: "/zq-admin/presets",        label: "🗂 Presets",            match: title === "Presets" },
-    { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",   match: title === "Broadcast Offer" },
-    { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",     match: title === "Subscription Expiry" },
+    { href: "/zq-admin",                label: "📊 Dashboard",        match: title === "Dashboard" },
+    { href: "/zq-admin/suppliers",      label: "🏪 Suppliers",         match: title === "Suppliers" || title.includes("Edit") },
+    { href: "/zq-admin/suppliers/new",  label: "➕ Register Supplier", match: title === "Register Supplier" },
+    { href: "/zq-admin/orders",         label: "📦 Orders",            match: title === "Orders" },
+    { href: "/zq-admin/payments",       label: "💳 Payments",          match: title === "Payments" },
+    { href: "/zq-admin/contacts",       label: "👥 Contacts",          match: title === "Contacts" },
+    { href: "/zq-admin/presets",        label: "🗂 Presets",           match: title === "Presets" },
+      { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",
+    match: req.path.startsWith("/broadcast-offer") },
+  { href: "/zq-admin/expiry",           label: "⏰ Subscriptions",
+     match: req.path.startsWith("/expiry") },
   ];
 
   return `<!DOCTYPE html>
