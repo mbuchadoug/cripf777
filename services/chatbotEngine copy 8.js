@@ -2250,7 +2250,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: pendingRequest.profileType || null,  // null = match both product & service
+    profileType: pendingRequest.profileType || "product",
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
@@ -3203,7 +3203,7 @@ Reply *menu* to start.`);
             requestType: "simple",
             items: parsedInline.items,
             rawText: text,
-            profileType: null,   // null = search BOTH product & service suppliers
+            profileType: "product",
             city: parsedInline.city,
             area: parsedInline.area
           }
@@ -3254,7 +3254,7 @@ Reply *menu* to start.`);
           requestType: "bulk",
           items,
           rawText: text,
-          profileType: null   // null = search BOTH product & service suppliers
+          profileType: "product"
         }
       }
     },

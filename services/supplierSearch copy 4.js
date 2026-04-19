@@ -367,7 +367,7 @@ export async function runSupplierSearch({ city, category, product, profileType, 
     active: true,
     $and: [
       { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
-      { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] }
+      { subscriptionStatus: "active" }
     ]
   };
 
