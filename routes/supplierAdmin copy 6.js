@@ -2036,42 +2036,16 @@ function tierColor(t) {
 }
 
 function layout(title, content) {
-  // ── Derive which section is active from the page title ──────────────────────
-  const t = title || "";
-  const isSuppliers   = t === "Suppliers" || t === "Register Supplier"
-                     || t.startsWith("Edit:") || t.startsWith("Activate:")
-                     || t.startsWith("Products:") || t.startsWith("Send Offer:")
-                     || t.startsWith("Receipt:") || t === "Add Price"
-                     || t === "Edit Price" || t === "Add Rate"
-                     || t === "Manage Live Items";
-  const isSchools     = t === "Schools" || t === "Register School"
-                     || t.startsWith("School:") || t.startsWith("Edit School:");
-  const isOrders      = t === "Orders";
-  const isPayments    = t === "Payments";
-  const isContacts    = t === "Contacts";
-  const isPresets     = t === "Presets" || t.startsWith("Preset:");
-  const isBroadcast   = t === "Broadcast Offer";
-  const isExpiry      = t === "Subscription Expiry" || t === "Expiry";
-  const isDashboard   = t === "Dashboard";
-
-  const nav = [
-    { href: "/zq-admin",                 label: "📊 Dashboard",          active: isDashboard },
-    // ── Suppliers ─────────────────────────────────────────────────────────────
-    { divider: "SUPPLIERS" },
-    { href: "/zq-admin/suppliers",       label: "🏪 Suppliers",           active: isSuppliers },
-    { href: "/zq-admin/suppliers/new",   label: "➕ Register Supplier",   active: t === "Register Supplier" },
-    // ── Schools ───────────────────────────────────────────────────────────────
-    { divider: "SCHOOLS" },
-    { href: "/zq-admin/schools",         label: "🏫 Schools",             active: isSchools && t !== "Register School" },
-    { href: "/zq-admin/schools/new",     label: "➕ Register School",     active: t === "Register School" },
-    // ── Platform ──────────────────────────────────────────────────────────────
-    { divider: "PLATFORM" },
-    { href: "/zq-admin/orders",          label: "📦 Orders",              active: isOrders },
-    { href: "/zq-admin/payments",        label: "💳 Payments",            active: isPayments },
-    { href: "/zq-admin/contacts",        label: "👥 Contacts",            active: isContacts },
-    { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
-    { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",     active: isBroadcast },
-    { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
+const nav = [
+    { href: "/zq-admin",                label: "📊 Dashboard",         match: title === "Dashboard" },
+    { href: "/zq-admin/suppliers",      label: "🏪 Suppliers",          match: title === "Suppliers" || title.includes("Edit") || title.includes("Activate") || title.includes("Profile") },
+    { href: "/zq-admin/suppliers/new",  label: "➕ Register Supplier",  match: title === "Register Supplier" },
+    { href: "/zq-admin/orders",         label: "📦 Orders",             match: title === "Orders" },
+    { href: "/zq-admin/payments",       label: "💳 Payments",           match: title === "Payments" },
+    { href: "/zq-admin/contacts",       label: "👥 Contacts",           match: title === "Contacts" },
+    { href: "/zq-admin/presets",        label: "🗂 Presets",            match: title === "Presets" },
+    { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",   match: title === "Broadcast Offer" },
+    { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",     match: title === "Subscription Expiry" },
   ];
 
   return `<!DOCTYPE html>
@@ -2086,95 +2060,43 @@ function layout(title, content) {
   --white:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;
   --blue:#2563eb;--green:#16a34a;--red:#dc2626;--orange:#ea580c;
   --yellow:#a16207;--purple:#7c3aed;--teal:#0d9488;
-  --sidebar-w:220px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
-
-/* ── Sidebar ────────────────────────────────────────────────────────────── */
-.sidebar{
-  position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);
-  background:var(--sidebar);display:flex;flex-direction:column;
-  z-index:200;transition:transform .25s ease;overflow-y:auto;
-}
-.sidebar-brand{
-  padding:18px 20px;font-size:17px;font-weight:700;color:white;
-  border-bottom:1px solid #1e293b;letter-spacing:-.3px;
-  display:flex;align-items:center;justify-content:space-between;
-}
+/* Sidebar */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:210px;background:var(--sidebar);
+         display:flex;flex-direction:column;z-index:100}
+.sidebar-brand{padding:20px;font-size:18px;font-weight:700;color:white;
+               border-bottom:1px solid #1e293b;letter-spacing:-.3px}
 .sidebar-brand span{color:#60a5fa}
-.sidebar-close{
-  display:none;background:none;border:none;color:#94a3b8;
-  font-size:20px;cursor:pointer;line-height:1;padding:2px 4px;
-}
-.sidebar-nav{flex:1;padding:6px 0}
-.nav-divider{
-  padding:10px 20px 4px;font-size:10px;font-weight:700;
-  color:#334155;letter-spacing:1px;text-transform:uppercase;
-}
-.sidebar-nav a{
-  display:flex;align-items:center;gap:9px;padding:10px 20px;
-  color:#94a3b8;text-decoration:none;font-size:13px;transition:all .15s;
-}
-.sidebar-nav a:hover,.sidebar-nav a.active{
-  background:var(--sidebar-hover);color:white;
-}
-.sidebar-footer{padding:14px 20px;border-top:1px solid #1e293b;flex-shrink:0}
-.sidebar-footer form button{
-  background:none;border:none;color:#94a3b8;
-  cursor:pointer;font-size:13px;padding:0;
-}
+.sidebar-nav{flex:1;padding:8px 0}
+.sidebar-nav a{display:flex;align-items:center;gap:8px;padding:11px 20px;
+               color:#94a3b8;text-decoration:none;font-size:13px;transition:all .15s}
+.sidebar-nav a:hover,.sidebar-nav a.active{background:var(--sidebar-hover);color:white}
+.sidebar-footer{padding:16px 20px;border-top:1px solid #1e293b}
+.sidebar-footer form button{background:none;border:none;color:#94a3b8;
+  cursor:pointer;font-size:13px;padding:0}
 .sidebar-footer form button:hover{color:white}
-
-/* ── Mobile top bar ─────────────────────────────────────────────────────── */
-.topbar{
-  display:none;position:sticky;top:0;z-index:150;
-  background:var(--sidebar);padding:12px 16px;
-  align-items:center;gap:12px;
-}
-.topbar-brand{font-size:16px;font-weight:700;color:white;flex:1}
-.topbar-brand span{color:#60a5fa}
-.hamburger{
-  background:none;border:none;cursor:pointer;
-  display:flex;flex-direction:column;gap:5px;padding:4px;
-}
-.hamburger span{
-  display:block;width:22px;height:2px;background:#94a3b8;
-  border-radius:2px;transition:background .15s;
-}
-.hamburger:hover span{background:white}
-
-/* ── Overlay (mobile) ───────────────────────────────────────────────────── */
-.overlay{
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
-  z-index:190;
-}
-.overlay.open{display:block}
-
-/* ── Main content ───────────────────────────────────────────────────────── */
-.main{margin-left:var(--sidebar-w);padding:24px;min-height:100vh}
+/* Main */
+.main{margin-left:210px;padding:24px;min-height:100vh}
 .page-title{font-size:22px;font-weight:700;margin-bottom:20px;color:var(--text)}
-
-/* ── Stats ──────────────────────────────────────────────────────────────── */
+/* Stats */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
 .stat-card{background:var(--white);padding:18px;border-radius:10px;
            box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:3px solid #e2e8f0}
 .stat-green{border-left-color:#22c55e}.stat-orange{border-left-color:#f97316}
 .stat-blue{border-left-color:#3b82f6}.stat-yellow{border-left-color:#eab308}
 .stat-purple{border-left-color:#a855f7}.stat-teal{border-left-color:#14b8a6}
-.stat-red{border-left-color:#ef4444}
 .stat-val{font-size:26px;font-weight:700;line-height:1}
 .stat-lbl{font-size:12px;color:var(--muted);margin-top:5px}
-
-/* ── Panels ─────────────────────────────────────────────────────────────── */
+/* Panels */
 .panel{background:var(--white);border-radius:10px;padding:20px;
        box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px}
 .panel h3{font-size:15px;font-weight:700;margin-bottom:14px}
-.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .panel-head h3{margin:0}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-
-/* ── Tables ─────────────────────────────────────────────────────────────── */
+/* Tables */
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:9px 12px;background:#f8fafc;border-bottom:2px solid var(--border);
    color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
@@ -2182,8 +2104,7 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#fafbfc}
 .items-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-/* ── Badges ─────────────────────────────────────────────────────────────── */
+/* Badges */
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;
        font-size:11px;font-weight:700;text-transform:capitalize}
 .badge-green{background:#dcfce7;color:#16a34a}
@@ -2193,10 +2114,8 @@ tr:hover td{background:#fafbfc}
 .badge-yellow{background:#fef9c3;color:#a16207}
 .badge-orange{background:#ffedd5;color:#c2410c}
 .badge-teal{background:#ccfbf1;color:#0f766e}
-.badge-purple{background:#f3e8ff;color:#7c3aed}
 .count{background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:20px;font-size:12px;margin-left:6px}
-
-/* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* Buttons */
 .btn{display:inline-block;padding:9px 18px;border:none;border-radius:7px;font-size:13px;
      font-weight:600;cursor:pointer;text-decoration:none;transition:opacity .15s}
 .btn:hover{opacity:.88}
@@ -2204,14 +2123,12 @@ tr:hover td{background:#fafbfc}
 .btn-green{background:#22c55e;color:white}
 .btn-red{background:#ef4444;color:white}
 .btn-orange{background:#f97316;color:white}
-.btn-purple{background:#7c3aed;color:white}
 .btn-gray{background:#e2e8f0;color:#475569}
 .btn-sm{padding:5px 12px;font-size:12px}
 .btn-link{color:var(--blue);text-decoration:none;font-size:13px;font-weight:600}
 .btn-link:hover{text-decoration:underline}
 .btn-reset{color:var(--muted);text-decoration:none;font-size:13px}
-
-/* ── Forms ───────────────────────────────────────────────────────────────── */
+/* Forms */
 .filter-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .filter-form input,.filter-form select{
   padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none}
@@ -2226,19 +2143,18 @@ tr:hover td{background:#fafbfc}
   padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--blue)}
 .fg textarea{resize:vertical}
-.form-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
-
-/* ── Detail list ─────────────────────────────────────────────────────────── */
+.form-actions{display:flex;gap:10px;margin-top:16px}
+/* Detail list */
 .detail-list{display:grid;grid-template-columns:140px 1fr;gap:1px}
 .detail-list dt{font-size:12px;font-weight:600;color:var(--muted);
   padding:8px 0;border-bottom:1px solid #f8fafc;text-transform:uppercase;letter-spacing:.3px}
 .detail-list dd{padding:8px 0;border-bottom:1px solid #f8fafc;font-size:13px}
 .admin-note{background:#fefce8;padding:6px 10px;border-radius:6px;font-style:italic;color:#854d0e}
-
-/* ── Tags / misc ─────────────────────────────────────────────────────────── */
+/* Tags */
 .tag-cloud{display:flex;flex-wrap:wrap;gap:6px}
 .tag{background:#e0f2fe;color:#0369a1;padding:4px 10px;border-radius:20px;font-size:12px}
 .type-pill{background:#f3e8ff;color:#7c3aed;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+/* Misc */
 .action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
 .back-link{display:inline-block;margin-bottom:16px;color:var(--blue);text-decoration:none;font-size:13px}
 .back-link:hover{text-decoration:underline}
@@ -2249,57 +2165,19 @@ tr:hover td{background:#fafbfc}
   text-decoration:none;color:var(--muted);font-size:13px}
 .pagination a.active{background:var(--blue);color:white;border-color:var(--blue)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;font-family:monospace}
-
-/* ── Mobile responsive ───────────────────────────────────────────────────── */
 @media(max-width:768px){
-  /* Show hamburger topbar, hide desktop sidebar */
-  .topbar{display:flex}
-  .sidebar-close{display:block}
-  /* Sidebar slides in from left */
-  .sidebar{transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  /* Main takes full width */
-  .main{margin-left:0;padding:16px}
-  .page-title{font-size:18px}
-  /* Layout adjustments */
+  .sidebar{display:none}
+  .main{margin-left:0}
   .two-col,.edit-form .form-grid{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .panel-head{flex-direction:column;align-items:flex-start}
-  .action-row{gap:6px}
-  /* Make tables scroll horizontally */
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{min-width:500px}
-}
-@media(min-width:769px){
-  .sidebar{transform:none !important}
-  .overlay{display:none !important}
 }
 </style>
 </head>
 <body>
-
-<!-- ── Mobile top bar ──────────────────────────────────────────────────────── -->
-<div class="topbar">
-  <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">
-    <span></span><span></span><span></span>
-  </button>
-  <div class="topbar-brand">⚡ <span>Zim</span>Quote</div>
-</div>
-
-<!-- ── Overlay (closes sidebar on mobile tap) ──────────────────────────────── -->
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-
-<!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
-<nav class="sidebar" id="sidebar">
-  <div class="sidebar-brand">
-    ⚡ <span>Zim</span>Quote
-    <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">✕</button>
-  </div>
+<nav class="sidebar">
+  <div class="sidebar-brand">⚡ <span>Zim</span>Quote</div>
   <div class="sidebar-nav">
-    ${nav.map(n => {
-      if (n.divider) return `<div class="nav-divider">${n.divider}</div>`;
-      return `<a href="${n.href}" ${n.active ? 'class="active"' : ""}>${n.label}</a>`;
-    }).join("")}
+    ${nav.map(n => `<a href="${n.href}" ${n.match ? 'class="active"' : ""}>${n.label}</a>`).join("")}
   </div>
   <div class="sidebar-footer">
     <form method="POST" action="/zq-admin/logout">
@@ -2307,29 +2185,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
     </form>
   </div>
 </nav>
-
-<!-- ── Main content ────────────────────────────────────────────────────────── -->
 <main class="main">
   <div class="page-title">${esc(title)}</div>
   ${content}
 </main>
-
-<script>
-function openSidebar(){
-  document.getElementById("sidebar").classList.add("open");
-  document.getElementById("overlay").classList.add("open");
-  document.body.style.overflow="hidden";
-}
-function closeSidebar(){
-  document.getElementById("sidebar").classList.remove("open");
-  document.getElementById("overlay").classList.remove("open");
-  document.body.style.overflow="";
-}
-// Close sidebar when a nav link is tapped on mobile
-document.querySelectorAll(".sidebar-nav a").forEach(a=>{
-  a.addEventListener("click",()=>{ if(window.innerWidth<=768) closeSidebar(); });
-});
-</script>
 </body>
 </html>`;
 }
