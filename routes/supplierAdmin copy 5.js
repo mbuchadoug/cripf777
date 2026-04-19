@@ -2838,7 +2838,7 @@ router.get("/suppliers/:id/send-offer", requireSupplierAdmin, async (req, res) =
         <div class="panel-head">
           <h3>📣 Send Discount / Payment Offer</h3>
           <span style="font-size:12px;color:var(--muted)">
-            Sends via Meta template — reaches supplier even outside 24hr window
+            Sends via Meta template - reaches supplier even outside 24hr window
           </span>
         </div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
@@ -2938,7 +2938,7 @@ router.get("/broadcast-offer", requireSupplierAdmin, async (req, res) => {
         <div class="panel-head">
           <h3>📣 Broadcast Discount / Payment Offer</h3>
           <span style="font-size:12px;color:var(--muted)">
-            Uses Meta template — reaches suppliers even outside the 24hr chat window
+            Uses Meta template - reaches suppliers even outside the 24hr chat window
           </span>
         </div>
 
@@ -3054,7 +3054,7 @@ router.post("/broadcast-offer", requireSupplierAdmin, async (req, res) => {
 // REPLACE the existing WhatsApp notify block (the try/catch that calls sendText)
 // with the following:
 //
-//   // ── 6. Notify seller — trial activated (Meta template) ───────────────────
+//   // ── 6. Notify seller - trial activated (Meta template) ───────────────────
 //   if (isActive) {
 //     try {
 //       const { notifySupplierTrialActivated } = await import("../services/supplierNotifications.js");
@@ -3168,8 +3168,8 @@ router.get("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => {
             <div class="fg">
               <label>Also update subscription?</label>
               <select name="updateSubscription">
-                <option value="true">Yes — set status to active + update expiry</option>
-                <option value="false">No — receipt only</option>
+                <option value="true">Yes - set status to active + update expiry</option>
+                <option value="false">No - receipt only</option>
               </select>
             </div>
           </div>
@@ -3203,7 +3203,7 @@ router.get("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => {
   }
 });
 
-// POST: Process receipt — log, WhatsApp, PDF
+// POST: Process receipt - log, WhatsApp, PDF
 router.post("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => {
   try {
     const {
@@ -3296,7 +3296,7 @@ router.post("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => 
         .fontSize(20).font("Helvetica-Bold").fillColor("#1d4ed8")
         .text("ZimQuote", { align: "center" })
         .fontSize(11).font("Helvetica").fillColor("#64748b")
-        .text("Supplier Platform — Official Receipt", { align: "center" })
+        .text("Supplier Platform - Official Receipt", { align: "center" })
         .moveDown(0.5);
 
       // Divider
@@ -3341,7 +3341,7 @@ router.post("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => 
         .text("Type menu on WhatsApp to access your seller dashboard.", { align: "center" })
         .moveDown(0.5)
         .fillColor("#cbd5e1")
-        .text("ZimQuote — Zimbabwe's Supplier & Service Platform", { align: "center" });
+        .text("ZimQuote - Zimbabwe's Supplier & Service Platform", { align: "center" });
 
       doc.end();
       return; // Response already handled by PDF pipe

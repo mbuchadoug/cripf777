@@ -146,7 +146,7 @@ async function _sendTemplate(to, templateName, variables = []) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify supplier — trial has been activated
+// PUBLIC: Notify supplier - trial has been activated
 // Template: supplier_trial_activated
 // Variables: {{1}} businessName, {{2}} businessName (repeated for greeting),
 //            {{3}} plan label, {{4}} expiry date
@@ -267,7 +267,7 @@ export async function broadcastSupplierOffer(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify supplier — subscription is expiring soon
+// PUBLIC: Notify supplier - subscription is expiring soon
 // Template: supplier_subscription_expiring
 // Variables: {{1}} businessName, {{2}} businessName, {{3}} daysLeft, {{4}} expiryDate
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ _This is an automated reminder from ZimQuote._`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify supplier — subscription has expired
+// PUBLIC: Notify supplier - subscription has expired
 // Template: supplier_subscription_expired
 // Variables: {{1}} businessName, {{2}} businessName, {{3}} expiryDate
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,7 +484,7 @@ export async function runSupplierExpiryChecks() {
       await new Promise(r => setTimeout(r, 300));
     }
 
-    // Handle just-expired — update DB and notify
+    // Handle just-expired - update DB and notify
     for (const s of justExpired) {
       await SupplierProfile.findByIdAndUpdate(s._id, {
         subscriptionStatus: "expired",

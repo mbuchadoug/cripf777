@@ -876,7 +876,7 @@ async function _showSchoolDetail(from, schoolId, biz) {
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1 } });
 
   // Notify school admin that a parent opened/clicked their school
-// Notify school admin — uses Meta template for out-of-session delivery
+// Notify school admin - uses Meta template for out-of-session delivery
   notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
 
   const verifiedBadge  = school.verified  ? " ✅ *Verified*"   : "";

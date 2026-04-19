@@ -79,7 +79,7 @@ async function _sendTemplate(to, templateName, variables = []) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent viewed their profile
+// PUBLIC: Notify school - a parent viewed their profile
 // Template body (submitted to Meta):
 //   New school profile view on ZimQuote.
 //   School: {{1}}
@@ -113,7 +113,7 @@ This is an automated activity alert from ZimQuote.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent sent a typed enquiry message
+// PUBLIC: Notify school - a parent sent a typed enquiry message
 // Template body (submitted to Meta):
 //   New parent enquiry received on ZimQuote.
 //   School: {{1}}
@@ -130,7 +130,7 @@ export async function notifySchoolEnquiry(schoolPhone, schoolName, parentPhone, 
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(schoolPhone);
 
-  // Full text used for fallback (plain sendText) — always includes message
+  // Full text used for fallback (plain sendText) - always includes message
   const fallbackBody = message
     ? `New parent enquiry received on ZimQuote.
 
@@ -169,7 +169,7 @@ This is an automated activity alert from ZimQuote.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent requested to apply
+// PUBLIC: Notify school - a parent requested to apply
 // Template body (submitted to Meta):
 //   New application interest received on ZimQuote.
 //   School: {{1}}

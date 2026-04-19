@@ -4342,10 +4342,10 @@ if (a === "sup_request_quote_search") {
       await sendButtons(fullPhone, interactiveBody);
       return;
     } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY] sendButtons failed for ${fullPhone}: ${btnErr.message} — trying template`);
+      console.warn(`[QUOTE NOTIFY] sendButtons failed for ${fullPhone}: ${btnErr.message} - trying template`);
     }
 
-    // ── Outside 24-hour window — use approved Meta template ───────────────────
+    // ── Outside 24-hour window - use approved Meta template ───────────────────
     // Reuses supplier_new_buyer_request template (already approved & active).
     // Template body:
     //   New buyer request on ZimQuote!
@@ -4457,10 +4457,10 @@ if (a.startsWith("sup_request_quote_supplier_")) {
       await sendButtons(_fullPhone2, _interactiveBody2);
       _sentInteractive = true;
     } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY SINGLE] sendButtons failed for ${_fullPhone2}: ${btnErr.message} — trying template`);
+      console.warn(`[QUOTE NOTIFY SINGLE] sendButtons failed for ${_fullPhone2}: ${btnErr.message} - trying template`);
     }
 
-    // Outside 24-hour window — send approved Meta template to open session
+    // Outside 24-hour window - send approved Meta template to open session
     if (!_sentInteractive) {
       try {
         const _axios2    = (await import("axios")).default;
@@ -4492,7 +4492,7 @@ if (a.startsWith("sup_request_quote_supplier_")) {
         );
         console.log(`[QUOTE NOTIFY SINGLE] Template sent to ${_fullPhone2} (${_qRef2})`);
 
-        // Template opens the session — send full interactive details after 2s
+        // Template opens the session - send full interactive details after 2s
         await new Promise(r => setTimeout(r, 2000));
         await sendButtons(_fullPhone2, _interactiveBody2);
       } catch (tplErr) {
@@ -4563,7 +4563,7 @@ if (a.startsWith("sup_ask_availability_")) {
       await sendButtons(_fullPhoneAv, _avBody);
       _avSent = true;
     } catch (btnErr) {
-      console.warn(`[AVAIL NOTIFY] sendButtons failed for ${_fullPhoneAv}: ${btnErr.message} — trying template`);
+      console.warn(`[AVAIL NOTIFY] sendButtons failed for ${_fullPhoneAv}: ${btnErr.message} - trying template`);
     }
 
     if (!_avSent) {

@@ -2136,7 +2136,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
     await sendButtons(request.buyerPhone, _buyerMsg);
     _buyerMsgSent = true;
   } catch (btnErr) {
-    console.warn(`[BUYER QUOTE NOTIFY] sendButtons failed for ${request.buyerPhone}: ${btnErr.message} — trying template`);
+    console.warn(`[BUYER QUOTE NOTIFY] sendButtons failed for ${request.buyerPhone}: ${btnErr.message} - trying template`);
   }
 
   // ── Template fallback: buyer is outside 24hr session ─────────────────────────
@@ -2181,7 +2181,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
       );
       console.log(`[BUYER QUOTE NOTIFY] Template sent to buyer ${_fullBuyer} (${ref})`);
 
-      // Session now open — send full interactive quote after 2s
+      // Session now open - send full interactive quote after 2s
       await new Promise(r => setTimeout(r, 2000));
       await sendButtons(_fullBuyer, _buyerMsg);
     } catch (tplErr) {
@@ -2284,7 +2284,7 @@ async function notifySuppliersOfBuyerRequest(request) {
 
         await sendButtons(_normalizedSupplierPhone, {
           text:
-            `🔔 *New ${_isServiceNotif ? "Service" : "Product"} Request — ${ref}*\n\n` +
+            `🔔 *New ${_isServiceNotif ? "Service" : "Product"} Request - ${ref}*\n\n` +
             `📍 *Location:* ${_templateLocation}\n` +
             `${_deliveryEmoji}\n` +
             `📦 *${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed:*\n` +
@@ -3110,7 +3110,7 @@ Reply *menu* to start.`);
         const _editLines = _editItems.map((item, i) => `${i+1}. *${item.product}* × ${Number(item.quantity||1)}`).join("\n");
         const _editEx    = _editItems.slice(0,3).map((_,i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
         return sendText(from,
-          `✏️ *Edit your prices — ${buildBuyerRequestRef(_editRequest)}*\n\n` +
+          `✏️ *Edit your prices - ${buildBuyerRequestRef(_editRequest)}*\n\n` +
           `*Items:*\n${_editLines}\n\n` +
           `*Re-enter prices:*\n` +
           `*${_editEx || "12.50"}*  or  *1x12.50  2x8.00*\n\n` +
@@ -3216,9 +3216,9 @@ Reply *menu* to start.`);
           `⚠️ *Couldn't read your prices.* Please try again.\n\n` +
           `*Items needed:*\n${_retryLines}\n\n` +
           `*Format examples:*\n` +
-          `• *${_retryEx || "12.50"}* — one price per item in order\n` +
-          `• *1x12.50  2x8.00* — item number x price\n` +
-          `• *steel fabrication: 250* — product name then price\n\n` +
+          `• *${_retryEx || "12.50"}* - one price per item in order\n` +
+          `• *1x12.50  2x8.00* - item number x price\n` +
+          `• *steel fabrication: 250* - product name then price\n\n` +
           `Can't supply? Type *0* for that item.\n` +
           `Type *cancel* to go back.`
         );
@@ -3255,7 +3255,7 @@ Reply *menu* to start.`);
 
       return sendButtons(from, {
         text:
-          `📋 *Quote Preview — ${buildBuyerRequestRef(request)}*\n\n` +
+          `📋 *Quote Preview - ${buildBuyerRequestRef(request)}*\n\n` +
           `${_previewLines}` +
           `${_previewTotal}` +
           `${_previewMsg}\n` +
@@ -4463,10 +4463,10 @@ if (a === "sup_request_quote_search") {
       await sendButtons(fullPhone, interactiveBody);
       return;
     } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY] sendButtons failed for ${fullPhone}: ${btnErr.message} — trying template`);
+      console.warn(`[QUOTE NOTIFY] sendButtons failed for ${fullPhone}: ${btnErr.message} - trying template`);
     }
 
-    // ── Outside 24-hour window — use approved Meta template ───────────────────
+    // ── Outside 24-hour window - use approved Meta template ───────────────────
     // Reuses supplier_new_buyer_request template (already approved & active).
     // Template body:
     //   New buyer request on ZimQuote!
@@ -4578,10 +4578,10 @@ if (a.startsWith("sup_request_quote_supplier_")) {
       await sendButtons(_fullPhone2, _interactiveBody2);
       _sentInteractive = true;
     } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY SINGLE] sendButtons failed for ${_fullPhone2}: ${btnErr.message} — trying template`);
+      console.warn(`[QUOTE NOTIFY SINGLE] sendButtons failed for ${_fullPhone2}: ${btnErr.message} - trying template`);
     }
 
-    // Outside 24-hour window — send approved Meta template to open session
+    // Outside 24-hour window - send approved Meta template to open session
     if (!_sentInteractive) {
       try {
         const _axios2    = (await import("axios")).default;
@@ -4613,7 +4613,7 @@ if (a.startsWith("sup_request_quote_supplier_")) {
         );
         console.log(`[QUOTE NOTIFY SINGLE] Template sent to ${_fullPhone2} (${_qRef2})`);
 
-        // Template opens the session — send full interactive details after 2s
+        // Template opens the session - send full interactive details after 2s
         await new Promise(r => setTimeout(r, 2000));
         await sendButtons(_fullPhone2, _interactiveBody2);
       } catch (tplErr) {
@@ -4684,7 +4684,7 @@ if (a.startsWith("sup_ask_availability_")) {
       await sendButtons(_fullPhoneAv, _avBody);
       _avSent = true;
     } catch (btnErr) {
-      console.warn(`[AVAIL NOTIFY] sendButtons failed for ${_fullPhoneAv}: ${btnErr.message} — trying template`);
+      console.warn(`[AVAIL NOTIFY] sendButtons failed for ${_fullPhoneAv}: ${btnErr.message} - trying template`);
     }
 
     if (!_avSent) {
@@ -13305,7 +13305,7 @@ if (a.startsWith("req_offer_confirm_")) {
   );
 
   if (!_confirmedResp?.supplierPhone) {
-    // Pending response lost — drop back to price entry
+    // Pending response lost - drop back to price entry
     const _lostItems = (_confirmReq.items || []);
     const _lostLines = _lostItems.map((it, i) => `${i+1}. *${it.product}* × ${Number(it.quantity||1)}`).join("\n");
     await UserSession.findOneAndUpdate(
@@ -13314,7 +13314,7 @@ if (a.startsWith("req_offer_confirm_")) {
       { upsert: true }
     );
     return sendText(from,
-      `⚠️ Session expired — please re-enter your prices.\n\n` +
+      `⚠️ Session expired - please re-enter your prices.\n\n` +
       `*Items:*\n${_lostLines}\n\n` +
       `Type price(s) e.g. *250* or *1x250  2x80*`
     );
@@ -13334,7 +13334,7 @@ if (a.startsWith("req_offer_confirm_")) {
 
   const _confCompLine = _confOtherCount > 0
     ? `\n_${_confOtherCount} other seller${_confOtherCount === 1 ? "" : "s"} also quoted this buyer._`
-    : `\n_⚡ You're the first to respond — great timing!_`;
+    : `\n_⚡ You're the first to respond - great timing!_`;
 
   return sendButtons(from, {
     text:
@@ -13400,7 +13400,7 @@ if (a.startsWith("req_offer_")) {
   const _deliveryLine = request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
   return sendText(from,
-    `✅ *${_reqRef} — Ready to quote*\n` +
+    `✅ *${_reqRef} - Ready to quote*\n` +
     `${_locationLine}  ${_deliveryLine}\n` +
     `─────────────────\n` +
     `*Items requested:*\n` +

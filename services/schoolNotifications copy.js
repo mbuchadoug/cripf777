@@ -59,7 +59,7 @@ async function _sendTemplate(to, templateName, variables = []) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent viewed their profile
+// PUBLIC: Notify school - a parent viewed their profile
 // Template body (submitted to Meta):
 //   New school profile view on ZimQuote.
 //   School: {{1}}
@@ -90,7 +90,7 @@ This is an automated activity alert from ZimQuote.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent tapped Contact School
+// PUBLIC: Notify school - a parent tapped Contact School
 // Template body (submitted to Meta):
 //   New parent enquiry received on ZimQuote.
 //   School: {{1}}
@@ -121,7 +121,7 @@ This is an automated activity alert from ZimQuote.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Notify school — a parent requested to apply
+// PUBLIC: Notify school - a parent requested to apply
 // Template body (submitted to Meta):
 //   New application interest received on ZimQuote.
 //   School: {{1}}

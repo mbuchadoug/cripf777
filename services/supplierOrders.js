@@ -119,10 +119,10 @@ export async function notifySupplierNewOrder(supplierPhone, order, buyerPhone, o
     await sendButtons(fullPhone, interactiveMsg);
     return;
   } catch (err) {
-    console.warn(`[ORDER NOTIFY] sendButtons failed for ${fullPhone}: ${err.message} — trying template fallback`);
+    console.warn(`[ORDER NOTIFY] sendButtons failed for ${fullPhone}: ${err.message} - trying template fallback`);
   }
 
-  // Outside 24hr window — send template ping first to open the session,
+  // Outside 24hr window - send template ping first to open the session,
   // then follow up with the full order details via sendText
   try {
     const axios = (await import("axios")).default;

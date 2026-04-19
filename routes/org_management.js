@@ -131,7 +131,7 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
     if (!membership) return res.status(403).send("Admins only (org membership required)");
 
     const role = String(membership.role || "").toLowerCase();
-    // readonly_admin is allowed through here too — individual routes gate writes separately
+    // readonly_admin is allowed through here too - individual routes gate writes separately
     if (["manager", "admin", "readonly_admin"].includes(role)) return next();
 
     return res.status(403).send("Admins only (insufficient role)");

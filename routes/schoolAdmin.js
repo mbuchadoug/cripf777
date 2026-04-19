@@ -430,7 +430,7 @@ router.get("/schools/new", requireSupplierAdmin, (req, res) => {
               <label>Contact Phone (shown to parents)</label>
               <input name="contactPhone" placeholder="e.g. 0242123456 or 0772123456"
                      title="This number appears on the school profile card. Leave blank to hide." />
-              <span style="font-size:11px;color:var(--muted)">Office landline, bursar, or admissions number — shown publicly on the WhatsApp profile card.</span>
+              <span style="font-size:11px;color:var(--muted)">Office landline, bursar, or admissions number - shown publicly on the WhatsApp profile card.</span>
             </div>
           </div>
         </div>
