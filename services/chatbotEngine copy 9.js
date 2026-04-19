@@ -4312,85 +4312,21 @@ if (a === "sup_request_quote_search") {
     });
   }
 
-  // ── Shared helper: send quote request notification with template fallback ──
-  async function _sendQuoteNotification(supplierPhone, supplierProfile, item, buyerPhone, ctx) {
-    const normalizedPhone = String(supplierPhone).replace(/\D+/, "");
-    const fullPhone = normalizedPhone.startsWith("0") && normalizedPhone.length === 10
-      ? "263" + normalizedPhone.slice(1) : normalizedPhone;
-
-    const isService = supplierProfile?.profileType === "service";
-    const label     = item || ctx.product || "your request";
-    const cityText  = ctx.city || supplierProfile?.location?.city || "Zimbabwe";
-    const areaText  = ctx.area ? `${ctx.area}, ${cityText}` : cityText;
-
-    const interactiveBody = {
-      text:
-        `📋 *New Quote Request*\n\n` +
-        `${isService ? "🔧 Service" : "🔎 Item"}: *${label}*\n` +
-        `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
-        `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
-        `📞 Buyer: ${buyerPhone}\n\n` +
-        `Buyer wants your price before ordering. Reply with your quote.`,
-      buttons: [
-        { id: "my_supplier_account", title: "🏪 My Store"   },
-        { id: "suppliers_home",      title: "🛒 Marketplace" }
-      ]
-    };
-
-    // ── Try interactive first (works within 24-hour session) ──────────────────
-    try {
-      await sendButtons(fullPhone, interactiveBody);
-      return;
-    } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY] sendButtons failed for ${fullPhone}: ${btnErr.message} — trying template`);
-    }
-
-    // ── Outside 24-hour window — use approved Meta template ───────────────────
-    // Reuses supplier_new_buyer_request template (already approved & active).
-    // Template body:
-    //   New buyer request on ZimQuote!
-    //   Ref: {{1}} | Location: {{2}} | Items: {{3}} | {{4}}
-    try {
-      const _axios = (await import("axios")).default;
-      const _PHONE_ID    = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-      const _TOKEN       = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-      const _quoteRef    = `QR-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-
-      await _axios.post(
-        `https://graph.facebook.com/v24.0/${_PHONE_ID}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to:   fullPhone,
-          type: "template",
-          template: {
-            name:     "supplier_new_buyer_request",
-            language: { code: "en" },
-            components: [{
-              type: "body",
-              parameters: [
-                { type: "text", text: _quoteRef },
-                { type: "text", text: areaText  },
-                { type: "text", text: `Quote requested: ${label}` },
-                { type: "text", text: "Buyer wants your price" }
-              ]
-            }]
-          }
-        },
-        { headers: { Authorization: `Bearer ${_TOKEN}`, "Content-Type": "application/json" } }
-      );
-      console.log(`[QUOTE NOTIFY] Template sent to ${fullPhone} (${_quoteRef})`);
-
-      // After template opens session, send full interactive details after 2s
-      await new Promise(r => setTimeout(r, 2000));
-      await sendButtons(fullPhone, interactiveBody);
-    } catch (tplErr) {
-      console.error(`[QUOTE NOTIFY] Template also failed for ${fullPhone}: ${tplErr.message}`);
-    }
-  }
-
   for (const supplier of suppliers) {
     try {
-      await _sendQuoteNotification(supplier.phone, supplier, ctx.product, from, ctx);
+      await sendButtons(supplier.phone, {
+        text:
+          `📋 *New Quote Request*\n\n` +
+          `🔎 Item/Service: ${ctx.product || "Not specified"}\n` +
+          `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
+          `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
+          `📞 Buyer: ${from}\n\n` +
+          `Buyer wants pricing before placing an order.`,
+        buttons: [
+          { id: "my_supplier_account", title: "🏪 My Store" },
+          { id: "suppliers_home", title: "🛒 Marketplace" }
+        ]
+      });
     } catch (err) {
       console.error("[QUOTE REQUEST SEARCH NOTIFY]", err.message);
     }
@@ -4427,78 +4363,21 @@ if (a.startsWith("sup_request_quote_supplier_")) {
     sess?.tempData?.supplierSearchProduct ||
     "item/service";
 
-  // ── Notify supplier with template fallback (reaches outside 24-hour window) ──
   try {
-    const _normPhone2  = String(supplier.phone).replace(/\D+/g, "");
-    const _fullPhone2  = _normPhone2.startsWith("0") && _normPhone2.length === 10
-      ? "263" + _normPhone2.slice(1) : _normPhone2;
-    const _isService2  = supplier?.profileType === "service";
-    const _cityText2   = ctx.city || supplier?.location?.city || "Zimbabwe";
-    const _areaText2   = ctx.area ? `${ctx.area}, ${_cityText2}` : _cityText2;
-
-    const _interactiveBody2 = {
+    await sendButtons(supplier.phone, {
       text:
         `📋 *New Quote Request*\n\n` +
-        `🏪 A buyer selected your business\n` +
-        `${_isService2 ? "🔧 Service" : "🔎 Item"}: *${requestedItem}*\n` +
+        `🏪 Buyer selected your business\n` +
+        `🔎 Requested: ${requestedItem}\n` +
         `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
         `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
         `📞 Buyer: ${from}\n\n` +
-        `Reply with your price/quote to win this customer.`,
+        `Buyer wants your price before ordering.`,
       buttons: [
-        { id: "my_supplier_account", title: "🏪 My Store"   },
-        { id: "suppliers_home",      title: "🛒 Marketplace" }
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "suppliers_home", title: "🛒 Marketplace" }
       ]
-    };
-
-    // Try interactive first (within 24hr session)
-    let _sentInteractive = false;
-    try {
-      await sendButtons(_fullPhone2, _interactiveBody2);
-      _sentInteractive = true;
-    } catch (btnErr) {
-      console.warn(`[QUOTE NOTIFY SINGLE] sendButtons failed for ${_fullPhone2}: ${btnErr.message} — trying template`);
-    }
-
-    // Outside 24-hour window — send approved Meta template to open session
-    if (!_sentInteractive) {
-      try {
-        const _axios2    = (await import("axios")).default;
-        const _PHONE_ID2 = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-        const _TOKEN2    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-        const _qRef2     = `QR-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-
-        await _axios2.post(
-          `https://graph.facebook.com/v24.0/${_PHONE_ID2}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to:   _fullPhone2,
-            type: "template",
-            template: {
-              name:     "supplier_new_buyer_request",
-              language: { code: "en" },
-              components: [{
-                type: "body",
-                parameters: [
-                  { type: "text", text: _qRef2 },
-                  { type: "text", text: _areaText2 },
-                  { type: "text", text: `Quote requested: ${requestedItem}` },
-                  { type: "text", text: "Buyer wants your price" }
-                ]
-              }]
-            }
-          },
-          { headers: { Authorization: `Bearer ${_TOKEN2}`, "Content-Type": "application/json" } }
-        );
-        console.log(`[QUOTE NOTIFY SINGLE] Template sent to ${_fullPhone2} (${_qRef2})`);
-
-        // Template opens the session — send full interactive details after 2s
-        await new Promise(r => setTimeout(r, 2000));
-        await sendButtons(_fullPhone2, _interactiveBody2);
-      } catch (tplErr) {
-        console.error(`[QUOTE NOTIFY SINGLE] Template also failed for ${_fullPhone2}: ${tplErr.message}`);
-      }
-    }
+    });
   } catch (err) {
     console.error("[QUOTE REQUEST SINGLE SUPPLIER]", err.message);
   }
@@ -4533,75 +4412,22 @@ if (a.startsWith("sup_ask_availability_")) {
     sess?.tempData?.supplierSearchProduct ||
     "item/service";
 
-  // ── Notify supplier with template fallback (reaches outside 24-hour window) ──
   try {
-    const _normPhoneAv  = String(supplier.phone).replace(/\D+/g, "");
-    const _fullPhoneAv  = _normPhoneAv.startsWith("0") && _normPhoneAv.length === 10
-      ? "263" + _normPhoneAv.slice(1) : _normPhoneAv;
-    const _isServiceAv  = supplier?.profileType === "service";
-    const _cityTextAv   = ctx.city || supplier?.location?.city || "Zimbabwe";
-    const _areaTextAv   = ctx.area ? `${ctx.area}, ${_cityTextAv}` : _cityTextAv;
-
-    const _avBody = {
+    await sendButtons(supplier.phone, {
       text:
         `❓ *Buyer Availability Check*\n\n` +
-        `${_isServiceAv ? "🔧 Service" : "🔎 Item"}: *${requestedItem}*\n` +
+        `🔎 Requested: ${requestedItem}\n` +
         `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
         `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
         `📞 Buyer: ${from}\n\n` +
-        `${_isServiceAv
-          ? "Buyer wants to know if you are available. Reply to confirm."
-          : "Buyer wants to know if this is in stock. Reply to confirm."}`,
+        `${supplier.profileType === "service"
+          ? "Buyer wants to know if you are available."
+          : "Buyer wants to know if this is in stock / available."}`,
       buttons: [
-        { id: "my_supplier_account", title: "🏪 My Store"   },
-        { id: "suppliers_home",      title: "🛒 Marketplace" }
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "suppliers_home", title: "🛒 Marketplace" }
       ]
-    };
-
-    let _avSent = false;
-    try {
-      await sendButtons(_fullPhoneAv, _avBody);
-      _avSent = true;
-    } catch (btnErr) {
-      console.warn(`[AVAIL NOTIFY] sendButtons failed for ${_fullPhoneAv}: ${btnErr.message} — trying template`);
-    }
-
-    if (!_avSent) {
-      try {
-        const _axiosAv   = (await import("axios")).default;
-        const _PHONE_IDAv = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-        const _TOKENAv    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-        const _avRef      = `AV-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-
-        await _axiosAv.post(
-          `https://graph.facebook.com/v24.0/${_PHONE_IDAv}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to:   _fullPhoneAv,
-            type: "template",
-            template: {
-              name:     "supplier_new_buyer_request",
-              language: { code: "en" },
-              components: [{
-                type: "body",
-                parameters: [
-                  { type: "text", text: _avRef },
-                  { type: "text", text: _areaTextAv },
-                  { type: "text", text: `Availability check: ${requestedItem}` },
-                  { type: "text", text: _isServiceAv ? "Are you available?" : "Is this in stock?" }
-                ]
-              }]
-            }
-          },
-          { headers: { Authorization: `Bearer ${_TOKENAv}`, "Content-Type": "application/json" } }
-        );
-        console.log(`[AVAIL NOTIFY] Template sent to ${_fullPhoneAv} (${_avRef})`);
-        await new Promise(r => setTimeout(r, 2000));
-        await sendButtons(_fullPhoneAv, _avBody);
-      } catch (tplErr) {
-        console.error(`[AVAIL NOTIFY] Template also failed for ${_fullPhoneAv}: ${tplErr.message}`);
-      }
-    }
+    });
   } catch (err) {
     console.error("[ASK AVAILABILITY]", err.message);
   }
