@@ -2034,39 +2034,27 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       }
     });
 
-    const link = `${site}/docs/generated/orders/${filename}`;
+    // Use /quotes/ path - same folder used by working invoice/quote sendDocument calls
+    const link = `${site}/docs/generated/quotes/${filename}`;
 
     // ── Normalize buyer phone ─────────────────────────────────────────────────
     const _normBuyerPdf  = String(request.buyerPhone || "").replace(/\D+/g, "");
     const _fullBuyerPdf  = _normBuyerPdf.startsWith("0") && _normBuyerPdf.length === 10
       ? "263" + _normBuyerPdf.slice(1) : _normBuyerPdf;
 
-    // ── Send caption text first so buyer knows what's coming ────────────────────
-    const totalStr = typeof response.totalAmount === "number"
-      ? ` — Total: *$${Number(response.totalAmount).toFixed(2)}*`
-      : "";
+    // ── Send the PDF document — same call signature as working invoice/receipt sends ─
+    await sendDocument(_fullBuyerPdf, { link, filename });
+    console.log(`[BUYER QUOTE PDF] PDF dispatched to ${_fullBuyerPdf}: ${filename}`);
 
-    const _captionText =
-      `📄 *Official Quotation — ${ref}*\n` +
-      `🏪 From: *${supplierName}*${totalStr}\n` +
-      `📞 Contact: ${response.supplierPhone || supplierPhone}\n` +
-      (supplierAddress ? `📍 ${supplierAddress}\n` : "") +
-      `\n_See the attached PDF for your full itemised quote._`;
-
+    // ── Follow-up text so buyer knows to scroll up for the PDF ───────────────────
+    const _followUpText =
+      `📄 *Quotation PDF sent above ↑*\n` +
+      `📞 To order, contact: ${response.supplierPhone || supplierPhone}\n` +
+      `_Reference: ${ref}_`;
     try {
-      await sendText(_fullBuyerPdf, _captionText);
-    } catch (captionErr) {
-      console.warn(`[BUYER QUOTE PDF] caption sendText failed: ${captionErr.message}`);
-    }
+      await sendText(_fullBuyerPdf, _followUpText);
+    } catch (_) {}
 
-    // ── Send the PDF document ─────────────────────────────────────────────────
-    await sendDocument(_fullBuyerPdf, {
-      link,
-      filename,
-      caption: `Quotation ${ref} from ${supplierName}`  // fallback caption if metaSender supports it
-    });
-
-    console.log(`[BUYER QUOTE PDF] Sent to ${_fullBuyerPdf}: ${filename}`);
     return link;
   } catch (err) {
     console.error("[BUYER QUOTE PDF]", err.message);
