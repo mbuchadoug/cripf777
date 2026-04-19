@@ -1616,32 +1616,43 @@ function parseSingleBuyerRequestLine(line = "") {
   // Bath tub(standard) x1
   // Cement x2 bags
   // Pitsand x1 tonne
-  const m =
-    clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$/i) ||
-    clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/i);
+  // ── Measurement suffixes — keep attached to product name, never treat as unit ──
+  const _MSUF = new Set([
+    "mm","cm","m","km","ml","l","kg","g","mg","lb","lbs","oz","ft","in","inch",
+    "psi","bar","kpa","mpa","kw","kva","hp","v","volt","amp","amps","watt","w","a","ah",
+    "litre","litres","liter","liters","tonne","tonnes","ton","tons","metre","metres",
+    "meter","meters","gallon","gallons","sqm","sqft","kwh","mhz","ghz","mb","gb","tb"
+  ]);
 
-  if (!m) {
-    return {
-      product: clean,
-      quantity: 1,
-      unitLabel: "units",
-      notes: "",
-      valid: false
-    };
+  // Case 1: explicit "x N unit?" — always treat as qty
+  const _xm = clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+  if (_xm) {
+    const _prod = String(_xm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
+    const _qty  = Number(_xm[2] || 1);
+    const _unit = String(_xm[3] || "units").trim().toLowerCase() || "units";
+    if (_prod) return { product: _prod, quantity: Number.isFinite(_qty) && _qty > 0 ? _qty : 1, unitLabel: _unit, notes: "", valid: true };
   }
 
-  const product = String(m[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
-  const quantity = Number(m[2] || 1);
-  const unitLabel = String(m[3] || "units").trim().toLowerCase() || "units";
+  // Case 2: "N unit" at end — only qty if unit is not a measurement suffix
+  const _bm = clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/i);
+  if (_bm) {
+    const _prod = String(_bm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
+    const _qty  = Number(_bm[2] || 1);
+    const _unit = String(_bm[3] || "").trim().toLowerCase();
+    const _isMeas = _MSUF.has(_unit);
+    const _prodEndsMeas = /\d+(mm|cm|kg|ml|m|ft|in|psi|bar|v|w|a|kw|kva|hp|ah|litre|liter)$/i.test(_prod);
+    if (!_isMeas && !_prodEndsMeas && _prod) {
+      return { product: _prod, quantity: Number.isFinite(_qty) && _qty > 0 ? _qty : 1, unitLabel: _unit, notes: "", valid: true };
+    }
+  }
 
-  if (!product) return null;
-
+  // Case 3: No quantity found — default qty=1, whole clean string is product
   return {
-    product,
-    quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-    unitLabel,
+    product: clean.replace(/[,:;.\-]+$/g, "").trim(),
+    quantity: 1,
+    unitLabel: "units",
     notes: "",
-    valid: true
+    valid: false
   };
 }
 
@@ -1779,50 +1790,64 @@ function parseInlineSimpleBuyerRequest(text = "") {
 
   let productText = String(parsed.product || "").trim();
 
-  // Optional quantity at the end of product text:
-  // "valve 5" => product "valve", quantity 5
-  // "25mm pvc pipe 10" => product "25mm pvc pipe", quantity 10
+  // ── Quantity extraction ───────────────────────────────────────────────────────
+  // Rules:
+  //  1. "x 5" or "x5" anywhere at end → explicit qty, always accepted
+  //  2. Bare trailing number with NO unit → qty, e.g. "cement 10"
+  //  3. Bare trailing number WITH a measurement unit suffix → PART OF PRODUCT NAME
+  //     e.g. "ball valve 20mm" → product="ball valve 20mm", qty=1 (NOT qty=20)
+  //
+  // Measurement suffixes that must stay attached to the product (not treated as units):
+  const MEASUREMENT_SUFFIXES = new Set([
+    "mm","cm","m","km","ml","l","kg","g","mg","lb","lbs","oz","ft","in","inch",
+    "psi","bar","kpa","mpa","kw","kva","hp","v","volt","amp","amps","watt","w","a","ah",
+    "litre","litres","liter","liters","tonne","tonnes","ton","tons","metre","metres",
+    "meter","meters","gallon","gallons","inch","inches","sqm","sqft","kwh","mhz","ghz",
+    "mb","gb","tb","rpm","nm","khz","mw","gw"
+  ]);
+
   let quantity = 1;
-  const qtyMatch = productText.match(/^(.+?)\s+(?:x\s*)?(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+  let unitLabel = "units";
 
-  if (qtyMatch) {
-    const maybeProduct = String(qtyMatch[1] || "").trim();
-    const maybeQty = Number(qtyMatch[2] || 1);
-    const maybeUnit = String(qtyMatch[3] || "").trim();
-
-    if (maybeProduct) {
-      productText = maybeProduct;
-      quantity = Number.isFinite(maybeQty) && maybeQty > 0 ? maybeQty : 1;
-
+  // Case 1: explicit "x N unit?" at end — always treat as qty
+  const explicitQtyMatch = productText.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+  if (explicitQtyMatch) {
+    const maybeProduct = String(explicitQtyMatch[1] || "").trim();
+    const maybeQty     = Number(explicitQtyMatch[2] || 1);
+    const maybeUnit    = String(explicitQtyMatch[3] || "").trim().toLowerCase();
+    if (maybeProduct && Number.isFinite(maybeQty) && maybeQty > 0) {
       return {
-        items: [
-          {
-            product: productText,
-            quantity,
-            unitLabel: maybeUnit || "units",
-            notes: ""
-          }
-        ],
-        city: parsed.city || null,
-        area: parsed.area || null,
-        itemText: productText
+        items: [{ product: maybeProduct, quantity: maybeQty, unitLabel: maybeUnit || "units", notes: "" }],
+        city: parsed.city || null, area: parsed.area || null, itemText: maybeProduct
       };
     }
   }
 
-  // No quantity provided - still valid
+  // Case 2: bare trailing "N unit?" — only treat as qty if unit is NOT a measurement suffix
+  const bareQtyMatch = productText.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
+  if (bareQtyMatch) {
+    const maybeProduct = String(bareQtyMatch[1] || "").trim();
+    const maybeQty     = Number(bareQtyMatch[2] || 1);
+    const maybeUnit    = String(bareQtyMatch[3] || "").trim().toLowerCase();
+
+    // If the unit part is a measurement suffix → keep whole string as product name, qty=1
+    const isMeasurement = maybeUnit && MEASUREMENT_SUFFIXES.has(maybeUnit);
+    // Also guard: if the "product" part itself ends with a measurement-looking pattern
+    // e.g. "20mm" → don't split
+    const productEndsMeasurement = /\d+\s*(mm|cm|kg|ml|l|m|ft|in|psi|bar|v|w|a|hp|kw|kva|ah|litre|litr)$/i.test(maybeProduct);
+
+    if (!isMeasurement && !productEndsMeasurement && maybeProduct && Number.isFinite(maybeQty) && maybeQty > 0 && maybeQty < 10000) {
+      return {
+        items: [{ product: maybeProduct, quantity: maybeQty, unitLabel: maybeUnit || "units", notes: "" }],
+        city: parsed.city || null, area: parsed.area || null, itemText: maybeProduct
+      };
+    }
+  }
+
+  // Case 3: No quantity — default qty=1, full productText is the product name
   return {
-    items: [
-      {
-        product: productText,
-        quantity: 1,
-        unitLabel: "units",
-        notes: ""
-      }
-    ],
-    city: parsed.city || null,
-    area: parsed.area || null,
-    itemText: productText
+    items: [{ product: productText, quantity: 1, unitLabel: "units", notes: "" }],
+    city: parsed.city || null, area: parsed.area || null, itemText: productText
   };
 }
 
@@ -3300,7 +3325,17 @@ Reply *menu* to start.`);
     if (!parsedInline.items.length) {
       return sendText(
         from,
-        `❌ Please use the request search format.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nType *cancel* to stop.`
+        `❌ Please use the format: *find [item] [city]*\n\n` +
+        `*Examples:*\n` +
+        `_find ball valve 20mm harare_\n` +
+        `_find cement harare_\n` +
+        `_find school uniform size 8 chitungwiza_\n` +
+        `_find plumber mbare harare_\n\n` +
+        `*Need more than 1?* Add the quantity at the end with x:\n` +
+        `_find cement harare x10_\n` +
+        `_find pipes 20mm harare x5_\n\n` +
+        `_Size/spec like 20mm stays part of the product name._\n` +
+        `Type *cancel* to stop.`
       );
     }
 
@@ -3312,7 +3347,16 @@ Reply *menu* to start.`);
     if (!parsedInline.city) {
       return sendText(
         from,
-        `❌ Please include the *city* in the same request line.\n\nExamples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_`
+        `❌ Please include the *city* in the same request line.\n\n` +
+        `*Format:* find [item] [city]\n\n` +
+        `*Examples:*\n` +
+        `_find ball valve brass 20mm harare_\n` +
+        `_find cement harare_\n` +
+        `_find school uniform size 8 chitungwiza_\n` +
+        `_find plumber avondale harare_\n\n` +
+        `*Need more than 1?* Add x2, x3 etc at the end:\n` +
+        `_find cement harare x10_\n` +
+        `_find ball valve 20mm harare x5_`
       );
     }
 
@@ -3335,15 +3379,25 @@ Reply *menu* to start.`);
       { upsert: true }
     );
 
+    // ── Show clear confirmation with qty so buyer can spot any misread ───────────
+    const _confirmItemLines = (parsedInline.items || []).map((item, i) => {
+      const qty  = Number(item.quantity || 1);
+      const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+      const qtyStr = qty === 1 ? "_(qty: 1 — add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
+      return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
+    }).join("\n");
+
     return sendButtons(from, {
       text:
-        `✅ *Request captured*\n\n` +
-        `${formatBuyerRequestItems(parsedInline.items, 10)}\n\n` +
+        `✅ *Request captured — please check:*\n\n` +
+        `${_confirmItemLines}\n\n` +
         `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
+        `_To change quantity, type your request again with e.g. x3 at the end:_\n` +
+        `_find ball valve brass 20mm harare x3_\n\n` +
         `🚚 Do you need delivery?`,
       buttons: [
         { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
-        { id: "sup_request_delivery_no", title: "🏠 No, collection" }
+        { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
       ]
     });
   }
