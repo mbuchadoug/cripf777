@@ -54,7 +54,8 @@ export const SUPPLIER_CITIES = [
   "Kwekwe",
   "Masvingo",
   "Chinhoyi",
-  "Bindura"
+  "Bindura",
+  "Murehwa"
 ];
 
 
