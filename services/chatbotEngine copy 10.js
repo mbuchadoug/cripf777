@@ -2216,27 +2216,23 @@ async function notifySuppliersOfBuyerRequest(request) {
       // Delay 3s so Meta registers the template session before the follow-up
       await new Promise(r => setTimeout(r, 3000));
 
-      // ── Step 2: Send a clear, guided interactive message with action buttons ──
-      // Supplier can tap "View & Quote" to see items, or "Not Available" to decline.
-      try {
-        const _isServiceNotif = supplier.profileType === "service";
-        const _deliveryEmoji  = request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-
-        await sendButtons(_normalizedSupplierPhone, {
-          text:
-            `🔔 *New ${_isServiceNotif ? "Service" : "Product"} Request — ${ref}*\n\n` +
-            `📍 *Location:* ${_templateLocation}\n` +
-            `${_deliveryEmoji}\n` +
-            `📦 *${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed:*\n` +
-            `${_notifItemLines}\n\n` +
-            `─────────────────\n` +
-            `Tap *View & Quote* to enter your prices.\n` +
-            `The buyer receives your quote instantly.`,
-          buttons: [
-            { id: `req_offer_${String(request._id)}`,   title: "💬 View & Quote" },
-            { id: `req_unavail_${String(request._id)}`, title: "❌ Not Available" }
-          ]
-        });
+      const _exPrices = Array.from(
+        { length: Math.min(_notifItemCount, 4) },
+        (_, i) => i === 1 ? "0" : (i * 4 + 8).toFixed(2)
+      ).join(", ");
+try {
+        await sendText(_normalizedSupplierPhone,
+          `📦 *${ref} - ${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed*\n` +
+          `📍 ${_templateLocation} · ${_deliveryLine}\n` +
+          `─────────────────\n` +
+          `${_notifItemLines}\n` +
+          `─────────────────\n\n` +
+          `💬 *Reply here with prices using: item number x price*\n` +
+          `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
+          `Only include items you can supply - skip the rest.\n` +
+          `Add a note: _msg delivering tomorrow_\n\n` +
+          `_PDF quote sent to buyer automatically._`
+        );
       } catch (followupErr) {
         console.warn(`[BUYER REQ FOLLOWUP] failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
       }
@@ -3030,35 +3026,6 @@ Reply *menu* to start.`);
     const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
     const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
 
-    // If supplier types while in confirm state, treat as wanting to edit → re-enter pricing
-    if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.sellerRequestReplyState": "awaiting_offer",
-            "tempData.sellerRequestId": sellerRequestId
-          },
-          $unset: { "tempData.pendingOfferResponse": "" }
-        },
-        { upsert: true }
-      );
-      // Re-show the item list so they can re-enter
-      const _editRequest = await BuyerRequest.findById(sellerRequestId);
-      if (_editRequest) {
-        const _editItems = (_editRequest.items || []);
-        const _editLines = _editItems.map((item, i) => `${i+1}. *${item.product}* × ${Number(item.quantity||1)}`).join("\n");
-        const _editEx    = _editItems.slice(0,3).map((_,i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
-        return sendText(from,
-          `✏️ *Edit your prices — ${buildBuyerRequestRef(_editRequest)}*\n\n` +
-          `*Items:*\n${_editLines}\n\n` +
-          `*Re-enter prices:*\n` +
-          `*${_editEx || "12.50"}*  or  *1x12.50  2x8.00*\n\n` +
-          `Type *cancel* to go back.`
-        );
-      }
-    }
-
     if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
       if (al === "cancel") {
         await UserSession.findOneAndUpdate(
@@ -3147,133 +3114,38 @@ Reply *menu* to start.`);
         etaText: ""
       };
 
-    // ── If no prices parsed and no message, prompt supplier again ───────────────
-      if (!responseItems.length && !message.trim()) {
-        const _retryItems  = (request.items || []);
-        const _retryLines  = _retryItems.map((item, i) => `${i + 1}. *${item.product}* × ${Number(item.quantity||1)}`).join("\n");
-        const _retryEx     = _retryItems.slice(0,3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
-        return sendText(from,
-          `⚠️ *Couldn't read your prices.* Please try again.\n\n` +
-          `*Items needed:*\n${_retryLines}\n\n` +
-          `*Format examples:*\n` +
-          `• *${_retryEx || "12.50"}* — one price per item in order\n` +
-          `• *1x12.50  2x8.00* — item number x price\n` +
-          `• *steel fabrication: 250* — product name then price\n\n` +
-          `Can't supply? Type *0* for that item.\n` +
-          `Type *cancel* to go back.`
-        );
-      }
-
-      // ── Build a quote preview so supplier can check before sending ────────────
-      const _isServiceConfirm = supplier.profileType === "service";
-      const _previewLines = responseItems.map((item, i) => {
-        const priceStr = `$${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}`;
-        const totalStr = `= $${Number(item.total).toFixed(2)}`;
-        return `${i + 1}. *${item.product}* × ${item.quantity} @ ${priceStr} ${totalStr}`;
-      }).join("\n");
-
-      const _previewTotal = totalAmount !== null
-        ? `\n─────────────────\n💵 *Total: $${Number(totalAmount).toFixed(2)}*`
-        : "";
-      const _previewMsg = message ? `\n📝 Note: _${message}_` : "";
-      const _previewDelivery = supplier.delivery?.available
-        ? "🚚 You offer delivery"
-        : "🏠 Collection only";
-
-      // Store the response temporarily for confirmation step
+    request.responses.push(response);
+      await request.save();
+ 
       await UserSession.findOneAndUpdate(
         { phone },
-        {
-          $set: {
-            "tempData.sellerRequestReplyState": "awaiting_offer_confirm",
-            "tempData.sellerRequestId":         String(request._id),
-            "tempData.pendingOfferResponse":    JSON.stringify(response)
-          }
-        },
+        { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
         { upsert: true }
       );
-
-      return sendButtons(from, {
-        text:
-          `📋 *Quote Preview — ${buildBuyerRequestRef(request)}*\n\n` +
-          `${_previewLines}` +
-          `${_previewTotal}` +
-          `${_previewMsg}\n` +
-          `${_previewDelivery}\n\n` +
-          `─────────────────\n` +
-          `Does this look correct? Tap *Send Quote* to deliver it to the buyer.`,
-        buttons: [
-          { id: `req_offer_confirm_${String(request._id)}`, title: "✅ Send Quote" },
-          { id: `req_offer_${String(request._id)}`,         title: "✏️ Edit Prices"  }
-        ]
-      });
-    }
-
-    // ── CONFIRMATION STEP: supplier taps "Send Quote" after preview ────────────
-    if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId) {
-      const _confirmRequestId = sellerRequestId;
-      const _confirmRequest   = await BuyerRequest.findById(_confirmRequestId);
-      const _confirmSupplier  = await SupplierProfile.findOne({ phone }).lean();
-
-      // Clear state immediately
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $unset: {
-            "tempData.sellerRequestReplyState": "",
-            "tempData.sellerRequestId":         "",
-            "tempData.pendingOfferResponse":    ""
-          }
-        },
-        { upsert: true }
-      );
-
-      if (!_confirmRequest || !_confirmSupplier) {
-        return sendText(from, "❌ Request has expired. The buyer may have already received quotes.");
-      }
-
-      // Parse the stored response
-      let _confirmedResponse;
-      try {
-        _confirmedResponse = JSON.parse(flowSess?.tempData?.pendingOfferResponse || "{}");
-      } catch (_) {
-        return sendText(from, "❌ Quote data was lost. Please tap View & Quote again to re-enter.");
-      }
-
-      if (!_confirmedResponse.supplierPhone) {
-        return sendText(from, "❌ Quote data was lost. Please tap View & Quote again to re-enter.");
-      }
-
-      _confirmRequest.responses.push(_confirmedResponse);
-      await _confirmRequest.save();
-
-      trackSupplierResponseSpeed(_confirmSupplier.phone, _confirmRequest.createdAt).catch(err =>
+ 
+      // Track supplier response speed (non-blocking - never delays the buyer notification)
+      trackSupplierResponseSpeed(supplier.phone, request.createdAt).catch(err =>
         console.error("[RESPONSE SPEED]", err.message)
       );
-
-      await sendBuyerRequestResponseToBuyer({
-        request:  _confirmRequest,
-        supplier: _confirmSupplier,
-        response: _confirmedResponse
-      });
-
-      const _otherQuoteCount = (_confirmRequest.responses || []).filter(
-        r => String(r.supplierPhone) !== String(_confirmSupplier.phone) &&
+ 
+      await sendBuyerRequestResponseToBuyer({ request, supplier, response });
+ 
+      // Tell supplier how many others have also quoted
+      const _otherQuoteCount = (request.responses || []).filter(
+        r => String(r.supplierPhone) !== String(supplier.phone) &&
              r.mode !== "unavailable" &&
              (r.items?.length || r.message)
       ).length;
-
+ 
       const _competitionLine = _otherQuoteCount > 0
         ? `\n_${_otherQuoteCount} other seller${_otherQuoteCount === 1 ? "" : "s"} also quoted this buyer._`
-        : `\n_⚡ You're the first to respond — great timing!_`;
-
+        : `\n_⚡ You're the first to respond - great timing!_`;
+ 
       return sendButtons(from, {
-        text:
-          `✅ *Quote sent successfully!*${_competitionLine}\n\n` +
-          `The buyer will see your prices and can contact you directly.`,
+        text: `✅ *Your offer has been sent to the buyer.*${_competitionLine}`,
         buttons: [
-          { id: "my_supplier_account", title: "🏪 My Store"    },
-          { id: "suppliers_home",      title: "🛒 Marketplace"  }
+          { id: "my_supplier_account", title: "🏪 My Store" },
+          { id: "suppliers_home",      title: "🛒 Marketplace" }
         ]
       });
     }
@@ -13303,14 +13175,8 @@ if (a.startsWith("req_offer_confirm_")) {
 if (a.startsWith("req_offer_")) {
   const requestId = a.replace("req_offer_", "");
   const request = await BuyerRequest.findById(requestId);
-  if (!request) return sendText(from, "❌ This request has expired or been closed.");
+  if (!request) return sendText(from, "❌ Request not found or expired.");
 
-  const _supplierForOffer = await SupplierProfile.findOne({ phone }).lean();
-  const _isServiceOffer   = _supplierForOffer?.profileType === "service";
-  const _items            = (request.items || []);
-  const _reqRef           = buildBuyerRequestRef(request);
-
-  // ── Set awaiting_offer state ───────────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -13322,47 +13188,31 @@ if (a.startsWith("req_offer_")) {
     { upsert: true }
   );
 
-  // ── Build a clear numbered item list with per-item price prompts ───────────
+  const _items     = (request.items || []);
   const _itemLines = _items.map((item, i) => {
     const qty  = Number(item.quantity || 1);
     const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-    return `${i + 1}. *${item.product}* × ${qty}${unit}`;
+    return `${i + 1}. ${item.product} × ${qty}${unit}`;
   }).join("\n");
 
-  // ── Build a concrete, realistic example using actual item names ────────────
-  const _exampleLines = _items.slice(0, 3).map((item, i) => {
-    const exPrice = (i * 5 + 8).toFixed(2);
-    return `${i + 1}x${exPrice}`;
-  }).join("  ");
+  const _exPrices = Array.from(
+    { length: Math.min(_items.length, 4) },
+    (_, i) => i === 1 ? "0" : (i * 4 + 8).toFixed(2)
+  ).join(", ");
 
-  const _singleItem = _items.length === 1;
-  const _singleExample = _singleItem
-    ? `Type the price, e.g: *${(12).toFixed(2)}*  or  *${(12).toFixed(2)}/${_isServiceOffer ? "job" : "each"}*`
-    : `Type each price like this:\n*${_exampleLines}*\n\n_(number = item, x = price)_`;
-
-  const _skipNote = _singleItem
-    ? ""
-    : `\nCan't supply an item? Type *0* for it, e.g. *1x0 2x5.50*`;
-
-  const _locationLine = request.area
-    ? `📍 ${request.area}, ${request.city || ""}`
-    : request.city ? `📍 ${request.city}` : "";
-
-  const _deliveryLine = request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+  const _reqRef = buildBuyerRequestRef(request);
 
   return sendText(from,
-    `✅ *${_reqRef} — Ready to quote*\n` +
-    `${_locationLine}  ${_deliveryLine}\n` +
+    `📦 *${_reqRef} - ${_items.length} item${_items.length === 1 ? "" : "s"} needed*\n` +
+    `📍 ${request.city || ""}${request.area ? ` · ${request.area}` : ""}\n` +
     `─────────────────\n` +
-    `*Items requested:*\n` +
     `${_itemLines}\n` +
     `─────────────────\n\n` +
-    `💰 *How to send your price:*\n` +
-    `${_singleExample}${_skipNote}\n\n` +
-    `Want to add a note? Start with *msg* e.g:\n` +
-    `_${_exampleLines || "12.50"}  msg available from tomorrow_\n\n` +
-    `Type *cancel* to go back.\n` +
-    `_Your quote goes to the buyer instantly._`
+    `💬 *Reply here with prices using: item number x price*\n` +
+    `_Example: 1x4.50 3x7 8x9 15x7_\n\n` +
+    `Only include items you can supply - skip the rest.\n` +
+    `Add a note: _msg delivering tomorrow_\n\n` +
+    `_PDF quote sent to buyer automatically._`
   );
 }
 
