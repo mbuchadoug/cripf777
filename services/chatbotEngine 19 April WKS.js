@@ -2338,22 +2338,46 @@ async function notifySuppliersOfBuyerRequest(request) {
       const _normalizedSupplierPhone = _supplierPhone.startsWith("0") && _supplierPhone.length === 10
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
-      // ── Step 2: Set state to "awaiting_offer_intro" ─────────────────────────────
-      // We do NOT send a follow-up message here — Meta only opens a real session
-      // when the supplier sends a message back to us, not when we send to them.
-      // Instead, the FIRST message the supplier sends (even "hi") will show
-      // them the full item list + View & Quote button. See awaiting_offer_intro handler.
+     // Step 2: Pre-set awaiting_offer state so supplier can type prices immediately
+      // Then send item list as plain text - works after template opens the session
       await UserSession.findOneAndUpdate(
         { phone: _normalizedSupplierPhone },
         {
           $set: {
-            "tempData.sellerRequestReplyState": "awaiting_offer_intro",
+            "tempData.sellerRequestReplyState": "awaiting_offer",
             "tempData.sellerRequestId":         String(request._id)
           }
         },
         { upsert: true }
       );
-      console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone}`);
+
+      // Delay 3s so Meta registers the template session before the follow-up
+      await new Promise(r => setTimeout(r, 3000));
+
+      // ── Step 2: Send a clear, guided interactive message with action buttons ──
+      // Supplier can tap "View & Quote" to see items, or "Not Available" to decline.
+      try {
+        const _isServiceNotif = supplier.profileType === "service";
+        const _deliveryEmoji  = request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+
+        await sendButtons(_normalizedSupplierPhone, {
+          text:
+            `🔔 *New ${_isServiceNotif ? "Service" : "Product"} Request - ${ref}*\n\n` +
+            `📍 *Location:* ${_templateLocation}\n` +
+            `${_deliveryEmoji}\n` +
+            `📦 *${_notifItemCount} item${_notifItemCount === 1 ? "" : "s"} needed:*\n` +
+            `${_notifItemLines}\n\n` +
+            `─────────────────\n` +
+            `Tap *View & Quote* to enter your prices.\n` +
+            `The buyer receives your quote instantly.`,
+          buttons: [
+            { id: `req_offer_${String(request._id)}`,   title: "💬 View & Quote" },
+            { id: `req_unavail_${String(request._id)}`, title: "❌ Not Available" }
+          ]
+        });
+      } catch (followupErr) {
+        console.warn(`[BUYER REQ FOLLOWUP] failed for ${_normalizedSupplierPhone}: ${followupErr.message}`);
+      }
       notifiedIds.push(supplier._id);
     } catch (err) {
       console.error("[BUYER REQUEST NOTIFY]", err.message);
@@ -3144,59 +3168,6 @@ Reply *menu* to start.`);
     const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
     const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
 
-    // ── awaiting_offer_intro: supplier's FIRST reply after template ──────────────
-    // Fires regardless of what they typed ("hi", "hello", a price, anything).
-    // Shows them the full item list + View & Quote button properly.
-    // This is the reliable entry point for outside-24hr-session suppliers.
-    if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
-      const _introRequest  = await BuyerRequest.findById(sellerRequestId);
-      const _introSupplier = await SupplierProfile.findOne({ phone }).lean();
-
-      if (!_introRequest || _introSupplier === null) {
-        // Clear state and bail
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
-          { upsert: true }
-        );
-        return sendText(from, "❌ This request has expired or been closed by the buyer.");
-      }
-
-      const _introRef       = buildBuyerRequestRef(_introRequest);
-      const _introItems     = (_introRequest.items || []);
-      const _introItemLines = _introItems.map((item, i) =>
-        `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
-      ).join("\n");
-      const _introLocation  = _introRequest.area
-        ? `${_introRequest.area}, ${_introRequest.city || ""}`
-        : (_introRequest.city || "Zimbabwe");
-      const _introDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-      const _introIsService = _introSupplier?.profileType === "service";
-
-      // Transition to awaiting_offer so next typed prices are processed correctly
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
-        { upsert: true }
-      );
-
-      return sendButtons(from, {
-        text:
-          `🔔 *New ${_introIsService ? "Service" : "Product"} Request — ${_introRef}*\n\n` +
-          `📍 *Location:* ${_introLocation}\n` +
-          `${_introDelivery}\n\n` +
-          `📦 *${_introItems.length} item${_introItems.length === 1 ? "" : "s"} needed:*\n` +
-          `${_introItemLines}\n\n` +
-          `─────────────────\n` +
-          `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
-          `The buyer receives your quote instantly.`,
-        buttons: [
-          { id: `req_offer_${sellerRequestId}`,   title: "💬 View & Quote"  },
-          { id: `req_unavail_${sellerRequestId}`, title: "❌ Not Available" }
-        ]
-      });
-    }
-
     // If supplier types while in confirm state, treat as wanting to edit → re-enter pricing
     if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a) {
       await UserSession.findOneAndUpdate(
@@ -3302,52 +3273,19 @@ Reply *menu* to start.`);
         message = String(text || "").trim();
       }
 
-      // ── Detect greetings / confusion — re-show the item list instead of ────────
-      // treating "hi", "hello", "yes", "ok", "?" etc as a message-only quote.
-      // A genuine price/message has digits OR is deliberately long.
-      const _looksLikeGreeting = !responseItems.length &&
-        message.trim() &&
-        !/\d/.test(message) &&          // no digits = no price
-        message.trim().length < 30 &&    // short texts only
-        /^(hi|hello|hey|yes|ok|okay|sure|what|how|hie|sawubona|mhoro|ndiri|help|good|fine|yeah|yep|nope|no|send|go|start|ready|quote|pricing|price|available|avail|\?+|\!+)$/i
-          .test(message.trim().replace(/[.,!?]+$/, "").trim());
-
-      if (!responseItems.length && (!message.trim() || _looksLikeGreeting)) {
-        // Re-show the item list with View & Quote button so they can start properly
-        const _retryItems = (request.items || []);
-        const _retryLines = _retryItems.map((item, i) =>
-          `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
-        ).join("\n");
-        const _retryEx    = _retryItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
-        const _isService  = supplier.profileType === "service";
-
-        return sendButtons(from, {
-          text:
-            `📋 *${ref} — Here are the items needed:*\n\n` +
-            `${_retryLines}\n\n` +
-            `─────────────────\n` +
-            `Tap *View & Quote* to enter your price${_retryItems.length > 1 ? "s" : ""}.\n` +
-            `Or tap *Not Available* if you can't supply.`,
-          buttons: [
-            { id: `req_offer_${sellerRequestId}`,   title: "💬 View & Quote"  },
-            { id: `req_unavail_${sellerRequestId}`, title: "❌ Not Available" }
-          ]
-        });
-      }
-
       const response = {
         supplierId: supplier._id,
         supplierPhone: supplier.phone,
         supplierName: supplier.businessName,
         mode: "manual_offer",
-        message: _looksLikeGreeting ? "" : message,
+        message,
         items: responseItems,
         totalAmount,
         deliveryAvailable: supplier.delivery?.available ?? null,
         etaText: ""
       };
 
-    // ── If truly nothing — shouldn't reach here but guard anyway ─────────────
+    // ── If no prices parsed and no message, prompt supplier again ───────────────
       if (!responseItems.length && !message.trim()) {
         const _retryItems  = (request.items || []);
         const _retryLines  = _retryItems.map((item, i) => `${i + 1}. *${item.product}* × ${Number(item.quantity||1)}`).join("\n");
@@ -3356,9 +3294,10 @@ Reply *menu* to start.`);
           `⚠️ *Couldn't read your prices.* Please try again.\n\n` +
           `*Items needed:*\n${_retryLines}\n\n` +
           `*Format examples:*\n` +
-          `• *${_retryEx || "12.50"}* — one price per item\n` +
-          `• *1x12.50  2x8.00* — item number x price\n` +
-          `• *ball valve: 44* — product name then price\n\n` +
+          `• *${_retryEx || "12.50"}* - one price per item in order\n` +
+          `• *1x12.50  2x8.00* - item number x price\n` +
+          `• *steel fabrication: 250* - product name then price\n\n` +
+          `Can't supply? Type *0* for that item.\n` +
           `Type *cancel* to go back.`
         );
       }
