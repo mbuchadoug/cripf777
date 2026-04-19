@@ -2112,7 +2112,9 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
     ? `\n_Request still open - more quotes may arrive._`
     : "";
  
-  await sendButtons(request.buyerPhone, {
+  // ── Try to reach buyer with interactive message ──────────────────────────────
+  // If buyer hasn't messaged in 24hrs, fall back to Meta template to re-open session
+  const _buyerMsg = {
     text:
       `📨 *New Seller Quote* (${ref})\n` +
       `💬 ${_quoteCount} quote${_quoteCount === 1 ? "" : "s"} received so far\n\n` +
@@ -2127,7 +2129,65 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
       { id: `buyer_view_all_quotes_${request._id}`, title: "📊 Compare All Quotes" },
       { id: "find_supplier",                        title: "🛒 Marketplace" }
     ]
-  });
+  };
+
+  let _buyerMsgSent = false;
+  try {
+    await sendButtons(request.buyerPhone, _buyerMsg);
+    _buyerMsgSent = true;
+  } catch (btnErr) {
+    console.warn(`[BUYER QUOTE NOTIFY] sendButtons failed for ${request.buyerPhone}: ${btnErr.message} — trying template`);
+  }
+
+  // ── Template fallback: buyer is outside 24hr session ─────────────────────────
+  // Uses supplier_new_buyer_request template (already approved) as a session opener,
+  // then immediately sends the full interactive quote details.
+  if (!_buyerMsgSent) {
+    try {
+      const _axiosBuyer  = (await import("axios")).default;
+      const _PHONEID_B   = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+      const _TOKEN_B     = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+      const _normBuyer   = String(request.buyerPhone).replace(/\D+/g, "");
+      const _fullBuyer   = _normBuyer.startsWith("0") && _normBuyer.length === 10
+        ? "263" + _normBuyer.slice(1) : _normBuyer;
+
+      const _totalStr    = typeof response.totalAmount === "number"
+        ? `$${Number(response.totalAmount).toFixed(2)}`
+        : "Price on request";
+      const _cityStr     = request.city || "Zimbabwe";
+
+      // Ping buyer via approved template to re-open their session
+      await _axiosBuyer.post(
+        `https://graph.facebook.com/v24.0/${_PHONEID_B}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to:   _fullBuyer,
+          type: "template",
+          template: {
+            name:     "supplier_new_buyer_request",
+            language: { code: "en" },
+            components: [{
+              type: "body",
+              parameters: [
+                { type: "text", text: ref },
+                { type: "text", text: _cityStr },
+                { type: "text", text: `Quote from ${supplierName}: ${_totalStr}` },
+                { type: "text", text: "Tap to view full quote" }
+              ]
+            }]
+          }
+        },
+        { headers: { Authorization: `Bearer ${_TOKEN_B}`, "Content-Type": "application/json" } }
+      );
+      console.log(`[BUYER QUOTE NOTIFY] Template sent to buyer ${_fullBuyer} (${ref})`);
+
+      // Session now open — send full interactive quote after 2s
+      await new Promise(r => setTimeout(r, 2000));
+      await sendButtons(_fullBuyer, _buyerMsg);
+    } catch (tplErr) {
+      console.error(`[BUYER QUOTE NOTIFY] Template also failed for ${request.buyerPhone}: ${tplErr.message}`);
+    }
+  }
 
   // Send PDF quotation only when there are actual quoted line items
   if (Array.isArray(response.items) && response.items.length) {
@@ -3209,74 +3269,7 @@ Reply *menu* to start.`);
       });
     }
 
-    // ── CONFIRMATION STEP: supplier taps "Send Quote" after preview ────────────
-    if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId) {
-      const _confirmRequestId = sellerRequestId;
-      const _confirmRequest   = await BuyerRequest.findById(_confirmRequestId);
-      const _confirmSupplier  = await SupplierProfile.findOne({ phone }).lean();
 
-      // Clear state immediately
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $unset: {
-            "tempData.sellerRequestReplyState": "",
-            "tempData.sellerRequestId":         "",
-            "tempData.pendingOfferResponse":    ""
-          }
-        },
-        { upsert: true }
-      );
-
-      if (!_confirmRequest || !_confirmSupplier) {
-        return sendText(from, "❌ Request has expired. The buyer may have already received quotes.");
-      }
-
-      // Parse the stored response
-      let _confirmedResponse;
-      try {
-        _confirmedResponse = JSON.parse(flowSess?.tempData?.pendingOfferResponse || "{}");
-      } catch (_) {
-        return sendText(from, "❌ Quote data was lost. Please tap View & Quote again to re-enter.");
-      }
-
-      if (!_confirmedResponse.supplierPhone) {
-        return sendText(from, "❌ Quote data was lost. Please tap View & Quote again to re-enter.");
-      }
-
-      _confirmRequest.responses.push(_confirmedResponse);
-      await _confirmRequest.save();
-
-      trackSupplierResponseSpeed(_confirmSupplier.phone, _confirmRequest.createdAt).catch(err =>
-        console.error("[RESPONSE SPEED]", err.message)
-      );
-
-      await sendBuyerRequestResponseToBuyer({
-        request:  _confirmRequest,
-        supplier: _confirmSupplier,
-        response: _confirmedResponse
-      });
-
-      const _otherQuoteCount = (_confirmRequest.responses || []).filter(
-        r => String(r.supplierPhone) !== String(_confirmSupplier.phone) &&
-             r.mode !== "unavailable" &&
-             (r.items?.length || r.message)
-      ).length;
-
-      const _competitionLine = _otherQuoteCount > 0
-        ? `\n_${_otherQuoteCount} other seller${_otherQuoteCount === 1 ? "" : "s"} also quoted this buyer._`
-        : `\n_⚡ You're the first to respond — great timing!_`;
-
-      return sendButtons(from, {
-        text:
-          `✅ *Quote sent successfully!*${_competitionLine}\n\n` +
-          `The buyer will see your prices and can contact you directly.`,
-        buttons: [
-          { id: "my_supplier_account", title: "🏪 My Store"    },
-          { id: "suppliers_home",      title: "🛒 Marketplace"  }
-        ]
-      });
-    }
 
  if (buyerRequestState === "awaiting_items") {
   if (al === "cancel") {
@@ -13279,23 +13272,79 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
 }
 
 if (a.startsWith("req_offer_confirm_")) {
-  // Treat same as req_offer_ - just set awaiting_offer state
-  const requestId = a.replace("req_offer_confirm_", "");
-  const request = await BuyerRequest.findById(requestId);
-  if (!request) return sendText(from, "❌ Request not found or expired.");
+  // ── Supplier tapped "Send Quote" from the preview ─────────────────────────
+  // Retrieve stored pending response and send it to the buyer.
+  const _confirmReqId  = a.replace("req_offer_confirm_", "");
+  const _confirmReq    = await BuyerRequest.findById(_confirmReqId);
+  const _confirmSup    = await SupplierProfile.findOne({ phone }).lean();
 
+  if (!_confirmReq || !_confirmSup) {
+    return sendText(from, "❌ Request has expired. The buyer may have already received quotes.");
+  }
+
+  // Read the pending offer stored during the preview step
+  const _confirmSess = await UserSession.findOne({ phone }).lean();
+  let _confirmedResp;
+  try {
+    _confirmedResp = JSON.parse(_confirmSess?.tempData?.pendingOfferResponse || "{}");
+  } catch (_) {
+    _confirmedResp = null;
+  }
+
+  // Clear state immediately regardless
   await UserSession.findOneAndUpdate(
     { phone },
     {
-      $set: {
-        "tempData.sellerRequestReplyState": "awaiting_offer",
-        "tempData.sellerRequestId": requestId
+      $unset: {
+        "tempData.sellerRequestReplyState": "",
+        "tempData.sellerRequestId":         "",
+        "tempData.pendingOfferResponse":    ""
       }
     },
     { upsert: true }
   );
 
-  return sendText(from, `✅ *Ready!* Now type your prices.\n\nFormat: _1=12.50, 2=8.00_ or _1x12.50 2x8.00_\n\nType *cancel* to go back.`);
+  if (!_confirmedResp?.supplierPhone) {
+    // Pending response lost — drop back to price entry
+    const _lostItems = (_confirmReq.items || []);
+    const _lostLines = _lostItems.map((it, i) => `${i+1}. *${it.product}* × ${Number(it.quantity||1)}`).join("\n");
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.sellerRequestReplyState": "awaiting_offer", "tempData.sellerRequestId": _confirmReqId } },
+      { upsert: true }
+    );
+    return sendText(from,
+      `⚠️ Session expired — please re-enter your prices.\n\n` +
+      `*Items:*\n${_lostLines}\n\n` +
+      `Type price(s) e.g. *250* or *1x250  2x80*`
+    );
+  }
+
+  // Save and send the confirmed response
+  _confirmReq.responses.push(_confirmedResp);
+  await _confirmReq.save();
+
+  trackSupplierResponseSpeed(_confirmSup.phone, _confirmReq.createdAt).catch(console.error);
+  await sendBuyerRequestResponseToBuyer({ request: _confirmReq, supplier: _confirmSup, response: _confirmedResp });
+
+  const _confOtherCount = (_confirmReq.responses || []).filter(
+    r => String(r.supplierPhone) !== String(_confirmSup.phone) &&
+         r.mode !== "unavailable" && (r.items?.length || r.message)
+  ).length;
+
+  const _confCompLine = _confOtherCount > 0
+    ? `\n_${_confOtherCount} other seller${_confOtherCount === 1 ? "" : "s"} also quoted this buyer._`
+    : `\n_⚡ You're the first to respond — great timing!_`;
+
+  return sendButtons(from, {
+    text:
+      `✅ *Quote sent successfully!*${_confCompLine}\n\n` +
+      `The buyer will see your prices and can contact you directly.`,
+    buttons: [
+      { id: "my_supplier_account", title: "🏪 My Store"   },
+      { id: "suppliers_home",      title: "🛒 Marketplace" }
+    ]
+  });
 }
 
 
