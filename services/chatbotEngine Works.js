@@ -1965,108 +1965,47 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       return null;
     }
 
-    const ref          = buildBuyerRequestRef(request);
+    const ref = buildBuyerRequestRef(request);
     const supplierName = supplier?.businessName || response?.supplierName || "Supplier";
-    const site         = (process.env.SITE_URL || "").replace(/\/$/, "");
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
 
-    // ── Supplier contact details for the PDF ──────────────────────────────────
-    const supplierPhone   = supplier?.contactDetails || response?.supplierPhone || supplier?.phone || "";
-    const supplierAddress = [
-      supplier?.address,
-      supplier?.location?.area,
-      supplier?.location?.city
-    ].filter(Boolean).join(", ") || "";
-    const supplierWebsite = supplier?.website || "";
-
-    // ── Delivery / collection note ────────────────────────────────────────────
-    const deliveryNote = request.deliveryRequired
-      ? "Delivery to buyer required"
-      : response.deliveryAvailable === true
-        ? "Delivery available"
-        : "Collection only";
-
-    // ── Buyer info shown on the quote ─────────────────────────────────────────
-    const buyerRef  = request.buyerPhone
-      ? `WhatsApp: ${request.buyerPhone}`
-      : "";
-    const buyerArea = request.area
-      ? `${request.area}, ${request.city || "Zimbabwe"}`
-      : (request.city || "Zimbabwe");
-
-    // ── Build billingTo block — buyer details ─────────────────────────────────
-    const billingTo = [
-      `Request Ref: ${ref}`,
-      `Location: ${buyerArea}`,
-      buyerRef,
-      deliveryNote
-    ].filter(Boolean).join("\n");
-
-    // ── Build supplier address block for bizMeta ──────────────────────────────
-    const supplierAddressBlock = [
-      supplierAddress,
-      supplierPhone  ? `Tel: ${supplierPhone}` : "",
-      supplierWebsite ? `Web: ${supplierWebsite}` : ""
-    ].filter(Boolean).join("\n");
-
-    // ── Notes / message from supplier ─────────────────────────────────────────
-    const supplierNote = response.message
-      ? `Note from seller: ${response.message}`
-      : "";
+    const deliveryNote = response.deliveryAvailable === true
+      ? "Delivery available"
+      : response.deliveryAvailable === false
+        ? "Collection / delivery to confirm"
+        : "Delivery / collection to confirm";
 
     const { filename } = await generatePDF({
-      type:      "quote",
-      number:    ref,
-      date:      new Date(),
-      billingTo,
-      notes:     supplierNote || undefined,
+      type: "quote",
+      number: ref,
+      date: new Date(),
+      billingTo:
+        `Buyer Request: ${ref}\n` +
+        `Area: ${request.area || "-"}\n` +
+        `City: ${request.city || "-"}\n` +
+        `${deliveryNote}`,
       items: (response.items || []).map(i => ({
-        item:  i.product,
-        qty:   Number(i.quantity || 1),
-        unit:  Number(i.pricePerUnit || 0),
+        item: i.product,
+        qty: Number(i.quantity || 1),
+        unit: Number(i.pricePerUnit || 0),
         total: Number(i.total || 0)
       })),
       bizMeta: {
-        name:     supplierName,
-        logoUrl:  supplier?.logoUrl || "",
-        address:  supplierAddressBlock,
-        _id:      String(supplier?._id || request._id),
-        status:   "quotation"
+        name: supplierName,
+        logoUrl: "",
+        address: `${supplier?.location?.area || ""}, ${supplier?.location?.city || ""}`,
+        _id: String(request._id),
+        status: "quotation"
       }
     });
 
     const link = `${site}/docs/generated/orders/${filename}`;
 
-    // ── Normalize buyer phone ─────────────────────────────────────────────────
-    const _normBuyerPdf  = String(request.buyerPhone || "").replace(/\D+/g, "");
-    const _fullBuyerPdf  = _normBuyerPdf.startsWith("0") && _normBuyerPdf.length === 10
-      ? "263" + _normBuyerPdf.slice(1) : _normBuyerPdf;
-
-    // ── Send caption text first so buyer knows what's coming ────────────────────
-    const totalStr = typeof response.totalAmount === "number"
-      ? ` — Total: *$${Number(response.totalAmount).toFixed(2)}*`
-      : "";
-
-    const _captionText =
-      `📄 *Official Quotation — ${ref}*\n` +
-      `🏪 From: *${supplierName}*${totalStr}\n` +
-      `📞 Contact: ${response.supplierPhone || supplierPhone}\n` +
-      (supplierAddress ? `📍 ${supplierAddress}\n` : "") +
-      `\n_See the attached PDF for your full itemised quote._`;
-
-    try {
-      await sendText(_fullBuyerPdf, _captionText);
-    } catch (captionErr) {
-      console.warn(`[BUYER QUOTE PDF] caption sendText failed: ${captionErr.message}`);
-    }
-
-    // ── Send the PDF document ─────────────────────────────────────────────────
-    await sendDocument(_fullBuyerPdf, {
+    await sendDocument(request.buyerPhone, {
       link,
-      filename,
-      caption: `Quotation ${ref} from ${supplierName}`  // fallback caption if metaSender supports it
+      filename
     });
 
-    console.log(`[BUYER QUOTE PDF] Sent to ${_fullBuyerPdf}: ${filename}`);
     return link;
   } catch (err) {
     console.error("[BUYER QUOTE PDF]", err.message);
@@ -2275,13 +2214,9 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
     }
   }
 
-  // Send PDF quotation whenever there are priced line items
-  // (message-only quotes skip PDF — nothing meaningful to put on paper)
-  if (Array.isArray(response.items) && response.items.length > 0) {
-    // Non-blocking: don't let PDF failure break the quote delivery
-    sendBuyerQuotePdf({ request, supplier, response }).catch(pdfErr =>
-      console.error("[BUYER QUOTE PDF] Failed:", pdfErr.message)
-    );
+  // Send PDF quotation only when there are actual quoted line items
+  if (Array.isArray(response.items) && response.items.length) {
+    await sendBuyerQuotePdf({ request, supplier, response });
   }
 
   return;
