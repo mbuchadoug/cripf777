@@ -1900,17 +1900,19 @@ function isStrongSingleVariantMatch(matches = []) {
   return (first.score - second.score) >= 12;
 }
 
-async function findSuppliersForBuyerRequest({ items = [], city = null, area = null, profileType = null }) {
+async function findSuppliersForBuyerRequest({ items = [], city = null, area = null }) {
   const scoreMap = new Map();
   const topItems = items.slice(0, 5);
 
   for (const item of topItems) {
-    const results = await runSupplierSearch({
-      city: city || null,
-      product: item.product,
-      area: area || null,
-      profileType: profileType || null
+    // Always search BOTH product and service suppliers for buyer requests
+    const productResults = await runSupplierSearch({
+      city: city || null, product: item.product, area: area || null, profileType: "product"
     });
+    const serviceResults = await runSupplierSearch({
+      city: city || null, product: item.product, area: area || null, profileType: "service"
+    });
+    const results = [...productResults, ...serviceResults];
 
     for (const supplier of results || []) {
       const key = String(supplier._id);
@@ -2138,8 +2140,8 @@ async function notifySuppliersOfBuyerRequest(request) {
   const suppliers = await findSuppliersForBuyerRequest({
     items: request.items || [],
     city: request.city || null,
-    area: request.area || null,
-    profileType: request.profileType || null
+    area: request.area || null
+    // profileType intentionally omitted: findSuppliersForBuyerRequest always searches both product & service
   });
 
   const notifiedIds = [];
@@ -2250,7 +2252,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: pendingRequest.profileType || null,  // null = match both product & service
+    profileType: pendingRequest.profileType || "product",  // DB storage only - search always covers both
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
@@ -3203,7 +3205,7 @@ Reply *menu* to start.`);
             requestType: "simple",
             items: parsedInline.items,
             rawText: text,
-            profileType: null,   // null = search BOTH product & service suppliers
+            profileType: "product",  // DB enum value - findSuppliersForBuyerRequest searches both
             city: parsedInline.city,
             area: parsedInline.area
           }
@@ -3254,7 +3256,7 @@ Reply *menu* to start.`);
           requestType: "bulk",
           items,
           rawText: text,
-          profileType: null   // null = search BOTH product & service suppliers
+          profileType: "product",  // DB enum value - findSuppliersForBuyerRequest searches both
         }
       }
     },
