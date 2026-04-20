@@ -3149,28 +3149,18 @@ Reply *menu* to start.`);
     // Shows them the full item list + View & Quote button properly.
     // This is the reliable entry point for outside-24hr-session suppliers.
     if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
-      const _introRequest = await BuyerRequest.findById(sellerRequestId);
+      const _introRequest  = await BuyerRequest.findById(sellerRequestId);
+      const _introSupplier = await SupplierProfile.findOne({ phone }).lean();
 
-      // ── Only bail if the request itself is gone — supplier profile is optional here ──
-      if (!_introRequest) {
+      if (!_introRequest || _introSupplier === null) {
+        // Clear state and bail
         await UserSession.findOneAndUpdate(
           { phone },
           { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
           { upsert: true }
         );
-        return sendText(from,
-          `⏰ *That request has closed.*\n\n` +
-          `The buyer's request has expired or been filled.\n\n` +
-          `New requests will be sent to you automatically when buyers need your products or services.`
-        );
+        return sendText(from, "❌ This request has expired or been closed by the buyer.");
       }
-
-      // ── Look up supplier with multi-format phone matching ─────────────────────
-      // Supplier may be stored as "0771..." or "263771..." — try both
-      const _introPhone2   = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-      const _introSupplier = await SupplierProfile.findOne({
-        phone: { $in: [phone, _introPhone2] }
-      }).lean();
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
       const _introItems     = (_introRequest.items || []);
@@ -3201,8 +3191,8 @@ Reply *menu* to start.`);
           `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
           `The buyer receives your quote instantly.`,
         buttons: [
-          { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"  },
-          { id: `req_unavail_${sellerRequestId}`, title: "Not Available" }
+          { id: `req_offer_${sellerRequestId}`,   title: "💬 View & Quote"  },
+          { id: `req_unavail_${sellerRequestId}`, title: "❌ Not Available" }
         ]
       });
     }
@@ -3256,11 +3246,7 @@ Reply *menu* to start.`);
         return sendText(from, "❌ Request not found or expired.");
       }
 
-      // Multi-format phone lookup — supplier may be stored as "0771..." or "263771..."
-      const _offerPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-      const supplier = await SupplierProfile.findOne({
-        phone: { $in: [phone, _offerPhone2] }
-      }).lean();
+      const supplier = await SupplierProfile.findOne({ phone }).lean();
       if (!supplier) {
         await UserSession.findOneAndUpdate(
           { phone },
