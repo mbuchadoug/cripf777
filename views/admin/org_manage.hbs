@@ -1000,6 +1000,7 @@
         {{groups.staff.length}}
       </span>
     </button>
+{{#unless isReadOnly}}
     <button class="sb-item" data-page="invites" onclick="gotoPage('invites',this)">
       <span class="sb-ic">✉️</span> Invites
       <span class="sb-badge">{{invites.length}}</span>
@@ -1007,7 +1008,9 @@
     <button class="sb-item" data-page="credentials" onclick="gotoPage('credentials',this)">
       <span class="sb-ic">🔑</span> Credentials
     </button>
+    {{/unless}}
 
+   {{#unless isReadOnly}}
     {{#unless isHomeSchool}}
     <div class="sb-section">Assessments</div>
     <button class="sb-item" data-page="assign" onclick="gotoPage('assign',this)">
@@ -1031,8 +1034,9 @@
     </button>
     {{/unless}}
     {{/if}}
+    {{/unless}}
 
-    {{#if (or isHomeSchool isCripSchool)}}
+  {{#if (and (or isHomeSchool isCripSchool) (not isReadOnly))}}
     <div class="sb-section">Rules</div>
     <button class="sb-item" data-page="rules" onclick="gotoPage('rules',this)">
       <span class="sb-ic">⚙️</span> Quiz Rules

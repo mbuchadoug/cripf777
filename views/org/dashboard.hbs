@@ -352,10 +352,13 @@
           {{else if user.displayName}}{{user.displayName}}
           {{else}}{{user.email}}{{/if}}
         </div>
-        <div class="sb-urole">
-          {{#if isAdmin}}Administrator{{else if (eq membership.role "student")}}Student
-          {{else if (eq membership.role "teacher")}}Teacher{{else}}Member{{/if}}
-        </div>
+       <div class="sb-urole">
+  {{#if (eq membership.role "readonly_admin")}}Read-Only Admin
+  {{else if isAdmin}}Administrator
+  {{else if (eq membership.role "student")}}Student
+  {{else if (eq membership.role "teacher")}}Teacher
+  {{else}}Member{{/if}}
+</div>
       </div>
     </div>
 

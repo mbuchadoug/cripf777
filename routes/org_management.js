@@ -434,6 +434,11 @@ const isHomeSchool = org.slug === "cripfcnt-home";
 const isCripSchool = org.slug === "cripfcnt-school";
 
 
+// ✅ ADD isReadOnly to the render data
+const managerMembership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+const managerRole = String(managerMembership?.role || "").toLowerCase();
+const isReadOnly = managerRole === "readonly_admin";
+
 return res.render("admin/org_manage", {
   org,
   invites,
@@ -444,15 +449,14 @@ return res.render("admin/org_manage", {
   groups,
   user: req.user,
   isAdmin: true,
+  isReadOnly,          // ← ADD THIS
   isSchool,
   isHomeSchool,
   quizRules,
-  // Classification manager
   classifyQuizzes,
   classifyCategoryCounts,
   unclassifiedCount: classifyQuizzes.filter(q => !q.category || q.category === "out-of-scope").length
 });
-
 
 
     } catch (err) {
@@ -1000,16 +1004,17 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
       .split(",").map(e => e.trim().toLowerCase())
       .includes((req.user.email || "").toLowerCase());
     const role    = String(membership.role || "").toLowerCase();
-    const isAdmin = platformAdmin || ["admin", "manager", "org_admin"].includes(role);
+    const isAdmin = platformAdmin || ["admin", "manager", "org_admin", "readonly_admin"].includes(role);
 
     const isCripfcntSchool = org.slug === "cripfcnt-school";
     const modules = await OrgModule.find({ org: org._id }).lean();
 
     let normalizedRole = "professional";
-    if (isAdmin)                                      normalizedRole = "administrator";
-    else if (role === "student")                      normalizedRole = "student";
-    else if (role === "teacher")                      normalizedRole = "teacher";
-    else if (role === "employee" || role === "staff") normalizedRole = "professional";
+if (role === "readonly_admin")                    normalizedRole = "readonly_admin";
+else if (isAdmin)                                 normalizedRole = "administrator";
+else if (role === "student")                      normalizedRole = "student";
+else if (role === "teacher")                      normalizedRole = "teacher";
+else if (role === "employee" || role === "staff") normalizedRole = "professional";
 
     const ICON_MAP = {
       "governance":"🏛","institutional-accountability":"⚖️","public-sector-ethics":"🔏",
