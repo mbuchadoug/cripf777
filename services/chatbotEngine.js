@@ -3328,6 +3328,7 @@ Reply *menu* to start.`);
 
       if (!responseItems.length && (!message.trim() || _looksLikeGreeting)) {
         // Re-show the item list with View & Quote button so they can start properly
+        const _retryRef   = buildBuyerRequestRef(request);
         const _retryItems = (request.items || []);
         const _retryLines = _retryItems.map((item, i) =>
           `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
@@ -3337,7 +3338,7 @@ Reply *menu* to start.`);
 
         return sendButtons(from, {
           text:
-            `📋 *${ref} — Here are the items needed:*\n\n` +
+            `📋 *${_retryRef} — Here are the items needed:*\n\n` +
             `${_retryLines}\n\n` +
             `─────────────────\n` +
             `Tap *View & Quote* to enter your price${_retryItems.length > 1 ? "s" : ""}.\n` +
