@@ -1,313 +1,710 @@
 {{!-- views/admin/analytics/dashboard.hbs --}}
-<div style="max-width:1400px; margin:0 auto; padding:20px;">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics · CRIPFCNT Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0a0c10;
+      --surface:  #111318;
+      --surface2: #181b22;
+      --border:   rgba(255,255,255,.07);
+      --border2:  rgba(255,255,255,.12);
+      --ink:      #f0f2f8;
+      --ink-soft: #8b91a8;
+      --ink-faint:#4a5068;
+      --gold:     #d4a843;
+      --gold-bg:  rgba(212,168,67,.1);
+      --green:    #34c984;
+      --green-bg: rgba(52,201,132,.1);
+      --blue:     #4d8ef8;
+      --blue-bg:  rgba(77,142,248,.1);
+      --rose:     #f05a6e;
+      --rose-bg:  rgba(240,90,110,.1);
+      --amber:    #f59e0b;
+      --amber-bg: rgba(245,158,11,.1);
+      --font: 'DM Sans', system-ui, sans-serif;
+      --mono: 'DM Mono', monospace;
+      --r:    10px;
+      --r-lg: 16px;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
 
-  {{!-- Header --}}
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+    /* ── TOPBAR ─────────────────────────────────────────── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,12,16,.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 58px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .topbar-left { display:flex; align-items:center; gap:14px; }
+    .back-link {
+      display: inline-flex; align-items: center; gap:6px;
+      color: var(--ink-soft); text-decoration: none;
+      font-size: 12.5px; font-weight: 500;
+      padding: 5px 10px; border-radius:6px;
+      border: 1px solid var(--border);
+      transition: all .15s;
+    }
+    .back-link:hover { color: var(--gold); border-color: rgba(212,168,67,.4); }
+    .topbar-title { font-size:15px; font-weight:700; color:var(--ink); }
+    .topbar-sub { font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
+
+    /* Range pills */
+    .range-pills { display:flex; gap:4px; }
+    .rpill {
+      padding: 5px 14px; border-radius:99px;
+      font-size: 12px; font-weight:600;
+      text-decoration: none; cursor: pointer;
+      border: 1px solid var(--border);
+      color: var(--ink-soft);
+      background: transparent;
+      transition: all .15s;
+    }
+    .rpill:hover { color: var(--ink); border-color:var(--border2); }
+    .rpill.active { background:var(--gold); color:#000; border-color:var(--gold); }
+
+    /* ── MAIN LAYOUT ─────────────────────────────────────── */
+    .page { max-width:1360px; margin:0 auto; padding:28px 28px 64px; }
+
+    /* Section heading */
+    .section-head {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom: 16px;
+    }
+    .section-label {
+      font-size: 10.5px; font-weight:700; letter-spacing:1.2px;
+      text-transform:uppercase; color:var(--ink-faint);
+    }
+
+    /* ── KPI GRID ────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 18px 20px;
+      display: flex; flex-direction:column; gap:4px;
+      transition: border-color .18s, box-shadow .18s;
+      position: relative; overflow:hidden;
+    }
+    .kpi:hover { border-color:var(--border2); box-shadow:0 8px 32px rgba(0,0,0,.3); }
+    .kpi::before {
+      content:'';
+      position:absolute; top:0; left:0; right:0; height:2px;
+    }
+    .kpi.gold::before   { background:var(--gold); }
+    .kpi.green::before  { background:var(--green); }
+    .kpi.blue::before   { background:var(--blue); }
+    .kpi.rose::before   { background:var(--rose); }
+    .kpi.amber::before  { background:var(--amber); }
+    .kpi-label {
+      font-size: 11px; font-weight:600; letter-spacing:.4px;
+      text-transform:uppercase; color:var(--ink-faint);
+    }
+    .kpi-value {
+      font-size: 28px; font-weight:700; line-height:1.1;
+      color: var(--ink); font-family:var(--mono);
+    }
+    .kpi-sub { font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+    /* ── CHARTS ROW ──────────────────────────────────────── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .card-hdr {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .card-title {
+      font-size: 13px; font-weight:700; color:var(--ink);
+      display:flex; align-items:center; gap:8px;
+    }
+    .card-sub { font-size:11px; color:var(--ink-faint); margin-top:2px; }
+    .card-body { padding:20px; }
+
+    /* Chart containers */
+    .chart-wrap { position:relative; }
+
+    /* ── TABLES ──────────────────────────────────────────── */
+    .tables-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .data-table {
+      width:100%; border-collapse:collapse;
+    }
+    .data-table th {
+      padding: 9px 12px;
+      text-align: left;
+      font-size: 10.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.6px;
+      color: var(--ink-faint);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .data-table th:not(:first-child) { text-align:right; }
+    .data-table td {
+      padding: 10px 12px;
+      font-size: 13px; color:var(--ink);
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .data-table td:not(:first-child) { text-align:right; }
+    .data-table tbody tr:last-child td { border-bottom:none; }
+    .data-table tbody tr:hover td { background:var(--surface2); }
+    .data-table .mono { font-family:var(--mono); font-size:12px; }
+
+    /* pass rate badge */
+    .pr-badge {
+      display:inline-block;
+      padding:2px 8px; border-radius:99px;
+      font-size:11px; font-weight:700;
+    }
+    .pr-high  { background:var(--green-bg); color:var(--green); }
+    .pr-mid   { background:var(--amber-bg); color:var(--amber); }
+    .pr-low   { background:var(--rose-bg);  color:var(--rose);  }
+
+    /* rank number */
+    .rank {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:22px; height:22px; border-radius:6px;
+      background:var(--surface2); border:1px solid var(--border);
+      font-size:10.5px; font-weight:700; color:var(--ink-faint);
+    }
+
+    /* ── BOTTOM ROW ──────────────────────────────────────── */
+    .bottom-row {
+      display:grid; grid-template-columns:1fr 1fr 1fr;
+      gap:16px; margin-bottom:28px;
+    }
+
+    /* Recent signups */
+    .signup-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+    .signup-row:last-child { border-bottom:none; }
+    .av {
+      width:30px; height:30px; border-radius:50%;
+      background:var(--surface2); border:1px solid var(--border);
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:700; color:var(--ink-soft);
+      flex-shrink:0;
+    }
+    .signup-name { font-size:12.5px; font-weight:600; color:var(--ink); }
+    .signup-meta { font-size:11px; color:var(--ink-faint); }
+    .role-pill {
+      margin-left:auto; flex-shrink:0;
+      padding:2px 8px; border-radius:99px;
+      font-size:10px; font-weight:700; text-transform:uppercase;
+    }
+    .rp-student  { background:var(--blue-bg);  color:var(--blue); }
+    .rp-employee { background:var(--gold-bg);  color:var(--gold); }
+    .rp-teacher  { background:var(--green-bg); color:var(--green); }
+    .rp-parent   { background:var(--amber-bg); color:var(--amber); }
+    .rp-admin    { background:var(--rose-bg);  color:var(--rose); }
+    .rp-other    { background:var(--surface2); color:var(--ink-soft); border:1px solid var(--border); }
+
+    /* Subscription breakdown */
+    .sub-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); }
+    .sub-row:last-child { border-bottom:none; }
+    .sub-label { font-size:12.5px; color:var(--ink); font-weight:500; }
+    .sub-count { font-size:15px; font-weight:700; color:var(--ink); font-family:var(--mono); }
+
+    /* Performance block */
+    .perf-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); }
+    .perf-row:last-child { border-bottom:none; }
+    .perf-label { font-size:12.5px; color:var(--ink); font-weight:500; }
+    .perf-val { font-size:14px; font-weight:700; font-family:var(--mono); }
+    .perf-ok   { color:var(--green); }
+    .perf-warn { color:var(--amber); }
+    .perf-bad  { color:var(--rose); }
+
+    /* ── QUICK ACTIONS ───────────────────────────────────── */
+    .actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .act-btn {
+      display:inline-flex; align-items:center; gap:7px;
+      padding:9px 18px; border-radius:var(--r);
+      font-size:12.5px; font-weight:600;
+      text-decoration:none; transition:all .15s;
+      white-space:nowrap;
+    }
+    .act-primary { background:var(--gold); color:#000; }
+    .act-primary:hover { background:#c99a30; }
+    .act-secondary {
+      background:transparent; color:var(--ink-soft);
+      border:1px solid var(--border);
+    }
+    .act-secondary:hover { border-color:var(--border2); color:var(--ink); }
+
+    /* empty state */
+    .empty { padding:32px; text-align:center; color:var(--ink-faint); font-size:12.5px; }
+
+    /* ── RESPONSIVE ──────────────────────────────────────── */
+    @media(max-width:1100px) {
+      .charts-row { grid-template-columns:1fr; }
+      .tables-row { grid-template-columns:1fr; }
+      .bottom-row { grid-template-columns:1fr 1fr; }
+    }
+    @media(max-width:700px) {
+      .page { padding:16px 14px 64px; }
+      .topbar { padding:0 14px; }
+      .kpi-grid { grid-template-columns:1fr 1fr; }
+      .bottom-row { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TOPBAR ──────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="/admin" class="back-link">← Admin</a>
     <div>
-      <h1 style="margin:0 0 8px 0; font-size:32px; font-weight:800;">📊 Analytics Dashboard</h1>
-      <div style="color:#888; font-size:14px;">Website traffic and user behavior insights</div>
+      <div class="topbar-title">Analytics</div>
+      <div class="topbar-sub">Platform activity overview</div>
     </div>
+  </div>
+  <div class="range-pills">
+    <a href="/admin/analytics?range=24h" class="rpill {{#if (eq range '24h')}}active{{/if}}">24h</a>
+    <a href="/admin/analytics?range=7d"  class="rpill {{#if (eq range '7d')}}active{{/if}}">7d</a>
+    <a href="/admin/analytics?range=30d" class="rpill {{#if (eq range '30d')}}active{{/if}}">30d</a>
+    <a href="/admin/analytics?range=90d" class="rpill {{#if (eq range '90d')}}active{{/if}}">90d</a>
+  </div>
+</div>
 
-    {{!-- Time range selector --}}
-    <div style="display:flex; gap:8px;">
-      <a href="/admin/analytics?range=24h" 
-         class="{{#if (eq timeRange '24h')}}btn-active{{else}}btn-outline{{/if}}"
-         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
-        24h
-      </a>
-      <a href="/admin/analytics?range=7d" 
-         class="{{#if (eq timeRange '7d')}}btn-active{{else}}btn-outline{{/if}}"
-         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
-        7d
-      </a>
-      <a href="/admin/analytics?range=30d" 
-         class="{{#if (eq timeRange '30d')}}btn-active{{else}}btn-outline{{/if}}"
-         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
-        30d
-      </a>
-      <a href="/admin/analytics?range=90d" 
-         class="{{#if (eq timeRange '90d')}}btn-active{{else}}btn-outline{{/if}}"
-         style="padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
-        90d
-      </a>
+<div class="page">
+
+  <!-- ── KPI CARDS ───────────────────────────────────────────── -->
+  <div class="section-head">
+    <div class="section-label">Key Metrics</div>
+    <div style="font-size:11px;color:var(--ink-faint)">
+      Showing data for selected period
     </div>
   </div>
 
-  {{!-- Quick stats cards --}}
-  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:32px;">
-    
-    <div class="stat-card">
-      <div class="stat-icon">👁️</div>
-      <div class="stat-value">{{stats.totalPageViews}}</div>
-      <div class="stat-label">Total Page Views</div>
+  <div class="kpi-grid">
+    <div class="kpi gold">
+      <div class="kpi-label">Quiz Attempts</div>
+      <div class="kpi-value">{{stats.totalAttempts}}</div>
+      <div class="kpi-sub">{{stats.passedAttempts}} passed · {{stats.passRate}} pass rate</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Avg Score</div>
+      <div class="kpi-value">{{stats.avgScore}}</div>
+      <div class="kpi-sub">across all attempts</div>
+    </div>
+    <div class="kpi blue">
+      <div class="kpi-label">Active Learners</div>
+      <div class="kpi-value">{{stats.activeUsers}}</div>
+      <div class="kpi-sub">completed ≥1 quiz this period</div>
+    </div>
+    <div class="kpi gold">
+      <div class="kpi-label">Certificates Issued</div>
+      <div class="kpi-value">{{stats.certsInRange}}</div>
+      <div class="kpi-sub">{{stats.totalCerts}} all time</div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-label">New Users</div>
+      <div class="kpi-value">{{stats.newUsers}}</div>
+      <div class="kpi-sub">{{stats.totalUsers}} total registered</div>
+    </div>
+    <div class="kpi rose">
+      <div class="kpi-label">Active Subscriptions</div>
+      <div class="kpi-value">{{stats.activePaidSubs}}</div>
+      <div class="kpi-sub">{{stats.trialParents}} parents on trial</div>
+    </div>
+  </div>
+
+  <!-- ── CHARTS ──────────────────────────────────────────────── -->
+  <div class="section-head"><div class="section-label">Activity Trends</div></div>
+  <div class="charts-row">
+
+    <!-- Daily quiz activity line chart -->
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-title">Quiz Activity — Last 30 Days</div>
+          <div class="card-sub">Attempts vs passes per day</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap"><canvas id="dailyChart" height="100"></canvas></div>
+      </div>
     </div>
 
-    <div class="stat-card">
-      <div class="stat-icon">👥</div>
-      <div class="stat-value">{{stats.uniqueVisitors}}</div>
-      <div class="stat-label">Unique Visitors</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon">🟢</div>
-      <div class="stat-value">{{stats.activeUsers}}</div>
-      <div class="stat-label">Active Users (24h)</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon">📱</div>
-      <div class="stat-value">{{stats.bounceRate}}%</div>
-      <div class="stat-label">Bounce Rate</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon">⚡</div>
-      <div class="stat-value">{{stats.avgResponseTime}}ms</div>
-      <div class="stat-label">Avg Response Time</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon">👤</div>
-      <div class="stat-value">{{stats.totalUsers}}</div>
-      <div class="stat-label">Total Registered Users</div>
+    <!-- User role breakdown doughnut -->
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-title">Users by Role</div>
+          <div class="card-sub">All registered accounts</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap"><canvas id="roleChart"></canvas></div>
+      </div>
     </div>
 
   </div>
 
-  {{!-- Charts section --}}
-  <div style="display:grid; grid-template-columns:2fr 1fr; gap:24px; margin-bottom:32px;">
-    
-    {{!-- Daily traffic chart --}}
-    <div class="chart-card">
-      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">📈 Daily Traffic (Last 30 Days)</h3>
-      <canvas id="dailyChart" height="80"></canvas>
-    </div>
+  <!-- ── TABLES ──────────────────────────────────────────────── -->
+  <div class="section-head"><div class="section-label">Activity Breakdown</div></div>
+  <div class="tables-row">
 
-    {{!-- Device breakdown --}}
-    <div class="chart-card">
-      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">📱 Devices</h3>
-      <canvas id="deviceChart"></canvas>
-    </div>
-
-  </div>
-
-  {{!-- Tables section --}}
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
-    
-    {{!-- Top pages --}}
-    <div class="table-card">
-      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">🔥 Top Pages</h3>
-      <table style="width:100%; border-collapse:collapse;">
-        <thead>
-          <tr style="border-bottom:2px solid #222;">
-            <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Page</th>
-            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Views</th>
-            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Unique</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#each topPages}}
-            <tr style="border-bottom:1px solid #111;">
-              <td style="padding:12px 8px; font-family:monospace; font-size:13px;">{{path}}</td>
-              <td style="padding:12px 8px; text-align:right; font-weight:600;">{{views}}</td>
-              <td style="padding:12px 8px; text-align:right; color:#888;">{{uniqueUsers}}</td>
+    <!-- Top quizzes -->
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-title">Most Attempted Quizzes</div>
+          <div class="card-sub">Top 10 this period</div>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        {{#if topQuizzes.length}}
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="padding-left:16px">#</th>
+              <th>Quiz</th>
+              <th>Attempts</th>
+              <th>Pass Rate</th>
+              <th>Avg Score</th>
             </tr>
-          {{/each}}
-        </tbody>
-      </table>
-    </div>
-
-    {{!-- Top referrers --}}
-    <div class="table-card">
-      <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:700;">🔗 Top Referrers</h3>
-      <table style="width:100%; border-collapse:collapse;">
-        <thead>
-          <tr style="border-bottom:2px solid #222;">
-            <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Source</th>
-            <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Visits</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#each referrerStats}}
-            <tr style="border-bottom:1px solid #111;">
-              <td style="padding:12px 8px; font-size:13px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                {{_id}}
+          </thead>
+          <tbody>
+            {{#each topQuizzes}}
+            <tr>
+              <td style="padding-left:16px"><span class="rank">{{inc @index}}</span></td>
+              <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{title}}</td>
+              <td>{{attempts}}</td>
+              <td>
+                <span class="pr-badge
+                  {{#if (gt passRate '74%')}}pr-high
+                  {{else if (gt passRate '49%')}}pr-mid
+                  {{else}}pr-low{{/if}}">
+                  {{passRate}}
+                </span>
               </td>
-              <td style="padding:12px 8px; text-align:right; font-weight:600;">{{count}}</td>
+              <td>{{avgScore}}</td>
             </tr>
-          {{/each}}
-        </tbody>
-      </table>
+            {{/each}}
+          </tbody>
+        </table>
+        {{else}}
+        <div class="empty">No quiz attempts recorded this period.</div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Attempts by organisation -->
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-title">Activity by Organisation</div>
+          <div class="card-sub">Top 8 orgs this period</div>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        {{#if attemptsByOrg.length}}
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="padding-left:16px">Organisation</th>
+              <th>Attempts</th>
+              <th>Pass Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each attemptsByOrg}}
+            <tr>
+              <td style="padding-left:16px;font-weight:600">{{name}}</td>
+              <td>{{attempts}}</td>
+              <td>
+                <span class="pr-badge
+                  {{#if (gt passRate '74%')}}pr-high
+                  {{else if (gt passRate '49%')}}pr-mid
+                  {{else}}pr-low{{/if}}">
+                  {{passRate}}
+                </span>
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+        {{else}}
+        <div class="empty">No organisation data for this period.</div>
+        {{/if}}
+      </div>
     </div>
 
   </div>
 
-  {{!-- Quick links --}}
-  <div style="margin-top:32px; display:flex; gap:12px;">
-    <a href="/admin/analytics/realtime" class="btn-primary">⚡ Real-time View</a>
-    <a href="/admin/analytics/users" class="btn-secondary">👥 User Analytics</a>
-    <a href="/admin/analytics/export?range={{timeRange}}" class="btn-secondary">📥 Export CSV</a>
+  <!-- ── BOTTOM 3-COL ROW ────────────────────────────────────── -->
+  <div class="section-head"><div class="section-label">Users & Platform</div></div>
+  <div class="bottom-row">
+
+    <!-- Recent signups -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Recent Signups</div>
+      </div>
+      <div class="card-body">
+        {{#if recentSignups.length}}
+          {{#each recentSignups}}
+          <div class="signup-row">
+            <div class="av">
+              {{#if firstName}}{{substring firstName 0 1}}{{else}}?{{/if}}
+            </div>
+            <div>
+              <div class="signup-name">
+                {{#if firstName}}{{firstName}} {{lastName}}{{else}}{{email}}{{/if}}
+              </div>
+              <div class="signup-meta">{{formatDate createdAt}}</div>
+            </div>
+            <span class="role-pill
+              {{#if (eq role 'student')}}rp-student
+              {{else if (eq role 'employee')}}rp-employee
+              {{else if (eq role 'teacher')}}rp-teacher
+              {{else if (eq role 'parent')}}rp-parent
+              {{else if (eq role 'org_admin')}}rp-admin
+              {{else}}rp-other{{/if}}">
+              {{role}}
+            </span>
+          </div>
+          {{/each}}
+        {{else}}
+          <div class="empty">No new signups this period.</div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Subscription health -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Subscription Health</div>
+      </div>
+      <div class="card-body">
+        <div class="sub-row">
+          <span class="sub-label">🟢 Active Paid (All)</span>
+          <span class="sub-count">{{stats.activePaidSubs}}</span>
+        </div>
+        <div class="sub-row">
+          <span class="sub-label">👨‍👩‍👧 Parents (paid)</span>
+          <span class="sub-count">—</span>
+        </div>
+        <div class="sub-row">
+          <span class="sub-label">👤 Employees (paid)</span>
+          <span class="sub-count">—</span>
+        </div>
+        <div class="sub-row">
+          <span class="sub-label">👨‍🏫 Teachers (paid)</span>
+          <span class="sub-count">—</span>
+        </div>
+        <div class="sub-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:14px">
+          <span class="sub-label" style="color:var(--ink-soft)">🔵 Trial (parents)</span>
+          <span class="sub-count" style="color:var(--ink-soft)">{{stats.trialParents}}</span>
+        </div>
+        <div class="sub-row">
+          <span class="sub-label" style="color:var(--ink-soft)">👥 Total Users</span>
+          <span class="sub-count" style="color:var(--ink-soft)">{{stats.totalUsers}}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Platform performance -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Platform Performance</div>
+      </div>
+      <div class="card-body">
+        <div class="perf-row">
+          <span class="perf-label">Avg Response Time</span>
+          <span class="perf-val {{#if (lt stats.avgResponseTime '300ms')}}perf-ok{{else if (lt stats.avgResponseTime '800ms')}}perf-warn{{else}}perf-bad{{/if}}">
+            {{stats.avgResponseTime}}
+          </span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-label">Total Page Views</span>
+          <span class="perf-val perf-ok">{{stats.totalPageViews}}</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-label">Error Rate</span>
+          <span class="perf-val {{#if (eq stats.errorRate '0%')}}perf-ok{{else if (lt stats.errorRate '5%')}}perf-warn{{else}}perf-bad{{/if}}">
+            {{stats.errorRate}}
+          </span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-label">Active Sessions (24h)</span>
+          <span class="perf-val" style="color:var(--ink)">{{stats.activeUsers}}</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── QUICK ACTIONS ───────────────────────────────────────── -->
+  <div class="actions">
+    <a href="/admin/analytics/realtime" class="act-btn act-primary">
+      ⚡ Live Activity Feed
+    </a>
+    <a href="/admin/analytics/export?range={{range}}" class="act-btn act-secondary">
+      ⬇ Export CSV ({{range}})
+    </a>
+    <a href="/admin/orgs/cripfcnt-school/attempts" class="act-btn act-secondary">
+      📋 All Attempts
+    </a>
   </div>
 
 </div>
 
-<style>
-  .stat-card {
-    background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
-    border: 1px solid #222;
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-  }
-
-  .stat-icon {
-    font-size: 32px;
-    margin-bottom: 12px;
-  }
-
-  .stat-value {
-    font-size: 32px;
-    font-weight: 800;
-    margin-bottom: 8px;
-    color: #FFFFFF !important; /* ✅ FIXED: White numbers */
-  }
-
-  .stat-label {
-    color: #aaa; /* ✅ FIXED: Lighter labels */
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .chart-card, .table-card {
-    background: #0f0f0f;
-    border: 1px solid #222;
-    border-radius: 12px;
-    padding: 24px;
-  }
-
-  .chart-card h3, .table-card h3 {
-    color: #FFFFFF !important; /* ✅ FIXED: White headers */
-  }
-
-  .table-card table {
-    color: #FFFFFF !important; /* ✅ FIXED: White table text */
-  }
-
-  .table-card table tbody tr td {
-    color: #EEEEEE !important; /* ✅ FIXED: Light table cells */
-  }
-
-  .btn-active {
-    background: #D4AF37;
-    color: #000;
-  }
-
-  .btn-outline {
-    background: transparent;
-    border: 1px solid #333;
-    color: #fff;
-  }
-
-  .btn-outline:hover {
-    border-color: #D4AF37;
-    color: #D4AF37;
-  }
-
-  .btn-primary {
-    display: inline-block;
-    padding: 12px 24px;
-    background: #D4AF37;
-    color: #000;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 700;
-  }
-
-  .btn-secondary {
-    display: inline-block;
-    padding: 12px 24px;
-    background: transparent;
-    border: 1px solid #333;
-    color: #fff;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 600;
-  }
-
-  .btn-secondary:hover {
-    border-color: #D4AF37;
-    color: #D4AF37;
-  }
-</style>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-  // Daily traffic chart
-  const dailyData = {{{json dailyStats}}};
-  
+  const dailyData  = {{dailyChartJson}};
+  const rolesData  = {{usersByRoleJson}};
+
+  // ── Daily quiz activity chart ──────────────────────────────
   new Chart(document.getElementById('dailyChart'), {
-    type: 'line',
+    type: 'bar',
     data: {
-      labels: dailyData.map(d => d.date),
+      labels: dailyData.map(d => d.label),
       datasets: [
         {
-          label: 'Page Views',
-          data: dailyData.map(d => d.views),
-          borderColor: '#D4AF37',
-          backgroundColor: 'rgba(212, 175, 55, 0.1)',
-          tension: 0.4,
-          fill: true
+          label: 'Total Attempts',
+          data: dailyData.map(d => d.attempts),
+          backgroundColor: 'rgba(77,142,248,.55)',
+          borderColor: '#4d8ef8',
+          borderWidth: 1,
+          borderRadius: 3,
+          order: 2
         },
         {
-          label: 'Unique Visitors',
-          data: dailyData.map(d => d.uniqueVisitors),
-          borderColor: '#4CAF50',
-          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          label: 'Passed',
+          data: dailyData.map(d => d.passed),
+          type: 'line',
+          borderColor: '#34c984',
+          backgroundColor: 'rgba(52,201,132,.12)',
           tension: 0.4,
-          fill: true
+          fill: true,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          order: 1
         }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: true,
+      interaction: { mode:'index', intersect:false },
       plugins: {
-        legend: { position: 'top', labels: { color: '#fff' } }
+        legend: {
+          position:'top',
+          labels:{ color:'#8b91a8', font:{ family:"'DM Sans'" }, boxWidth:14, padding:16 }
+        },
+        tooltip: {
+          backgroundColor:'rgba(17,19,24,.96)',
+          borderColor:'rgba(255,255,255,.1)',
+          borderWidth:1,
+          titleColor:'#f0f2f8',
+          bodyColor:'#8b91a8',
+          padding:12
+        }
       },
       scales: {
-        y: { 
-          beginAtZero: true,
-          ticks: { color: '#888' },
-          grid: { color: '#222' }
+        x: {
+          ticks:{ color:'#4a5068', maxRotation:0, font:{ size:10 } },
+          grid:{ display:false },
+          border:{ display:false }
         },
-        x: { 
-          ticks: { color: '#888' },
-          grid: { display: false }
+        y: {
+          beginAtZero:true,
+          ticks:{ color:'#4a5068', font:{ size:11 } },
+          grid:{ color:'rgba(255,255,255,.04)' },
+          border:{ display:false }
         }
       }
     }
   });
 
-  // Device breakdown chart
-  const deviceData = {{{json deviceStats}}};
-  
-  new Chart(document.getElementById('deviceChart'), {
+  // ── User role doughnut ────────────────────────────────────
+  const ROLE_COLORS = {
+    'student':        '#4d8ef8',
+    'employee':       '#d4a843',
+    'parent':         '#f59e0b',
+    'teacher':        '#34c984',
+    'private_teacher':'#a78bfa',
+    'org_admin':      '#f05a6e',
+    'super_admin':    '#ef4444',
+  };
+  const roleLabels = rolesData.map(r => r._id || 'unknown');
+  const roleColors = roleLabels.map(l => ROLE_COLORS[l] || '#4a5068');
+
+  new Chart(document.getElementById('roleChart'), {
     type: 'doughnut',
     data: {
-      labels: deviceData.map(d => d._id || 'Unknown'),
+      labels: roleLabels,
       datasets: [{
-        data: deviceData.map(d => d.count),
-        backgroundColor: ['#D4AF37', '#4CAF50', '#2196F3', '#FF9800']
+        data: rolesData.map(r => r.count),
+        backgroundColor: roleColors.map(c => c + 'cc'),
+        borderColor: roleColors,
+        borderWidth: 2,
+        hoverOffset: 6
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: true,
+      cutout: '65%',
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#fff' } }
+        legend: {
+          position: 'right',
+          labels: {
+            color:'#8b91a8', font:{ family:"'DM Sans'", size:12 },
+            padding:12, boxWidth:12, boxHeight:12
+          }
+        },
+        tooltip: {
+          backgroundColor:'rgba(17,19,24,.96)',
+          borderColor:'rgba(255,255,255,.1)',
+          borderWidth:1,
+          titleColor:'#f0f2f8',
+          bodyColor:'#8b91a8',
+          padding:12
+        }
       }
     }
   });
 </script>
+</body>
+</html>

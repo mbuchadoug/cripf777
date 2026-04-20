@@ -1,156 +1,421 @@
 {{!-- views/admin/analytics/realtime.hbs --}}
-<div style="max-width:1400px; margin:0 auto; padding:20px;">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Activity · CRIPFCNT Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #0a0c10;
+      --surface:  #111318;
+      --surface2: #181b22;
+      --border:   rgba(255,255,255,.07);
+      --border2:  rgba(255,255,255,.12);
+      --ink:      #f0f2f8;
+      --ink-soft: #8b91a8;
+      --ink-faint:#4a5068;
+      --gold:     #d4a843;
+      --green:    #34c984;
+      --blue:     #4d8ef8;
+      --rose:     #f05a6e;
+      --amber:    #f59e0b;
+      --font: 'DM Sans', system-ui, sans-serif;
+      --mono: 'DM Mono', monospace;
+      --r:    10px;
+      --r-lg: 16px;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:var(--font); background:var(--bg); color:var(--ink);
+      font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased;
+    }
 
-  <div style="margin-bottom:24px;">
-    <a href="/admin/analytics" style="color:#D4AF37; text-decoration:none; font-weight:600;">← Back to Dashboard</a>
-  </div>
+    /* ── TOPBAR ──────────────────────────────────────────── */
+    .topbar {
+      position:sticky; top:0; z-index:100;
+      background:rgba(10,12,16,.92);
+      backdrop-filter:blur(16px);
+      border-bottom:1px solid var(--border);
+      padding:0 28px; height:58px;
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+    }
+    .topbar-left { display:flex; align-items:center; gap:14px; }
+    .back-link {
+      display:inline-flex; align-items:center; gap:6px;
+      color:var(--ink-soft); text-decoration:none;
+      font-size:12.5px; font-weight:500;
+      padding:5px 10px; border-radius:6px; border:1px solid var(--border);
+      transition:all .15s;
+    }
+    .back-link:hover { color:var(--gold); border-color:rgba(212,168,67,.4); }
+    .topbar-title { font-size:15px; font-weight:700; color:var(--ink); }
+    .topbar-sub { font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
 
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
+    /* Live indicator */
+    .live-badge {
+      display:flex; align-items:center; gap:8px;
+      padding:5px 14px; border-radius:99px;
+      background:rgba(52,201,132,.1); border:1px solid rgba(52,201,132,.25);
+    }
+    .pulse {
+      width:8px; height:8px; border-radius:50%;
+      background:var(--green);
+      animation:pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(52,201,132,.6); }
+      50%      { box-shadow:0 0 0 7px rgba(52,201,132,0); }
+    }
+    .live-label { font-size:12px; font-weight:700; color:var(--green); }
+    .live-count { font-size:16px; font-weight:700; color:var(--green); font-family:var(--mono); }
+
+    /* Refresh controls */
+    .refresh-ctrl { display:flex; align-items:center; gap:8px; }
+    .countdown { font-size:11px; color:var(--ink-faint); font-family:var(--mono); }
+    .pause-btn {
+      padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600;
+      background:transparent; color:var(--ink-soft);
+      border:1px solid var(--border); cursor:pointer;
+      transition:all .15s; font-family:var(--font);
+    }
+    .pause-btn:hover { color:var(--ink); border-color:var(--border2); }
+    .pause-btn.paused { color:var(--amber); border-color:rgba(245,158,11,.35); }
+
+    /* ── PAGE ────────────────────────────────────────────── */
+    .page { max-width:1360px; margin:0 auto; padding:28px 28px 64px; }
+
+    /* top stats row */
+    .stat-row {
+      display:grid; grid-template-columns:repeat(4,1fr);
+      gap:12px; margin-bottom:24px;
+    }
+    .stat-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--r-lg); padding:16px 18px;
+      display:flex; flex-direction:column; gap:3px;
+    }
+    .stat-label { font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-faint); }
+    .stat-val { font-size:26px; font-weight:700; color:var(--ink); font-family:var(--mono); }
+    .stat-sub { font-size:11.5px; color:var(--ink-soft); }
+
+    /* section label */
+    .section-label {
+      font-size:10.5px; font-weight:700; letter-spacing:1.2px;
+      text-transform:uppercase; color:var(--ink-faint);
+      margin-bottom:12px;
+    }
+
+    /* ── PANELS GRID ──────────────────────────────────────── */
+    .panels { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+
+    .card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--r-lg); overflow:hidden;
+    }
+    .card-hdr {
+      padding:14px 18px 12px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .card-title {
+      font-size:13px; font-weight:700; color:var(--ink);
+      display:flex; align-items:center; gap:8px;
+    }
+    .card-badge {
+      padding:2px 9px; border-radius:99px;
+      font-size:10px; font-weight:700;
+      background:var(--surface2); color:var(--ink-soft);
+    }
+
+    /* ── ATTEMPT FEED ─────────────────────────────────────── */
+    .attempt-item {
+      display:flex; align-items:center; gap:12px;
+      padding:11px 18px; border-bottom:1px solid var(--border);
+      transition:background .1s;
+    }
+    .attempt-item:last-child { border-bottom:none; }
+    .attempt-item:hover { background:var(--surface2); }
+    .av {
+      width:32px; height:32px; border-radius:50%; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; font-weight:700;
+      background:var(--surface2); border:1px solid var(--border);
+      color:var(--ink-soft);
+    }
+    .attempt-body { flex:1; min-width:0; }
+    .attempt-name { font-size:12.5px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .attempt-quiz { font-size:11.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+    .attempt-right { flex-shrink:0; text-align:right; }
+    .attempt-time { font-size:10.5px; color:var(--ink-faint); font-family:var(--mono); }
+    .result-pill {
+      display:inline-block; margin-top:3px;
+      padding:2px 9px; border-radius:99px;
+      font-size:10.5px; font-weight:700;
+    }
+    .result-pass { background:rgba(52,201,132,.15); color:var(--green); }
+    .result-fail { background:rgba(240,90,110,.13);  color:var(--rose); }
+    .score-pct { font-size:11px; color:var(--ink-faint); font-family:var(--mono); }
+
+    /* ── SIGNUP FEED ──────────────────────────────────────── */
+    .signup-item {
+      display:flex; align-items:center; gap:12px;
+      padding:10px 18px; border-bottom:1px solid var(--border);
+    }
+    .signup-item:last-child { border-bottom:none; }
+    .signup-body { flex:1; min-width:0; }
+    .signup-name { font-size:12.5px; font-weight:600; color:var(--ink); }
+    .signup-meta { font-size:11px; color:var(--ink-faint); margin-top:1px; }
+    .role-pill {
+      flex-shrink:0; padding:2px 9px; border-radius:99px;
+      font-size:10px; font-weight:700; text-transform:uppercase;
+    }
+    .rp-student  { background:rgba(77,142,248,.15); color:var(--blue); }
+    .rp-employee { background:rgba(212,168,67,.13);  color:var(--gold); }
+    .rp-teacher  { background:rgba(52,201,132,.13);  color:var(--green); }
+    .rp-parent   { background:rgba(245,158,11,.13);  color:var(--amber); }
+    .rp-admin    { background:rgba(240,90,110,.13);  color:var(--rose); }
+    .rp-other    { background:var(--surface2); color:var(--ink-soft); border:1px solid var(--border); }
+
+    /* ── PAGE HITS TABLE ──────────────────────────────────── */
+    .full-card { margin-bottom:24px; }
+    .data-table { width:100%; border-collapse:collapse; }
+    .data-table th {
+      padding:10px 16px;
+      text-align:left; font-size:10.5px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.6px;
+      color:var(--ink-faint); border-bottom:1px solid var(--border);
+      white-space:nowrap;
+    }
+    .data-table th:not(:first-child) { text-align:right; }
+    .data-table td {
+      padding:10px 16px; font-size:12.5px; color:var(--ink);
+      border-bottom:1px solid var(--border);
+    }
+    .data-table td:not(:first-child) { text-align:right; }
+    .data-table tbody tr:last-child td { border-bottom:none; }
+    .data-table tbody tr:hover td { background:var(--surface2); }
+    .mono { font-family:var(--mono); font-size:12px; }
+    .rt-fast  { color:var(--green); }
+    .rt-ok    { color:var(--amber); }
+    .rt-slow  { color:var(--rose); }
+
+    /* empty */
+    .empty { padding:32px; text-align:center; color:var(--ink-faint); font-size:12.5px; }
+
+    @media(max-width:900px) {
+      .stat-row { grid-template-columns:1fr 1fr; }
+      .panels { grid-template-columns:1fr; }
+      .page { padding:16px 14px 64px; }
+      .topbar { padding:0 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TOPBAR ──────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="/admin/analytics" class="back-link">← Analytics</a>
     <div>
-      <h1 style="margin:0 0 8px 0; font-size:32px; font-weight:800;">⚡ Real-time Analytics</h1>
-      <div style="color:#888; font-size:14px;">Live visitor tracking (last 5 minutes)</div>
+      <div class="topbar-title">Live Activity</div>
+      <div class="topbar-sub">Last 5 minutes · 1 hour window</div>
     </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="live-badge">
+      <div class="pulse"></div>
+      <span class="live-label">LIVE</span>
+      <span class="live-count">{{activeSessionCount}}</span>
+      <span style="font-size:11px;color:var(--green);opacity:.7">active</span>
+    </div>
+    <div class="refresh-ctrl">
+      <span class="countdown" id="countdown">10s</span>
+      <button class="pause-btn" id="pauseBtn" onclick="togglePause()">Pause</button>
+    </div>
+  </div>
+</div>
 
-    <div style="display:flex; align-items:center; gap:12px;">
-      <div class="pulse-dot"></div>
-      <span style="font-weight:700; font-size:24px;">{{activeNow}}</span>
-      <span style="color:#888;">active now</span>
+<div class="page">
+
+  <!-- ── QUICK STATS ─────────────────────────────────────────── -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-label">Active Sessions</div>
+      <div class="stat-val">{{activeSessionCount}}</div>
+      <div class="stat-sub">last 5 minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Quizzes Completed</div>
+      <div class="stat-val">{{recentAttempts.length}}</div>
+      <div class="stat-sub">last 60 minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">New Signups</div>
+      <div class="stat-val">{{recentSignups.length}}</div>
+      <div class="stat-sub">last 60 minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Page Hits</div>
+      <div class="stat-val">{{recentPageViews.length}}</div>
+      <div class="stat-sub">last 5 minutes</div>
     </div>
   </div>
 
-  {{!-- Auto-refresh notice --}}
-  <div style="background:#1a1a1a; border:1px solid #333; border-radius:8px; padding:12px 16px; margin-bottom:24px; display:flex; align-items:center; gap:12px;">
-    <span style="font-size:20px;">🔄</span>
-    <span style="color:#888;">Auto-refreshing every 10 seconds</span>
-    <button id="pauseRefresh" style="margin-left:auto; padding:6px 12px; background:#333; border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:600;">
-      Pause
-    </button>
+  <!-- ── ATTEMPTS + SIGNUPS ─────────────────────────────────── -->
+  <div class="panels">
+
+    <!-- Recent quiz completions -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">
+          📝 Recent Quiz Completions
+        </div>
+        <span class="card-badge">{{recentAttempts.length}} in last hour</span>
+      </div>
+      {{#if recentAttempts.length}}
+        {{#each recentAttempts}}
+        <div class="attempt-item">
+          <div class="av">
+            {{#if userId.firstName}}{{substring userId.firstName 0 1}}{{else}}?{{/if}}
+          </div>
+          <div class="attempt-body">
+            <div class="attempt-name">
+              {{#if userId.firstName}}{{userId.firstName}} {{userId.lastName}}
+              {{else if userId.email}}{{userId.email}}
+              {{else}}Anonymous{{/if}}
+            </div>
+            <div class="attempt-quiz">{{#if quizTitle}}{{quizTitle}}{{else}}Quiz{{/if}}</div>
+          </div>
+          <div class="attempt-right">
+            <div class="attempt-time">{{formatDate finishedAt}}</div>
+            <div>
+              {{#if passed}}
+              <span class="result-pill result-pass">✓ Passed</span>
+              {{else}}
+              <span class="result-pill result-fail">✗ Failed</span>
+              {{/if}}
+              <span class="score-pct"> {{percentage}}%</span>
+            </div>
+          </div>
+        </div>
+        {{/each}}
+      {{else}}
+        <div class="empty">No quiz completions in the last hour.</div>
+      {{/if}}
+    </div>
+
+    <!-- Recent signups -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">
+          🙋 New Signups
+        </div>
+        <span class="card-badge">{{recentSignups.length}} in last hour</span>
+      </div>
+      {{#if recentSignups.length}}
+        {{#each recentSignups}}
+        <div class="signup-item">
+          <div class="av">
+            {{#if firstName}}{{substring firstName 0 1}}{{else}}?{{/if}}
+          </div>
+          <div class="signup-body">
+            <div class="signup-name">
+              {{#if firstName}}{{firstName}} {{lastName}}{{else}}{{email}}{{/if}}
+            </div>
+            <div class="signup-meta">{{formatDate createdAt}}</div>
+          </div>
+          <span class="role-pill
+            {{#if (eq role 'student')}}rp-student
+            {{else if (eq role 'employee')}}rp-employee
+            {{else if (eq role 'teacher')}}rp-teacher
+            {{else if (eq role 'parent')}}rp-parent
+            {{else if (eq role 'org_admin')}}rp-admin
+            {{else}}rp-other{{/if}}">
+            {{role}}
+          </span>
+        </div>
+        {{/each}}
+      {{else}}
+        <div class="empty">No new signups in the last hour.</div>
+      {{/if}}
+    </div>
+
   </div>
 
-  {{!-- Recent activity table --}}
-  <div style="background:#0f0f0f; border:1px solid #222; border-radius:12px; padding:24px;">
-    <h3 style="margin:0 0 20px 0; font-size:20px; font-weight:700;">🔥 Recent Activity</h3>
-    
-    <table id="activityTable" style="width:100%; border-collapse:collapse;">
+  <!-- ── RAW PAGE HIT FEED ─────────────────────────────────── -->
+  <div class="section-label">Recent Page Hits (last 5 min)</div>
+  <div class="card full-card">
+    {{#if recentPageViews.length}}
+    <table class="data-table">
       <thead>
-        <tr style="border-bottom:2px solid #222;">
-          <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Time</th>
-          <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">User</th>
-          <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Page</th>
-          <th style="text-align:left; padding:12px 8px; font-weight:600; color:#888;">Device</th>
-          <th style="text-align:right; padding:12px 8px; font-weight:600; color:#888;">Response</th>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Page</th>
+          <th>Device</th>
+          <th>Response</th>
         </tr>
       </thead>
       <tbody>
-        {{#each recentPages}}
-          <tr style="border-bottom:1px solid #111;">
-            <td style="padding:12px 8px; color:#888; font-size:13px;">
-              {{formatDate timestamp}}
-            </td>
-            <td style="padding:12px 8px;">
-              {{#if userId}}
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="background:#D4AF37; color:#000; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700;">
-                    {{userRole}}
-                  </span>
-                  <span>{{userId.firstName}} {{userId.lastName}}</span>
-                </div>
-              {{else}}
-                <span style="color:#666; font-style:italic;">Anonymous</span>
-              {{/if}}
-            </td>
-            <td style="padding:12px 8px; font-family:monospace; font-size:13px;">
-              {{path}}
-            </td>
-            <td style="padding:12px 8px; font-size:13px;">
-              {{#if device.browser}}
-                {{device.browser}} / {{device.type}}
-              {{else}}
-                Unknown
-              {{/if}}
-            </td>
-            <td style="padding:12px 8px; text-align:right;">
-              {{#if responseTime}}
-                <span style="color:{{#if (lt responseTime 200)}}#4CAF50{{else if (lt responseTime 500)}}#FFC107{{else}}#f44336{{/if}};">
-                  {{responseTime}}ms
-                </span>
-              {{else}}
-                -
-              {{/if}}
-            </td>
-          </tr>
+        {{#each recentPageViews}}
+        <tr>
+          <td class="mono" style="color:var(--ink-faint)">{{formatDate timestamp}}</td>
+          <td>
+            {{#if userId}}
+              {{#if userId.firstName}}{{userId.firstName}} {{userId.lastName}}
+              {{else}}{{userId.email}}{{/if}}
+            {{else}}
+              <span style="color:var(--ink-faint);font-style:italic">visitor</span>
+            {{/if}}
+          </td>
+          <td class="mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{path}}
+          </td>
+          <td style="color:var(--ink-soft)">
+            {{#if device.type}}{{device.type}}{{else}}—{{/if}}
+          </td>
+          <td class="mono">
+            {{#if responseTime}}
+              <span class="
+                {{#if (lt responseTime 300)}}rt-fast
+                {{else if (lt responseTime 800)}}rt-ok
+                {{else}}rt-slow{{/if}}">
+                {{responseTime}}ms
+              </span>
+            {{else}}—{{/if}}
+          </td>
+        </tr>
         {{/each}}
       </tbody>
     </table>
-
-    {{#unless recentPages}}
-      <div style="text-align:center; padding:40px; color:#666;">
-        <div style="font-size:48px; margin-bottom:12px;">😴</div>
-        <div>No recent activity in the last 5 minutes</div>
-      </div>
-    {{/unless}}
+    {{else}}
+      <div class="empty">No page activity in the last 5 minutes.</div>
+    {{/if}}
   </div>
 
 </div>
 
-<style>
-  .pulse-dot {
-    width: 12px;
-    height: 12px;
-    background: #4CAF50;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% {
-      box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
-    }
-    50% {
-      box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
-    }
-  }
-
-  #pauseRefresh:hover {
-    background: #444;
-  }
-
-  /* ✅ FIXED: Make all text visible */
-  h1, h2, h3, h4, h5, h6 {
-    color: #FFFFFF !important;
-  }
-
-  table {
-    color: #FFFFFF !important;
-  }
-
-  table tbody tr td {
-    color: #EEEEEE !important;
-  }
-
-  table thead tr th {
-    color: #AAAAAA !important;
-  }
-</style>
-
 <script>
-  let refreshInterval;
-  let isPaused = false;
+  let paused = false;
+  let seconds = 10;
+  const countdown = document.getElementById('countdown');
+  const pauseBtn  = document.getElementById('pauseBtn');
 
-  function startAutoRefresh() {
-    refreshInterval = setInterval(() => {
-      if (!isPaused) {
-        location.reload();
-      }
-    }, 10000); // 10 seconds
+  function togglePause() {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('paused', paused);
   }
 
-  document.getElementById('pauseRefresh').addEventListener('click', function() {
-    isPaused = !isPaused;
-    this.textContent = isPaused ? 'Resume' : 'Pause';
-    this.style.background = isPaused ? '#D4AF37' : '#333';
-    this.style.color = isPaused ? '#000' : '#fff';
-  });
-
-  startAutoRefresh();
+  setInterval(() => {
+    if (paused) return;
+    seconds--;
+    countdown.textContent = seconds + 's';
+    if (seconds <= 0) {
+      location.reload();
+    }
+  }, 1000);
 </script>
+</body>
+</html>
