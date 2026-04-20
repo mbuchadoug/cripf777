@@ -1363,11 +1363,12 @@ else if (examId) finalExamId = examId;
 else finalExamId = "exam-" + Date.now().toString(36);
 
 // ✅ Resolve student (quiz taker) ONCE, early
+// ✅ FIXED — quiz taker (req.user) always wins
 const attemptUserId =
-  exam?.userId ||
-  exam?.learnerId ||
-  payload.userId ||
-  req.user?._id ||   // <-- optional fallback if your system allows direct quiz taking
+  req.user?._id ||     // person who is logged in and submitted the quiz
+  payload.userId ||    // explicit userId sent in the submit payload
+  exam?.learnerId ||   // learner field if explicitly set
+  exam?.userId ||      // fallback: only used when no session (e.g. anonymous/kiosk)
   null;
 
 if (!attemptUserId) {
