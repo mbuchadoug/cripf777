@@ -3275,88 +3275,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       });
     }
 
-    // ── pendingQuoteReply: seller received a browse-and-shop quote request ────────
-    // They reply with a price/message and we forward it directly to the buyer.
-    const _pendingQuote = flowSess?.tempData?.pendingQuoteReply;
-    if (_pendingQuote === "true" && text && !a) {
-      const _pqItem      = flowSess?.tempData?.pendingQuoteItem       || "your item";
-      const _pqBuyer     = flowSess?.tempData?.pendingQuoteBuyerPhone || "";
-      const _pqCity      = flowSess?.tempData?.pendingQuoteCity       || "";
-      const _pqArea      = flowSess?.tempData?.pendingQuoteArea       || "";
-      const _pqSupplier  = await findSupplierByPhone(phone);
-
-      // Handle cancel
-      if (text.trim().toLowerCase() === "cancel") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: {
-            "tempData.pendingQuoteReply":      "",
-            "tempData.pendingQuoteItem":       "",
-            "tempData.pendingQuoteBuyerPhone": "",
-            "tempData.pendingQuoteCity":       "",
-            "tempData.pendingQuoteArea":       ""
-          }},
-          { upsert: true }
-        );
-        return sendText(from, "✅ Quote request ignored.");
-      }
-
-      // Clear session
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { $unset: {
-          "tempData.pendingQuoteReply":      "",
-          "tempData.pendingQuoteItem":       "",
-          "tempData.pendingQuoteBuyerPhone": "",
-          "tempData.pendingQuoteCity":       "",
-          "tempData.pendingQuoteArea":       ""
-        }},
-        { upsert: true }
-      );
-
-      const _pqSupplierName = _pqSupplier?.businessName || "A seller";
-      const _pqSupplierPhone = _pqSupplier?.phone || from;
-      const _pqLocation = _pqArea ? `${_pqArea}, ${_pqCity}` : _pqCity;
-
-      // Forward quote to buyer
-      if (_pqBuyer) {
-        const _pqNormBuyer = String(_pqBuyer).replace(/\D+/g, "");
-        const _pqFullBuyer = _pqNormBuyer.startsWith("0") && _pqNormBuyer.length === 10
-          ? "263" + _pqNormBuyer.slice(1) : _pqNormBuyer;
-        try {
-          await sendButtons(_pqFullBuyer, {
-            text:
-              `💬 *Quote received for: ${_pqItem}*\n\n` +
-              `🏪 *${_pqSupplierName}*\n` +
-              (_pqLocation ? `📍 ${_pqLocation}\n` : "") +
-              `📞 ${_pqSupplierPhone}\n\n` +
-              `💵 *Quote:* ${text.trim()}\n\n` +
-              `Contact the seller directly to confirm your order.`,
-            buttons: [
-              { id: "find_supplier",       title: "🔍 Browse & Shop" },
-              { id: "sup_request_sellers", title: "⚡ Request Sellers" }
-            ]
-          });
-          console.log(`[PENDING QUOTE] Forwarded quote from ${from} to buyer ${_pqFullBuyer}`);
-        } catch (fwdErr) {
-          console.error(`[PENDING QUOTE] Failed to forward to buyer: ${fwdErr.message}`);
-        }
-      }
-
-      // Confirm to seller
-      return sendButtons(from, {
-        text:
-          `✅ *Quote sent to buyer!*\n\n` +
-          `You quoted: _${text.trim()}_\n` +
-          `For: *${_pqItem}*\n\n` +
-          `The buyer will see your price and contact details. Good luck! 🎯`,
-        buttons: [
-          { id: "my_supplier_account", title: "🏪 My Store"   },
-          { id: "suppliers_home",      title: "🛒 Marketplace" }
-        ]
-      });
-    }
-
     // If supplier types while in confirm state, treat as wanting to edit → re-enter pricing
     if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a) {
       await UserSession.findOneAndUpdate(
@@ -4774,22 +4692,6 @@ if (a === "sup_request_quote_search") {
     const cityText  = ctx.city || supplierProfile?.location?.city || "Zimbabwe";
     const areaText  = ctx.area ? `${ctx.area}, ${cityText}` : cityText;
 
-    // ── Set session state so seller's price reply is handled correctly ──────────
-    const _normPhoneKey = fullPhone.replace(/\D+/g, "");
-    await UserSession.findOneAndUpdate(
-      { phone: _normPhoneKey },
-      {
-        $set: {
-          "tempData.pendingQuoteReply":      "true",
-          "tempData.pendingQuoteItem":       label,
-          "tempData.pendingQuoteBuyerPhone": buyerPhone,
-          "tempData.pendingQuoteCity":       ctx.city || "",
-          "tempData.pendingQuoteArea":       ctx.area || ""
-        }
-      },
-      { upsert: true }
-    );
-
     const interactiveBody = {
       text:
         `📋 *New Quote Request*\n\n` +
@@ -4797,14 +4699,7 @@ if (a === "sup_request_quote_search") {
         `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
         `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
         `📞 Buyer: ${buyerPhone}\n\n` +
-        `─────────────────\n` +
-        `💰 *Reply with your price to send the buyer a quote.*\n\n` +
-        `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
-        `Or type a full message e.g: _250 includes labour and materials_\n\n` +
-        `Type *cancel* to ignore this request.`,
+        `Buyer wants your price before ordering. Reply with your quote.`,
       buttons: [
         { id: "my_supplier_account", title: "🏪 My Store"   },
         { id: "suppliers_home",      title: "🛒 Marketplace" }
@@ -4910,22 +4805,6 @@ if (a.startsWith("sup_request_quote_supplier_")) {
     const _cityText2   = ctx.city || supplier?.location?.city || "Zimbabwe";
     const _areaText2   = ctx.area ? `${ctx.area}, ${_cityText2}` : _cityText2;
 
-    // ── Set session state so seller's price reply is handled correctly ──────────
-    const _normPhone2Key = _fullPhone2.replace(/\D+/g, "");
-    await UserSession.findOneAndUpdate(
-      { phone: _normPhone2Key },
-      {
-        $set: {
-          "tempData.pendingQuoteReply":      "true",
-          "tempData.pendingQuoteItem":       requestedItem,
-          "tempData.pendingQuoteBuyerPhone": from,
-          "tempData.pendingQuoteCity":       ctx.city || "",
-          "tempData.pendingQuoteArea":       ctx.area || ""
-        }
-      },
-      { upsert: true }
-    );
-
     const _interactiveBody2 = {
       text:
         `📋 *New Quote Request*\n\n` +
@@ -4934,14 +4813,7 @@ if (a.startsWith("sup_request_quote_supplier_")) {
         `${ctx.area ? `📍 Area: ${ctx.area}\n` : ""}` +
         `${ctx.city ? `🏙 City: ${ctx.city}\n` : ""}` +
         `📞 Buyer: ${from}\n\n` +
-        `─────────────────\n` +
-        `💰 *Reply with your price to send the buyer a quote.*\n\n` +
-        `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
-        `Or type a full message e.g: _250 includes labour and materials_\n\n` +
-        `Type *cancel* to ignore this request.`,
+        `Reply with your price/quote to win this customer.`,
       buttons: [
         { id: "my_supplier_account", title: "🏪 My Store"   },
         { id: "suppliers_home",      title: "🛒 Marketplace" }
