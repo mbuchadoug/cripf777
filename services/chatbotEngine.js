@@ -3116,7 +3116,14 @@ Reply *menu* to start.`);
   // =========================
   // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
   // =========================
-  if (!isMetaAction) {
+const isBuyerRequestMetaReply =
+  a === "view_and_quote" ||
+  al === "view & quote" ||
+  al === "view and quote" ||
+  a === "not_available" ||
+  al === "not available";
+
+if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
     const buyerRequestState = flowSess?.tempData?.buyerRequestState || null;
     const pendingBuyerRequest = flowSess?.tempData?.pendingBuyerRequest || null;
