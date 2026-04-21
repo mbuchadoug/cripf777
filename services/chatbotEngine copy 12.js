@@ -3150,91 +3150,20 @@ Reply *menu* to start.`);
     // This is the reliable entry point for outside-24hr-session suppliers.
     if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
       const _introRequest  = await BuyerRequest.findById(sellerRequestId);
+      const _introSupplier = await SupplierProfile.findOne({ phone }).lean();
 
-      if (!_introRequest) {
+      if (!_introRequest || _introSupplier === null) {
+        // Clear state and bail
         await UserSession.findOneAndUpdate(
           { phone },
           { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
           { upsert: true }
         );
-        return sendText(from,
-          `⏰ *That request has closed.*\n\n` +
-          `The buyer's request has expired or been filled.\n\n` +
-          `New requests will be sent to you automatically when buyers need your products or services.`
-        );
+        return sendText(from, "❌ This request has expired or been closed by the buyer.");
       }
-
-      // ── Multi-format phone lookup ─────────────────────────────────────────────
-      const _introPhone2   = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-      const _introSupplier = await SupplierProfile.findOne({
-        phone: { $in: [phone, _introPhone2, "+" + phone] }
-      }).lean();
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
       const _introItems     = (_introRequest.items || []);
-      const _introIsService = _introSupplier?.profileType === "service";
-
-      // ── If supplier tapped "View & Quote" from the v2 template ───────────────
-      // Go DIRECTLY to the pricing form — skip the intermediate buttons message.
-      if (a === "view_and_quote") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
-          { upsert: true }
-        );
-
-        const _directItemLines = _introItems.map((item, i) => `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`).join("\n");
-        const _directEx        = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
-        const _directSingle    = _introItems.length === 1;
-        const _directLocation  = _introRequest.area ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}` : _introRequest.city ? `📍 ${_introRequest.city}` : "";
-        const _directDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-
-        return sendText(from,
-          `✅ *${_introRef} — Ready to quote*\n` +
-          `${_directLocation}  ${_directDelivery}\n` +
-          `─────────────────\n` +
-          `*Items requested:*\n` +
-          `${_directItemLines}\n` +
-          `─────────────────\n\n` +
-          `💰 *How to send your price:*\n` +
-          (_directSingle
-            ? `Type the price, e.g: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`
-            : `Type each price like this:\n*${_directEx}*\n\n_(number = item, x = price)_`) +
-          (_directSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\nWant to add a note? Start with *msg* e.g: _12.00 msg available from tomorrow_\n\n` +
-          `Type *cancel* to go back.\n` +
-          `_Your quote goes to the buyer instantly._`
-        );
-      }
-
-      // ── If supplier tapped "Not Available" from the v2 template ─────────────
-      if (a === "not_available") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
-          { upsert: true }
-        );
-        if (_introSupplier) {
-          const _naResponse = {
-            supplierId: _introSupplier._id, supplierPhone: _introSupplier.phone,
-            supplierName: _introSupplier.businessName, mode: "unavailable",
-            message: "", items: [], totalAmount: null,
-            deliveryAvailable: _introSupplier.delivery?.available ?? null, etaText: ""
-          };
-          _introRequest.responses.push(_naResponse);
-          await _introRequest.save();
-          await sendBuyerRequestResponseToBuyer({ request: _introRequest, supplier: _introSupplier, response: _naResponse });
-        }
-        return sendButtons(from, {
-          text: "✅ *Response sent.* The buyer has been notified you are not available.",
-          buttons: [
-            { id: "my_supplier_account", title: "🏪 My Store"   },
-            { id: "suppliers_home",      title: "🛒 Marketplace" }
-          ]
-        });
-      }
-
-      // ── Any other message (e.g. "hi") → show item list + buttons ─────────────
       const _introItemLines = _introItems.map((item, i) =>
         `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
       ).join("\n");
@@ -3242,7 +3171,9 @@ Reply *menu* to start.`);
         ? `${_introRequest.area}, ${_introRequest.city || ""}`
         : (_introRequest.city || "Zimbabwe");
       const _introDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+      const _introIsService = _introSupplier?.profileType === "service";
 
+      // Transition to awaiting_offer so next typed prices are processed correctly
       await UserSession.findOneAndUpdate(
         { phone },
         { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
@@ -3260,7 +3191,7 @@ Reply *menu* to start.`);
           `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
           `The buyer receives your quote instantly.`,
         buttons: [
-          { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"  },
+          { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"   },
           { id: `req_unavail_${sellerRequestId}`, title: "Not Available" }
         ]
       });
