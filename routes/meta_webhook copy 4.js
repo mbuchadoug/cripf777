@@ -315,19 +315,11 @@ if (msg.type === "document") {
     // 🔥 NORMALIZE INPUT HERE
     // ===========================
 
-  if (msg.type === "text") {
-  const rawText = (msg.text?.body || "").trim();
-  const lowered = rawText.toLowerCase();
-
-  // Normalize supplier request template replies that may arrive as plain text
-  if (lowered === "view & quote" || lowered === "view and quote") {
-    action = "view_and_quote";
-  } else if (lowered === "not available") {
-    action = "not_available";
-  } else {
-    action = lowered;
-  }
-}
+    if (msg.type === "text") {
+      action = (msg.text?.body || "")
+        .trim()
+        .toLowerCase();
+    }
 
     if (msg.type === "interactive") {
       action = (
