@@ -2935,6 +2935,8 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_request_delivery_no" ||
       a.startsWith("req_offer_") ||
       a.startsWith("req_unavail_") ||
+      a === "view_and_quote" ||
+      a === "not_available" ||
       a.startsWith("buyer_view_all_quotes_") ||
       a === "buyer_my_requests" ||
 
@@ -4175,6 +4177,8 @@ a.startsWith("sup_accept_") ||
   a === "sup_request_delivery_no" ||
   a.startsWith("req_offer_") ||
   a.startsWith("req_unavail_") ||
+  a === "view_and_quote" ||
+  a === "not_available" ||
   a.startsWith("buyer_view_all_quotes_") ||
   a === "buyer_my_requests" ||
 
