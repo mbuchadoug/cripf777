@@ -3178,7 +3178,7 @@ Reply *menu* to start.`);
 
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
       // Go DIRECTLY to the pricing form — skip the intermediate buttons message.
-      if (a === "view_and_quote") {
+      if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
         await UserSession.findOneAndUpdate(
           { phone },
           { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
@@ -3210,7 +3210,7 @@ Reply *menu* to start.`);
       }
 
       // ── If supplier tapped "Not Available" from the v2 template ─────────────
-      if (a === "not_available") {
+      if (a === "not_available" || al === "not available") {
         await UserSession.findOneAndUpdate(
           { phone },
           { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
