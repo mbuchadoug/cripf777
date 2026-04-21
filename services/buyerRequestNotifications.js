@@ -23,7 +23,7 @@ import axios   from "axios";
 import { sendButtons, sendText } from "./metaSender.js";
 
 // ══ FEATURE FLAG — flip to true once supplier_new_request_v2 is approved ══════
-const USE_V2_TEMPLATE = false;
+const USE_V2_TEMPLATE = true;
 // ══════════════════════════════════════════════════════════════════════════════
 
 const GRAPH_API_VERSION = "v24.0";
