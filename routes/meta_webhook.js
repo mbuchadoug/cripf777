@@ -309,17 +309,17 @@ if (msg.type === "document") {
 
 
     const from = msg.from;
-    let action = "";
+  let action = "";
 
-    // ===========================
-    // 🔥 NORMALIZE INPUT HERE
-    // ===========================
+// ===========================
+// 🔥 NORMALIZE INPUT HERE
+// ===========================
 
-  if (msg.type === "text") {
+// ✅ TEXT (fallback)
+if (msg.type === "text") {
   const rawText = (msg.text?.body || "").trim();
   const lowered = rawText.toLowerCase();
 
-  // Normalize supplier request template replies that may arrive as plain text
   if (lowered === "view & quote" || lowered === "view and quote") {
     action = "view_and_quote";
   } else if (lowered === "not available") {
@@ -329,16 +329,29 @@ if (msg.type === "document") {
   }
 }
 
-    if (msg.type === "interactive") {
-      action = (
-        msg.interactive?.button_reply?.id ||
-        msg.interactive?.list_reply?.id ||
-        ""
-      )
-        .trim()
-        .toLowerCase();
-    }
+// ✅ TEMPLATE QUICK REPLY (THIS IS YOUR MISSING PIECE)
+if (msg.type === "button") {
+  action = (
+    msg.button?.payload ||   // 🔥 THIS is the real value: view_and_quote
+    msg.button?.text ||      // fallback
+    ""
+  )
+    .trim()
+    .toLowerCase();
+}
 
+// ✅ INTERACTIVE (list/buttons after bot sends menus)
+if (msg.type === "interactive") {
+  action = (
+    msg.interactive?.button_reply?.id ||
+    msg.interactive?.list_reply?.id ||
+    msg.interactive?.button_reply?.title ||
+    msg.interactive?.list_reply?.title ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+}
     // 🔥 IMPORTANT: do NOT touch res below this line
     await handleIncomingMessage({ from, action });
     //await handleIncomingMessage({ from, action: msg });
