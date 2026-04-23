@@ -3323,6 +3323,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     
     const sellerRequestReplyState = flowSess?.tempData?.sellerRequestReplyState || null;
     const sellerRequestId = flowSess?.tempData?.sellerRequestId || null;
+    let pendingDraftQuote = null;
+    try {
+      const _rawDraft = flowSess?.tempData?.pendingDraftQuote;
+      pendingDraftQuote = _rawDraft
+        ? (typeof _rawDraft === "string" ? JSON.parse(_rawDraft) : _rawDraft)
+        : null;
+    } catch (_) { pendingDraftQuote = null; }
 
     // ── awaiting_offer_intro: supplier's FIRST reply after template ──────────────
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
@@ -3393,34 +3400,43 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           : _introRequest.city ? `📍 ${_introRequest.city}` : "";
         const _directDelivery = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
-        // ── Case 1: All items auto-priced — one-tap send ──────────────────────
+        // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
           const _allLines = _draft.responseItems.map((item, i) =>
             `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
           ).join("\n");
 
-          return sendButtons(from, {
-            text:
-              `📋 *Quote Preview — ${_introRef}*\n` +
-              `${_directLocation}  ${_directDelivery}\n` +
-              `─────────────────\n` +
-              `${_allLines}\n\n` +
-              `💵 *Total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
-              `─────────────────\n` +
-              `Prices are from your catalogue. Edit if needed, or tap *Send Quote* to deliver instantly.`,
-            buttons: [
-              { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Quote" },
-              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-            ]
-          });
+          const _previewBody =
+            `📋 *Quote Preview — ${_introRef}*\n` +
+            `${_directLocation}  ${_directDelivery}\n` +
+            `─────────────────\n` +
+            `${_allLines}\n\n` +
+            `💵 *Total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
+            `─────────────────\n` +
+            `Prices from your catalogue. Edit if needed.\n\n` +
+            `Type *send* to deliver instantly, or edit any price e.g: _1x12.50_`;
+
+          // sendButtons body is capped at 1024 chars by Meta — use sendText for long lists
+          if (_previewBody.length <= 900) {
+            return sendButtons(from, {
+              text: _previewBody,
+              buttons: [
+                { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Quote" },
+                { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
+              ]
+            });
+          } else {
+            // Too many items for sendButtons — use plain text with typed commands
+            return sendText(from, _previewBody);
+          }
         }
 
-        // ── Case 2: Some items priced, some missing — show hybrid ─────────────
+        // ── Case 2: Some items priced, some missing ───────────────────────────
         if (_draft.responseItems.length > 0) {
           const _pricedLines = _draft.responseItems.map((item, i) =>
             `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)} ✅`
           ).join("\n");
-          const _missingLines = _draft.missingItems.map(m => `• ${m} — ❓ enter price`).join("\n");
+          const _missingLines = _draft.missingItems.map(m => `• ${m} — enter price`).join("\n");
 
           return sendText(from,
             `📋 *Quote Preview — ${_introRef}*\n` +
@@ -3430,9 +3446,8 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             `💵 *Priced total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
             `─────────────────\n` +
             `*Still needs pricing:*\n${_missingLines}\n\n` +
-            `*Options:*\n` +
-            `• Type *send* to quote only the priced items above\n` +
-            `• Type prices for missing items e.g: _1x12.50_  then those are added\n` +
+            `• Type *send* to quote only the priced items\n` +
+            `• Type prices for missing items e.g: _1x12.50_\n` +
             `• Type *cancel* to go back`
           );
         }
