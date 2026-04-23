@@ -260,94 +260,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       return acc;
     }, {});
 
-      const ADMIN_PRODUCT_PRESETS = {
-    plumbing_supplies: {
-      products: [
-        "110mm pvc pipe",
-        "110mm pvc ug pipe",
-        "110mm ac pvc pipe",
-        "50mm waste pipe",
-        "32mm p trap",
-        "40mm p trap",
-        "50mm p trap",
-        "32mm bottle trap",
-        "100mm floor drain",
-        "110mm inspection eye",
-        "110mm plain bend",
-        "110mm h t bend",
-        "110mm plain tee",
-        "110mm access tee",
-        "110mm y junction",
-        "110-50 reducer tee",
-        "110mm vent valve",
-        "110mm boss connector",
-        "50mm plain bend",
-        "50mm ie bend",
-        "50mm ic tee",
-        "gulley p",
-        "gulley heads",
-        "15mm pipe clip",
-        "20mm pipe clip",
-        "15mm male connector",
-        "15mm cap elbow",
-        "22mm cap elbow",
-        "3/4 cu elbow",
-        "22mm cu pipe",
-        "15mm cu pipe",
-        "solvent cement",
-        "soldering wire",
-        "nasco flux",
-        "gas canister",
-        "masonry disk",
-        "basin pedestal",
-        "basin waste",
-        "toilet lid",
-        "shower rose and arm"
-      ],
-      prices: [
-        "110mm pvc pipe, 10, each",
-        "110mm pvc ug pipe, 10, each",
-        "110mm ac pvc pipe, 12, each",
-        "50mm waste pipe, 6, each",
-        "32mm p trap, 5, each",
-        "40mm p trap, 5, each",
-        "50mm p trap, 5, each",
-        "32mm bottle trap, 10, each",
-        "100mm floor drain, 10, each",
-        "110mm inspection eye, 15, each",
-        "110mm plain bend, 3, each",
-        "110mm h t bend, 3, each",
-        "110mm plain tee, 4, each",
-        "110mm access tee, 12, each",
-        "110mm y junction, 4, each",
-        "110-50 reducer tee, 4, each",
-        "110mm vent valve, 3, each",
-        "110mm boss connector, 3, each",
-        "50mm plain bend, 1, each",
-        "50mm ie bend, 0.5, each",
-        "50mm ic tee, 1, each",
-        "gulley p, 2.5, each",
-        "gulley heads, 4, each",
-        "15mm pipe clip, 0.5, each",
-        "20mm pipe clip, 1, each",
-        "15mm male connector, 1.5, each",
-        "15mm cap elbow, 0.5, each",
-        "22mm cap elbow, 1.5, each",
-        "3/4 cu elbow, 1.5, each",
-        "22mm cu pipe, 35, each",
-        "15mm cu pipe, 20, each",
-        "solvent cement, 10, each",
-        "soldering wire, 10, each",
-        "nasco flux, 5, each",
-        "gas canister, 3, each",
-        "masonry disk, 10, each",
-        "basin pedestal, 30, each",
-        "basin waste, 5, each",
-        "toilet lid, 10, each",
-        "shower rose and arm, 8, each"
-      ]
-    }
-  };
   const error   = req.query.error   ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
   const success = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
 
@@ -553,9 +465,8 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       </form>
     </div>
 
-       <script>
+    <script>
     const SUBCATS = ${JSON.stringify(subcatMap)};
-    const ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
 
     function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
@@ -574,16 +485,14 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       document.getElementById("subcategorySelect").innerHTML = '<option value="">All / General</option>';
     }
 
-      function updateSubcats() {
+    function updateSubcats() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
       const catId = isService
         ? document.getElementById("serviceCategorySelect").value
         : document.getElementById("productCategorySelect").value;
-
       const subs = SUBCATS[catId] || [];
       const subcatWrap   = document.getElementById("subcatWrap");
       const subcatSelect = document.getElementById("subcategorySelect");
-
       if (subs.length) {
         subcatSelect.innerHTML = '<option value="">All / General</option>' +
           subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
@@ -591,25 +500,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       } else {
         subcatSelect.innerHTML = '<option value="">All / General</option>';
         subcatWrap.style.display = "none";
-      }
-
-      // ── NEW: auto-fill admin presets for product suppliers only ──
-      const productsTextarea = document.getElementById("productsTextarea");
-      const pricesTextarea = document.querySelector('textarea[name="prices"]');
-
-      if (!isService && catId && ADMIN_PRODUCT_PRESETS[catId]) {
-        const preset = ADMIN_PRODUCT_PRESETS[catId];
-
-        productsTextarea.value = (preset.products || []).join(", ");
-        if (pricesTextarea) {
-          pricesTextarea.value = (preset.prices || []).join("\n");
-        }
-        return;
-      }
-
-      // Optional: clear product pricing when switching away from a preset category
-      if (!isService && pricesTextarea && catId !== "plumbing_supplies") {
-        // leave existing values untouched unless you explicitly want auto-clear
       }
     }
     </script>
@@ -643,113 +533,10 @@ const {
       );
     }
 
-       const ADMIN_PRODUCT_PRESETS = {
-      plumbing_supplies: {
-        products: [
-          "110mm pvc pipe",
-          "110mm pvc ug pipe",
-          "110mm ac pvc pipe",
-          "50mm waste pipe",
-          "32mm p trap",
-          "40mm p trap",
-          "50mm p trap",
-          "32mm bottle trap",
-          "100mm floor drain",
-          "110mm inspection eye",
-          "110mm plain bend",
-          "110mm h t bend",
-          "110mm plain tee",
-          "110mm access tee",
-          "110mm y junction",
-          "110-50 reducer tee",
-          "110mm vent valve",
-          "110mm boss connector",
-          "50mm plain bend",
-          "50mm ie bend",
-          "50mm ic tee",
-          "gulley p",
-          "gulley heads",
-          "15mm pipe clip",
-          "20mm pipe clip",
-          "15mm male connector",
-          "15mm cap elbow",
-          "22mm cap elbow",
-          "3/4 cu elbow",
-          "22mm cu pipe",
-          "15mm cu pipe",
-          "solvent cement",
-          "soldering wire",
-          "nasco flux",
-          "gas canister",
-          "masonry disk",
-          "basin pedestal",
-          "basin waste",
-          "toilet lid",
-          "shower rose and arm"
-        ],
-        prices: [
-          { product: "110mm pvc pipe", amount: 10, unit: "each" },
-          { product: "110mm pvc ug pipe", amount: 10, unit: "each" },
-          { product: "110mm ac pvc pipe", amount: 12, unit: "each" },
-          { product: "50mm waste pipe", amount: 6, unit: "each" },
-          { product: "32mm p trap", amount: 5, unit: "each" },
-          { product: "40mm p trap", amount: 5, unit: "each" },
-          { product: "50mm p trap", amount: 5, unit: "each" },
-          { product: "32mm bottle trap", amount: 10, unit: "each" },
-          { product: "100mm floor drain", amount: 10, unit: "each" },
-          { product: "110mm inspection eye", amount: 15, unit: "each" },
-          { product: "110mm plain bend", amount: 3, unit: "each" },
-          { product: "110mm h t bend", amount: 3, unit: "each" },
-          { product: "110mm plain tee", amount: 4, unit: "each" },
-          { product: "110mm access tee", amount: 12, unit: "each" },
-          { product: "110mm y junction", amount: 4, unit: "each" },
-          { product: "110-50 reducer tee", amount: 4, unit: "each" },
-          { product: "110mm vent valve", amount: 3, unit: "each" },
-          { product: "110mm boss connector", amount: 3, unit: "each" },
-          { product: "50mm plain bend", amount: 1, unit: "each" },
-          { product: "50mm ie bend", amount: 0.5, unit: "each" },
-          { product: "50mm ic tee", amount: 1, unit: "each" },
-          { product: "gulley p", amount: 2.5, unit: "each" },
-          { product: "gulley heads", amount: 4, unit: "each" },
-          { product: "15mm pipe clip", amount: 0.5, unit: "each" },
-          { product: "20mm pipe clip", amount: 1, unit: "each" },
-          { product: "15mm male connector", amount: 1.5, unit: "each" },
-          { product: "15mm cap elbow", amount: 0.5, unit: "each" },
-          { product: "22mm cap elbow", amount: 1.5, unit: "each" },
-          { product: "3/4 cu elbow", amount: 1.5, unit: "each" },
-          { product: "22mm cu pipe", amount: 35, unit: "each" },
-          { product: "15mm cu pipe", amount: 20, unit: "each" },
-          { product: "solvent cement", amount: 10, unit: "each" },
-          { product: "soldering wire", amount: 10, unit: "each" },
-          { product: "nasco flux", amount: 5, unit: "each" },
-          { product: "gas canister", amount: 3, unit: "each" },
-          { product: "masonry disk", amount: 10, unit: "each" },
-          { product: "basin pedestal", amount: 30, unit: "each" },
-          { product: "basin waste", amount: 5, unit: "each" },
-          { product: "toilet lid", amount: 10, unit: "each" },
-          { product: "shower rose and arm", amount: 8, unit: "each" }
-        ]
-      }
-    };
-
-    const category = profileType === "service" ? serviceCategory : productCategory;
-    const categories = category ? [category.trim()] : [];
-
-    let productList = (products || "")
+    const productList = (products || "")
       .split(",")
       .map(p => p.trim().toLowerCase())
       .filter(Boolean);
-
-    // Backend fallback: if admin chose plumbing_supplies and left products blank,
-    // auto-load the preset products.
-    if (
-      profileType !== "service" &&
-      category === "plumbing_supplies" &&
-      !productList.length &&
-      ADMIN_PRODUCT_PRESETS.plumbing_supplies
-    ) {
-      productList = [...ADMIN_PRODUCT_PRESETS.plumbing_supplies.products];
-    }
 
     const priceList = [];
     if (prices && profileType !== "service") {
@@ -764,24 +551,6 @@ const {
       }
     }
 
-    // Backend fallback: if admin chose plumbing_supplies and left prices blank,
-    // auto-load preset prices too.
-    if (
-      profileType !== "service" &&
-      category === "plumbing_supplies" &&
-      !priceList.length &&
-      ADMIN_PRODUCT_PRESETS.plumbing_supplies
-    ) {
-      for (const row of ADMIN_PRODUCT_PRESETS.plumbing_supplies.prices) {
-        priceList.push({
-          product: row.product,
-          amount: row.amount,
-          unit: row.unit || "each",
-          inStock: true,
-          currency: "USD"
-        });
-      }
-    }
     const rateList = [];
     if (rates && profileType === "service") {
       for (const line of (rates || "").split("\n")) {

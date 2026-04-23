@@ -898,177 +898,6 @@ function findMatchingSupplierPrice(supplier, requestedProduct) {
   return null;
 }
 
-
-const PLUMBING_PRESET_PRICES = Object.freeze({
-  "110mm pvc pipe":         { amount: 10, unit: "each" },
-  "110mm pvc ug pipe":      { amount: 10, unit: "each" },
-  "110mm ac pvc pipe":      { amount: 12, unit: "each" },
-  "50mm waste pipe":        { amount: 6,  unit: "each" },
-
-  "32mm p trap":            { amount: 5,  unit: "each" },
-  "40mm p trap":            { amount: 5,  unit: "each" },
-  "50mm p trap":            { amount: 5,  unit: "each" },
-  "32mm bottle trap":       { amount: 10, unit: "each" },
-  "100mm floor drain":      { amount: 10, unit: "each" },
-
-  "110mm inspection eye":   { amount: 15, unit: "each" },
-  "110mm plain bend":       { amount: 3,  unit: "each" },
-  "110mm h t bend":         { amount: 3,  unit: "each" },
-  "110mm plain tee":        { amount: 4,  unit: "each" },
-  "110mm access tee":       { amount: 12, unit: "each" },
-  "110mm y junction":       { amount: 4,  unit: "each" },
-  "110-50 reducer tee":     { amount: 4,  unit: "each" },
-  "110mm vent valve":       { amount: 3,  unit: "each" },
-  "110mm boss connector":   { amount: 3,  unit: "each" },
-
-  "50mm plain bend":        { amount: 1,   unit: "each" },
-  "50mm ie bend":           { amount: 0.5, unit: "each" },
-  "50mm ic tee":            { amount: 1,   unit: "each" },
-  "gulley p":               { amount: 2.5, unit: "each" },
-  "gulley heads":           { amount: 4,   unit: "each" },
-
-  "15mm pipe clip":         { amount: 0.5, unit: "each" },
-  "20mm pipe clip":         { amount: 1,   unit: "each" },
-  "15mm male connector":    { amount: 1.5, unit: "each" },
-  "15mm cap elbow":         { amount: 0.5, unit: "each" },
-  "22mm cap elbow":         { amount: 1.5, unit: "each" },
-  "3/4 cu elbow":           { amount: 1.5, unit: "each" },
-
-  "22mm cu pipe":           { amount: 35, unit: "each" },
-  "15mm cu pipe":           { amount: 20, unit: "each" },
-
-  "solvent cement":         { amount: 10, unit: "each" },
-  "soldering wire":         { amount: 10, unit: "each" },
-  "nasco flux":             { amount: 5,  unit: "each" },
-  "gas canister":           { amount: 3,  unit: "each" },
-  "masonry disk":           { amount: 10, unit: "each" },
-
-  "basin pedestal":         { amount: 30, unit: "each" },
-  "basin waste":            { amount: 5,  unit: "each" },
-  "toilet lid":             { amount: 10, unit: "each" },
-  "shower rose and arm":    { amount: 8,  unit: "each" }
-});
-
-function getBestPlumbingPresetPrice(requestedProduct = "") {
-  const normalized = normalizeProductName(requestedProduct);
-  if (!normalized) return null;
-
-  if (PLUMBING_PRESET_PRICES[normalized]) {
-    return {
-      product: requestedProduct,
-      amount: Number(PLUMBING_PRESET_PRICES[normalized].amount),
-      unit: PLUMBING_PRESET_PRICES[normalized].unit || "each",
-      source: "preset_exact"
-    };
-  }
-
-  const scored = Object.entries(PLUMBING_PRESET_PRICES)
-    .map(([name, price]) => ({
-      name,
-      price,
-      score: scoreLooseMatch(name, normalized)
-    }))
-    .sort((a, b) => b.score - a.score);
-
-  const best = scored[0];
-  const second = scored[1];
-
-  if (best && best.score >= 70 && (!second || best.score - second.score >= 10)) {
-    return {
-      product: requestedProduct,
-      amount: Number(best.price.amount),
-      unit: best.price.unit || "each",
-      source: "preset_fuzzy",
-      matchedPreset: best.name
-    };
-  }
-
-  return null;
-}
-
-function supplierLooksLikePlumbingSeller(supplier) {
-  const categories = Array.isArray(supplier?.categories) ? supplier.categories : [];
-  return categories.includes("plumbing_supplies");
-}
-
-function getSupplierStockNames(supplier) {
-  return [
-    ...(supplier?.listedProducts || []),
-    ...(supplier?.products || [])
-  ]
-    .map(p => normalizeProductName(p))
-    .filter(Boolean);
-}
-
-function supplierStocksRequestedItem(supplier, requestedProduct = "") {
-  const requested = normalizeProductName(requestedProduct);
-  if (!requested) return false;
-
-  const stockNames = getSupplierStockNames(supplier);
-  if (!stockNames.length) return false;
-
-  if (stockNames.includes(requested)) return true;
-
-  const scored = stockNames
-    .map(name => ({ name, score: scoreLooseMatch(name, requested) }))
-    .sort((a, b) => b.score - a.score);
-
-  return Boolean(scored[0] && scored[0].score >= 70);
-}
-
-function findMatchingSupplierPriceOrPreset(supplier, requestedProduct) {
-  const supplierPrice = findMatchingSupplierPrice(supplier, requestedProduct);
-  if (supplierPrice) {
-    return {
-      ...supplierPrice,
-      source: "supplier_saved"
-    };
-  }
-
-  if (!supplierLooksLikePlumbingSeller(supplier)) return null;
-  if (!supplierStocksRequestedItem(supplier, requestedProduct)) return null;
-
-  return getBestPlumbingPresetPrice(requestedProduct);
-}
-
-function buildDraftQuoteFromRequest(supplier, request) {
-  const items = Array.isArray(request?.items) ? request.items : [];
-
-  const responseItems = [];
-  const missingItems = [];
-
-  for (const item of items) {
-    const match = findMatchingSupplierPriceOrPreset(supplier, item.product);
-    if (!match || typeof match.amount !== "number") {
-      missingItems.push(item.product);
-      continue;
-    }
-
-    const qty = Number(item.quantity || 1);
-    const unitPrice = Number(match.amount);
-    const total = Number((qty * unitPrice).toFixed(2));
-
-    responseItems.push({
-      product: item.product,
-      quantity: qty,
-      unit: match.unit || item.unitLabel || "each",
-      pricePerUnit: unitPrice,
-      total,
-      available: true,
-      autoSource: match.source || "unknown"
-    });
-  }
-
-  const totalAmount = Number(
-    responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
-  );
-
-  return {
-    responseItems,
-    missingItems,
-    totalAmount
-  };
-}
 function parseBulkOrderInput(text = "") {
   const raw = String(text || "").trim();
   if (!raw) return [];
@@ -3557,158 +3386,187 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
-  if (al === "cancel") {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
+    if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
+      if (al === "cancel") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendSupplierAccountMenu(from, await SupplierProfile.findOne({ phone }));
+      }
+
+      const request = await BuyerRequest.findById(sellerRequestId);
+      if (!request) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendText(from, "❌ Request not found or expired.");
+      }
+
+      const supplier = await SupplierProfile.findOne({ phone }).lean();
+      if (!supplier) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { upsert: true }
+        );
+        return sendText(from, "❌ Supplier profile not found.");
+      }
+
+     const requestedProducts = (request.items || []).map(i => i.product);
+      // Treat "0" entries as "skip" - sellers use 0 to mean "can't supply this item"
+      const _priceText = String(text || "").replace(/(?<![.\d])0(?![.\d])/g, "skip");
+      const parsed = parseSupplierPriceInput(_priceText, requestedProducts, supplier.profileType === "service");
+      let responseItems = [];
+      let totalAmount = null;
+      let message = "";
+
+      if (parsed.updated.length) {
+        const updatedMap = new Map(
+          parsed.updated.map(u => [normalizeProductName(u.product), u])
+        );
+
+        responseItems = (request.items || [])
+          .map(item => {
+            const match = updatedMap.get(normalizeProductName(item.product));
+            if (!match) return null;
+
+            const qty = Number(item.quantity || 1);
+            const unitPrice = Number(match.amount || 0);
+            const total = Number((qty * unitPrice).toFixed(2));
+
+            return {
+              product: item.product,
+              quantity: qty,
+              unit: match.unit || item.unitLabel || "each",
+              pricePerUnit: unitPrice,
+              total,
+              available: true
+            };
+          })
+          .filter(Boolean);
+
+        if (responseItems.length) {
+          totalAmount = Number(
+            responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+          );
         }
-      },
-      { upsert: true }
-    );
-    return sendSupplierAccountMenu(from, await SupplierProfile.findOne({ phone }));
-  }
 
-  const request = await BuyerRequest.findById(sellerRequestId);
-  if (!request) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
+        if (parsed.failed.length) {
+          message = `Some parts of your message were skipped: ${parsed.failed.slice(0, 3).join(", ")}`;
         }
-      },
-      { upsert: true }
-    );
-    return sendText(from, "❌ Request not found or expired.");
-  }
+      } else {
+        message = String(text || "").trim();
+      }
 
-  const supplier = await SupplierProfile.findOne({ phone }).lean();
-  if (!supplier) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
-        }
-      },
-      { upsert: true }
-    );
-    return sendText(from, "❌ Supplier profile not found.");
-  }
+      // ── Detect greetings / confusion — re-show the item list instead of ────────
+      // treating "hi", "hello", "yes", "ok", "?" etc as a message-only quote.
+      // A genuine price/message has digits OR is deliberately long.
+      const _looksLikeGreeting = !responseItems.length &&
+        message.trim() &&
+        !/\d/.test(message) &&          // no digits = no price
+        message.trim().length < 30 &&    // short texts only
+        /^(hi|hello|hey|yes|ok|okay|sure|what|how|hie|sawubona|mhoro|ndiri|help|good|fine|yeah|yep|nope|no|send|go|start|ready|quote|pricing|price|available|avail|\?+|\!+)$/i
+          .test(message.trim().replace(/[.,!?]+$/, "").trim());
 
-  let responseItems = [];
-  let totalAmount = null;
-  let message = "";
+      if (!responseItems.length && (!message.trim() || _looksLikeGreeting)) {
+        // Re-show the item list with View & Quote button so they can start properly
+        const _retryItems = (request.items || []);
+        const _retryLines = _retryItems.map((item, i) =>
+          `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
+        ).join("\n");
+        const _retryEx    = _retryItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
+        const _isService  = supplier.profileType === "service";
 
-  if (al === "send" && pendingDraftQuote?.responseItems?.length) {
-    responseItems = (pendingDraftQuote.responseItems || []).map(item => ({
-      product: item.product,
-      quantity: Number(item.quantity || 1),
-      unit: item.unit || "each",
-      pricePerUnit: Number(item.pricePerUnit || 0),
-      total: Number(item.total || 0),
-      available: true
-    }));
+        return sendButtons(from, {
+          text:
+            `📋 *${ref} — Here are the items needed:*\n\n` +
+            `${_retryLines}\n\n` +
+            `─────────────────\n` +
+            `Tap *View & Quote* to enter your price${_retryItems.length > 1 ? "s" : ""}.\n` +
+            `Or tap *Not Available* if you can't supply.`,
+          buttons: [
+            { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"   },
+            { id: `req_unavail_${sellerRequestId}`, title: "Not Available" }
+          ]
+        });
+      }
 
-    totalAmount = Number(
-      responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
-    );
+      const response = {
+        supplierId: supplier._id,
+        supplierPhone: supplier.phone,
+        supplierName: supplier.businessName,
+        mode: "manual_offer",
+        message: _looksLikeGreeting ? "" : message,
+        items: responseItems,
+        totalAmount,
+        deliveryAvailable: supplier.delivery?.available ?? null,
+        etaText: ""
+      };
 
-    if (pendingDraftQuote?.missingItems?.length) {
-      message = `Quoted available items only. Not priced now: ${pendingDraftQuote.missingItems.join(", ")}`;
-    }
-  } else {
-    const requestedProducts = (request.items || []).map(i => i.product);
-    const parsed = parseSupplierPriceInput(text, requestedProducts, supplier.profileType === "service");
-
-    if (parsed.updated.length) {
-      const updatedMap = new Map(
-        parsed.updated.map(u => [normalizeProductName(u.product), u])
-      );
-
-      responseItems = (request.items || [])
-        .map(item => {
-          const match = updatedMap.get(normalizeProductName(item.product));
-          if (!match) return null;
-
-          const qty = Number(item.quantity || 1);
-          const unitPrice = Number(match.amount || 0);
-          const total = Number((qty * unitPrice).toFixed(2));
-
-          return {
-            product: item.product,
-            quantity: qty,
-            unit: match.unit || item.unitLabel || "each",
-            pricePerUnit: unitPrice,
-            total,
-            available: true
-          };
-        })
-        .filter(Boolean);
-
-      if (responseItems.length) {
-        totalAmount = Number(
-          responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+    // ── If truly nothing — shouldn't reach here but guard anyway ─────────────
+      if (!responseItems.length && !message.trim()) {
+        const _retryItems  = (request.items || []);
+        const _retryLines  = _retryItems.map((item, i) => `${i + 1}. *${item.product}* × ${Number(item.quantity||1)}`).join("\n");
+        const _retryEx     = _retryItems.slice(0,3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
+        return sendText(from,
+          `⚠️ *Couldn't read your prices.* Please try again.\n\n` +
+          `*Items needed:*\n${_retryLines}\n\n` +
+          `*Format examples:*\n` +
+          `• *${_retryEx || "12.50"}* — one price per item\n` +
+          `• *1x12.50  2x8.00* — item number x price\n` +
+          `• *ball valve: 44* — product name then price\n\n` +
+          `Type *cancel* to go back.`
         );
       }
 
-      if (parsed.failed.length) {
-        message = `Some parts of your message were skipped: ${parsed.failed.slice(0, 3).join(", ")}`;
-      }
-    } else {
-      message = String(text || "").trim();
+      // ── Build a quote preview so supplier can check before sending ────────────
+      const _isServiceConfirm = supplier.profileType === "service";
+      const _previewLines = responseItems.map((item, i) => {
+        const priceStr = `$${Number(item.pricePerUnit).toFixed(2)}/${item.unit || "each"}`;
+        const totalStr = `= $${Number(item.total).toFixed(2)}`;
+        return `${i + 1}. *${item.product}* × ${item.quantity} @ ${priceStr} ${totalStr}`;
+      }).join("\n");
+
+      const _previewTotal = totalAmount !== null
+        ? `\n─────────────────\n💵 *Total: $${Number(totalAmount).toFixed(2)}*`
+        : "";
+      const _previewMsg = message ? `\n📝 Note: _${message}_` : "";
+      const _previewDelivery = supplier.delivery?.available
+        ? "🚚 You offer delivery"
+        : "🏠 Collection only";
+
+      // Store the response temporarily for confirmation step
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.sellerRequestReplyState": "awaiting_offer_confirm",
+            "tempData.sellerRequestId":         String(request._id),
+            "tempData.pendingOfferResponse":    JSON.stringify(response)
+          }
+        },
+        { upsert: true }
+      );
+
+      return sendButtons(from, {
+        text:
+          `📋 *Quote Preview - ${buildBuyerRequestRef(request)}*\n\n` +
+          `${_previewLines}` +
+          `${_previewTotal}` +
+          `${_previewMsg}\n` +
+          `${_previewDelivery}\n\n` +
+          `─────────────────\n` +
+          `Does this look correct? Tap *Send Quote* to deliver it to the buyer.`,
+        buttons: [
+          { id: `req_offer_confirm_${String(request._id)}`, title: "✅ Send Quote" },
+          { id: `req_offer_${String(request._id)}`,         title: "✏️ Edit Prices"  }
+        ]
+      });
     }
-  }
-
-  const response = {
-    supplierId: supplier._id,
-    supplierPhone: supplier.phone,
-    supplierName: supplier.businessName,
-    mode: "manual_offer",
-    message,
-    items: responseItems,
-    totalAmount,
-    deliveryAvailable: supplier.delivery?.available ?? null,
-    etaText: ""
-  };
-
-  request.responses.push(response);
-  await request.save();
-
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $unset: {
-        "tempData.sellerRequestReplyState": "",
-        "tempData.sellerRequestId": "",
-        "tempData.pendingDraftQuote": ""
-      }
-    },
-    { upsert: true }
-  );
-
-  await sendBuyerRequestResponseToBuyer({ request, supplier, response });
-
-  return sendButtons(from, {
-    text:
-      responseItems.length
-        ? `✅ Your quotation has been sent.\n\nQuoted items: ${responseItems.length}\nTotal: $${Number(totalAmount || 0).toFixed(2)}`
-        : `✅ Your response has been sent to the buyer.`,
-    buttons: [
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "suppliers_home", title: "🛒 Marketplace" }
-    ]
-  });
-}
 
 
 
@@ -13865,57 +13723,73 @@ if (a.startsWith("req_offer_confirm_")) {
   });
 }
 
+
+
 if (a.startsWith("req_offer_")) {
   const requestId = a.replace("req_offer_", "");
   const request = await BuyerRequest.findById(requestId);
-  if (!request) return sendText(from, "❌ Request not found or expired.");
+  if (!request) return sendText(from, "❌ This request has expired or been closed.");
 
-  const supplier = await SupplierProfile.findOne({ phone }).lean();
-  if (!supplier) return sendText(from, "❌ Supplier profile not found.");
+  const _supplierForOffer = await SupplierProfile.findOne({ phone }).lean();
+  const _isServiceOffer   = _supplierForOffer?.profileType === "service";
+  const _items            = (request.items || []);
+  const _reqRef           = buildBuyerRequestRef(request);
 
-  const draft = buildDraftQuoteFromRequest(supplier, request);
-
+  // ── Set awaiting_offer state ───────────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
       $set: {
         "tempData.sellerRequestReplyState": "awaiting_offer",
-        "tempData.sellerRequestId": requestId,
-        "tempData.pendingDraftQuote": draft
+        "tempData.sellerRequestId": requestId
       }
     },
     { upsert: true }
   );
 
-  const draftLines = draft.responseItems.length
-    ? draft.responseItems
-        .map((item, i) =>
-          `${i + 1}. ${item.product} x${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
-        )
-        .join("\n")
-    : "No auto-priced items found yet.";
+  // ── Build a clear numbered item list with per-item price prompts ───────────
+  const _itemLines = _items.map((item, i) => {
+    const qty  = Number(item.quantity || 1);
+    const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+    return `${i + 1}. *${item.product}* × ${qty}${unit}`;
+  }).join("\n");
 
-  const missingLines = draft.missingItems.length
-    ? `\n\n⚠️ *Needs review / no price found yet:*\n${draft.missingItems.map(i => `• ${i}`).join("\n")}`
-    : "";
+  // ── Build a concrete, realistic example using actual item names ────────────
+  const _exampleLines = _items.slice(0, 3).map((item, i) => {
+    const exPrice = (i * 5 + 8).toFixed(2);
+    return `${i + 1}x${exPrice}`;
+  }).join("  ");
 
-  return sendText(
-    from,
-    `💬 *Review and send quotation*\n\n` +
-      `${formatBuyerRequestItems(request.items || [], 20)}\n\n` +
-      `*Suggested draft quote:*\n${draftLines}` +
-      `${draft.responseItems.length ? `\n\n💵 Draft total: $${Number(draft.totalAmount || 0).toFixed(2)}` : ""}` +
-      `${missingLines}\n\n` +
-      `Reply in any of these ways:\n\n` +
-      `*1. Send draft as is*\n_send_\n\n` +
-      `*2. Edit prices by number*\n_1x12, 2x8.5, 3x4.20_\n\n` +
-      `*3. Send prices in order*\n_12, 8.5, 4.20, 16_\n\n` +
-      `*4. Send named prices*\n_110 access tees: 12_\n_vent valves: 8.5_\n\n` +
-      `*5. Partial quote*\n_110 access tees: 12_\n_vent valves: 8.5_\nOnly these are available now._\n\n` +
-      `Type *cancel* to stop.`
+  const _singleItem = _items.length === 1;
+  const _singleExample = _singleItem
+    ? `Type the price, e.g: *${(12).toFixed(2)}*  or  *${(12).toFixed(2)}/${_isServiceOffer ? "job" : "each"}*`
+    : `Type each price like this:\n*${_exampleLines}*\n\n_(number = item, x = price)_`;
+
+  const _skipNote = _singleItem
+    ? ""
+    : `\nCan't supply an item? Type *0* for it, e.g. *1x0 2x5.50*`;
+
+  const _locationLine = request.area
+    ? `📍 ${request.area}, ${request.city || ""}`
+    : request.city ? `📍 ${request.city}` : "";
+
+  const _deliveryLine = request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+
+  return sendText(from,
+    `✅ *${_reqRef} - Ready to quote*\n` +
+    `${_locationLine}  ${_deliveryLine}\n` +
+    `─────────────────\n` +
+    `*Items requested:*\n` +
+    `${_itemLines}\n` +
+    `─────────────────\n\n` +
+    `💰 *How to send your price:*\n` +
+    `${_singleExample}${_skipNote}\n\n` +
+    `Want to add a note? Start with *msg* e.g:\n` +
+    `_${_exampleLines || "12.50"}  msg available from tomorrow_\n\n` +
+    `Type *cancel* to go back.\n` +
+    `_Your quote goes to the buyer instantly._`
   );
 }
-
 
 if (a.startsWith("req_auto_")) {
   const requestId = a.replace("req_auto_", "");
