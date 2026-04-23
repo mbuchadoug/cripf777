@@ -3357,106 +3357,33 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
       // Go DIRECTLY to the pricing form — skip the intermediate buttons message.
       if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
-        // ── Build auto-priced draft from supplier's own prices + preset prices ──
-        const _draft = buildDraftQuoteFromRequest(_introSupplier, _introRequest);
-
-        // Build the full response object now so req_offer_confirm_ can send it directly
-        const _draftResponse = {
-          supplierId:        _introSupplier?._id || null,
-          supplierPhone:     _introSupplier?.phone || from,
-          supplierName:      _introSupplier?.businessName || "Supplier",
-          mode:              "manual_offer",
-          message:           _draft.missingItems?.length
-            ? `Quoted available items. Not priced: ${_draft.missingItems.join(", ")}`
-            : "",
-          items:             _draft.responseItems || [],
-          totalAmount:       _draft.totalAmount   || null,
-          deliveryAvailable: _introSupplier?.delivery?.available ?? null,
-          etaText:           ""
-        };
-
         await UserSession.findOneAndUpdate(
           { phone },
-          {
-            $set: {
-              "tempData.sellerRequestReplyState": "awaiting_offer",
-              "tempData.sellerRequestId":         sellerRequestId,
-              "tempData.pendingDraftQuote":        _draft,
-              "tempData.pendingOfferResponse":     JSON.stringify(_draftResponse)
-            }
-          },
+          { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
           { upsert: true }
         );
 
-        const _directLocation = _introRequest.area
-          ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}`
-          : _introRequest.city ? `📍 ${_introRequest.city}` : "";
-        const _directDelivery = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-
-        // ── Case 1: All items auto-priced — one-tap send ──────────────────────
-        if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
-          const _allLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
-          ).join("\n");
-
-          return sendButtons(from, {
-            text:
-              `📋 *Quote Preview — ${_introRef}*\n` +
-              `${_directLocation}  ${_directDelivery}\n` +
-              `─────────────────\n` +
-              `${_allLines}\n\n` +
-              `💵 *Total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
-              `─────────────────\n` +
-              `Prices are from your catalogue. Edit if needed, or tap *Send Quote* to deliver instantly.`,
-            buttons: [
-              { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Quote" },
-              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-            ]
-          });
-        }
-
-        // ── Case 2: Some items priced, some missing — show hybrid ─────────────
-        if (_draft.responseItems.length > 0) {
-          const _pricedLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)} ✅`
-          ).join("\n");
-          const _missingLines = _draft.missingItems.map(m => `• ${m} — ❓ enter price`).join("\n");
-
-          return sendText(from,
-            `📋 *Quote Preview — ${_introRef}*\n` +
-            `${_directLocation}  ${_directDelivery}\n` +
-            `─────────────────\n` +
-            `*Auto-priced from your catalogue:*\n${_pricedLines}\n\n` +
-            `💵 *Priced total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
-            `─────────────────\n` +
-            `*Still needs pricing:*\n${_missingLines}\n\n` +
-            `*Options:*\n` +
-            `• Type *send* to quote only the priced items above\n` +
-            `• Type prices for missing items e.g: _1x12.50_  then those are added\n` +
-            `• Type *cancel* to go back`
-          );
-        }
-
-        // ── Case 3: No prices found — show blank form with item list ──────────
-        const _blankItemLines = _introItems.map((item, i) =>
-          `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
-        ).join("\n");
-        const _blankEx     = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
-        const _blankSingle = _introItems.length === 1;
+        const _directItemLines = _introItems.map((item, i) => `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`).join("\n");
+        const _directEx        = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
+        const _directSingle    = _introItems.length === 1;
+        const _directLocation  = _introRequest.area ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}` : _introRequest.city ? `📍 ${_introRequest.city}` : "";
+        const _directDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
         return sendText(from,
-          `📋 *${_introRef} — Enter your prices*\n` +
+          `✅ *${_introRef} — Ready to quote*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
-          `*Items requested:*\n${_blankItemLines}\n` +
+          `*Items requested:*\n` +
+          `${_directItemLines}\n` +
           `─────────────────\n\n` +
           `💰 *How to send your price:*\n` +
-          (_blankSingle
+          (_directSingle
             ? `Type the price, e.g: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`
-            : `Type each price:\n*${_blankEx}*\n\n_(item number x price)_`) +
-          (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\nAdd a note: start with *msg* e.g: _12.00 msg available tomorrow_\n` +
-          `Type *cancel* to go back.`
+            : `Type each price like this:\n*${_directEx}*\n\n_(number = item, x = price)_`) +
+          (_directSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
+          `\n\nWant to add a note? Start with *msg* e.g: _12.00 msg available from tomorrow_\n\n` +
+          `Type *cancel* to go back.\n` +
+          `_Your quote goes to the buyer instantly._`
         );
       }
 
