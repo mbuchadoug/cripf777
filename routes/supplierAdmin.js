@@ -792,8 +792,7 @@ const {
       }
     }
 
-    const category   = profileType === "service" ? serviceCategory : productCategory;
-    const categories = category ? [category.trim()] : [];
+
 
     const now       = new Date();
     const days      = Number(durationDays) || 30;
