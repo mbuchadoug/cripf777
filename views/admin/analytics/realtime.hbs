@@ -373,7 +373,7 @@
             {{path}}
           </td>
           <td style="color:var(--ink-soft)">
-            {{#if device.type}}{{device.type}}{{else}}—{{/if}}
+            {{#if device.type}}{{device.type}}{{else}}-{{/if}}
           </td>
           <td class="mono">
             {{#if responseTime}}
@@ -383,7 +383,7 @@
                 {{else}}rt-slow{{/if}}">
                 {{responseTime}}ms
               </span>
-            {{else}}—{{/if}}
+            {{else}}-{{/if}}
           </td>
         </tr>
         {{/each}}

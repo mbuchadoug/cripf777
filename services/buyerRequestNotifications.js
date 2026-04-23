@@ -3,26 +3,26 @@
 //
 // TWO TEMPLATES SUPPORTED:
 //
-//   supplier_new_buyer_request  (CURRENT — active, plain text only)
+//   supplier_new_buyer_request  (CURRENT - active, plain text only)
 //     Supplier must reply "hi" to trigger the item list flow.
 //     Used by default (USE_V2_TEMPLATE = false).
 //
-//   supplier_new_request_v2     (NEW — switch on when Meta approves it)
+//   supplier_new_request_v2     (NEW - switch on when Meta approves it)
 //     Has QUICK REPLY buttons built into the template.
-//     Supplier taps "💬 View & Quote" directly — no typing needed.
+//     Supplier taps "💬 View & Quote" directly - no typing needed.
 //     Enable by setting USE_V2_TEMPLATE = true below.
 //
 // ─── HOW TO SWITCH TO THE NEW TEMPLATE ───────────────────────────────────────
 //   1. Submit supplier_new_request_v2 to Meta (see NEW_TEMPLATE_GUIDE.md)
 //   2. Wait for Meta approval (usually 24-48 hrs for UTILITY)
 //   3. Change USE_V2_TEMPLATE = false  →  USE_V2_TEMPLATE = true
-//   4. Deploy — done. No other changes needed.
+//   4. Deploy - done. No other changes needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import axios   from "axios";
 import { sendButtons, sendText } from "./metaSender.js";
 
-// ══ FEATURE FLAG — flip to true once supplier_new_request_v2 is approved ══════
+// ══ FEATURE FLAG - flip to true once supplier_new_request_v2 is approved ══════
 const USE_V2_TEMPLATE = true;
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -92,7 +92,7 @@ async function _sendTemplateV2(to, templateName, variables = []) {
   const phone = _normalizeZimPhone(to);
 
   // v2 template has: header, body (with variables), footer, and 2 quick-reply buttons
-  // The buttons are defined in the template itself — we just need to include the
+  // The buttons are defined in the template itself - we just need to include the
   // buttons component in the request so Meta knows to render them.
   const components = [
     // Body variables
@@ -100,7 +100,7 @@ async function _sendTemplateV2(to, templateName, variables = []) {
       type: "body",
       parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) }))
     },
-    // Quick reply buttons — the index matches the order defined in the template
+    // Quick reply buttons - the index matches the order defined in the template
     {
       type:     "button",
       sub_type: "quick_reply",
@@ -183,14 +183,14 @@ export async function notifySupplierNewRequestTemplate({
         ref             // {{4}} reference
       ]);
       console.log(`[BUY REQ TPL v2] supplier_new_request_v2 → ${normalizedPhone} (${ref})`);
-      return; // v2 sent — buttons are IN the template, no further action needed
+      return; // v2 sent - buttons are IN the template, no further action needed
     } catch (err) {
       console.warn(`[BUY REQ TPL v2] failed for ${normalizedPhone}: ${err.message}. Falling back to v1.`);
       // Fall through to v1 below
     }
   }
 
-  // ── v1 template: plain text ping — supplier must reply to trigger item list ──
+  // ── v1 template: plain text ping - supplier must reply to trigger item list ──
   try {
     await _sendTemplate(normalizedPhone, "supplier_new_buyer_request", [
       ref,

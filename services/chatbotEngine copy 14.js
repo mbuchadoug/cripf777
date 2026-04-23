@@ -1787,7 +1787,7 @@ function parseSingleBuyerRequestLine(line = "") {
   // Bath tub(standard) x1
   // Cement x2 bags
   // Pitsand x1 tonne
-  // ── Measurement suffixes — keep attached to product name, never treat as unit ──
+  // ── Measurement suffixes - keep attached to product name, never treat as unit ──
   const _MSUF = new Set([
     "mm","cm","m","km","ml","l","kg","g","mg","lb","lbs","oz","ft","in","inch",
     "psi","bar","kpa","mpa","kw","kva","hp","v","volt","amp","amps","watt","w","a","ah",
@@ -1795,7 +1795,7 @@ function parseSingleBuyerRequestLine(line = "") {
     "meter","meters","gallon","gallons","sqm","sqft","kwh","mhz","ghz","mb","gb","tb"
   ]);
 
-  // Case 1: explicit "x N unit?" — always treat as qty
+  // Case 1: explicit "x N unit?" - always treat as qty
   const _xm = clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (_xm) {
     const _prod = String(_xm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
@@ -1804,7 +1804,7 @@ function parseSingleBuyerRequestLine(line = "") {
     if (_prod) return { product: _prod, quantity: Number.isFinite(_qty) && _qty > 0 ? _qty : 1, unitLabel: _unit, notes: "", valid: true };
   }
 
-  // Case 2: "N unit" at end — only qty if unit is not a measurement suffix
+  // Case 2: "N unit" at end - only qty if unit is not a measurement suffix
   const _bm = clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/i);
   if (_bm) {
     const _prod = String(_bm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
@@ -1817,7 +1817,7 @@ function parseSingleBuyerRequestLine(line = "") {
     }
   }
 
-  // Case 3: No quantity found — default qty=1, whole clean string is product
+  // Case 3: No quantity found - default qty=1, whole clean string is product
   return {
     product: clean.replace(/[,:;.\-]+$/g, "").trim(),
     quantity: 1,
@@ -1980,7 +1980,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
   let quantity = 1;
   let unitLabel = "units";
 
-  // Case 1: explicit "x N unit?" at end — always treat as qty
+  // Case 1: explicit "x N unit?" at end - always treat as qty
   const explicitQtyMatch = productText.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (explicitQtyMatch) {
     const maybeProduct = String(explicitQtyMatch[1] || "").trim();
@@ -1994,7 +1994,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // Case 2: bare trailing "N unit?" — only treat as qty if unit is NOT a measurement suffix
+  // Case 2: bare trailing "N unit?" - only treat as qty if unit is NOT a measurement suffix
   const bareQtyMatch = productText.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (bareQtyMatch) {
     const maybeProduct = String(bareQtyMatch[1] || "").trim();
@@ -2015,7 +2015,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // Case 3: No quantity — default qty=1, full productText is the product name
+  // Case 3: No quantity - default qty=1, full productText is the product name
   return {
     items: [{ product: productText, quantity: 1, unitLabel: "units", notes: "" }],
     city: parsed.city || null, area: parsed.area || null, itemText: productText
@@ -2164,7 +2164,7 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       ? `${request.area}, ${request.city || "Zimbabwe"}`
       : (request.city || "Zimbabwe");
 
-    // ── Build billingTo block — buyer details ─────────────────────────────────
+    // ── Build billingTo block - buyer details ─────────────────────────────────
     const billingTo = [
       `Request Ref: ${ref}`,
       `Location: ${buyerArea}`,
@@ -2213,7 +2213,7 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
     const _fullBuyerPdf  = _normBuyerPdf.startsWith("0") && _normBuyerPdf.length === 10
       ? "263" + _normBuyerPdf.slice(1) : _normBuyerPdf;
 
-    // ── Send the PDF document — same call signature as working invoice/receipt sends ─
+    // ── Send the PDF document - same call signature as working invoice/receipt sends ─
     await sendDocument(_fullBuyerPdf, { link, filename });
     console.log(`[BUYER QUOTE PDF] PDF dispatched to ${_fullBuyerPdf}: ${filename}`);
 
@@ -2435,7 +2435,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   }
 
   // Send PDF quotation whenever there are priced line items
-  // (message-only quotes skip PDF — nothing meaningful to put on paper)
+  // (message-only quotes skip PDF - nothing meaningful to put on paper)
   if (Array.isArray(response.items) && response.items.length > 0) {
     // Non-blocking: don't let PDF failure break the quote delivery
     sendBuyerQuotePdf({ request, supplier, response }).catch(pdfErr =>
@@ -2510,7 +2510,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
       // ── Step 2: Set state to "awaiting_offer_intro" ─────────────────────────────
-      // We do NOT send a follow-up message here — Meta only opens a real session
+      // We do NOT send a follow-up message here - Meta only opens a real session
       // when the supplier sends a message back to us, not when we send to them.
       // Instead, the FIRST message the supplier sends (even "hi") will show
       // them the full item list + View & Quote button. See awaiting_offer_intro handler.
@@ -3355,7 +3355,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introIsService = _introSupplier?.profileType === "service";
 
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
-      // Go DIRECTLY to the pricing form — skip the intermediate buttons message.
+      // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
       if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
         await UserSession.findOneAndUpdate(
           { phone },
@@ -3370,7 +3370,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _directDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
         return sendText(from,
-          `✅ *${_introRef} — Ready to quote*\n` +
+          `✅ *${_introRef} - Ready to quote*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
           `*Items requested:*\n` +
@@ -3431,7 +3431,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       return sendButtons(from, {
         text:
-          `🔔 *New ${_introIsService ? "Service" : "Product"} Request — ${_introRef}*\n\n` +
+          `🔔 *New ${_introIsService ? "Service" : "Product"} Request - ${_introRef}*\n\n` +
           `📍 *Location:* ${_introLocation}\n` +
           `${_introDelivery}\n\n` +
           `📦 *${_introItems.length} item${_introItems.length === 1 ? "" : "s"} needed:*\n` +
@@ -3799,13 +3799,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     const _confirmItemLines = (parsedInline.items || []).map((item, i) => {
       const qty  = Number(item.quantity || 1);
       const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-      const qtyStr = qty === 1 ? "_(qty: 1 — add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
+      const qtyStr = qty === 1 ? "_(qty: 1 - add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
       return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
     }).join("\n");
 
     return sendButtons(from, {
       text:
-        `✅ *Request captured — please check:*\n\n` +
+        `✅ *Request captured - please check:*\n\n` +
         `${_confirmItemLines}\n\n` +
         `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
         `_To change quantity, type your request again with e.g. x3 at the end:_\n` +
@@ -4942,9 +4942,9 @@ if (a === "sup_request_quote_search") {
         `─────────────────\n` +
         `💰 *Reply with your price to send the buyer a quote.*\n\n` +
         `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
+        `• *25* - flat price\n` +
+        `• *25/hour* or *25/job* - rate\n` +
+        `• *From 50, depends on scope* - range\n\n` +
         `Or type a full message e.g: _250 includes labour and materials_\n\n` +
         `Type *cancel* to ignore this request.`,
       buttons: [
@@ -5079,9 +5079,9 @@ if (a.startsWith("sup_request_quote_supplier_")) {
         `─────────────────\n` +
         `💰 *Reply with your price to send the buyer a quote.*\n\n` +
         `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
+        `• *25* - flat price\n` +
+        `• *25/hour* or *25/job* - rate\n` +
+        `• *From 50, depends on scope* - range\n\n` +
         `Or type a full message e.g: _250 includes labour and materials_\n\n` +
         `Type *cancel* to ignore this request.`,
       buttons: [

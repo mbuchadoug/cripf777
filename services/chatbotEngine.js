@@ -1803,7 +1803,7 @@ function parseSingleBuyerRequestLine(line = "") {
   // Bath tub(standard) x1
   // Cement x2 bags
   // Pitsand x1 tonne
-  // ── Measurement suffixes — keep attached to product name, never treat as unit ──
+  // ── Measurement suffixes - keep attached to product name, never treat as unit ──
   const _MSUF = new Set([
     "mm","cm","m","km","ml","l","kg","g","mg","lb","lbs","oz","ft","in","inch",
     "psi","bar","kpa","mpa","kw","kva","hp","v","volt","amp","amps","watt","w","a","ah",
@@ -1811,7 +1811,7 @@ function parseSingleBuyerRequestLine(line = "") {
     "meter","meters","gallon","gallons","sqm","sqft","kwh","mhz","ghz","mb","gb","tb"
   ]);
 
-  // Case 1: explicit "x N unit?" — always treat as qty
+  // Case 1: explicit "x N unit?" - always treat as qty
   const _xm = clean.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (_xm) {
     const _prod = String(_xm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
@@ -1820,7 +1820,7 @@ function parseSingleBuyerRequestLine(line = "") {
     if (_prod) return { product: _prod, quantity: Number.isFinite(_qty) && _qty > 0 ? _qty : 1, unitLabel: _unit, notes: "", valid: true };
   }
 
-  // Case 2: "N unit" at end — only qty if unit is not a measurement suffix
+  // Case 2: "N unit" at end - only qty if unit is not a measurement suffix
   const _bm = clean.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/i);
   if (_bm) {
     const _prod = String(_bm[1] || "").trim().replace(/[,:;.\-]+$/g, "").trim();
@@ -1833,7 +1833,7 @@ function parseSingleBuyerRequestLine(line = "") {
     }
   }
 
-  // Case 3: No quantity found — default qty=1, whole clean string is product
+  // Case 3: No quantity found - default qty=1, whole clean string is product
   return {
     product: clean.replace(/[,:;.\-]+$/g, "").trim(),
     quantity: 1,
@@ -1996,7 +1996,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
   let quantity = 1;
   let unitLabel = "units";
 
-  // Case 1: explicit "x N unit?" at end — always treat as qty
+  // Case 1: explicit "x N unit?" at end - always treat as qty
   const explicitQtyMatch = productText.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (explicitQtyMatch) {
     const maybeProduct = String(explicitQtyMatch[1] || "").trim();
@@ -2010,7 +2010,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // Case 2: bare trailing "N unit?" — only treat as qty if unit is NOT a measurement suffix
+  // Case 2: bare trailing "N unit?" - only treat as qty if unit is NOT a measurement suffix
   const bareQtyMatch = productText.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (bareQtyMatch) {
     const maybeProduct = String(bareQtyMatch[1] || "").trim();
@@ -2031,7 +2031,7 @@ function parseInlineSimpleBuyerRequest(text = "") {
     }
   }
 
-  // Case 3: No quantity — default qty=1, full productText is the product name
+  // Case 3: No quantity - default qty=1, full productText is the product name
   return {
     items: [{ product: productText, quantity: 1, unitLabel: "units", notes: "" }],
     city: parsed.city || null, area: parsed.area || null, itemText: productText
@@ -2180,7 +2180,7 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       ? `${request.area}, ${request.city || "Zimbabwe"}`
       : (request.city || "Zimbabwe");
 
-    // ── Build billingTo block — buyer details ─────────────────────────────────
+    // ── Build billingTo block - buyer details ─────────────────────────────────
     const billingTo = [
       `Request Ref: ${ref}`,
       `Location: ${buyerArea}`,
@@ -2229,7 +2229,7 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
     const _fullBuyerPdf  = _normBuyerPdf.startsWith("0") && _normBuyerPdf.length === 10
       ? "263" + _normBuyerPdf.slice(1) : _normBuyerPdf;
 
-    // ── Send the PDF document — same call signature as working invoice/receipt sends ─
+    // ── Send the PDF document - same call signature as working invoice/receipt sends ─
     await sendDocument(_fullBuyerPdf, { link, filename });
     console.log(`[BUYER QUOTE PDF] PDF dispatched to ${_fullBuyerPdf}: ${filename}`);
 
@@ -2451,7 +2451,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   }
 
   // Send PDF quotation whenever there are priced line items
-  // (message-only quotes skip PDF — nothing meaningful to put on paper)
+  // (message-only quotes skip PDF - nothing meaningful to put on paper)
   if (Array.isArray(response.items) && response.items.length > 0) {
     // Non-blocking: don't let PDF failure break the quote delivery
     sendBuyerQuotePdf({ request, supplier, response }).catch(pdfErr =>
@@ -2526,7 +2526,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? "263" + _supplierPhone.slice(1) : _supplierPhone;
 
       // ── Step 2: Set state to "awaiting_offer_intro" ─────────────────────────────
-      // We do NOT send a follow-up message here — Meta only opens a real session
+      // We do NOT send a follow-up message here - Meta only opens a real session
       // when the supplier sends a message back to us, not when we send to them.
       // Instead, the FIRST message the supplier sends (even "hi") will show
       // them the full item list + View & Quote button. See awaiting_offer_intro handler.
@@ -3380,7 +3380,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introIsService = _introSupplier?.profileType === "service";
 
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
-      // Go DIRECTLY to the pricing form — skip the intermediate buttons message.
+      // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
       if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
         // ── Build auto-priced draft from supplier's own prices + preset prices ──
         const _draft = buildDraftQuoteFromRequest(_introSupplier, _introRequest);
@@ -3421,12 +3421,12 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
           const _allLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}`
+            `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}`
           ).join("\n");
 
           // Always send two messages: list then buttons (no length limit issues)
           await sendText(from,
-            `📋 *Quote Preview — ${_introRef}*\n` +
+            `📋 *Quote Preview - ${_introRef}*\n` +
             `${_directLocation}  ${_directDelivery}\n` +
             `─────────────────\n` +
             `${_allLines}\n\n` +
@@ -3450,12 +3450,12 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         // ── Case 2: Some items priced, some missing ───────────────────────────
         if (_draft.responseItems.length > 0) {
           const _pricedLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)} ✅`
+            `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)} ✅`
           ).join("\n");
-          const _missingLines = _draft.missingItems.map((m, i) => `${_draft.responseItems.length + i + 1}. ${m} — ❓ add price`).join("\n");
+          const _missingLines = _draft.missingItems.map((m, i) => `${_draft.responseItems.length + i + 1}. ${m} - ❓ add price`).join("\n");
 
           await sendText(from,
-            `📋 *Quote Preview — ${_introRef}*\n` +
+            `📋 *Quote Preview - ${_introRef}*\n` +
             `${_directLocation}  ${_directDelivery}\n` +
             `─────────────────\n` +
             `*✅ Auto-priced (${_draft.responseItems.length} items):*\n${_pricedLines}\n\n` +
@@ -3477,7 +3477,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           });
         }
 
-        // ── Case 3: No prices found — show blank form with item list ──────────
+        // ── Case 3: No prices found - show blank form with item list ──────────
         const _blankItemLines = _introItems.map((item, i) =>
           `${i + 1}. *${item.product}* × ${Number(item.quantity || 1)}`
         ).join("\n");
@@ -3485,7 +3485,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _blankSingle = _introItems.length === 1;
 
         return sendText(from,
-          `📋 *${_introRef} — Enter your prices*\n` +
+          `📋 *${_introRef} - Enter your prices*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
           `*Items requested:*\n${_blankItemLines}\n` +
@@ -3544,7 +3544,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       return sendButtons(from, {
         text:
-          `🔔 *New ${_introIsService ? "Service" : "Product"} Request — ${_introRef}*\n\n` +
+          `🔔 *New ${_introIsService ? "Service" : "Product"} Request - ${_introRef}*\n\n` +
           `📍 *Location:* ${_introLocation}\n` +
           `${_introDelivery}\n\n` +
           `📦 *${_introItems.length} item${_introItems.length === 1 ? "" : "s"} needed:*\n` +
@@ -3703,23 +3703,23 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
   }
 
   // ── Helper: build a preview text of current draft items ───────────────────
-  // Returns {text, short} — short=true means fits in sendButtons (≤900 chars)
+  // Returns {text, short} - short=true means fits in sendButtons (≤900 chars)
   // ── _sendDraftPreview: ALWAYS sends two messages ──────────────────────────
   // 1. Full item list as sendText (no length limit)
   // 2. Action buttons as sendButtons (always shows tap buttons)
   async function _sendDraftPreview(items, skippedNames, ref, totalAmt, reqId) {
     const editedCount = items.filter(i => i._edited).length;
     const lines = items.map((item, i) =>
-      `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
+      `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
     ).join("\n");
     const skippedLine = skippedNames?.length
-      ? `\n\n❌ *Skipped — not in stock (${skippedNames.length}):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
+      ? `\n\n❌ *Skipped - not in stock (${skippedNames.length}):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
       : "";
     const editNote = editedCount > 0 ? `\n_✏️ = price you edited_` : "";
 
     // Message 1: the full item list
     await sendText(from,
-      `📋 *Quote Preview — ${ref}*\n` +
+      `📋 *Quote Preview - ${ref}*\n` +
       `─────────────────\n` +
       `${lines}\n\n` +
       `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}${editNote}`
@@ -3749,7 +3749,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     let hasEditCmd = false;
     let hasSkipCmd = false;
 
-    // ── "have 3,7,15" — I ONLY have these items, skip all others ────────────
+    // ── "have 3,7,15" - I ONLY have these items, skip all others ────────────
     let haveMode = false;
     const haveMatch = raw.match(/\bhave\s+([\d,\s]+)/i);
     if (haveMatch) {
@@ -3766,7 +3766,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-    // ── "skip 3,7,15" — skip specific items ──────────────────────────────────
+    // ── "skip 3,7,15" - skip specific items ──────────────────────────────────
     if (!haveMode) {
       const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
       if (skipMatch) {
@@ -3778,7 +3778,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-    // ── "edit 1x5 3x15" or "1x5, 3x15" — edit specific prices ───────────────
+    // ── "edit 1x5 3x15" or "1x5, 3x15" - edit specific prices ───────────────
     const editSection = raw
       .replace(/\bhave\s+[\d,\s]+/i, "")
       .replace(/\bskip\s+[\d,\s]+/i, "")
@@ -3857,7 +3857,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     });
   }
 
-  // ── EDIT / SKIP commands — update draft and show preview ──────────────────
+  // ── EDIT / SKIP commands - update draft and show preview ──────────────────
   const { editUpdates, skipIndices, hasEditCmd, hasSkipCmd } = _parseEditSkip(text, pendingDraftQuote?.responseItems || []);
 
   if ((hasEditCmd || hasSkipCmd) && pendingDraftQuote?.responseItems?.length) {
@@ -3914,7 +3914,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     return _sendDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal, sellerRequestId);
   }
 
-  // ── GREETING / confusion while in awaiting_offer — re-show the draft ─────
+  // ── GREETING / confusion while in awaiting_offer - re-show the draft ─────
   const _looksLikeGreeting = !hasEditCmd && !hasSkipCmd &&
     !/\d/.test(text) && text.trim().length < 30 &&
     /^(hi|hello|hey|yes|ok|okay|sure|what|how|hie|help|good|fine|yeah|send|go|start|ready|quote|pricing|price|available|avail|\?+|\!+)$/i
@@ -3959,7 +3959,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         return _sendDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
       }
 
-      // No draft — build response from parsed prices only
+      // No draft - build response from parsed prices only
       const updatedMap = new Map(parsed.updated.map(u => [normalizeProductName(u.product), u]));
       responseItems = (request.items || []).map(item => {
         const match = updatedMap.get(normalizeProductName(item.product));
@@ -3984,14 +3984,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       return _sendDraftPreview(responseItems, [], _ref, totalAmount, sellerRequestId);
 
     } else {
-      // No prices parsed — message-only or greeting
+      // No prices parsed - message-only or greeting
       message = String(text || "").trim();
       if (!message || _looksLikeGreeting) {
         return sendText(from,
           `⚠️ I couldn't read prices from that.\n\n` +
           `• Type *confirm* to send the draft as-is\n` +
-          `• *edit 1x12.50* — change a price\n` +
-          `• *skip 3,7* — remove items you don't have\n` +
+          `• *edit 1x12.50* - change a price\n` +
+          `• *skip 3,7* - remove items you don't have\n` +
           `• *cancel* to go back`
         );
       }
@@ -4107,13 +4107,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     const _confirmItemLines = (parsedInline.items || []).map((item, i) => {
       const qty  = Number(item.quantity || 1);
       const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-      const qtyStr = qty === 1 ? "_(qty: 1 — add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
+      const qtyStr = qty === 1 ? "_(qty: 1 - add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
       return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
     }).join("\n");
 
     return sendButtons(from, {
       text:
-        `✅ *Request captured — please check:*\n\n` +
+        `✅ *Request captured - please check:*\n\n` +
         `${_confirmItemLines}\n\n` +
         `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
         `_To change quantity, type your request again with e.g. x3 at the end:_\n` +
@@ -5250,9 +5250,9 @@ if (a === "sup_request_quote_search") {
         `─────────────────\n` +
         `💰 *Reply with your price to send the buyer a quote.*\n\n` +
         `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
+        `• *25* - flat price\n` +
+        `• *25/hour* or *25/job* - rate\n` +
+        `• *From 50, depends on scope* - range\n\n` +
         `Or type a full message e.g: _250 includes labour and materials_\n\n` +
         `Type *cancel* to ignore this request.`,
       buttons: [
@@ -5387,9 +5387,9 @@ if (a.startsWith("sup_request_quote_supplier_")) {
         `─────────────────\n` +
         `💰 *Reply with your price to send the buyer a quote.*\n\n` +
         `*Examples:*\n` +
-        `• *25* — flat price\n` +
-        `• *25/hour* or *25/job* — rate\n` +
-        `• *From 50, depends on scope* — range\n\n` +
+        `• *25* - flat price\n` +
+        `• *25/hour* or *25/job* - rate\n` +
+        `• *From 50, depends on scope* - range\n\n` +
         `Or type a full message e.g: _250 includes labour and materials_\n\n` +
         `Type *cancel* to ignore this request.`,
       buttons: [
