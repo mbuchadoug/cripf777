@@ -477,31 +477,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             </span>
           </div>
 
-          <script>
-            var _PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
-            function doLoadPreset() {
-              var sel = document.getElementById("presetSelector");
-              var key = sel ? sel.value : "";
-              if (!key) { alert("Select a preset first."); return; }
-              var p = _PRESETS[key];
-              if (!p) { alert("Preset not found: " + key); return; }
-              var ta = document.getElementById("productsTextarea");
-              var tp = document.getElementById("pricesTextarea");
-              var cat = document.getElementById("productCategorySelect");
-              var hint = document.getElementById("presetLoadHint");
-              var ucp = document.getElementById("useCategoryPreset");
-              if (ta && p.products) ta.value = p.products.join(", ");
-              if (tp && p.prices)   tp.value = p.prices.join("\n");
-              if (cat) cat.value = key;
-              if (ucp) ucp.value = "true";
-              if (hint) {
-                hint.textContent = "✅ Loaded " + (p.products||[]).length + " products and " + (p.prices||[]).length + " prices.";
-                hint.style.color = "#16a34a";
-                hint.style.fontWeight = "700";
-              }
-              if (typeof updateSubcats === "function") updateSubcats();
-            }
-          </script>
 
                   <div class="fg full" style="margin-bottom:12px">
             <label id="productsLabel">Products (comma-separated)</label>
@@ -602,6 +577,30 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
        <script>
     const SUBCATS = ${JSON.stringify(subcatMap)};
     window.ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
+
+           function doLoadPreset() {
+      var presets = window.ADMIN_PRODUCT_PRESETS || {};
+      var sel     = document.getElementById("presetSelector");
+      var key     = sel ? sel.value : "";
+      if (!key) { alert("Select a preset first."); return; }
+      var p = presets[key];
+      if (!p) { alert("Preset data not found."); return; }
+      var ta   = document.getElementById("productsTextarea");
+      var tp   = document.getElementById("pricesTextarea");
+      var cat  = document.getElementById("productCategorySelect");
+      var hint = document.getElementById("presetLoadHint");
+      var ucp  = document.getElementById("useCategoryPreset");
+      if (ta && p.products) ta.value = p.products.join(", ");
+      if (tp && p.prices)   tp.value = p.prices.join("\n");
+      if (cat) { cat.value = key; }
+      if (ucp) { ucp.value = "true"; }
+      if (hint) {
+        hint.textContent = "✅ Loaded " + (p.products||[]).length + " products and " + (p.prices||[]).length + " prices.";
+        hint.style.color = "#16a34a";
+        hint.style.fontWeight = "700";
+      }
+      updateSubcats();
+    }
 
            function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
