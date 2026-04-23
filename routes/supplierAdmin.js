@@ -575,7 +575,8 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
 
        <script>
     const SUBCATS = ${JSON.stringify(subcatMap)};
-    const ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
+    window.ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
+    const ADMIN_PRODUCT_PRESETS = window.ADMIN_PRODUCT_PRESETS;
 
            function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
@@ -608,80 +609,77 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     }
 
       function loadSelectedPresetFromDropdown() {
-      const isService = document.getElementById("profileTypeSelect").value === "service";
-      if (isService) {
-        alert("Presets currently apply to product suppliers only.");
-        return;
-      }
+      try {
+        const profileEl = document.getElementById("profileTypeSelect");
+        const isService = profileEl ? profileEl.value === "service" : false;
+        if (isService) {
+          alert("Presets currently apply to product suppliers only.");
+          return;
+        }
 
-      const presetSelector = document.getElementById("presetSelector");
-      const presetKey = presetSelector ? presetSelector.value : "";
-      if (!presetKey) {
-        alert("Select a preset first.");
-        return;
-      }
+        const presetSelector = document.getElementById("presetSelector");
+        const presetKey = presetSelector ? presetSelector.value : "";
+        if (!presetKey) {
+          alert("Select a preset first.");
+          return;
+        }
 
-      const preset = ADMIN_PRODUCT_PRESETS[presetKey];
-      if (!preset) {
-        alert("Preset data not found for: " + presetKey);
-        return;
-      }
+        if (!window.ADMIN_PRODUCT_PRESETS || !window.ADMIN_PRODUCT_PRESETS[presetKey]) {
+          alert("Preset data not found. Please refresh the page and try again.");
+          return;
+        }
 
-      const productsTextarea = document.getElementById("productsTextarea");
-      const pricesTextarea = document.getElementById("pricesTextarea");
-      const productCategorySelect = document.getElementById("productCategorySelect");
-      const presetLoadHint = document.getElementById("presetLoadHint");
-      const useCategoryPreset = document.getElementById("useCategoryPreset");
+        const preset = window.ADMIN_PRODUCT_PRESETS[presetKey];
 
-      if (!productsTextarea) {
-        alert("Products textarea not found.");
-        return;
-      }
+        const productsTextarea    = document.getElementById("productsTextarea");
+        const pricesTextarea      = document.getElementById("pricesTextarea");
+        const productCategorySelect = document.getElementById("productCategorySelect");
+        const presetLoadHint      = document.getElementById("presetLoadHint");
+        const useCategoryPreset   = document.getElementById("useCategoryPreset");
 
-      productsTextarea.value = Array.isArray(preset.products)
-        ? preset.products.join(", ")
-        : "";
+        // ── Fill products ────────────────────────────────────────────────────
+        if (productsTextarea && Array.isArray(preset.products)) {
+          productsTextarea.value = preset.products.join(", ");
+        }
 
-      if (pricesTextarea) {
-        pricesTextarea.value = Array.isArray(preset.prices)
-          ? preset.prices.join("\n")
-          : "";
-      }
+        // ── Fill prices ──────────────────────────────────────────────────────
+        if (pricesTextarea && Array.isArray(preset.prices)) {
+          pricesTextarea.value = preset.prices.join("\n");
+        }
 
-      // ── Map preset key → actual category ID in the dropdown ─────────────────
-      // "plumbing_supplies" is not a category ID — map it to "hardware" (or the
-      // closest match available as an <option> in productCategorySelect)
-      const PRESET_CATEGORY_MAP = {
-        plumbing_supplies: "hardware"
-      };
-      const mappedCategoryId = PRESET_CATEGORY_MAP[presetKey] || presetKey;
-
-      if (productCategorySelect) {
-        // Try the mapped ID first, then the raw preset key as fallback
-        productCategorySelect.value = mappedCategoryId;
-        if (!productCategorySelect.value) {
+        // ── Set category dropdown to match the preset ────────────────────────
+        // Try the preset key directly (e.g. "plumbing_supplies" IS a valid category id)
+        // then fall back to looking for an option whose text contains the key
+        if (productCategorySelect) {
           productCategorySelect.value = presetKey;
+          if (!productCategorySelect.value) {
+            // Try to find a matching option by scanning all options
+            const opts = Array.from(productCategorySelect.options);
+            const match = opts.find(o =>
+              o.value.toLowerCase().replace(/[_\s]/g, "") ===
+              presetKey.toLowerCase().replace(/[_\s]/g, "")
+            );
+            if (match) productCategorySelect.value = match.value;
+          }
         }
-        // If still no match, log a warning but don't block the preset load
-        if (!productCategorySelect.value) {
-          console.warn("Preset: no matching category option for", mappedCategoryId, "- products still loaded");
+
+        if (useCategoryPreset) useCategoryPreset.value = "true";
+
+        // ── Update hint text ─────────────────────────────────────────────────
+        if (presetLoadHint) {
+          const itemCount  = Array.isArray(preset.products) ? preset.products.length : 0;
+          const priceCount = Array.isArray(preset.prices)   ? preset.prices.length   : 0;
+          presetLoadHint.textContent = "✅ Loaded " + itemCount + " products and " + priceCount + " prices.";
+          presetLoadHint.style.color      = "#16a34a";
+          presetLoadHint.style.fontWeight = "700";
         }
-      }
 
-      if (useCategoryPreset) {
-        useCategoryPreset.value = "true";
-      }
+        updateSubcats();
 
-      if (presetLoadHint) {
-        const itemCount = Array.isArray(preset.products) ? preset.products.length : 0;
-        const priceCount = Array.isArray(preset.prices) ? preset.prices.length : 0;
-        presetLoadHint.textContent =
-          "✅ Preset loaded: " + itemCount + " products and " + priceCount + " prices filled in.";
-        presetLoadHint.style.color = "green";
-        presetLoadHint.style.fontWeight = "600";
+      } catch (err) {
+        alert("Preset load error: " + err.message);
+        console.error("loadSelectedPresetFromDropdown error:", err);
       }
-
-      updateSubcats();
     }
 
     function updateSubcats() {
@@ -707,13 +705,9 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       // keep preset selector aligned with selected product category
       if (!isService) {
         const presetSelector = document.getElementById("presetSelector");
-        if (presetSelector) {
-          // Map category ID back to preset key (e.g. "hardware" → "plumbing_supplies")
-          const CATEGORY_PRESET_MAP = { hardware: "plumbing_supplies" };
-          const matchingPreset = CATEGORY_PRESET_MAP[catId] || catId;
-          if (ADMIN_PRODUCT_PRESETS[matchingPreset]) {
-            presetSelector.value = matchingPreset;
-          }
+        const presets = window.ADMIN_PRODUCT_PRESETS || {};
+        if (presetSelector && presets[catId]) {
+          presetSelector.value = catId;
         }
       }
     }
