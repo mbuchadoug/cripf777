@@ -3292,7 +3292,9 @@ const isBuyerRequestMetaReply =
   al === "view & quote" ||
   al === "view and quote" ||
   a === "not_available" ||
-  al === "not available";
+  al === "not available" ||
+  al === "confirm" ||
+  al === "send";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
@@ -3646,156 +3648,312 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
 
    if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
+
+  // ── cancel ───────────────────────────────────────────────────────────────
   if (al === "cancel") {
     await UserSession.findOneAndUpdate(
       { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
-        }
-      },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
       { upsert: true }
     );
-    return sendSupplierAccountMenu(from, await SupplierProfile.findOne({ phone }));
+    return sendSupplierAccountMenu(from, await findSupplierByPhone(phone));
   }
 
   const request = await BuyerRequest.findById(sellerRequestId);
   if (!request) {
     await UserSession.findOneAndUpdate(
       { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
-        }
-      },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
       { upsert: true }
     );
     return sendText(from, "❌ Request not found or expired.");
   }
 
-  const supplier = await SupplierProfile.findOne({ phone }).lean();
+  const supplier = await findSupplierByPhone(phone);
   if (!supplier) {
     await UserSession.findOneAndUpdate(
       { phone },
-      {
-        $unset: {
-          "tempData.sellerRequestReplyState": "",
-          "tempData.sellerRequestId": "",
-          "tempData.pendingDraftQuote": ""
-        }
-      },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
       { upsert: true }
     );
     return sendText(from, "❌ Supplier profile not found.");
   }
 
-  let responseItems = [];
-  let totalAmount = null;
-  let message = "";
+  // ── Helper: build a preview text of current draft items ───────────────────
+  function _buildDraftPreview(items, skippedNames, ref, totalAmt) {
+    const lines = items.map((item, i) =>
+      `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
+    ).join("\n");
+    const skippedLine = skippedNames?.length
+      ? `\n\n❌ *Skipped (not in stock):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
+      : "";
+    return (
+      `📋 *Updated Quote — ${ref}*\n─────────────────\n${lines}\n\n` +
+      `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}\n\n` +
+      `─────────────────\n` +
+      `Type *confirm* to send to buyer\n` +
+      `Edit: _edit 1x12.50 3x8_ | Skip: _skip 3,7_ | Cancel: _cancel_`
+    );
+  }
 
-  if (al === "send" && pendingDraftQuote?.responseItems?.length) {
-    responseItems = (pendingDraftQuote.responseItems || []).map(item => ({
-      product: item.product,
-      quantity: Number(item.quantity || 1),
-      unit: item.unit || "each",
+  // ── Parse skip / edit commands ────────────────────────────────────────────
+  // Supports: "skip 3,7,15"  "edit 1x5, 3x15"  "skip 3 edit 1x5"
+  function _parseEditSkip(inputText, draftItems) {
+    const raw = String(inputText || "").trim();
+    let editUpdates = {};   // { itemIndex(1-based): newPrice }
+    let skipIndices = new Set();
+    let hasEditCmd = false;
+    let hasSkipCmd = false;
+
+    // Extract skip numbers: "skip 3,7,15" or "skip 3 7 15"
+    const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
+    if (skipMatch) {
+      hasSkipCmd = true;
+      skipMatch[1].split(/[,\s]+/).forEach(n => {
+        const idx = parseInt(n);
+        if (!isNaN(idx) && idx >= 1 && idx <= draftItems.length) skipIndices.add(idx);
+      });
+    }
+
+    // Extract edit pairs: "edit 1x5 3x15" or "1x5, 3x15" (without skip keyword)
+    // Also handle "edit 1x5" prefix
+    const editSection = raw.replace(/\bskip\s+[\d,\s]+/i, "").replace(/^\bedit\b\s*/i, "").trim();
+    const pairPattern = /(\d+)\s*x\s*(\d+(?:\.\d+)?)/gi;
+    let m;
+    while ((m = pairPattern.exec(editSection)) !== null) {
+      hasEditCmd = true;
+      editUpdates[parseInt(m[1])] = parseFloat(m[2]);
+    }
+
+    return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd };
+  }
+
+  const _isService = supplier.profileType === "service";
+  const _ref = buildBuyerRequestRef(request);
+
+  // ── CONFIRM: send the current stored draft ────────────────────────────────
+  if (al === "confirm" || al === "send") {
+    const _confirmDraft = pendingDraftQuote;
+    if (!_confirmDraft?.responseItems?.length) {
+      return sendText(from,
+        `⚠️ No draft found. Please tap *View & Quote* again from the request message.`
+      );
+    }
+
+    const responseItems = _confirmDraft.responseItems.map(item => ({
+      product:      item.product,
+      quantity:     Number(item.quantity || 1),
+      unit:         item.unit || "each",
       pricePerUnit: Number(item.pricePerUnit || 0),
-      total: Number(item.total || 0),
-      available: true
+      total:        Number(item.total || 0),
+      available:    true
     }));
 
-    totalAmount = Number(
-      responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+    const totalAmount = Number(responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2));
+    const skippedNote = (_confirmDraft.skippedItems?.length)
+      ? `Not in stock: ${_confirmDraft.skippedItems.join(", ")}`
+      : (_confirmDraft.missingItems?.length ? `Not priced: ${_confirmDraft.missingItems.join(", ")}` : "");
+
+    const response = {
+      supplierId:        supplier._id,
+      supplierPhone:     supplier.phone,
+      supplierName:      supplier.businessName,
+      mode:              "manual_offer",
+      message:           skippedNote,
+      items:             responseItems,
+      totalAmount,
+      deliveryAvailable: supplier.delivery?.available ?? null,
+      etaText:           ""
+    };
+
+    request.responses.push(response);
+    await request.save();
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+      { upsert: true }
     );
 
-    if (pendingDraftQuote?.missingItems?.length) {
-      message = `Quoted available items only. Not priced now: ${pendingDraftQuote.missingItems.join(", ")}`;
-    }
-  } else {
+    trackSupplierResponseSpeed(supplier.phone, request.createdAt).catch(console.error);
+    await sendBuyerRequestResponseToBuyer({ request, supplier, response });
+
+    return sendButtons(from, {
+      text:
+        `✅ *Quote sent!*\n\n` +
+        `🏪 ${supplier.businessName}\n` +
+        `📦 ${responseItems.length} item${responseItems.length === 1 ? "" : "s"} quoted\n` +
+        `💵 Total: $${totalAmount.toFixed(2)}\n\n` +
+        `The buyer will see your prices and can contact you directly.`,
+      buttons: [
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "suppliers_home",      title: "🛒 Marketplace" }
+      ]
+    });
+  }
+
+  // ── EDIT / SKIP commands — update draft and show preview ──────────────────
+  const { editUpdates, skipIndices, hasEditCmd, hasSkipCmd } = _parseEditSkip(text, pendingDraftQuote?.responseItems || []);
+
+  if ((hasEditCmd || hasSkipCmd) && pendingDraftQuote?.responseItems?.length) {
+    // Apply edits to the draft
+    const updatedItems = (pendingDraftQuote.responseItems || [])
+      .filter((_, idx) => !skipIndices.has(idx + 1))  // remove skipped items
+      .map((item, _newIdx) => {
+        // find original 1-based index before filtering for skip
+        const origIdx = (pendingDraftQuote.responseItems || []).indexOf(item) + 1;
+        if (editUpdates[origIdx] !== undefined) {
+          const newPrice = Number(editUpdates[origIdx]);
+          const qty = Number(item.quantity || 1);
+          return {
+            ...item,
+            pricePerUnit: newPrice,
+            total:        Number((qty * newPrice).toFixed(2)),
+            _edited:      true
+          };
+        }
+        return item;
+      });
+
+    const skippedNames = (pendingDraftQuote.responseItems || [])
+      .filter((_, idx) => skipIndices.has(idx + 1))
+      .map(i => i.product);
+
+    const newTotal = Number(updatedItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2));
+
+    // Persist the updated draft
+    const updatedDraft = {
+      ...pendingDraftQuote,
+      responseItems: updatedItems,
+      skippedItems:  [...(pendingDraftQuote.skippedItems || []), ...skippedNames],
+      totalAmount:   newTotal
+    };
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { upsert: true }
+    );
+
+    const preview = _buildDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal);
+    // Use sendText — preview can be long
+    return sendText(from, preview);
+  }
+
+  // ── GREETING / confusion while in awaiting_offer — re-show the draft ─────
+  const _looksLikeGreeting = !hasEditCmd && !hasSkipCmd &&
+    !/\d/.test(text) && text.trim().length < 30 &&
+    /^(hi|hello|hey|yes|ok|okay|sure|what|how|hie|help|good|fine|yeah|send|go|start|ready|quote|pricing|price|available|avail|\?+|\!+)$/i
+      .test(text.trim().replace(/[.,!?]+$/, "").trim());
+
+  if (_looksLikeGreeting && pendingDraftQuote?.responseItems?.length) {
+    const _greetLines = (pendingDraftQuote.responseItems || []).map((item, i) =>
+      `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
+    ).join("\n");
+    const _greetTotal = Number((pendingDraftQuote.totalAmount || 0)).toFixed(2);
+    return sendText(from,
+      `📋 *Quote Draft — ${_ref}*\n─────────────────\n${_greetLines}\n\n` +
+      `💵 *Total: $${_greetTotal}*\n\n─────────────────\n` +
+      `• Type *confirm* to send as-is\n` +
+      `• *edit 1x12.50 3x8* — change item prices\n` +
+      `• *skip 3,7* — remove items you don't have\n` +
+      `• *cancel* to go back`
+    );
+  }
+
+  // ── TYPED PRICES (no draft, or seller typed raw prices directly) ──────────
+  {
     const requestedProducts = (request.items || []).map(i => i.product);
-    const parsed = parseSupplierPriceInput(text, requestedProducts, supplier.profileType === "service");
+    const parsed = parseSupplierPriceInput(text, requestedProducts, _isService);
+
+    let responseItems = [];
+    let totalAmount = null;
+    let message = "";
 
     if (parsed.updated.length) {
-      const updatedMap = new Map(
-        parsed.updated.map(u => [normalizeProductName(u.product), u])
-      );
-
-      responseItems = (request.items || [])
-        .map(item => {
+      // If we have a draft, MERGE typed prices into it (don't discard auto-priced items)
+      if (pendingDraftQuote?.responseItems?.length) {
+        const updatedMap = new Map(parsed.updated.map(u => [normalizeProductName(u.product), u]));
+        const mergedItems = (pendingDraftQuote.responseItems || []).map(item => {
           const match = updatedMap.get(normalizeProductName(item.product));
-          if (!match) return null;
+          if (match) {
+            const qty = Number(item.quantity || 1);
+            const unitPrice = Number(match.amount || 0);
+            return { ...item, pricePerUnit: unitPrice, total: Number((qty * unitPrice).toFixed(2)), _edited: true };
+          }
+          return item;
+        });
 
-          const qty = Number(item.quantity || 1);
-          const unitPrice = Number(match.amount || 0);
-          const total = Number((qty * unitPrice).toFixed(2));
+        const newTotal = Number(mergedItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2));
+        const updatedDraft = { ...pendingDraftQuote, responseItems: mergedItems, totalAmount: newTotal };
 
-          return {
-            product: item.product,
-            quantity: qty,
-            unit: match.unit || item.unitLabel || "each",
-            pricePerUnit: unitPrice,
-            total,
-            available: true
-          };
-        })
-        .filter(Boolean);
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+          { upsert: true }
+        );
+
+        const preview = _buildDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal);
+        return sendText(from, preview);
+      }
+
+      // No draft — build response from parsed prices only
+      const updatedMap = new Map(parsed.updated.map(u => [normalizeProductName(u.product), u]));
+      responseItems = (request.items || []).map(item => {
+        const match = updatedMap.get(normalizeProductName(item.product));
+        if (!match) return null;
+        const qty = Number(item.quantity || 1);
+        const unitPrice = Number(match.amount || 0);
+        return { product: item.product, quantity: qty, unit: match.unit || item.unitLabel || "each", pricePerUnit: unitPrice, total: Number((qty * unitPrice).toFixed(2)), available: true };
+      }).filter(Boolean);
 
       if (responseItems.length) {
-        totalAmount = Number(
-          responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+        totalAmount = Number(responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2));
+      }
+      if (parsed.failed.length) message = `Some parts skipped: ${parsed.failed.slice(0, 3).join(", ")}`;
+
+      // Show preview and ask for confirm
+      const _newDraft = { responseItems, missingItems: [], totalAmount };
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $set: { "tempData.pendingDraftQuote": _newDraft } },
+        { upsert: true }
+      );
+      return sendText(from, _buildDraftPreview(responseItems, [], _ref, totalAmount));
+
+    } else {
+      // No prices parsed — message-only or greeting
+      message = String(text || "").trim();
+      if (!message || _looksLikeGreeting) {
+        return sendText(from,
+          `⚠️ I couldn't read prices from that.\n\n` +
+          `• Type *confirm* to send the draft as-is\n` +
+          `• *edit 1x12.50* — change a price\n` +
+          `• *skip 3,7* — remove items you don't have\n` +
+          `• *cancel* to go back`
         );
       }
 
-      if (parsed.failed.length) {
-        message = `Some parts of your message were skipped: ${parsed.failed.slice(0, 3).join(", ")}`;
-      }
-    } else {
-      message = String(text || "").trim();
+      // Treat as a message-only quote (send immediately with note)
+      const _msgResp = {
+        supplierId: supplier._id, supplierPhone: supplier.phone, supplierName: supplier.businessName,
+        mode: "manual_offer", message, items: [], totalAmount: null,
+        deliveryAvailable: supplier.delivery?.available ?? null, etaText: ""
+      };
+      request.responses.push(_msgResp);
+      await request.save();
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
+        { upsert: true }
+      );
+      await sendBuyerRequestResponseToBuyer({ request, supplier, response: _msgResp });
+      return sendButtons(from, {
+        text: `✅ *Message sent to buyer.*\n\n_"${message.slice(0, 80)}"_`,
+        buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }, { id: "suppliers_home", title: "🛒 Marketplace" }]
+      });
     }
   }
-
-  const response = {
-    supplierId: supplier._id,
-    supplierPhone: supplier.phone,
-    supplierName: supplier.businessName,
-    mode: "manual_offer",
-    message,
-    items: responseItems,
-    totalAmount,
-    deliveryAvailable: supplier.delivery?.available ?? null,
-    etaText: ""
-  };
-
-  request.responses.push(response);
-  await request.save();
-
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $unset: {
-        "tempData.sellerRequestReplyState": "",
-        "tempData.sellerRequestId": "",
-        "tempData.pendingDraftQuote": ""
-      }
-    },
-    { upsert: true }
-  );
-
-  await sendBuyerRequestResponseToBuyer({ request, supplier, response });
-
-  return sendButtons(from, {
-    text:
-      responseItems.length
-        ? `✅ Your quotation has been sent.\n\nQuoted items: ${responseItems.length}\nTotal: $${Number(totalAmount || 0).toFixed(2)}`
-        : `✅ Your response has been sent to the buyer.`,
-    buttons: [
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "suppliers_home", title: "🛒 Marketplace" }
-    ]
-  });
 }
 
 
