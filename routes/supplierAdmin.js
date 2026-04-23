@@ -468,7 +468,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
                 <option value="">Select preset to load...</option>
                 <option value="plumbing_supplies">🚿 Plumbing Supplies Preset</option>
               </select>
-              <button type="button" class="btn btn-blue btn-sm" onclick="loadSelectedPresetFromDropdown()">
+              <button type="button" class="btn btn-blue btn-sm" onclick="doLoadPreset()">
                 📦 Load Preset Items
               </button>
             </div>
@@ -476,6 +476,32 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               Choose a preset and load products plus suggested prices into the form.
             </span>
           </div>
+
+          <script>
+            var _PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
+            function doLoadPreset() {
+              var sel = document.getElementById("presetSelector");
+              var key = sel ? sel.value : "";
+              if (!key) { alert("Select a preset first."); return; }
+              var p = _PRESETS[key];
+              if (!p) { alert("Preset not found: " + key); return; }
+              var ta = document.getElementById("productsTextarea");
+              var tp = document.getElementById("pricesTextarea");
+              var cat = document.getElementById("productCategorySelect");
+              var hint = document.getElementById("presetLoadHint");
+              var ucp = document.getElementById("useCategoryPreset");
+              if (ta && p.products) ta.value = p.products.join(", ");
+              if (tp && p.prices)   tp.value = p.prices.join("\n");
+              if (cat) cat.value = key;
+              if (ucp) ucp.value = "true";
+              if (hint) {
+                hint.textContent = "✅ Loaded " + (p.products||[]).length + " products and " + (p.prices||[]).length + " prices.";
+                hint.style.color = "#16a34a";
+                hint.style.fontWeight = "700";
+              }
+              if (typeof updateSubcats === "function") updateSubcats();
+            }
+          </script>
 
                   <div class="fg full" style="margin-bottom:12px">
             <label id="productsLabel">Products (comma-separated)</label>
@@ -576,7 +602,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
        <script>
     const SUBCATS = ${JSON.stringify(subcatMap)};
     window.ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
-    const ADMIN_PRODUCT_PRESETS = window.ADMIN_PRODUCT_PRESETS;
 
            function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
@@ -608,79 +633,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       if (presetSelector) presetSelector.value = "";
     }
 
-      function loadSelectedPresetFromDropdown() {
-      try {
-        const profileEl = document.getElementById("profileTypeSelect");
-        const isService = profileEl ? profileEl.value === "service" : false;
-        if (isService) {
-          alert("Presets currently apply to product suppliers only.");
-          return;
-        }
-
-        const presetSelector = document.getElementById("presetSelector");
-        const presetKey = presetSelector ? presetSelector.value : "";
-        if (!presetKey) {
-          alert("Select a preset first.");
-          return;
-        }
-
-        if (!window.ADMIN_PRODUCT_PRESETS || !window.ADMIN_PRODUCT_PRESETS[presetKey]) {
-          alert("Preset data not found. Please refresh the page and try again.");
-          return;
-        }
-
-        const preset = window.ADMIN_PRODUCT_PRESETS[presetKey];
-
-        const productsTextarea    = document.getElementById("productsTextarea");
-        const pricesTextarea      = document.getElementById("pricesTextarea");
-        const productCategorySelect = document.getElementById("productCategorySelect");
-        const presetLoadHint      = document.getElementById("presetLoadHint");
-        const useCategoryPreset   = document.getElementById("useCategoryPreset");
-
-        // ── Fill products ────────────────────────────────────────────────────
-        if (productsTextarea && Array.isArray(preset.products)) {
-          productsTextarea.value = preset.products.join(", ");
-        }
-
-        // ── Fill prices ──────────────────────────────────────────────────────
-        if (pricesTextarea && Array.isArray(preset.prices)) {
-          pricesTextarea.value = preset.prices.join("\n");
-        }
-
-        // ── Set category dropdown to match the preset ────────────────────────
-        // Try the preset key directly (e.g. "plumbing_supplies" IS a valid category id)
-        // then fall back to looking for an option whose text contains the key
-        if (productCategorySelect) {
-          productCategorySelect.value = presetKey;
-          if (!productCategorySelect.value) {
-            // Try to find a matching option by scanning all options
-            const opts = Array.from(productCategorySelect.options);
-            const match = opts.find(o =>
-              o.value.toLowerCase().replace(/[_\s]/g, "") ===
-              presetKey.toLowerCase().replace(/[_\s]/g, "")
-            );
-            if (match) productCategorySelect.value = match.value;
-          }
-        }
-
-        if (useCategoryPreset) useCategoryPreset.value = "true";
-
-        // ── Update hint text ─────────────────────────────────────────────────
-        if (presetLoadHint) {
-          const itemCount  = Array.isArray(preset.products) ? preset.products.length : 0;
-          const priceCount = Array.isArray(preset.prices)   ? preset.prices.length   : 0;
-          presetLoadHint.textContent = "✅ Loaded " + itemCount + " products and " + priceCount + " prices.";
-          presetLoadHint.style.color      = "#16a34a";
-          presetLoadHint.style.fontWeight = "700";
-        }
-
-        updateSubcats();
-
-      } catch (err) {
-        alert("Preset load error: " + err.message);
-        console.error("loadSelectedPresetFromDropdown error:", err);
-      }
-    }
 
     function updateSubcats() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
