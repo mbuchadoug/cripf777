@@ -132,6 +132,22 @@ function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function round2(n) { return Math.round(n * 100) / 100; }
 
+// ── findSupplierByPhone ───────────────────────────────────────────────────────
+// Checks all 3 phone formats: "263773...", "+263773...", "0773..."
+async function findSupplierByPhone(rawPhone) {
+  const digits = String(rawPhone || "").replace(/\D+/g, "");
+  if (!digits || digits.length < 9) return null;
+  let intl, intlPlus, local;
+  if (digits.startsWith("263") && digits.length >= 12) {
+    intl = digits; intlPlus = "+" + digits; local = "0" + digits.slice(3);
+  } else if (digits.startsWith("0") && digits.length === 10) {
+    local = digits; intl = "263" + digits.slice(1); intlPlus = "+263" + digits.slice(1);
+  } else {
+    intl = digits; intlPlus = "+" + digits; local = digits;
+  }
+  return SupplierProfile.findOne({ phone: { $in: [intl, intlPlus, local] } }).lean();
+}
+
 
 function calculateUpgradeCost(currentPrice, nextPrice, daysRemaining, totalDays) {
   if (nextPrice <= currentPrice) return 0;
@@ -3680,20 +3696,31 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
   }
 
   // ── Helper: build a preview text of current draft items ───────────────────
+  // Returns {text, short} — short=true means fits in sendButtons (≤900 chars)
   function _buildDraftPreview(items, skippedNames, ref, totalAmt) {
+    const editedCount = items.filter(i => i._edited).length;
     const lines = items.map((item, i) =>
-      `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
+      `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
     ).join("\n");
     const skippedLine = skippedNames?.length
-      ? `\n\n❌ *Skipped (not in stock):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
+      ? `\n\n❌ *Not in stock (${skippedNames.length}):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
       : "";
-    return (
-      `📋 *Updated Quote — ${ref}*\n─────────────────\n${lines}\n\n` +
-      `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}\n\n` +
+    const editNote = editedCount > 0 ? `\n_✏️ = price edited by you_` : "";
+
+    const body =
+      `📋 *Quote Preview — ${ref}*\n` +
       `─────────────────\n` +
-      `Type *confirm* to send to buyer\n` +
-      `Edit: _edit 1x12.50 3x8_ | Skip: _skip 3,7_ | Cancel: _cancel_`
-    );
+      `${lines}\n\n` +
+      `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}${editNote}\n\n` +
+      `─────────────────\n` +
+      `✅ Happy with this? Tap *Confirm & Send*\n\n` +
+      `*To adjust:*\n` +
+      `• Change a price: _edit 1x12.50_ or _edit 1x12.50 3x8_\n` +
+      `• Remove item: _skip 3_ or _skip 3,7,15_\n` +
+      `• Both: _edit 1x5 skip 3,7_\n` +
+      `• Discard: _cancel_`;
+
+    return { text: body, short: body.length <= 900 };
   }
 
   // ── Parse skip / edit commands ────────────────────────────────────────────
@@ -3829,15 +3856,34 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       totalAmount:   newTotal
     };
 
+    // Also update pendingOfferResponse so "Confirm & Send" button works
+    const _editedResponse = {
+      supplierId: supplier._id, supplierPhone: supplier.phone, supplierName: supplier.businessName,
+      mode: "manual_offer",
+      message: updatedDraft.skippedItems?.length ? `Not in stock: ${updatedDraft.skippedItems.join(", ")}` : "",
+      items: updatedItems.map(item => ({
+        product: item.product, quantity: Number(item.quantity || 1), unit: item.unit || "each",
+        pricePerUnit: Number(item.pricePerUnit || 0), total: Number(item.total || 0), available: true
+      })),
+      totalAmount: newTotal, deliveryAvailable: supplier.delivery?.available ?? null, etaText: ""
+    };
     await UserSession.findOneAndUpdate(
       { phone },
-      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft, "tempData.pendingOfferResponse": JSON.stringify(_editedResponse) } },
       { upsert: true }
     );
 
-    const preview = _buildDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal);
-    // Use sendText — preview can be long
-    return sendText(from, preview);
+    const _p1 = _buildDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal);
+    if (_p1.short) {
+      return sendButtons(from, {
+        text: _p1.text,
+        buttons: [
+          { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+          { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
+        ]
+      });
+    }
+    return sendText(from, _p1.text);
   }
 
   // ── GREETING / confusion while in awaiting_offer — re-show the draft ─────
@@ -3847,18 +3893,22 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       .test(text.trim().replace(/[.,!?]+$/, "").trim());
 
   if (_looksLikeGreeting && pendingDraftQuote?.responseItems?.length) {
-    const _greetLines = (pendingDraftQuote.responseItems || []).map((item, i) =>
-      `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
-    ).join("\n");
-    const _greetTotal = Number((pendingDraftQuote.totalAmount || 0)).toFixed(2);
-    return sendText(from,
-      `📋 *Quote Draft — ${_ref}*\n─────────────────\n${_greetLines}\n\n` +
-      `💵 *Total: $${_greetTotal}*\n\n─────────────────\n` +
-      `• Type *confirm* to send as-is\n` +
-      `• *edit 1x12.50 3x8* — change item prices\n` +
-      `• *skip 3,7* — remove items you don't have\n` +
-      `• *cancel* to go back`
+    const _pg = _buildDraftPreview(
+      pendingDraftQuote.responseItems,
+      pendingDraftQuote.skippedItems || [],
+      _ref,
+      pendingDraftQuote.totalAmount || 0
     );
+    if (_pg.short) {
+      return sendButtons(from, {
+        text: _pg.text,
+        buttons: [
+          { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+          { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
+        ]
+      });
+    }
+    return sendText(from, _pg.text);
   }
 
   // ── TYPED PRICES (no draft, or seller typed raw prices directly) ──────────
@@ -3893,8 +3943,17 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           { upsert: true }
         );
 
-        const preview = _buildDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal);
-        return sendText(from, preview);
+        const _p2 = _buildDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal);
+        if (_p2.short) {
+          return sendButtons(from, {
+            text: _p2.text,
+            buttons: [
+              { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
+            ]
+          });
+        }
+        return sendText(from, _p2.text);
       }
 
       // No draft — build response from parsed prices only
@@ -3919,7 +3978,17 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         { $set: { "tempData.pendingDraftQuote": _newDraft } },
         { upsert: true }
       );
-      return sendText(from, _buildDraftPreview(responseItems, [], _ref, totalAmount));
+      const _p3 = _buildDraftPreview(responseItems, [], _ref, totalAmount);
+      if (_p3.short) {
+        return sendButtons(from, {
+          text: _p3.text,
+          buttons: [
+            { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+            { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
+          ]
+        });
+      }
+      return sendText(from, _p3.text);
 
     } else {
       // No prices parsed — message-only or greeting
