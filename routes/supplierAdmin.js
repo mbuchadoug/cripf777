@@ -451,23 +451,32 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             </div>
           </div>
 
-          <div id="presetLoadWrap" style="display:none;margin-top:12px">
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <button type="button" class="btn btn-blue btn-sm" onclick="loadSelectedCategoryPreset()">
-                📦 Load Preset Items
-              </button>
-              <span id="presetLoadHint" style="font-size:12px;color:var(--muted)">
-                Load category preset products and suggested prices into the form.
-              </span>
-            </div>
-          </div>
+        
         </div>
 
         <!-- ── SECTION 3: Products / Services ───────────────────────── -->
+              <!-- ── SECTION 3: Products / Services ───────────────────────── -->
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
             3. Products / Services
           </p>
+
+          <div class="fg full" id="presetToolsWrap" style="margin-bottom:14px">
+            <label>Preset Items</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <select id="presetSelector" style="min-width:260px;padding:10px;border:1px solid #e2e8f0;border-radius:8px">
+                <option value="">Select preset to load...</option>
+                <option value="plumbing_supplies">🚿 Plumbing Supplies Preset</option>
+              </select>
+              <button type="button" class="btn btn-blue btn-sm" onclick="loadSelectedPresetFromDropdown()">
+                📦 Load Preset Items
+              </button>
+            </div>
+            <span id="presetLoadHint" style="font-size:11px;color:var(--muted)">
+              Choose a preset and load products plus suggested prices into the form.
+            </span>
+          </div>
+
           <div class="fg full" style="margin-bottom:12px">
             <label id="productsLabel">Products (comma-separated)</label>
             <textarea name="products" id="productsTextarea" rows="4"
@@ -568,87 +577,100 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     const SUBCATS = ${JSON.stringify(subcatMap)};
     const ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
 
-        function toggleCategoryGroups() {
+           function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
-      document.getElementById("productCatWrap").style.display  = isService ? "none" : "";
-      document.getElementById("serviceCatWrap").style.display  = isService ? ""     : "none";
-      document.getElementById("deliveryWrap").style.display    = isService ? "none" : "";
-      document.getElementById("travelWrap").style.display      = isService ? ""     : "none";
-      document.getElementById("pricesWrap").style.display      = isService ? "none" : "";
-      document.getElementById("ratesWrap").style.display       = isService ? ""     : "none";
-      document.getElementById("productsLabel").textContent     = isService
-        ? "Services (comma-separated)" : "Products (comma-separated)";
-      document.getElementById("productsTextarea").placeholder  = isService
+
+      document.getElementById("productCatWrap").style.display = isService ? "none" : "";
+      document.getElementById("serviceCatWrap").style.display = isService ? "" : "none";
+      document.getElementById("deliveryWrap").style.display = isService ? "none" : "";
+      document.getElementById("travelWrap").style.display = isService ? "" : "none";
+      document.getElementById("pricesWrap").style.display = isService ? "none" : "";
+      document.getElementById("ratesWrap").style.display = isService ? "" : "none";
+
+      document.getElementById("productsLabel").textContent = isService
+        ? "Services (comma-separated)"
+        : "Products (comma-separated)";
+
+      document.getElementById("productsTextarea").placeholder = isService
         ? "burst pipe repair, geyser installation, blocked drain"
         : "cooking oil, rice, sugar, mealie meal 10kg";
+
       document.getElementById("subcatWrap").style.display = "none";
       document.getElementById("subcategorySelect").innerHTML = '<option value="">All / General</option>';
 
-      document.getElementById("presetLoadWrap").style.display = isService ? "none" : "none";
+      // show preset tools only for product suppliers
+      document.getElementById("presetToolsWrap").style.display = isService ? "none" : "";
       document.getElementById("useCategoryPreset").value = "false";
+
+      // reset preset selector when switching modes
+      const presetSelector = document.getElementById("presetSelector");
+      if (presetSelector) presetSelector.value = "";
     }
 
-    function loadSelectedCategoryPreset() {
+    function loadSelectedPresetFromDropdown() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
       if (isService) return;
 
-      const catId = document.getElementById("productCategorySelect").value;
-      if (!catId || !ADMIN_PRODUCT_PRESETS[catId]) {
-        alert("No preset found for this category.");
+      const presetKey = document.getElementById("presetSelector").value;
+      if (!presetKey || !ADMIN_PRODUCT_PRESETS[presetKey]) {
+        alert("Select a preset first.");
         return;
       }
 
-      const preset = ADMIN_PRODUCT_PRESETS[catId];
+      const preset = ADMIN_PRODUCT_PRESETS[presetKey];
       const productsTextarea = document.getElementById("productsTextarea");
       const pricesTextarea = document.querySelector('textarea[name="prices"]');
+      const productCategorySelect = document.getElementById("productCategorySelect");
 
       productsTextarea.value = (preset.products || []).join(", ");
       if (pricesTextarea) {
         pricesTextarea.value = (preset.prices || []).join("\n");
       }
 
+      // keep category in sync with preset
+      if (productCategorySelect) {
+        productCategorySelect.value = presetKey;
+      }
+
       document.getElementById("useCategoryPreset").value = "true";
+
+      const presetLoadHint = document.getElementById("presetLoadHint");
+      if (presetLoadHint) {
+        presetLoadHint.textContent =
+          "Preset loaded: " + presetKey.replaceAll("_", " ") + ". You can still edit the items and prices before saving.";
+      }
+
+      updateSubcats();
     }
 
-  function updateSubcats() {
-  const isService = document.getElementById("profileTypeSelect").value === "service";
-  const catId = isService
-    ? document.getElementById("serviceCategorySelect").value
-    : document.getElementById("productCategorySelect").value;
+    function updateSubcats() {
+      const isService = document.getElementById("profileTypeSelect").value === "service";
+      const catId = isService
+        ? document.getElementById("serviceCategorySelect").value
+        : document.getElementById("productCategorySelect").value;
 
-  const subs = SUBCATS[catId] || [];
-  const subcatWrap = document.getElementById("subcatWrap");
-  const subcatSelect = document.getElementById("subcategorySelect");
+      const subs = SUBCATS[catId] || [];
+      const subcatWrap = document.getElementById("subcatWrap");
+      const subcatSelect = document.getElementById("subcategorySelect");
 
-  if (subs.length) {
-    subcatSelect.innerHTML =
-      '<option value="">All / General</option>' +
-      subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
-    subcatWrap.style.display = "";
-  } else {
-    subcatSelect.innerHTML = '<option value="">All / General</option>';
-    subcatWrap.style.display = "none";
-  }
+      if (subs.length) {
+        subcatSelect.innerHTML =
+          '<option value="">All / General</option>' +
+          subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
+        subcatWrap.style.display = "";
+      } else {
+        subcatSelect.innerHTML = '<option value="">All / General</option>';
+        subcatWrap.style.display = "none";
+      }
 
-  const presetLoadWrap = document.getElementById("presetLoadWrap");
-  const presetLoadHint = document.getElementById("presetLoadHint");
-
-  if (!isService && catId && ADMIN_PRODUCT_PRESETS[catId]) {
-    presetLoadWrap.style.display = "";
-    presetLoadHint.textContent =
-      "Load preset items and suggested prices for " +
-      catId.replaceAll("_", " ") +
-      ".";
-  } else {
-    presetLoadWrap.style.display = "none";
-    if (presetLoadHint) {
-      presetLoadHint.textContent =
-        "Load category preset products and suggested prices into the form.";
+      // keep preset selector aligned with selected product category
+      if (!isService) {
+        const presetSelector = document.getElementById("presetSelector");
+        if (presetSelector && ADMIN_PRODUCT_PRESETS[catId]) {
+          presetSelector.value = catId;
+        }
+      }
     }
-  }
-
-  document.getElementById("useCategoryPreset").value = "false";
-}
     </script>
   `));
 });
