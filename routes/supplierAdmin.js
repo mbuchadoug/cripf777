@@ -610,41 +610,45 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       document.getElementById("useCategoryPreset").value = "true";
     }
 
-    function updateSubcats() {
-      const isService = document.getElementById("profileTypeSelect").value === "service";
-      const catId = isService
-        ? document.getElementById("serviceCategorySelect").value
-        : document.getElementById("productCategorySelect").value;
+  function updateSubcats() {
+  const isService = document.getElementById("profileTypeSelect").value === "service";
+  const catId = isService
+    ? document.getElementById("serviceCategorySelect").value
+    : document.getElementById("productCategorySelect").value;
 
-      const subs = SUBCATS[catId] || [];
-      const subcatWrap   = document.getElementById("subcatWrap");
-      const subcatSelect = document.getElementById("subcategorySelect");
+  const subs = SUBCATS[catId] || [];
+  const subcatWrap = document.getElementById("subcatWrap");
+  const subcatSelect = document.getElementById("subcategorySelect");
 
-      if (subs.length) {
-        subcatSelect.innerHTML = '<option value="">All / General</option>' +
-          subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
-        subcatWrap.style.display = "";
-      } else {
-        subcatSelect.innerHTML = '<option value="">All / General</option>';
-        subcatWrap.style.display = "none";
-      }
+  if (subs.length) {
+    subcatSelect.innerHTML =
+      '<option value="">All / General</option>' +
+      subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join("");
+    subcatWrap.style.display = "";
+  } else {
+    subcatSelect.innerHTML = '<option value="">All / General</option>';
+    subcatWrap.style.display = "none";
+  }
 
-      const presetLoadWrap = document.getElementById("presetLoadWrap");
-      const presetLoadHint = document.getElementById("presetLoadHint");
+  const presetLoadWrap = document.getElementById("presetLoadWrap");
+  const presetLoadHint = document.getElementById("presetLoadHint");
 
-      if (!isService && catId && ADMIN_PRODUCT_PRESETS[catId]) {
-        presetLoadWrap.style.display = "";
-       presetLoadHint.textContent = "Load preset items and suggested prices for " + catId.replaceAll("_", " ") + ".";
-      } else {
-        presetLoadWrap.style.display = "none";
-        if (presetLoadHint) {
-          presetLoadHint.textContent = "Load category preset products and suggested prices into the form.";
-        }
-      }
-
-      document.getElementById("useCategoryPreset").value = "false";
+  if (!isService && catId && ADMIN_PRODUCT_PRESETS[catId]) {
+    presetLoadWrap.style.display = "";
+    presetLoadHint.textContent =
+      "Load preset items and suggested prices for " +
+      catId.replaceAll("_", " ") +
+      ".";
+  } else {
+    presetLoadWrap.style.display = "none";
+    if (presetLoadHint) {
+      presetLoadHint.textContent =
+        "Load category preset products and suggested prices into the form.";
     }
+  }
 
+  document.getElementById("useCategoryPreset").value = "false";
+}
     </script>
   `));
 });
