@@ -477,7 +477,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
             </span>
           </div>
 
-          <div class="fg full" style="margin-bottom:12px">
+                  <div class="fg full" style="margin-bottom:12px">
             <label id="productsLabel">Products (comma-separated)</label>
             <textarea name="products" id="productsTextarea" rows="4"
               placeholder="cooking oil, rice, sugar, mealie meal 10kg"></textarea>
@@ -485,13 +485,13 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           </div>
           <div class="fg full" id="pricesWrap" style="margin-bottom:12px">
             <label>Prices (one per line: <code>product, amount, unit</code>)</label>
-            <textarea name="prices" rows="4"
+            <textarea name="prices" id="pricesTextarea" rows="4"
               placeholder="cooking oil, 4.50, litre&#10;rice, 8.00, 5kg bag&#10;sugar, 1.20, kg"></textarea>
             <span style="font-size:11px;color:var(--muted)">Optional - leave blank to let supplier set prices later.</span>
           </div>
           <div class="fg full" id="ratesWrap" style="display:none;margin-bottom:12px">
             <label>Service Rates (one per line: <code>service name, rate</code>)</label>
-            <textarea name="rates" rows="4"
+            <textarea name="rates" id="ratesTextarea" rows="4"
               placeholder="burst pipe repair, 30/job&#10;geyser installation, 80/job&#10;blocked drain, 25/hr"></textarea>
             <span style="font-size:11px;color:var(--muted)">Optional - format: <code>service name, amount/unit</code></span>
           </div>
@@ -607,37 +607,64 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       if (presetSelector) presetSelector.value = "";
     }
 
-    function loadSelectedPresetFromDropdown() {
+      function loadSelectedPresetFromDropdown() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
-      if (isService) return;
+      if (isService) {
+        alert("Presets currently apply to product suppliers only.");
+        return;
+      }
 
-      const presetKey = document.getElementById("presetSelector").value;
-      if (!presetKey || !ADMIN_PRODUCT_PRESETS[presetKey]) {
+      const presetSelector = document.getElementById("presetSelector");
+      const presetKey = presetSelector ? presetSelector.value : "";
+      if (!presetKey) {
         alert("Select a preset first.");
         return;
       }
 
       const preset = ADMIN_PRODUCT_PRESETS[presetKey];
-      const productsTextarea = document.getElementById("productsTextarea");
-      const pricesTextarea = document.querySelector('textarea[name="prices"]');
-      const productCategorySelect = document.getElementById("productCategorySelect");
-
-      productsTextarea.value = (preset.products || []).join(", ");
-      if (pricesTextarea) {
-        pricesTextarea.value = (preset.prices || []).join("\n");
+      if (!preset) {
+        alert("Preset data not found for: " + presetKey);
+        return;
       }
 
-      // keep category in sync with preset
+      const productsTextarea = document.getElementById("productsTextarea");
+      const pricesTextarea = document.getElementById("pricesTextarea");
+      const productCategorySelect = document.getElementById("productCategorySelect");
+      const presetLoadHint = document.getElementById("presetLoadHint");
+      const useCategoryPreset = document.getElementById("useCategoryPreset");
+
+      if (!productsTextarea) {
+        alert("Products textarea not found.");
+        return;
+      }
+
+      productsTextarea.value = Array.isArray(preset.products)
+        ? preset.products.join(", ")
+        : "";
+
+      if (pricesTextarea) {
+        pricesTextarea.value = Array.isArray(preset.prices)
+          ? preset.prices.join("\n")
+          : "";
+      }
+
       if (productCategorySelect) {
         productCategorySelect.value = presetKey;
       }
 
-      document.getElementById("useCategoryPreset").value = "true";
+      if (useCategoryPreset) {
+        useCategoryPreset.value = "true";
+      }
 
-      const presetLoadHint = document.getElementById("presetLoadHint");
       if (presetLoadHint) {
+        const itemCount = Array.isArray(preset.products) ? preset.products.length : 0;
+        const priceCount = Array.isArray(preset.prices) ? preset.prices.length : 0;
         presetLoadHint.textContent =
-          "Preset loaded: " + presetKey.replaceAll("_", " ") + ". You can still edit the items and prices before saving.";
+          "Preset loaded successfully: " +
+          itemCount +
+          " items and " +
+          priceCount +
+          " suggested prices.";
       }
 
       updateSubcats();
@@ -681,7 +708,7 @@ const {
   businessName, phone, city, area, address, contactDetails, website, profileType,
   tier, billingCycle, durationDays, setActive,
   productCategory, serviceCategory, subcategory,
-  products, prices, rates,
+  products, prices, rates, useCategoryPreset,
   deliveryAvailable, travelAvailable, minOrder,
   currency, adminNote
 } = req.body;
@@ -801,10 +828,10 @@ const {
 
     // Backend fallback: if admin chose plumbing_supplies and left products blank,
     // auto-load the preset products.
-    if (
+      if (
       profileType !== "service" &&
       category === "plumbing_supplies" &&
-      !productList.length &&
+      (useCategoryPreset === "true" || !productList.length) &&
       ADMIN_PRODUCT_PRESETS.plumbing_supplies
     ) {
       productList = [...ADMIN_PRODUCT_PRESETS.plumbing_supplies.products];
@@ -825,10 +852,10 @@ const {
 
     // Backend fallback: if admin chose plumbing_supplies and left prices blank,
     // auto-load preset prices too.
-    if (
+       if (
       profileType !== "service" &&
       category === "plumbing_supplies" &&
-      !priceList.length &&
+      (useCategoryPreset === "true" || !priceList.length) &&
       ADMIN_PRODUCT_PRESETS.plumbing_supplies
     ) {
       for (const row of ADMIN_PRODUCT_PRESETS.plumbing_supplies.prices) {
