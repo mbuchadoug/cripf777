@@ -428,7 +428,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               </select>
             </div>
           </div>
-          <div class="form-grid">
+                 <div class="form-grid">
             <div class="fg" id="productCatWrap">
               <label>Product Category</label>
               <select name="productCategory" id="productCategorySelect" onchange="updateSubcats()">
@@ -448,6 +448,17 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               <select name="subcategory" id="subcategorySelect">
                 <option value="">All / General</option>
               </select>
+            </div>
+          </div>
+
+          <div id="presetLoadWrap" style="display:none;margin-top:12px">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn btn-blue btn-sm" onclick="loadSelectedCategoryPreset()">
+                📦 Load Preset Items
+              </button>
+              <span id="presetLoadHint" style="font-size:12px;color:var(--muted)">
+                Load category preset products and suggested prices into the form.
+              </span>
             </div>
           </div>
         </div>
@@ -545,7 +556,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           <textarea name="adminNote" rows="2"
             placeholder="e.g. Registered at trade fair, paid cash, free trial..."></textarea>
         </div>
-
+        <input type="hidden" name="useCategoryPreset" id="useCategoryPreset" value="false" />
         <div class="form-actions">
           <button type="submit" class="btn btn-green">✅ Register Supplier</button>
           <a href="/zq-admin/suppliers" class="btn btn-gray">Cancel</a>
@@ -557,7 +568,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     const SUBCATS = ${JSON.stringify(subcatMap)};
     const ADMIN_PRODUCT_PRESETS = ${JSON.stringify(ADMIN_PRODUCT_PRESETS)};
 
-    function toggleCategoryGroups() {
+        function toggleCategoryGroups() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
       document.getElementById("productCatWrap").style.display  = isService ? "none" : "";
       document.getElementById("serviceCatWrap").style.display  = isService ? ""     : "none";
@@ -572,9 +583,34 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
         : "cooking oil, rice, sugar, mealie meal 10kg";
       document.getElementById("subcatWrap").style.display = "none";
       document.getElementById("subcategorySelect").innerHTML = '<option value="">All / General</option>';
+
+      document.getElementById("presetLoadWrap").style.display = isService ? "none" : "none";
+      document.getElementById("useCategoryPreset").value = "false";
     }
 
-      function updateSubcats() {
+    function loadSelectedCategoryPreset() {
+      const isService = document.getElementById("profileTypeSelect").value === "service";
+      if (isService) return;
+
+      const catId = document.getElementById("productCategorySelect").value;
+      if (!catId || !ADMIN_PRODUCT_PRESETS[catId]) {
+        alert("No preset found for this category.");
+        return;
+      }
+
+      const preset = ADMIN_PRODUCT_PRESETS[catId];
+      const productsTextarea = document.getElementById("productsTextarea");
+      const pricesTextarea = document.querySelector('textarea[name="prices"]');
+
+      productsTextarea.value = (preset.products || []).join(", ");
+      if (pricesTextarea) {
+        pricesTextarea.value = (preset.prices || []).join("\n");
+      }
+
+      document.getElementById("useCategoryPreset").value = "true";
+    }
+
+    function updateSubcats() {
       const isService = document.getElementById("profileTypeSelect").value === "service";
       const catId = isService
         ? document.getElementById("serviceCategorySelect").value
@@ -593,25 +629,22 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
         subcatWrap.style.display = "none";
       }
 
-      // ── NEW: auto-fill admin presets for product suppliers only ──
-      const productsTextarea = document.getElementById("productsTextarea");
-      const pricesTextarea = document.querySelector('textarea[name="prices"]');
+      const presetLoadWrap = document.getElementById("presetLoadWrap");
+      const presetLoadHint = document.getElementById("presetLoadHint");
 
       if (!isService && catId && ADMIN_PRODUCT_PRESETS[catId]) {
-        const preset = ADMIN_PRODUCT_PRESETS[catId];
-
-        productsTextarea.value = (preset.products || []).join(", ");
-        if (pricesTextarea) {
-          pricesTextarea.value = (preset.prices || []).join("\n");
+        presetLoadWrap.style.display = "";
+       presetLoadHint.textContent = "Load preset items and suggested prices for " + catId.replaceAll("_", " ") + ".";
+      } else {
+        presetLoadWrap.style.display = "none";
+        if (presetLoadHint) {
+          presetLoadHint.textContent = "Load category preset products and suggested prices into the form.";
         }
-        return;
       }
 
-      // Optional: clear product pricing when switching away from a preset category
-      if (!isService && pricesTextarea && catId !== "plumbing_supplies") {
-        // leave existing values untouched unless you explicitly want auto-clear
-      }
+      document.getElementById("useCategoryPreset").value = "false";
     }
+
     </script>
   `));
 });
