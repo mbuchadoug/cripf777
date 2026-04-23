@@ -648,8 +648,24 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           : "";
       }
 
+      // ── Map preset key → actual category ID in the dropdown ─────────────────
+      // "plumbing_supplies" is not a category ID — map it to "hardware" (or the
+      // closest match available as an <option> in productCategorySelect)
+      const PRESET_CATEGORY_MAP = {
+        plumbing_supplies: "hardware"
+      };
+      const mappedCategoryId = PRESET_CATEGORY_MAP[presetKey] || presetKey;
+
       if (productCategorySelect) {
-        productCategorySelect.value = presetKey;
+        // Try the mapped ID first, then the raw preset key as fallback
+        productCategorySelect.value = mappedCategoryId;
+        if (!productCategorySelect.value) {
+          productCategorySelect.value = presetKey;
+        }
+        // If still no match, log a warning but don't block the preset load
+        if (!productCategorySelect.value) {
+          console.warn("Preset: no matching category option for", mappedCategoryId, "- products still loaded");
+        }
       }
 
       if (useCategoryPreset) {
@@ -660,11 +676,9 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
         const itemCount = Array.isArray(preset.products) ? preset.products.length : 0;
         const priceCount = Array.isArray(preset.prices) ? preset.prices.length : 0;
         presetLoadHint.textContent =
-          "Preset loaded successfully: " +
-          itemCount +
-          " items and " +
-          priceCount +
-          " suggested prices.";
+          "✅ Preset loaded: " + itemCount + " products and " + priceCount + " prices filled in.";
+        presetLoadHint.style.color = "green";
+        presetLoadHint.style.fontWeight = "600";
       }
 
       updateSubcats();
@@ -693,8 +707,13 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       // keep preset selector aligned with selected product category
       if (!isService) {
         const presetSelector = document.getElementById("presetSelector");
-        if (presetSelector && ADMIN_PRODUCT_PRESETS[catId]) {
-          presetSelector.value = catId;
+        if (presetSelector) {
+          // Map category ID back to preset key (e.g. "hardware" → "plumbing_supplies")
+          const CATEGORY_PRESET_MAP = { hardware: "plumbing_supplies" };
+          const matchingPreset = CATEGORY_PRESET_MAP[catId] || catId;
+          if (ADMIN_PRODUCT_PRESETS[matchingPreset]) {
+            presetSelector.value = matchingPreset;
+          }
         }
       }
     }
