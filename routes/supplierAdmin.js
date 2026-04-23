@@ -591,7 +591,7 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
       var hint = document.getElementById("presetLoadHint");
       var ucp  = document.getElementById("useCategoryPreset");
       if (ta && p.products) ta.value = p.products.join(", ");
-      if (tp && p.prices)   tp.value = p.prices.join("\n");
+      if (tp && p.prices)   tp.value = p.prices.join("\\n");
       if (cat) { cat.value = key; }
       if (ucp) { ucp.value = "true"; }
       if (hint) {
