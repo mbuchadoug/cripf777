@@ -3421,53 +3421,60 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
           const _allLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)}`
+            `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}`
           ).join("\n");
 
-          const _previewBody =
+          // Always send two messages: list then buttons (no length limit issues)
+          await sendText(from,
             `📋 *Quote Preview — ${_introRef}*\n` +
             `${_directLocation}  ${_directDelivery}\n` +
             `─────────────────\n` +
             `${_allLines}\n\n` +
             `💵 *Total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
-            `─────────────────\n` +
-            `Prices from your catalogue. Edit if needed.\n\n` +
-            `Type *send* to deliver instantly, or edit any price e.g: _1x12.50_`;
-
-          // sendButtons body is capped at 1024 chars by Meta — use sendText for long lists
-          if (_previewBody.length <= 900) {
-            return sendButtons(from, {
-              text: _previewBody,
-              buttons: [
-                { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Quote" },
-                { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-              ]
-            });
-          } else {
-            // Too many items for sendButtons — use plain text with typed commands
-            return sendText(from, _previewBody);
-          }
+            `_Prices from your catalogue. All ${_draft.responseItems.length} items matched._`
+          );
+          return sendButtons(from, {
+            text:
+              `*What would you like to do?*\n\n` +
+              `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
+              `❌ *Skip items you don't have:* _skip 3_ or _skip 3,7,15_\n` +
+              `⚡ *Only have a few items:* _have 3,7_ (skips everything else)\n` +
+              `🗑️ *Discard:* _cancel_`,
+            buttons: [
+              { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
+              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices"    }
+            ]
+          });
         }
 
         // ── Case 2: Some items priced, some missing ───────────────────────────
         if (_draft.responseItems.length > 0) {
           const _pricedLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} @ $${Number(item.pricePerUnit).toFixed(2)}/${item.unit} = $${Number(item.total).toFixed(2)} ✅`
+            `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)} ✅`
           ).join("\n");
-          const _missingLines = _draft.missingItems.map(m => `• ${m} — enter price`).join("\n");
+          const _missingLines = _draft.missingItems.map((m, i) => `${_draft.responseItems.length + i + 1}. ${m} — ❓ add price`).join("\n");
 
-          return sendText(from,
+          await sendText(from,
             `📋 *Quote Preview — ${_introRef}*\n` +
             `${_directLocation}  ${_directDelivery}\n` +
             `─────────────────\n` +
-            `*Auto-priced from your catalogue:*\n${_pricedLines}\n\n` +
+            `*✅ Auto-priced (${_draft.responseItems.length} items):*\n${_pricedLines}\n\n` +
             `💵 *Priced total: $${Number(_draft.totalAmount || 0).toFixed(2)}*\n\n` +
-            `─────────────────\n` +
-            `*Still needs pricing:*\n${_missingLines}\n\n` +
-            `• Type *send* to quote only the priced items\n` +
-            `• Type prices for missing items e.g: _1x12.50_\n` +
-            `• Type *cancel* to go back`
+            `*❓ Still needs your price (${_draft.missingItems.length} items):*\n${_missingLines}`
           );
+          return sendButtons(from, {
+            text:
+              `*What would you like to do?*\n\n` +
+              `• Type *send* to quote only the ✅ priced items\n` +
+              `• Add missing prices: _edit 30x12.50 31x8_\n` +
+              `• Skip items you don't have: _skip 30,31_\n` +
+              `• Only have a few: _have 1,2,3_ (skips rest)\n` +
+              `• Discard: _cancel_`,
+            buttons: [
+              { id: `req_offer_confirm_${sellerRequestId}`, title: "Send Priced Items" },
+              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices"       }
+            ]
+          });
         }
 
         // ── Case 3: No prices found — show blank form with item list ──────────
@@ -3697,30 +3704,40 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
   // ── Helper: build a preview text of current draft items ───────────────────
   // Returns {text, short} — short=true means fits in sendButtons (≤900 chars)
-  function _buildDraftPreview(items, skippedNames, ref, totalAmt) {
+  // ── _sendDraftPreview: ALWAYS sends two messages ──────────────────────────
+  // 1. Full item list as sendText (no length limit)
+  // 2. Action buttons as sendButtons (always shows tap buttons)
+  async function _sendDraftPreview(items, skippedNames, ref, totalAmt, reqId) {
     const editedCount = items.filter(i => i._edited).length;
     const lines = items.map((item, i) =>
       `${i + 1}. *${item.product}* × ${item.quantity} — $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
     ).join("\n");
     const skippedLine = skippedNames?.length
-      ? `\n\n❌ *Not in stock (${skippedNames.length}):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
+      ? `\n\n❌ *Skipped — not in stock (${skippedNames.length}):*\n${skippedNames.map(s => `• ${s}`).join("\n")}`
       : "";
-    const editNote = editedCount > 0 ? `\n_✏️ = price edited by you_` : "";
+    const editNote = editedCount > 0 ? `\n_✏️ = price you edited_` : "";
 
-    const body =
+    // Message 1: the full item list
+    await sendText(from,
       `📋 *Quote Preview — ${ref}*\n` +
       `─────────────────\n` +
       `${lines}\n\n` +
-      `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}${editNote}\n\n` +
-      `─────────────────\n` +
-      `✅ Happy with this? Tap *Confirm & Send*\n\n` +
-      `*To adjust:*\n` +
-      `• Change a price: _edit 1x12.50_ or _edit 1x12.50 3x8_\n` +
-      `• Remove item: _skip 3_ or _skip 3,7,15_\n` +
-      `• Both: _edit 1x5 skip 3,7_\n` +
-      `• Discard: _cancel_`;
+      `💵 *Total: $${Number(totalAmt).toFixed(2)}*${skippedLine}${editNote}`
+    );
 
-    return { text: body, short: body.length <= 900 };
+    // Message 2: action buttons + short command guide
+    return sendButtons(from, {
+      text:
+        `*What would you like to do?*\n\n` +
+        `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
+        `❌ *Skip items:* _skip 3_ or _skip 3,7,15_\n` +
+        `⚡ *Only have some items:* _have 3,7,15_ (skips all others)\n` +
+        `🗑️ *Discard:* _cancel_`,
+      buttons: [
+        { id: `req_offer_confirm_${reqId}`, title: "Confirm & Send" },
+        { id: `req_offer_${reqId}`,         title: "Edit Prices"    }
+      ]
+    });
   }
 
   // ── Parse skip / edit commands ────────────────────────────────────────────
@@ -3732,19 +3749,40 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     let hasEditCmd = false;
     let hasSkipCmd = false;
 
-    // Extract skip numbers: "skip 3,7,15" or "skip 3 7 15"
-    const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
-    if (skipMatch) {
+    // ── "have 3,7,15" — I ONLY have these items, skip all others ────────────
+    let haveMode = false;
+    const haveMatch = raw.match(/\bhave\s+([\d,\s]+)/i);
+    if (haveMatch) {
       hasSkipCmd = true;
-      skipMatch[1].split(/[,\s]+/).forEach(n => {
+      haveMode = true;
+      const haveSet = new Set();
+      haveMatch[1].split(/[,\s]+/).forEach(n => {
         const idx = parseInt(n);
-        if (!isNaN(idx) && idx >= 1 && idx <= draftItems.length) skipIndices.add(idx);
+        if (!isNaN(idx)) haveSet.add(idx);
       });
+      // Skip everything NOT in the have list
+      for (let i = 1; i <= draftItems.length; i++) {
+        if (!haveSet.has(i)) skipIndices.add(i);
+      }
     }
 
-    // Extract edit pairs: "edit 1x5 3x15" or "1x5, 3x15" (without skip keyword)
-    // Also handle "edit 1x5" prefix
-    const editSection = raw.replace(/\bskip\s+[\d,\s]+/i, "").replace(/^\bedit\b\s*/i, "").trim();
+    // ── "skip 3,7,15" — skip specific items ──────────────────────────────────
+    if (!haveMode) {
+      const skipMatch = raw.match(/\bskip\s+([\d,\s]+)/i);
+      if (skipMatch) {
+        hasSkipCmd = true;
+        skipMatch[1].split(/[,\s]+/).forEach(n => {
+          const idx = parseInt(n);
+          if (!isNaN(idx) && idx >= 1 && idx <= draftItems.length) skipIndices.add(idx);
+        });
+      }
+    }
+
+    // ── "edit 1x5 3x15" or "1x5, 3x15" — edit specific prices ───────────────
+    const editSection = raw
+      .replace(/\bhave\s+[\d,\s]+/i, "")
+      .replace(/\bskip\s+[\d,\s]+/i, "")
+      .replace(/^\bedit\b\s*/i, "").trim();
     const pairPattern = /(\d+)\s*x\s*(\d+(?:\.\d+)?)/gi;
     let m;
     while ((m = pairPattern.exec(editSection)) !== null) {
@@ -3752,7 +3790,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       editUpdates[parseInt(m[1])] = parseFloat(m[2]);
     }
 
-    return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd };
+    return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
   }
 
   const _isService = supplier.profileType === "service";
@@ -3873,17 +3911,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       { upsert: true }
     );
 
-    const _p1 = _buildDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal);
-    if (_p1.short) {
-      return sendButtons(from, {
-        text: _p1.text,
-        buttons: [
-          { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
-          { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-        ]
-      });
-    }
-    return sendText(from, _p1.text);
+    return _sendDraftPreview(updatedItems, updatedDraft.skippedItems, _ref, newTotal, sellerRequestId);
   }
 
   // ── GREETING / confusion while in awaiting_offer — re-show the draft ─────
@@ -3893,22 +3921,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       .test(text.trim().replace(/[.,!?]+$/, "").trim());
 
   if (_looksLikeGreeting && pendingDraftQuote?.responseItems?.length) {
-    const _pg = _buildDraftPreview(
-      pendingDraftQuote.responseItems,
-      pendingDraftQuote.skippedItems || [],
-      _ref,
-      pendingDraftQuote.totalAmount || 0
-    );
-    if (_pg.short) {
-      return sendButtons(from, {
-        text: _pg.text,
-        buttons: [
-          { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
-          { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-        ]
-      });
-    }
-    return sendText(from, _pg.text);
+    return _sendDraftPreview(pendingDraftQuote.responseItems, pendingDraftQuote.skippedItems || [], _ref, pendingDraftQuote.totalAmount || 0, sellerRequestId);
   }
 
   // ── TYPED PRICES (no draft, or seller typed raw prices directly) ──────────
@@ -3943,17 +3956,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           { upsert: true }
         );
 
-        const _p2 = _buildDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal);
-        if (_p2.short) {
-          return sendButtons(from, {
-            text: _p2.text,
-            buttons: [
-              { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
-              { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-            ]
-          });
-        }
-        return sendText(from, _p2.text);
+        return _sendDraftPreview(mergedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
       }
 
       // No draft — build response from parsed prices only
@@ -3978,17 +3981,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         { $set: { "tempData.pendingDraftQuote": _newDraft } },
         { upsert: true }
       );
-      const _p3 = _buildDraftPreview(responseItems, [], _ref, totalAmount);
-      if (_p3.short) {
-        return sendButtons(from, {
-          text: _p3.text,
-          buttons: [
-            { id: `req_offer_confirm_${sellerRequestId}`, title: "Confirm & Send" },
-            { id: `req_offer_${sellerRequestId}`,         title: "Edit Prices" }
-          ]
-        });
-      }
-      return sendText(from, _p3.text);
+      return _sendDraftPreview(responseItems, [], _ref, totalAmount, sellerRequestId);
 
     } else {
       // No prices parsed — message-only or greeting
