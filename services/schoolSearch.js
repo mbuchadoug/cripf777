@@ -105,7 +105,7 @@ function _findSchoolFacility(text = "") {
     if (_includesWholePhrase(normalized, fac.id)) return fac.id;
     if (_includesWholePhrase(normalized, fac.label)) return fac.id;
 
-    const shortLabel = _normSchoolText(fac.label).replace(/^.*?\s/, "");
+    const shortLabel = _normSchoolText(fac.label).replace(/^\S+\s+/, "").trim();
     if (shortLabel && _includesWholePhrase(normalized, shortLabel)) return fac.id;
   }
 
@@ -875,12 +875,13 @@ const query = { active: true };
 if (search.city)     query.city    = new RegExp(`^${search.city}$`, "i");
 if (search.suburb)   query.suburb  = new RegExp(search.suburb, "i");
 if (search.type) {
-  // ecd search returns both "ecd" and "ecd_primary" schools
-  // primary search also includes "ecd_primary" since those schools teach primary grades
+  // "combined" schools span ECD–Form 6, so they must appear in ALL type searches
   if (search.type === "ecd") {
-    query.type = { $in: ["ecd", "ecd_primary"] };
+    query.type = { $in: ["ecd", "ecd_primary", "combined"] };
   } else if (search.type === "primary") {
-    query.type = { $in: ["primary", "ecd_primary"] };
+    query.type = { $in: ["primary", "ecd_primary", "combined"] };
+  } else if (search.type === "secondary") {
+    query.type = { $in: ["secondary", "combined"] };
   } else {
     query.type = search.type;
   }
@@ -888,12 +889,12 @@ if (search.type) {
 if (search.feeRange)  query.feeRange   = search.feeRange;
 if (search.facility)  query.facilities = search.facility;
 if (search.curriculum) {
-  // "cambridge" search should find both cambridge (IGCSE) AND cambridge_primary schools
-  // "cambridge_primary" search finds only cambridge_primary schools
   if (search.curriculum === "cambridge") {
+    // matches schools whose curriculum array contains "cambridge" OR "cambridge_primary"
     query.curriculum = { $in: ["cambridge", "cambridge_primary"] };
   } else {
-    query.curriculum = search.curriculum;
+    // for all other curricula (zimsec, ib, combined), match against the array field
+    query.curriculum = { $elemMatch: { $eq: search.curriculum } };
   }
 }
 if (search.gender)    query.gender     = search.gender;
