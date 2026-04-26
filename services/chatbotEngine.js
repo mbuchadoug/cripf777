@@ -3260,15 +3260,18 @@ Reply *menu* to start.`);
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
   const SCHOOL_TRIGGER_PHRASES = [
-    "find school", "find schools",
-    "find primary", "find secondary", "find combined", "find preschool",
-    "find ecd", "find kindergarten", "find boarding school", "find day school",
-    "find girls school", "find boys school", "find mixed school",
-    "find budget school", "find affordable school", "find cheap school",
-    "find premium school", "find cambridge school", "find zimsec school",
-    "find a school", "look for school", "search school",
-    "school in ", "schools in ", "primary school in ", "secondary school in "
-  ];
+  "find school", "find schools",
+  "find primary", "find secondary", "find combined", "find preschool",
+  "find ecd", "find kindergarten", "find boarding school", "find day school",
+  "find girls school", "find boys school", "find mixed school",
+  "find budget school", "find affordable school", "find cheap school",
+  "find premium school",
+  "find cambridge school", "find cambridge",
+  "find zimsec school", "find zimsec",
+  "find ib school", "find ib",
+  "find a school", "look for school", "search school",
+  "school in ", "schools in ", "primary school in ", "secondary school in "
+];
 
   const isSchoolShortcodeQuery =
     typeof action === "string" &&
