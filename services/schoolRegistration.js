@@ -117,34 +117,125 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
   // (handled via action school_reg_boarding_*)
 
   // ── Step 9: Fees ─────────────────────────────────────────────────────────
-  if (state === "school_reg_fees") {
-    const raw = text.trim();
-    const parts = raw.split(/[,\s\/]+/).map(s => Number(s.replace(/[^\d.]/g, ""))).filter(n => !isNaN(n) && n >= 0);
+ if (state === "school_reg_fees") {
+    const raw   = text.trim();
+    const parts = raw.split(/[,\s\/]+/)
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
 
     if (!parts.length) {
-      await sendText(from,
-        `❌ Please enter your fees.\n\nExample: *800, 800, 750*\n_(term1, term2, term3 in USD)_\n\nOr enter a single amount if all terms are equal: *800*`
-      );
+      await sendText(from, `❌ Please enter valid fees.\n\nExample: *800, 800, 750*\n_(term1, term2, term3)_\n\nOr one number: *800*`);
       return true;
     }
 
-    reg.fees = {
-      term1:    parts[0] || 0,
-      term2:    parts[1] !== undefined ? parts[1] : parts[0],
-      term3:    parts[2] !== undefined ? parts[2] : parts[0],
-      currency: "USD"
-    };
-    reg.feeRange = computeSchoolFeeRange(reg.fees.term1);
-    biz.sessionState = "school_reg_facilities";
-    await saveBiz(biz);
+    const t1 = parts[0] || 0;
+    const t2 = parts[1] !== undefined ? parts[1] : t1;
+    const t3 = parts[2] !== undefined ? parts[2] : t1;
 
-  // Page 0, PAGE_SIZE=7: worst case is 7 items + More + Done = 9. Middle pages: 7 + Prev + More + Done = 10. Safe.
-  reg.facilitiesPage = 0;
+    // These are always the day fees (or the only fees if day-only school)
+    reg.fees = reg.fees || {};
+    reg.fees.term1    = t1;
+    reg.fees.term2    = t2;
+    reg.fees.term3    = t3;
+    reg.fees.currency = "USD";
+    reg.feeRange      = computeSchoolFeeRange(t1);
+
+    const needsBoardingFees = (reg.boarding === "both");
+    const hasEcd = reg.type === "ecd_primary" || reg.type === "combined";
+
+    if (needsBoardingFees && !reg.fees.boardingTerm1) {
+      // Ask for boarding fees next
+      biz.sessionState = "school_reg_boarding_fees";
+      await saveBiz(biz);
+      return sendText(from,
+        `✅ Day fees saved: *$${t1} / $${t2} / $${t3}* per term.\n\n` +
+        `🏫 Now enter *boarding fees* per term:\nExample: *1500, 1500, 1400*\n\nOr one number: *1500*`
+      );
+    }
+
+    if (hasEcd && !reg.fees.ecdTerm1) {
+      // Ask if ECD fees differ
+      biz.sessionState = "school_reg_ecd_fees";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: `✅ Fees saved: *$${t1} / $${t2} / $${t3}* per term.\n\n🌱 Do ECD / preschool fees differ from the above?`,
+        buttons: [
+          { id: "school_reg_ecd_fees_same", title: "Same as above" },
+          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
+        ]
+      });
+    }
+
+    biz.sessionState = "school_reg_facilities";
+    reg.facilitiesPage = 0;
     reg.facilities     = reg.facilities || [];
     await saveBiz(biz);
     return _sendFacilityBundles(from, reg.schoolName);
   }
 
+  // ── Boarding fees entry ───────────────────────────────────────────────────
+  if (state === "school_reg_boarding_fees") {
+    const raw   = text.trim();
+    const parts = raw.split(/[,\s\/]+/)
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
+
+    if (!parts.length) {
+      await sendText(from, `❌ Please enter boarding fees.\n\nExample: *1500, 1500, 1400*\n\nOr one number: *1500*`);
+      return true;
+    }
+
+    const b1 = parts[0] || 0;
+    const b2 = parts[1] !== undefined ? parts[1] : b1;
+    const b3 = parts[2] !== undefined ? parts[2] : b1;
+
+    reg.fees.boardingTerm1 = b1;
+    reg.fees.boardingTerm2 = b2;
+    reg.fees.boardingTerm3 = b3;
+
+    const hasEcd = reg.type === "ecd_primary" || reg.type === "combined";
+
+    if (hasEcd) {
+      biz.sessionState = "school_reg_ecd_fees";
+      await saveBiz(biz);
+      return sendButtons(from, {
+        text: `✅ Boarding fees saved: *$${b1} / $${b2} / $${b3}* per term.\n\n🌱 Do ECD / preschool fees differ from the day fees?`,
+        buttons: [
+          { id: "school_reg_ecd_fees_same", title: "Same as day fees" },
+          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
+        ]
+      });
+    }
+
+    biz.sessionState = "school_reg_facilities";
+    reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
+  }
+
+  // ── ECD fees entry ────────────────────────────────────────────────────────
+  if (state === "school_reg_ecd_fees") {
+    const raw   = text.trim();
+    const parts = raw.split(/[,\s\/]+/)
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
+
+    if (!parts.length) {
+      await sendText(from, `❌ Please enter ECD fees.\n\nExample: *600, 600, 550*\n\nOr one number: *600*`);
+      return true;
+    }
+
+    reg.fees.ecdTerm1 = parts[0] || 0;
+    reg.fees.ecdTerm2 = parts[1] !== undefined ? parts[1] : reg.fees.ecdTerm1;
+    reg.fees.ecdTerm3 = parts[2] !== undefined ? parts[2] : reg.fees.ecdTerm1;
+
+    biz.sessionState = "school_reg_facilities";
+    reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
+  }
   // ── Step 10: Facilities - handled via actions
 
   // ── Step 11: Extramural - handled via actions
@@ -365,20 +456,53 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
       ...SCHOOL_BOARDING.map(b => ({ id: `school_reg_boarding_${b.id}`, title: b.label }))
     ]);
   }
+// ── ECD fees same as day ──────────────────────────────────────────────────
+  if (a === "school_reg_ecd_fees_same") {
+    // Copy day fees to ECD fees
+    reg.fees.ecdTerm1 = reg.fees.term1 || 0;
+    reg.fees.ecdTerm2 = reg.fees.term2 || 0;
+    reg.fees.ecdTerm3 = reg.fees.term3 || 0;
+    biz.sessionState  = "school_reg_facilities";
+    reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
+  }
 
+  if (a === "school_reg_ecd_fees_diff") {
+    biz.sessionState = "school_reg_ecd_fees";
+    await saveBiz(biz);
+    return sendText(from,
+      `🌱 Enter *ECD fees* per term (USD):\nExample: *600, 600, 550*\n\nOr one number: *600*`
+    );
+  }
   // ── Boarding selected ─────────────────────────────────────────────────────
-  if (a.startsWith("school_reg_boarding_")) {
+if (a.startsWith("school_reg_boarding_")) {
     reg.boarding       = a.replace("school_reg_boarding_", "");
     biz.sessionState   = "school_reg_fees";
     await saveBiz(biz);
-    return sendText(from,
-`💵 *Step 9 of 12* - What are the school fees per term (in USD)?
 
-Enter as: *term1, term2, term3*
-Example: *800, 800, 750*
+    // Tailor the fee prompt based on boarding type selected
+    const hasBoardingFees = reg.boarding === "boarding" || reg.boarding === "both";
+    const hasEcdFees      = reg.type === "ecd" || reg.type === "ecd_primary" || reg.type === "combined";
 
-Or one number if all terms are equal: *800*`
-    );
+    let feePrompt = `💵 *Step 9 of 12* - School fees per term (USD)\n\n`;
+
+    if (hasBoardingFees && reg.boarding === "boarding") {
+      // Boarding-only school — just boarding fees
+      feePrompt += `Enter *boarding fees* as: term1, term2, term3\nExample: *1500, 1500, 1400*\n\nOr one number if all terms equal: *1500*`;
+    } else if (hasBoardingFees) {
+      // Day & Boarding — need both
+      feePrompt += `Your school has *day and boarding* fees.\n\n`;
+      feePrompt += `First, enter *day fees*: term1, term2, term3\nExample: *800, 800, 750*\n\nOr one number: *800*`;
+    } else if (hasEcdFees && reg.type !== "primary" && reg.type !== "secondary") {
+      // Combined/ECD+Primary — might have different ECD fees
+      feePrompt += `Enter *primary/secondary fees* per term:\nExample: *800, 800, 750*\n\nWe'll ask about ECD fees next if they differ.`;
+    } else {
+      feePrompt += `Enter as: *term1, term2, term3*\nExample: *800, 800, 750*\n\nOr one number if all terms equal: *800*`;
+    }
+
+    return sendText(from, feePrompt);
   }
 // ── Facilities bundle quick-select ────────────────────────────────────────
   if (a.startsWith("school_reg_fac_bundle_")) {
@@ -675,9 +799,17 @@ async function _sendSchoolConfirmPrompt(from, reg) {
   const extraCount     = (reg.extramuralActivities || []).length;
   const curriculumText = (reg.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "Not set";
 
-  const feeLine = reg.fees
-    ? `$${reg.fees.term1} / $${reg.fees.term2} / $${reg.fees.term3} per term (USD)`
-    : "Not set";
+let feeLine = "Not set";
+  if (reg.fees) {
+    feeLine = `Day: $${reg.fees.term1} / $${reg.fees.term2} / $${reg.fees.term3}`;
+    if (reg.fees.boardingTerm1 > 0) {
+      feeLine += `\n   Boarding: $${reg.fees.boardingTerm1} / $${reg.fees.boardingTerm2} / $${reg.fees.boardingTerm3}`;
+    }
+    if (reg.fees.ecdTerm1 > 0 && reg.fees.ecdTerm1 !== reg.fees.term1) {
+      feeLine += `\n   ECD: $${reg.fees.ecdTerm1} / $${reg.fees.ecdTerm2} / $${reg.fees.ecdTerm3}`;
+    }
+    feeLine += " (USD)";
+  }
 
   return sendButtons(from, {
     text:

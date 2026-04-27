@@ -998,9 +998,17 @@ async function _showSchoolDetail(from, schoolId, biz) {
     .map(id => SCHOOL_EXTRAMURALACTIVITIES_MAP[id] || id)
     .join(", ") || "Not specified";
 
-  const feeLine        = school.fees?.term1
-    ? `Term 1: $${school.fees.term1} | Term 2: $${school.fees.term2} | Term 3: $${school.fees.term3} (USD)`
-    : feeRangeLabel(school.feeRange);
+let feeLine = feeRangeLabel(school.feeRange);
+  if (school.fees?.term1) {
+    feeLine = `Day: $${school.fees.term1} / $${school.fees.term2} / $${school.fees.term3}`;
+    if ((school.fees.boardingTerm1 || 0) > 0) {
+      feeLine += `\n  Boarding: $${school.fees.boardingTerm1} / $${school.fees.boardingTerm2} / $${school.fees.boardingTerm3}`;
+    }
+    if ((school.fees.ecdTerm1 || 0) > 0 && school.fees.ecdTerm1 !== school.fees.term1) {
+      feeLine += `\n  ECD: $${school.fees.ecdTerm1} / $${school.fees.ecdTerm2} / $${school.fees.ecdTerm3}`;
+    }
+    feeLine += " (USD per term)";
+  }
 
   const rating         = school.reviewCount > 0
     ? `⭐ ${school.rating.toFixed(1)} (${school.reviewCount} reviews)`
@@ -1054,28 +1062,44 @@ async function _downloadSchoolProfile(from, schoolId) {
   // Track inquiry
   await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
 
-if (school.profilePdfUrl) {
-    const { sendDocument } = await import("./metaSender.js");
-    const filename = `${school.schoolName.replace(/\s+/g, "_")}_Profile.pdf`;
+// Collect all available documents: admin brochures first, then legacy profilePdfUrl
+  const { sendDocument } = await import("./metaSender.js");
+  const allDocs = [];
 
-    // Try to send as WhatsApp document - log error if Meta rejects it
-    try {
-      await sendDocument(from, { link: school.profilePdfUrl, filename });
-    } catch (docErr) {
-      console.error("[School DL] sendDocument failed:", docErr.message, "url:", school.profilePdfUrl);
+  // Admin-uploaded brochures (the new system)
+  if ((school.brochures || []).length > 0) {
+    for (const b of school.brochures) {
+      allDocs.push({ label: b.label || "School Brochure", url: b.url });
+    }
+  }
+
+  // Legacy single PDF (old system — keep working)
+  if (school.profilePdfUrl && !allDocs.some(d => d.url === school.profilePdfUrl)) {
+    allDocs.push({ label: `${school.schoolName} Profile`, url: school.profilePdfUrl });
+  }
+
+  if (allDocs.length > 0) {
+    // Send each document
+    for (const doc of allDocs) {
+      const filename = doc.label.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_") + ".pdf";
+      try {
+        await sendDocument(from, { link: doc.url, filename });
+      } catch (docErr) {
+        console.error(`[School DL] sendDocument failed for "${doc.label}":`, docErr.message);
+      }
     }
 
-    // Always send the direct link as text too - so parent can tap it even if document delivery fails
- return sendButtons(from, {
+    const docList = allDocs.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+    return sendButtons(from, {
       text:
-`📄 *${school.schoolName} - School Profile*
+`📄 *${school.schoolName}*
 
-Your download has been sent above as a PDF file. Tap it to open.
+${allDocs.length > 1 ? `Sent ${allDocs.length} documents:\n${docList}\n\nTap each to open.` : `Your document has been sent above. Tap it to open.`}
 
-_Can't see it? Scroll up or tap 📞 Contact School for a copy._`,
+_Can't see it? Scroll up, or contact the school directly._`,
       buttons: [
-        { id: `school_apply_${schoolId}`,   title: "📝 Apply Online" },
-        { id: "school_search_refine",        title: "🔄 More Schools" }
+        { id: `school_apply_${schoolId}`,  title: "📝 Apply Online" },
+        { id: "school_search_refine",       title: "🔄 More Schools" }
       ]
     });
   }

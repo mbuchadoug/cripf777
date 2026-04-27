@@ -30,13 +30,22 @@ const schoolProfileSchema = new mongoose.Schema({
   studentCount:  { type: Number, default: 0 },
 
   // ── Fees ─────────────────────────────────────────────────────────────────
-  fees: {
+fees: {
+    // Day school fees
     term1:    { type: Number, default: 0 },
     term2:    { type: Number, default: 0 },
     term3:    { type: Number, default: 0 },
-    currency: { type: String, default: "USD" }
+    currency: { type: String, default: "USD" },
+    // Boarding fees — only populated when boarding === "boarding" or "both"
+    boardingTerm1: { type: Number, default: 0 },
+    boardingTerm2: { type: Number, default: 0 },
+    boardingTerm3: { type: Number, default: 0 },
+    // ECD fees — only populated when type includes ECD and fees differ from primary
+    ecdTerm1: { type: Number, default: 0 },
+    ecdTerm2: { type: Number, default: 0 },
+    ecdTerm3: { type: Number, default: 0 },
   },
-  // Auto-computed from fees.term1: "budget" | "mid" | "premium"
+  // Auto-computed from fees.term1 (day fee): "budget" | "mid" | "premium"
   feeRange: { type: String, enum: ["budget","mid","premium",""], default: "" },
 
   // ── Facilities & activities ───────────────────────────────────────────────
@@ -46,7 +55,12 @@ const schoolProfileSchema = new mongoose.Schema({
   // ── Admissions ────────────────────────────────────────────────────────────
   admissionsOpen:     { type: Boolean, default: true },
   registrationLink:   { type: String, default: "" },   // online application URL
-  profilePdfUrl:      { type: String, default: "" },   // downloadable school profile
+ profilePdfUrl:      { type: String, default: "" },   // legacy single PDF (kept for compatibility)
+  brochures: [{
+    label:     { type: String, default: "School Brochure" }, // e.g. "2025 Prospectus", "Fee Schedule"
+    url:       { type: String, required: true },             // publicly accessible URL
+    addedAt:   { type: Date,   default: Date.now }
+  }],
 
   // ── Subscription & listing ────────────────────────────────────────────────
   active:              { type: Boolean, default: false, index: true },

@@ -618,10 +618,21 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
     const isActive  = setActive === "true";
 
     // Parse fees
+// Parse fees
     const t1 = parseFloat(feesTerm1) || 0;
     const t2 = parseFloat(feesTerm2) || t1;
     const t3 = parseFloat(feesTerm3) || t1;
-    const fees     = { term1: t1, term2: t2, term3: t3, currency: "USD" };
+    const b1 = parseFloat(req.body.feesBoarding1) || 0;
+    const b2 = parseFloat(req.body.feesBoarding2) || b1;
+    const b3 = parseFloat(req.body.feesBoarding3) || b1;
+    const e1 = parseFloat(req.body.feesEcd1) || 0;
+    const e2 = parseFloat(req.body.feesEcd2) || e1;
+    const e3 = parseFloat(req.body.feesEcd3) || e1;
+    const fees = {
+      term1: t1, term2: t2, term3: t3, currency: "USD",
+      boardingTerm1: b1, boardingTerm2: b2, boardingTerm3: b3,
+      ecdTerm1: e1, ecdTerm2: e2, ecdTerm3: e3
+    };
     const feeRange = computeSchoolFeeRange(t1);
 
     // Normalise checkbox arrays (single value comes as string, multiple as array)
@@ -745,9 +756,11 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Boarding</dt><dd>${esc(school.boarding || "-")}</dd>
             <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
-            <dt>Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
+          <dt>Day Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
               <span class="badge badge-${school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue"}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>
             </dd>
+            ${(school.fees?.boardingTerm1 || 0) > 0 ? `<dt>Boarding Fees / Term</dt><dd>$${school.fees.boardingTerm1} / $${school.fees.boardingTerm2} / $${school.fees.boardingTerm3} USD</dd>` : ""}
+            ${(school.fees?.ecdTerm1 || 0) > 0 ? `<dt>ECD Fees / Term</dt><dd>$${school.fees.ecdTerm1} / $${school.fees.ecdTerm2} / $${school.fees.ecdTerm3} USD</dd>` : ""}
             <dt>Plan</dt><dd>${badge(school.tier || "none", tierColor(school.tier))}</dd>
             <dt>Status</dt><dd>${badge(school.active ? "Active" : "Inactive", school.active ? "green" : "gray")}</dd>
             <dt>Admissions</dt><dd>${school.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</dd>
@@ -782,6 +795,43 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
           </div>
         </div>
 
+        <!-- ── Brochures panel ── -->
+          <div class="panel">
+            <div class="panel-head">
+              <h3>📄 Brochures & Documents</h3>
+            </div>
+
+            ${(school.brochures || []).length ? `
+            <table style="margin-bottom:14px">
+              <thead><tr><th>Label</th><th>URL</th><th>Added</th><th></th></tr></thead>
+              <tbody>
+                ${(school.brochures || []).map((b, i) => `
+                <tr>
+                  <td><strong>${esc(b.label)}</strong></td>
+                  <td><a href="${esc(b.url)}" target="_blank" class="btn-link" style="font-size:12px">View →</a></td>
+                  <td style="color:var(--muted);font-size:12px">${new Date(b.addedAt).toLocaleDateString()}</td>
+                  <td>
+                    <form method="POST" action="/zq-admin/schools/${school._id}/brochure/${i}/delete" style="display:inline" onsubmit="return confirm('Remove this brochure?')">
+                      <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:4px 10px;font-size:11px">Remove</button>
+                    </form>
+                  </td>
+                </tr>`).join("")}
+              </tbody>
+            </table>` : `<p class="muted" style="font-size:13px;margin-bottom:14px">No brochures uploaded yet.</p>`}
+
+            <form method="POST" action="/zq-admin/schools/${school._id}/brochure/add" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+              <div class="fg" style="flex:1;min-width:160px">
+                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Label</label>
+                <input name="label" placeholder="e.g. 2025 Prospectus" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
+              </div>
+              <div class="fg" style="flex:2;min-width:240px">
+                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL (Google Drive, Dropbox, etc.)</label>
+                <input name="url" type="url" placeholder="https://drive.google.com/..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
+              </div>
+              <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">+ Add Brochure</button>
+            </form>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px">💡 Upload the PDF to Google Drive, set sharing to "Anyone with the link can view", then paste the link above.</p>
+          </div>
         <div>
           <div class="panel">
             <h3>🏊 Facilities (${(school.facilities || []).length})</h3>
@@ -924,11 +974,29 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           </div>
 
           <!-- ── Fees ────────────────────────────────────────────────── -->
-          <p style="font-weight:700;font-size:13px;margin-bottom:14px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fees (USD)</p>
+     <!-- ── Fees ────────────────────────────────────────────────── -->
+          <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fees (USD)</p>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Fill in Day fees always. Fill in Boarding fees only if the school has boarding. Fill in ECD fees only if ECD rates differ from primary.</p>
+
+          <p style="font-size:12px;font-weight:600;margin-bottom:8px">🏠 Day Fees</p>
           <div class="form-grid">
-            <div class="fg"><label>Term 1 ($)</label><input type="number" name="feesTerm1" value="${school.fees?.term1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Term 2 ($)</label><input type="number" name="feesTerm2" value="${school.fees?.term2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Term 3 ($)</label><input type="number" name="feesTerm3" value="${school.fees?.term3 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day – Term 1 ($)</label><input type="number" name="feesTerm1" value="${school.fees?.term1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day – Term 2 ($)</label><input type="number" name="feesTerm2" value="${school.fees?.term2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day – Term 3 ($)</label><input type="number" name="feesTerm3" value="${school.fees?.term3 || 0}" min="0" step="0.01" /></div>
+          </div>
+
+          <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🏫 Boarding Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if day school only)</span></p>
+          <div class="form-grid">
+            <div class="fg"><label>Boarding – Term 1 ($)</label><input type="number" name="feesBoarding1" value="${school.fees?.boardingTerm1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Boarding – Term 2 ($)</label><input type="number" name="feesBoarding2" value="${school.fees?.boardingTerm2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Boarding – Term 3 ($)</label><input type="number" name="feesBoarding3" value="${school.fees?.boardingTerm3 || 0}" min="0" step="0.01" /></div>
+          </div>
+
+          <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🌱 ECD Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if same as day fees above)</span></p>
+          <div class="form-grid">
+            <div class="fg"><label>ECD – Term 1 ($)</label><input type="number" name="feesEcd1" value="${school.fees?.ecdTerm1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>ECD – Term 2 ($)</label><input type="number" name="feesEcd2" value="${school.fees?.ecdTerm2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>ECD – Term 3 ($)</label><input type="number" name="feesEcd3" value="${school.fees?.ecdTerm3 || 0}" min="0" step="0.01" /></div>
           </div>
 
           <!-- ── Facilities ──────────────────────────────────────────── -->
@@ -1005,11 +1073,13 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
 
-    const {
+ const {
       schoolName, phone, contactPhone, city, suburb, address, email, website,
       principalName, type, gender, boarding, gradesFrom, gradesTo,
       capacity, curriculum, facilities, extramuralActivities,
       feesTerm1, feesTerm2, feesTerm3,
+      feesBoarding1, feesBoarding2, feesBoarding3,
+      feesEcd1, feesEcd2, feesEcd3,
       registrationLink, tier, subscriptionEndsAt,
       active, admissionsOpen, verified, adminNote
     } = req.body;
@@ -1017,6 +1087,12 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     const t1 = parseFloat(feesTerm1) || 0;
     const t2 = parseFloat(feesTerm2) || t1;
     const t3 = parseFloat(feesTerm3) || t1;
+    const b1 = parseFloat(feesBoarding1) || 0;
+    const b2 = parseFloat(feesBoarding2) || b1;
+    const b3 = parseFloat(feesBoarding3) || b1;
+    const e1 = parseFloat(feesEcd1) || 0;
+    const e2 = parseFloat(feesEcd2) || e1;
+    const e3 = parseFloat(feesEcd3) || e1;
 
     const curriculumArr = curriculum
       ? (Array.isArray(curriculum) ? curriculum : [curriculum]) : [];
@@ -1040,7 +1116,11 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     school.grades               = { from: gradesFrom?.trim() || "ECD A", to: gradesTo?.trim() || "Form 6" };
     school.capacity             = Number(capacity) || 0;
     school.curriculum           = curriculumArr;
-    school.fees                 = { term1: t1, term2: t2, term3: t3, currency: "USD" };
+  school.fees = {
+      term1: t1, term2: t2, term3: t3, currency: "USD",
+      boardingTerm1: b1, boardingTerm2: b2, boardingTerm3: b3,
+      ecdTerm1: e1, ecdTerm2: e2, ecdTerm3: e3
+    };
     school.feeRange             = computeSchoolFeeRange(t1);
     school.facilities           = facilitiesArr;
     school.extramuralActivities = extramuralArr;
@@ -1064,6 +1144,50 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     res.redirect(
       `/zq-admin/schools/${req.params.id}/edit?error=${encodeURIComponent(err.message)}`
     );
+  }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD BROCHURE
+// POST /zq-admin/schools/:id/brochure/add
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/schools/:id/brochure/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { label, url } = req.body;
+    if (!url?.trim()) throw new Error("URL is required.");
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    school.brochures = school.brochures || [];
+    school.brochures.push({
+      label:   (label?.trim() || "School Brochure"),
+      url:     url.trim(),
+      addedAt: new Date()
+    });
+    await school.save();
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Brochure added.")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE BROCHURE
+// POST /zq-admin/schools/:id/brochure/:index/delete
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/schools/:id/brochure/:index/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const idx = parseInt(req.params.index);
+    if (!isNaN(idx) && school.brochures?.[idx]) {
+      school.brochures.splice(idx, 1);
+      await school.save();
+    }
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Brochure removed.")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
   }
 });
 
