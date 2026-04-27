@@ -1042,14 +1042,17 @@ ${school.principalName ? `👤 *Principal:* ${school.principalName}\n` : ""}${sc
 ${rating}
 👀 ${school.monthlyViews || 0} views this month`;
 
-  return sendButtons(from, {
-    text: detailText,
-    buttons: [
-      { id: `school_dl_profile_${schoolId}`,  title: "📄 Download Profile" },
-      { id: `school_apply_${schoolId}`,        title: "📝 Apply Online" },
-      { id: `school_enquiry_${schoolId}`,      title: "✉️ Send Enquiry" }
-    ]
-  });
+ // Show download button only if school has documents
+  const hasDocuments = (school.brochures || []).length > 0 || !!school.profilePdfUrl;
+  const docCount     = (school.brochures || []).length || (school.profilePdfUrl ? 1 : 0);
+  const dlLabel      = docCount > 1 ? `📄 Download (${docCount} docs)` : "📄 Download Profile";
+
+  const buttons = [];
+  if (hasDocuments) buttons.push({ id: `school_dl_profile_${schoolId}`, title: dlLabel });
+  buttons.push({ id: `school_apply_${schoolId}`,  title: "📝 Apply Online" });
+  buttons.push({ id: `school_enquiry_${schoolId}`, title: "✉️ Send Enquiry" });
+
+  return sendButtons(from, { text: detailText, buttons });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
