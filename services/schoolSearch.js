@@ -1081,22 +1081,10 @@ async function _downloadSchoolProfile(from, schoolId) {
     allDocs.push({ label: `${school.schoolName} Profile`, url: school.profilePdfUrl });
   }
 
-
-  if (allDocs.length > 0) {
-    // ── Convert Google Drive viewer URLs to direct download URLs ──────────────
-    // Drive viewer:  .../file/d/FILE_ID/view?...
-    // Direct download: .../uc?export=download&id=FILE_ID
-    function toDirectUrl(url = "") {
-      const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-      if (driveMatch) {
-        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
-      }
-      return url; // not a Drive link — return as-is
-    }
-
+if (allDocs.length > 0) {
     // ── Try sendDocument first, fall back to text link ────────────────────────
     for (const doc of allDocs) {
-      const directUrl = toDirectUrl(doc.url);
+      const directUrl = doc.url;
       const filename  = doc.label.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_") + ".pdf";
       try {
         await sendDocument(from, { link: directUrl, filename });

@@ -81,6 +81,26 @@ Reply here if you want us to activate it for you.`;
 }
 
 const router = express.Router();
+
+const multer     = require("multer");
+const mongoose   = require("mongoose");
+const { GridFSBucket } = require("mongodb");
+const path       = require("path");
+
+// ── GridFS bucket for school brochures ───────────────────────────────────────
+function getBucket() {
+  return new GridFSBucket(mongoose.connection.db, { bucketName: "schoolBrochures" });
+}
+
+// ── Multer — store in memory first, then pipe to GridFS ──────────────────────
+const brochureUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Only PDF files are allowed."));
+  }
+});
 router.use(express.json());
 
 // ─── Helpers (same as supplierAdmin.js) ───────────────────────────────────────
@@ -819,18 +839,19 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               </tbody>
             </table>` : `<p class="muted" style="font-size:13px;margin-bottom:14px">No brochures uploaded yet.</p>`}
 
-            <form method="POST" action="/zq-admin/schools/${school._id}/brochure/add" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+           <form method="POST" action="/zq-admin/schools/${school._id}/brochure/add" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
               <div class="fg" style="flex:1;min-width:160px">
                 <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Label</label>
                 <input name="label" placeholder="e.g. 2025 Prospectus" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
               </div>
               <div class="fg" style="flex:2;min-width:240px">
-                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL (Google Drive, Dropbox, etc.)</label>
-                <input name="url" type="url" placeholder="https://drive.google.com/..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px" required />
+                <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">PDF File</label>
+                <input name="brochureFile" type="file" accept=".pdf,application/pdf" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface2);color:var(--text)" required />
               </div>
-              <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">+ Add Brochure</button>
+              <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">⬆ Upload PDF</button>
             </form>
-            <p style="font-size:11px;color:var(--muted);margin-top:8px">💡 Upload the PDF to Google Drive, set sharing to "Anyone with the link can view", then paste the link above.</p>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp — no Google Drive or data needed.</p>
+            <p style="font-size:11px;color:var(--muted);margin-top:4px">⚠ Max file size: 10MB. Keep PDFs under 5MB for best WhatsApp delivery.</p>
           </div>
         <div>
           <div class="panel">
@@ -1152,41 +1173,83 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
 // ADD BROCHURE
 // POST /zq-admin/schools/:id/brochure/add
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/schools/:id/brochure/add", requireSupplierAdmin, async (req, res) => {
+router.post("/schools/:id/brochure/add",
+  requireSupplierAdmin,
+  brochureUpload.single("brochureFile"),
+  async (req, res) => {
+    try {
+      const school = await SchoolProfile.findById(req.params.id);
+      if (!school) return res.redirect("/zq-admin/schools");
+
+      if (!req.file) throw new Error("Please select a PDF file to upload.");
+
+      const label    = (req.body.label?.trim()) || "School Brochure";
+      const filename = `${school._id}_${Date.now()}.pdf`;
+      const bucket   = getBucket();
+
+      // ── Stream the buffer into GridFS ─────────────────────────────────────
+      await new Promise((resolve, reject) => {
+        const uploadStream = bucket.openUploadStream(filename, {
+          contentType: "application/pdf",
+          metadata: {
+            schoolId:   school._id.toString(),
+            schoolName: school.schoolName,
+            label
+          }
+        });
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error",  reject);
+        uploadStream.end(req.file.buffer);
+      });
+
+      // ── Build the serving URL ─────────────────────────────────────────────
+      // This URL is served by the GET route below — publicly accessible
+      const baseUrl  = process.env.APP_BASE_URL || `https://${req.headers.host}`;
+      const fileUrl  = `${baseUrl}/zq-admin/schools/brochure/${filename}`;
+
+      school.brochures = school.brochures || [];
+      school.brochures.push({ label, url: fileUrl, addedAt: new Date() });
+      await school.save();
+
+      const sizeMB = (req.file.size / 1024 / 1024).toFixed(2);
+      res.redirect(`/zq-admin/schools/${req.params.id}?success=` +
+        encodeURIComponent(`"${label}" uploaded (${sizeMB} MB). Parents can now download it on WhatsApp.`));
+
+    } catch (err) {
+      res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+    }
+  }
+);
+
+
+
+
+// ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
+// Serves the PDF directly — no login required so WhatsApp/Meta can fetch it
+// and parents receive it as a native WhatsApp document
+router.get("/schools/brochure/:filename", async (req, res) => {
   try {
-    const { label, url } = req.body;
-    if (!url?.trim()) throw new Error("URL is required.");
+    const bucket = getBucket();
+    const files  = await bucket.find({ filename: req.params.filename }).toArray();
 
-    const school = await SchoolProfile.findById(req.params.id);
-    if (!school) return res.redirect("/zq-admin/schools");
-
-    // ── Normalise Google Drive URLs to direct download format ─────────────────
-    // Viewer URL:  https://drive.google.com/file/d/FILE_ID/view?usp=...
-    // Correct URL: https://drive.google.com/uc?export=download&id=FILE_ID
-    let finalUrl = url.trim();
-    const driveMatch = finalUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch) {
-      finalUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    if (!files || files.length === 0) {
+      return res.status(404).send("File not found.");
     }
 
-    school.brochures = school.brochures || [];
-    school.brochures.push({
-      label:   (label?.trim() || "School Brochure"),
-      url:     finalUrl,
-      addedAt: new Date()
-    });
-    await school.save();
+    const file = files[0];
+    res.setHeader("Content-Type",        "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    res.setHeader("Cache-Control",       "public, max-age=86400"); // cache 24h
 
-    const msg = driveMatch
-      ? "Brochure added. Google Drive link was automatically converted to a direct download URL."
-      : "Brochure added.";
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.on("error", () => res.status(404).send("File not found."));
+    downloadStream.pipe(res);
 
-    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(msg)}`);
   } catch (err) {
-    res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
+    console.error("[Brochure Serve]", err.message);
+    res.status(500).send("Error serving file.");
   }
 });
-
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE BROCHURE
 // POST /zq-admin/schools/:id/brochure/:index/delete
@@ -1195,8 +1258,27 @@ router.post("/schools/:id/brochure/:index/delete", requireSupplierAdmin, async (
   try {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
+
     const idx = parseInt(req.params.index);
     if (!isNaN(idx) && school.brochures?.[idx]) {
+      const brochure = school.brochures[idx];
+
+      // ── Also delete from GridFS if it's a self-hosted file ────────────────
+      try {
+        const urlParts = brochure.url.split("/brochure/");
+        if (urlParts.length > 1) {
+          const filename = urlParts[1];
+          const bucket   = getBucket();
+          const files    = await bucket.find({ filename }).toArray();
+          if (files.length > 0) {
+            await bucket.delete(files[0]._id);
+          }
+        }
+      } catch (gfsErr) {
+        console.error("[Brochure GFS Delete]", gfsErr.message);
+        // Don't block — still remove from DB even if GFS delete fails
+      }
+
       school.brochures.splice(idx, 1);
       await school.save();
     }
