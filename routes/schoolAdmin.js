@@ -1156,17 +1156,32 @@ router.post("/schools/:id/brochure/add", requireSupplierAdmin, async (req, res) 
   try {
     const { label, url } = req.body;
     if (!url?.trim()) throw new Error("URL is required.");
+
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
+
+    // ── Normalise Google Drive URLs to direct download format ─────────────────
+    // Viewer URL:  https://drive.google.com/file/d/FILE_ID/view?usp=...
+    // Correct URL: https://drive.google.com/uc?export=download&id=FILE_ID
+    let finalUrl = url.trim();
+    const driveMatch = finalUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch) {
+      finalUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    }
 
     school.brochures = school.brochures || [];
     school.brochures.push({
       label:   (label?.trim() || "School Brochure"),
-      url:     url.trim(),
+      url:     finalUrl,
       addedAt: new Date()
     });
     await school.save();
-    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent("Brochure added.")}`);
+
+    const msg = driveMatch
+      ? "Brochure added. Google Drive link was automatically converted to a direct download URL."
+      : "Brochure added.";
+
+    res.redirect(`/zq-admin/schools/${req.params.id}?success=${encodeURIComponent(msg)}`);
   } catch (err) {
     res.redirect(`/zq-admin/schools/${req.params.id}?error=${encodeURIComponent(err.message)}`);
   }

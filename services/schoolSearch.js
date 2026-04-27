@@ -1081,28 +1081,59 @@ async function _downloadSchoolProfile(from, schoolId) {
     allDocs.push({ label: `${school.schoolName} Profile`, url: school.profilePdfUrl });
   }
 
+
   if (allDocs.length > 0) {
-    // Send each document
-    for (const doc of allDocs) {
-      const filename = doc.label.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_") + ".pdf";
-      try {
-        await sendDocument(from, { link: doc.url, filename });
-      } catch (docErr) {
-        console.error(`[School DL] sendDocument failed for "${doc.label}":`, docErr.message);
+    // ── Convert Google Drive viewer URLs to direct download URLs ──────────────
+    // Drive viewer:  .../file/d/FILE_ID/view?...
+    // Direct download: .../uc?export=download&id=FILE_ID
+    function toDirectUrl(url = "") {
+      const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (driveMatch) {
+        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
       }
+      return url; // not a Drive link — return as-is
     }
 
-    const docList = allDocs.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+    // ── Try sendDocument first, fall back to text link ────────────────────────
+    for (const doc of allDocs) {
+      const directUrl = toDirectUrl(doc.url);
+      const filename  = doc.label.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_") + ".pdf";
+      try {
+        await sendDocument(from, { link: directUrl, filename });
+        doc._sent = true; // mark as successfully sent as file
+      } catch (docErr) {
+        console.error(`[School DL] sendDocument failed for "${doc.label}":`, docErr.message);
+        doc._sent = false;
+      }
+      doc._directUrl = directUrl;
+    }
+
+    // ── Build the reply message ───────────────────────────────────────────────
+    const sentAsDocs  = allDocs.filter(d => d._sent);
+    const failedDocs  = allDocs.filter(d => !d._sent);
+
+    let replyText = `📄 *${school.schoolName} — Documents*\n\n`;
+
+    if (sentAsDocs.length > 0) {
+      replyText += `The following ${sentAsDocs.length > 1 ? "documents were" : "document was"} sent above as a file:\n`;
+      replyText += sentAsDocs.map(d => `• ${d.label}`).join("\n");
+      replyText += `\n\nTap the file${sentAsDocs.length > 1 ? "s" : ""} above to open.\n\n`;
+    }
+
+    // For any that failed (e.g. Drive permission issues), send as tappable links
+    if (failedDocs.length > 0) {
+      replyText += `Tap to open:\n`;
+      replyText += failedDocs.map(d => `📎 *${d.label}*\n${d._directUrl}`).join("\n\n");
+      replyText += "\n\n";
+    }
+
+    replyText += `_Contact the school if you have any questions._`;
+
     return sendButtons(from, {
-      text:
-`📄 *${school.schoolName}*
-
-${allDocs.length > 1 ? `Sent ${allDocs.length} documents:\n${docList}\n\nTap each to open.` : `Your document has been sent above. Tap it to open.`}
-
-_Can't see it? Scroll up, or contact the school directly._`,
+      text: replyText,
       buttons: [
-        { id: `school_apply_${schoolId}`,  title: "📝 Apply Online" },
-        { id: "school_search_refine",       title: "🔄 More Schools" }
+        { id: `school_apply_${schoolId}`, title: "📝 Apply Online" },
+        { id: "school_search_refine",      title: "🔄 More Schools" }
       ]
     });
   }
