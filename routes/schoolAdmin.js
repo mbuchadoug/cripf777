@@ -6,6 +6,10 @@
 //  supplierAdmin router OR import and use separately with the same session auth)
 
 import express from "express";
+import multer from "multer";
+import mongoose from "mongoose";
+import { GridFSBucket } from "mongodb";
+import path from "path";
 import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
@@ -82,10 +86,7 @@ Reply here if you want us to activate it for you.`;
 
 const router = express.Router();
 
-const multer     = require("multer");
-const mongoose   = require("mongoose");
-const { GridFSBucket } = require("mongodb");
-const path       = require("path");
+
 
 // ── GridFS bucket for school brochures ───────────────────────────────────────
 function getBucket() {
