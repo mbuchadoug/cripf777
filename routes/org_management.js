@@ -1752,18 +1752,40 @@ if (!platformAdmin && !membership && !orgFieldMatch) {
 
 
     // 🔑 ADMIN OPEN: assignmentId → resolve to ONE examId
+// 🔑 STUDENT OPEN: assignmentId → resolve to THIS student's exam instance
 if (assignmentId && !examId) {
+  // MUST filter by userId — assignmentId is shared across all students
+  // assigned the same quiz. Without userId filter, findOne returns the
+  // first matching doc in the collection which is always the same student.
   const exam = await ExamInstance.findOne({
     assignmentId,
-    org: org._id
+    org:    org._id,
+    userId: req.user._id          // ← THE FIX: scope to this student only
   }).lean();
 
   if (!exam) {
-    return res.status(404).send("Quiz not found");
+    // Fallback: maybe this student's instance has a slightly different
+    // assignmentId format — try without userId but log a warning
+    console.warn(
+      `[quiz] No exam found for assignmentId=${assignmentId} userId=${req.user._id} — ` +
+      `student may not have been assigned this quiz individually`
+    );
+    return res.status(404).send(
+      "Quiz not found for your account. Please contact your administrator."
+    );
   }
 
+  const quizTitle = req.query.quizTitle
+    ? `&quizTitle=${encodeURIComponent(req.query.quizTitle)}`
+    : "";
+
+  console.log(
+    `[quiz] Resolved assignmentId=${assignmentId} → examId=${exam.examId} ` +
+    `for userId=${req.user._id} (${req.user.email})`
+  );
+
   return res.redirect(
-    `/lms/quiz?examId=${encodeURIComponent(exam.examId)}&org=${encodeURIComponent(org.slug)}`
+    `/lms/quiz?examId=${encodeURIComponent(exam.examId)}&org=${encodeURIComponent(org.slug)}${quizTitle}`
   );
 }
 
