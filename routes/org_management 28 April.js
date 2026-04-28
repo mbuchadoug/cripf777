@@ -1332,17 +1332,9 @@ else if (role === "employee" || role === "staff") normalizedRole = "professional
       }
 
       let openUrl;
-      if (ex.isAdminQuiz) {
-        openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
-      } else if (ex.examId) {
-        // ✅ Always use examId directly for student quizzes — it is unique per student.
-        // Using assignmentId caused all students to load the same quiz (the first
-        // ExamInstance in the collection that matched assignmentId + org).
-        openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-      } else {
-        // Fallback: assignmentId only if no examId (should not happen in practice)
-        openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
-      }
+      if (ex.isAdminQuiz)        openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
+      else if (ex.isOnboarding)  openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
+      else                       openUrl = `/org/${org.slug}/quiz?assignmentId=${encodeURIComponent(assignmentKey)}&quizTitle=${encodeURIComponent(quizTitle)}`;
 
       quizzesBySeries[seriesKey].quizzes.push({
         assignmentId: assignmentKey, quizTitle, questionCount, status, openUrl,
