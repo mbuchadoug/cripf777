@@ -123,10 +123,6 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
   try {
     if (isPlatformAdmin(req)) return next();
 
-    // ✅ User-level readonly_admin role (stored on User doc, not OrgMembership)
-    // These users have no org membership but should access all orgs read-only.
-    if (req.user?.role === "readonly_admin") return next();
-
     const slug = String(req.params.slug || "").trim();
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
@@ -135,12 +131,8 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
     if (!membership) return res.status(403).send("Admins only (org membership required)");
 
     const role = String(membership.role || "").toLowerCase();
-    // readonly_admin membership role also allowed — individual routes gate writes
+    // readonly_admin is allowed through here too - individual routes gate writes separately
     if (["manager", "admin", "readonly_admin"].includes(role)) return next();
-
-    // ✅ Previous fix: cripfcnt-school members get access to manage/classify
-    const isCripfcntSchoolMember = org.slug === "cripfcnt-school";
-    if (isCripfcntSchoolMember) return next();
 
     return res.status(403).send("Admins only (insufficient role)");
   } catch (e) {
@@ -157,11 +149,6 @@ async function allowPlatformAdminOrOrgManager(req, res, next) {
 /* ------------------------------------------------------------------ */
 async function denyReadOnly(req, res, next) {
   if (isPlatformAdmin(req)) return next(); // platform admins always pass
-
-  // ✅ Check user-level readonly_admin role first (no membership needed)
-  if (req.user?.role === "readonly_admin") {
-    return res.status(403).json({ ok: false, error: "Read-only admins cannot perform this action" });
-  }
 
   const slug = String(req.params.slug || "").trim();
   try {
@@ -1010,29 +997,23 @@ router.get("/org/:slug/dashboard", ensureAuth, async (req, res) => {
     const org = await Organization.findOne({ slug }).lean();
     if (!org) return res.status(404).send("org not found");
 
+    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
+    if (!membership) return res.status(403).send("You are not a member of this organization");
+
     const platformAdmin = (process.env.ADMIN_EMAILS || "")
       .split(",").map(e => e.trim().toLowerCase())
       .includes((req.user.email || "").toLowerCase());
-
-    // ✅ User-level readonly_admin can view any org dashboard without membership
-    const isUserReadOnly = req.user?.role === "readonly_admin";
-
-    const membership = await OrgMembership.findOne({ org: org._id, user: req.user._id }).lean();
-    if (!membership && !platformAdmin && !isUserReadOnly) {
-      return res.status(403).send("You are not a member of this organization");
-    }
-
-    const role    = String(membership?.role || "").toLowerCase();
-    const isAdmin = platformAdmin || isUserReadOnly || ["admin", "manager", "org_admin", "readonly_admin"].includes(role);
+    const role    = String(membership.role || "").toLowerCase();
+    const isAdmin = platformAdmin || ["admin", "manager", "org_admin", "readonly_admin"].includes(role);
 
     const isCripfcntSchool = org.slug === "cripfcnt-school";
     const modules = await OrgModule.find({ org: org._id }).lean();
 
     let normalizedRole = "professional";
-if (isUserReadOnly || role === "readonly_admin") normalizedRole = "readonly_admin";
-else if (isAdmin)                                normalizedRole = "administrator";
-else if (role === "student")                     normalizedRole = "student";
-else if (role === "teacher")                     normalizedRole = "teacher";
+if (role === "readonly_admin")                    normalizedRole = "readonly_admin";
+else if (isAdmin)                                 normalizedRole = "administrator";
+else if (role === "student")                      normalizedRole = "student";
+else if (role === "teacher")                      normalizedRole = "teacher";
 else if (role === "employee" || role === "staff") normalizedRole = "professional";
 
     const ICON_MAP = {
@@ -1483,22 +1464,15 @@ router.get("/org/:slug/take-quiz", ensureAuth, async (req, res) => {
       user: req.user._id
     }).lean();
 
-    // ✅ User-level readonly_admin bypasses membership requirement entirely
-    const isUserReadOnly = req.user?.role === "readonly_admin";
-
-    if (!membership && !platformAdmin && !isUserReadOnly) {
+    if (!membership && !platformAdmin) {
       return res.status(403).send("You are not a member of this organization");
     }
 
     const role = String(membership?.role || "").toLowerCase();
     const isAdmin =
-      platformAdmin || isUserReadOnly ||
-      role === "admin" || role === "manager" || role === "org_admin" || role === "readonly_admin";
+      platformAdmin || role === "admin" || role === "manager" || role === "org_admin";
 
-    // ✅ cripfcnt-school members can also take catalog quizzes
-    const isCripfcntSchoolMember = org.slug === "cripfcnt-school" && !!membership;
-
-    if (!isAdmin && !isCripfcntSchoolMember) {
+    if (!isAdmin) {
       return res.status(403).send("Only admins can take quizzes from the catalog");
     }
 
@@ -1763,14 +1737,11 @@ const assignmentId = String(req.query.assignmentId || "").trim();
     if (!membership) {
       return res.status(403).send("You are not a member of this organization");
     }*/
-// ✅ Platform admin check
+   // ✅ Platform admin check
 const platformAdmin = (process.env.ADMIN_EMAILS || "")
   .split(",")
   .map(e => e.trim().toLowerCase())
   .includes(String(req.user.email || "").toLowerCase());
-
-// ✅ User-level readonly_admin bypasses membership requirement
-const isUserReadOnly = req.user?.role === "readonly_admin";
 
 // ✅ Membership lookup (still used for normal users)
 const membership = await OrgMembership.findOne({
@@ -1782,8 +1753,8 @@ const membership = await OrgMembership.findOne({
 const orgFieldMatch =
   req.user?.organization && String(req.user.organization) === String(org._id);
 
-// ✅ Block only if NOT platform admin AND NOT member AND NOT orgFieldMatch AND NOT user-level readonly_admin
-if (!platformAdmin && !isUserReadOnly && !membership && !orgFieldMatch) {
+// ✅ Block only if NOT platform admin AND NOT member AND NOT orgFieldMatch
+if (!platformAdmin && !membership && !orgFieldMatch) {
   return res.status(403).send("You are not a member of this organization");
 }
 
