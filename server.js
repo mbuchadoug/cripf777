@@ -112,6 +112,7 @@ import adminOrganizationRoutes from "./routes/admin_organizations.js";
 import orgManagementRoutes from "./routes/org_management.js";
 import { ensureAuth } from "./middleware/authGuard.js";
 import webReceipts from "./routes/web_receipts.js";
+import videoRoutes from "./routes/videos.js";
 import cron from "node-cron";
 import { autoCloseExpiredRequests } from "./services/buyerRequests.js";
 
@@ -473,6 +474,8 @@ app.use("/zq-admin", schoolAdminRoutes);
 // API routes - keep LMS API on /api/lms so quiz UI fetches work
 app.use("/api/lms", lmsApiRoutes);
 app.use("/", creatorCampaignRoutes);
+app.use("/", videoRoutes);
+
 
 // Admin attempts UI
 app.use("/", adminAttempts);
@@ -550,6 +553,7 @@ app.use(adminPlacementImport);
 app.use(placementAuditRoutes);
 app.use(scoiDownloadRoutes);
 app.use(specialScoiImportRoutes);
+
 
 
 // small debug route to inspect current user (useful for testing)

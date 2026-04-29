@@ -1,0 +1,380 @@
+{{!-- views/admin/videos.hbs --}}
+{{!-- Admin panel: upload + manage GridFS videos --}}
+
+<style>
+  .vid-admin { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; font-family: 'DM Sans', 'Inter', sans-serif; }
+  .vid-admin h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .vid-admin .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2.5rem; }
+
+  /* Upload card */
+  .upload-card {
+    background: #fff;
+    border: 1.5px dashed #d1d5db;
+    border-radius: 10px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+    transition: border-color 0.2s;
+  }
+  .upload-card:hover { border-color: #c9a84c; }
+  .upload-card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1.25rem; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+  .form-group label { font-size: 0.8rem; font-weight: 600; color: #374151; letter-spacing: 0.04em; text-transform: uppercase; }
+  .form-group input, .form-group select {
+    padding: 0.6rem 0.85rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: border-color 0.2s;
+    background: #fafafa;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #c9a84c;
+    background: #fff;
+  }
+
+  .file-drop {
+    border: 1.5px dashed #e5e7eb;
+    border-radius: 6px;
+    padding: 1.5rem;
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .file-drop:hover, .file-drop.dragover { border-color: #c9a84c; background: #fffbf0; color: #0d0d0d; }
+  .file-drop input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .file-drop .drop-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .file-drop .file-name { font-weight: 600; color: #111; margin-top: 0.35rem; font-size: 0.9rem; }
+
+  .btn-upload {
+    margin-top: 1.25rem;
+    background: #0d0d0d;
+    color: #fff;
+    border: none;
+    padding: 0.7rem 1.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.2s;
+  }
+  .btn-upload:hover { background: #c9a84c; color: #0d0d0d; }
+  .btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Progress */
+  .progress-wrap { margin-top: 1rem; display: none; }
+  .progress-bar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #c9a84c; width: 0%; transition: width 0.3s; }
+  .progress-label { font-size: 0.8rem; color: #6b7280; margin-top: 0.35rem; }
+
+  /* Result toast */
+  .upload-result {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    display: none;
+  }
+  .upload-result.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .upload-result.error   { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+  /* Video list */
+  .section-title { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: #111; }
+  .video-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .video-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 1rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
+
+  .video-info .vname { font-weight: 600; font-size: 0.95rem; }
+  .video-info .vmeta { font-size: 0.78rem; color: #6b7280; margin-top: 0.2rem; font-family: monospace; }
+
+  .video-actions { display: flex; gap: 0.5rem; }
+
+  .btn-preview {
+    background: #f3f4f6;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: #374151;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: background 0.15s;
+  }
+  .btn-preview:hover { background: #e5e7eb; }
+
+  .btn-delete {
+    background: #fef2f2;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: #dc2626;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+  .btn-delete:hover { background: #fee2e2; }
+
+  .copy-url {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline dotted;
+  }
+  .copy-url:hover { color: #1d4ed8; }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #9ca3af;
+    font-size: 0.9rem;
+    border: 1.5px dashed #e5e7eb;
+    border-radius: 8px;
+  }
+
+  @media (max-width: 640px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .video-row { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="vid-admin">
+  <h1>🎬 Video Manager</h1>
+  <p class="subtitle">Upload and manage CRIPFCnt insight videos stored in MongoDB GridFS.</p>
+
+  <!-- UPLOAD FORM -->
+  <div class="upload-card">
+    <h2>Upload New Video</h2>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Slug (URL key)</label>
+        <input type="text" id="slug" placeholder="e.g. primitive-accumulation-redistribution" />
+      </div>
+      <div class="form-group">
+        <label>Episode</label>
+        <input type="text" id="episode" placeholder="e.g. 01" />
+      </div>
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label>Title</label>
+        <input type="text" id="title" placeholder="e.g. Primitive Accumulation, Redistribution & the Blind Success Equation" />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Video File (MP4 / WebM / MOV — max 500 MB)</label>
+      <div class="file-drop" id="dropZone">
+        <input type="file" id="videoFile" accept="video/mp4,video/webm,video/ogg,video/quicktime" />
+        <div class="drop-icon">📹</div>
+        <div>Drag & drop your video here, or <strong>click to browse</strong></div>
+        <div class="file-name" id="fileName"></div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">Uploading…</div>
+    </div>
+
+    <div class="upload-result" id="uploadResult"></div>
+
+    <button class="btn-upload" id="uploadBtn">
+      ⬆ Upload to GridFS
+    </button>
+  </div>
+
+  <!-- VIDEO LIST -->
+  <div class="section-title">Stored Videos ({{videos.length}})</div>
+
+  {{#if videos.length}}
+    <div class="video-list" id="videoList">
+      {{#each videos}}
+      <div class="video-row" data-filename="{{filename}}">
+        <div class="video-info">
+          <div class="vname">
+            {{#if episode}}<span style="color:#c9a84c;font-family:monospace;font-size:0.8rem;">EP {{episode}} · </span>{{/if}}
+            {{title}}
+          </div>
+          <div class="vmeta">
+            {{filename}} &nbsp;·&nbsp; {{size_mb}} MB &nbsp;·&nbsp;
+            <button class="copy-url" onclick="copyUrl('{{streamUrl}}')">copy URL</button>
+            &nbsp;·&nbsp; {{formatDate uploadedAt}}
+          </div>
+        </div>
+        <a class="btn-preview" href="{{streamUrl}}" target="_blank">▶ Preview</a>
+        <button class="btn-delete" onclick="deleteVideo('{{filename}}', this)">✕ Delete</button>
+      </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <div class="empty-state" id="videoList">No videos uploaded yet. Use the form above to add your first one.</div>
+  {{/if}}
+</div>
+
+<script>
+  // ── File picker display ───────────────────────────────────────
+  const fileInput  = document.getElementById("videoFile");
+  const fileNameEl = document.getElementById("fileName");
+  const dropZone   = document.getElementById("dropZone");
+
+  fileInput.addEventListener("change", () => {
+    fileNameEl.textContent = fileInput.files[0]?.name || "";
+  });
+
+  dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const dt = e.dataTransfer;
+    if (dt.files[0]) {
+      fileInput.files = dt.files;
+      fileNameEl.textContent = dt.files[0].name;
+    }
+  });
+
+  // ── Upload ────────────────────────────────────────────────────
+  document.getElementById("uploadBtn").addEventListener("click", async () => {
+    const file    = fileInput.files[0];
+    const slug    = document.getElementById("slug").value.trim();
+    const title   = document.getElementById("title").value.trim();
+    const episode = document.getElementById("episode").value.trim();
+    const resultEl = document.getElementById("uploadResult");
+    const progressWrap = document.getElementById("progressWrap");
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    const btn = document.getElementById("uploadBtn");
+
+    if (!file)  return showResult("error", "Please select a video file.");
+    if (!slug)  return showResult("error", "Please enter a slug (URL key).");
+    if (!title) return showResult("error", "Please enter a title.");
+
+    const formData = new FormData();
+    formData.append("video",   file);
+    formData.append("slug",    slug);
+    formData.append("title",   title);
+    formData.append("episode", episode);
+
+    btn.disabled = true;
+    progressWrap.style.display = "block";
+    resultEl.style.display = "none";
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/admin/videos/upload");
+
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        progressFill.style.width = pct + "%";
+        progressLabel.textContent = `Uploading… ${pct}%  (${(e.loaded/1024/1024).toFixed(1)} / ${(e.total/1024/1024).toFixed(1)} MB)`;
+      }
+    };
+
+    xhr.onload = () => {
+      btn.disabled = false;
+      progressWrap.style.display = "none";
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status === 200 && data.ok) {
+          showResult("success", `✅ Uploaded! Stream at <a href="${data.streamUrl}" target="_blank">${data.streamUrl}</a>`);
+          addToList(data, slug, episode, title);
+          fileInput.value = "";
+          fileNameEl.textContent = "";
+        } else {
+          showResult("error", `❌ ${data.error || "Upload failed."}`);
+        }
+      } catch(e) {
+        showResult("error", "❌ Unexpected server response.");
+      }
+    };
+
+    xhr.onerror = () => {
+      btn.disabled = false;
+      progressWrap.style.display = "none";
+      showResult("error", "❌ Network error. Check your connection.");
+    };
+
+    xhr.send(formData);
+  });
+
+  function showResult(type, html) {
+    const el = document.getElementById("uploadResult");
+    el.className = `upload-result ${type}`;
+    el.innerHTML = html;
+    el.style.display = "block";
+  }
+
+  function addToList(data, slug, episode, title) {
+    const list = document.getElementById("videoList");
+    if (list.classList.contains("empty-state")) {
+      list.className = "video-list";
+      list.innerHTML = "";
+    }
+    const row = document.createElement("div");
+    row.className = "video-row";
+    row.dataset.filename = data.filename;
+    row.innerHTML = `
+      <div class="video-info">
+        <div class="vname">${episode ? `<span style="color:#c9a84c;font-family:monospace;font-size:.8rem;">EP ${episode} · </span>` : ""}${title}</div>
+        <div class="vmeta">${data.filename} · Just now · <button class="copy-url" onclick="copyUrl('${data.streamUrl}')">copy URL</button></div>
+      </div>
+      <a class="btn-preview" href="${data.streamUrl}" target="_blank">▶ Preview</a>
+      <button class="btn-delete" onclick="deleteVideo('${data.filename}', this)">✕ Delete</button>
+    `;
+    list.prepend(row);
+  }
+
+  // ── Delete ────────────────────────────────────────────────────
+  async function deleteVideo(filename, btn) {
+    if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/admin/videos/${encodeURIComponent(filename)}`, { method: "DELETE" });
+      const d = await r.json();
+      if (d.ok) {
+        btn.closest(".video-row").remove();
+      } else {
+        alert("Delete failed: " + d.error);
+        btn.disabled = false;
+      }
+    } catch(e) {
+      alert("Network error.");
+      btn.disabled = false;
+    }
+  }
+
+  // ── Copy stream URL ───────────────────────────────────────────
+  function copyUrl(url) {
+    navigator.clipboard.writeText(window.location.origin + url)
+      .then(() => alert("Copied: " + window.location.origin + url))
+      .catch(() => prompt("Copy this URL:", window.location.origin + url));
+  }
+</script>
