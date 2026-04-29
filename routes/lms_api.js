@@ -1363,7 +1363,7 @@ else if (examId) finalExamId = examId;
 else finalExamId = "exam-" + Date.now().toString(36);
 
 // ✅ Resolve student (quiz taker) ONCE, early
-// ✅ FIXED — quiz taker (req.user) always wins
+// ✅ FIXED - quiz taker (req.user) always wins
 const attemptUserId =
   req.user?._id ||     // person who is logged in and submitted the quiz
   payload.userId ||    // explicit userId sent in the submit payload

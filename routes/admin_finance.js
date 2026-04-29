@@ -169,7 +169,7 @@ router.post(
       const parent = await User.findById(userId);
       if (!parent) return res.status(404).json({ error: "User not found" });
 
-      // Calculate expiry — extend from today or from current expiry if still active
+      // Calculate expiry - extend from today or from current expiry if still active
       let expiresAt;
       if (parent.subscriptionExpiresAt && new Date(parent.subscriptionExpiresAt) > now) {
         expiresAt = new Date(parent.subscriptionExpiresAt);
@@ -226,7 +226,7 @@ router.post(
       }
 
       const parentName = [parent.firstName, parent.lastName].filter(Boolean).join(" ") || parent.email;
-      console.log(`[manual-activate] ${planConfig.name} activated for ${parentName} (${parent.email}) by ${req.user.email} — expires ${expiresAt.toISOString()}`);
+      console.log(`[manual-activate] ${planConfig.name} activated for ${parentName} (${parent.email}) by ${req.user.email} - expires ${expiresAt.toISOString()}`);
 
       return res.json({
         success:  true,
@@ -330,7 +330,7 @@ router.post(
       const parentName = [parent.firstName, parent.lastName].filter(Boolean).join(" ") || parent.email;
       return res.json({
         success: true,
-        message: `${parentName} extended by ${days} days — now expires ${expiresAt.toLocaleDateString()}`,
+        message: `${parentName} extended by ${days} days - now expires ${expiresAt.toLocaleDateString()}`,
         expiresAt
       });
 

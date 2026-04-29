@@ -1335,7 +1335,7 @@ else if (role === "employee" || role === "staff") normalizedRole = "professional
       if (ex.isAdminQuiz) {
         openUrl = `/org/${org.slug}/take-quiz?quizId=${ex.quizId}`;
       } else if (ex.examId) {
-        // ✅ Always use examId directly for student quizzes — it is unique per student.
+        // ✅ Always use examId directly for student quizzes - it is unique per student.
         // Using assignmentId caused all students to load the same quiz (the first
         // ExamInstance in the collection that matched assignmentId + org).
         openUrl = `/org/${org.slug}/quiz?examId=${encodeURIComponent(ex.examId)}&quizTitle=${encodeURIComponent(quizTitle)}`;
@@ -1762,7 +1762,7 @@ if (!platformAdmin && !membership && !orgFieldMatch) {
     // 🔑 ADMIN OPEN: assignmentId → resolve to ONE examId
 // 🔑 STUDENT OPEN: assignmentId → resolve to THIS student's exam instance
 if (assignmentId && !examId) {
-  // MUST filter by userId — assignmentId is shared across all students
+  // MUST filter by userId - assignmentId is shared across all students
   // assigned the same quiz. Without userId filter, findOne returns the
   // first matching doc in the collection which is always the same student.
   const exam = await ExamInstance.findOne({
@@ -1773,9 +1773,9 @@ if (assignmentId && !examId) {
 
   if (!exam) {
     // Fallback: maybe this student's instance has a slightly different
-    // assignmentId format — try without userId but log a warning
+    // assignmentId format - try without userId but log a warning
     console.warn(
-      `[quiz] No exam found for assignmentId=${assignmentId} userId=${req.user._id} — ` +
+      `[quiz] No exam found for assignmentId=${assignmentId} userId=${req.user._id} - ` +
       `student may not have been assigned this quiz individually`
     );
     return res.status(404).send(

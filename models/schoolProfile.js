@@ -36,11 +36,11 @@ fees: {
     term2:    { type: Number, default: 0 },
     term3:    { type: Number, default: 0 },
     currency: { type: String, default: "USD" },
-    // Boarding fees — only populated when boarding === "boarding" or "both"
+    // Boarding fees - only populated when boarding === "boarding" or "both"
     boardingTerm1: { type: Number, default: 0 },
     boardingTerm2: { type: Number, default: 0 },
     boardingTerm3: { type: Number, default: 0 },
-    // ECD fees — only populated when type includes ECD and fees differ from primary
+    // ECD fees - only populated when type includes ECD and fees differ from primary
     ecdTerm1: { type: Number, default: 0 },
     ecdTerm2: { type: Number, default: 0 },
     ecdTerm3: { type: Number, default: 0 },

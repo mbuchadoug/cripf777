@@ -499,17 +499,17 @@
     <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px">
       <h3>Activate or Reactivate Account</h3>
       <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-        Activates a plan for any parent — trial, expired, or new. Creates an audit payment record with $0.
+        Activates a plan for any parent - trial, expired, or new. Creates an audit payment record with $0.
       </p>
 
       <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">Parent account</label>
       <select id="act-user" style="width:100%;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;margin-bottom:12px">
-        <option value="">— Select parent —</option>
+        <option value="">- Select parent -</option>
         <!-- Active subscribers -->
         <optgroup label="Active subscribers">
           {{#each subscriberList}}
             {{#if (eq this.status "active")}}
-              <option value="{{this._id}}">{{this.name}} ({{this.email}}) — {{this.plan}} · {{this.daysLeft}}d left</option>
+              <option value="{{this._id}}">{{this.name}} ({{this.email}}) - {{this.plan}} · {{this.daysLeft}}d left</option>
             {{/if}}
           {{/each}}
         </optgroup>
@@ -517,7 +517,7 @@
         <optgroup label="Expired subscribers">
           {{#each subscriberList}}
             {{#if (eq this.status "expired")}}
-              <option value="{{this._id}}">{{this.name}} ({{this.email}}) — expired</option>
+              <option value="{{this._id}}">{{this.name}} ({{this.email}}) - expired</option>
             {{/if}}
           {{/each}}
         </optgroup>
@@ -532,7 +532,7 @@
       <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">Plan</label>
       <select id="act-plan" style="width:100%;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;margin-bottom:12px">
         {{#each plans}}
-          <option value="{{this.key}}">{{this.name}} — ${{this.amount}}/{{this.durationDays}}d</option>
+          <option value="{{this.key}}">{{this.name}} - ${{this.amount}}/{{this.durationDays}}d</option>
         {{/each}}
       </select>
 
@@ -560,9 +560,9 @@
 
       <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">Parent account</label>
       <select id="ext-user" style="width:100%;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;margin-bottom:12px">
-        <option value="">— Select parent —</option>
+        <option value="">- Select parent -</option>
         {{#each subscriberList}}
-          <option value="{{this._id}}">{{this.name}} — {{this.plan}} · {{#if (eq this.status "active")}}{{this.daysLeft}}d left{{else}}expired{{/if}}</option>
+          <option value="{{this._id}}">{{this.name}} - {{this.plan}} · {{#if (eq this.status "active")}}{{this.daysLeft}}d left{{else}}expired{{/if}}</option>
         {{/each}}
       </select>
 
@@ -599,7 +599,7 @@
       </p>
       <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:4px">Parent account</label>
       <select id="deact-user" style="width:100%;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;margin-bottom:12px">
-        <option value="">— Select parent —</option>
+        <option value="">- Select parent -</option>
         {{#each subscriberList}}
           {{#if (eq this.status "active")}}
             <option value="{{this._id}}">{{this.name}} ({{this.email}})</option>

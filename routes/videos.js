@@ -60,10 +60,10 @@ function adminOnly(req, res, next) {
 // POST /admin/videos/upload
 // Uploads a video file into GridFS
 // Body (multipart/form-data):
-//   video     — the video file
-//   slug      — URL-safe name, e.g. "primitive-accumulation-redistribution"
-//   title     — human-readable title
-//   episode   — optional episode label, e.g. "01"
+//   video     - the video file
+//   slug      - URL-safe name, e.g. "primitive-accumulation-redistribution"
+//   title     - human-readable title
+//   episode   - optional episode label, e.g. "01"
 // ═══════════════════════════════════════════════════════════════════════════
 router.post(
   "/admin/videos/upload",

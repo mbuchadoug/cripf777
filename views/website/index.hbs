@@ -1,1254 +1,699 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CRIPFCnt — Taking Psychology to the People</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>CRIPFCnt | Recalibrating Intelligence &amp; Society</title>
+  <meta name="description" content="CRIPFCnt: an eight-pillar framework and life manual redefining consciousness, responsibility and interpretation for the data age." />
+  <link rel="canonical" href="{{siteUrl}}{{canonicalPath}}" />
+
+  <meta property="og:site_name" content="CRIPFCnt" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CRIPFCnt | Recalibrating Intelligence &amp; Society" />
+  <meta property="og:description" content="CRIPFCnt: an eight-pillar framework and life manual redefining consciousness, responsibility and interpretation for the data age." />
+  <meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
+  <meta property="og:image" content="{{siteUrl}}/static/img/logo.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CRIPFCnt | Recalibrating Intelligence &amp; Society" />
+  <meta name="twitter:description" content="CRIPFCnt | an eight-pillar framework and life manual for society, leadership." />
+  <meta name="twitter:image" content="{{siteUrl}}/static/img/logo.png" />
+
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"CRIPFCnt","url":"{{siteUrl}}","logo":"{{siteUrl}}/static/img/logo.png"}</script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <style>
+    /* ── DESIGN TOKENS ───────────────────────────────────────────── */
     :root {
-      --ink: #0d0d0d;
-      --cream: #f7f3ec;
-      --gold: #c9a84c;
-      --gold-light: #e8d08a;
-      --rust: #b94a2c;
-      --slate: #2c3e50;
-      --muted: #6b7280;
-      --card-bg: #ffffff;
-      --border: rgba(201,168,76,0.25);
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html { scroll-behavior: smooth; }
-
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--cream);
-      color: var(--ink);
-      overflow-x: hidden;
-    }
-
-    /* ─── NOISE TEXTURE OVERLAY ─── */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 1000;
-      opacity: 0.6;
-    }
-
-    /* ─── NAV ─── */
-    nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 100;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.25rem 3rem;
-      background: rgba(247,243,236,0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .nav-logo {
-      font-family: 'Space Mono', monospace;
-      font-weight: 700;
-      font-size: 1.1rem;
-      color: var(--ink);
-      letter-spacing: -0.02em;
-    }
-
-    .nav-logo span { color: var(--gold); }
-
-    .nav-links {
-      display: flex;
-      gap: 2rem;
-      list-style: none;
-    }
-
-    .nav-links a {
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--muted);
-      text-decoration: none;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      transition: color 0.2s;
-    }
-
-    .nav-links a:hover { color: var(--ink); }
-
-    .nav-cta {
-      background: var(--ink);
-      color: var(--cream) !important;
-      padding: 0.5rem 1.25rem;
-      border-radius: 2px;
-    }
-
-    .nav-cta:hover { background: var(--gold); color: var(--ink) !important; }
-
-    /* ─── HERO ─── */
-    .hero {
-      min-height: 100vh;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0;
-      padding-top: 5rem;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero-left {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 5rem 3rem 5rem 4rem;
-      position: relative;
-      z-index: 2;
-    }
-
-    .hero-eyebrow {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.75rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--gold);
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .hero-eyebrow::before {
-      content: '';
-      display: block;
-      width: 2rem;
-      height: 1px;
-      background: var(--gold);
-    }
-
-    .hero h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(3rem, 5vw, 4.5rem);
-      font-weight: 900;
-      line-height: 1.05;
-      letter-spacing: -0.02em;
-      margin-bottom: 1.75rem;
-    }
-
-    .hero h1 em {
-      font-style: italic;
-      color: var(--rust);
-    }
-
-    .hero-sub {
-      font-size: 1.1rem;
-      line-height: 1.7;
-      color: #444;
-      max-width: 480px;
-      margin-bottom: 2.5rem;
-    }
-
-    .hero-actions {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .btn-primary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: var(--ink);
-      color: var(--cream);
-      padding: 0.9rem 2rem;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 500;
-      font-size: 0.95rem;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
-      transition: all 0.25s;
-      letter-spacing: 0.02em;
-    }
-
-    .btn-primary:hover {
-      background: var(--gold);
-      color: var(--ink);
-      transform: translateY(-2px);
-    }
-
-    .btn-secondary {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: transparent;
-      color: var(--ink);
-      padding: 0.9rem 2rem;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 500;
-      font-size: 0.95rem;
-      text-decoration: none;
-      border: 1.5px solid var(--ink);
-      cursor: pointer;
-      transition: all 0.25s;
-    }
-
-    .btn-secondary:hover {
-      background: var(--ink);
-      color: var(--cream);
-    }
-
-    .hero-right {
-      position: relative;
-      background: var(--ink);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .hero-visual {
-      position: absolute;
-      inset: 0;
-      background: 
-        radial-gradient(ellipse at 30% 50%, rgba(201,168,76,0.15) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 20%, rgba(185,74,44,0.1) 0%, transparent 50%),
-        var(--ink);
-    }
-
-    .hero-formula {
-      position: relative;
-      z-index: 2;
-      padding: 3rem;
-      text-align: center;
-    }
-
-    .formula-label {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--gold);
-      margin-bottom: 2rem;
-    }
-
-    .formula-box {
-      border: 1px solid rgba(201,168,76,0.4);
-      padding: 2.5rem 2rem;
-      margin-bottom: 2rem;
-    }
-
-    .formula-title {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.4rem;
-      color: var(--cream);
-      margin-bottom: 1.5rem;
-      font-style: italic;
-    }
-
-    .formula-eq {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.85rem;
-      color: var(--gold-light);
-      line-height: 2;
-    }
-
-    .formula-eq .operator { color: var(--rust); font-size: 1rem; }
-
-    .hero-stat-row {
-      display: flex;
-      gap: 2rem;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .hero-stat {
-      text-align: center;
-    }
-
-    .hero-stat-num {
-      font-family: 'Playfair Display', serif;
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--gold);
-    }
-
-    .hero-stat-label {
-      font-size: 0.75rem;
-      color: #888;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-top: 0.25rem;
-    }
-
-    /* ─── SECTION BASE ─── */
-    section {
-      padding: 6rem 0;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 2rem;
-    }
-
-    .section-tag {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--gold);
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-
-    .section-tag::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-      max-width: 3rem;
-    }
-
-    .section-title {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(2rem, 3.5vw, 3rem);
-      font-weight: 900;
-      line-height: 1.1;
-      margin-bottom: 1.25rem;
-    }
-
-    .section-body {
-      font-size: 1.05rem;
-      line-height: 1.75;
-      color: #444;
-      max-width: 600px;
-    }
-
-    /* ─── CONCEPT STRIP ─── */
-    .concept-strip {
-      background: var(--ink);
-      color: var(--cream);
-      padding: 5rem 0;
-    }
-
-    .concept-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0;
-    }
-
-    .concept-item {
-      padding: 3rem 2.5rem;
-      border-right: 1px solid rgba(255,255,255,0.08);
-      position: relative;
-      transition: background 0.3s;
-    }
-
-    .concept-item:last-child { border-right: none; }
-    .concept-item:hover { background: rgba(201,168,76,0.05); }
-
-    .concept-num {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--gold);
-      letter-spacing: 0.15em;
-      margin-bottom: 1.5rem;
-    }
-
-    .concept-icon {
-      width: 3rem;
-      height: 3rem;
-      border: 1px solid rgba(201,168,76,0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.25rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .concept-h {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-      color: var(--cream);
-    }
-
-    .concept-p {
-      font-size: 0.95rem;
-      line-height: 1.7;
-      color: #aaa;
-    }
-
-    /* ─── VIDEO SECTION ─── */
-    .videos-section {
-      background: var(--cream);
-      padding: 6rem 0;
-    }
-
-    .videos-header {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4rem;
-      align-items: end;
-      margin-bottom: 4rem;
-    }
-
-    .videos-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
-    }
-
-    .video-card {
-      background: white;
-      border: 1px solid rgba(0,0,0,0.06);
-      overflow: hidden;
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .video-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.12);
-    }
-
-    .video-wrapper {
-      position: relative;
-      aspect-ratio: 16/9;
-      background: var(--ink);
-      overflow: hidden;
-    }
-
-    .video-wrapper video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .video-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%);
-      display: flex;
-      align-items: flex-end;
-      padding: 1.25rem;
-      pointer-events: none;
-    }
-
-    .video-duration {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      color: rgba(255,255,255,0.8);
-      background: rgba(0,0,0,0.4);
-      padding: 0.2rem 0.5rem;
-    }
-
-    .video-body {
-      padding: 1.75rem;
-    }
-
-    .video-tag {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--gold);
-      margin-bottom: 0.75rem;
-    }
-
-    .video-title {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.3rem;
-      font-weight: 700;
-      line-height: 1.25;
-      margin-bottom: 1rem;
-    }
-
-    .video-desc {
-      font-size: 0.9rem;
-      line-height: 1.65;
-      color: #555;
-      margin-bottom: 1.25rem;
-    }
-
-    .video-concepts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    .video-concept-tag {
-      font-size: 0.75rem;
-      font-family: 'Space Mono', monospace;
-      padding: 0.25rem 0.6rem;
-      border: 1px solid var(--border);
-      color: var(--muted);
-    }
-
-    /* ─── EQUATION SECTION ─── */
-    .equation-section {
-      background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
-      color: var(--cream);
-      padding: 6rem 0;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .equation-section::before {
-      content: 'SCOI';
-      position: absolute;
-      right: -2rem;
-      top: 50%;
-      transform: translateY(-50%);
-      font-family: 'Playfair Display', serif;
-      font-size: 20rem;
-      font-weight: 900;
-      color: rgba(201,168,76,0.04);
-      pointer-events: none;
-      line-height: 1;
-    }
-
-    .equation-inner {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6rem;
-      align-items: center;
-    }
-
-    .eq-display {
-      border: 1px solid rgba(201,168,76,0.3);
-      padding: 3rem;
-    }
-
-    .eq-main {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.85rem;
-      line-height: 2.5;
-      color: #ccc;
-    }
-
-    .eq-main .eq-highlight {
-      color: var(--gold);
-      font-size: 1rem;
-    }
-
-    .eq-main .eq-result {
-      color: var(--cream);
-      font-size: 1.1rem;
-      font-weight: 700;
-      border-top: 1px solid rgba(201,168,76,0.3);
-      padding-top: 1rem;
-      margin-top: 0.5rem;
-    }
-
-    .eq-vars {
-      margin-top: 2rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-
-    .eq-var {
-      padding: 0.75rem;
-      border: 1px solid rgba(255,255,255,0.06);
-      font-size: 0.8rem;
-    }
-
-    .eq-var-name {
-      font-family: 'Space Mono', monospace;
-      color: var(--gold-light);
-      font-size: 0.7rem;
-      letter-spacing: 0.1em;
-      margin-bottom: 0.25rem;
-    }
-
-    .eq-var-def { color: #999; font-size: 0.8rem; }
-
-    .eq-content .section-tag { color: var(--gold); }
-    .eq-content .section-tag::after { background: rgba(201,168,76,0.3); }
-    .eq-content .section-title { color: var(--cream); }
-    .eq-content .section-body { color: #aaa; max-width: 100%; }
-
-    /* ─── REDISTRIBUTION SECTION ─── */
-    .redist-section {
-      padding: 6rem 0;
-      background: var(--cream);
-    }
-
-    .redist-inner {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5rem;
-      align-items: start;
-    }
-
-    .questions-list {
-      margin-top: 2rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-
-    .question-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-      padding: 1.25rem 1.5rem;
-      background: white;
-      border-left: 3px solid transparent;
-      transition: border-color 0.2s, transform 0.2s;
-      cursor: default;
-    }
-
-    .question-item:hover {
-      border-left-color: var(--gold);
-      transform: translateX(4px);
-    }
-
-    .q-num {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--gold);
-      padding-top: 0.2rem;
-      flex-shrink: 0;
-    }
-
-    .q-text {
-      font-size: 1rem;
-      line-height: 1.5;
-      color: var(--ink);
-    }
-
-    .redist-actions {
-      margin-top: 2rem;
-      padding: 2rem;
-      background: var(--ink);
-      color: var(--cream);
-    }
-
-    .redist-actions-title {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.25rem;
-      margin-bottom: 1.25rem;
-      font-style: italic;
-    }
-
-    .action-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .action-list li {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-size: 0.95rem;
-      color: #ccc;
-    }
-
-    .action-list li::before {
-      content: '→';
-      color: var(--gold);
-      font-family: 'Space Mono', monospace;
-      flex-shrink: 0;
-    }
-
-    /* ─── AUDIT CTA ─── */
-    .audit-cta {
-      background: var(--rust);
-      color: var(--cream);
-      padding: 5rem 0;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .audit-cta::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: 
-        radial-gradient(ellipse at 20% 50%, rgba(255,255,255,0.06) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 50%, rgba(0,0,0,0.15) 0%, transparent 60%);
-    }
-
-    .audit-cta .container { position: relative; z-index: 2; }
-
-    .audit-cta-tag {
-      font-family: 'Space Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.6);
-      margin-bottom: 1.5rem;
-    }
-
-    .audit-cta h2 {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(2rem, 4vw, 3.5rem);
-      font-weight: 900;
-      margin-bottom: 1.25rem;
-      line-height: 1.1;
-    }
-
-    .audit-cta p {
-      font-size: 1.1rem;
-      color: rgba(255,255,255,0.8);
-      max-width: 560px;
-      margin: 0 auto 2.5rem;
-      line-height: 1.7;
-    }
-
-    .audit-cta .btn-primary {
-      background: var(--cream);
-      color: var(--rust);
-    }
-
-    .audit-cta .btn-primary:hover {
-      background: var(--ink);
-      color: var(--cream);
-    }
-
-    /* ─── INPUT SECTION (old tool) ─── */
-    .tool-section {
-      padding: 6rem 0;
-      background: #f0ece4;
-    }
-
-    .tool-inner {
-      max-width: 700px;
-      margin: 0 auto;
-      text-align: center;
-    }
-
-    .tool-inner .section-title { margin-bottom: 0.75rem; }
-    .tool-inner .section-body { margin: 0 auto 2.5rem; text-align: center; }
-
-    .input-row {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .input-row input {
-      flex: 1;
-      padding: 0.9rem 1.25rem;
-      border: 1.5px solid rgba(0,0,0,0.15);
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 1rem;
-      color: var(--ink);
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .input-row input:focus { border-color: var(--gold); }
-    .input-row input::placeholder { color: #aaa; }
-
-    .output {
-      background: white;
-      border: 1.5px solid rgba(0,0,0,0.08);
-      padding: 1.5rem 2rem;
-      white-space: pre-wrap;
-      font-family: 'Space Mono', monospace;
-      font-size: 0.82rem;
-      line-height: 1.7;
-      text-align: left;
-      color: var(--ink);
-      min-height: 120px;
-    }
-
-    /* ─── BOOK BANNER ─── */
-    .book-banner {
-      background: var(--ink);
-      color: var(--cream);
-      padding: 4rem 0;
-      border-top: 3px solid var(--gold);
-    }
-
-    .book-inner {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 3rem;
-      flex-wrap: wrap;
-    }
-
-    .book-text h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.75rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-
-    .book-text p {
-      color: #aaa;
-      font-size: 0.95rem;
-    }
-
-    /* ─── FOOTER ─── */
-    footer {
-      background: #080808;
-      color: #666;
-      padding: 3rem 0;
-      text-align: center;
-      font-size: 0.85rem;
-      font-family: 'Space Mono', monospace;
-      letter-spacing: 0.05em;
-    }
-
-    footer a { color: var(--gold); text-decoration: none; }
-
-    /* ─── ANIMATIONS ─── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .fade-up {
-      opacity: 0;
-      animation: fadeUp 0.7s ease forwards;
-    }
-
-    .fade-up:nth-child(1) { animation-delay: 0.1s; }
-    .fade-up:nth-child(2) { animation-delay: 0.25s; }
-    .fade-up:nth-child(3) { animation-delay: 0.4s; }
-    .fade-up:nth-child(4) { animation-delay: 0.55s; }
-
-    /* ─── RESPONSIVE ─── */
-    @media (max-width: 900px) {
-      nav { padding: 1rem 1.5rem; }
-      .nav-links { display: none; }
-      .hero { grid-template-columns: 1fr; }
-      .hero-right { min-height: 340px; }
-      .hero-left { padding: 4rem 1.5rem 3rem; }
-      .concept-grid { grid-template-columns: 1fr; }
-      .concept-item { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
-      .videos-header { grid-template-columns: 1fr; gap: 2rem; }
-      .videos-grid { grid-template-columns: 1fr; }
-      .equation-inner { grid-template-columns: 1fr; gap: 3rem; }
-      .redist-inner { grid-template-columns: 1fr; gap: 3rem; }
-      .book-inner { flex-direction: column; text-align: center; }
-      .input-row { flex-direction: column; }
-    }
+      --navy:         #1E3A5F;
+      --navy-dark:    #0F1C2E;
+      --gold:         #C9A961;
+      --gold-light:   #E5D4A6;
+      --white:        #FFFFFF;
+      --light-gray:   #F8F9FA;
+      --medium-gray:  #E9ECEF;
+      --dark-gray:    #495057;
+      --text-primary: #212529;
+      --font-serif:   'Crimson Pro', serif;
+      --font-sans:    'Inter', sans-serif;
+      --shadow-sm:    0 2px 8px rgba(30,58,95,0.08);
+      --shadow-md:    0 4px 16px rgba(30,58,95,0.12);
+      --shadow-lg:    0 8px 32px rgba(30,58,95,0.16);
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { overflow-x:hidden; scroll-behavior:smooth; }
+    body { font-family:var(--font-sans); color:var(--text-primary); line-height:1.7; background:var(--white); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+
+    /* ── NAVBAR ─────────────────────────────────────────────────── */
+    .navbar { background:var(--white); border-bottom:1px solid var(--medium-gray); padding:1.5rem 5%; position:sticky; top:0; z-index:1000; box-shadow:var(--shadow-sm); }
+    .nav-container { max-width:1400px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; }
+    .logo { display:flex; align-items:center; gap:1rem; text-decoration:none; z-index:1001; }
+    .logo-icon { width:48px; height:48px; background:var(--navy); display:flex; align-items:center; justify-content:center; font-family:var(--font-serif); font-weight:700; font-size:1.4rem; color:var(--gold); border:2px solid var(--gold); flex-shrink:0; }
+    .logo-text { font-family:var(--font-serif); font-size:1.8rem; font-weight:700; color:var(--navy); letter-spacing:-0.5px; }
+    .nav-links { display:flex; gap:2.5rem; list-style:none; align-items:center; }
+    .nav-links a { font-size:0.95rem; font-weight:500; color:var(--text-primary); text-decoration:none; transition:color 0.3s; letter-spacing:0.3px; }
+    .nav-links a:hover { color:var(--navy); }
+    .nav-cta { background:var(--navy); color:var(--white) !important; padding:0.75rem 1.75rem; border-radius:4px; font-weight:600; transition:all 0.3s; }
+    .nav-cta:hover { background:var(--navy-dark) !important; }
+
+    /* user pill */
+    .user-pill { display:inline-flex; align-items:center; gap:0.6rem; padding:0.45rem 0.75rem; border:1px solid var(--medium-gray); background:var(--light-gray); border-radius:999px; font-size:0.9rem; max-width:260px; }
+    .user-pill .user-email { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .user-pill .user-photo { width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid var(--medium-gray); flex-shrink:0; }
+    .nav-signout { background:transparent; border:1px solid var(--medium-gray); padding:0.55rem 0.9rem; border-radius:8px; font-weight:600; text-decoration:none; white-space:nowrap; color:var(--text-primary); transition:background 0.2s; }
+    .nav-signout:hover { background:var(--light-gray); }
+    .nav-auth { display:inline-flex; align-items:center; gap:0.75rem; }
+
+    /* LMS dropdown */
+    .nav-item.dropdown { position:relative; }
+    .dropdown-toggle { display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer; }
+    .caret { font-size:0.75rem; opacity:0.8; transition:transform 0.2s; }
+    .nav-item.dropdown.open .caret { transform:rotate(180deg); }
+    .dropdown-menu { position:absolute; top:calc(100% + 8px); left:0; min-width:320px; background:var(--white); border:1px solid var(--medium-gray); box-shadow:var(--shadow-md); padding:0.6rem; border-radius:10px; opacity:0; visibility:hidden; transform:translateY(-10px); transition:all 0.2s ease; z-index:2000; pointer-events:none; }
+    .nav-item.dropdown::after { content:''; position:absolute; top:100%; left:0; right:0; height:12px; display:none; }
+    .nav-item.dropdown:hover::after, .nav-item.dropdown:focus-within::after { display:block; }
+    .nav-item.dropdown:hover .dropdown-menu, .nav-item.dropdown:focus-within .dropdown-menu { opacity:1; visibility:visible; transform:translateY(0); pointer-events:auto; }
+    .dropdown-link { display:block; text-decoration:none; padding:0.85rem 0.9rem; border-radius:8px; transition:background 0.2s, transform 0.2s; color:var(--text-primary); }
+    .dropdown-link:hover { background:var(--light-gray); transform:translateY(-1px); }
+    .dd-title { font-weight:700; color:var(--navy); font-size:0.95rem; line-height:1.25; }
+    .dd-sub { margin-top:0.25rem; font-size:0.82rem; color:#6b7280; line-height:1.3; }
+
+    /* mobile toggle */
+    .mobile-menu-toggle { display:none; flex-direction:column; gap:5px; background:none; border:none; cursor:pointer; padding:0.5rem; z-index:1001; }
+    .mobile-menu-toggle span { width:28px; height:3px; background:var(--navy); transition:all 0.3s; border-radius:2px; display:block; }
+    .mobile-menu-toggle.active span:nth-child(1) { transform:rotate(45deg) translate(8px,8px); }
+    .mobile-menu-toggle.active span:nth-child(2) { opacity:0; }
+    .mobile-menu-toggle.active span:nth-child(3) { transform:rotate(-45deg) translate(7px,-7px); }
+
+    /* ── HERO ────────────────────────────────────────────────────── */
+    .hero { background:linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%); padding:8rem 5% 6rem; position:relative; overflow:hidden; }
+    .hero::before { content:''; position:absolute; top:0; right:0; width:50%; height:100%; background:linear-gradient(90deg, transparent, rgba(201,169,97,0.05)); }
+    .hero-container { max-width:1400px; margin:0 auto; position:relative; z-index:1; }
+    .hero-badge { display:inline-block; background:rgba(201,169,97,0.15); color:var(--gold-light); padding:0.5rem 1.25rem; border-radius:30px; font-size:0.85rem; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:2rem; border:1px solid rgba(201,169,97,0.3); }
+    .hero h1 { font-family:var(--font-serif); font-size:clamp(2.5rem,5vw,4.5rem); font-weight:700; color:var(--white); line-height:1.15; margin-bottom:1.5rem; max-width:900px; }
+    .hero h1 em { font-style:italic; color:var(--gold); }
+    .hero-subtitle { font-size:1.2rem; color:rgba(255,255,255,0.85); max-width:680px; margin-bottom:2.5rem; line-height:1.7; }
+    .hero-actions { display:flex; gap:1.25rem; flex-wrap:wrap; margin-bottom:4rem; }
+    .btn { display:inline-block; padding:1rem 2.5rem; font-family:var(--font-sans); font-size:1rem; font-weight:600; border-radius:4px; text-decoration:none; transition:all 0.3s; letter-spacing:0.3px; cursor:pointer; border:none; }
+    .btn-gold { background:var(--gold); color:var(--navy-dark); border:2px solid var(--gold); }
+    .btn-gold:hover { background:var(--gold-light); border-color:var(--gold-light); }
+    .btn-outline { background:transparent; color:var(--white); border:2px solid rgba(255,255,255,0.6); }
+    .btn-outline:hover { background:rgba(255,255,255,0.1); border-color:var(--white); }
+    .hero-stats { display:flex; gap:4rem; flex-wrap:wrap; padding-top:3rem; border-top:1px solid rgba(255,255,255,0.1); }
+    .stat-item { display:flex; flex-direction:column; }
+    .stat-number { font-family:var(--font-serif); font-size:2.5rem; font-weight:700; color:var(--gold); margin-bottom:0.25rem; }
+    .stat-label { font-size:0.85rem; color:rgba(255,255,255,0.65); text-transform:uppercase; letter-spacing:1px; }
+
+    /* ── TRUST BAR ───────────────────────────────────────────────── */
+    .trust-bar { background:var(--light-gray); padding:2.5rem 5%; border-bottom:1px solid var(--medium-gray); }
+    .trust-container { max-width:1400px; margin:0 auto; text-align:center; }
+    .trust-title { font-size:0.8rem; font-weight:700; color:var(--dark-gray); text-transform:uppercase; letter-spacing:2px; margin-bottom:1.5rem; }
+    .trust-logos { display:flex; justify-content:center; align-items:center; gap:1.5rem; flex-wrap:wrap; }
+    .trust-logo { font-size:0.875rem; font-weight:600; color:var(--dark-gray); padding:0.75rem 1.5rem; background:var(--white); border:1px solid var(--medium-gray); border-radius:4px; }
+
+    /* ── SECTIONS SHARED ─────────────────────────────────────────── */
+    .section-container { max-width:1400px; margin:0 auto; }
+    .section-header { text-align:center; margin-bottom:4rem; }
+    .section-label { font-size:0.85rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:2px; margin-bottom:1rem; }
+    .section-title { font-family:var(--font-serif); font-size:clamp(2rem,4vw,3rem); font-weight:700; color:var(--navy-dark); margin-bottom:1.25rem; line-height:1.3; }
+    .section-description { font-size:1.1rem; color:var(--dark-gray); max-width:700px; margin:0 auto; line-height:1.7; }
+
+    /* ── FRAMEWORK / PILLARS ─────────────────────────────────────── */
+    .framework-section { padding:7rem 5%; background:var(--white); }
+    .pillars-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.5rem; }
+    .pillar-card { background:var(--white); border:1px solid var(--medium-gray); padding:2rem 1.75rem; transition:all 0.3s; position:relative; overflow:hidden; }
+    .pillar-card::before { content:''; position:absolute; top:0; left:0; width:4px; height:0; background:var(--gold); transition:height 0.3s; }
+    .pillar-card:hover { box-shadow:var(--shadow-md); transform:translateY(-4px); }
+    .pillar-card:hover::before { height:100%; }
+    .pillar-number { font-family:var(--font-serif); font-size:2.5rem; font-weight:700; color:var(--gold); opacity:0.3; margin-bottom:0.75rem; }
+    .pillar-name { font-family:var(--font-serif); font-size:1.35rem; font-weight:700; color:var(--navy); margin-bottom:0.6rem; }
+    .pillar-description { font-size:0.9rem; color:var(--dark-gray); line-height:1.6; }
+
+    /* ── VIDEO SECTION ───────────────────────────────────────────── */
+    .videos-section { padding:7rem 5%; background:var(--light-gray); }
+    .videos-header { display:grid; grid-template-columns:1fr 1fr; gap:4rem; align-items:end; margin-bottom:3.5rem; }
+    .videos-header .section-title { text-align:left; }
+    .videos-intro { font-size:1.05rem; color:var(--dark-gray); line-height:1.75; }
+    .videos-grid { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+    .video-card { background:var(--white); border:1px solid var(--medium-gray); overflow:hidden; transition:all 0.3s; box-shadow:var(--shadow-sm); }
+    .video-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); }
+    .video-wrapper { position:relative; aspect-ratio:16/9; background:var(--navy-dark); overflow:hidden; }
+    .video-wrapper video { width:100%; height:100%; object-fit:cover; }
+    .video-episode { position:absolute; bottom:1rem; left:1rem; font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold-light); background:rgba(15,28,46,0.75); padding:0.25rem 0.6rem; border-radius:3px; }
+    .video-body { padding:1.75rem 2rem; }
+    .video-tag { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--navy); margin-bottom:0.6rem; }
+    .video-title { font-family:var(--font-serif); font-size:1.35rem; font-weight:700; color:var(--navy-dark); line-height:1.3; margin-bottom:0.9rem; }
+    .video-desc { font-size:0.92rem; color:var(--dark-gray); line-height:1.65; margin-bottom:1.25rem; }
+    .video-tags { display:flex; flex-wrap:wrap; gap:0.4rem; }
+    .video-tag-pill { font-size:0.75rem; padding:0.2rem 0.65rem; border:1px solid var(--medium-gray); color:var(--dark-gray); border-radius:2px; }
+
+    /* ── EQUATION / SCOI ─────────────────────────────────────────── */
+    .equation-section { background:linear-gradient(135deg, var(--navy-dark), var(--navy)); color:var(--white); padding:7rem 5%; position:relative; overflow:hidden; }
+    .equation-section::before { content:'SCOI'; position:absolute; right:-2rem; top:50%; transform:translateY(-50%); font-family:var(--font-serif); font-size:18rem; font-weight:700; color:rgba(201,169,97,0.05); pointer-events:none; line-height:1; }
+    .equation-inner { display:grid; grid-template-columns:1fr 1fr; gap:6rem; align-items:center; }
+    .eq-box { border:1px solid rgba(201,169,97,0.35); padding:3rem; background:rgba(255,255,255,0.03); }
+    .eq-label { font-size:0.72rem; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.75rem; }
+    .eq-lines { font-family:'Inter', monospace; font-size:0.85rem; line-height:2.8; color:rgba(255,255,255,0.7); }
+    .eq-lines .hl { color:var(--gold); font-size:1rem; font-weight:600; }
+    .eq-lines .result { color:var(--white); font-size:1rem; font-weight:700; border-top:1px solid rgba(201,169,97,0.3); padding-top:1rem; margin-top:0.5rem; line-height:1.6; display:block; }
+    .eq-vars { margin-top:2rem; display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
+    .eq-var { padding:0.75rem; border:1px solid rgba(255,255,255,0.07); }
+    .eq-var-name { font-size:0.68rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--gold-light); margin-bottom:0.25rem; }
+    .eq-var-def { font-size:0.8rem; color:rgba(255,255,255,0.6); }
+    .eq-content .section-label { color:var(--gold); }
+    .eq-content .section-title { color:var(--white); text-align:left; }
+    .eq-content p { color:rgba(255,255,255,0.75); line-height:1.75; margin-bottom:1.25rem; font-size:1rem; }
+
+    /* ── REDISTRIBUTION ──────────────────────────────────────────── */
+    .redist-section { padding:7rem 5%; background:var(--white); }
+    .redist-inner { display:grid; grid-template-columns:1fr 1fr; gap:5rem; }
+    .redist-inner .section-title { text-align:left; }
+    .redist-body { font-size:1rem; color:var(--dark-gray); line-height:1.75; margin-bottom:2rem; }
+    .action-box { background:var(--navy-dark); color:var(--white); padding:2rem; }
+    .action-box-title { font-family:var(--font-serif); font-size:1.2rem; margin-bottom:1.25rem; font-style:italic; color:var(--gold-light); }
+    .action-list { list-style:none; display:flex; flex-direction:column; gap:0.75rem; }
+    .action-list li { display:flex; align-items:flex-start; gap:0.75rem; font-size:0.95rem; color:rgba(255,255,255,0.8); }
+    .action-list li::before { content:'→'; color:var(--gold); font-weight:700; flex-shrink:0; }
+    .questions-list { display:flex; flex-direction:column; gap:1px; }
+    .question-item { display:flex; align-items:flex-start; gap:1rem; padding:1.25rem 1.5rem; background:var(--light-gray); border-left:3px solid transparent; transition:border-color 0.2s, transform 0.2s; }
+    .question-item:hover { border-left-color:var(--gold); transform:translateX(4px); }
+    .q-num { font-size:0.7rem; font-weight:700; color:var(--gold); font-family:var(--font-sans); padding-top:0.2rem; flex-shrink:0; letter-spacing:0.05em; }
+    .q-text { font-size:0.95rem; line-height:1.55; color:var(--text-primary); }
+
+    /* ── AUDIT TOOL ──────────────────────────────────────────────── */
+    .audit-section { padding:7rem 5%; background:var(--light-gray); }
+    .audit-inner { max-width:760px; margin:0 auto; text-align:center; }
+    .audit-inner .section-title { text-align:center; }
+    .audit-inner .section-description { margin-bottom:2.5rem; }
+    .input-row { display:flex; gap:0.5rem; margin-bottom:1.5rem; }
+    .input-row input { flex:1; padding:0.9rem 1.25rem; border:1.5px solid var(--medium-gray); background:var(--white); font-family:var(--font-sans); font-size:1rem; color:var(--text-primary); outline:none; border-radius:4px; transition:border-color 0.2s; }
+    .input-row input:focus { border-color:var(--navy); }
+    .input-row input::placeholder { color:#aaa; }
+    .btn-navy { background:var(--navy); color:var(--white); border:2px solid var(--navy); border-radius:4px; }
+    .btn-navy:hover { background:var(--navy-dark); border-color:var(--navy-dark); }
+    .audit-output { background:var(--white); border:1.5px solid var(--medium-gray); border-radius:4px; padding:1.5rem 2rem; white-space:pre-wrap; font-family:'Courier New', monospace; font-size:0.82rem; line-height:1.7; text-align:left; color:var(--text-primary); min-height:120px; display:none; }
+
+    /* ── VALUE PROPOSITION ───────────────────────────────────────── */
+    .value-section { background:var(--light-gray); padding:7rem 5%; }
+    .value-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:2.5rem; margin-top:0; }
+    .value-card { background:var(--white); padding:2.5rem 2rem; border-left:3px solid var(--gold); box-shadow:var(--shadow-sm); }
+    .value-icon { width:56px; height:56px; background:var(--navy); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin-bottom:1.25rem; }
+    .value-title { font-family:var(--font-serif); font-size:1.4rem; font-weight:700; color:var(--navy); margin-bottom:0.75rem; }
+    .value-text { color:var(--dark-gray); line-height:1.7; font-size:0.95rem; }
+
+    /* ── CTA ─────────────────────────────────────────────────────── */
+    .cta-section { background:var(--navy); padding:6rem 5%; text-align:center; }
+    .cta-container { max-width:800px; margin:0 auto; }
+    .cta-section h2 { font-family:var(--font-serif); font-size:clamp(2rem,4vw,3rem); font-weight:700; color:var(--white); margin-bottom:1.25rem; }
+    .cta-section p { font-size:1.1rem; color:rgba(255,255,255,0.85); margin-bottom:2.5rem; line-height:1.7; }
+    .cta-buttons { display:flex; gap:1.25rem; justify-content:center; flex-wrap:wrap; }
+    .btn-primary { background:var(--gold); color:var(--navy-dark); border:2px solid var(--gold); }
+    .btn-primary:hover { background:var(--gold-light); border-color:var(--gold-light); }
+    .btn-secondary { background:transparent; color:var(--white); border:2px solid var(--white); }
+    .btn-secondary:hover { background:var(--white); color:var(--navy); }
+
+    /* ── BOOK BANNER ─────────────────────────────────────────────── */
+    .book-banner { background:var(--white); border-top:3px solid var(--gold); padding:3.5rem 5%; }
+    .book-inner { max-width:1400px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; gap:2rem; flex-wrap:wrap; }
+    .book-text h3 { font-family:var(--font-serif); font-size:1.75rem; font-weight:700; color:var(--navy-dark); margin-bottom:0.35rem; }
+    .book-text p { font-size:0.95rem; color:var(--dark-gray); }
+
+    /* ── FOOTER ──────────────────────────────────────────────────── */
+    footer { background:var(--navy-dark); color:rgba(255,255,255,0.8); padding:5rem 5% 3rem; }
+    .footer-container { max-width:1400px; margin:0 auto; }
+    .footer-grid { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:4rem; margin-bottom:4rem; }
+    .footer-brand { font-family:var(--font-serif); font-size:2rem; font-weight:700; color:var(--gold); margin-bottom:1.25rem; }
+    .footer-description { color:rgba(255,255,255,0.65); line-height:1.7; margin-bottom:1.25rem; font-size:0.95rem; }
+    .footer-title { font-family:var(--font-serif); font-size:1.05rem; font-weight:700; color:var(--white); margin-bottom:1.25rem; }
+    .footer-links { list-style:none; }
+    .footer-links li { margin-bottom:0.6rem; font-size:0.9rem; color:rgba(255,255,255,0.6); }
+    .footer-links a { color:rgba(255,255,255,0.65); text-decoration:none; transition:color 0.3s; }
+    .footer-links a:hover { color:var(--gold); }
+    .footer-bottom { border-top:1px solid rgba(255,255,255,0.1); padding-top:2rem; text-align:center; color:rgba(255,255,255,0.5); font-size:0.875rem; }
+    .footer-bottom a { color:rgba(255,255,255,0.6); text-decoration:none; }
+    .footer-bottom a:hover { color:var(--gold); }
+
+    /* ── MOBILE ──────────────────────────────────────────────────── */
+    @media (max-width:768px) {
+      html, body { overflow-x:hidden; width:100%; }
+      .mobile-menu-toggle { display:flex; }
+      .nav-links { position:fixed; top:0; right:-85%; width:85%; max-width:320px; height:100vh; background:var(--white); flex-direction:column; align-items:flex-start; padding:5rem 1.5rem 2rem; gap:0; box-shadow:-4px 0 20px rgba(0,0,0,0.1); transition:right 0.3s ease; overflow-y:auto; overflow-x:hidden; z-index:1000; box-sizing:border-box; }
+      .nav-links.active { right:0; }
+      body.menu-open { overflow:hidden; position:fixed; width:100%; }
+      body::after { content:''; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); opacity:0; visibility:hidden; transition:all 0.3s; z-index:999; }
+      body.menu-open::after { opacity:1; visibility:visible; }
+      .nav-links li { width:100%; border-bottom:1px solid var(--medium-gray); box-sizing:border-box; }
+      .nav-links li:last-child { border-bottom:none; }
+      .nav-links a { display:block; padding:1.1rem 0; width:100%; font-size:1rem; box-sizing:border-box; }
+      .nav-cta { margin-top:1rem; text-align:center; width:100%; box-sizing:border-box; }
+      .nav-item.dropdown { width:100%; }
+      .nav-item.dropdown::after { display:none !important; }
+      .dropdown-toggle { width:100%; justify-content:space-between; padding:1.1rem 0; display:flex; }
+      .dropdown-menu { position:static; opacity:1; visibility:visible; transform:none; display:none; width:100%; min-width:0; box-shadow:none; border:none; padding:0.5rem 0 1rem; margin-top:0; pointer-events:auto; background:var(--light-gray); border-radius:0; }
+      .nav-item.dropdown.open .dropdown-menu { display:block !important; }
+      .nav-links li.nav-auth { flex-direction:column; align-items:stretch; gap:0.6rem; }
+      .nav-links li.nav-auth .user-pill { width:100%; max-width:100%; }
+      .nav-links li.nav-auth .nav-signout { width:100%; display:block; text-align:center; }
+      .mobile-only { display:block !important; }
+      .desktop-only { display:none !important; }
+      .mobile-lms-section { width:100%; padding:0; border:none; }
+      .mobile-section-header { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--dark-gray); padding:1.5rem 0 0.75rem; border-top:2px solid var(--medium-gray); margin-top:1rem; }
+      .mobile-lms-links { list-style:none; padding:0; margin:0; width:100%; box-sizing:border-box; }
+      .mobile-lms-links li { border-bottom:none; width:100%; box-sizing:border-box; }
+      .mobile-lms-links a { display:block; padding:0.9rem 0.75rem; font-size:0.9rem; color:var(--text-primary); background:var(--light-gray); margin:0.25rem 0; border-radius:8px; transition:background 0.2s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box; }
+      .mobile-lms-links a:hover { background:rgba(201,169,97,0.15); }
+      .hero { padding:5rem 5% 4rem; }
+      .hero h1 { font-size:2.2rem; }
+      .hero-stats { gap:2.5rem; }
+      .videos-header { grid-template-columns:1fr; gap:1.5rem; }
+      .videos-grid { grid-template-columns:1fr; }
+      .equation-inner { grid-template-columns:1fr; gap:3rem; }
+      .equation-section::before { display:none; }
+      .redist-inner { grid-template-columns:1fr; gap:3rem; }
+      .pillars-grid { grid-template-columns:1fr 1fr; gap:1rem; }
+      .value-grid { grid-template-columns:1fr; gap:1.5rem; }
+      .footer-grid { grid-template-columns:1fr; gap:2.5rem; }
+      .input-row { flex-direction:column; }
+      .book-inner { flex-direction:column; text-align:center; }
+    }
+    @media (min-width:769px) {
+      .mobile-only { display:none !important; }
+      .desktop-only { display:block !important; }
+    }
+    @media (max-width:1024px) and (min-width:769px) {
+      .pillars-grid { grid-template-columns:repeat(2,1fr); }
+      .value-grid { grid-template-columns:1fr 1fr; }
+    }
+
+    /* scroll reveal */
+    .reveal { opacity:0; transform:translateY(24px); transition:opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity:1; transform:translateY(0); }
   </style>
 </head>
 <body>
 
-  <!-- NAV -->
-  <nav>
-    <div class="nav-logo">CRIP<span>F</span>Cnt</div>
-    <ul class="nav-links">
-      <li><a href="#concepts">Framework</a></li>
-      <li><a href="#videos">Insights</a></li>
-      <li><a href="#equation">The Equation</a></li>
-      <li><a href="#audit" class="nav-cta">Run Audit →</a></li>
+<!-- ── NAVBAR ─────────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="nav-container">
+    <a href="/" class="logo">
+      <div class="logo-icon">C</div>
+      <span class="logo-text">CRIPFCnt</span>
+    </a>
+
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+
+    <ul class="nav-links" id="navLinks">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">Framework</a></li>
+      <li><a href="/services">Services</a></li>
+      <li><a href="/scoi">Audits</a></li>
+
+      <!-- LMS Desktop Dropdown -->
+      <li class="nav-item dropdown desktop-only" id="lmsDropdown">
+        <a href="/lms" class="dropdown-toggle">LMS <span class="caret">▾</span></a>
+        <div class="dropdown-menu">
+          <a class="dropdown-link" href="/auth/parent">
+            <div class="dd-title">Parents &amp; Guardians</div>
+            <div class="dd-sub">Manage kids · Grades 1–7 + High School</div>
+          </a>
+          <a class="dropdown-link" href="/auth/teacher">
+            <div class="dd-title">Private Teachers</div>
+            <div class="dd-sub">Up to 15/40 learners</div>
+          </a>
+          <a class="dropdown-link" href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">
+            <div class="dd-title">Professionals</div>
+            <div class="dd-sub">8 modules · audits · certification</div>
+          </a>
+        </div>
+      </li>
+
+      <!-- LMS Mobile Expanded -->
+      <li class="mobile-only mobile-lms-section">
+        <div class="mobile-section-header">LMS Options</div>
+        <ul class="mobile-lms-links">
+          <li><a href="/auth/parent">👨‍👩‍👧 Parents &amp; Guardians</a></li>
+          <li><a href="/auth/teacher">👨‍🏫 Private Teachers</a></li>
+          <li><a href="/auth/google?returnTo=%2Forg%2Fcripfcnt-school%2Fdashboard&force=1">🏛️ Professionals</a></li>
+        </ul>
+      </li>
+
+      <li><a href="/auth/school">Student Portal</a></li>
+      <li><a href="/contact">Contact</a></li>
+
+      <li class="nav-auth">
+        {{#if user}}
+          <div class="user-pill" title="{{user.email}}">
+            {{#if user.photo}}<img class="user-photo" src="{{user.photo}}" alt="Profile" />{{/if}}
+            <span class="user-email">{{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}</span>
+          </div>
+          <a href="/auth/logout" class="nav-signout">Sign out</a>
+        {{else}}
+          <a href="mailto:info@cripfcnt.com" class="nav-cta">Get Started</a>
+        {{/if}}
+      </li>
     </ul>
-  </nav>
+  </div>
+</nav>
 
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-left">
-      <div class="hero-eyebrow fade-up">Taking Psychology to the People</div>
-      <h1 class="fade-up">
-        Structure shapes<br>
-        what effort<br>
-        <em>cannot explain.</em>
-      </h1>
-      <p class="hero-sub fade-up">
-        Two people work equally hard. One advances. One remains unseen. 
-        CRIPFCnt is the framework that names what happens in the space between effort and outcome — 
-        and what you can do about it.
-      </p>
-      <div class="hero-actions fade-up">
-        <a href="#audit" class="btn-primary">Run a Live SCOI Audit →</a>
-        <a href="#videos" class="btn-secondary">Watch the Insights</a>
+<!-- ── HERO ───────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-container">
+    <div class="hero-badge">Taking Psychology to the People</div>
+    <h1>Structure shapes what<br><em>effort cannot explain.</em></h1>
+    <p class="hero-subtitle">
+      Two people work equally hard. One advances. One remains unseen. CRIPFCnt is the framework 
+      that names what happens in the space between effort and outcome - and what you can do about it.
+    </p>
+    <div class="hero-actions">
+      <a href="/audit" class="btn btn-gold">Run a SCOI Audit →</a>
+      <a href="#videos" class="btn btn-outline">Watch the Insights</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-item">
+        <div class="stat-number">8</div>
+        <div class="stat-label">Core Pillars</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">SCOI</div>
+        <div class="stat-label">Audit System</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">ERF</div>
+        <div class="stat-label">Resilience Factor</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">Global</div>
+        <div class="stat-label">Reach &amp; Impact</div>
       </div>
     </div>
+  </div>
+</section>
 
-    <div class="hero-right">
-      <div class="hero-visual"></div>
-      <div class="hero-formula">
-        <div class="formula-label">The Core Framework</div>
-        <div class="formula-box">
-          <div class="formula-title">Blind Success Equation</div>
-          <div class="formula-eq">
-            Blind Success<br>
-            <span class="operator">=</span> Talent<br>
-            <span class="operator">+</span> Grit<br>
-            <span class="operator">+</span> Head Start<br>
-            <span class="operator">+</span> Inherited Advantage<br>
-            <span class="operator">+</span> Unconscious Placement
-          </div>
+<!-- ── TRUST BAR ──────────────────────────────────────────────────────── -->
+<section class="trust-bar">
+  <div class="trust-container">
+    <div class="trust-title">Designed for Global Institutions</div>
+    <div class="trust-logos">
+      <div class="trust-logo">Government Agencies</div>
+      <div class="trust-logo">NGOs &amp; Foundations</div>
+      <div class="trust-logo">Think Tanks</div>
+      <div class="trust-logo">Public Companies</div>
+      <div class="trust-logo">International Organizations</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FRAMEWORK / PILLARS ────────────────────────────────────────────── -->
+<section class="framework-section" id="framework">
+  <div class="section-container">
+    <div class="section-header reveal">
+      <div class="section-label">The CRIPFCnt Framework</div>
+      <h2 class="section-title">Eight Pillars of Intelligence &amp; Governance Transformation</h2>
+      <p class="section-description">A systematic approach to restructuring institutional intelligence, enhancing decision-making capabilities, and implementing governance reform at scale.</p>
+    </div>
+    <div class="pillars-grid">
+      <div class="pillar-card reveal"><div class="pillar-number">01</div><h3 class="pillar-name">Consciousness</h3><p class="pillar-description">Institutional awareness and strategic foresight as fundamental organizational assets.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">02</div><h3 class="pillar-name">Responsibility</h3><p class="pillar-description">Accountability frameworks and performance measurement systems driving organizational evolution.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">03</div><h3 class="pillar-name">Interpretation</h3><p class="pillar-description">Evidence-based analysis frameworks for complex decision-making environments.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">04</div><h3 class="pillar-name">Purpose</h3><p class="pillar-description">Mission clarity and strategic alignment across organizational hierarchies.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">05</div><h3 class="pillar-name">Frequencies</h3><p class="pillar-description">Communication protocols and stakeholder engagement optimization.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">06</div><h3 class="pillar-name">Civilization</h3><p class="pillar-description">Societal infrastructure and institutional frameworks for sustainable development.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">07</div><h3 class="pillar-name">Negotiation</h3><p class="pillar-description">Strategic dialogue and consensus-building methodologies for multi-stakeholder environments.</p></div>
+      <div class="pillar-card reveal"><div class="pillar-number">08</div><h3 class="pillar-name">Technology</h3><p class="pillar-description">AI-age tools and digital transformation strategies for institutional advancement.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── VIDEO INSIGHTS ─────────────────────────────────────────────────── -->
+<section class="videos-section" id="videos">
+  <div class="section-container">
+    <div class="videos-header">
+      <div>
+        <div class="section-label">Insight Series</div>
+        <h2 class="section-title">Psychology, applied.</h2>
+      </div>
+      <p class="videos-intro">Two short films. One expanded framework. Watch how invisible forces shape who rises, who is seen, and how understanding the structure can change what you do next.</p>
+    </div>
+    <div class="videos-grid">
+      <div class="video-card reveal">
+        <div class="video-wrapper">
+          <video controls preload="metadata">
+            <source src="/videos/primitive-accumulation-redistribution.mp4" type="video/mp4">
+          </video>
+          <span class="video-episode">Episode 01</span>
         </div>
-        <div class="hero-stat-row">
-          <div class="hero-stat">
-            <div class="hero-stat-num">SCOI</div>
-            <div class="hero-stat-label">Audit System</div>
-          </div>
-          <div class="hero-stat">
-            <div class="hero-stat-num">ERF</div>
-            <div class="hero-stat-label">Resilience Factor</div>
-          </div>
-          <div class="hero-stat">
-            <div class="hero-stat-num">CRIPFCnt</div>
-            <div class="hero-stat-label">Framework</div>
+        <div class="video-body">
+          <div class="video-tag">CRIPFCnt Framework</div>
+          <h3 class="video-title">Primitive Accumulation, Redistribution &amp; the Blind Success Equation</h3>
+          <p class="video-desc">Two people work equally hard - and still arrive at completely different destinations. This film maps the invisible variables that make the difference: inherited advantage, unconscious placement, and the non-material assets that compound silently over time.</p>
+          <div class="video-tags">
+            <span class="video-tag-pill">Blind Success</span>
+            <span class="video-tag-pill">Redistribution</span>
+            <span class="video-tag-pill">SCOI Equation</span>
           </div>
         </div>
       </div>
-    </div>
-  </section>
-
-  <!-- CONCEPT STRIP -->
-  <div class="concept-strip" id="concepts">
-    <div class="container">
-      <div class="concept-grid">
-        <div class="concept-item">
-          <div class="concept-num">01 / ACCUMULATION</div>
-          <div class="concept-icon">◈</div>
-          <div class="concept-h">Non-Material Assets</div>
-          <p class="concept-p">
-            Beyond wealth, individuals accumulate attention, access, recognition, and connections. 
-            These invisible assets compound over time, making some visible and others not — 
-            regardless of the effort invested.
-          </p>
+      <div class="video-card reveal">
+        <div class="video-wrapper">
+          <video controls preload="metadata">
+            <source src="/videos/you-were-never-weak.mp4" type="video/mp4">
+          </video>
+          <span class="video-episode">Episode 02</span>
         </div>
-        <div class="concept-item">
-          <div class="concept-num">02 / REDISTRIBUTION</div>
-          <div class="concept-icon">⇄</div>
-          <div class="concept-h">Daily Micro-Decisions</div>
-          <p class="concept-p">
-            Redistribution is not only about money. Every day you decide who you mention, 
-            who you recommend, who you introduce into new spaces. Repeated across thousands 
-            of interactions, these choices reshape entire systems.
-          </p>
-        </div>
-        <div class="concept-item">
-          <div class="concept-num">03 / PLACEMENT</div>
-          <div class="concept-icon">◎</div>
-          <div class="concept-h">Structure Determines Outcome</div>
-          <p class="concept-p">
-            Effort produces output. Structure determines outcome. CRIPFCnt measures not just 
-            what you achieve, but the net structural contribution your presence makes to those 
-            around you — seen and unseen.
-          </p>
+        <div class="video-body">
+          <div class="video-tag">CRIPFCnt Framework</div>
+          <h3 class="video-title">You Were Never Weak - You Were Learning Your Environment</h3>
+          <p class="video-desc">What has been labelled personal failure is often an intelligent, adaptive response to a misunderstood environment. CRIPFCnt reframes the narrative: not as an excuse, but as a more accurate map for finding your place within the structure.</p>
+          <div class="video-tags">
+            <span class="video-tag-pill">Environment &amp; Placement</span>
+            <span class="video-tag-pill">Adaptive Psychology</span>
+            <span class="video-tag-pill">Structure vs Effort</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
+</section>
 
-  <!-- VIDEOS -->
-  <section class="videos-section" id="videos">
-    <div class="container">
-      <div class="videos-header">
-        <div>
-          <div class="section-tag">Insight Series</div>
-          <h2 class="section-title">Psychology,<br>applied.</h2>
+<!-- ── EQUATION SECTION ───────────────────────────────────────────────── -->
+<section class="equation-section" id="equation">
+  <div class="section-container">
+    <div class="equation-inner">
+      <div class="eq-box reveal">
+        <div class="eq-label">The SCOI Formula</div>
+        <div class="eq-lines">
+          <div>Raw SCOI</div>
+          <div class="hl">= Contribution ÷ Visibility</div>
+          <br>
+          <div>Adjusted SCOI</div>
+          <div class="hl">= Raw SCOI × ERF</div>
+          <br>
+          <span class="result">CRIPFCnt Success<br>= Blind Success ± Net Structural Contribution</span>
         </div>
-        <p class="section-body">
-          Two short films. One expanded framework. 
-          Watch how invisible forces shape who rises, who is seen, and how understanding 
-          the structure can change what you do next.
-        </p>
-      </div>
-
-      <div class="videos-grid">
-
-        <!-- VIDEO 1 -->
-        <div class="video-card">
-          <div class="video-wrapper">
-            <!-- Replace src with your actual video path once stored -->
-            <video controls preload="metadata" poster="">
-              <source src="/videos/primitive-accumulation-redistribution.mp4" type="video/mp4">
-              Your browser does not support video playback.
-            </video>
-            <div class="video-overlay">
-              <span class="video-duration">Episode 01</span>
-            </div>
-          </div>
-          <div class="video-body">
-            <div class="video-tag">CRIPFCnt Framework</div>
-            <h3 class="video-title">Primitive Accumulation, Redistribution & the Blind Success Equation</h3>
-            <p class="video-desc">
-              Two people work equally hard — and still arrive at completely different destinations. 
-              This film maps the invisible variables that make the difference: inherited advantage, 
-              unconscious placement, and the non-material assets that compound silently over time. 
-              It then asks the harder question: what are you redistributing today, and who remains 
-              outside your field of view because of it?
-            </p>
-            <div class="video-concepts">
-              <span class="video-concept-tag">Blind Success</span>
-              <span class="video-concept-tag">Redistribution</span>
-              <span class="video-concept-tag">SCOI Equation</span>
-              <span class="video-concept-tag">Structural Contribution</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- VIDEO 2 -->
-        <div class="video-card">
-          <div class="video-wrapper">
-            <!-- Replace src with your actual video path once stored -->
-            <video controls preload="metadata" poster="">
-              <source src="/videos/you-were-never-weak.mp4" type="video/mp4">
-              Your browser does not support video playback.
-            </video>
-            <div class="video-overlay">
-              <span class="video-duration">Episode 02</span>
-            </div>
-          </div>
-          <div class="video-body">
-            <div class="video-tag">CRIPFCnt Framework</div>
-            <h3 class="video-title">You Were Never Weak — You Were Learning Your Environment</h3>
-            <p class="video-desc">
-              What has been labelled as personal failure is often an intelligent, adaptive response 
-              to a misunderstood environment. CRIPFCnt reframes the narrative: not as an excuse, 
-              but as a more accurate map. When you understand the structure you are operating within, 
-              you stop fighting the wrong battle — and find your actual place within it.
-            </p>
-            <div class="video-concepts">
-              <span class="video-concept-tag">Environment & Placement</span>
-              <span class="video-concept-tag">Adaptive Psychology</span>
-              <span class="video-concept-tag">Structure vs Effort</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- EQUATION SECTION -->
-  <section class="equation-section" id="equation">
-    <div class="container">
-      <div class="equation-inner">
-        <div class="eq-display">
-          <div class="formula-label">The SCOI Formula</div>
-          <div class="eq-main">
-            <div>Raw SCOI</div>
-            <div class="eq-highlight">= Contribution ÷ Visibility</div>
-            <br>
-            <div>Adjusted SCOI</div>
-            <div class="eq-highlight">= Raw SCOI × ERF</div>
-            <br>
-            <div class="eq-result">CRIPFCnt Success<br>= Blind Success ± Net Structural Contribution</div>
-          </div>
-          <div class="eq-vars">
-            <div class="eq-var">
-              <div class="eq-var-name">SCOI</div>
-              <div class="eq-var-def">Structural Contribution Output Index</div>
-            </div>
-            <div class="eq-var">
-              <div class="eq-var-name">ERF</div>
-              <div class="eq-var-def">Environmental Resilience Factor</div>
-            </div>
-            <div class="eq-var">
-              <div class="eq-var-name">VISIBILITY</div>
-              <div class="eq-var-def">How much space you occupy in others' awareness</div>
-            </div>
-            <div class="eq-var">
-              <div class="eq-var-name">CONTRIBUTION</div>
-              <div class="eq-var-def">What you actually produce for others</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="eq-content">
-          <div class="section-tag">The Numbers Behind It</div>
-          <h2 class="section-title" style="color: var(--cream);">Not all success contributes. Not all contribution is seen.</h2>
-          <p class="section-body">
-            The SCOI system makes the invisible measurable. An entity can have enormous visibility 
-            but minimal contribution — inflating its apparent success. Or extraordinary contribution 
-            that goes entirely unrecognised. The Adjusted SCOI corrects for the environment's difficulty, 
-            producing a fairer picture of where an individual or organisation truly stands.
-          </p>
-          <br><br>
-          <p class="section-body" style="color: #888; font-size: 0.9rem;">
-            The Environmental Resilience Factor (ERF) accounts for operating context: economic instability, 
-            systemic inequality, geographic disadvantage. A high ERF acknowledges that the same output 
-            achieved in a harder environment represents greater structural contribution.
-          </p>
+        <div class="eq-vars">
+          <div class="eq-var"><div class="eq-var-name">SCOI</div><div class="eq-var-def">Structural Contribution Output Index</div></div>
+          <div class="eq-var"><div class="eq-var-name">ERF</div><div class="eq-var-def">Environmental Resilience Factor</div></div>
+          <div class="eq-var"><div class="eq-var-name">Visibility</div><div class="eq-var-def">Space occupied in others' awareness</div></div>
+          <div class="eq-var"><div class="eq-var-name">Contribution</div><div class="eq-var-def">What you actually produce for others</div></div>
         </div>
       </div>
-    </div>
-  </section>
-
-  <!-- REDISTRIBUTION / QUESTIONS -->
-  <section class="redist-section" id="redistribution">
-    <div class="container">
-      <div class="redist-inner">
-        <div>
-          <div class="section-tag">Daily Practice</div>
-          <h2 class="section-title">The questions that<br>change systems.</h2>
-          <p class="section-body">
-            Redistribution happens in micro-decisions made every single day. These are not abstract 
-            policy debates — they are choices you make in meetings, in conversations, in the person 
-            you mention for an opportunity or quietly pass over. CRIPFCnt holds up a mirror to those choices.
-          </p>
-          <div class="redist-actions">
-            <div class="redist-actions-title">Redistribution in Practice</div>
-            <ul class="action-list">
-              <li>Who do you mention when an opportunity arises?</li>
-              <li>Who do you introduce into spaces they have not yet entered?</li>
-              <li>Who do you recommend — and why them, not someone else?</li>
-              <li>What criterion drives that choice: familiarity, comfort, or genuine merit?</li>
-            </ul>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-tag">Reflective Audit</div>
-          <h3 style="font-family:'Playfair Display',serif;font-size:1.4rem;margin-bottom:1.5rem;line-height:1.3;">Four questions worth sitting with</h3>
-          <div class="questions-list">
-            <div class="question-item">
-              <span class="q-num">01</span>
-              <span class="q-text">What are you redistributing today — and what criterion drives that choice?</span>
-            </div>
-            <div class="question-item">
-              <span class="q-num">02</span>
-              <span class="q-text">Is your criterion familiarity, genuine potential, or an unconscious bias you haven't named yet?</span>
-            </div>
-            <div class="question-item">
-              <span class="q-num">03</span>
-              <span class="q-text">Who remains unseen precisely because of how you make those choices?</span>
-            </div>
-            <div class="question-item">
-              <span class="q-num">04</span>
-              <span class="q-text">How many capable people exist entirely outside your current field of view?</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- AUDIT CTA -->
-  <section class="audit-cta" id="audit-cta">
-    <div class="container">
-      <div class="audit-cta-tag">Live AI-Powered Analysis</div>
-      <h2>Run a CRIPFCnt<br>SCOI Audit</h2>
-      <p>
-        Enter any organisation, institution, or entity and receive a live structural audit — 
-        scored across Visibility, Contribution, SCOI, and Environmental Resilience. 
-        Powered by the CRIPFCnt framework.
-      </p>
-      <a href="/audit" class="btn-primary">Begin the Audit →</a>
-    </div>
-  </section>
-
-  <!-- INLINE TOOL -->
-  <section class="tool-section" id="audit">
-    <div class="container">
-      <div class="tool-inner">
-        <div class="section-tag" style="justify-content:center;">Quick Audit</div>
-        <h2 class="section-title">Try it here</h2>
-        <p class="section-body">
-          Enter an organisation or entity name to run a live CRIPFCnt SCOI audit powered by AI.
-        </p>
-        <div class="input-row">
-          <input id="companyInput" type="text" placeholder="e.g. Econet, UNICEF, your workplace…" />
-          <button class="btn-primary" id="analyzeBtn">Analyse →</button>
-        </div>
-        <div id="output" class="output" style="display:none;"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- BOOK BANNER -->
-  <div class="book-banner">
-    <div class="container">
-      <div class="book-inner">
-        <div class="book-text">
-          <h3>Read the book.</h3>
-          <p>CRIPFCnt — Taking Psychology to the People. Now available on Amazon.</p>
-        </div>
-        <a href="https://www.amazon.com" target="_blank" class="btn-primary" style="background:var(--gold);color:var(--ink);">
-          Get it on Amazon →
-        </a>
+      <div class="eq-content reveal">
+        <div class="section-label">The Numbers Behind It</div>
+        <h2 class="section-title">Not all success contributes. Not all contribution is seen.</h2>
+        <p>The SCOI system makes the invisible measurable. An entity can have enormous visibility but minimal contribution - inflating its apparent success. Or extraordinary contribution that goes entirely unrecognised. The Adjusted SCOI corrects for the environment's difficulty, producing a fairer picture of where an individual or organisation truly stands.</p>
+        <p style="font-size:0.9rem; color:rgba(255,255,255,0.55);">The Environmental Resilience Factor (ERF) accounts for operating context: economic instability, systemic inequality, geographic disadvantage. A high ERF acknowledges that the same output achieved in a harder environment represents greater structural contribution.</p>
+        <a href="/audit" class="btn btn-gold" style="margin-top:2rem; display:inline-block;">Run a Live Audit →</a>
       </div>
     </div>
   </div>
+</section>
 
-  <!-- FOOTER -->
-  <footer>
-    <p>© 2026 CRIPFCnt — Donald Mataranyika &nbsp;|&nbsp; <a href="/privacy-policy">Privacy Policy</a> &nbsp;|&nbsp; <a href="/data-deletion">Data Deletion</a></p>
-  </footer>
+<!-- ── REDISTRIBUTION ─────────────────────────────────────────────────── -->
+<section class="redist-section" id="redistribution">
+  <div class="section-container">
+    <div class="redist-inner">
+      <div class="reveal">
+        <div class="section-label">Daily Practice</div>
+        <h2 class="section-title">The questions that change systems.</h2>
+        <p class="redist-body">Redistribution happens in micro-decisions made every single day. These are not abstract policy debates - they are choices you make in meetings, in conversations, in the person you mention for an opportunity or quietly pass over. CRIPFCnt holds up a mirror to those choices.</p>
+        <div class="action-box">
+          <div class="action-box-title">Redistribution in Practice</div>
+          <ul class="action-list">
+            <li>Who do you mention when an opportunity arises?</li>
+            <li>Who do you introduce into spaces they have not yet entered?</li>
+            <li>Who do you recommend - and why them, not someone else?</li>
+            <li>What criterion drives that choice: familiarity, comfort, or genuine merit?</li>
+          </ul>
+        </div>
+      </div>
+      <div class="reveal">
+        <div class="section-label">Reflective Audit</div>
+        <h3 style="font-family:var(--font-serif);font-size:1.5rem;font-weight:700;color:var(--navy-dark);margin-bottom:1.5rem;line-height:1.3;">Four questions worth sitting with</h3>
+        <div class="questions-list">
+          <div class="question-item"><span class="q-num">01</span><span class="q-text">What are you redistributing today - and what criterion drives that choice?</span></div>
+          <div class="question-item"><span class="q-num">02</span><span class="q-text">Is your criterion familiarity, genuine potential, or an unconscious bias you haven't named yet?</span></div>
+          <div class="question-item"><span class="q-num">03</span><span class="q-text">Who remains unseen precisely because of how you make those choices?</span></div>
+          <div class="question-item"><span class="q-num">04</span><span class="q-text">How many capable people exist entirely outside your current field of view?</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <script>
-    // ── Audit tool (same logic, cleaner output) ──────────────────
-    const analyzeBtn = document.getElementById("analyzeBtn");
-    const companyInput = document.getElementById("companyInput");
-    const outputDiv = document.getElementById("output");
+<!-- ── VALUE PROPOSITION ──────────────────────────────────────────────── -->
+<section class="value-section">
+  <div class="section-container">
+    <div class="section-header reveal">
+      <div class="section-label">Value Proposition</div>
+      <h2 class="section-title">Why Global Institutions Choose CRIPFCnt</h2>
+    </div>
+    <div class="value-grid">
+      <div class="value-card reveal"><div class="value-icon">📊</div><h3 class="value-title">Evidence-Based Framework</h3><p class="value-text">Grounded in governance research, organizational psychology, and leadership science. Designed for measurable institutional outcomes and sustained transformation.</p></div>
+      <div class="value-card reveal"><div class="value-icon">🌍</div><h3 class="value-title">Global Applicability</h3><p class="value-text">Tested across diverse institutional contexts. Adaptable to government agencies, NGOs, international organizations, and public sector entities worldwide.</p></div>
+      <div class="value-card reveal"><div class="value-icon">⚖️</div><h3 class="value-title">Governance Excellence</h3><p class="value-text">Developed by chartered governance specialists. Integrates compliance frameworks, accountability mechanisms, and institutional best practices.</p></div>
+    </div>
+  </div>
+</section>
 
-    analyzeBtn.addEventListener("click", async () => {
-      const company = companyInput.value.trim();
-      if (!company) return alert("Please enter a company name");
+<!-- ── QUICK AUDIT TOOL ────────────────────────────────────────────────── -->
+<section class="audit-section" id="audit">
+  <div class="section-container">
+    <div class="audit-inner">
+      <div class="section-label">Live AI-Powered Analysis</div>
+      <h2 class="section-title">Run a CRIPFCnt SCOI Audit</h2>
+      <p class="section-description">Enter any organisation, institution, or entity to receive a live structural audit - scored across Visibility, Contribution, SCOI, and Environmental Resilience.</p>
+      <div class="input-row">
+        <input id="companyInput" type="text" placeholder="e.g. Econet, UNICEF, your workplace…" />
+        <button class="btn btn-navy" id="analyzeBtn">Analyse →</button>
+      </div>
+      <div id="output" class="audit-output"></div>
+    </div>
+  </div>
+</section>
 
-      outputDiv.style.display = "block";
-      outputDiv.textContent = `Running CRIPFCnt SCOI Audit for: ${company}...\n\n`;
+<!-- ── CTA ────────────────────────────────────────────────────────────── -->
+<section class="cta-section" id="contact">
+  <div class="cta-container">
+    <h2>Partner with CRIPFCnt for Institutional Transformation</h2>
+    <p>Contact our team to explore how the CRIPFCnt framework can support your organisation's governance reform, leadership development, and institutional intelligence objectives.</p>
+    <div class="cta-buttons">
+      <a href="mailto:info@cripfcnt.com" class="btn btn-primary">Request Consultation</a>
+      <a href="/about" class="btn btn-secondary">Explore Framework</a>
+    </div>
+  </div>
+</section>
 
-      try {
-        const response = await fetch(`/analyze?company=${encodeURIComponent(company)}`);
-        if (!response.body) { outputDiv.textContent = "Error: No response stream."; return; }
+<!-- ── BOOK BANNER ────────────────────────────────────────────────────── -->
+<div class="book-banner">
+  <div class="book-inner">
+    <div class="book-text">
+      <h3>Read the book.</h3>
+      <p>CRIPFCnt - Taking Psychology to the People. Now available on Amazon.</p>
+    </div>
+    <a href="https://www.amazon.com" target="_blank" rel="noopener" class="btn btn-gold">Get it on Amazon →</a>
+  </div>
+</div>
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let displayBuffer = "";
+<!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-brand">CRIPFCnt</div>
+        <p class="footer-description">A comprehensive framework for institutional intelligence restructuring, governance reform, and leadership development in the AI age.</p>
+        <p class="footer-description"><strong style="color:var(--gold);">Donald Mataranyika</strong><br>Chartered Secretary &amp; Governance Specialist<br>Framework Developer</p>
+      </div>
+      <div>
+        <h4 class="footer-title">Framework</h4>
+        <ul class="footer-links">
+          <li><a href="/about">About CRIPFCnt</a></li>
+          <li><a href="/about#pillars">Eight Pillars</a></li>
+          <li><a href="/services">Services</a></li>
+          <li><a href="/scoi">SCOI Audits</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="footer-title">Platform</h4>
+        <ul class="footer-links">
+          <li><a href="/lms">Learning Platform</a></li>
+          <li><a href="/auth/school">Student Portal</a></li>
+          <li><a href="/auth/parent">Parents &amp; Guardians</a></li>
+          <li><a href="/auth/teacher">Private Teachers</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="footer-title">Contact</h4>
+        <ul class="footer-links">
+          <li>5 Walford Avenue</li>
+          <li>Wolverhampton, WV3 7AZ</li>
+          <li>United Kingdom</li>
+          <li style="margin-top:0.75rem;"><a href="tel:+447940298087">+44 7940 298087</a></li>
+          <li><a href="mailto:info@cripfcnt.com">info@cripfcnt.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025 CRIPFCnt. All rights reserved. &nbsp;|&nbsp; <a href="/privacy-policy">Privacy Policy</a> &nbsp;|&nbsp; <a href="/data-deletion">Data Deletion</a></p>
+    </div>
+  </div>
+</footer>
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+<script>
+  /* ── Audit tool ─────────────────────────────────────────────── */
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  const companyInput = document.getElementById("companyInput");
+  const outputDiv = document.getElementById("output");
 
-          let chunk = decoder.decode(value, { stream: true })
-            .replace(/^data:\s*/gm, "")
-            .replace(/\u0000/g, "")
-            .replace(/\r/g, "")
-            .replace(/(\s){2,}/g, " ")
-            .replace(/\s([.,;:])/g, "$1")
-            .replace(/S\s*C\s*O\s*I/gi, "SCOI")
-            .replace(/C\s*R\s*I\s*P\s*F\s*C\s*n\s*t/gi, "CRIPFCnt");
-
-          buffer += chunk;
-          const sentences = buffer.split(/(?<=[.:\n])\s+/);
-          buffer = sentences.pop() || "";
-          for (const s of sentences) {
-            displayBuffer += s.trim() + " ";
-            outputDiv.textContent = displayBuffer;
-          }
-        }
-      } catch(e) {
-        outputDiv.textContent = "Error running audit. Please try again.";
+  analyzeBtn.addEventListener("click", async () => {
+    const company = companyInput.value.trim();
+    if (!company) return alert("Please enter a company name");
+    outputDiv.style.display = "block";
+    outputDiv.textContent = `Running CRIPFCnt SCOI Audit for: ${company}...\n\n`;
+    try {
+      const response = await fetch(`/analyze?company=${encodeURIComponent(company)}`);
+      if (!response.body) { outputDiv.textContent = "Error: No response stream."; return; }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "", displayBuffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        let chunk = decoder.decode(value, { stream: true })
+          .replace(/^data:\s*/gm, "").replace(/\u0000/g, "").replace(/\r/g, "")
+          .replace(/(\s){2,}/g, " ").replace(/\s([.,;:])/g, "$1")
+          .replace(/S\s*C\s*O\s*I/gi, "SCOI").replace(/C\s*R\s*I\s*P\s*F\s*C\s*n\s*t/gi, "CRIPFCnt");
+        buffer += chunk;
+        const sentences = buffer.split(/(?<=[.:\n])\s+/);
+        buffer = sentences.pop() || "";
+        for (const s of sentences) { displayBuffer += s.trim() + " "; outputDiv.textContent = displayBuffer; }
       }
-    });
+    } catch(e) { outputDiv.textContent = "Error running audit. Please try again."; }
+  });
 
-    // ── Intersection Observer for fade-in ────────────────────────
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.style.opacity = "1";
-          e.target.style.transform = "translateY(0)";
-        }
-      });
-    }, { threshold: 0.15 });
+  /* ── Mobile menu ────────────────────────────────────────────── */
+  const toggle = document.getElementById('mobileMenuToggle');
+  const navLinks = document.getElementById('navLinks');
+  toggle?.addEventListener('click', e => { e.stopPropagation(); toggle.classList.toggle('active'); navLinks.classList.toggle('active'); document.body.classList.toggle('menu-open'); });
+  navLinks?.querySelectorAll('a').forEach(link => { link.addEventListener('click', () => { toggle.classList.remove('active'); navLinks.classList.remove('active'); document.body.classList.remove('menu-open'); }); });
+  document.addEventListener('click', e => { if (window.innerWidth <= 768 && !navLinks?.contains(e.target) && !toggle?.contains(e.target) && navLinks?.classList.contains('active')) { toggle.classList.remove('active'); navLinks.classList.remove('active'); document.body.classList.remove('menu-open'); } });
+  window.addEventListener('resize', () => { if (window.innerWidth > 768) { toggle?.classList.remove('active'); navLinks?.classList.remove('active'); document.body.classList.remove('menu-open'); } });
 
-    document.querySelectorAll('.concept-item, .video-card, .question-item').forEach(el => {
-      el.style.opacity = "0";
-      el.style.transform = "translateY(20px)";
-      el.style.transition = "opacity 0.6s ease, transform 0.6s ease";
-      observer.observe(el);
-    });
-  </script>
+  /* LMS dropdown toggle on mobile */
+  document.getElementById('lmsDropdown')?.addEventListener('click', function(e) {
+    if (window.innerWidth <= 768) { e.preventDefault(); this.classList.toggle('open'); }
+  });
+
+  /* ── Scroll reveal ──────────────────────────────────────────── */
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
 </body>
 </html>
