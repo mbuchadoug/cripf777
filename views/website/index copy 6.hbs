@@ -184,6 +184,18 @@
     .q-num { font-size:0.7rem; font-weight:700; color:var(--gold); font-family:var(--font-sans); padding-top:0.2rem; flex-shrink:0; letter-spacing:0.05em; }
     .q-text { font-size:0.95rem; line-height:1.55; color:var(--text-primary); }
 
+    /* ── AUDIT TOOL ──────────────────────────────────────────────── */
+    .audit-section { padding:7rem 5%; background:var(--light-gray); }
+    .audit-inner { max-width:760px; margin:0 auto; text-align:center; }
+    .audit-inner .section-title { text-align:center; }
+    .audit-inner .section-description { margin-bottom:2.5rem; }
+    .input-row { display:flex; gap:0.5rem; margin-bottom:1.5rem; }
+    .input-row input { flex:1; padding:0.9rem 1.25rem; border:1.5px solid var(--medium-gray); background:var(--white); font-family:var(--font-sans); font-size:1rem; color:var(--text-primary); outline:none; border-radius:4px; transition:border-color 0.2s; }
+    .input-row input:focus { border-color:var(--navy); }
+    .input-row input::placeholder { color:#aaa; }
+    .btn-navy { background:var(--navy); color:var(--white); border:2px solid var(--navy); border-radius:4px; }
+    .btn-navy:hover { background:var(--navy-dark); border-color:var(--navy-dark); }
+    .audit-output { background:var(--white); border:1.5px solid var(--medium-gray); border-radius:4px; padding:1.5rem 2rem; white-space:pre-wrap; font-family:'Courier New', monospace; font-size:0.82rem; line-height:1.7; text-align:left; color:var(--text-primary); min-height:120px; display:none; }
 
     /* ── VALUE PROPOSITION ───────────────────────────────────────── */
     .value-section { background:var(--light-gray); padding:7rem 5%; }
@@ -265,6 +277,7 @@
       .pillars-grid { grid-template-columns:1fr 1fr; gap:1rem; }
       .value-grid { grid-template-columns:1fr; gap:1.5rem; }
       .footer-grid { grid-template-columns:1fr; gap:2.5rem; }
+      .input-row { flex-direction:column; }
       .book-inner { flex-direction:column; text-align:center; }
     }
     @media (min-width:769px) {
@@ -358,7 +371,7 @@
       that names what happens in the space between effort and outcome - and what you can do about it.
     </p>
     <div class="hero-actions">
-      <a href="/scoi" class="btn btn-gold">Run a SCOI Audit →</a>
+      <a href="/audit" class="btn btn-gold">Run a SCOI Audit →</a>
       <a href="#videos" class="btn btn-outline">Watch the Insights</a>
     </div>
     <div class="hero-stats">
@@ -495,7 +508,7 @@
         <h2 class="section-title">Not all success contributes. Not all contribution is seen.</h2>
         <p>The SCOI system makes the invisible measurable. An entity can have enormous visibility but minimal contribution - inflating its apparent success. Or extraordinary contribution that goes entirely unrecognised. The Adjusted SCOI corrects for the environment's difficulty, producing a fairer picture of where an individual or organisation truly stands.</p>
         <p style="font-size:0.9rem; color:rgba(255,255,255,0.55);">The Environmental Resilience Factor (ERF) accounts for operating context: economic instability, systemic inequality, geographic disadvantage. A high ERF acknowledges that the same output achieved in a harder environment represents greater structural contribution.</p>
-        <a href="/scoi" class="btn btn-gold" style="margin-top:2rem; display:inline-block;">Run a SCOI Audit →</a>
+        <a href="/audit" class="btn btn-gold" style="margin-top:2rem; display:inline-block;">Run a Live Audit →</a>
       </div>
     </div>
   </div>
@@ -548,6 +561,21 @@
   </div>
 </section>
 
+<!-- ── QUICK AUDIT TOOL ────────────────────────────────────────────────── -->
+<section class="audit-section" id="audit">
+  <div class="section-container">
+    <div class="audit-inner">
+      <div class="section-label">Live AI-Powered Analysis</div>
+      <h2 class="section-title">Run a CRIPFCnt SCOI Audit</h2>
+      <p class="section-description">Enter any organisation, institution, or entity to receive a live structural audit - scored across Visibility, Contribution, SCOI, and Environmental Resilience.</p>
+      <div class="input-row">
+        <input id="companyInput" type="text" placeholder="e.g. Econet, UNICEF, your workplace…" />
+        <button class="btn btn-navy" id="analyzeBtn">Analyse →</button>
+      </div>
+      <div id="output" class="audit-output"></div>
+    </div>
+  </div>
+</section>
 
 <!-- ── CTA ────────────────────────────────────────────────────────────── -->
 <section class="cta-section" id="contact">
@@ -617,6 +645,37 @@
 </footer>
 
 <script>
+  /* ── Audit tool ─────────────────────────────────────────────── */
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  const companyInput = document.getElementById("companyInput");
+  const outputDiv = document.getElementById("output");
+
+  analyzeBtn.addEventListener("click", async () => {
+    const company = companyInput.value.trim();
+    if (!company) return alert("Please enter a company name");
+    outputDiv.style.display = "block";
+    outputDiv.textContent = `Running CRIPFCnt SCOI Audit for: ${company}...\n\n`;
+    try {
+      const response = await fetch(`/analyze?company=${encodeURIComponent(company)}`);
+      if (!response.body) { outputDiv.textContent = "Error: No response stream."; return; }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "", displayBuffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        let chunk = decoder.decode(value, { stream: true })
+          .replace(/^data:\s*/gm, "").replace(/\u0000/g, "").replace(/\r/g, "")
+          .replace(/(\s){2,}/g, " ").replace(/\s([.,;:])/g, "$1")
+          .replace(/S\s*C\s*O\s*I/gi, "SCOI").replace(/C\s*R\s*I\s*P\s*F\s*C\s*n\s*t/gi, "CRIPFCnt");
+        buffer += chunk;
+        const sentences = buffer.split(/(?<=[.:\n])\s+/);
+        buffer = sentences.pop() || "";
+        for (const s of sentences) { displayBuffer += s.trim() + " "; outputDiv.textContent = displayBuffer; }
+      }
+    } catch(e) { outputDiv.textContent = "Error running audit. Please try again."; }
+  });
+
   /* ── Mobile menu ────────────────────────────────────────────── */
   const toggle = document.getElementById('mobileMenuToggle');
   const navLinks = document.getElementById('navLinks');
