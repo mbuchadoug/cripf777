@@ -122,13 +122,7 @@ import {
   startSchoolSearch,
   handleSchoolSearchActions,
   handleSchoolAdminStates,
-  runSchoolShortcodeSearch,
-  handleZqDeepLink,
-  handleSchoolSlugSearch,
-  handleSmartCardMenu,
-  handleSmartCardSourceLink,
-  handleMyLeads,
-  handleFollowUpLead
+  runSchoolShortcodeSearch
 } from "./schoolSearch.js";
  
 
@@ -3223,15 +3217,7 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_fac_toggle_") ||
       a.startsWith("school_fac_page_") ||
       a.startsWith("school_ext_toggle_") ||
-      a.startsWith("school_ext_page_") ||
-      // ── Smart Card / ZQ Link actions ──────────────────────────────────────
-      a === "school_get_zq_link" ||
-      a === "school_share_link_wa" ||
-      a === "school_smart_card_menu" ||
-      a === "school_my_leads" ||
-      a.startsWith("school_sc_src_") ||
-      a.startsWith("school_followup_") ||
-      a.startsWith("school_leads_page_")
+      a.startsWith("school_ext_page_")
     
     );
   // =========================
@@ -3270,27 +3256,7 @@ Reply *menu* to start.`);
   const biz = await getBizForPhone(from);
   const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
 
-    // ── ZQ SMART CARD DEEP-LINK INTERCEPT ───────────────────────────────────
-  // Catches ZQ:SCHOOL:<id>[:<action>[:name=...]] payloads sent by wa.me links.
-  // Must run before everything — even biz checks — so links always work.
-  if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
-    const _handled = await handleZqDeepLink({
-      from, text, biz,
-      saveBiz: biz ? (b) => saveBizSafe(b) : async () => {}
-    });
-    if (_handled) return;
-  }
-
-  // ── ZQ SLUG SHORTCODE — "zq huxton-academy" typed into WhatsApp ──────────
-  if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
-    const _slugHandled = await handleSchoolSlugSearch({
-      from, text, biz,
-      saveBiz: biz ? (b) => saveBizSafe(b) : async () => {}
-    });
-    if (_slugHandled) return;
-  }
-
-  // ── GLOBAL school shortcode trigger ──────────────────────────────────────
+    // ── GLOBAL school shortcode trigger ──────────────────────────────────────
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
   const SCHOOL_TRIGGER_PHRASES = [
