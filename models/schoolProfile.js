@@ -61,6 +61,9 @@ fees: {
     url:       { type: String, required: true },             // publicly accessible URL
     addedAt:   { type: Date,   default: Date.now }
   }],
+  zqSlug:            { type: String, unique: true, sparse: true },
+zqLinkViews:       { type: Number, default: 0 },
+zqLinkConversions: { type: Number, default: 0 },
 
   // ── Subscription & listing ────────────────────────────────────────────────
   active:              { type: Boolean, default: false, index: true },

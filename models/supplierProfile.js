@@ -108,6 +108,9 @@ rates: {
   ],
   default: []
 },         // e.g. "$20/hr or $50/job"
+zqSlug:            { type: String, unique: true, sparse: true },
+zqLinkViews:       { type: Number, default: 0 },
+zqLinkConversions: { type: Number, default: 0 },
 travelAvailable: { type: Boolean },         // service providers: do they travel to client?
 serviceArea:     { type: String },          // e.g. "Harare CBD and suburbs"
   // Saved by buyers

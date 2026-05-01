@@ -15,12 +15,6 @@ import {
   notifySchoolApplicationInterest
 } from "./schoolNotifications.js";
 
-import SupplierProfile from "../models/supplierProfile.js";
-
-// ── ZQ Link base URL ──────────────────────────────────────────────────────────
-const BASE_URL   = (process.env.SITE_URL || process.env.APP_BASE_URL || "https://zimquote.co.zw").replace(/\/$/, "");
-const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
-
 
 
 const SCHOOL_TYPE_ALIASES = {
@@ -264,144 +258,6 @@ export async function runSchoolShortcodeSearch({ from, text, biz, saveBiz }) {
   }
 
   return _runSchoolSearch(from, parsed.search);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ZQ DEEP-LINK HANDLER
-// Intercepts payloads fired by the ZQ Link landing page via wa.me deep-link.
-// Payload format: "ZQ:SCHOOL:<mongoId>"  or  "ZQ:SUPPLIER:<mongoId>"
-//
-// Wire in chatbotEngine BEFORE the state machine:
-//   const deepHandled = await handleZqDeepLink({ from, text, biz, saveBiz });
-//   if (deepHandled) return;
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
-  const raw = String(text || "").trim();
-
-  if (/^ZQ:SCHOOL:[a-f0-9]{24}$/i.test(raw)) {
-    const schoolId = raw.split(":")[2];
-    SchoolProfile.findByIdAndUpdate(schoolId, {
-      $inc: { monthlyViews: 1, zqLinkConversions: 1 }
-    }).catch(() => {});
-    await _showSchoolDetail(from, schoolId, biz, "zq_link");
-    return true;
-  }
-
-  if (/^ZQ:SUPPLIER:[a-f0-9]{24}$/i.test(raw)) {
-    const supplierId = raw.split(":")[2];
-    await _showSupplierCard(from, supplierId);
-    return true;
-  }
-
-  return false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ZQ SLUG SHORTCODE HANDLER
-// "zq st-ignatius" or "zq mama-bakers" typed directly in WhatsApp.
-//
-// Wire in chatbotEngine BEFORE the state machine:
-//   const slugHandled = await handleSchoolSlugSearch({ from, text, biz, saveBiz });
-//   if (slugHandled) return;
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
-  const raw = String(text || "").trim().toLowerCase();
-  if (!raw.startsWith("zq ") || raw.length < 5) return false;
-
-  const slug = raw.slice(3).trim().replace(/\s+/g, "-");
-
-  const school = await SchoolProfile.findOne({ zqSlug: slug, active: true }).lean();
-  if (school) {
-    SchoolProfile.findByIdAndUpdate(school._id, {
-      $inc: { monthlyViews: 1, zqLinkConversions: 1 }
-    }).catch(() => {});
-    await _showSchoolDetail(from, String(school._id), biz, "slug_search");
-    return true;
-  }
-
-  const supplier = await SupplierProfile.findOne({ zqSlug: slug }).lean();
-  if (supplier) {
-    await _showSupplierCard(from, String(supplier._id));
-    return true;
-  }
-
-  return false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SCHOOL ADMIN BOT: "Get My ZQ Link"
-// Wire into handleSchoolSearchActions:
-//   if (a === "school_get_zq_link")   return handleGetSchoolZqLink(from);
-//   if (a === "school_share_link_wa") return handleShareSchoolLinkWa(from);
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleGetSchoolZqLink(from) {
-  const phone  = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone }).lean();
-
-  if (!school) {
-    return sendText(from, "❌ No school profile found for this number.");
-  }
-
-  if (!school.zqSlug) {
-    return sendText(from,
-`⚠️ *Your ZQ Link is not set up yet.*
-
-Please contact ZimQuote to activate your shareable link.
-
-📞 0789 901 058`
-    );
-  }
-
-  const link = `${BASE_URL}/s/${school.zqSlug}`;
-
-  return sendButtons(from, {
-    text:
-`🔗 *Your ZimQuote Profile Link*
-
-${link}
-
-*Share this link everywhere you market your school:*
-
-📱 *TikTok* → Paste as your bio link. Every video drives parents straight to your profile.
-📘 *Facebook* → Paste in posts, stories, and your page description.
-🐦 *Twitter / X* → Add to your profile bio — it shows as a rich preview card.
-💬 *WhatsApp Status* → Share it weekly so your contacts can tap and enquire.
-🖨️ *Posters* → Your admin can print a QR code for school gates and events.
-📧 *Email signature* → One tap takes parents to your profile.
-
-When anyone taps this link, WhatsApp opens and your full profile appears instantly — fees, facilities, admissions, and an Enquire button. No searching needed.`,
-    buttons: [
-      { id: "school_share_link_wa", title: "📤 Get Share Message" },
-      { id: "school_account",       title: "⬅ Back to Menu" }
-    ]
-  });
-}
-
-export async function handleShareSchoolLinkWa(from) {
-  const phone  = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone }).lean();
-  if (!school || !school.zqSlug) return false;
-
-  const link = `${BASE_URL}/s/${school.zqSlug}`;
-
-  await sendText(from,
-`📤 *Copy and paste this into any Facebook post, WhatsApp group, or TikTok caption:*
-
-━━━━━━━━━━━━━━━━━━
-🏫 *${school.schoolName}*
-📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}
-${school.admissionsOpen ? "🟢 Admissions currently OPEN\n" : ""}
-See our full profile, fees, facilities & apply online:
-👉 ${link}
-
-_Found us on ZimQuote – Zimbabwe's school finder_
-━━━━━━━━━━━━━━━━━━
-
-_Tip: Put this link in your TikTok bio. Every video you post drives parents directly to your school profile._`
-  );
-
-  const { sendSchoolAccountMenu } = await import("./metaMenus.js");
-  return sendSchoolAccountMenu(from, school);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // ENTRY POINT - called when parent taps "🏫 Find a School"
@@ -770,44 +626,6 @@ Or one number for equal terms: *900*`
     );
   }
 
-  // ── School admin: get ZQ Link ─────────────────────────────────────────────
-  if (a === "school_get_zq_link") {
-    return handleGetSchoolZqLink(from);
-  }
-
-  // ── School admin: get share message ──────────────────────────────────────
-  if (a === "school_share_link_wa") {
-    return handleShareSchoolLinkWa(from);
-  }
-
-  // ── School admin: Smart Card platform-specific link menu ─────────────────
-  if (a === "school_smart_card_menu") {
-    return handleSmartCardMenu(from);
-  }
-
-  // ── School admin: generate a source-tagged link ───────────────────────────
-  if (a.startsWith("school_sc_src_")) {
-    const src = a.replace("school_sc_src_", "");
-    return handleSmartCardSourceLink(from, src);
-  }
-
-  // ── School admin: view lead database ─────────────────────────────────────
-  if (a === "school_my_leads") {
-    return handleMyLeads(from, biz, saveBiz);
-  }
-
-  // ── School admin: follow up a specific lead ───────────────────────────────
-  if (a.startsWith("school_followup_")) {
-    const leadId = a.replace("school_followup_", "");
-    return handleFollowUpLead(from, leadId);
-  }
-
-  // ── School admin: leads pagination ───────────────────────────────────────
-  if (a.startsWith("school_leads_page_")) {
-    const page = parseInt(a.replace("school_leads_page_", ""), 10) || 0;
-    return handleMyLeads(from, biz, saveBiz, page);
-  }
-
   return false;
 }
 
@@ -929,6 +747,56 @@ Parents who tap "📄 Download Profile" on your listing will now receive this PD
 You can upload a new one anytime from ⚙️ More Options.`
     );
 
+    const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+    return sendSchoolMoreOptionsMenu(from, school);
+  }
+
+ // ── School admin: brochure upload state ──────────────────────────────────
+  if (state === "school_admin_awaiting_brochure") {
+    const phone  = from.replace(/\D+/g, "");
+    const school = await SchoolProfile.findOne({ phone });
+    if (!school) return false;
+
+    // Cancel command
+    if ((text || "").trim().toLowerCase() === "cancel") {
+      if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
+      const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
+      return sendSchoolMoreOptionsMenu(from, school);
+    }
+
+    // The PDF URL was stored in biz.sessionData by the webhook before calling engine
+    const docUrl = biz?.sessionData?.pendingDocumentUrl;
+
+    if (!docUrl) {
+      // No PDF received yet - remind them
+      await sendText(from,
+`📄 *Waiting for your PDF...*
+
+Please send your school brochure as a *PDF file* using the 📎 attachment icon in WhatsApp.
+
+Type *cancel* to go back.`
+      );
+      return true;
+    }
+
+    // Save the uploaded PDF URL on the school profile
+    school.profilePdfUrl = docUrl;
+    await school.save();
+
+    // Clear the pending URL from session and reset state
+    if (biz) {
+      biz.sessionData  = { ...(biz.sessionData || {}), pendingDocumentUrl: null };
+      biz.sessionState = "ready";
+      await saveBiz(biz);
+    }
+
+    await sendText(from,
+`✅ *School brochure uploaded successfully!*
+
+Parents who tap "📄 Download Profile" on your listing will now receive this PDF.
+
+You can replace it anytime from ⚙️ More Options → 📄 Upload School Brochure.`
+    );
     const { sendSchoolMoreOptionsMenu } = await import("./metaMenus.js");
     return sendSchoolMoreOptionsMenu(from, school);
   }
@@ -1095,9 +963,8 @@ Try broadening your search - remove the facility filter or select "Any Type".`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE: full school detail card
-// source: "zq_link" | "slug_search" | undefined
 // ─────────────────────────────────────────────────────────────────────────────
-async function _showSchoolDetail(from, schoolId, biz, source) {
+async function _showSchoolDetail(from, schoolId, biz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) {
     await sendText(from, "❌ School not found.");
@@ -1151,21 +1018,11 @@ let feeLine = feeRangeLabel(school.feeRange);
     ? `${school.grades.from} – ${school.grades.to}`
     : "Not specified";
 
-  // ── ZQ Link footer — shown when the school has a slug ────────────────────
-  const zqLinkLine = school.zqSlug
-    ? `\n\n🔗 *Share this school:*\n${BASE_URL}/s/${school.zqSlug}`
-    : "";
-
-  // Source note for parents who arrived via a shared link
-  const sourceNote = source === "zq_link" || source === "slug_search"
-    ? "\n_You arrived via a ZimQuote share link._"
-    : "";
-
   const detailText =
 `🏫 *${school.schoolName}*${verifiedBadge}${featuredBadge}
 📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}${school.address ? "\n🏠 " + school.address : ""}
 
-${admissions}${sourceNote}
+${admissions}
 
 📗 *Type:* ${typeLabels[school.type] || school.type}
 📚 *Curriculum:* ${curriculumText}
@@ -1183,7 +1040,7 @@ ${admissions}${sourceNote}
 
 ${school.principalName ? `👤 *Principal:* ${school.principalName}\n` : ""}${school.contactPhone ? `📞 *Contact:* ${school.contactPhone}\n` : ""}${school.email ? `📧 ${school.email}\n` : ""}
 ${rating}
-👀 ${school.monthlyViews || 0} views this month${zqLinkLine}`;
+👀 ${school.monthlyViews || 0} views this month`;
 
  // Show download button only if school has documents
   const hasDocuments = (school.brochures || []).length > 0 || !!school.profilePdfUrl;
@@ -1196,57 +1053,6 @@ ${rating}
   buttons.push({ id: `school_enquiry_${schoolId}`, title: "✉️ Send Enquiry" });
 
   return sendButtons(from, { text: detailText, buttons });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PRIVATE: supplier detail card (for ZQ deep-link / slug search)
-// ─────────────────────────────────────────────────────────────────────────────
-async function _showSupplierCard(from, supplierId) {
-  const supplier = await SupplierProfile.findById(supplierId).lean();
-  if (!supplier) {
-    return sendButtons(from, {
-      text: "❌ This seller profile is not currently available.",
-      buttons: [{ id: "main_menu_back", title: "🏠 Main Menu" }]
-    });
-  }
-
-  const isService   = supplier.serviceType === "service";
-  const productList = (supplier.products || []).slice(0, 8).join(", ") || "See catalogue";
-  const delivery    = supplier.delivery?.available ? "🚚 Delivers to buyers" : "🏠 Collection only";
-  const rating      = (supplier.reviewCount || 0) > 0
-    ? `⭐ ${Number(supplier.rating).toFixed(1)} (${supplier.reviewCount} reviews)`
-    : "⭐ No reviews yet";
-
-  const priceSummary = isService
-    ? (Array.isArray(supplier.rates) && supplier.rates.length
-        ? supplier.rates.slice(0, 3).map(r => `${r.service} (${r.rate})`).join(", ")
-        : "_Rates on request_")
-    : (Array.isArray(supplier.prices) && supplier.prices.length
-        ? supplier.prices.slice(0, 3).map(p => `${p.product} $${Number(p.amount).toFixed(2)}`).join(", ")
-        : "_Prices on request_");
-
-  const zqLinkLine = supplier.zqSlug
-    ? `\n\n🔗 *Share this seller:*\n${BASE_URL}/p/${supplier.zqSlug}`
-    : "";
-
-  const detailText =
-`🏪 *${supplier.businessName}*
-📍 ${supplier.area ? supplier.area + ", " : ""}${supplier.city}
-
-${isService ? "🔧" : "📦"} *${isService ? "Services" : "Products"}:* ${productList}
-
-💰 *Pricing:* ${priceSummary}
-${delivery}
-
-${rating}${zqLinkLine}`;
-
-  return sendButtons(from, {
-    text: detailText,
-    buttons: [
-      { id: `sup_enquire_${supplierId}`, title: "✉️ Send Enquiry" },
-      { id: `sup_view_${supplierId}`,    title: "📋 Full Profile" }
-    ]
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1499,223 +1305,3 @@ const SCHOOL_EXTRAMURALACTIVITIES_MAP = {
   dance: "💃 Dance", art: "🎨 Art", scouts: "⚜️ Scouts",
   environmental: "🌿 Env. Club", coding: "💻 Coding Club", science_club: "🔬 Science Club"
 };
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART CARD MENU — school admin picks platform for source-tagged link
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleSmartCardMenu(from) {
-  const phone  = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone }).lean();
-  if (!school) return sendText(from, "❌ No school profile found.");
-
-  if (!school.zqSlug) {
-    return sendText(from,
-`⚠️ *Your Smart Card link is not set up yet.*
-
-Please contact ZimQuote admin to activate your Smart Card.
-📞 0789 901 058`
-    );
-  }
-
-  const baseLink = `${BASE_URL}/s/${school.zqSlug}`;
-
-  return sendList(from,
-`🔗 *Your ZimQuote Smart Card*
-
-${baseLink}
-
-Choose where you want to share it — we will generate a version that tracks leads from that platform:`,
-    [
-      { id: "school_sc_src_tiktok",          title: "📱 TikTok bio link" },
-      { id: "school_sc_src_facebook",         title: "📘 Facebook post / page" },
-      { id: "school_sc_src_twitter",          title: "🐦 Twitter / X profile" },
-      { id: "school_sc_src_whatsapp_status",  title: "💬 WhatsApp Status" },
-      { id: "school_sc_src_qr",              title: "🖨️ QR poster / print" },
-      { id: "school_sc_src_sms",             title: "📲 SMS blast" },
-      { id: "school_my_leads",               title: "👥 View My Leads" },
-      { id: "school_account",                title: "⬅ Back to Menu" }
-    ]
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART CARD SOURCE LINK — return a source-tagged link + ready-to-paste copy
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleSmartCardSourceLink(from, source) {
-  const phone  = from.replace(/\D+/g, "");
-  const school = await SchoolProfile.findOne({ phone }).lean();
-  if (!school || !school.zqSlug) return false;
-
-  const link = `${BASE_URL}/s/${school.zqSlug}?src=${source}`;
-
-  const TIPS = {
-    tiktok:         "Paste this in TikTok → Edit Profile → Add link. End every video caption with: \"Link in bio 👆\"",
-    facebook:       "Paste this in your Facebook post caption or in your Page's About section → Website field.",
-    twitter:        "Add this to your Twitter/X profile bio under the website field. It unfurls into a preview card.",
-    whatsapp_status: "Copy the share message below and post it to your WhatsApp Status. Tap it at any time to update.",
-    qr:             `Open this URL on your phone or laptop:\n${BASE_URL}/s/${school.zqSlug}/qr\nThen tap 🖨️ Print Poster.`,
-    sms:            "Paste this link into your bulk SMS message. It works on all phones, even without data."
-  };
-  const tip = TIPS[source] || "Share this link on any platform.";
-
-  const admLine = school.admissionsOpen ? "🟢 Admissions currently OPEN" : "";
-  const shareMsg =
-`🏫 *${school.schoolName}*
-📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}
-${admLine}
-
-See our full profile, fees & enquire:
-👉 ${link}
-
-_Found via ZimQuote – Zimbabwe's school finder_`;
-
-  await sendText(from,
-`🔗 *Your ${source.replace("_"," ")} Smart Card link:*
-
-${link}
-
-📋 *Ready-to-paste message:*
-━━━━━━━━━━━━━━━━━━
-${shareMsg}
-━━━━━━━━━━━━━━━━━━
-
-💡 *Tip:* ${tip}`
-  );
-
-  return sendButtons(from, {
-    text: "What would you like to do next?",
-    buttons: [
-      { id: "school_smart_card_menu", title: "🔗 Other Platforms" },
-      { id: "school_my_leads",        title: "👥 My Leads" },
-      { id: "school_account",         title: "⬅ Back to Menu" }
-    ]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MY LEADS — shows the school's uncontacted leads with follow-up buttons
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleMyLeads(from, biz, saveBiz, page = 0) {
-  const SchoolLead = (await import("../models/schoolLead.js")).default;
-  const phone      = from.replace(/\D+/g, "");
-  const school     = await SchoolProfile.findOne({ phone }).lean();
-  if (!school) return false;
-
-  const PAGE_SIZE    = 5;
-  const totalLeads   = await SchoolLead.countDocuments({ schoolId: school._id });
-  const uncontacted  = await SchoolLead.countDocuments({ schoolId: school._id, contacted: false, actionType: { $ne: "view" } });
-  const leads        = await SchoolLead.find({ schoolId: school._id, actionType: { $ne: "view" } })
-    .sort({ createdAt: -1 })
-    .skip(page * PAGE_SIZE)
-    .limit(PAGE_SIZE)
-    .lean();
-
-  if (!leads.length && page === 0) {
-    return sendButtons(from, {
-      text:
-`👥 *Your Smart Card Leads*
-
-No leads yet.
-
-Share your Smart Card link on TikTok, Facebook, or WhatsApp Status to start receiving leads.`,
-      buttons: [
-        { id: "school_smart_card_menu", title: "🔗 Get My Smart Card" },
-        { id: "school_account",         title: "⬅ Back to Menu" }
-      ]
-    });
-  }
-
-  const ACTION_LABELS = {
-    fees: "Requested fees", visit: "Requested visit",
-    place: "Asked about place", pdf: "Downloaded profile",
-    enquiry: "Sent enquiry", apply: "Wants to apply"
-  };
-  const SOURCE_ICONS = {
-    tiktok:"TikTok", facebook:"FB", twitter:"X", whatsapp_status:"WA Status",
-    qr:"QR poster", sms:"SMS", direct:"Direct link", other:"Other"
-  };
-
-  let text = `👥 *Smart Card Leads* (page ${page + 1})\n`;
-  text    += `📊 Total: ${totalLeads} · ⚠️ Not yet contacted: ${uncontacted}\n\n`;
-
-  for (const lead of leads) {
-    const date    = new Date(lead.createdAt).toLocaleDateString("en-GB", { day:"numeric", month:"short" });
-    const name    = lead.parentName || "Anonymous";
-    const action  = ACTION_LABELS[lead.actionType] || lead.actionType;
-    const src     = SOURCE_ICONS[lead.source] || lead.source;
-    const status  = lead.contacted ? "✅ Contacted" : "🔴 Not contacted";
-    const grade   = lead.gradeInterest ? ` (${lead.gradeInterest})` : "";
-    text += `${status} · ${date}\n👤 ${name}${lead.parentPhone ? " · " + lead.parentPhone : ""}\n📌 ${action}${grade} · ${src}\n\n`;
-  }
-
-  const buttons = [];
-  // Show follow-up button for first uncontacted lead
-  const firstUncontacted = leads.find(l => !l.contacted);
-  if (firstUncontacted) {
-    buttons.push({ id: `school_followup_${firstUncontacted._id}`, title: "📲 Follow Up Next" });
-  }
-  if ((page + 1) * PAGE_SIZE < totalLeads) {
-    buttons.push({ id: `school_leads_page_${page + 1}`, title: "➡ Next Page" });
-  }
-  buttons.push({ id: "school_account", title: "⬅ Back to Menu" });
-
-  return sendButtons(from, { text: text.trim(), buttons });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FOLLOW UP LEAD — mark as contacted, send school admin a pre-filled WA link
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleFollowUpLead(from, leadId) {
-  const SchoolLead = (await import("../models/schoolLead.js")).default;
-  const lead = await SchoolLead.findById(leadId).lean();
-  if (!lead) return sendText(from, "❌ Lead not found.");
-
-  // Mark as contacted
-  await SchoolLead.findByIdAndUpdate(leadId, {
-    $set: { contacted: true, contactedAt: new Date(), contactedBy: from.replace(/\D+/g,"") }
-  });
-
-  const ACTION_LABELS = {
-    fees:"requested fees", visit:"requested a school visit",
-    place:"asked about a place", pdf:"downloaded your school profile",
-    enquiry:"sent an enquiry", apply:"asked about applying"
-  };
-  const actionLabel = ACTION_LABELS[lead.actionType] || "enquired via ZimQuote";
-
-  const greeting = lead.parentName
-    ? `Hi ${lead.parentName.split(" ")[0]}`
-    : "Good morning";
-
-  const prefilledMsg = lead.gradeInterest
-    ? `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} for ${lead.gradeInterest} via ZimQuote. I'd love to help — do you have any questions?`
-    : `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} via ZimQuote. I'd love to help — do you have any questions?`;
-
-  const buttons = [];
-
-  if (lead.parentPhone) {
-    const waLink = `https://wa.me/${lead.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent(prefilledMsg)}`;
-    await sendText(from,
-`✅ *Lead marked as contacted.*
-
-👤 *${lead.parentName || "Anonymous"}*${lead.parentPhone ? "\n📞 " + lead.parentPhone : ""}
-📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " — " + lead.gradeInterest : ""}
-
-*Tap below to open a pre-filled WhatsApp message to this parent:*
-${waLink}`
-    );
-    buttons.push({ id: "school_my_leads", title: "👥 Back to Leads" });
-    buttons.push({ id: "school_account",  title: "⬅ Main Menu" });
-  } else {
-    await sendText(from,
-`✅ *Lead marked as contacted.*
-
-👤 *${lead.parentName || "Anonymous"}*
-📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " — " + lead.gradeInterest : ""}
-
-No phone number captured for this lead (they may not have entered their name on the Smart Card page).`
-    );
-    buttons.push({ id: "school_my_leads", title: "👥 Back to Leads" });
-    buttons.push({ id: "school_account",  title: "⬅ Main Menu" });
-  }
-
-  return sendButtons(from, { text: "What would you like to do next?", buttons });
-}
