@@ -1866,7 +1866,7 @@ Type *menu* to manage your listing. 🎓`
 
 import SchoolLead from "../models/schoolLead.js";
 
-const SC_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const SC_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
 function _waLinkSchool(id) {
   return `https://wa.me/${SC_BOT}?text=${encodeURIComponent("ZQ:SCHOOL:" + id)}`;

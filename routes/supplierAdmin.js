@@ -4008,7 +4008,7 @@ router.post("/expiry/notify-bulk", requireSupplierAdmin, async (req, res) => {
 //   GET  /zq-admin/suppliers/:id/chatlink/qr    → QR poster
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SUP_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const SUP_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
 function _waLinkSupplier(id) {
   return `https://wa.me/${SUP_BOT}?text=${encodeURIComponent("ZQ:SUPPLIER:" + id)}`;

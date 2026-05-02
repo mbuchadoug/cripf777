@@ -26,7 +26,7 @@ import SchoolLead      from "../models/schoolLead.js";
 import { sendText, sendButtons, sendList, sendDocument } from "./metaSender.js";
 import { notifySupplierNewOrder } from "./supplierOrders.js";
 
-const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SELLER PROFILE + MENU

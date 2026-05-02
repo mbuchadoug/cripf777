@@ -23,7 +23,7 @@ import SupplierProfile from "../models/supplierProfile.js";
 
 // ── ZQ Link base URL ──────────────────────────────────────────────────────────
 const BASE_URL   = (process.env.SITE_URL || process.env.APP_BASE_URL || "https://zimquote.co.zw").replace(/\/$/, "");
-const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
 
 

@@ -40,7 +40,7 @@ import {
 } from "./schoolNotifications.js";
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
 
-const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN FAQ MENU — shown when parent first arrives at a school profile
