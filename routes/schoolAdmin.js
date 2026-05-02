@@ -1846,244 +1846,252 @@ Type *menu* to manage your listing. 🎓`
   }
 });
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// ZIMQUOTE CHATBOT LINK PANEL — SCHOOLS
-// The "chatbot link" is a pure wa.me deep-link. No domain. No slug. No web page.
-// When tapped on any platform it opens WhatsApp and the ZimQuote bot immediately
-// shows the school's full FAQ chatbot — fees, enrollment, tour booking, results.
-//
-// Link format: https://wa.me/<BOT>?text=ZQ:SCHOOL:<mongoId>
-// That's it. Generated from the school's MongoDB _id — no setup required.
-//
-// Routes:
-//   GET  /zq-admin/schools/:id/smartcard          → chatbot link panel
-//   POST /zq-admin/schools/:id/smartcard/send      → send link to school via WA
-//   POST /zq-admin/schools/:id/smartcard/lead/:id/contacted → mark lead contacted
-//   GET  /zq-admin/schools/:id/smartcard/leads     → full leads list
-//   GET  /zq-admin/schools/:id/smartcard/qr        → print-ready QR poster
+// SMART CARD MANAGEMENT PANEL
+// GET /zq-admin/schools/:id/smartcard
 // ─────────────────────────────────────────────────────────────────────────────
 
 import SchoolLead from "../models/schoolLead.js";
 
-const SC_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
+const SC_BASE_URL   = (process.env.SITE_URL || process.env.APP_BASE_URL || "https://zimquote.co.zw").replace(/\/$/, "");
+const SC_BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER || "263789901058").replace(/\D/g, "");
 
-function _waLinkSchool(id) {
-  return `https://wa.me/${SC_BOT}?text=${encodeURIComponent("ZQ:SCHOOL:" + id)}`;
+function _scSlug(name = "") {
+  return name.toLowerCase().replace(/[^a-z0-9\s-]/g,"").trim().replace(/\s+/g,"-").replace(/-+/g,"-").slice(0,40);
 }
-function _qrUrl(waLink, size = 300) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(waLink)}&color=085041&bgcolor=FFFFFF&qzone=2`;
+async function _uniqueSlug(base, excludeId) {
+  let candidate = base, attempt = 1;
+  while (true) {
+    const q = { zqSlug: candidate };
+    if (excludeId) q._id = { $ne: excludeId };
+    const clash = await SchoolProfile.findOne(q).lean();
+    if (!clash) return candidate;
+    attempt++;
+    candidate = `${base}-${attempt}`;
+  }
 }
 
-// ── Chatbot link panel ────────────────────────────────────────────────────────
 router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id).lean();
     if (!school) return res.redirect("/zq-admin/schools");
 
-    const ok  = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
-    const err = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>`    : "";
+    const successMsg = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+    const errorMsg = req.query.error
+      ? `<div class="alert red" style="margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
 
-    const waLink  = _waLinkSchool(String(school._id));
-    const qrImg   = _qrUrl(waLink, 260);
+    const slug     = school.zqSlug || "";
+    const baseLink = slug ? `${SC_BASE_URL}/s/${slug}` : "";
+    const sugSlug  = _scSlug(school.schoolName);
 
     // Lead stats
-    const [totalLeads, uncontacted, recentLeads, sourceBreakdown] = await Promise.all([
-      SchoolLead.countDocuments({ schoolId: school._id }),
-      SchoolLead.countDocuments({ schoolId: school._id, contacted: false, actionType: { $ne: "view" } }),
-      SchoolLead.find({ schoolId: school._id, actionType: { $ne: "view" } }).sort({ createdAt: -1 }).limit(10).lean(),
-      SchoolLead.aggregate([
-        { $match: { schoolId: school._id, actionType: { $ne: "view" } } },
-        { $group: { _id: "$source", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ])
-    ]);
+    const totalLeads      = slug ? await SchoolLead.countDocuments({ schoolId: school._id }) : 0;
+    const uncontacted     = slug ? await SchoolLead.countDocuments({ schoolId: school._id, contacted: false, actionType: { $ne: "view" } }) : 0;
+    const recentLeads     = slug ? await SchoolLead.find({ schoolId: school._id, actionType: { $ne: "view" } }).sort({ createdAt: -1 }).limit(8).lean() : [];
 
-    const AL = { fees:"Requested fees", visit:"Visit request", place:"Place enquiry", pdf:"Downloaded PDF", enquiry:"General enquiry", apply:"Apply interest", view:"Profile view" };
-    const SL = { tiktok:"TikTok", facebook:"Facebook", twitter:"Twitter/X", whatsapp_status:"WA Status", qr:"QR Poster", sms:"SMS", direct:"Direct", whatsapp_link:"WA Link", other:"Other" };
+    // Source breakdown
+    const sourcePipeline  = [
+      { $match: { schoolId: school._id, actionType: { $ne: "view" } } },
+      { $group: { _id: "$source", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ];
+    const sourceBreakdown = slug ? await SchoolLead.aggregate(sourcePipeline) : [];
 
-    const admLine = school.admissionsOpen ? "🟢 Admissions currently OPEN" : "";
+    const ACTION_LABELS = { fees:"Requested fees", visit:"Visit request", place:"Place enquiry", pdf:"Downloaded PDF", enquiry:"General enquiry", apply:"Apply interest", view:"Profile view" };
+    const SOURCE_LABELS = { tiktok:"TikTok", facebook:"Facebook", twitter:"Twitter/X", whatsapp_status:"WhatsApp Status", qr:"QR Poster", sms:"SMS", direct:"Direct Link", other:"Other" };
 
-    // Per-platform captions — all using the same wa.me link
     const PLATFORMS = [
-      { id:"tiktok",          icon:"📱", label:"TikTok bio",       tip:"Put as your bio link. Say "link in bio 👆" in every video." },
-      { id:"facebook",        icon:"📘", label:"Facebook",          tip:"Paste in post captions and your Page About section." },
-      { id:"twitter",         icon:"🐦", label:"Twitter / X",       tip:"Add to your profile bio under Website." },
-      { id:"whatsapp_status", icon:"💬", label:"WhatsApp Status",   tip:"Post the message below as a status update." },
-      { id:"sms",             icon:"📲", label:"SMS blast",          tip:"Paste in SMS messages to parents. Works on any phone." }
+      { id:"tiktok",          label:"📱 TikTok", tip:"Paste as your bio link. Say 'link in bio' in every video." },
+      { id:"facebook",        label:"📘 Facebook", tip:"Paste in post captions, stories, and your Page About section." },
+      { id:"twitter",         label:"🐦 Twitter / X", tip:"Add to your profile bio — unfurls as a rich preview card." },
+      { id:"whatsapp_status", label:"💬 WhatsApp Status", tip:"Share weekly with the message block below." },
+      { id:"qr",              label:"🖨️ QR Poster", tip:"Download, print and post at the school gate, churches, shops." },
+      { id:"sms",             label:"📲 SMS", tip:"Paste in SMS blasts to parents in your contact list." }
     ];
 
     const platformRows = PLATFORMS.map(p => {
-      const caption = `🏫 ${school.schoolName}\n📍 ${school.suburb||""}${school.suburb?", ":""}${school.city}\n${admLine}\n\nTap to see full profile, fees & enquire on WhatsApp:\n👉 ${waLink}\n\n_Found via ZimQuote_`;
-      return `<tr>
-        <td><strong>${p.icon} ${p.label}</strong></td>
-        <td style="font-size:12px;color:var(--muted)">${p.tip}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm btn-gray"
-            onclick="(function(b,t){navigator.clipboard.writeText(t).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy',1800)}).catch(()=>{});})(this,${JSON.stringify(caption)})">
-            📋 Copy caption
-          </button>
-        </td>
-      </tr>`;
+      const link = `${SC_BASE_URL}/s/${slug}?src=${p.id}`;
+      return `
+        <tr>
+          <td><strong>${p.label}</strong></td>
+          <td><code style="font-size:11px;word-break:break-all">${slug ? esc(link) : "—"}</code></td>
+          <td style="font-size:12px;color:var(--muted)">${p.tip}</td>
+          ${slug ? `<td>
+            <button class="btn btn-sm" style="white-space:nowrap" onclick="navigator.clipboard.writeText('${esc(link)}').then(()=>this.textContent='✅ Copied!').catch(()=>{})">📋 Copy</button>
+            ${p.id==="qr" ? `<a href="${esc(SC_BASE_URL)}/s/${esc(slug)}/qr" target="_blank" class="btn btn-sm btn-blue" style="margin-left:4px">🖨️ Poster</a>` : ""}
+          </td>` : "<td>—</td>"}
+        </tr>`;
     }).join("");
 
-    const leadsRows = recentLeads.map(l => `<tr>
-      <td style="white-space:nowrap;font-size:12px">${new Date(l.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</td>
-      <td><strong>${esc(l.parentName||"Anonymous")}</strong>${l.parentPhone?`<div style="font-size:11px;color:var(--muted)">${esc(l.parentPhone)}</div>`:""}</td>
-      <td style="font-size:12px">${esc(AL[l.actionType]||l.actionType)}${l.gradeInterest?` <em>(${esc(l.gradeInterest)})</em>`:""}</td>
-      <td style="font-size:12px">${esc(SL[l.source]||l.source)}</td>
-      <td>${l.contacted
-        ? `<span class="badge badge-green">Contacted</span>`
-        : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline"><button class="btn btn-sm btn-green">✅ Mark contacted</button></form>`}
-      </td>
-      <td>${l.parentPhone
-        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent("Hi "+(l.parentName||"")+(l.parentName?", ":"")+"I'm following up from "+school.schoolName+" regarding your ZimQuote enquiry.")}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
-        : "—"}
-      </td>
-    </tr>`).join("");
+    const leadsTable = recentLeads.length ? `
+      <table>
+        <thead><tr><th>Date</th><th>Parent</th><th>Action</th><th>Source</th><th>Status</th></tr></thead>
+        <tbody>
+          ${recentLeads.map(l => `
+          <tr>
+            <td style="white-space:nowrap;font-size:12px">${new Date(l.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</td>
+            <td><strong>${esc(l.parentName||"Anonymous")}</strong>${l.parentPhone?`<div style="font-size:11px;color:var(--muted)">${esc(l.parentPhone)}</div>`:""}</td>
+            <td style="font-size:12px">${esc(ACTION_LABELS[l.actionType]||l.actionType)}${l.gradeInterest?` <em>(${esc(l.gradeInterest)})</em>`:""}</td>
+            <td style="font-size:12px">${esc(SOURCE_LABELS[l.source]||l.source)}</td>
+            <td>${l.contacted
+              ? `<span class="badge badge-green">Contacted</span>`
+              : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline">
+                  <button class="btn btn-sm btn-green">✅ Mark Contacted</button>
+                </form>`}
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>` : "<em class='muted'>No leads yet — share your Smart Card link to start receiving leads.</em>";
 
     const sourceRows = sourceBreakdown.map(s =>
-      `<tr><td>${esc(SL[s._id]||s._id||"Unknown")}</td><td><strong>${s.count}</strong></td></tr>`
-    ).join("") || `<tr><td colspan="2" style="color:var(--muted)">No leads yet</td></tr>`;
+      `<tr><td>${esc(SOURCE_LABELS[s._id]||s._id)}</td><td><strong>${s.count}</strong></td></tr>`
+    ).join("") || "<tr><td colspan='2'><em class='muted'>No data yet</em></td></tr>";
 
-    const msgToSchool = `Hi ${school.schoolName},
+    const shareMsg = slug ? `🏫 ${school.schoolName}
+📍 ${school.suburb?school.suburb+", ":""}${school.city}
+${school.admissionsOpen?"🟢 Admissions currently OPEN":""}
 
-Your ZimQuote chatbot link is ready! 🎉
+See our full profile, fees & enquire:
+👉 ${baseLink}
 
-📲 Your link:
-${waLink}
+_Found via ZimQuote – Zimbabwe's school finder_` : "";
 
-When anyone taps this link — on Facebook, TikTok, WhatsApp, or SMS — WhatsApp opens and your school's full profile appears instantly in the ZimQuote chat.
-
-Parents can:
-• See fees, facilities, and results
-• Book a school tour
-• Ask about enrollment and required documents
-• Download your fee schedule
-• Send you an enquiry
-
-All without you being online.
-
-Share it everywhere:
-📱 TikTok → Put it as your bio link
-📘 Facebook → Paste in post captions
-💬 WhatsApp Status → Share it weekly
-📲 SMS → Send to parents in your contact list
-🖨️ Print → We've generated a QR code you can print
-
-ZimQuote Team`;
-
-    res.send(layout(`Chatbot Link: ${esc(school.schoolName)}`, `
+    res.send(layout(`Smart Card: ${esc(school.schoolName)}`, `
       <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to ${esc(school.schoolName)}</a>
-      ${ok}${err}
+      ${successMsg}${errorMsg}
 
-      <!-- ── THE LINK ─────────────────────────────────────────────────────── -->
+      <!-- Slug setup -->
       <div class="panel" style="margin-bottom:16px">
         <div class="panel-head">
-          <h3>📲 ZimQuote Chatbot Link</h3>
-          <span class="badge badge-green">Active — no setup needed</span>
+          <h3>🔗 Smart Card Link</h3>
+          ${slug ? `<span class="badge badge-green">Active</span>` : `<span class="badge badge-gray">Not configured</span>`}
         </div>
-
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:18px;margin-bottom:16px">
-          <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-            Pure WhatsApp link — works on every platform, no web page, no domain
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-            <code style="font-size:13px;flex:1;word-break:break-all;background:#dcfce7;padding:9px 12px;border-radius:7px;font-family:monospace">${esc(waLink)}</code>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-green btn-sm"
-              onclick="(function(b){navigator.clipboard.writeText(${JSON.stringify(waLink)}).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy Link',1800)}).catch(()=>{})})(this)">
-              📋 Copy Link
-            </button>
-            <a href="${esc(waLink)}" target="_blank" class="btn btn-blue btn-sm">
-              📱 Test on WhatsApp
-            </a>
-            <a href="/zq-admin/schools/${school._id}/smartcard/qr" target="_blank" class="btn btn-sm btn-gray">
-              🖨️ Print QR Poster
-            </a>
-          </div>
-          <p style="font-size:12px;color:#166534;margin-top:10px">
-            When tapped, WhatsApp opens and the ZimQuote bot shows the full school chatbot:
-            fees, enrollment enquiry, tour booking, academic results, transport, facilities — all instantly.
-          </p>
-        </div>
-
-        <!-- Stats -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          <div class="stat-card stat-blue"><div class="stat-val">${school.zqLinkViews||0}</div><div class="stat-lbl">Link taps</div></div>
-          <div class="stat-card stat-green"><div class="stat-val">${school.zqLinkConversions||0}</div><div class="stat-lbl">Bot opens</div></div>
-          <div class="stat-card stat-orange"><div class="stat-val">${totalLeads}</div><div class="stat-lbl">Total leads</div></div>
-          <div class="stat-card stat-purple"><div class="stat-val" style="color:#dc2626">${uncontacted}</div><div class="stat-lbl">Not contacted</div></div>
-        </div>
-      </div>
-
-      <!-- ── QR CODE ─────────────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <h3>🖨️ QR Code</h3>
-        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
-          <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
-            <img src="${esc(qrImg)}" alt="QR Code" width="130" height="130" style="display:block">
-          </div>
-          <div>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:10px;max-width:360px">
-              This QR code encodes the WhatsApp link directly — not a website URL.
-              Scanning it with WhatsApp's built-in camera opens the bot immediately.
-              Print it on school gate banners, posters, notice boards, and flyers.
-            </p>
-            <a href="/zq-admin/schools/${school._id}/smartcard/qr" target="_blank" class="btn btn-blue">🖨️ Open Print-Ready Poster</a>
+        ${slug ? `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin-bottom:16px">
+          <div style="font-size:12px;color:#16a34a;font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Shareable Smart Card</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <code style="font-size:14px;flex:1;word-break:break-all">${esc(baseLink)}</code>
+            <a href="${esc(baseLink)}" target="_blank" class="btn btn-green btn-sm">🔍 Preview</a>
+            <a href="/zq-admin/schools/${school._id}/smartcard/qr" target="_blank" class="btn btn-blue btn-sm">🖨️ QR Poster</a>
           </div>
         </div>
-      </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:500">${school.zqLinkViews||0}</div>
+            <div style="font-size:12px;color:var(--muted)">Page opens</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:500">${school.zqLinkConversions||0}</div>
+            <div style="font-size:12px;color:var(--muted)">WA taps</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:500">${totalLeads}</div>
+            <div style="font-size:12px;color:var(--muted)">Total leads</div>
+          </div>
+          <div style="background:#fef2f2;border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:500;color:#dc2626">${uncontacted}</div>
+            <div style="font-size:12px;color:#dc2626">Not contacted</div>
+          </div>
+        </div>` : `
+        <div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:16px;margin-bottom:16px">
+          <p style="font-weight:600;margin-bottom:6px">⚠️ Smart Card not yet configured</p>
+          <p style="font-size:13px;color:#854d0e">Set a slug below to generate the shareable Smart Card for this school.</p>
+        </div>`}
 
-      <!-- ── SEND TO SCHOOL ─────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <h3>📨 Send link to school admin</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          Send the chatbot link and instructions directly to <strong>${esc(school.phone)}</strong> via WhatsApp.
-        </p>
-        <form method="POST" action="/zq-admin/schools/${school._id}/smartcard/send">
+        <form method="POST" action="/zq-admin/schools/${school._id}/smartcard/set">
           <div class="fg" style="margin-bottom:12px">
-            <label>Message (edit before sending)</label>
-            <textarea name="message" rows="16" style="font-size:12px;font-family:monospace">${esc(msgToSchool)}</textarea>
+            <label>URL slug <span style="color:red">*</span></label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:13px;color:var(--muted);white-space:nowrap">${SC_BASE_URL}/s/</span>
+              <input name="slug" value="${esc(slug)}" placeholder="${esc(sugSlug)}" style="flex:1;min-width:160px" maxlength="40" pattern="[a-z0-9-]+">
+            </div>
+            <span style="font-size:11px;color:var(--muted);margin-top:4px;display:block">Lowercase, letters &amp; hyphens only. Suggested: <strong>${esc(sugSlug)}</strong>
+              <button type="button" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:11px;padding:0 4px" onclick="document.querySelector('[name=slug]').value='${esc(sugSlug)}'">Use this</button>
+            </span>
           </div>
-          <button type="submit" class="btn btn-green">📱 Send via WhatsApp</button>
+          <div style="display:flex;gap:8px">
+            <button type="submit" class="btn btn-green">${slug?"🔄 Update Slug":"✅ Generate Smart Card"}</button>
+          </div>
         </form>
       </div>
 
-      <!-- ── PLATFORM CAPTIONS ──────────────────────────────────────────── -->
+      <!-- Send to school -->
+      ${slug ? `
       <div class="panel" style="margin-bottom:16px">
-        <h3>📋 Ready-to-paste captions</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          The link is the same everywhere. These are captions to post alongside it on each platform.
-        </p>
-        <table>
-          <thead><tr><th>Platform</th><th>Where to use</th><th></th></tr></thead>
-          <tbody>${platformRows}</tbody>
-        </table>
+        <h3>📨 Send to School Admin</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Send the Smart Card link and instructions directly to <strong>${esc(school.phone)}</strong> via WhatsApp.</p>
+        <form method="POST" action="/zq-admin/schools/${school._id}/smartcard/send">
+          <div class="fg" style="margin-bottom:12px">
+            <label>Message (editable)</label>
+            <textarea name="message" rows="12" style="font-size:12px;font-family:monospace">${esc(
+`Hi ${school.schoolName},
+
+Your ZimQuote Smart Card is now active! 🎉
+
+🔗 Your Smart Card link:
+${baseLink}
+
+Every time a parent taps this link and enters their name, you will receive a WhatsApp notification with their name and what they want — fees, a visit, a place, or your school profile PDF.
+
+Share this link everywhere you market your school:
+
+📱 TikTok → Put it as your bio link
+📘 Facebook → Paste in posts and your Page About section
+🐦 Twitter/X → Add to your profile bio
+💬 WhatsApp Status → Share it weekly
+🖨️ Posters → We can generate a QR code for you
+
+To see your leads and get platform-specific links, type MENU in this chat and go to 🔗 Smart Card.
+
+ZimQuote Team`)}</textarea>
+          </div>
+          <button type="submit" class="btn btn-green">📱 Send via WhatsApp</button>
+        </form>
+
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Pre-composed share message for school to copy</div>
+          <pre style="background:var(--surface2);padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;font-family:monospace;border:1px solid var(--border)">${esc(shareMsg)}</pre>
+        </div>
       </div>
 
-      <!-- ── RECENT LEADS ───────────────────────────────────────────────── -->
+      <!-- Platform links -->
+      <div class="panel" style="margin-bottom:16px">
+        <h3>📱 Platform-specific Smart Card links</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Each link tracks where leads come from. Copy the right one for each platform.</p>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Platform</th><th>Link</th><th>Tip</th><th></th></tr></thead>
+            <tbody>${platformRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Leads table -->
       <div class="panel" style="margin-bottom:16px">
         <div class="panel-head">
-          <h3>👥 Recent leads</h3>
-          <a href="/zq-admin/schools/${school._id}/smartcard/leads" class="btn btn-sm btn-blue">View all ${totalLeads} →</a>
+          <h3>👥 Recent Leads</h3>
+          <a href="/zq-admin/schools/${school._id}/smartcard/leads" class="btn btn-sm btn-blue">View All →</a>
         </div>
-        ${recentLeads.length
-          ? `<div style="overflow-x:auto"><table>
-              <thead><tr><th>Date</th><th>Parent</th><th>Action</th><th>Source</th><th>Status</th><th></th></tr></thead>
-              <tbody>${leadsRows}</tbody>
-            </table></div>`
-          : `<p style="color:var(--muted);font-size:13px">No leads yet. Share the chatbot link to start receiving leads.</p>`}
+        ${leadsTable}
       </div>
 
-      <!-- ── LEADS BY SOURCE ────────────────────────────────────────────── -->
-      <div class="panel">
-        <h3>📊 Leads by source</h3>
-        <table style="max-width:320px">
+      <!-- Source breakdown -->
+      <div class="panel" style="margin-bottom:16px">
+        <h3>📊 Leads by Source</h3>
+        <table style="max-width:360px">
           <thead><tr><th>Source</th><th>Leads</th></tr></thead>
           <tbody>${sourceRows}</tbody>
         </table>
+      </div>` : ""}
+
+      <!-- Bulk generate note -->
+      <div class="panel">
+        <h3>⚡ Bulk generate</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Generate Smart Card slugs for all schools that don't have one yet.</p>
+        <form method="POST" action="/zq-admin/schools/smartcard/bulk-generate" onsubmit="return confirm('Generate slugs for all schools without one?')">
+          <button type="submit" class="btn btn-gray">⚡ Bulk Generate All</button>
+        </form>
       </div>
     `));
   } catch (err) {
@@ -2091,60 +2099,79 @@ ZimQuote Team`;
   }
 });
 
-// ── Send chatbot link to school ───────────────────────────────────────────────
-router.post("/schools/:id/smartcard/send", requireSupplierAdmin, async (req, res) => {
+// SET SLUG
+router.post("/schools/:id/smartcard/set", requireSupplierAdmin, async (req, res) => {
   try {
-    const school  = await SchoolProfile.findById(req.params.id).lean();
+    const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
-    const message = String(req.body.message || "").trim();
-    if (!message) return res.redirect(`/zq-admin/schools/${school._id}/smartcard?error=${encodeURIComponent("Message is empty.")}`);
-    await sendText(school.phone, message);
-    res.redirect(`/zq-admin/schools/${school._id}/smartcard?success=${encodeURIComponent("Link sent to " + school.phone + " via WhatsApp.")}`);
+    let slug = String(req.body.slug || "").toLowerCase().replace(/[^a-z0-9-]/g,"").replace(/-+/g,"-").replace(/^-|-$/g,"").slice(0,40);
+    if (!slug) slug = _scSlug(school.schoolName);
+    if (slug.length < 2) return res.redirect(`/zq-admin/schools/${school._id}/smartcard?error=${encodeURIComponent("Slug too short.")}`);
+    slug = await _uniqueSlug(slug, school._id);
+    school.zqSlug = slug;
+    if (!school.zqLinkViews)       school.zqLinkViews = 0;
+    if (!school.zqLinkConversions) school.zqLinkConversions = 0;
+    await school.save();
+    res.redirect(`/zq-admin/schools/${school._id}/smartcard?success=${encodeURIComponent("Smart Card link set: "+SC_BASE_URL+"/s/"+slug)}`);
   } catch (err) {
-    res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?error=${encodeURIComponent("Send failed: " + err.message)}`);
+    res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?error=${encodeURIComponent(err.message)}`);
   }
 });
 
-// ── Mark lead as contacted ────────────────────────────────────────────────────
+// SEND TO SCHOOL VIA WHATSAPP
+router.post("/schools/:id/smartcard/send", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school?.zqSlug) return res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?error=${encodeURIComponent("Set a slug first.")}`);
+    const { sendText: _sendText } = await import("../services/metaSender.js");
+    await _sendText(school.phone, String(req.body.message || "").trim());
+    res.redirect(`/zq-admin/schools/${school._id}/smartcard?success=${encodeURIComponent("Message sent to "+school.phone)}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?error=${encodeURIComponent("Send failed: "+err.message)}`);
+  }
+});
+
+// MARK LEAD AS CONTACTED (admin panel)
 router.post("/schools/:id/smartcard/lead/:leadId/contacted", requireSupplierAdmin, async (req, res) => {
   try {
-    await SchoolLead.findByIdAndUpdate(req.params.leadId, { $set: { contacted: true, contactedAt: new Date() } });
+    await SchoolLead.findByIdAndUpdate(req.params.leadId, {
+      $set: { contacted: true, contactedAt: new Date() }
+    });
     res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?success=${encodeURIComponent("Lead marked as contacted.")}`);
   } catch (err) {
     res.redirect(`/zq-admin/schools/${req.params.id}/smartcard?error=${encodeURIComponent(err.message)}`);
   }
 });
 
-// ── All leads list ────────────────────────────────────────────────────────────
+// FULL LEADS LIST PAGE
 router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res) => {
   try {
     const school  = await SchoolProfile.findById(req.params.id).lean();
     if (!school) return res.redirect("/zq-admin/schools");
     const page    = parseInt(req.query.page || "0", 10);
-    const perPage = 25;
-    const total   = await SchoolLead.countDocuments({ schoolId: school._id, actionType: { $ne: "view" } });
-    const leads   = await SchoolLead.find({ schoolId: school._id, actionType: { $ne: "view" } })
-      .sort({ createdAt: -1 }).skip(page * perPage).limit(perPage).lean();
+    const perPage = 20;
+    const total   = await SchoolLead.countDocuments({ schoolId: school._id, actionType: { $ne:"view" } });
+    const leads   = await SchoolLead.find({ schoolId: school._id, actionType: { $ne:"view" } })
+      .sort({ createdAt:-1 }).skip(page*perPage).limit(perPage).lean();
 
-    const AL = { fees:"Requested fees", visit:"Visit request", place:"Place enquiry", pdf:"Downloaded PDF", enquiry:"General enquiry", apply:"Apply interest" };
-    const SL = { tiktok:"TikTok", facebook:"Facebook", twitter:"Twitter/X", whatsapp_status:"WA Status", qr:"QR", sms:"SMS", direct:"Direct", whatsapp_link:"WA Link", other:"Other" };
+    const ACTION_LABELS = { fees:"Requested fees", visit:"Visit request", place:"Place enquiry", pdf:"Downloaded PDF", enquiry:"General enquiry", apply:"Apply interest" };
+    const SOURCE_LABELS = { tiktok:"TikTok", facebook:"Facebook", twitter:"Twitter/X", whatsapp_status:"WA Status", qr:"QR Poster", sms:"SMS", direct:"Direct", other:"Other" };
 
-    const rows = leads.map(l => `<tr>
-      <td style="white-space:nowrap;font-size:12px">${new Date(l.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</td>
-      <td><strong>${esc(l.parentName||"Anonymous")}</strong>${l.parentPhone?`<div style="font-size:11px;color:var(--muted)">${esc(l.parentPhone)}</div>`:""}</td>
-      <td style="font-size:12px">${esc(AL[l.actionType]||l.actionType)}${l.gradeInterest?` <em>(${esc(l.gradeInterest)})</em>`:""}</td>
-      <td style="font-size:12px">${esc(SL[l.source]||l.source)}</td>
-      <td>${l.contacted
-        ? `<span class="badge badge-green">Contacted</span>`
-        : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline"><button class="btn btn-sm btn-green">✅ Mark contacted</button></form>`}
-      </td>
-      <td>${l.parentPhone
-        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent("Hi "+(l.parentName||"")+(l.parentName?", ":"")+"I'm following up from "+school.schoolName+" regarding your ZimQuote enquiry.")}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
-        : "—"}
-      </td>
-    </tr>`).join("");
+    const rows = leads.map(l => `
+      <tr>
+        <td style="white-space:nowrap;font-size:12px">${new Date(l.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</td>
+        <td><strong>${esc(l.parentName||"Anonymous")}</strong>${l.parentPhone?`<div style="font-size:11px;color:var(--muted)">${esc(l.parentPhone)}</div>`:""}</td>
+        <td style="font-size:12px">${esc(ACTION_LABELS[l.actionType]||l.actionType)}${l.gradeInterest?` <em>(${esc(l.gradeInterest)})</em>`:""}</td>
+        <td style="font-size:12px">${esc(SOURCE_LABELS[l.source]||l.source)}</td>
+        <td>${l.contacted
+          ? `<span class="badge badge-green">Contacted</span>`
+          : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline">
+              <button class="btn btn-sm btn-green">✅ Mark Contacted</button>
+            </form>`}</td>
+        ${l.parentPhone?`<td><a href="https://wa.me/${l.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent("Hi "+l.parentName+", I'm following up from "+school.schoolName+" re your ZimQuote enquiry.")}" target="_blank" class="btn btn-sm btn-blue">💬 WhatsApp</a></td>`:"<td></td>"}
+      </tr>`).join("");
 
-    const totalPages = Math.ceil(total / perPage);
+    const totalPages = Math.ceil(total/perPage);
     const pager = totalPages > 1 ? `<div style="display:flex;gap:8px;margin-top:16px">
       ${page>0?`<a href="?page=${page-1}" class="btn btn-sm btn-gray">← Prev</a>`:""}
       <span style="padding:6px 12px;font-size:13px;color:var(--muted)">Page ${page+1} of ${totalPages}</span>
@@ -2152,18 +2179,16 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
     </div>` : "";
 
     res.send(layout(`Leads: ${esc(school.schoolName)}`, `
-      <a href="/zq-admin/schools/${school._id}/smartcard" class="back-link">← Back to Chatbot Link</a>
+      <a href="/zq-admin/schools/${school._id}/smartcard" class="back-link">← Back to Smart Card</a>
       <div class="panel">
         <div class="panel-head">
-          <h3>👥 All leads — ${esc(school.schoolName)}</h3>
+          <h3>👥 All Leads — ${esc(school.schoolName)}</h3>
           <span style="font-size:13px;color:var(--muted)">${total} total</span>
         </div>
-        ${leads.length
-          ? `<div style="overflow-x:auto"><table>
-              <thead><tr><th>Date</th><th>Parent</th><th>Action</th><th>Source</th><th>Status</th><th></th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table></div>${pager}`
-          : "<em style='color:var(--muted)'>No leads yet.</em>"}
+        ${leads.length ? `<div style="overflow-x:auto"><table>
+          <thead><tr><th>Date</th><th>Parent</th><th>Action</th><th>Source</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>${pager}` : "<em class='muted'>No leads yet.</em>"}
       </div>
     `));
   } catch (err) {
@@ -2171,62 +2196,37 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
   }
 });
 
-// ── QR print-ready poster ─────────────────────────────────────────────────────
+// QR REDIRECT
 router.get("/schools/:id/smartcard/qr", requireSupplierAdmin, async (req, res) => {
   try {
-    const school  = await SchoolProfile.findById(req.params.id).lean();
-    if (!school) return res.redirect(`/zq-admin/schools/${req.params.id}/smartcard`);
-
-    const waLink  = _waLinkSchool(String(school._id));
-    const qrImg   = _qrUrl(waLink, 400);
-    const loc     = [school.suburb, school.city].filter(Boolean).join(", ");
-    const feeStr  = school.fees?.term1
-      ? `$${school.fees.term1}/term`
-      : { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" }[school.feeRange] || "";
-
-    res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>QR Poster – ${esc(school.schoolName)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,"Segoe UI",sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-.poster{width:420px;border:3px solid #085041;border-radius:20px;padding:28px;text-align:center}
-.brand{font-size:11px;font-weight:700;color:#0F6E56;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px}
-h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.2}
-.sub{font-size:13px;color:#5a7a5a;margin-bottom:4px}
-.adm{display:inline-block;margin:10px 0 14px;background:#E1F5EE;color:#0F6E56;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px}
-.adm.closed{background:#fee2e2;color:#dc2626}
-.qrw{margin:0 auto 16px;padding:14px;border:1px solid #E1F5EE;border-radius:14px;display:inline-block;background:#f9fff9}
-.qrw img{display:block;width:200px;height:200px}
-.cta{font-size:14px;font-weight:700;color:#085041;margin-bottom:6px}
-.how{font-size:12px;color:#666;background:#f0faf5;border-radius:8px;padding:8px 12px;margin-bottom:14px;line-height:1.6}
-.dets{font-size:12px;color:#5a7a5a;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-.foot{font-size:10px;color:#aaa}
-.noprint{margin-top:16px;display:flex;gap:10px;justify-content:center}
-@media print{.noprint{display:none!important}body{padding:0}}
-</style></head><body>
-<div class="poster">
-  <div class="brand">ZimQuote · Verified School</div>
-  <h1>${esc(school.schoolName)}</h1>
-  <p class="sub">📍 ${esc(loc)}</p>
-  ${feeStr?`<p class="sub">${esc(feeStr)}</p>`:""}
-  <span class="adm ${school.admissionsOpen===false?"closed":""}">${school.admissionsOpen===false?"🔴 Admissions Closed":"🟢 Admissions Open"}</span>
-  <div class="qrw"><img src="${esc(qrImg)}" alt="Scan to open on WhatsApp"></div>
-  <p class="cta">📲 Scan to see fees, enroll & enquire</p>
-  <div class="how">Open WhatsApp → tap Camera → scan this code<br>Your school profile opens in the chat <strong>instantly</strong>.<br>No app download. No website. Any phone.</div>
-  <div class="dets">
-    ${(school.curriculum||[]).length?`<span>📚 ${school.curriculum.map(c=>c.toUpperCase()).join(" + ")}</span>`:""}
-    ${school.gender?`<span>${{mixed:"👫 Co-ed",boys:"👦 Boys",girls:"👧 Girls"}[school.gender]||""}</span>`:""}
-    ${school.boarding?`<span>${{day:"🏠 Day",boarding:"🏫 Boarding",both:"🏠🏫 Day & Boarding"}[school.boarding]||""}</span>`:""}
-  </div>
-  <div class="foot">Powered by ZimQuote · zimquote.co.zw</div>
-</div>
-<div class="noprint">
-  <button onclick="window.print()" style="padding:10px 20px;background:#085041;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">🖨️ Print Poster</button>
-  <a href="/zq-admin/schools/${school._id}/smartcard" style="padding:10px 20px;background:#e2e8f0;color:#475569;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none">← Back</a>
-</div>
-</body></html>`);
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school?.zqSlug) return res.redirect(`/zq-admin/schools/${req.params.id}/smartcard`);
+    res.redirect(`${SC_BASE_URL}/s/${school.zqSlug}/qr`);
   } catch (err) {
-    res.status(500).send(`<p>Error: ${err.message}</p>`);
+    res.status(500).send(err.message);
+  }
+});
+
+// BULK GENERATE
+router.post("/schools/smartcard/bulk-generate", requireSupplierAdmin, async (req, res) => {
+  try {
+    const schools = await SchoolProfile.find({ zqSlug: { $in: [null, "", undefined] } }).lean();
+    let generated = 0;
+    for (const s of schools) {
+      try {
+        const base = _scSlug(s.schoolName);
+        const slug = await _uniqueSlug(base, s._id);
+        await SchoolProfile.findByIdAndUpdate(s._id, {
+          $set: { zqSlug: slug, zqLinkViews: 0, zqLinkConversions: 0 }
+        });
+        generated++;
+      } catch (e) {
+        console.error(`[SmartCard bulk] failed for ${s.schoolName}:`, e.message);
+      }
+    }
+    res.redirect(`/zq-admin/schools?success=${encodeURIComponent("Generated Smart Card links for "+generated+" school(s).")}`);
+  } catch (err) {
+    res.redirect(`/zq-admin/schools?error=${encodeURIComponent("Bulk generate failed: "+err.message)}`);
   }
 });
 
