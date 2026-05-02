@@ -130,19 +130,6 @@ import {
   handleMyLeads,
   handleFollowUpLead
 } from "./schoolSearch.js";
-
-import {
-  showSchoolFAQMenu,
-  handleSchoolFAQAction,
-  handleSchoolFAQState
-} from "./schoolFAQ.js";
-
-import {
-  showSellerMenu,
-  handleSellerChatAction,
-  handleSellerChatState,
-  handleSellerPriceReply
-} from "./sellerChat.js";
  
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -3237,15 +3224,14 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("school_fac_page_") ||
       a.startsWith("school_ext_toggle_") ||
       a.startsWith("school_ext_page_") ||
+      // ── Smart Card / ZQ Link actions ──────────────────────────────────────
       a === "school_get_zq_link" ||
       a === "school_share_link_wa" ||
       a === "school_smart_card_menu" ||
       a === "school_my_leads" ||
       a.startsWith("school_sc_src_") ||
       a.startsWith("school_followup_") ||
-      a.startsWith("school_leads_page_") ||
-      a.startsWith("sfaq_") ||
-      a.startsWith("sc_")
+      a.startsWith("school_leads_page_")
     
     );
   // =========================
@@ -3284,7 +3270,27 @@ Reply *menu* to start.`);
   const biz = await getBizForPhone(from);
   const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
 
-    // ── GLOBAL school shortcode trigger ──────────────────────────────────────
+    // ── ZQ SMART CARD DEEP-LINK INTERCEPT ───────────────────────────────────
+  // Catches ZQ:SCHOOL:<id>[:<action>[:name=...]] payloads sent by wa.me links.
+  // Must run before everything — even biz checks — so links always work.
+  if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
+    const _handled = await handleZqDeepLink({
+      from, text, biz,
+      saveBiz: biz ? (b) => saveBizSafe(b) : async () => {}
+    });
+    if (_handled) return;
+  }
+
+  // ── ZQ SLUG SHORTCODE — "zq huxton-academy" typed into WhatsApp ──────────
+  if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
+    const _slugHandled = await handleSchoolSlugSearch({
+      from, text, biz,
+      saveBiz: biz ? (b) => saveBizSafe(b) : async () => {}
+    });
+    if (_slugHandled) return;
+  }
+
+  // ── GLOBAL school shortcode trigger ──────────────────────────────────────
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
   const SCHOOL_TRIGGER_PHRASES = [
@@ -8013,22 +8019,6 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
       if (handled) return;
     }
  
-    // ── School FAQ chatbot text states ──────────────────────────────────────
-    if (biz.sessionState?.startsWith("sfaq_")) {
-      const handled = await handleSchoolFAQState({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
-      });
-      if (handled) return;
-    }
-
-    // ── Seller chatbot text states ────────────────────────────────────────────
-    if (biz.sessionState?.startsWith("sc_")) {
-      const handled = await handleSellerChatState({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
-      });
-      if (handled) return;
-    }
-
     // ── School admin text-input states (e.g. fee updates) ────────────────────
     if (schoolAdminStates.includes(biz.sessionState)) {
       const handled = await handleSchoolAdminStates({
@@ -8936,39 +8926,6 @@ if (a === "school_toggle_admissions" || a === "school_update_fees") {
   if (handled) return;
 }
  
-// ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
-if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
-  const _handled = await handleZqDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-
-// ── ZQ slug shortcode "zq huxton-academy" ────────────────────────────────────
-if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
-  const _handled = await handleSchoolSlugSearch({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (_handled) return;
-}
-
-// ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
-if (a.startsWith("sfaq_")) {
-  const handled = await handleSchoolFAQAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (handled) return;
-}
-
-// ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────
-if (a.startsWith("sc_")) {
-  const handled = await handleSellerChatAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (handled) return;
-}
-
-// ── Smart Card / ZQ Link admin actions ───────────────────────────────────────
-if (a === "school_get_zq_link" || a === "school_share_link_wa" ||
-    a === "school_smart_card_menu" || a === "school_my_leads" ||
-    a.startsWith("school_sc_src_") || a.startsWith("school_followup_") ||
-    a.startsWith("school_leads_page_")) {
-  const handled = await handleSchoolSearchActions({ action: a, from, biz, saveBiz: saveBizSafe.bind(null, biz) });
-  if (handled) return;
-}
-
 // ── School registration entry (tapped from main menu or account) ──────────────
 if (a === "school_register") {
   return startSchoolRegistration(from, biz);
