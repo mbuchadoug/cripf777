@@ -15,6 +15,7 @@ import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
 import { sendDocument, sendText } from "../services/metaSender.js";
 import { generatePDF } from "../routes/twilio_biz.js";
+import SchoolLead from "../models/schoolLead.js";
 import {
   SCHOOL_CITIES,
   SCHOOL_FACILITIES,
@@ -82,6 +83,18 @@ I've also attached the invoice showing the discounted fee.
 To arrange payment, contact 0789901058.
 
 Reply here if you want us to activate it for you.`;
+}
+
+// ── ZimQuote chatbot link helpers (must be before route declarations) ──────────
+const SC_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
+
+function _waLinkSchool(id) {
+  return "https://wa.me/" + SC_BOT + "?text=" + encodeURIComponent("ZQ:SCHOOL:" + id);
+}
+function _qrUrl(waLink, size) {
+  size = size || 300;
+  return "https://api.qrserver.com/v1/create-qr-code/?size=" + size + "x" + size
+    + "&data=" + encodeURIComponent(waLink) + "&color=085041&bgcolor=FFFFFF&qzone=2";
 }
 
 const router = express.Router();
@@ -1864,16 +1877,6 @@ Type *menu* to manage your listing. 🎓`
 //   GET  /zq-admin/schools/:id/smartcard/qr        → print-ready QR poster
 // ─────────────────────────────────────────────────────────────────────────────
 
-import SchoolLead from "../models/schoolLead.js";
-
-const SC_BOT = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
-
-function _waLinkSchool(id) {
-  return `https://wa.me/${SC_BOT}?text=${encodeURIComponent("ZQ:SCHOOL:" + id)}`;
-}
-function _qrUrl(waLink, size = 300) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(waLink)}&color=085041&bgcolor=FFFFFF&qzone=2`;
-}
 
 // ── Chatbot link panel ────────────────────────────────────────────────────────
 router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
@@ -1920,7 +1923,8 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
         <td style="font-size:12px;color:var(--muted)">${p.tip}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm btn-gray"
-            onclick="(function(b,t){navigator.clipboard.writeText(t).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy',1800)}).catch(()=>{});})(this,${JSON.stringify(caption)})">
+            data-copy="${esc(caption)}"
+            onclick="var d=this.dataset.copy;navigator.clipboard.writeText(d).then(()=>{this.textContent='✅ Copied!';var b=this;setTimeout(()=>b.textContent='📋 Copy caption',1800)}).catch(()=>{})">
             📋 Copy caption
           </button>
         </td>
@@ -1993,7 +1997,8 @@ ZimQuote Team`;
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-green btn-sm"
-              onclick="(function(b){navigator.clipboard.writeText(${JSON.stringify(waLink)}).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy Link',1800)}).catch(()=>{})})(this)">
+              data-copy="${esc(waLink)}"
+            onclick="var d=this.dataset.copy;navigator.clipboard.writeText(d).then(()=>{this.textContent='✅ Copied!';var b=this;setTimeout(()=>b.textContent='📋 Copy Link',1800)}).catch(()=>{})">
               📋 Copy Link
             </button>
             <a href="${esc(waLink)}" target="_blank" class="btn btn-blue btn-sm">

@@ -3047,6 +3047,16 @@ export async function handleIncomingMessage({ from, action }) {
   const al = text.toLowerCase();
   const a = typeof action === "string" ? action.trim().toLowerCase() : "";
 
+  // ── ZQ CHATBOT LINK — ABSOLUTE FIRST PRIORITY ─────────────────────────────
+  // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> payloads come in as plain text via
+  // wa.me deep-links. They must be caught HERE — before isMetaAction, before
+  // any session state check, before the supplier search text handler.
+  // Without this, any user with an active session gets "Which city?" instead
+  // of their school/seller profile.
+  if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+    const _zqHandled = await handleZqDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
+    if (_zqHandled) return;
+  }
 
 const isMetaAction =
     typeof action === "string" &&
