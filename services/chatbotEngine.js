@@ -8016,7 +8016,7 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     // ── School FAQ chatbot text states ──────────────────────────────────────
     if (biz.sessionState?.startsWith("sfaq_")) {
       const handled = await handleSchoolFAQState({
-        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe
+        state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
       });
       if (handled) return;
     }
@@ -8871,6 +8871,13 @@ if (a === "main_menu_back") {
   return sendMainMenu(from);
 }
  
+// ── Handle sfaq_ FAQ text states for users who may not have a biz record ────────
+// This must run BEFORE supplier registration guards that would short-circuit
+if (isMetaAction && a.startsWith("sfaq_")) {
+  const handled = await handleSchoolFAQAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  if (handled) return;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🏫 SCHOOLS - Action handlers
 // ═══════════════════════════════════════════════════════════════════════════════
