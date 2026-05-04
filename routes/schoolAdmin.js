@@ -129,7 +129,7 @@ function badge(text, color) {
   return `<span class="badge badge-${color}">${esc(text)}</span>`;
 }
 function stat(value, label, color) {
-  return `<div class="stat-card ${color ? "stat-" + color : ""}">
+  return `<div class="stat-card ${color ? 'stat-' + color : ''}">
     <div class="stat-val">${value}</div>
     <div class="stat-lbl">${label}</div>
   </div>`;
@@ -266,6 +266,20 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 // SCHOOLS LIST
 // GET /zq-admin/schools
 // ─────────────────────────────────────────────────────────────────────────────
+// ── FAQ management helpers ───────────────────────────────────────────────────
+const FAQ_CATEGORIES = [
+  { id: "fees",       label: "💵 Fees & Payments",     desc: "Extra fee info, payment tips, late fees" },
+  { id: "admissions", label: "📝 Admissions",           desc: "Deadlines, assessments, what to bring" },
+  { id: "academic",   label: "📊 Academic",             desc: "Study tips, remedial, gifted programs" },
+  { id: "life",       label: "🏫 School Life",          desc: "Uniform policy, after-school, trips" },
+  { id: "admin",      label: "📞 Admin & Contact",      desc: "Holiday office hours, complaints procedure" },
+  { id: "custom",     label: "❓ General / Other",      desc: "Anything not in the above categories" }
+];
+
+function _genFaqId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 router.get("/schools", requireSupplierAdmin, async (req, res) => {
   try {
     const { search = "", status = "", tier = "", city = "", page = 1 } = req.query;
@@ -316,8 +330,8 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
               <input name="search" placeholder="Name, phone, city..." value="${esc(search)}" />
               <select name="status">
                 <option value="">All Status</option>
-                <option ${status === "active"   ? "selected" : ""} value="active">Active</option>
-                <option ${status === "inactive" ? "selected" : ""} value="inactive">Inactive</option>
+                <option ${status === 'active'   ? 'selected' : ''} value="active">Active</option>
+                <option ${status === 'inactive' ? 'selected' : ''} value="inactive">Inactive</option>
               </select>
               <select name="tier">
                 <option value="">All Plans</option>
@@ -348,7 +362,7 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
               <td>${esc(s.suburb || "")}${s.suburb ? ", " : ""}${esc(s.city)}</td>
               <td><span class="tag" style="font-size:11px">${esc(s.type || "combined")}</span></td>
               <td>${badge(s.tier || "none", tierColor(s.tier))}</td>
-              <td>${badge(s.active ? "Active" : "Inactive", s.active ? "green" : "gray")}</td>
+              <td>${badge(s.active ? 'Active' : 'Inactive', s.active ? 'green' : 'gray')}</td>
               <td>${s.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</td>
               <td>⭐ ${(s.rating || 0).toFixed(1)}</td>
      <td>
@@ -365,7 +379,7 @@ router.get("/schools", requireSupplierAdmin, async (req, res) => {
         <div class="pagination">
           ${Number(page) > 1 ? `<a href="${qs(Number(page) - 1)}">← Prev</a>` : ""}
           ${Array.from({ length: Math.min(pages, 10) }, (_, i) => i + 1).map(p =>
-            `<a href="${qs(p)}" class="${Number(page) === p ? "active" : ""}">${p}</a>`
+            `<a href="${qs(p)}" class="${Number(page) === p ? 'active' : ''}">${p}</a>`
           ).join("")}
           ${Number(page) < pages ? `<a href="${qs(Number(page) + 1)}">Next →</a>` : ""}
         </div>` : ""}
@@ -791,12 +805,12 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
           <dt>Day Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
-              <span class="badge badge-${school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue"}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>
+              <span class="badge badge-${school.feeRange === 'budget' ? 'green' : school.feeRange === 'premium' ? 'orange' : 'blue'}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>
             </dd>
             ${(school.fees?.boardingTerm1 || 0) > 0 ? `<dt>Boarding Fees / Term</dt><dd>$${school.fees.boardingTerm1} / $${school.fees.boardingTerm2} / $${school.fees.boardingTerm3} USD</dd>` : ""}
             ${(school.fees?.ecdTerm1 || 0) > 0 ? `<dt>ECD Fees / Term</dt><dd>$${school.fees.ecdTerm1} / $${school.fees.ecdTerm2} / $${school.fees.ecdTerm3} USD</dd>` : ""}
             <dt>Plan</dt><dd>${badge(school.tier || "none", tierColor(school.tier))}</dd>
-            <dt>Status</dt><dd>${badge(school.active ? "Active" : "Inactive", school.active ? "green" : "gray")}</dd>
+            <dt>Status</dt><dd>${badge(school.active ? 'Active' : 'Inactive', school.active ? 'green' : 'gray')}</dd>
             <dt>Admissions</dt><dd>${school.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</dd>
             <dt>Subscription Ends</dt><dd>${renewDate}</dd>
             <dt>Rating</dt><dd>⭐ ${(school.rating || 0).toFixed(1)} (${school.reviewCount || 0} reviews)</dd>
@@ -809,17 +823,17 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
 
           <div class="action-row">
             <form method="POST" action="/zq-admin/schools/${school._id}/toggle-active" style="display:inline">
-              <button class="btn ${school.active ? "btn-orange" : "btn-green"}">
+              <button class="btn ${school.active ? 'btn-orange' : 'btn-green'}">
                 ${school.active ? "⏸ Deactivate" : "✅ Activate"}
               </button>
             </form>
             <form method="POST" action="/zq-admin/schools/${school._id}/toggle-admissions" style="display:inline">
-              <button class="btn ${school.admissionsOpen ? "btn-gray" : "btn-green"}">
+              <button class="btn ${school.admissionsOpen ? 'btn-gray' : 'btn-green'}">
                 ${school.admissionsOpen ? "🔴 Close Admissions" : "🟢 Open Admissions"}
               </button>
             </form>
             <form method="POST" action="/zq-admin/schools/${school._id}/toggle-verified" style="display:inline">
-              <button class="btn ${school.verified ? "btn-orange" : "btn-blue"}">
+              <button class="btn ${school.verified ? 'btn-orange' : 'btn-blue'}">
                 ${school.verified ? "❌ Remove Verified" : "✅ Mark Verified"}
               </button>
             </form>
@@ -895,7 +909,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
       $${Number(p.amount || 0).toFixed(2)}
       ${p.discountPercent ? `<div style="font-size:11px;color:var(--muted)">-${Number(p.discountPercent).toFixed(2)}% discount</div>` : ""}
     </td>
-    <td>${badge(p.status, p.status === "paid" ? "green" : "gray")}</td>
+    <td>${badge(p.status, p.status === 'paid' ? 'green' : 'gray')}</td>
     <td>${p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "-"}</td>
     <td>${p.endsAt ? new Date(p.endsAt).toLocaleDateString() : "-"}</td>
     <td>
@@ -980,7 +994,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           <div class="form-grid">
             <div class="fg"><label>School Name</label><input name="schoolName" value="${esc(school.schoolName)}" required /></div>
             <div class="fg"><label>Phone (login / WhatsApp)</label><input name="phone" value="${esc(school.phone)}" required /></div>
-            <div class="fg"><label>Contact Phone (shown to parents)</label><input name="contactPhone" value="${esc(school.contactPhone || "")}" placeholder="e.g. 0242123456" /></div>
+            <div class="fg"><label>Contact Phone (shown to parents)</label><input name="contactPhone" value="${esc(school.contactPhone || '')}" placeholder="e.g. 0242123456" /></div>
             <div class="fg">
               <label>City</label>
               <select name="city" required>
@@ -989,11 +1003,11 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
                 <option value="${esc(school.city)}" selected>${esc(school.city)}</option>
               </select>
             </div>
-            <div class="fg"><label>Suburb / Area</label><input name="suburb" value="${esc(school.suburb || "")}" required /></div>
-            <div class="fg"><label>Address</label><input name="address" value="${esc(school.address || "")}" /></div>
-            <div class="fg"><label>Email</label><input name="email" type="email" value="${esc(school.email || "")}" /></div>
-            <div class="fg"><label>Website</label><input name="website" value="${esc(school.website || "")}" /></div>
-            <div class="fg"><label>Principal</label><input name="principalName" value="${esc(school.principalName || "")}" /></div>
+            <div class="fg"><label>Suburb / Area</label><input name="suburb" value="${esc(school.suburb || '')}" required /></div>
+            <div class="fg"><label>Address</label><input name="address" value="${esc(school.address || '')}" /></div>
+            <div class="fg"><label>Email</label><input name="email" type="email" value="${esc(school.email || '')}" /></div>
+            <div class="fg"><label>Website</label><input name="website" value="${esc(school.website || '')}" /></div>
+            <div class="fg"><label>Principal</label><input name="principalName" value="${esc(school.principalName || '')}" /></div>
           </div>
 
           <!-- ── Academic ────────────────────────────────────────────── -->
@@ -1002,8 +1016,8 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="fg"><label>School Type</label><select name="type">${typeOptions}</select></div>
             <div class="fg"><label>Gender</label><select name="gender">${genderOptions}</select></div>
             <div class="fg"><label>Boarding</label><select name="boarding">${boardingOptions}</select></div>
-            <div class="fg"><label>Grades From</label><input name="gradesFrom" value="${esc(school.grades?.from || "ECD A")}" /></div>
-            <div class="fg"><label>Grades To</label><input name="gradesTo" value="${esc(school.grades?.to || "Form 6")}" /></div>
+            <div class="fg"><label>Grades From</label><input name="gradesFrom" value="${esc(school.grades?.from || 'ECD A')}" /></div>
+            <div class="fg"><label>Grades To</label><input name="gradesTo" value="${esc(school.grades?.to || 'Form 6')}" /></div>
             <div class="fg"><label>Capacity</label><input type="number" name="capacity" value="${school.capacity || 0}" min="0" /></div>
           </div>
           <div class="fg full" style="margin-bottom:14px">
@@ -1083,7 +1097,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
           </div>
           <div class="fg full" style="margin-bottom:14px;margin-top:10px">
             <label>Online Application Link</label>
-            <input name="registrationLink" value="${esc(school.registrationLink || "")}" placeholder="https://forms.gle/..." />
+            <input name="registrationLink" value="${esc(school.registrationLink || '')}" placeholder="https://forms.gle/..." />
           </div>
           <div class="fg full" style="margin-bottom:20px">
             <label>Admin Note (internal)</label>
@@ -1941,7 +1955,7 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
         : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline"><button class="btn btn-sm btn-green">✅ Mark contacted</button></form>`}
       </td>
       <td>${l.parentPhone
-        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent("Hi "+(l.parentName||"")+(l.parentName?", ":"")+"I'm following up from "+school.schoolName+" regarding your ZimQuote enquiry.")}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
+        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,'')}?text=${encodeURIComponent('Hi '+(l.parentName||'')+(l.parentName?', ':'')+'I\'m following up from '+school.schoolName+' regarding your ZimQuote enquiry.')}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
         : "—"}
       </td>
     </tr>`).join("");
@@ -2144,7 +2158,7 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
         : `<form method="POST" action="/zq-admin/schools/${school._id}/smartcard/lead/${l._id}/contacted" style="display:inline"><button class="btn btn-sm btn-green">✅ Mark contacted</button></form>`}
       </td>
       <td>${l.parentPhone
-        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,"")}?text=${encodeURIComponent("Hi "+(l.parentName||"")+(l.parentName?", ":"")+"I'm following up from "+school.schoolName+" regarding your ZimQuote enquiry.")}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
+        ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,'')}?text=${encodeURIComponent('Hi '+(l.parentName||'')+(l.parentName?', ':'')+'I\'m following up from '+school.schoolName+' regarding your ZimQuote enquiry.')}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
         : "—"}
       </td>
     </tr>`).join("");
@@ -2214,7 +2228,7 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
   <h1>${esc(school.schoolName)}</h1>
   <p class="sub">📍 ${esc(loc)}</p>
   ${feeStr?`<p class="sub">${esc(feeStr)}</p>`:""}
-  <span class="adm ${school.admissionsOpen===false?"closed":""}">${school.admissionsOpen===false?"🔴 Admissions Closed":"🟢 Admissions Open"}</span>
+  <span class="adm ${school.admissionsOpen===false?'closed':''}">${school.admissionsOpen===false?'🔴 Admissions Closed':'🟢 Admissions Open'}</span>
   <div class="qrw"><img src="${esc(qrImg)}" alt="Scan to open on WhatsApp"></div>
   <p class="cta">📲 Scan to see fees, enroll & enquire</p>
   <div class="how">Open WhatsApp → tap Camera → scan this code<br>Your school profile opens in the chat <strong>instantly</strong>.<br>No app download. No website. Any phone.</div>
@@ -2232,6 +2246,290 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 </body></html>`);
   } catch (err) {
     res.status(500).send(`<p>Error: ${err.message}</p>`);
+  }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHOOL FAQ MANAGEMENT
+// Schools load their own Q&A. Admin can manage on behalf of schools.
+// Supports: categories, ordering, PDF attachments, pagination.
+//
+// faqItems schema:
+//   { id, category, question, answer, pdfUrl, pdfLabel, active, order, addedBy }
+//
+// GET  /zq-admin/schools/:id/faq                 → FAQ panel
+// POST /zq-admin/schools/:id/faq/add             → Add Q&A item
+// POST /zq-admin/schools/:id/faq/:itemId/delete  → Delete one item
+// POST /zq-admin/schools/:id/faq/:itemId/toggle  → Toggle active/inactive
+// POST /zq-admin/schools/:id/faq/:itemId/move    → Move up/down (reorder)
+// POST /zq-admin/schools/:id/faq/clear           → Clear all
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+router.get("/schools/:id/faq", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const okMsg  = req.query.success ? '<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ' + esc(req.query.success) + "</div>" : "";
+    const errMsg = req.query.error   ? '<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px">❌ ' + esc(req.query.error) + "</div>" : "";
+
+    const filterCat = req.query.cat || "";
+    const allItems  = school.faqItems || [];
+    const items     = filterCat ? allItems.filter(f => f.category === filterCat) : allItems;
+    const itemsByCat = {};
+    FAQ_CATEGORIES.forEach(c => {
+      itemsByCat[c.id] = allItems.filter(f => f.category === c.id).sort((a,b) => (a.order||0) - (b.order||0));
+    });
+
+    // Build category filter tabs
+    const catTabs = FAQ_CATEGORIES.map(c => {
+      const count = (itemsByCat[c.id] || []).length;
+      const active = filterCat === c.id;
+      return `<a href="?cat=${c.id}" style="display:inline-block;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;text-decoration:none;`
+        + (active ? "background:var(--primary);color:#fff;" : "background:var(--bg);color:var(--muted);border:.5px solid var(--border);")
+        + '">' + esc(c.label) + (count ? " <b>"+count+"</b>" : "") + "</a>";
+    }).join(" ");
+
+    // Build items table
+    const displayItems = items.slice().sort((a,b) => (a.order||0) - (b.order||0));
+    const rows = displayItems.map((fq, idx) => {
+      const catLabel = (FAQ_CATEGORIES.find(c => c.id === fq.category) || {}).label || fq.category || "General";
+      const active   = fq.active !== false;
+      return "<tr>"
+        + '<td style="font-size:12px;color:var(--muted);text-align:center">' + ((fq.order || 0) + 1) + "</td>"
+        + "<td><strong>" + esc(fq.question) + "</strong>"
+        + (fq.question.length > 20 ? '<div style="font-size:10px;color:#dc2626">⚠️ Button shows: "' + esc(fq.question.slice(0,20)) + '"</div>' : "")
+        + "</td>"
+        + '<td style="font-size:12px;color:var(--muted);max-width:200px">' + esc((fq.answer || "").slice(0, 80)) + (fq.answer?.length > 80 ? "…" : "") + "</td>"
+        + '<td style="font-size:12px">' + esc(catLabel) + "</td>"
+        + '<td style="font-size:12px">' + (fq.pdfUrl ? '<span style="color:#16a34a">📄 PDF attached</span>' : "<span style='color:var(--muted)'>No PDF</span>") + "</td>"
+        + '<td style="font-size:12px;text-align:center">'
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/toggle" style="display:inline">'
+        + '<button class="btn btn-sm ' + (active ? "btn-green" : "btn-gray") + '">' + (active ? "✅ On" : "⏸️ Off") + "</button></form>"
+        + "</td>"
+        + "<td style='white-space:nowrap'>"
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/move" style="display:inline"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-gray" title="Move up">↑</button></form> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/move" style="display:inline"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-gray" title="Move down">↓</button></form> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/delete" style="display:inline">'
+        + '<button class="btn btn-sm btn-red" onclick="return confirm(&quot;Delete this Q&A?&quot;)">🗑️</button></form>'
+        + "</td>"
+        + "</tr>";
+    }).join("");
+
+    // Example questions per category for quick-add
+    const EXAMPLES = {
+      fees:       ["What happens if fees are paid late?","Are there sibling discounts?","Can fees be paid in installments?","What are the extra levy charges?"],
+      admissions: ["When does enrollment open for 2027?","Is there an entry assessment?","What is the maximum class size?","Do you accept mid-year transfers?"],
+      academic:   ["What remedial support is available?","Is there a gifted learner program?","How often are parent-teacher meetings?","What is the homework policy?"],
+      life:       ["What is the uniform supplier?","Is after-school care available?","Do you have a tuck shop?","What is the cell phone policy?"],
+      admin:      ["Who do I contact for complaints?","What are holiday office hours?","How do I update my contact details?","Is there a parent WhatsApp group?"],
+      custom:     ["Is the school affiliated to a church?","Do you accept international students?","What security measures are in place?","Is there a school shuttle from town?"]
+    };
+    const activeCatExamples = filterCat && EXAMPLES[filterCat] ? EXAMPLES[filterCat] : EXAMPLES.custom;
+
+  const exampleBtns = activeCatExamples.map(q =>
+  '<button type="button" style="background:var(--bg);border:.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;margin:3px" '
+  + "onclick='document.getElementById(\"fq_question\").value=" + JSON.stringify(q) + ";document.getElementById(\"fq_question\").focus()'>"
+  + esc(q) + "</button>"
+).join("");
+
+    const catOptions = FAQ_CATEGORIES.map(c =>
+      '<option value="' + c.id + '"' + (filterCat === c.id ? " selected" : "") + ">" + esc(c.label) + " — " + esc(c.desc) + "</option>"
+    ).join("");
+
+res.send(layout("FAQ: " + esc(school.schoolName),
+  '<a href="/zq-admin/schools/' + school._id + '" class="back-link">← Back to ' + esc(school.schoolName) + "</a>\n"
+      + okMsg + errMsg
+
+      + '<div class="panel" style="margin-bottom:16px">'
+      + '<div class="panel-head">'
+      + '<h3>❓ Preloaded FAQ — ' + esc(school.schoolName) + '</h3>'
+      + '<span style="font-size:13px;color:var(--muted)">' + allItems.length + ' question' + (allItems.length !== 1 ? "s" : "") + ' · ' + allItems.filter(f => f.active !== false).length + ' active</span>'
+      + "</div>"
+
+      + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">'
+      + 'When a parent taps <strong>"More Q&A"</strong> in the school chatbot, they see these questions with instant preloaded answers — no staff needed online.'
+      + " Button titles are trimmed to 20 characters (WhatsApp limit). Questions marked ⚠️ will be truncated."
+      + "</p>"
+
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
+      + '<a href="?cat=" style="display:inline-block;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;text-decoration:none;' + (!filterCat ? "background:var(--primary);color:#fff;" : "background:var(--bg);color:var(--muted);border:.5px solid var(--border);") + '">All (' + allItems.length + ")</a>"
+      + catTabs
+      + "</div>"
+
+      + (displayItems.length ? `
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>#</th><th>Question (button shows first 20 chars)</th><th>Answer preview</th><th>Category</th><th>PDF</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>` + rows + `</tbody>
+          </table>
+        </div>
+        <form method="POST" action="/zq-admin/schools/${school._id}/faq/clear" onsubmit="return confirm('Delete ALL FAQ items for this school?')" style="margin-top:12px">
+          <button class="btn btn-sm btn-gray">🗑️ Clear all FAQ items</button>
+        </form>`
+      : '<p style="color:var(--muted);font-size:13px;padding:16px 0">No FAQ items yet. Add your first one below.</p>')
+      + "</div>"
+
+      + '<div class="panel" style="margin-bottom:16px">'
+      + "<h3>➕ Add a Q&A item</h3>"
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/add" enctype="multipart/form-data">'
+
+      + '<div class="fg" style="margin-bottom:12px">'
+      + '<label>Category <span style="color:red">*</span></label>'
+      + '<select name="category" required><option value="">Select category...</option>' + catOptions + "</select>"
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:6px">'
+      + '<label>Question (shown as button to parents) <span style="color:red">*</span></label>'
+      + '<input id="fq_question" name="question" maxlength="100" required placeholder="e.g. After-school care?" oninput="var v=this.value;document.getElementById(&quot;q_preview&quot;).textContent=v.slice(0,20);document.getElementById(&quot;q_len&quot;).textContent=v.length">'
+      + '<div style="font-size:11px;margin-top:4px;display:flex;gap:12px">'
+      + '<span style="color:var(--muted)">Button shows: <strong id="q_preview"></strong></span>'
+      + '<span style="color:var(--muted)">Characters: <span id="q_len">0</span>/100</span>'
+      + '</div>'
+      + "</div>"
+
+      + '<div style="margin-bottom:12px">'
+      + '<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">Quick-fill examples:</div>'
+      + exampleBtns
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:12px">'
+      + '<label>Answer (full text shown to parent) <span style="color:red">*</span></label>'
+      + '<textarea name="answer" rows="5" required placeholder="Type the complete answer. This is what parents read when they tap the question. Be specific — include times, numbers, names, contacts." maxlength="2000"></textarea>'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:12px">'
+      + '<label>PDF attachment (optional)</label>'
+      + '<input type="text" name="pdfUrl" placeholder="Paste PDF URL (e.g. from Google Drive, Dropbox, or your server)">'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:4px">If provided, the PDF is sent to the parent alongside the text answer. Use a direct download link.</div>'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:14px">'
+      + '<label>PDF label (optional)</label>'
+      + '<input type="text" name="pdfLabel" placeholder="e.g. School prospectus 2026" maxlength="60">'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:14px">'
+      + '<label>Position (order number, 0 = first)</label>'
+      + '<input type="number" name="order" value="' + allItems.length + '" min="0" max="99" style="width:100px">'
+      + "</div>"
+
+      + '<button type="submit" class="btn btn-green">➕ Add Q&A item</button>'
+      + "</form></div>"
+
+      + '<div class="panel">'
+      + "<h3>💡 What parents see in the chatbot</h3>"
+      + '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Default topics are always shown and answered from the school profile data. Custom Q&A items appear under <strong>"More Q&A"</strong>.</p>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">'
+      + ["💵 Fees & payments","📝 Admissions","📊 Academic & results","🏫 School life","📞 Contact & docs","❓ More Q&A"].map(t =>
+          '<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:13px">' + esc(t) + "</div>"
+        ).join("")
+      + "</div></div>"
+    ));
+  } catch (err) {
+    res.send(layout("Error", '<div class="alert red">' + err.message + "</div>"));
+  }
+});
+
+// Add FAQ item
+router.post("/schools/:id/faq/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school   = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const question = String(req.body.question || "").trim();
+    const answer   = String(req.body.answer   || "").trim();
+    const category = String(req.body.category || "custom").trim();
+    const pdfUrl   = String(req.body.pdfUrl   || "").trim();
+    const pdfLabel = String(req.body.pdfLabel || "").trim();
+    const order    = parseInt(req.body.order  || "0", 10);
+
+    if (!question || !answer) {
+      return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("Question and answer are required."));
+    }
+    if ((school.faqItems || []).length >= 50) {
+      return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("Maximum 50 FAQ items per school."));
+    }
+
+    const items = school.faqItems || [];
+    items.push({
+      id:       _genFaqId(),
+      category, question, answer,
+      pdfUrl:   pdfUrl   || undefined,
+      pdfLabel: pdfLabel || undefined,
+      active:   true,
+      order,
+      addedBy:  "zimquote_admin"
+    });
+    // Re-sort by order
+    items.sort((a, b) => (a.order||0) - (b.order||0));
+    school.faqItems = items;
+    await school.save();
+
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?cat=" + category + "&success=" + encodeURIComponent("Q&A item added. Parents will see it under “More Q&A”."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// Delete one FAQ item
+router.post("/schools/:id/faq/:itemId/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    school.faqItems = (school.faqItems || []).filter(f => f.id !== req.params.itemId);
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item deleted."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// Toggle active/inactive
+router.post("/schools/:id/faq/:itemId/toggle", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const item = (school.faqItems || []).find(f => f.id === req.params.itemId);
+    if (item) item.active = !item.active;
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item " + (item?.active ? "activated" : "hidden") + "."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// Move item up or down in order
+router.post("/schools/:id/faq/:itemId/move", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const dir   = req.body.dir === "up" ? -1 : 1;
+    const items = (school.faqItems || []).sort((a, b) => (a.order||0) - (b.order||0));
+    const idx   = items.findIndex(f => f.id === req.params.itemId);
+    const swap  = idx + dir;
+    if (idx >= 0 && swap >= 0 && swap < items.length) {
+      const tmp         = items[idx].order;
+      items[idx].order  = items[swap].order;
+      items[swap].order = tmp;
+    }
+    school.faqItems = items;
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item moved."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// Clear all FAQ items
+router.post("/schools/:id/faq/clear", requireSupplierAdmin, async (req, res) => {
+  try {
+    await SchoolProfile.findByIdAndUpdate(req.params.id, { $set: { faqItems: [] } });
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?success=" + encodeURIComponent("All FAQ items cleared."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
   }
 });
 

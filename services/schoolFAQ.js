@@ -1,20 +1,29 @@
 // services/schoolFAQ.js
-// ─── ZimQuote School Chatbot — Preloaded FAQ with Custom Questions ────────────
+// ─── ZimQuote School Chatbot — Full FAQ with Preloaded Answers ────────────────
 //
-// HOW IT WORKS:
-//   1. Parent taps school's ZimQuote chatbot link → showSchoolFAQMenu()
-//   2. Bot shows 9 topic buttons (WhatsApp max 10 per list)
-//   3. Parent taps a topic → gets PRELOADED ANSWER from school's profile data
-//   4. If school has added custom FAQ items (school.faqItems[]), those appear too
-//   5. Schools can add/edit/delete their own Q&A pairs via bot menu (school admin)
+// WHATSAPP BUTTON TITLE LIMIT: 20 characters maximum (hard limit enforced by Meta)
+// All button titles in this file are ≤20 chars. Counted carefully.
 //
-// NULL-SAFE: Works for first-time users with no biz session.
-// schoolId is embedded in every action ID so no session context is ever required
-// to deliver an answer.
+// FAQ Categories (each is a separate sendList with ≤10 items):
+//   CATEGORY 1: Fees & Payments
+//   CATEGORY 2: Admissions & Enrollment
+//   CATEGORY 3: Academic & Results
+//   CATEGORY 4: School Life (transport, facilities, sports, uniforms, calendar)
+//   CATEGORY 5: Contact & Admin (staff, docs, compare, message)
+//   CATEGORY 6: Custom FAQ (school-specific Q&A set by school admin)
 //
-// SchoolProfile fields used (add to schema if not present):
-//   faqItems: [{ question: String, answer: String, order: Number }]
-//   All other fields (fees, termCalendar, etc.) already exist.
+// SchoolProfile schema additions needed:
+//   faqItems: [{
+//     id: String,           // unique, auto-generated
+//     category: String,     // "fees"|"admissions"|"academic"|"life"|"admin"|"custom"
+//     question: String,     // shown as button title (truncated to 20 chars on button)
+//     answer: String,       // full answer text sent to parent
+//     pdfUrl: String,       // optional: PDF sent instead of/alongside text answer
+//     pdfLabel: String,     // filename label for the PDF
+//     active: Boolean,      // true = shown to parents
+//     order: Number,        // position within category (0 = first)
+//     addedBy: String,      // "school" | "zimquote_admin"
+//   }]
 
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolLead    from "../models/schoolLead.js";
@@ -29,280 +38,238 @@ import {
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
+// CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-function _feeLabel(school) {
-  if (school.fees?.term1) return `$${school.fees.term1}/term`;
-  return { budget: "Under $300/term", mid: "$300–$800/term", premium: "$800+/term" }[school.feeRange] || "Contact school";
+const MAX_BTN = 20; // WhatsApp button title hard limit
+
+// Safe button title — trims and enforces ≤20 chars
+function _btn(title) {
+  return title.trim().slice(0, MAX_BTN);
 }
 
-// Null-safe session save — never crashes when biz is null
-async function _saveSession(biz, saveBiz, state, extraData = {}) {
+function _feeLabel(s) {
+  if (s.fees?.term1) return `$${s.fees.term1}/term`;
+  return { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" }[s.feeRange] || "Ask school";
+}
+
+async function _saveSession(biz, saveBiz, state, data = {}) {
   if (!biz || !saveBiz) return;
   biz.sessionState = state;
-  biz.sessionData  = { ...(biz.sessionData || {}), ...extraData };
+  biz.sessionData  = { ...(biz.sessionData || {}), ...data };
   try { await saveBiz(biz); } catch (e) { /* ignore */ }
 }
 
-function _saveLead(from, school, actionType, source, extra = {}) {
+function _lead(from, school, action, source, extra = {}) {
   SchoolLead.create({
     schoolId: school._id, schoolPhone: school.phone,
     schoolName: school.schoolName, zqSlug: school.zqSlug || "",
-    parentPhone: from.replace(/\D+/g, ""),
+    parentPhone: from.replace(/\D+/g,""),
     parentName: extra.parentName || "", gradeInterest: extra.gradeInterest || "",
-    actionType, source, waOpened: true, contacted: false
+    actionType: action, source, waOpened: true, contacted: false
   }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY POINT — called by handleZqDeepLink in schoolSearch.js
+// MAIN MENU — entry point when parent taps school's ZimQuote bot link
 // ─────────────────────────────────────────────────────────────────────────────
 export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return sendText(from, "❌ School not found. Please try the link again.");
 
-  // Track visit (fire-and-forget)
   SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { monthlyViews: 1, zqLinkConversions: 1 } }).catch(() => {});
+  _lead(from, school, "view", source, { parentName });
 
-  // Save lead stub
-  _saveLead(from, school, "view", source, { parentName });
-
-  // Save session context (safe for null biz)
   await _saveSession(biz, saveBiz, "sfaq_menu", {
     faqSchoolId:   String(schoolId),
-    faqParentName: parentName
+    faqParentName: parentName,
+    faqSource:     source
   });
 
-  // ── Build school header ─────────────────────────────────────────────────────
-  const admBadge = school.admissionsOpen ? "🟢 Admissions Open" : "🔴 Admissions Closed";
-  const fee      = _feeLabel(school);
-  const verified = school.verified ? " ✅" : "";
-  const typeMap  = { ecd:"ECD/Preschool", ecd_primary:"ECD + Primary", primary:"Primary School", secondary:"Secondary School", combined:"Combined School" };
-  const cur      = (school.curriculum || []).map(c => c.toUpperCase()).join(" + ") || "ZIMSEC";
-  const greeting = parentName ? `Hi ${parentName.split(" ")[0]}! ` : "";
+  const adm  = school.admissionsOpen ? "🟢 Open" : "🔴 Closed";
+  const fee  = _feeLabel(school);
+  const cur  = (school.curriculum || []).map(c => c.toUpperCase()).join("+") || "ZIMSEC";
+  const TYPE = { ecd:"ECD/Preschool", ecd_primary:"ECD+Primary", primary:"Primary", secondary:"Secondary", combined:"Combined" };
+  const greet = parentName ? `Hi ${parentName.split(" ")[0]}! ` : "";
+
+  // Count active custom FAQ items by category
+  const custom = (school.faqItems || []).filter(f => f.active !== false);
 
   await sendText(from,
-`🏫 *${school.schoolName}*${verified}
+`🏫 *${school.schoolName}*${school.verified ? " ✅" : ""}
 📍 ${school.suburb ? school.suburb + ", " : ""}${school.city}
-${admBadge} · ${fee}
-📚 ${typeMap[school.type] || "School"} · ${cur}
+${adm} · ${fee} · ${TYPE[school.type] || "School"} · ${cur}
 
-${greeting}Welcome to *${school.schoolName}* on ZimQuote.
-Choose what you'd like to know:`
+${greet}Welcome! What would you like to know?`
   );
 
-  // ── Build menu — default topics + custom FAQ items from school ──────────────
-  // WhatsApp hard limit: 10 rows per list section
-  const customFAQ = (school.faqItems || [])
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .slice(0, 1); // show 1 custom item in main menu (rest in "More")
-
+  // Categories shown as list — ≤10 items, all titles ≤20 chars
   const rows = [
-    { id: `sfaq_fees_${schoolId}`,       title: "💵 School fees",           description: "Fees per term, payment methods" },
-    { id: `sfaq_enroll_${schoolId}`,     title: "📝 Enrollment",            description: "How to apply, documents needed" },
-    { id: `sfaq_tour_${schoolId}`,       title: "📅 Book a school visit",   description: "Schedule a tour or open day" },
-    { id: `sfaq_results_${schoolId}`,    title: "📊 Academic results",      description: "Pass rates, rankings, subjects" },
-    { id: `sfaq_transport_${schoolId}`,  title: "🚌 Transport",             description: "Routes, suburbs covered, costs" },
-    { id: `sfaq_facilities_${schoolId}`, title: "🏊 Facilities & sports",   description: "Labs, pool, clubs, activities" },
-    { id: `sfaq_calendar_${schoolId}`,   title: "📆 Term dates",            description: "Term 1/2/3, exams, holidays" },
-    { id: `sfaq_staff_${schoolId}`,      title: "👤 Contact & staff",       description: "Phone, email, office hours" },
-    ...customFAQ.map(fq => ({
-      id:          `sfaq_custom_${fq._id || fq.order || "0"}_${schoolId}`,
-      title:       fq.question.slice(0, 24),
-      description: fq.answer.slice(0, 72)
-    })),
-    { id: `sfaq_more_${schoolId}`,       title: "➕ More options",           description: "Uniforms, docs, message school" }
-  ].slice(0, 10); // enforce WhatsApp 10-row limit
+    { id: `sfaq_cat_fees_${schoolId}`,    title: "💵 Fees & payments",    description: "Term fees, payment, EcoCash" },
+    { id: `sfaq_cat_admissions_${schoolId}`, title: "📝 Admissions",      description: "Apply, documents, age guide" },
+    { id: `sfaq_cat_academic_${schoolId}`, title: "📊 Academic & results", description: "Pass rates, subjects, ranks" },
+    { id: `sfaq_cat_life_${schoolId}`,    title: "🏫 School life",         description: "Transport, facilities, sports" },
+    { id: `sfaq_cat_admin_${schoolId}`,   title: "📞 Contact & docs",      description: "Staff, phone, downloads" },
+  ];
+
+  // Add custom category if school has active custom items
+  if (custom.length > 0) {
+    rows.push({ id: `sfaq_cat_custom_${schoolId}`, title: "❓ More Q&A", description: `${custom.length} school-specific answers` });
+  }
+
+  rows.push({ id: `sfaq_message_${schoolId}`, title: "✉️ Send a message", description: "Ask anything directly" });
 
   return sendList(from, "Select a topic:", rows);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTION ROUTER — handles every sfaq_ button tap
-// schoolId is ALWAYS the last segment after the final underscore
-// This works even when biz is null — no session needed
+// ACTION ROUTER
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQAction({ from, action: a, biz, saveBiz }) {
-  // Parse: last 24-char hex segment is always the schoolId
-  const lastUs  = a.lastIndexOf("_");
+  const lastUs   = a.lastIndexOf("_");
   const schoolId = a.slice(lastUs + 1);
   const topic    = a.slice(5, lastUs); // strip "sfaq_" prefix
 
   if (!schoolId || schoolId.length !== 24) return false;
 
-  // Always keep session fresh with current school
-  await _saveSession(biz, saveBiz, biz?.sessionState || "sfaq_menu", {
-    faqSchoolId: schoolId
-  });
+  // Refresh session
+  await _saveSession(biz, saveBiz, biz?.sessionState || "sfaq_menu", { faqSchoolId: schoolId });
 
-  // Custom FAQ items: sfaq_custom_<itemId>_<schoolId>
-  if (topic.startsWith("custom_")) {
-    const itemId = topic.slice(7); // strip "custom_"
-    return _faqCustomAnswer(from, schoolId, itemId);
+  // Custom FAQ item answer: sfaq_ans_<itemId>_<schoolId>
+  if (topic.startsWith("ans_")) {
+    const itemId = topic.slice(4);
+    return _answerCustomItem(from, schoolId, itemId, biz, saveBiz);
+  }
+
+  // Category pages
+  if (topic.startsWith("cat_")) {
+    const cat = topic.slice(4);
+    return _showCategory(from, schoolId, cat, 0, biz, saveBiz);
+  }
+
+  // Category pagination: sfaq_pg_<cat>_<page>_<schoolId>
+  if (topic.startsWith("pg_")) {
+    const parts2 = topic.split("_");
+    const page   = parseInt(parts2[parts2.length - 1], 10) || 0;
+    const cat    = parts2.slice(1, -1).join("_");
+    return _showCategory(from, schoolId, cat, page, biz, saveBiz);
   }
 
   switch (topic) {
-    case "fees":              return _faqFees(from, schoolId);
-    case "fees_pay":          return _faqFeesPayment(from, schoolId);
-    case "fees_pdf":          return _faqFeesPDF(from, schoolId, biz, saveBiz);
-    case "fees_disc":         return _faqFeesDiscount(from, schoolId);
-    case "enroll":            return _faqEnroll(from, schoolId, biz, saveBiz);
-    case "enroll_apply":      return _faqEnrollApply(from, schoolId, biz, saveBiz);
-    case "enroll_docs":       return _faqEnrollDocs(from, schoolId);
-    case "enroll_age":        return _faqEnrollAge(from, schoolId);
-    case "enroll_grade":      return _faqGradeCheck(from, schoolId, biz, saveBiz);
-    case "tour":              return _faqTour(from, schoolId, biz, saveBiz);
-    case "tour_book":         return _faqTourBook(from, schoolId, biz, saveBiz);
-    case "results":           return _faqResults(from, schoolId);
-    case "results_sub":       return _faqResultsSubs(from, schoolId);
-    case "results_uni":       return _faqResultsUni(from, schoolId);
-    case "transport":         return _faqTransport(from, schoolId);
-    case "transport_routes":  return _faqTransportRoutes(from, schoolId);
-    case "transport_cost":    return _faqTransportCost(from, schoolId);
-    case "facilities":        return _faqFacilities(from, schoolId);
-    case "sports":            return _faqSports(from, schoolId);
-    case "calendar":          return _faqCalendar(from, schoolId);
-    case "staff":             return _faqStaff(from, schoolId);
-    case "more":              return _faqMore(from, schoolId, biz, saveBiz);
-    case "uniforms":          return _faqUniforms(from, schoolId);
-    case "docs":              return _faqDocs(from, schoolId);
-    case "compare":           return _faqCompare(from, schoolId);
-    case "bursary":           return _faqBursary(from, schoolId, biz, saveBiz);
-    case "message":           return _faqMessage(from, schoolId, biz, saveBiz);
-    case "back":              return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+    // ── Fees sub-actions
+    case "fees_pay":         return _faqFeesPayment(from, schoolId);
+    case "fees_disc":        return _faqFeesDiscount(from, schoolId);
+    case "fees_pdf":         return _faqFeesPDF(from, schoolId);
+    case "fees_boarding":    return _faqFeesBoarding(from, schoolId);
 
-    // ── School admin: manage custom FAQ (from school admin bot menu) ──────────
-    case "admin_faq":         return _adminFAQMenu(from, schoolId, biz, saveBiz);
-    case "admin_faq_list":    return _adminFAQList(from, schoolId);
-    case "admin_faq_add":     return _adminFAQAdd(from, schoolId, biz, saveBiz);
-    case "admin_faq_clear":   return _adminFAQClear(from, schoolId);
+    // ── Admissions sub-actions
+    case "enroll_apply":     return _faqEnrollApply(from, schoolId, biz, saveBiz);
+    case "enroll_docs":      return _faqEnrollDocs(from, schoolId);
+    case "enroll_age":       return _faqEnrollAge(from, schoolId);
+    case "enroll_grade":     return _faqGradeCheck(from, schoolId, biz, saveBiz);
+    case "enroll_status":    return _faqAppStatus(from, schoolId, biz, saveBiz);
+
+    // ── Academic sub-actions
+    case "results_subs":     return _faqResultsSubs(from, schoolId);
+    case "results_uni":      return _faqResultsUni(from, schoolId);
+
+    // ── School life sub-actions
+    case "transport_routes": return _faqTransportRoutes(from, schoolId);
+    case "transport_cost":   return _faqTransportCost(from, schoolId);
+    case "sports":           return _faqSports(from, schoolId);
+
+    // ── Contact & docs sub-actions
+    case "compare":          return _faqCompare(from, schoolId);
+    case "bursary":          return _faqBursary(from, schoolId, biz, saveBiz);
+
+    // ── Utility
+    case "message":          return _faqMessage(from, schoolId, biz, saveBiz);
+    case "back":             return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+    case "tour_book":        return _faqTourBook(from, schoolId, biz, saveBiz);
 
     default: return false;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATE HANDLER — handles typed text in sfaq_ states
+// STATE HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sfaq_")) return false;
-
   const schoolId = biz?.sessionData?.faqSchoolId;
   if (!schoolId) return false;
 
   const raw = (text || "").trim();
-  const lo  = raw.toLowerCase();
-
-  // Universal escape
-  if (lo === "cancel" || lo === "back" || lo === "menu") {
+  if (["cancel","back","menu"].includes(raw.toLowerCase())) {
     await _saveSession(biz, saveBiz, "sfaq_menu");
     return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
   }
 
   switch (state) {
 
-    // ── Parent sent a typed message to school ────────────────────────────────
     case "sfaq_awaiting_message": {
-      if (raw.length < 3) return sendText(from, "Please type your message (minimum 3 characters). Type *cancel* to go back.");
+      if (raw.length < 3) return sendText(from, "Please type your message. Type *cancel* to go back.");
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       notifySchoolEnquiry(school.phone, school.schoolName, from, raw).catch(() => {});
-      _saveLead(from, school, "enquiry", "whatsapp_link");
+      _lead(from, school, "enquiry", "whatsapp_link");
+      SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } }).catch(() => {});
       await _saveSession(biz, saveBiz, "sfaq_menu");
       return sendButtons(from, {
-        text: `✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThe school will reply to you on WhatsApp.\n📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${school.contactPhone || school.phone}`,
         buttons: [
-          { id: `sfaq_tour_${schoolId}`,   title: "📅 Book a tour" },
-          { id: `sfaq_enroll_${schoolId}`, title: "📝 Enrollment" },
-          { id: `sfaq_back_${schoolId}`,   title: "⬅ Back to menu" }
+          { id: `sfaq_cat_admissions_${schoolId}`, title: _btn("📝 Admissions") },
+          { id: `sfaq_tour_book_${schoolId}`,       title: _btn("📅 Book a tour") },
+          { id: `sfaq_back_${schoolId}`,             title: _btn("⬅ Main menu") }
         ]
       });
     }
 
-    // ── Parent chose preferred tour date ────────────────────────────────────
     case "sfaq_awaiting_tour_date": {
-      if (raw.length < 3) return sendText(from, "Please enter a preferred date, e.g. *Monday 9am*. Type *cancel* to go back.");
+      if (raw.length < 3) return sendText(from, "Please enter a date, e.g. *Monday 9am*. Type *cancel* to go back.");
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       const pName = biz?.sessionData?.faqParentName || "";
-      notifySchoolVisitRequest(school.phone, school.schoolName, pName || from.replace(/\D+/g, ""), "WhatsApp Bot").catch(() => {});
-      _saveLead(from, school, "visit", "whatsapp_link", { parentName: pName });
+      notifySchoolVisitRequest(school.phone, school.schoolName, pName || from, "WhatsApp Bot").catch(() => {});
+      _lead(from, school, "visit", "whatsapp_link", { parentName: pName });
       await _saveSession(biz, saveBiz, "sfaq_menu");
       return sendButtons(from, {
-        text:
-`✅ *School tour request sent!*
-
-*${school.schoolName}* has been notified.
-Preferred date: _${raw}_
-
-They will confirm your visit and send directions.
-📍 ${school.address || (school.suburb ? school.suburb + ", " : "") + school.city}
-📞 ${school.contactPhone || school.phone}`,
+        text: `✅ *Tour request sent!*\n\n*${school.schoolName}*\nPreferred: _${raw}_\n\nThey will confirm + send directions.\n📞 ${school.contactPhone || school.phone}`,
         buttons: [
-          { id: `sfaq_enroll_${schoolId}`, title: "📝 Start enrollment" },
-          { id: `sfaq_fees_${schoolId}`,    title: "💵 See fees" },
-          { id: `sfaq_back_${schoolId}`,    title: "⬅ Back to menu" }
+          { id: `sfaq_enroll_apply_${schoolId}`, title: _btn("📋 Apply now") },
+          { id: `sfaq_cat_fees_${schoolId}`,      title: _btn("💵 See fees") },
+          { id: `sfaq_back_${schoolId}`,           title: _btn("⬅ Main menu") }
         ]
       });
     }
 
-    // ── Parent typed which grade they're asking about ────────────────────────
     case "sfaq_awaiting_grade": {
       const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
       const pName = biz?.sessionData?.faqParentName || "";
-      notifySchoolPlaceEnquiry(school.phone, school.schoolName, pName || from.replace(/\D+/g, ""), raw, "WhatsApp Bot").catch(() => {});
-      _saveLead(from, school, "place", "whatsapp_link", { parentName: pName, gradeInterest: raw });
+      notifySchoolPlaceEnquiry(school.phone, school.schoolName, pName || from, raw, "WhatsApp Bot").catch(() => {});
+      _lead(from, school, "place", "whatsapp_link", { parentName: pName, gradeInterest: raw });
       await _saveSession(biz, saveBiz, "sfaq_menu");
       const admText = school.admissionsOpen
-        ? `🟢 *Admissions are OPEN.*\n\nYour interest in *${raw}* has been sent to ${school.schoolName}.`
-        : `🔴 *Admissions are closed.*\n\nYour interest in *${raw}* has been recorded. You'll be contacted when admissions re-open.`;
+        ? `🟢 *Admissions OPEN.*\nYour interest in *${raw}* sent to ${school.schoolName}.`
+        : `🔴 *Admissions closed.*\nYour interest in *${raw}* recorded.`;
       return sendButtons(from, {
         text: `📝 *Grade enquiry sent*\n\n${admText}`,
         buttons: [
-          { id: `sfaq_enroll_apply_${schoolId}`, title: "📋 Apply online" },
-          { id: `sfaq_tour_${schoolId}`,          title: "📅 Book a tour" },
-          { id: `sfaq_back_${schoolId}`,           title: "⬅ Back to menu" }
+          { id: `sfaq_enroll_apply_${schoolId}`, title: _btn("📋 Apply online") },
+          { id: `sfaq_tour_book_${schoolId}`,    title: _btn("📅 Book a tour") },
+          { id: `sfaq_back_${schoolId}`,          title: _btn("⬅ Main menu") }
         ]
       });
     }
 
-    // ── School admin adding a custom FAQ question ────────────────────────────
-    case "sfaq_admin_adding_question": {
-      if (raw.length < 5) return sendText(from, "Please type the question (at least 5 characters). Type *cancel* to go back.");
-      await _saveSession(biz, saveBiz, "sfaq_admin_adding_answer", { faqPendingQuestion: raw });
-      return sendText(from, `✅ Question noted: _"${raw}"_\n\nNow type the *answer* parents will see:\n\n_Type *cancel* to go back._`);
-    }
-
-    // ── School admin typed the answer for their new FAQ item ────────────────
-    case "sfaq_admin_adding_answer": {
-      if (raw.length < 5) return sendText(from, "Please type the answer (at least 5 characters). Type *cancel* to go back.");
-      const question = biz?.sessionData?.faqPendingQuestion;
-      if (!question) return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
-
-      const school = await SchoolProfile.findById(schoolId);
+    case "sfaq_awaiting_appref": {
+      const school = await SchoolProfile.findById(schoolId).lean();
       if (!school) return false;
-
-      const existing = school.faqItems || [];
-      existing.push({ question, answer: raw, order: existing.length });
-      await SchoolProfile.findByIdAndUpdate(schoolId, { $set: { faqItems: existing } });
-
-      await _saveSession(biz, saveBiz, "sfaq_menu", { faqPendingQuestion: "" });
+      notifySchoolEnquiry(school.phone, school.schoolName, from, `APPLICATION STATUS: "${raw}"`).catch(() => {});
+      await _saveSession(biz, saveBiz, "sfaq_menu");
       return sendButtons(from, {
-        text:
-`✅ *FAQ item added!*
-
-Q: _${question}_
-A: _${raw}_
-
-Parents will now see this in the "More options" section of your ZimQuote chatbot link.
-
-You can add more or return to your menu.`,
-        buttons: [
-          { id: `sfaq_admin_faq_add_${schoolId}`, title: "➕ Add another" },
-          { id: `sfaq_admin_faq_list_${schoolId}`,title: "📋 View all FAQ" },
-          { id: `school_account`,                  title: "⬅ My account" }
-        ]
+        text: `🔎 *Status enquiry sent*\n\nRef: _${raw}_\n\n${school.schoolName} admissions will follow up on this number.\n📞 ${school.contactPhone || school.phone}`,
+        buttons: [{ id: `sfaq_back_${schoolId}`, title: _btn("⬅ Main menu") }]
       });
     }
 
@@ -311,58 +278,262 @@ You can add more or return to your menu.`,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ── FEES ──────────────────────────────────────────────────────────────────────
+// CATEGORY PAGES — paginated lists of FAQ items per category
 // ─────────────────────────────────────────────────────────────────────────────
-async function _faqFees(from, schoolId) {
+async function _showCategory(from, schoolId, cat, page, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  _saveLead(from, school, "fees", "whatsapp_link");
 
-  // Build fee answer from school data
-  let answer = `💵 *School fees — ${school.schoolName}*\n\n`;
+  const PAGE_SIZE = 9; // leave 1 slot for Back button
 
-  if (school.fees?.term1) {
-    answer += `*Day school fees (USD per term):*\n`;
-    if (school.fees.ecdTerm1 && String(school.fees.ecdTerm1) !== String(school.fees.term1)) {
-      answer += `ECD: $${school.fees.ecdTerm1}\n`;
-    }
-    answer += `Term 1: *$${school.fees.term1}*\n`;
-    if (school.fees.term2) answer += `Term 2: *$${school.fees.term2}*\n`;
-    if (school.fees.term3) answer += `Term 3: *$${school.fees.term3}*\n`;
-    if (school.fees.devLevy)   answer += `\nDevelopment levy: $${school.fees.devLevy}/term`;
-    if (school.fees.sportsFee) answer += `\nSports levy: $${school.fees.sportsFee}/term`;
-    if (school.fees.examFee)   answer += `\nExam fees: $${school.fees.examFee}/year`;
-    if (school.fees.boardingTerm1 > 0) {
-      answer += `\n\n*Boarding fees (USD per term):*\nTerm 1: *$${school.fees.boardingTerm1}*`;
-      if (school.fees.boardingTerm2) answer += ` | Term 2: *$${school.fees.boardingTerm2}*`;
-      if (school.fees.boardingTerm3) answer += ` | Term 3: *$${school.fees.boardingTerm3}*`;
-    }
-    // Helpful annual estimate
-    const t1 = Number(school.fees.term1) || 0;
-    const t2 = Number(school.fees.term2) || t1;
-    const t3 = Number(school.fees.term3) || t1;
-    if (t1 > 0) answer += `\n\n💡 _Approx. annual: ~$${t1 + t2 + t3}_`;
-  } else if (school.feeRange) {
-    const label = { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" }[school.feeRange];
-    answer += `Fee range: *${label}*\n\nContact the school for the exact fee schedule.`;
-  } else {
-    answer += `Contact the school for the current fee schedule.\n📞 ${school.contactPhone || school.phone}`;
+  switch (cat) {
+    case "fees":       return _catFees(from, school, page, biz, saveBiz);
+    case "admissions": return _catAdmissions(from, school, page, biz, saveBiz);
+    case "academic":   return _catAcademic(from, school, page, biz, saveBiz);
+    case "life":       return _catLife(from, school, page, biz, saveBiz);
+    case "admin":      return _catAdmin(from, school, page, biz, saveBiz);
+    case "custom":     return _catCustom(from, school, page, biz, saveBiz);
+    default:           return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+  }
+}
+
+// ── FEES CATEGORY ─────────────────────────────────────────────────────────────
+async function _catFees(from, school, page, biz, saveBiz) {
+  const id = String(school._id);
+  const fee = _feeLabel(school);
+  const rows = [
+    { id: `sfaq_cat_fees_main_${id}`,      title: "💵 Term fees",              description: fee },
+    { id: `sfaq_fees_pay_${id}`,           title: "💳 How to pay",             description: "EcoCash, InnBucks, bank" },
+    { id: `sfaq_fees_disc_${id}`,          title: "🎁 Discounts",              description: "Sibling, bursary, aid" },
+    { id: `sfaq_fees_boarding_${id}`,      title: "🏠 Boarding fees",          description: "Full boarding costs" },
+    { id: `sfaq_fees_pdf_${id}`,           title: "📄 Fee schedule PDF",       description: "Download fee document" },
+  ];
+
+  // Add custom fee FAQ items from school
+  const custom = _getCustomItems(school, "fees");
+  custom.forEach(fq => rows.push({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  rows.push({ id: `sfaq_back_${id}`, title: "⬅ Back" });
+  return sendList(from, `💵 Fees — ${school.schoolName}:`, rows.slice(0, 10));
+}
+
+async function _catFees_main(from, school) {
+  return _faqFeesInline(from, String(school._id), school);
+}
+
+// ── ADMISSIONS CATEGORY ───────────────────────────────────────────────────────
+async function _catAdmissions(from, school, page, biz, saveBiz) {
+  const id  = String(school._id);
+  const adm = school.admissionsOpen ? "🟢 Open now" : "🔴 Currently closed";
+  const rows = [
+    { id: `sfaq_admissions_status_${id}`,  title: "📋 Apply now",              description: adm },
+    { id: `sfaq_enroll_apply_${id}`,       title: "📝 How to apply",           description: "Online form or in person" },
+    { id: `sfaq_enroll_docs_${id}`,        title: "📑 Documents needed",       description: "Birth cert, ID, report" },
+    { id: `sfaq_enroll_age_${id}`,         title: "🎂 Age requirements",       description: "ECD A to Form 1 ages" },
+    { id: `sfaq_enroll_grade_${id}`,       title: "🎓 Grade availability",     description: "Check specific grade" },
+    { id: `sfaq_tour_book_${id}`,          title: "📅 Book a school tour",     description: "Visit before enrolling" },
+    { id: `sfaq_enroll_status_${id}`,      title: "🔎 Application status",     description: "Follow up your application" },
+  ];
+
+  const custom = _getCustomItems(school, "admissions");
+  custom.forEach(fq => rows.push({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  rows.push({ id: `sfaq_back_${id}`, title: "⬅ Back" });
+  return sendList(from, `📝 Admissions — ${school.schoolName}:`, rows.slice(0, 10));
+}
+
+// ── ACADEMIC CATEGORY ─────────────────────────────────────────────────────────
+async function _catAcademic(from, school, page, biz, saveBiz) {
+  const id = String(school._id);
+  const r  = school.academicResults;
+  const passRate = r?.oLevelPassRate ? `O-Level: ${r.oLevelPassRate}%` : "Tap for results";
+  const rows = [
+    { id: `sfaq_academic_results_${id}`,   title: "📊 Exam results",           description: passRate },
+    { id: `sfaq_results_subs_${id}`,       title: "📘 Top subjects",           description: "Best-performing subjects" },
+    { id: `sfaq_results_uni_${id}`,        title: "🎓 University placement",   description: "How many go to uni" },
+    { id: `sfaq_academic_curriculum_${id}`,title: "📚 Curriculum",             description: "ZIMSEC, Cambridge, IB" },
+    { id: `sfaq_academic_staff_${id}`,     title: "👩‍🏫 Teaching staff",         description: "Qualifications, ratio" },
+  ];
+
+  const custom = _getCustomItems(school, "academic");
+  custom.forEach(fq => rows.push({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  rows.push({ id: `sfaq_back_${id}`, title: "⬅ Back" });
+  return sendList(from, `📊 Academic — ${school.schoolName}:`, rows.slice(0, 10));
+}
+
+// ── SCHOOL LIFE CATEGORY ──────────────────────────────────────────────────────
+async function _catLife(from, school, page, biz, saveBiz) {
+  const id = String(school._id);
+  const hasTrans = (school.facilities || []).includes("transport");
+  const rows = [
+    { id: `sfaq_life_transport_${id}`,     title: "🚌 Transport",              description: hasTrans ? "Routes available" : "No school bus" },
+    { id: `sfaq_life_facilities_${id}`,    title: "🏊 Facilities",             description: "Labs, pool, library" },
+    { id: `sfaq_sports_${id}`,             title: "⚽ Sports & clubs",         description: "Extramural activities" },
+    { id: `sfaq_life_uniforms_${id}`,      title: "👕 Uniforms",               description: "List, sizes, where to buy" },
+    { id: `sfaq_life_calendar_${id}`,      title: "📆 Term calendar",          description: "Terms, exams, holidays" },
+    { id: `sfaq_life_feeding_${id}`,       title: "🍽️ Meals & feeding",        description: "Tuck shop, boarding meals" },
+    { id: `sfaq_life_boarding_${id}`,      title: "🛏️ Boarding",               description: "Boarding rules, costs" },
+  ];
+
+  const custom = _getCustomItems(school, "life");
+  custom.forEach(fq => rows.push({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  rows.push({ id: `sfaq_back_${id}`, title: "⬅ Back" });
+  return sendList(from, `🏫 School life — ${school.schoolName}:`, rows.slice(0, 10));
+}
+
+// ── CONTACT & DOCS CATEGORY ───────────────────────────────────────────────────
+async function _catAdmin(from, school, page, biz, saveBiz) {
+  const id   = String(school._id);
+  const docs = _countDocs(school);
+  const rows = [
+    { id: `sfaq_admin_contact_${id}`,      title: "📞 Phone & email",          description: `📞 ${school.contactPhone || school.phone}` },
+    { id: `sfaq_admin_location_${id}`,     title: "📍 Location & hours",       description: school.officeHours || "Mon–Fri 7am–4pm" },
+    { id: `sfaq_admin_docs_${id}`,         title: "📄 Download documents",     description: `${docs} document${docs !== 1 ? "s" : ""} available` },
+    { id: `sfaq_compare_${id}`,            title: "🔍 Compare schools",        description: "See similar schools nearby" },
+    { id: `sfaq_bursary_${id}`,            title: "🎓 Bursary / aid",          description: "Financial assistance" },
+  ];
+
+  const custom = _getCustomItems(school, "admin");
+  custom.forEach(fq => rows.push({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  rows.push({ id: `sfaq_message_${id}`, title: "✉️ Send a message" });
+  rows.push({ id: `sfaq_back_${id}`,    title: "⬅ Back" });
+  return sendList(from, `📞 Contact — ${school.schoolName}:`, rows.slice(0, 10));
+}
+
+// ── CUSTOM FAQ CATEGORY ───────────────────────────────────────────────────────
+async function _catCustom(from, school, page, biz, saveBiz) {
+  const id     = String(school._id);
+  const active = (school.faqItems || [])
+    .filter(f => f.active !== false)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  if (!active.length) {
+    return sendButtons(from, {
+      text: `❓ No custom Q&A set up yet for ${school.schoolName}.`,
+      buttons: [
+        { id: `sfaq_message_${id}`, title: _btn("✉️ Send a message") },
+        { id: `sfaq_back_${id}`,    title: _btn("⬅ Main menu") }
+      ]
+    });
   }
 
-  // Check for custom FAQ answer on fees
-  const customFeesItem = (school.faqItems || []).find(fq =>
-    fq.question.toLowerCase().includes("fee") || fq.question.toLowerCase().includes("cost")
+  const PAGE_SIZE = 9;
+  const start = page * PAGE_SIZE;
+  const slice = active.slice(start, start + PAGE_SIZE);
+  const rows  = slice.map(fq => ({
+    id:          `sfaq_ans_${fq.id || fq.order}_${id}`,
+    title:       fq.question.slice(0, MAX_BTN),
+    description: fq.answer.slice(0, 72)
+  }));
+
+  // Pagination
+  if (start + PAGE_SIZE < active.length) {
+    const nextPage = page + 1;
+    rows.push({ id: `sfaq_pg_custom_${nextPage}_${id}`, title: "➡ Next page" });
+  }
+  if (page > 0) {
+    rows.push({ id: `sfaq_pg_custom_${page - 1}_${id}`, title: "⬅ Previous" });
+  }
+  rows.push({ id: `sfaq_back_${id}`, title: "⬅ Main menu" });
+
+  const total = active.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  return sendList(from,
+    `❓ ${school.schoolName} FAQ (${page + 1}/${pages}):`,
+    rows.slice(0, 10)
   );
-  if (customFeesItem) {
-    answer += `\n\n_Additional info from ${school.schoolName}:_\n${customFeesItem.answer}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANSWER CUSTOM ITEM — serves a school-configured Q&A item
+// ─────────────────────────────────────────────────────────────────────────────
+async function _answerCustomItem(from, schoolId, itemRef, biz, saveBiz) {
+  const school = await SchoolProfile.findById(schoolId).lean();
+  if (!school) return false;
+  const id = String(school._id);
+
+  const item = (school.faqItems || []).find(fq =>
+    String(fq.id) === itemRef || String(fq.order) === itemRef
+  );
+  if (!item) return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+
+  // Send PDF if attached
+  if (item.pdfUrl) {
+    try {
+      const { sendDocument } = await import("./metaSender.js");
+      await sendDocument(from, {
+        link: item.pdfUrl,
+        filename: (item.pdfLabel || item.question).replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_").slice(0, 40) + ".pdf"
+      });
+    } catch (e) { /* fallback to text */ }
   }
 
   return sendButtons(from, {
-    text: answer,
+    text: `❓ *${item.question}*\n\n${item.answer}`,
     buttons: [
-      { id: `sfaq_fees_pay_${schoolId}`, title: "💳 Payment methods" },
-      { id: `sfaq_fees_pdf_${schoolId}`, title: "📄 Get fee schedule PDF" },
-      { id: `sfaq_back_${schoolId}`,     title: "⬅ Back to menu" }
+      { id: `sfaq_cat_custom_${id}`, title: _btn("❓ More Q&A") },
+      { id: `sfaq_message_${id}`,    title: _btn("✉️ Follow up") },
+      { id: `sfaq_back_${id}`,       title: _btn("⬅ Main menu") }
+    ]
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INLINE CATEGORY HANDLERS — dispatched from action router
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Fees inline answers ───────────────────────────────────────────────────────
+async function _faqFeesInline(from, schoolId, school) {
+  school = school || await SchoolProfile.findById(schoolId).lean();
+  if (!school) return false;
+  _lead(from, school, "fees", "whatsapp_link");
+  const id = String(school._id);
+
+  let text = `💵 *Fees — ${school.schoolName}*\n\n`;
+  if (school.fees?.term1) {
+    text += `*Day school (USD per term):*\nTerm 1: *$${school.fees.term1}*`;
+    if (school.fees.term2) text += ` | T2: *$${school.fees.term2}*`;
+    if (school.fees.term3) text += ` | T3: *$${school.fees.term3}*`;
+    if (school.fees.devLevy)   text += `\nDev levy: $${school.fees.devLevy}/term`;
+    if (school.fees.sportsFee) text += `\nSports: $${school.fees.sportsFee}/term`;
+    if (school.fees.examFee)   text += `\nExam: $${school.fees.examFee}/year`;
+    const t1 = Number(school.fees.term1)||0, t2 = Number(school.fees.term2)||t1, t3 = Number(school.fees.term3)||t1;
+    if (t1 > 0) text += `\n\n💡 _Annual ~$${t1+t2+t3}_`;
+  } else if (school.feeRange) {
+    text += `Range: *${{ budget:"Under $300", mid:"$300–$800", premium:"$800+" }[school.feeRange]}/term*`;
+  } else {
+    text += `Contact school for fees.\n📞 ${school.contactPhone || school.phone}`;
+  }
+
+  return sendButtons(from, {
+    text,
+    buttons: [
+      { id: `sfaq_fees_pay_${id}`,  title: _btn("💳 How to pay") },
+      { id: `sfaq_fees_pdf_${id}`,  title: _btn("📄 Fee PDF") },
+      { id: `sfaq_back_${id}`,      title: _btn("⬅ Main menu") }
     ]
   });
 }
@@ -370,23 +541,23 @@ async function _faqFees(from, schoolId) {
 async function _faqFeesPayment(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-
-  const methods = (school.paymentMethods || []).length > 0
+  const id = String(school._id);
+  const methods = school.paymentMethods?.length
     ? school.paymentMethods
-    : ["EcoCash", "InnBucks", "Bank transfer (CABS, CBZ, ZB, Steward Bank)", "Cash at school office"];
+    : ["EcoCash", "InnBucks", "Bank transfer", "Cash at school office"];
 
-  let answer = `💳 *Payment methods — ${school.schoolName}*\n\n`;
-  methods.forEach(m => { answer += `• ${m}\n`; });
-  if (school.ecocashNumber) answer += `\n📲 *EcoCash:* ${school.ecocashNumber}`;
-  if (school.bankDetails)   answer += `\n🏦 *Bank details:* ${school.bankDetails}`;
-  answer += `\n\n_Use your child's full name + grade as the payment reference._`;
+  let text = `💳 *Payment — ${school.schoolName}*\n\n`;
+  methods.forEach(m => { text += `• ${m}\n`; });
+  if (school.ecocashNumber) text += `\n📲 EcoCash: *${school.ecocashNumber}*`;
+  if (school.bankDetails)   text += `\n🏦 Bank: ${school.bankDetails}`;
+  text += `\n\n_Use child's name + grade as reference._`;
 
   return sendButtons(from, {
-    text: answer,
+    text,
     buttons: [
-      { id: `sfaq_fees_disc_${schoolId}`, title: "🎁 Discounts?" },
-      { id: `sfaq_fees_${schoolId}`,      title: "⬅ Back to fees" },
-      { id: `sfaq_back_${schoolId}`,      title: "⬅ Main menu" }
+      { id: `sfaq_fees_disc_${id}`,    title: _btn("🎁 Discounts?") },
+      { id: `sfaq_cat_fees_${id}`,     title: _btn("⬅ Fees menu") },
+      { id: `sfaq_back_${id}`,         title: _btn("⬅ Main menu") }
     ]
   });
 }
@@ -394,133 +565,114 @@ async function _faqFeesPayment(from, schoolId) {
 async function _faqFeesDiscount(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const info = school.feeDiscounts || "Sibling discounts and bursary assistance may be available. Contact the admissions office to enquire.";
+  const id = String(school._id);
+  const info = school.feeDiscounts || "Sibling discounts and bursary assistance may be available. Contact admissions.";
   return sendButtons(from, {
-    text: `🎁 *Discounts & bursaries — ${school.schoolName}*\n\n${info}\n\n📞 ${school.contactPhone || school.phone}`,
+    text: `🎁 *Discounts — ${school.schoolName}*\n\n${info}\n\n📞 ${school.contactPhone || school.phone}`,
     buttons: [
-      { id: `sfaq_bursary_${schoolId}`, title: "🎓 Ask about bursary" },
-      { id: `sfaq_fees_${schoolId}`,    title: "⬅ Back to fees" }
+      { id: `sfaq_bursary_${id}`,   title: _btn("🎓 Ask bursary") },
+      { id: `sfaq_cat_fees_${id}`,  title: _btn("⬅ Fees menu") },
+      { id: `sfaq_back_${id}`,      title: _btn("⬅ Main menu") }
     ]
   });
 }
 
-async function _faqFeesPDF(from, schoolId, biz, saveBiz) {
+async function _faqFeesBoarding(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  _saveLead(from, school, "pdf", "whatsapp_link");
-  notifySchoolNewLead(school.phone, school.schoolName, from.replace(/\D+/g, ""), "pdf", "WhatsApp Bot").catch(() => {});
+  const id = String(school._id);
+  let text = `🛏️ *Boarding fees — ${school.schoolName}*\n\n`;
+  if (school.fees?.boardingTerm1 > 0) {
+    text += `Term 1: *$${school.fees.boardingTerm1}*`;
+    if (school.fees.boardingTerm2) text += ` | T2: *$${school.fees.boardingTerm2}*`;
+    if (school.fees.boardingTerm3) text += ` | T3: *$${school.fees.boardingTerm3}*`;
+    text += `\n\n_Boarding fees are inclusive of accommodation and meals._`;
+  } else {
+    text += `Contact the school for boarding fee information.\n📞 ${school.contactPhone || school.phone}`;
+  }
+  return sendButtons(from, {
+    text,
+    buttons: [
+      { id: `sfaq_cat_fees_${id}`,  title: _btn("⬅ Fees menu") },
+      { id: `sfaq_back_${id}`,      title: _btn("⬅ Main menu") }
+    ]
+  });
+}
+
+async function _faqFeesPDF(from, schoolId) {
+  const school = await SchoolProfile.findById(schoolId).lean();
+  if (!school) return false;
+  const id = String(school._id);
+  _lead(from, school, "pdf", "whatsapp_link");
+  notifySchoolNewLead(school.phone, school.schoolName, from, "pdf", "WhatsApp Bot").catch(() => {});
 
   if (school.feeSchedulePdfUrl || school.profilePdfUrl) {
     try {
       const { sendDocument } = await import("./metaSender.js");
       await sendDocument(from, {
         link: school.feeSchedulePdfUrl || school.profilePdfUrl,
-        filename: school.schoolName.replace(/\s+/g, "_") + "_Fees.pdf"
+        filename: school.schoolName.replace(/\s+/g,"_") + "_Fees.pdf"
       });
-    } catch (e) { /* fallback to text */ }
+    } catch (e) { /* fallback */ }
     return sendButtons(from, {
-      text: `📄 Fee schedule PDF sent above. Tap to open and save.\n\n_Share it with your family on WhatsApp._`,
+      text: `📄 *Fee schedule sent above.* Tap to open and save.\n\n_Forward it to family on WhatsApp._`,
       buttons: [
-        { id: `sfaq_enroll_${schoolId}`, title: "📝 Start enrollment" },
-        { id: `sfaq_back_${schoolId}`,   title: "⬅ Back to menu" }
+        { id: `sfaq_enroll_apply_${id}`, title: _btn("📋 Apply now") },
+        { id: `sfaq_back_${id}`,          title: _btn("⬅ Main menu") }
       ]
     });
   }
 
   return sendButtons(from, {
-    text: `📄 The fee schedule is not yet available as a PDF.\n\nContact the school:\n📞 ${school.contactPhone || school.phone}`,
+    text: `📄 Fee schedule PDF not yet available online.\n\nContact school:\n📞 ${school.contactPhone || school.phone}`,
     buttons: [
-      { id: `sfaq_staff_${schoolId}`,  title: "📞 Contact school" },
-      { id: `sfaq_back_${schoolId}`,   title: "⬅ Back to menu" }
+      { id: `sfaq_admin_contact_${id}`, title: _btn("📞 Contact school") },
+      { id: `sfaq_back_${id}`,           title: _btn("⬅ Main menu") }
     ]
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── ENROLLMENT ────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqEnroll(from, schoolId, biz, saveBiz) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-
-  const admText = school.admissionsOpen
-    ? "🟢 *Admissions are currently OPEN.*"
-    : "🔴 *Admissions are currently CLOSED.*\n_You can register your interest and the school will contact you when admissions open._";
-
-  // Check for custom enrollment FAQ
-  const custom = (school.faqItems || []).find(fq =>
-    fq.question.toLowerCase().includes("enroll") || fq.question.toLowerCase().includes("admission") || fq.question.toLowerCase().includes("apply")
-  );
-
-  let answer = `📝 *Enrollment — ${school.schoolName}*\n\n${admText}`;
-  if (custom) answer += `\n\n${custom.answer}`;
-
-  return sendButtons(from, {
-    text: answer,
-    buttons: [
-      { id: `sfaq_enroll_apply_${schoolId}`, title: "📋 Apply / register interest" },
-      { id: `sfaq_enroll_docs_${schoolId}`,  title: "📑 Documents needed" },
-      { id: `sfaq_enroll_grade_${schoolId}`, title: "🎓 Check grade availability" }
-    ]
-  });
-}
-
+// ── Admissions inline answers ─────────────────────────────────────────────────
 async function _faqEnrollApply(from, schoolId, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
+  const id = String(school._id);
   notifySchoolApplicationInterest(school.phone, school.schoolName, from).catch(() => {});
-  _saveLead(from, school, "apply", "whatsapp_link");
+  _lead(from, school, "apply", "whatsapp_link");
 
   if (school.registrationLink) {
     return sendButtons(from, {
-      text:
-`📋 *Apply to ${school.schoolName}*
-
-${school.admissionsOpen ? "🟢 Admissions are OPEN." : "🔴 Admissions closed — you can still submit interest."}
-
-Complete the online application form:
-👉 ${school.registrationLink}
-
-The school will confirm receipt and next steps.
-📞 ${school.contactPhone || school.phone}`,
+      text: `📋 *Apply — ${school.schoolName}*\n\n${school.admissionsOpen ? "🟢 Admissions OPEN." : "🔴 Closed — register interest."}\n\nOnline form:\n👉 ${school.registrationLink}\n\n📞 ${school.contactPhone || school.phone}`,
       buttons: [
-        { id: `sfaq_enroll_docs_${schoolId}`, title: "📑 Documents needed" },
-        { id: `sfaq_tour_${schoolId}`,         title: "📅 Book a tour" },
-        { id: `sfaq_back_${schoolId}`,          title: "⬅ Main menu" }
+        { id: `sfaq_enroll_docs_${id}`,  title: _btn("📑 Documents") },
+        { id: `sfaq_tour_book_${id}`,    title: _btn("📅 Book a tour") },
+        { id: `sfaq_back_${id}`,          title: _btn("⬅ Main menu") }
       ]
     });
   }
 
-  // No link — capture grade interest
-  await _saveSession(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: schoolId });
-  return sendText(from,
-`📝 *Enrollment enquiry — ${school.schoolName}*
-
-Which grade are you enquiring about?
-
-_Type the grade, e.g. "Grade 3", "Form 1", "ECD B"_
-_Type *cancel* to go back._`
-  );
+  await _saveSession(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: id });
+  return sendText(from, `📝 *Enrollment — ${school.schoolName}*\n\nWhich grade are you enquiring for?\n\n_e.g. "Grade 3", "Form 1", "ECD B"_\n_Type *cancel* to go back._`);
 }
 
 async function _faqEnrollDocs(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-
+  const id = String(school._id);
   const docs = school.enrollmentDocs ||
-`• Child's birth certificate (certified copy)
+`• Child's birth certificate (certified)
 • Parents' national IDs or passports
-• Previous school report (last term)
+• Previous school report (latest)
 • Transfer letter (if from another school)
-• 4 passport-size photos of the child
-• Proof of residence (utility bill or council letter)${school.boarding !== "day" ? "\n• Medical certificate (boarding pupils)" : ""}`;
+• 4 passport photos of child
+• Proof of residence (utility bill)`;
 
   return sendButtons(from, {
-    text: `📑 *Documents for enrollment — ${school.schoolName}*\n\n${docs}\n\n_Bring originals and certified copies._\n📍 ${school.address || (school.suburb ? school.suburb + ", " : "") + school.city}`,
+    text: `📑 *Documents — ${school.schoolName}*\n\n${docs}\n\n_Bring originals + certified copies._\n📍 ${school.address || school.city}`,
     buttons: [
-      { id: `sfaq_enroll_apply_${schoolId}`, title: "📋 Apply now" },
-      { id: `sfaq_enroll_age_${schoolId}`,   title: "🎂 Age requirements" },
-      { id: `sfaq_back_${schoolId}`,          title: "⬅ Main menu" }
+      { id: `sfaq_enroll_apply_${id}`, title: _btn("📋 Apply now") },
+      { id: `sfaq_enroll_age_${id}`,   title: _btn("🎂 Age guide") },
+      { id: `sfaq_back_${id}`,          title: _btn("⬅ Main menu") }
     ]
   });
 }
@@ -528,319 +680,112 @@ async function _faqEnrollDocs(from, schoolId) {
 async function _faqEnrollAge(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
+  const id = String(school._id);
   const ages = school.ageRequirements ||
 `• ECD A: turning 3 by 1 March
 • ECD B: turning 4 by 1 March
 • Grade 1: turning 6 by 31 March
-• Grade 2+: according to previous school level
-_As per Zimbabwe Ministry of Primary & Secondary Education._`;
+• Grade 2+: per previous school level`;
   return sendButtons(from, {
     text: `🎂 *Age requirements — ${school.schoolName}*\n\n${ages}`,
     buttons: [
-      { id: `sfaq_enroll_apply_${schoolId}`, title: "📋 Apply now" },
-      { id: `sfaq_enroll_docs_${schoolId}`,  title: "📑 Documents" },
-      { id: `sfaq_back_${schoolId}`,          title: "⬅ Main menu" }
+      { id: `sfaq_enroll_apply_${id}`, title: _btn("📋 Apply now") },
+      { id: `sfaq_enroll_docs_${id}`,  title: _btn("📑 Documents") },
+      { id: `sfaq_back_${id}`,          title: _btn("⬅ Main menu") }
     ]
   });
 }
 
 async function _faqGradeCheck(from, schoolId, biz, saveBiz) {
   await _saveSession(biz, saveBiz, "sfaq_awaiting_grade", { faqSchoolId: schoolId });
-  return sendText(from, `🎓 *Grade availability check*\n\nWhich grade are you asking about?\n\n_e.g. "Grade 5", "Form 2", "ECD A"_\n_Type *cancel* to go back._`);
+  return sendText(from, `🎓 *Grade check*\n\nWhich grade?\n\n_e.g. "Grade 5", "Form 2"_\n_Type *cancel* to go back._`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── SCHOOL TOUR ───────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqTour(from, schoolId, biz, saveBiz) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const info = school.tourInfo || "School tours are available on weekdays by appointment. Tours take approximately 45 minutes and include all key facilities.";
-  return sendButtons(from, {
-    text:
-`📅 *School tour — ${school.schoolName}*
-
-${info}
-
-📍 ${school.address || (school.suburb ? school.suburb + ", " : "") + school.city}
-⏰ ${school.officeHours || "Mon–Fri, 7am–4pm"}
-📞 ${school.contactPhone || school.phone}`,
-    buttons: [
-      { id: `sfaq_tour_book_${schoolId}`, title: "✅ Book my tour now" },
-      { id: `sfaq_staff_${schoolId}`,     title: "📞 Call admissions" },
-      { id: `sfaq_back_${schoolId}`,      title: "⬅ Main menu" }
-    ]
-  });
+async function _faqAppStatus(from, schoolId, biz, saveBiz) {
+  await _saveSession(biz, saveBiz, "sfaq_awaiting_appref", { faqSchoolId: schoolId });
+  return sendText(from, `🔎 *Application status*\n\nType your reference number or child's name + grade:\n\n_e.g. "APP-2026-012" or "Rudo Moyo Grade 1"_\n_Type *cancel* to go back._`);
 }
 
-async function _faqTourBook(from, schoolId, biz, saveBiz) {
-  await _saveSession(biz, saveBiz, "sfaq_awaiting_tour_date", { faqSchoolId: schoolId });
-  return sendText(from,
-`📅 *Book a school tour — ${(await SchoolProfile.findById(schoolId).lean())?.schoolName || "school"}*
-
-Type your preferred date and time:
-
-Examples:
-• _"Monday 9am"_
-• _"Any weekday morning"_
-• _"This Saturday if possible"_
-• _"15 August at 10am"_
-
-_Type *cancel* to go back._`
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── ACADEMIC RESULTS ──────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqResults(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const r = school.academicResults;
-  let answer = `📊 *Academic results — ${school.schoolName}*\n\n`;
-
-  if (r?.oLevelPassRate) {
-    answer += `*ZIMSEC O-Level (${r.oLevelYear || "latest"}):*\nPass rate: *${r.oLevelPassRate}%*\n`;
-    if (r.oLevel5Plus) answer += `5+ subjects: *${r.oLevel5Plus}%*\n`;
-  }
-  if (r?.aLevelPassRate) {
-    answer += `\n*A-Level (${r.aLevelYear || "latest"}):*\nPass rate: *${r.aLevelPassRate}%*\n`;
-    if (r.universityEntry) answer += `University entry: *${r.universityEntry}%*\n`;
-  }
-  if (r?.cambridgePassRate) {
-    answer += `\n*Cambridge IGCSE:* Pass rate *${r.cambridgePassRate}%*\n`;
-  }
-  if (r?.nationalRanking) answer += `\n🏆 National ranking: *#${r.nationalRanking}*`;
-  if (r?.harareRanking)   answer += `\nHarare ranking: *#${r.harareRanking}*`;
-
-  if (!r?.oLevelPassRate && !r?.aLevelPassRate) {
-    // Check custom FAQ for results
-    const custom = (school.faqItems || []).find(fq => fq.question.toLowerCase().includes("result") || fq.question.toLowerCase().includes("pass"));
-    if (custom) {
-      answer += custom.answer;
-    } else {
-      answer += `Contact the school for academic results information.\n📞 ${school.contactPhone || school.phone}`;
-    }
-  }
-
-  return sendButtons(from, {
-    text: answer,
-    buttons: [
-      { id: `sfaq_results_sub_${schoolId}`, title: "📘 Top subjects" },
-      { id: `sfaq_results_uni_${schoolId}`, title: "🎓 University placement" },
-      { id: `sfaq_enroll_${schoolId}`,      title: "📝 Enroll now" }
-    ]
-  });
-}
-
+// ── Academic inline answers ───────────────────────────────────────────────────
 async function _faqResultsSubs(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const info = school.academicResults?.topSubjects || `Contact the school for subject breakdown.\n📞 ${school.contactPhone || school.phone}`;
+  const id = String(school._id);
+  const info = school.academicResults?.topSubjects || `Contact school for subject breakdown.\n📞 ${school.contactPhone || school.phone}`;
   return sendButtons(from, {
     text: `📘 *Top subjects — ${school.schoolName}*\n\n${info}`,
-    buttons: [{ id: `sfaq_results_${schoolId}`, title: "⬅ Back to results" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
+    buttons: [
+      { id: `sfaq_cat_academic_${id}`, title: _btn("⬅ Academic menu") },
+      { id: `sfaq_back_${id}`,          title: _btn("⬅ Main menu") }
+    ]
   });
 }
 
 async function _faqResultsUni(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const info = school.academicResults?.universityInfo || `Contact the school for university placement stats.\n📞 ${school.contactPhone || school.phone}`;
+  const id = String(school._id);
+  const info = school.academicResults?.universityInfo || `Contact school for university placement stats.\n📞 ${school.contactPhone || school.phone}`;
   return sendButtons(from, {
     text: `🎓 *University placement — ${school.schoolName}*\n\n${info}`,
-    buttons: [{ id: `sfaq_results_${schoolId}`, title: "⬅ Back to results" }, { id: `sfaq_enroll_${schoolId}`, title: "📝 Enroll" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── TRANSPORT ─────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqTransport(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const hasTransport = (school.facilities || []).includes("transport");
-  if (!hasTransport) {
-    return sendButtons(from, {
-      text: `🚌 *Transport — ${school.schoolName}*\n\nThis school does not operate a school bus service.\n\nParents arrange own transport.\n📍 ${school.address || (school.suburb ? school.suburb + ", " : "") + school.city}`,
-      buttons: [{ id: `sfaq_staff_${schoolId}`, title: "📞 Contact school" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-    });
-  }
-  return sendButtons(from, {
-    text: `🚌 *Transport — ${school.schoolName}*\n\n${school.transportInfo || "School transport is available. Contact the school for routes and costs."}\n📞 ${school.transportContact || school.contactPhone || school.phone}`,
     buttons: [
-      { id: `sfaq_transport_routes_${schoolId}`, title: "🗺️ Routes & suburbs" },
-      { id: `sfaq_transport_cost_${schoolId}`,   title: "💵 Transport costs" },
-      { id: `sfaq_back_${schoolId}`,              title: "⬅ Main menu" }
+      { id: `sfaq_cat_academic_${id}`, title: _btn("⬅ Academic menu") },
+      { id: `sfaq_enroll_apply_${id}`, title: _btn("📋 Apply now") }
     ]
   });
 }
 
+// ── School life inline answers ─────────────────────────────────────────────────
+async function _faqSports(from, schoolId) {
+  const school = await SchoolProfile.findById(schoolId).lean();
+  if (!school) return false;
+  const id = String(school._id);
+  const EXT = Object.fromEntries((SCHOOL_EXTRAMURALACTIVITIES||[]).map(e=>[e.id,e.label]));
+  const list = (school.extramuralActivities||[]).map(i=>EXT[i]||i).join(", ") || `Contact school.\n📞 ${school.contactPhone || school.phone}`;
+  return sendButtons(from, {
+    text: `⚽ *Sports & extramural — ${school.schoolName}*\n\n${list}${school.sportsAchievements?"\n\n"+school.sportsAchievements:""}`,
+    buttons: [
+      { id: `sfaq_cat_life_${id}`, title: _btn("⬅ School life") },
+      { id: `sfaq_back_${id}`,     title: _btn("⬅ Main menu") }
+    ]
+  });
+}
+
+// ── Transport inline ───────────────────────────────────────────────────────────
 async function _faqTransportRoutes(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const routes = school.transportRoutes || `Contact the school for route information.\n📞 ${school.transportContact || school.contactPhone || school.phone}`;
+  const id = String(school._id);
+  const routes = school.transportRoutes || `Contact school for routes.\n📞 ${school.transportContact || school.contactPhone || school.phone}`;
   return sendButtons(from, {
     text: `🗺️ *Transport routes — ${school.schoolName}*\n\n${routes}`,
-    buttons: [{ id: `sfaq_transport_cost_${schoolId}`, title: "💵 Transport costs" }, { id: `sfaq_message_${schoolId}`, title: "✉️ Ask about my area" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
+    buttons: [
+      { id: `sfaq_transport_cost_${id}`, title: _btn("💵 Transport cost") },
+      { id: `sfaq_message_${id}`,         title: _btn("✉️ Ask my area") },
+      { id: `sfaq_back_${id}`,             title: _btn("⬅ Main menu") }
+    ]
   });
 }
 
 async function _faqTransportCost(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const cost = school.transportFees || `Contact the school for transport pricing.\n📞 ${school.contactPhone || school.phone}`;
+  const id = String(school._id);
+  const cost = school.transportFees || `Contact school for transport pricing.\n📞 ${school.contactPhone || school.phone}`;
   return sendButtons(from, {
     text: `💵 *Transport fees — ${school.schoolName}*\n\n${cost}`,
-    buttons: [{ id: `sfaq_transport_routes_${schoolId}`, title: "🗺️ View routes" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── FACILITIES & SPORTS ───────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqFacilities(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const FAC = Object.fromEntries((SCHOOL_FACILITIES || []).map(f => [f.id, f.label]));
-  const list = (school.facilities || []).map(id => FAC[id] || id).join("\n") || `Contact school for facilities information.\n📞 ${school.contactPhone || school.phone}`;
-  return sendButtons(from, {
-    text: `🏊 *Facilities — ${school.schoolName}*\n\n${list}`,
     buttons: [
-      { id: `sfaq_sports_${schoolId}`, title: "⚽ Sports & clubs" },
-      { id: `sfaq_tour_${schoolId}`,    title: "📅 Book a tour to see" },
-      { id: `sfaq_back_${schoolId}`,    title: "⬅ Main menu" }
+      { id: `sfaq_transport_routes_${id}`, title: _btn("🗺️ View routes") },
+      { id: `sfaq_back_${id}`,              title: _btn("⬅ Main menu") }
     ]
   });
 }
 
-async function _faqSports(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const EXT = Object.fromEntries((SCHOOL_EXTRAMURALACTIVITIES || []).map(e => [e.id, e.label]));
-  const sports = (school.extramuralActivities || []).map(id => EXT[id] || id).join(", ") || `Contact school for extramural information.\n📞 ${school.contactPhone || school.phone}`;
-  return sendButtons(from, {
-    text: `⚽ *Sports & extramural — ${school.schoolName}*\n\n${sports}${school.sportsAchievements ? "\n\n" + school.sportsAchievements : ""}`,
-    buttons: [{ id: `sfaq_facilities_${schoolId}`, title: "🏊 All facilities" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── CALENDAR ──────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqCalendar(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const cal = school.termCalendar || `Contact the school for the current term calendar.\n📞 ${school.contactPhone || school.phone}`;
-  return sendButtons(from, {
-    text: `📆 *Term calendar — ${school.schoolName}*\n\n${cal}`,
-    buttons: [{ id: `sfaq_enroll_${schoolId}`, title: "📝 Enrollment" }, { id: `sfaq_tour_${schoolId}`, title: "📅 Book a tour" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── STAFF & CONTACT ───────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqStaff(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  let answer = `👤 *Contact — ${school.schoolName}*\n\n`;
-  if (school.principalName) answer += `Principal: *${school.principalName}*\n`;
-  if (school.deputyName)    answer += `Deputy: *${school.deputyName}*\n`;
-  answer += `\n📞 Office: *${school.contactPhone || school.phone}*\n`;
-  if (school.email)   answer += `📧 ${school.email}\n`;
-  if (school.website) answer += `🌐 ${school.website}\n`;
-  if (school.address) answer += `\n📍 ${school.address}\n`;
-  answer += `\n⏰ ${school.officeHours || "Monday–Friday, 7am–4pm"}`;
-  return sendButtons(from, {
-    text: answer,
-    buttons: [{ id: `sfaq_message_${schoolId}`, title: "✉️ Send a message" }, { id: `sfaq_tour_${schoolId}`, title: "📅 Book a tour" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── MORE OPTIONS PAGE ─────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqMore(from, schoolId, biz, saveBiz) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-
-  const customItems = (school.faqItems || [])
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .slice(0, 4); // up to 4 custom items in "More" page
-
-  const rows = [
-    { id: `sfaq_uniforms_${schoolId}`, title: "👕 Uniforms & supplies",  description: "List, sizes, where to buy" },
-    { id: `sfaq_docs_${schoolId}`,     title: "📄 Download documents",   description: "Prospectus, forms, fee schedule" },
-    { id: `sfaq_compare_${schoolId}`,  title: "🔍 Compare schools",      description: "See similar schools nearby" },
-    { id: `sfaq_bursary_${schoolId}`,  title: "🎓 Bursary / financial aid", description: "Ask about fee assistance" },
-    ...customItems.map(fq => ({
-      id:          `sfaq_custom_${fq._id || fq.order || "0"}_${schoolId}`,
-      title:       fq.question.slice(0, 24),
-      description: fq.answer.slice(0, 72)
-    })),
-    { id: `sfaq_message_${schoolId}`,  title: "✉️ Send a message",       description: "Ask anything not listed here" },
-    { id: `sfaq_back_${schoolId}`,     title: "⬅ Back to main menu" }
-  ].slice(0, 10);
-
-  return sendList(from, `More — ${school.schoolName}:`, rows);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── UNIFORMS ──────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqUniforms(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const info = school.uniformInfo || `Uniforms are available from the school tuck shop or an approved supplier.\nContact the school for sizes and prices.\n📞 ${school.contactPhone || school.phone}`;
-  return sendButtons(from, {
-    text: `👕 *Uniforms — ${school.schoolName}*\n\n${info}`,
-    buttons: [{ id: `sfaq_fees_${schoolId}`, title: "💵 View school fees" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── DOCUMENTS ─────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqDocs(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-
-  const docs = [];
-  if (school.profilePdfUrl)      docs.push({ label:"School Prospectus",  url: school.profilePdfUrl });
-  if (school.feeSchedulePdfUrl)  docs.push({ label:"Fee Schedule",        url: school.feeSchedulePdfUrl });
-  if (school.applicationFormUrl) docs.push({ label:"Application Form",    url: school.applicationFormUrl });
-  for (const b of (school.brochures || [])) docs.push(b);
-
-  if (!docs.length) {
-    return sendButtons(from, {
-      text: `📄 *Documents — ${school.schoolName}*\n\nNo documents uploaded yet.\n\n📞 ${school.contactPhone || school.phone}`,
-      buttons: [{ id: `sfaq_message_${schoolId}`, title: "✉️ Request documents" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-    });
-  }
-
-  _saveLead(from, school, "pdf", "whatsapp_link");
-  const { sendDocument } = await import("./metaSender.js");
-  let sent = 0;
-  for (const doc of docs) {
-    try {
-      await sendDocument(from, { link: doc.url, filename: (doc.label || "Doc").replace(/[^a-zA-Z0-9 ]/g,"").replace(/\s+/g,"_") + ".pdf" });
-      sent++;
-    } catch (e) { /* ignore */ }
-  }
-  return sendButtons(from, {
-    text: sent > 0 ? `📄 *${sent} document${sent>1?"s":""} sent above.* Tap each to open.\n\n_Forward to your family on WhatsApp._` : `📄 Documents:\n${docs.map(d=>`• ${d.label}: ${d.url}`).join("\n")}`,
-    buttons: [{ id: `sfaq_enroll_apply_${schoolId}`, title: "📋 Apply online" }, { id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ── COMPARE WITH NEARBY SCHOOLS ───────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Contact inline ─────────────────────────────────────────────────────────────
 async function _faqCompare(from, schoolId) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-
+  const id = String(school._id);
   const ranges = { budget:["budget"], mid:["budget","mid"], premium:["mid","premium"] };
   const others = await SchoolProfile.find({
     _id: { $ne: school._id }, city: school.city, active: true,
@@ -849,139 +794,68 @@ async function _faqCompare(from, schoolId) {
 
   if (!others.length) {
     return sendButtons(from, {
-      text: `🔍 No other schools found in ${school.city} on ZimQuote at the same price range.\n\nSearch all schools:\nwa.me/263789901058`,
-      buttons: [{ id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" }]
+      text: `🔍 No similar schools found in ${school.city} on ZimQuote right now.`,
+      buttons: [{ id: `sfaq_back_${id}`, title: _btn("⬅ Main menu") }]
     });
   }
 
-  const FEE = { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" };
-  let answer = `🔍 *Similar schools in ${school.city}*\n\nCompared to *${school.schoolName}* (${FEE[school.feeRange]||""})\n\n`;
+  const FEE = { budget:"<$300/term", mid:"$300–800/term", premium:"$800+/term" };
+  let text = `🔍 *Similar schools in ${school.city}*\n\n`;
   others.forEach((s, i) => {
-    answer += `*${i+1}. ${s.schoolName}*\n📍 ${s.suburb?s.suburb+", ":""}${s.city}\n💵 ${_feeLabel(s)} · ${s.admissionsOpen?"🟢 Open":"🔴 Closed"}\n\n`;
+    text += `*${i+1}. ${s.schoolName}*\n📍 ${s.suburb?s.suburb+", ":""}${s.city} · ${s.admissionsOpen?"🟢":"🔴"} · ${FEE[s.feeRange]||""}\n\n`;
   });
 
-  const btns = others.slice(0, 2).map(s => ({ id: `sfaq_fees_${String(s._id)}`, title: s.schoolName.slice(0,20) }));
-  btns.push({ id: `sfaq_back_${schoolId}`, title: "⬅ Main menu" });
-  return sendButtons(from, { text: answer, buttons: btns });
+  const btns = others.slice(0, 2).map(s => ({
+    id: `sfaq_cat_fees_${String(s._id)}`, title: _btn(s.schoolName.slice(0, MAX_BTN))
+  }));
+  btns.push({ id: `sfaq_back_${id}`, title: _btn("⬅ Main menu") });
+  return sendButtons(from, { text, buttons: btns });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── BURSARY ───────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
 async function _faqBursary(from, schoolId, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
-  const info = school.bursaryInfo || school.feeDiscounts || "Bursary and financial assistance may be available for deserving pupils. Please contact the school admissions office to discuss your situation confidentially.";
+  const info = school.bursaryInfo || school.feeDiscounts || "Bursary and financial assistance may be available. Contact admissions confidentially.";
   await _saveSession(biz, saveBiz, "sfaq_awaiting_message", { faqSchoolId: schoolId });
-  return sendText(from,
-`🎓 *Bursary & financial aid — ${school.schoolName}*
-
-${info}
-
-To enquire about financial assistance, briefly describe your situation below and it will be sent to the school:
-
-_e.g. "Single parent, 2 children, asking about partial fee assistance for Grade 3 2026"_
-
-Type *cancel* to go back.`
-  );
+  return sendText(from, `🎓 *Bursary — ${school.schoolName}*\n\n${info}\n\nDescribe your situation below and it will be sent to the school:\n\n_e.g. "Single parent, 2 children, asking about partial fee assistance for 2026"_\n_Type *cancel* to go back._`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── LEAVE A MESSAGE ───────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
 async function _faqMessage(from, schoolId, biz, saveBiz) {
   await _saveSession(biz, saveBiz, "sfaq_awaiting_message", { faqSchoolId: schoolId });
   const school = await SchoolProfile.findById(schoolId).lean();
-  return sendText(from, `✉️ *Send a message to ${school?.schoolName || "the school"}*\n\nType your question or message. The school will reply on WhatsApp.\n\n_Type *cancel* to go back._`);
+  return sendText(from, `✉️ *Message — ${school?.schoolName || "school"}*\n\nType your question. The school will reply on WhatsApp.\n\n_Type *cancel* to go back._`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── CUSTOM FAQ ANSWER ─────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-async function _faqCustomAnswer(from, schoolId, itemRef) {
+async function _faqTourBook(from, schoolId, biz, saveBiz) {
+  await _saveSession(biz, saveBiz, "sfaq_awaiting_tour_date", { faqSchoolId: schoolId });
   const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-
-  // itemRef is either a MongoDB ObjectId string or the order number
-  const item = (school.faqItems || []).find(fq =>
-    String(fq._id) === itemRef || String(fq.order) === itemRef
-  );
-
-  if (!item) return showSchoolFAQMenu(from, schoolId, null, null);
-
-  return sendButtons(from, {
-    text: `❓ *${item.question}*\n\n${item.answer}`,
-    buttons: [
-      { id: `sfaq_more_${schoolId}`,    title: "⬅ More questions" },
-      { id: `sfaq_back_${schoolId}`,    title: "⬅ Main menu" },
-      { id: `sfaq_message_${schoolId}`, title: "✉️ Ask follow-up" }
-    ]
-  });
+  return sendText(from, `📅 *Book a tour — ${school?.schoolName || "school"}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n_Type *cancel* to go back._`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ── SCHOOL ADMIN — MANAGE CUSTOM FAQ (via bot, for school staff) ──────────────
+// DYNAMIC INLINE HANDLERS (called from action router by action name)
 // ─────────────────────────────────────────────────────────────────────────────
-async function _adminFAQMenu(from, schoolId, biz, saveBiz) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const count = (school.faqItems || []).length;
-  return sendButtons(from, {
-    text:
-`📋 *Manage your FAQ — ${school.schoolName}*
 
-You have *${count}* custom question${count !== 1 ? "s" : ""} set up.
+// These are dispatched from the switch in handleSchoolFAQAction
+// for action IDs like sfaq_cat_fees_main_<id>, sfaq_admissions_status_<id> etc.
+// They're handled by the category router above. Any unmatched cat_ prefixed
+// actions fall through to _showCategory which handles them.
 
-Parents see your custom Q&A in the "More options" section of your ZimQuote chatbot.
-
-What would you like to do?`,
-    buttons: [
-      { id: `sfaq_admin_faq_add_${schoolId}`,   title: "➕ Add a question" },
-      { id: `sfaq_admin_faq_list_${schoolId}`,  title: "📋 View my questions" },
-      { id: `sfaq_admin_faq_clear_${schoolId}`, title: "🗑️ Clear all custom FAQ" }
-    ]
-  });
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+function _getCustomItems(school, category) {
+  return (school.faqItems || [])
+    .filter(f => f.active !== false && (!f.category || f.category === category || f.category === "custom"))
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .slice(0, 3); // max 3 custom items per category (to stay under 10 total)
 }
 
-async function _adminFAQList(from, schoolId) {
-  const school = await SchoolProfile.findById(schoolId).lean();
-  if (!school) return false;
-  const items = school.faqItems || [];
-  if (!items.length) {
-    return sendText(from, `📋 *Your custom FAQ — ${school.schoolName}*\n\nNo custom questions yet.\n\nAdd questions parents frequently ask — things not covered by the default topics.`);
-  }
-  let list = `📋 *Your custom FAQ — ${school.schoolName}*\n\n`;
-  items.forEach((fq, i) => {
-    list += `*${i+1}. ${fq.question}*\n_${fq.answer.slice(0, 80)}${fq.answer.length > 80 ? "..." : ""}_\n\n`;
-  });
-  return sendButtons(from, {
-    text: list.trim(),
-    buttons: [
-      { id: `sfaq_admin_faq_add_${schoolId}`,   title: "➕ Add more" },
-      { id: `sfaq_admin_faq_clear_${schoolId}`, title: "🗑️ Clear all" },
-      { id: `school_account`,                    title: "⬅ My account" }
-    ]
-  });
-}
-
-async function _adminFAQAdd(from, schoolId, biz, saveBiz) {
-  await _saveSession(biz, saveBiz, "sfaq_admin_adding_question", { faqSchoolId: schoolId });
-  return sendText(from,
-`➕ *Add a custom FAQ question*
-
-Type the *question* parents frequently ask about your school:
-
-Examples:
-• _"Do you offer after-school care?"_
-• _"When is the next open day?"_
-• _"What is the school's WhatsApp group policy?"_
-• _"Is the school affiliated with any church?"_
-
-Type *cancel* to go back.`
-  );
-}
-
-async function _adminFAQClear(from, schoolId) {
-  await SchoolProfile.findByIdAndUpdate(schoolId, { $set: { faqItems: [] } });
-  return sendText(from, `🗑️ All custom FAQ questions cleared.\n\nYour ZimQuote chatbot will now show the default topics only. You can add new questions any time.`);
+function _countDocs(school) {
+  let n = 0;
+  if (school.profilePdfUrl)      n++;
+  if (school.feeSchedulePdfUrl)  n++;
+  if (school.applicationFormUrl) n++;
+  n += (school.brochures || []).length;
+  return n;
 }
