@@ -40,145 +40,6 @@ export async function startSchoolRegistration(from, biz) {
 // STATE MACHINE - called from chatbotEngine for every school_reg_* state
 // Returns true if it handled the state, false to fall through.
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FEE SECTION HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Human-readable label for each section
-function _sectionLabel(section) {
-  return {
-    ecd:          "ECD / Preschool",
-    lowerPrimary: "Lower Primary (Grades 1–4)",
-    upperPrimary: "Upper Primary (Grades 5–7)",
-    primary:      "Primary (Grades 1–7)",
-    olevel:       "O-Level (Form 1–4)",
-    alevel:       "A-Level (Form 5–6)"
-  }[section] || section;
-}
-
-// Build the ordered list of sections to collect fees for
-// Based on school type and boarding type
-function _buildFeeQueue(type, boarding) {
-  const queue = [];
-  const needsBoarding = boarding === "boarding" || boarding === "both";
-
-  // Which sections does this school have?
-  const hasCombined      = type === "combined";
-  const hasEcd           = type === "ecd" || type === "ecd_primary" || hasCombined;
-  const hasPrimary       = type === "primary" || type === "ecd_primary" || hasCombined;
-  const hasSecondary     = type === "secondary" || hasCombined;
-
-  // ECD-only school
-  if (type === "ecd") return ["ecd"];
-
-  // Build in logical order (youngest to oldest)
-  if (hasEcd) queue.push("ecd");
-
-  if (hasPrimary) {
-    // For combined/ecd_primary schools we offer primary as one block
-    // (admin can later split lower/upper via the admin panel)
-    queue.push("primary");
-  }
-
-  if (hasSecondary) {
-    queue.push("olevel");
-    queue.push("alevel");
-  }
-
-  return queue;
-}
-
-// Start collecting fees for the next section in the queue
-async function _startNextFeeSection(from, biz, saveBiz, reg) {
-  const queue = reg._feeQueue || [];
-  if (!queue.length) {
-    // No more sections — move to levies
-    return _goToLevies(from, biz, saveBiz, reg);
-  }
-
-  const section    = queue.shift();
-  reg._feeQueue    = queue;
-  reg._currentSection = section;
-  biz.sessionState    = "school_reg_fees_day";
-  await saveBiz(biz);
-
-  const label      = _sectionLabel(section);
-  const isBoarding = reg.boarding === "boarding" || reg.boarding === "both";
-  const hasMore    = queue.length > 0;
-
-  const stepInfo = `💵 *Fees — ${label}*`;
-  const moreInfo = hasMore
-    ? `\n_Remaining: ${queue.map(_sectionLabel).join(", ")}_`
-    : "";
-
-  return sendText(from,
-    `${stepInfo}
-
-` +
-    `Enter *day tuition fees* per term (USD):
-` +
-    `Format: *term1, term2, term3*
-` +
-    `Example: *800, 800, 750*
-
-` +
-    `If all terms are equal: *800*` +
-    moreInfo
-  );
-}
-
-// Called after each day fee (and boarding fee if applicable) is collected
-async function _nextFeeSection(from, biz, saveBiz, reg, confirmMsg) {
-  const queue = reg._feeQueue || [];
-  if (!queue.length) {
-    return _goToLevies(from, biz, saveBiz, reg, confirmMsg);
-  }
-
-  const section    = queue.shift();
-  reg._feeQueue    = queue;
-  reg._currentSection = section;
-  biz.sessionState    = "school_reg_fees_day";
-  await saveBiz(biz);
-
-  const label  = _sectionLabel(section);
-  const hasMore = queue.length > 0;
-  const moreInfo = hasMore ? `
-_Remaining: ${queue.map(_sectionLabel).join(", ")}_` : "";
-
-  return sendText(from,
-    (confirmMsg ? confirmMsg + "\n\n" : "") +
-    `💵 *${label} — day fees* (USD)\n\n` +
-    `Enter per term: *term1, term2, term3*\n` +
-    `Example: *900, 900, 850*\n\nIf all equal: *900*` + moreInfo
-  );
-}
-
-async function _goToLevies(from, biz, saveBiz, reg, confirmMsg) {
-  biz.sessionState = "school_reg_levies";
-  await saveBiz(biz);
-
-  // Build fee summary for confirmation
-  const sections = Object.entries(reg.feeSections || {});
-  let feeSummary = sections.map(([sec, data]) => {
-    const d = data.day;
-    const b = data.boarding;
-    let line = `• *${_sectionLabel(sec)} (day):* $${d.term1} / $${d.term2} / $${d.term3}`;
-    if (b?.term1 > 0) line += `\n  ↳ Boarding: $${b.term1} / $${b.term2} / $${b.term3}`;
-    return line;
-  }).join("\n");
-
-  return sendButtons(from, {
-    text:
-      (confirmMsg ? confirmMsg + "\n\n" : "") +
-      (feeSummary ? `✅ *Fees collected:*\n${feeSummary}\n\n` : "") +
-      `📋 *Additional levies*\n\nDoes your school charge any of these? _(type them or tap Skip)_\n\n• Development levy\n• Sports levy\n• IT / Library levy\n• Exam fees\n\nFormat: *Development: $40/term, Sports: $20/year*\n\nOr type *skip* if none.`,
-    buttons: [
-      { id: "school_reg_levies_skip", title: "⏭ No extra levies" }
-    ]
-  });
-}
-
 export async function handleSchoolRegistrationStates({ state, from, text, biz, saveBiz }) {
   const phone = from.replace(/\D+/g, "");
   const reg   = getReg(biz);
@@ -255,36 +116,15 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
   // ── Step 8: Boarding ─────────────────────────────────────────────────────
   // (handled via action school_reg_boarding_*)
 
-  // ── Step 9: Fees — section-based ────────────────────────────────────────
-  // State: school_reg_fees_<section>
-  // Sections: ecd, lowerPrimary, upperPrimary, primary, olevel, alevel
-  // Each section has day fees; boarding schools also collect boarding fees per section.
-  //
-  // Fee collection order (driven by school type + boarding):
-  //   Combined/ECD+Primary: ecd → [lowerPrimary if split else primary] → olevel → alevel
-  //   Secondary only:       olevel → alevel
-  //   Primary only:         [lowerPrimary if split else primary]
-  //   ECD only:             ecd
-  //   Boarding sections:    after each day fee, ask boarding fee for that section
-  //
-  // reg.feeSections = { ecd:{day,boarding}, primary:{day,boarding}, olevel:{day,boarding}, alevel:{day,boarding} }
-  // reg._feeQueue  = remaining sections to collect (array of section ids)
-  // reg._currentSection = section being collected now
-  // reg._collectingBoarding = true/false
-
-  if (state === "school_reg_fees_day" || state.startsWith("school_reg_fees_day_")) {
+  // ── Step 9: Fees ─────────────────────────────────────────────────────────
+ if (state === "school_reg_fees") {
     const raw   = text.trim();
     const parts = raw.split(/[,\s\/]+/)
-      .map(s => Number(s.replace(/[^\d.]/g, ""))).filter(n => !isNaN(n) && n >= 0);
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
 
     if (!parts.length) {
-      const sectionLabel = _sectionLabel(reg._currentSection || "primary");
-      await sendText(from,
-        "❌ Please enter valid fees.\n\n" +
-        "Example: *800, 800, 750* _(term1, term2, term3)_\n" +
-        "Or a single number if all terms are equal: *800*\n\n" +
-        `This is for *${sectionLabel}* day fees.`
-      );
+      await sendText(from, `❌ Please enter valid fees.\n\nExample: *800, 800, 750*\n_(term1, term2, term3)_\n\nOr one number: *800*`);
       return true;
     }
 
@@ -292,38 +132,56 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     const t2 = parts[1] !== undefined ? parts[1] : t1;
     const t3 = parts[2] !== undefined ? parts[2] : t1;
 
-    const section = reg._currentSection || "primary";
-    reg.feeSections = reg.feeSections || {};
-    reg.feeSections[section] = reg.feeSections[section] || {};
-    reg.feeSections[section].day = { term1: t1, term2: t2, term3: t3 };
+    // These are always the day fees (or the only fees if day-only school)
+    reg.fees = reg.fees || {};
+    reg.fees.term1    = t1;
+    reg.fees.term2    = t2;
+    reg.fees.term3    = t3;
+    reg.fees.currency = "USD";
+    reg.feeRange      = computeSchoolFeeRange(t1);
 
-    const hasBoarding = reg.boarding === "boarding" || reg.boarding === "both";
-    const sectionLabel = _sectionLabel(section);
+    const needsBoardingFees = (reg.boarding === "both");
+    const hasEcd = reg.type === "ecd_primary" || reg.type === "combined";
 
-    if (hasBoarding) {
-      biz.sessionState = "school_reg_fees_boarding";
+    if (needsBoardingFees && !reg.fees.boardingTerm1) {
+      // Ask for boarding fees next
+      biz.sessionState = "school_reg_boarding_fees";
+      await saveBiz(biz);
+      return sendText(from,
+        `✅ Day fees saved: *$${t1} / $${t2} / $${t3}* per term.\n\n` +
+        `🏫 Now enter *boarding fees* per term:\nExample: *1500, 1500, 1400*\n\nOr one number: *1500*`
+      );
+    }
+
+    if (hasEcd && !reg.fees.ecdTerm1) {
+      // Ask if ECD fees differ
+      biz.sessionState = "school_reg_ecd_fees";
       await saveBiz(biz);
       return sendButtons(from, {
-        text:
-          `✅ *${sectionLabel} day fees saved:*\n` +
-          `T1: $${t1} · T2: $${t2} · T3: $${t3}\n\n` +
-          `🏠 Now enter *${sectionLabel} boarding fees* per term (USD):\n` +
-          `Example: *1500, 1400, 1400*  or a single number: *1500*\n\n` +
-          `_Boarding fee = full cost of room + meals + supervision_`,
-        buttons: [{ id: "school_reg_fees_boarding_same", title: "Same as day fee" }]
+        text: `✅ Fees saved: *$${t1} / $${t2} / $${t3}* per term.\n\n🌱 Do ECD / preschool fees differ from the above?`,
+        buttons: [
+          { id: "school_reg_ecd_fees_same", title: "Same as above" },
+          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
+        ]
       });
     }
 
-    return _nextFeeSection(from, biz, saveBiz, reg, `✅ *${sectionLabel} day fees saved:* T1: $${t1} · T2: $${t2} · T3: $${t3}`);
+    biz.sessionState = "school_reg_facilities";
+    reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
   }
 
-  if (state === "school_reg_fees_boarding") {
+  // ── Boarding fees entry ───────────────────────────────────────────────────
+  if (state === "school_reg_boarding_fees") {
     const raw   = text.trim();
     const parts = raw.split(/[,\s\/]+/)
-      .map(s => Number(s.replace(/[^\d.]/g, ""))).filter(n => !isNaN(n) && n >= 0);
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
 
     if (!parts.length) {
-      await sendText(from, "❌ Please enter boarding fees.\n\nExample: *1500, 1500, 1400*\n\nOr one number: *1500*");
+      await sendText(from, `❌ Please enter boarding fees.\n\nExample: *1500, 1500, 1400*\n\nOr one number: *1500*`);
       return true;
     }
 
@@ -331,82 +189,54 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
     const b2 = parts[1] !== undefined ? parts[1] : b1;
     const b3 = parts[2] !== undefined ? parts[2] : b1;
 
-    const section = reg._currentSection || "primary";
-    reg.feeSections = reg.feeSections || {};
-    reg.feeSections[section] = reg.feeSections[section] || {};
-    reg.feeSections[section].boarding = { term1: b1, term2: b2, term3: b3 };
+    reg.fees.boardingTerm1 = b1;
+    reg.fees.boardingTerm2 = b2;
+    reg.fees.boardingTerm3 = b3;
 
-    const sectionLabel = _sectionLabel(section);
-    return _nextFeeSection(from, biz, saveBiz, reg, `✅ *${sectionLabel} boarding fees saved:* T1: $${b1} · T2: $${b2} · T3: $${b3}`);
-  }
+    const hasEcd = reg.type === "ecd_primary" || reg.type === "combined";
 
-  if (state === "school_reg_levies") {
-    const raw = text.trim().toLowerCase();
-    if (raw === "skip" || raw === "none" || raw === "0" || raw === "no") {
-      reg.levies = [];
-      biz.sessionState = "school_reg_admission_fee";
+    if (hasEcd) {
+      biz.sessionState = "school_reg_ecd_fees";
       await saveBiz(biz);
       return sendButtons(from, {
-        text:
-          "💳 *Admission / Registration fee*\n\n" +
-          "Is there a once-off admission or registration fee that new pupils pay?\n\n" +
-          "_e.g. $150 registration fee_",
+        text: `✅ Boarding fees saved: *$${b1} / $${b2} / $${b3}* per term.\n\n🌱 Do ECD / preschool fees differ from the day fees?`,
         buttons: [
-          { id: "school_reg_admission_skip", title: "⏭ No admission fee" }
+          { id: "school_reg_ecd_fees_same", title: "Same as day fees" },
+          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
         ]
       });
     }
 
-    // Parse "Development: $40/term, Sports: $20/year" etc.
-    const levies = [];
-    const lines  = raw.split(/[\n,;]+/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      const m = line.match(/([a-z\s]+)[:\s-]+\$?([\d.]+)\s*\/?\s*(term|year|once|annual|termly)?/i);
-      if (m) {
-        levies.push({
-          name:   m[1].trim().replace(/\b\w/g, c => c.toUpperCase()),
-          amount: parseFloat(m[2]) || 0,
-          per:    m[3]?.toLowerCase().startsWith("term") ? "term" :
-                  m[3]?.toLowerCase().startsWith("once") ? "once_off" : "year",
-          sections: []
-        });
-      }
-    }
-    if (!levies.length) {
-      await sendText(from,
-        "❌ Could not read levies. Please format like:\n\n" +
-        "*Development: $40/term, Sports: $20/year, IT: $15/year*\n\n" +
-        "Or type *skip* if there are no additional levies."
-      );
-      return true;
-    }
-    reg.levies = levies;
-    biz.sessionState = "school_reg_admission_fee";
-    await saveBiz(biz);
-    const summary = levies.map(l => `• ${l.name}: $${l.amount}/${l.per.replace("_"," ")}`).join("\n");
-    return sendButtons(from, {
-      text:
-        `✅ *Levies saved:*\n${summary}\n\n` +
-        "💳 *Admission / Registration fee*\n\n" +
-        "Is there a once-off admission or registration fee new pupils pay?",
-      buttons: [
-        { id: "school_reg_admission_skip", title: "⏭ No admission fee" }
-      ]
-    });
-  }
-
-  if (state === "school_reg_admission_fee") {
-    const raw = text.trim();
-    const amount = parseFloat(raw.replace(/[^\d.]/g, "")) || 0;
-    reg.admissionFee = amount;
     biz.sessionState = "school_reg_facilities";
     reg.facilitiesPage = 0;
-    reg.facilities = reg.facilities || [];
+    reg.facilities     = reg.facilities || [];
     await saveBiz(biz);
     return _sendFacilityBundles(from, reg.schoolName);
   }
 
-    // ── Step 10: Facilities - handled via actions
+  // ── ECD fees entry ────────────────────────────────────────────────────────
+  if (state === "school_reg_ecd_fees") {
+    const raw   = text.trim();
+    const parts = raw.split(/[,\s\/]+/)
+      .map(s => Number(s.replace(/[^\d.]/g, "")))
+      .filter(n => !isNaN(n) && n >= 0);
+
+    if (!parts.length) {
+      await sendText(from, `❌ Please enter ECD fees.\n\nExample: *600, 600, 550*\n\nOr one number: *600*`);
+      return true;
+    }
+
+    reg.fees.ecdTerm1 = parts[0] || 0;
+    reg.fees.ecdTerm2 = parts[1] !== undefined ? parts[1] : reg.fees.ecdTerm1;
+    reg.fees.ecdTerm3 = parts[2] !== undefined ? parts[2] : reg.fees.ecdTerm1;
+
+    biz.sessionState = "school_reg_facilities";
+    reg.facilitiesPage = 0;
+    reg.facilities     = reg.facilities || [];
+    await saveBiz(biz);
+    return _sendFacilityBundles(from, reg.schoolName);
+  }
+  // ── Step 10: Facilities - handled via actions
 
   // ── Step 11: Extramural - handled via actions
 
@@ -627,42 +457,7 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
     ]);
   }
 // ── ECD fees same as day ──────────────────────────────────────────────────
-  // ── Levies skip ───────────────────────────────────────────────────────────
-  if (a === "school_reg_levies_skip") {
-    reg.levies = [];
-    biz.sessionState = "school_reg_admission_fee";
-    await saveBiz(biz);
-    return sendButtons(from, {
-      text:
-        "💳 *Admission / Registration fee*\n\n" +
-        "Is there a once-off admission or registration fee that new pupils pay?\n\n" +
-        "_This is the fee paid when first joining the school (not term fees)_",
-      buttons: [{ id: "school_reg_admission_skip", title: "⏭ No admission fee" }]
-    });
-  }
-
-  if (a === "school_reg_admission_skip") {
-    reg.admissionFee   = 0;
-    biz.sessionState   = "school_reg_facilities";
-    reg.facilitiesPage = 0;
-    reg.facilities     = reg.facilities || [];
-    await saveBiz(biz);
-    return _sendFacilityBundles(from, reg.schoolName);
-  }
-
-  if (a === "school_reg_fees_boarding_same") {
-    // Boarding fee = same as day fee for this section
-    const section = reg._currentSection || "primary";
-    reg.feeSections = reg.feeSections || {};
-    reg.feeSections[section] = reg.feeSections[section] || {};
-    const day = reg.feeSections[section].day || { term1: 0, term2: 0, term3: 0 };
-    reg.feeSections[section].boarding = { ...day };
-    await saveBiz(biz);
-    const sectionLabel = _sectionLabel(section);
-    return _nextFeeSection(from, biz, saveBiz, reg, `✅ *${sectionLabel} boarding fees* set to same as day fees.`);
-  }
-
-    if (a === "school_reg_ecd_fees_same") {
+  if (a === "school_reg_ecd_fees_same") {
     // Copy day fees to ECD fees
     reg.fees.ecdTerm1 = reg.fees.term1 || 0;
     reg.fees.ecdTerm2 = reg.fees.term2 || 0;
@@ -683,16 +478,31 @@ export async function handleSchoolRegistrationActions({ action: a, from, biz, sa
   }
   // ── Boarding selected ─────────────────────────────────────────────────────
 if (a.startsWith("school_reg_boarding_")) {
-    reg.boarding = a.replace("school_reg_boarding_", "");
+    reg.boarding       = a.replace("school_reg_boarding_", "");
+    biz.sessionState   = "school_reg_fees";
     await saveBiz(biz);
 
-    // Build fee collection queue based on school type + boarding
-    reg._feeQueue       = _buildFeeQueue(reg.type, reg.boarding);
-    reg._currentSection = null;
-    reg.feeSections     = {};
+    // Tailor the fee prompt based on boarding type selected
+    const hasBoardingFees = reg.boarding === "boarding" || reg.boarding === "both";
+    const hasEcdFees      = reg.type === "ecd" || reg.type === "ecd_primary" || reg.type === "combined";
 
-    await saveBiz(biz);
-    return _startNextFeeSection(from, biz, saveBiz, reg);
+    let feePrompt = `💵 *Step 9 of 12* - School fees per term (USD)\n\n`;
+
+    if (hasBoardingFees && reg.boarding === "boarding") {
+      // Boarding-only school — just boarding fees
+      feePrompt += `Enter *boarding fees* as: term1, term2, term3\nExample: *1500, 1500, 1400*\n\nOr one number if all terms equal: *1500*`;
+    } else if (hasBoardingFees) {
+      // Day & Boarding — need both
+      feePrompt += `Your school has *day and boarding* fees.\n\n`;
+      feePrompt += `First, enter *day fees*: term1, term2, term3\nExample: *800, 800, 750*\n\nOr one number: *800*`;
+    } else if (hasEcdFees && reg.type !== "primary" && reg.type !== "secondary") {
+      // Combined/ECD+Primary — might have different ECD fees
+      feePrompt += `Enter *primary/secondary fees* per term:\nExample: *800, 800, 750*\n\nWe'll ask about ECD fees next if they differ.`;
+    } else {
+      feePrompt += `Enter as: *term1, term2, term3*\nExample: *800, 800, 750*\n\nOr one number if all terms equal: *800*`;
+    }
+
+    return sendText(from, feePrompt);
   }
 // ── Facilities bundle quick-select ────────────────────────────────────────
   if (a.startsWith("school_reg_fac_bundle_")) {
@@ -1025,38 +835,6 @@ _Is this correct?_`,
   });
 }
 
-
-// Build legacy fees object from feeSections for backward compat
-function _buildLegacyFees(reg) {
-  const fs = reg.feeSections || {};
-  // Representative section (primary > olevel > ecd > alevel)
-  const rep = fs.primary?.day || fs.olevel?.day || fs.upperPrimary?.day ||
-              fs.lowerPrimary?.day || fs.ecd?.day || fs.alevel?.day || null;
-
-  const brd = fs.olevel?.boarding || fs.primary?.boarding ||
-              fs.upperPrimary?.boarding || null;
-
-  return {
-    term1:         rep?.term1 || 0,
-    term2:         rep?.term2 || rep?.term1 || 0,
-    term3:         rep?.term3 || rep?.term1 || 0,
-    currency:      "USD",
-    boardingTerm1: brd?.term1 || 0,
-    boardingTerm2: brd?.term2 || brd?.term1 || 0,
-    boardingTerm3: brd?.term3 || brd?.term1 || 0,
-    ecdTerm1:      fs.ecd?.day?.term1 || 0,
-    ecdTerm2:      fs.ecd?.day?.term2 || fs.ecd?.day?.term1 || 0,
-    ecdTerm3:      fs.ecd?.day?.term3 || fs.ecd?.day?.term1 || 0,
-  };
-}
-
-function _primaryFeeAmount(reg) {
-  const fs = reg.feeSections || {};
-  return fs.primary?.day?.term1 || fs.olevel?.day?.term1 ||
-         fs.upperPrimary?.day?.term1 || fs.lowerPrimary?.day?.term1 ||
-         fs.ecd?.day?.term1 || reg.fees?.term1 || 0;
-}
-
 async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
   // Upsert school profile
   const school = await SchoolProfile.findOneAndUpdate(
@@ -1072,12 +850,8 @@ async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
         curriculum:           reg.curriculum || [],
         gender:               reg.gender,
         boarding:             reg.boarding,
-        feeSections:          reg.feeSections || {},
-        levies:               reg.levies || [],
-        admissionFee:         reg.admissionFee || 0,
-        // Legacy flat fee fields — auto-synced by pre-save hook but set here for immediate use
-        fees: _buildLegacyFees(reg),
-        feeRange:             computeSchoolFeeRange(_primaryFeeAmount(reg)),
+        fees:                 reg.fees || { term1: 0, term2: 0, term3: 0, currency: "USD" },
+        feeRange:             computeSchoolFeeRange(reg.fees?.term1 || 0),
         facilities:           reg.facilities || [],
         extramuralActivities: reg.extramuralActivities || [],
         principalName:        reg.principalName || "",

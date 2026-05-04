@@ -113,16 +113,87 @@ function _generateDefaults(school) {
   let o = 0; // order counter per category
 
   // ── FEES ──────────────────────────────────────────────────────────────────
-  const fees = school.fees;
-  if (hasFees) {
+  const fs = school.feeSections || {};
+  const SECTION_LABEL = {
+    ecd:          "ECD / Preschool",
+    lowerPrimary: "Lower Primary (Grades 1–4)",
+    upperPrimary: "Upper Primary (Grades 5–7)",
+    primary:      "Primary (Grades 1–7)",
+    olevel:       "O-Level (Form 1–4)",
+    alevel:       "A-Level (Form 5–6)"
+  };
+
+  // Helper: format a section's fees as a line
+  function _secLine(data, label, prefix) {
+    if (!data?.day?.term1) return "";
+    const d = data.day;
+    let line = `${prefix || "•"} *${label} (day):* $${d.term1}/T1 · $${d.term2 || d.term1}/T2 · $${d.term3 || d.term1}/T3`;
+    if (data.boarding?.term1 > 0) {
+      const b = data.boarding;
+      line += `\n  ↳ Boarding: $${b.term1}/T1 · $${b.term2 || b.term1}/T2 · $${b.term3 || b.term1}/T3`;
+    }
+    return line;
+  }
+
+  // Build a full fee schedule answer from feeSections
+  const ORDER = ["ecd","lowerPrimary","upperPrimary","primary","olevel","alevel"];
+  const feeLines = ORDER.map(sec => _secLine(fs[sec], SECTION_LABEL[sec], "")).filter(Boolean);
+
+  // Build levies text
+  const levies = school.levies || [];
+  const levyLines = levies.map(l => `• ${l.name}: $${l.amount}/${l.per.replace("_"," ")}`);
+  const admFee = school.admissionFee > 0 ? `• Admission / Registration fee: *$${school.admissionFee}* (once-off)` : "";
+  const cautionFee = school.cautionMoney > 0 ? `• Caution money (refundable): *$${school.cautionMoney}*` : "";
+
+  if (feeLines.length > 0) {
+    // Annual estimate from primary or olevel
+    const repFee = fs.primary?.day?.term1 || fs.olevel?.day?.term1 || 0;
+    const repT2  = fs.primary?.day?.term2 || fs.olevel?.day?.term2 || repFee;
+    const repT3  = fs.primary?.day?.term3 || fs.olevel?.day?.term3 || repFee;
+    const annual = repFee + repT2 + repT3;
+
+    let feeAnswer = `💵 *Fee schedule — ${school.schoolName}*\n\n`;
+    feeAnswer += feeLines.join("\n\n");
+    if (levyLines.length) feeAnswer += "\n\n*Annual levies:*\n" + levyLines.join("\n");
+    if (admFee) feeAnswer += "\n\n*Once-off fees:*\n" + admFee;
+    if (cautionFee) feeAnswer += "\n" + cautionFee;
+    if (annual > 0) feeAnswer += `\n\n💡 _Day school annual estimate: ~$${annual} (excl. levies)_`;
+    feeAnswer += "\n\n_All fees are in USD._";
+
+    defaults.push({ categoryId: "fees", id: "def_fees_full", order: o++, isDefault: true,
+      question: "What are the school fees?",
+      answer: feeAnswer,
+      pdfUrl: school.feeSchedulePdfUrl || undefined,
+      pdfLabel: school.feeSchedulePdfUrl ? `${school.schoolName} Fee Schedule` : undefined
+    });
+
+    // Section-specific questions for schools with multiple sections
+    if (feeLines.length > 1) {
+      for (const sec of ORDER) {
+        if (!fs[sec]?.day?.term1) continue;
+        const d = fs[sec].day;
+        const b = fs[sec].boarding;
+        const label = SECTION_LABEL[sec];
+        let ans = `💵 *${label} fees — ${school.schoolName}*\n\n`;
+        ans += `Day fees per term:\nT1: *$${d.term1}* · T2: *$${d.term2||d.term1}* · T3: *$${d.term3||d.term1}*`;
+        if (b?.term1 > 0) ans += `\n\nBoarding fees per term:\nT1: *$${b.term1}* · T2: *$${b.term2||b.term1}* · T3: *$${b.term3||b.term1}*`;
+        const annualSec = (d.term1||0) + (d.term2||d.term1||0) + (d.term3||d.term1||0);
+        if (annualSec > 0) ans += `\n\n💡 Annual day estimate: ~$${annualSec}`;
+        defaults.push({ categoryId: "fees", id: `def_fees_${sec}`, order: o++, isDefault: true,
+          question: `${label} fees?`,
+          answer: ans
+        });
+      }
+    }
+  } else if (hasFees) {
+    // Fallback to legacy flat fees
+    const fees = school.fees;
     defaults.push({ categoryId: "fees", id: "def_fees_term", order: o++, isDefault: true,
-      question: "What are the term fees?",
-      answer: `💵 *Term fees — ${school.schoolName}*\n\n` +
-        (fees.ecdTerm1 && fees.ecdTerm1 !== fees.term1 ? `ECD: $${fees.ecdTerm1}/term\n` : "") +
-        `Grade school: *$${fees.term1}* (T1) · *$${fees.term2 || fees.term1}* (T2) · *$${fees.term3 || fees.term1}* (T3)` +
-        (fees.devLevy ? `\nDevelopment levy: $${fees.devLevy}/term` : "") +
-        (fees.sportsFee ? `\nSports levy: $${fees.sportsFee}/term` : "") +
-        (fees.examFee ? `\nExam fees: $${fees.examFee}/year` : "") +
+      question: "What are the school fees?",
+      answer: `💵 *Fees — ${school.schoolName}*\n\n` +
+        (fees.ecdTerm1 > 0 && fees.ecdTerm1 !== fees.term1 ? `ECD: $${fees.ecdTerm1}/term\n` : "") +
+        `Grade school: *$${fees.term1}* (T1) · *$${fees.term2||fees.term1}* (T2) · *$${fees.term3||fees.term1}* (T3)` +
+        (fees.boardingTerm1 > 0 ? `\nBoarding: *$${fees.boardingTerm1}* (T1) · *$${fees.boardingTerm2||fees.boardingTerm1}* (T2)` : "") +
         `\n\n💡 Annual estimate: ~$${(+fees.term1 + +(fees.term2||fees.term1) + +(fees.term3||fees.term1)).toFixed(0)}`
     });
   } else if (feeText) {
@@ -138,7 +209,7 @@ function _generateDefaults(school) {
     question: "How do I pay fees?",
     answer: `💳 *Payment methods — ${school.schoolName}*\n\n` +
       payMethods.map(m => `• ${m}`).join("\n") +
-      (school.ecocashNumber ? `\n\n📲 EcoCash number: *${school.ecocashNumber}*` : "") +
+      (school.ecocashNumber ? `\n\n📲 EcoCash: *${school.ecocashNumber}*` : "") +
       (school.bankDetails ? `\n🏦 ${school.bankDetails}` : "") +
       `\n\n_Use child's full name + grade as payment reference._`
   });
@@ -152,10 +223,20 @@ function _generateDefaults(school) {
     });
   }
 
-  if (hasFees && (school.feeSchedulePdfUrl || school.profilePdfUrl)) {
+  if (school.admissionFee > 0) {
+    defaults.push({ categoryId: "fees", id: "def_fees_admission", order: o++, isDefault: true,
+      question: "Is there a registration fee?",
+      answer: `💳 *Admission / Registration fee — ${school.schoolName}*\n\n` +
+        `Once-off registration fee: *$${school.admissionFee}*\n\n` +
+        (school.cautionMoney > 0 ? `Refundable caution deposit: *$${school.cautionMoney}*\n\n` : "") +
+        `_This is paid once when a pupil is accepted and joins the school._\n📞 ${phone}`
+    });
+  }
+
+  if (school.feeSchedulePdfUrl || school.profilePdfUrl) {
     defaults.push({ categoryId: "fees", id: "def_fees_pdf", order: o++, isDefault: true,
       question: "Can I get the fee schedule?",
-      answer: "📄 The fee schedule PDF is available. Tap *Download documents* in Contact & Admin or request it by sending a message below.",
+      answer: "📄 The fee schedule PDF is available. Tap below to download it to WhatsApp.",
       pdfUrl: school.feeSchedulePdfUrl || school.profilePdfUrl,
       pdfLabel: `${school.schoolName} Fee Schedule`
     });

@@ -679,18 +679,39 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
     const t1 = parseFloat(feesTerm1) || 0;
     const t2 = parseFloat(feesTerm2) || t1;
     const t3 = parseFloat(feesTerm3) || t1;
-    const b1 = parseFloat(req.body.feesBoarding1) || 0;
-    const b2 = parseFloat(req.body.feesBoarding2) || b1;
-    const b3 = parseFloat(req.body.feesBoarding3) || b1;
-    const e1 = parseFloat(req.body.feesEcd1) || 0;
-    const e2 = parseFloat(req.body.feesEcd2) || e1;
-    const e3 = parseFloat(req.body.feesEcd3) || e1;
+    // ── Section-based fee parsing ─────────────────────────────────────────────
+    const SECTIONS = ["ecd","lowerPrimary","upperPrimary","primary","olevel","alevel"];
+    const feeSections = {};
+    for (const sec of SECTIONS) {
+      const dt1 = parseFloat(req.body["feeDay_"+sec+"_t1"]) || 0;
+      const dt2 = parseFloat(req.body["feeDay_"+sec+"_t2"]) || dt1;
+      const dt3 = parseFloat(req.body["feeDay_"+sec+"_t3"]) || dt1;
+      const bt1 = parseFloat(req.body["feeBrd_"+sec+"_t1"]) || 0;
+      const bt2 = parseFloat(req.body["feeBrd_"+sec+"_t2"]) || bt1;
+      const bt3 = parseFloat(req.body["feeBrd_"+sec+"_t3"]) || bt1;
+      feeSections[sec] = { day: { term1: dt1, term2: dt2, term3: dt3 }, boarding: { term1: bt1, term2: bt2, term3: bt3 } };
+    }
+    const admissionFeeVal = parseFloat(req.body.admissionFee) || 0;
+    const levies = [];
+    for (const [key, name, per] of [["levyDevelopment","Development","term"],["levySports","Sports","year"],["levyIT","IT / Computer","year"],["levyLibrary","Library","year"],["levyExam","Exam","year"]]) {
+      const amt = parseFloat(req.body[key]) || 0;
+      if (amt > 0) levies.push({ name, amount: amt, per, sections: [] });
+    }
+    const repSec = feeSections.primary?.day?.term1 > 0 ? feeSections.primary.day :
+                   feeSections.olevel?.day?.term1  > 0 ? feeSections.olevel.day  :
+                   feeSections.upperPrimary?.day?.term1 > 0 ? feeSections.upperPrimary.day :
+                   feeSections.lowerPrimary?.day?.term1 > 0 ? feeSections.lowerPrimary.day :
+                   feeSections.ecd?.day?.term1     > 0 ? feeSections.ecd.day     :
+                   { term1: t1, term2: t2, term3: t3 };
+    const brdSec = feeSections.olevel?.boarding?.term1 > 0 ? feeSections.olevel.boarding :
+                   feeSections.primary?.boarding?.term1 > 0 ? feeSections.primary.boarding : null;
     const fees = {
-      term1: t1, term2: t2, term3: t3, currency: "USD",
-      boardingTerm1: b1, boardingTerm2: b2, boardingTerm3: b3,
-      ecdTerm1: e1, ecdTerm2: e2, ecdTerm3: e3
+      term1: repSec.term1, term2: repSec.term2 || repSec.term1, term3: repSec.term3 || repSec.term1,
+      currency: "USD",
+      boardingTerm1: brdSec?.term1 || 0, boardingTerm2: brdSec?.term2 || 0, boardingTerm3: brdSec?.term3 || 0,
+      ecdTerm1: feeSections.ecd?.day?.term1 || 0, ecdTerm2: feeSections.ecd?.day?.term2 || 0, ecdTerm3: feeSections.ecd?.day?.term3 || 0
     };
-    const feeRange = computeSchoolFeeRange(t1);
+    const feeRange = computeSchoolFeeRange(repSec.term1);
 
     // Normalise checkbox arrays (single value comes as string, multiple as array)
     const curriculumArr         = curriculum         ? (Array.isArray(curriculum)         ? curriculum         : [curriculum])         : [];
@@ -1034,30 +1055,46 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="checkbox-grid">${curriculumChecks}</div>
           </div>
 
-          <!-- ── Fees ────────────────────────────────────────────────── -->
-     <!-- ── Fees ────────────────────────────────────────────────── -->
-          <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fees (USD)</p>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Fill in Day fees always. Fill in Boarding fees only if the school has boarding. Fill in ECD fees only if ECD rates differ from primary.</p>
+          <!-- ── Fees (Section-based) ───────────────────────────────── -->
+          <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fee Schedule (USD per term)</p>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+            Enter fees for each section your school has. Leave at 0 for sections that don't apply.
+            Boarding fees only apply for boarding or day-and-boarding schools.
+            These appear directly in parent enquiry answers — keep them up to date.
+          </p>
 
-          <p style="font-size:12px;font-weight:600;margin-bottom:8px">🏠 Day Fees</p>
-          <div class="form-grid">
-            <div class="fg"><label>Day – Term 1 ($)</label><input type="number" name="feesTerm1" value="${school.fees?.term1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Day – Term 2 ($)</label><input type="number" name="feesTerm2" value="${school.fees?.term2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Day – Term 3 ($)</label><input type="number" name="feesTerm3" value="${school.fees?.term3 || 0}" min="0" step="0.01" /></div>
-          </div>
+          ${["ecd","lowerPrimary","upperPrimary","primary","olevel","alevel"].map(sec => {
+            const LABELS = { ecd:"ECD / Preschool", lowerPrimary:"Lower Primary (Grades 1–4)", upperPrimary:"Upper Primary (Grades 5–7)", primary:"Primary (Grades 1–7)", olevel:"O-Level (Form 1–4)", alevel:"A-Level (Form 5–6)" };
+            const ICONS  = { ecd:"🌱", lowerPrimary:"📗", upperPrimary:"📗", primary:"📗", olevel:"📙", alevel:"📘" };
+            const d = school.feeSections?.[sec]?.day || {};
+            const b = school.feeSections?.[sec]?.boarding || {};
+            const hasBoarding = school.boarding === "boarding" || school.boarding === "both";
+            return `
+            <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px;border:.5px solid var(--border)">
+              <p style="font-size:13px;font-weight:600;margin-bottom:10px">${ICONS[sec]} ${LABELS[sec]} <span style="font-weight:400;font-size:11px;color:var(--muted)">— Day fees per term</span></p>
+              <div class="form-grid" style="margin-bottom:${hasBoarding?8:0}px">
+                <div class="fg" style="margin-bottom:0"><label>Term 1 ($)</label><input type="number" name="feeDay_${sec}_t1" value="${d.term1||0}" min="0" step="0.01" /></div>
+                <div class="fg" style="margin-bottom:0"><label>Term 2 ($)</label><input type="number" name="feeDay_${sec}_t2" value="${d.term2||0}" min="0" step="0.01" /></div>
+                <div class="fg" style="margin-bottom:0"><label>Term 3 ($)</label><input type="number" name="feeDay_${sec}_t3" value="${d.term3||0}" min="0" step="0.01" /></div>
+              </div>
+              ${hasBoarding ? `
+              <p style="font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--muted)">🏠 Boarding fees for this section <span style="font-weight:400">(leave 0 if no boarding for this section)</span></p>
+              <div class="form-grid">
+                <div class="fg" style="margin-bottom:0"><label>Boarding T1 ($)</label><input type="number" name="feeBrd_${sec}_t1" value="${b.term1||0}" min="0" step="0.01" /></div>
+                <div class="fg" style="margin-bottom:0"><label>Boarding T2 ($)</label><input type="number" name="feeBrd_${sec}_t2" value="${b.term2||0}" min="0" step="0.01" /></div>
+                <div class="fg" style="margin-bottom:0"><label>Boarding T3 ($)</label><input type="number" name="feeBrd_${sec}_t3" value="${b.term3||0}" min="0" step="0.01" /></div>
+              </div>` : ""}
+            </div>`;
+          }).join("")}
 
-          <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🏫 Boarding Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if day school only)</span></p>
+          <p style="font-size:13px;font-weight:600;margin:14px 0 8px">💳 Additional Levies <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — shown to parents)</span></p>
           <div class="form-grid">
-            <div class="fg"><label>Boarding – Term 1 ($)</label><input type="number" name="feesBoarding1" value="${school.fees?.boardingTerm1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Boarding – Term 2 ($)</label><input type="number" name="feesBoarding2" value="${school.fees?.boardingTerm2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Boarding – Term 3 ($)</label><input type="number" name="feesBoarding3" value="${school.fees?.boardingTerm3 || 0}" min="0" step="0.01" /></div>
-          </div>
-
-          <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🌱 ECD Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if same as day fees above)</span></p>
-          <div class="form-grid">
-            <div class="fg"><label>ECD – Term 1 ($)</label><input type="number" name="feesEcd1" value="${school.fees?.ecdTerm1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>ECD – Term 2 ($)</label><input type="number" name="feesEcd2" value="${school.fees?.ecdTerm2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>ECD – Term 3 ($)</label><input type="number" name="feesEcd3" value="${school.fees?.ecdTerm3 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Development levy ($/term)</label><input type="number" name="levyDevelopment" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("develop"))?.amount||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Sports levy ($/year)</label><input type="number" name="levySports" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("sport"))?.amount||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>IT / Computer levy ($/year)</label><input type="number" name="levyIT" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("it")||l.name.toLowerCase().includes("computer"))?.amount||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Library levy ($/year)</label><input type="number" name="levyLibrary" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("library"))?.amount||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Exam fees ($/year)</label><input type="number" name="levyExam" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("exam"))?.amount||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Admission / Reg fee (once-off)</label><input type="number" name="admissionFee" value="${school.admissionFee||0}" min="0" step="0.01" /></div>
           </div>
 
           <!-- ── Facilities ──────────────────────────────────────────── -->
