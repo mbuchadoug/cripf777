@@ -76,6 +76,8 @@ zqLinkConversions: { type: Number, default: 0 },
   monthlyViews:  { type: Number, default: 0 },
   inquiries:     { type: Number, default: 0 },
 
+  faqCategories: [{ id, name, emoji, order, active }],
+faqItems:      [{ id, categoryId, question, answer, pdfUrl, pdfLabel, active, order, isDefault }],
   // ── Ratings ───────────────────────────────────────────────────────────────
   rating:       { type: Number, default: 0 },
   reviewCount:  { type: Number, default: 0 },

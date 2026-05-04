@@ -267,18 +267,27 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;font-fa
 // GET /zq-admin/schools
 // ─────────────────────────────────────────────────────────────────────────────
 // ── FAQ management helpers ───────────────────────────────────────────────────
-const FAQ_CATEGORIES = [
-  { id: "fees",       label: "💵 Fees & Payments",     desc: "Extra fee info, payment tips, late fees" },
-  { id: "admissions", label: "📝 Admissions",           desc: "Deadlines, assessments, what to bring" },
-  { id: "academic",   label: "📊 Academic",             desc: "Study tips, remedial, gifted programs" },
-  { id: "life",       label: "🏫 School Life",          desc: "Uniform policy, after-school, trips" },
-  { id: "admin",      label: "📞 Admin & Contact",      desc: "Holiday office hours, complaints procedure" },
-  { id: "custom",     label: "❓ General / Other",      desc: "Anything not in the above categories" }
+// ── FAQ & Category management helpers ────────────────────────────────────────
+function _genFaqId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+}
+
+const SYSTEM_FAQ_CATEGORIES = [
+  { id: "fees",       name: "Fees & Payments", emoji: "💵", order: 10 },
+  { id: "admissions", name: "Admissions",       emoji: "📝", order: 20 },
+  { id: "boarding",   name: "Boarding",         emoji: "🛏️", order: 30 },
+  { id: "transport",  name: "Transport",        emoji: "🚌", order: 40 },
+  { id: "academics",  name: "Academics",        emoji: "📊", order: 50 },
+  { id: "facilities", name: "Facilities",       emoji: "🏊", order: 60 },
+  { id: "uniforms",   name: "Uniforms",         emoji: "👕", order: 70 },
+  { id: "calendar",   name: "Term Calendar",    emoji: "📆", order: 80 },
+  { id: "contact",    name: "Contact & Admin",  emoji: "📞", order: 90 },
 ];
 
-function _genFaqId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function _esc(str) {
+  return String(str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+
 
 router.get("/schools", requireSupplierAdmin, async (req, res) => {
   try {
@@ -2251,283 +2260,498 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCHOOL FAQ MANAGEMENT
-// Schools load their own Q&A. Admin can manage on behalf of schools.
-// Supports: categories, ordering, PDF attachments, pagination.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENQUIRY & FAQ MANAGER
+// Admins manage categories, questions, answers, ordering, visibility.
+// Both system-generated defaults and admin-created items are shown together
+// to parents as one unified list — no labels, no separation.
 //
-// faqItems schema:
-//   { id, category, question, answer, pdfUrl, pdfLabel, active, order, addedBy }
+// SchoolProfile schema additions:
+//   faqCategories: [{ id, name, emoji, order, active }]
+//   faqItems:      [{ id, categoryId, question, answer, pdfUrl, pdfLabel,
+//                     active, order, isDefault, overridesDefaultId }]
 //
-// GET  /zq-admin/schools/:id/faq                 → FAQ panel
-// POST /zq-admin/schools/:id/faq/add             → Add Q&A item
-// POST /zq-admin/schools/:id/faq/:itemId/delete  → Delete one item
-// POST /zq-admin/schools/:id/faq/:itemId/toggle  → Toggle active/inactive
-// POST /zq-admin/schools/:id/faq/:itemId/move    → Move up/down (reorder)
-// POST /zq-admin/schools/:id/faq/clear           → Clear all
+// Routes:
+//   GET  /schools/:id/faq                          → manager landing
+//   GET  /schools/:id/faq/cat/:catId               → questions in a category
+//   POST /schools/:id/faq/cat/add                  → create custom category
+//   POST /schools/:id/faq/cat/:catId/edit          → rename/reorder category
+//   POST /schools/:id/faq/cat/:catId/toggle        → show/hide category
+//   POST /schools/:id/faq/cat/:catId/delete        → delete category (+questions)
+//   POST /schools/:id/faq/cat/:catId/move          → reorder category
+//   POST /schools/:id/faq/q/add                    → add question
+//   POST /schools/:id/faq/q/:qId/edit              → edit question or answer
+//   POST /schools/:id/faq/q/:qId/toggle            → activate/deactivate
+//   POST /schools/:id/faq/q/:qId/delete            → delete question
+//   POST /schools/:id/faq/q/:qId/move              → reorder question
+//   POST /schools/:id/faq/q/:qId/moveto            → move to different category
 // ─────────────────────────────────────────────────────────────────────────────
 
-
-
+// ── FAQ Manager landing — shows all categories ─────────────────────────────
 router.get("/schools/:id/faq", requireSupplierAdmin, async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id).lean();
     if (!school) return res.redirect("/zq-admin/schools");
 
-    const okMsg  = req.query.success ? '<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ' + esc(req.query.success) + "</div>" : "";
-    const errMsg = req.query.error   ? '<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px">❌ ' + esc(req.query.error) + "</div>" : "";
+    const ok  = req.query.success ? '<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ' + _esc(req.query.success) + "</div>" : "";
+    const err = req.query.error   ? '<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px">❌ ' + _esc(req.query.error) + "</div>" : "";
 
-    const filterCat = req.query.cat || "";
-    const allItems  = school.faqItems || [];
-    const items     = filterCat ? allItems.filter(f => f.category === filterCat) : allItems;
-    const itemsByCat = {};
-    FAQ_CATEGORIES.forEach(c => {
-      itemsByCat[c.id] = allItems.filter(f => f.category === c.id).sort((a,b) => (a.order||0) - (b.order||0));
+    const adminCats  = (school.faqCategories || []).sort((a, b) => (a.order||0) - (b.order||0));
+    const adminItems = school.faqItems || [];
+    const systemIds  = new Set(SYSTEM_FAQ_CATEGORIES.map(s => s.id));
+
+    // Merge system + admin categories
+    const allCats = SYSTEM_FAQ_CATEGORIES.map(sc => {
+      const over = adminCats.find(a => a.id === sc.id);
+      const count = adminItems.filter(q => q.categoryId === sc.id).length;
+      return {
+        id:       sc.id,
+        name:     over?.name  || sc.name,
+        emoji:    over?.emoji || sc.emoji,
+        order:    over?.order ?? sc.order,
+        active:   over ? over.active !== false : true,
+        isSystem: true,
+        count
+      };
     });
+    // Admin-only custom categories
+    adminCats.filter(c => !systemIds.has(c.id)).forEach(c => {
+      allCats.push({
+        id:       c.id,
+        name:     c.name,
+        emoji:    c.emoji || "❓",
+        order:    c.order || 999,
+        active:   c.active !== false,
+        isSystem: false,
+        count:    adminItems.filter(q => q.categoryId === c.id).length
+      });
+    });
+    allCats.sort((a, b) => (a.order||0) - (b.order||0));
 
-    // Build category filter tabs
-    const catTabs = FAQ_CATEGORIES.map(c => {
-      const count = (itemsByCat[c.id] || []).length;
-      const active = filterCat === c.id;
-      return `<a href="?cat=${c.id}" style="display:inline-block;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;text-decoration:none;`
-        + (active ? "background:var(--primary);color:#fff;" : "background:var(--bg);color:var(--muted);border:.5px solid var(--border);")
-        + '">' + esc(c.label) + (count ? " <b>"+count+"</b>" : "") + "</a>";
-    }).join(" ");
+    const totalQ = adminItems.length;
+    const activeQ = adminItems.filter(q => q.active !== false).length;
 
-    // Build items table
-    const displayItems = items.slice().sort((a,b) => (a.order||0) - (b.order||0));
-    const rows = displayItems.map((fq, idx) => {
-      const catLabel = (FAQ_CATEGORIES.find(c => c.id === fq.category) || {}).label || fq.category || "General";
-      const active   = fq.active !== false;
+    const catRows = allCats.map(cat => {
+      const badge = cat.active
+        ? '<span style="background:#dcfce7;color:#16a34a;font-size:11px;padding:2px 8px;border-radius:10px">Visible</span>'
+        : '<span style="background:#f1f5f9;color:#64748b;font-size:11px;padding:2px 8px;border-radius:10px">Hidden</span>';
+      const systemBadge = cat.isSystem
+        ? '<span style="background:#eff6ff;color:#3b82f6;font-size:11px;padding:2px 8px;border-radius:10px">System</span>'
+        : '<span style="background:#fef9c3;color:#854d0e;font-size:11px;padding:2px 8px;border-radius:10px">Custom</span>';
       return "<tr>"
-        + '<td style="font-size:12px;color:var(--muted);text-align:center">' + ((fq.order || 0) + 1) + "</td>"
-        + "<td><strong>" + esc(fq.question) + "</strong>"
-        + (fq.question.length > 20 ? '<div style="font-size:10px;color:#dc2626">⚠️ Button shows: "' + esc(fq.question.slice(0,20)) + '"</div>' : "")
-        + "</td>"
-        + '<td style="font-size:12px;color:var(--muted);max-width:200px">' + esc((fq.answer || "").slice(0, 80)) + (fq.answer?.length > 80 ? "…" : "") + "</td>"
-        + '<td style="font-size:12px">' + esc(catLabel) + "</td>"
-        + '<td style="font-size:12px">' + (fq.pdfUrl ? '<span style="color:#16a34a">📄 PDF attached</span>' : "<span style='color:var(--muted)'>No PDF</span>") + "</td>"
-        + '<td style="font-size:12px;text-align:center">'
-        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/toggle" style="display:inline">'
-        + '<button class="btn btn-sm ' + (active ? "btn-green" : "btn-gray") + '">' + (active ? "✅ On" : "⏸️ Off") + "</button></form>"
-        + "</td>"
+        + '<td style="font-size:18px;text-align:center">' + _esc(cat.emoji) + "</td>"
+        + "<td><strong>" + _esc(cat.name) + "</strong><div style='font-size:11px;color:var(--muted)'>" + cat.id + "</div></td>"
+        + "<td>" + badge + " " + systemBadge + "</td>"
+        + '<td style="font-size:13px">' + cat.count + " admin Q&A</td>"
         + "<td style='white-space:nowrap'>"
-        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/move" style="display:inline"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-gray" title="Move up">↑</button></form> '
-        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/move" style="display:inline"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-gray" title="Move down">↓</button></form> '
-        + '<form method="POST" action="/zq-admin/schools/' + school._id + "/faq/" + fq.id + '/delete" style="display:inline">'
-        + '<button class="btn btn-sm btn-red" onclick="return confirm(&quot;Delete this Q&A?&quot;)">🗑️</button></form>'
+        + '<a href="/zq-admin/schools/' + school._id + '/faq/cat/' + cat.id + '" class="btn btn-sm btn-blue">✏️ Manage Q&A</a> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/' + cat.id + '/toggle" style="display:inline">'
+        + '<button class="btn btn-sm btn-gray">' + (cat.active ? "Hide" : "Show") + "</button></form> "
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/' + cat.id + '/move" style="display:inline">'
+        + '<input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-gray" title="Move up">↑</button></form> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/' + cat.id + '/move" style="display:inline">'
+        + '<input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-gray" title="Move down">↓</button></form>'
+        + (!cat.isSystem ? ' <form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/' + cat.id + '/delete" style="display:inline" onsubmit="return confirm(\'Delete this category?\')"><button class="btn btn-sm btn-red">🗑️</button></form>' : "")
         + "</td>"
         + "</tr>";
     }).join("");
 
-    // Example questions per category for quick-add
-    const EXAMPLES = {
-      fees:       ["What happens if fees are paid late?","Are there sibling discounts?","Can fees be paid in installments?","What are the extra levy charges?"],
-      admissions: ["When does enrollment open for 2027?","Is there an entry assessment?","What is the maximum class size?","Do you accept mid-year transfers?"],
-      academic:   ["What remedial support is available?","Is there a gifted learner program?","How often are parent-teacher meetings?","What is the homework policy?"],
-      life:       ["What is the uniform supplier?","Is after-school care available?","Do you have a tuck shop?","What is the cell phone policy?"],
-      admin:      ["Who do I contact for complaints?","What are holiday office hours?","How do I update my contact details?","Is there a parent WhatsApp group?"],
-      custom:     ["Is the school affiliated to a church?","Do you accept international students?","What security measures are in place?","Is there a school shuttle from town?"]
-    };
-    const activeCatExamples = filterCat && EXAMPLES[filterCat] ? EXAMPLES[filterCat] : EXAMPLES.custom;
-
-  const exampleBtns = activeCatExamples.map(q =>
-  '<button type="button" style="background:var(--bg);border:.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;margin:3px" '
-  + "onclick='document.getElementById(\"fq_question\").value=" + JSON.stringify(q) + ";document.getElementById(\"fq_question\").focus()'>"
-  + esc(q) + "</button>"
-).join("");
-
-    const catOptions = FAQ_CATEGORIES.map(c =>
-      '<option value="' + c.id + '"' + (filterCat === c.id ? " selected" : "") + ">" + esc(c.label) + " — " + esc(c.desc) + "</option>"
-    ).join("");
-
-res.send(layout("FAQ: " + esc(school.schoolName),
-  '<a href="/zq-admin/schools/' + school._id + '" class="back-link">← Back to ' + esc(school.schoolName) + "</a>\n"
-      + okMsg + errMsg
+    res.send(layout("FAQ Manager: " + _esc(school.schoolName),
+      '<a href="/zq-admin/schools/' + school._id + '" class="back-link">← Back to ' + _esc(school.schoolName) + "</a>\n"
+      + ok + err
 
       + '<div class="panel" style="margin-bottom:16px">'
-      + '<div class="panel-head">'
-      + '<h3>❓ Preloaded FAQ — ' + esc(school.schoolName) + '</h3>'
-      + '<span style="font-size:13px;color:var(--muted)">' + allItems.length + ' question' + (allItems.length !== 1 ? "s" : "") + ' · ' + allItems.filter(f => f.active !== false).length + ' active</span>'
-      + "</div>"
+      + '<div class="panel-head"><h3>❓ Enquiry & FAQ Manager</h3>'
+      + '<span style="font-size:13px;color:var(--muted)">' + totalQ + ' admin Q&A · ' + activeQ + ' active</span></div>'
 
       + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">'
-      + 'When a parent taps <strong>"More Q&A"</strong> in the school chatbot, they see these questions with instant preloaded answers — no staff needed online.'
-      + " Button titles are trimmed to 20 characters (WhatsApp limit). Questions marked ⚠️ will be truncated."
+      + 'Smart questions are generated automatically from the school profile and shown to parents alongside admin-created Q&A — all in the same categories, no labels. '
+      + 'Use this panel to add custom questions, rename categories, control ordering, and manage visibility.'
       + "</p>"
 
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
-      + '<a href="?cat=" style="display:inline-block;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;text-decoration:none;' + (!filterCat ? "background:var(--primary);color:#fff;" : "background:var(--bg);color:var(--muted);border:.5px solid var(--border);") + '">All (' + allItems.length + ")</a>"
-      + catTabs
-      + "</div>"
-
-      + (displayItems.length ? `
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>#</th><th>Question (button shows first 20 chars)</th><th>Answer preview</th><th>Category</th><th>PDF</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>` + rows + `</tbody>
-          </table>
-        </div>
-        <form method="POST" action="/zq-admin/schools/${school._id}/faq/clear" onsubmit="return confirm('Delete ALL FAQ items for this school?')" style="margin-top:12px">
-          <button class="btn btn-sm btn-gray">🗑️ Clear all FAQ items</button>
-        </form>`
-      : '<p style="color:var(--muted);font-size:13px;padding:16px 0">No FAQ items yet. Add your first one below.</p>')
-      + "</div>"
-
-      + '<div class="panel" style="margin-bottom:16px">'
-      + "<h3>➕ Add a Q&A item</h3>"
-      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/add" enctype="multipart/form-data">'
-
-      + '<div class="fg" style="margin-bottom:12px">'
-      + '<label>Category <span style="color:red">*</span></label>'
-      + '<select name="category" required><option value="">Select category...</option>' + catOptions + "</select>"
-      + "</div>"
-
-      + '<div class="fg" style="margin-bottom:6px">'
-      + '<label>Question (shown as button to parents) <span style="color:red">*</span></label>'
-      + '<input id="fq_question" name="question" maxlength="100" required placeholder="e.g. After-school care?" oninput="var v=this.value;document.getElementById(&quot;q_preview&quot;).textContent=v.slice(0,20);document.getElementById(&quot;q_len&quot;).textContent=v.length">'
-      + '<div style="font-size:11px;margin-top:4px;display:flex;gap:12px">'
-      + '<span style="color:var(--muted)">Button shows: <strong id="q_preview"></strong></span>'
-      + '<span style="color:var(--muted)">Characters: <span id="q_len">0</span>/100</span>'
-      + '</div>'
-      + "</div>"
-
-      + '<div style="margin-bottom:12px">'
-      + '<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">Quick-fill examples:</div>'
-      + exampleBtns
-      + "</div>"
-
-      + '<div class="fg" style="margin-bottom:12px">'
-      + '<label>Answer (full text shown to parent) <span style="color:red">*</span></label>'
-      + '<textarea name="answer" rows="5" required placeholder="Type the complete answer. This is what parents read when they tap the question. Be specific — include times, numbers, names, contacts." maxlength="2000"></textarea>'
-      + "</div>"
-
-      + '<div class="fg" style="margin-bottom:12px">'
-      + '<label>PDF attachment (optional)</label>'
-      + '<input type="text" name="pdfUrl" placeholder="Paste PDF URL (e.g. from Google Drive, Dropbox, or your server)">'
-      + '<div style="font-size:11px;color:var(--muted);margin-top:4px">If provided, the PDF is sent to the parent alongside the text answer. Use a direct download link.</div>'
-      + "</div>"
-
-      + '<div class="fg" style="margin-bottom:14px">'
-      + '<label>PDF label (optional)</label>'
-      + '<input type="text" name="pdfLabel" placeholder="e.g. School prospectus 2026" maxlength="60">'
-      + "</div>"
-
-      + '<div class="fg" style="margin-bottom:14px">'
-      + '<label>Position (order number, 0 = first)</label>'
-      + '<input type="number" name="order" value="' + allItems.length + '" min="0" max="99" style="width:100px">'
-      + "</div>"
-
-      + '<button type="submit" class="btn btn-green">➕ Add Q&A item</button>'
-      + "</form></div>"
+      + '<div style="overflow-x:auto"><table>'
+      + "<thead><tr><th></th><th>Category</th><th>Status</th><th>Admin Q&A</th><th>Actions</th></tr></thead>"
+      + "<tbody>" + catRows + "</tbody>"
+      + "</table></div></div>"
 
       + '<div class="panel">'
-      + "<h3>💡 What parents see in the chatbot</h3>"
-      + '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Default topics are always shown and answered from the school profile data. Custom Q&A items appear under <strong>"More Q&A"</strong>.</p>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">'
-      + ["💵 Fees & payments","📝 Admissions","📊 Academic & results","🏫 School life","📞 Contact & docs","❓ More Q&A"].map(t =>
-          '<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:13px">' + esc(t) + "</div>"
-        ).join("")
-      + "</div></div>"
+      + "<h3>➕ Add a custom category</h3>"
+      + '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Create a new category that does not exist in the system list above (e.g. "Scholarships", "Extra Classes", "School Trips").</p>'
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/add">'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      + '<div class="fg" style="flex:1;min-width:160px;margin:0"><label>Category name <span style="color:red">*</span></label><input name="name" placeholder="e.g. Scholarships" maxlength="30" required></div>'
+      + '<div class="fg" style="width:80px;margin:0"><label>Emoji</label><input name="emoji" placeholder="🎓" maxlength="4"></div>'
+      + '<div class="fg" style="width:80px;margin:0"><label>Order</label><input type="number" name="order" value="100" min="0" max="999" style="width:70px"></div>'
+      + '<button type="submit" class="btn btn-green" style="margin-bottom:1px">➕ Add category</button>'
+      + "</div></form></div>"
     ));
   } catch (err) {
     res.send(layout("Error", '<div class="alert red">' + err.message + "</div>"));
   }
 });
 
-// Add FAQ item
-router.post("/schools/:id/faq/add", requireSupplierAdmin, async (req, res) => {
+// ── Category Q&A detail page ───────────────────────────────────────────────
+router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res) => {
   try {
-    const school   = await SchoolProfile.findById(req.params.id);
+    const school  = await SchoolProfile.findById(req.params.id).lean();
     if (!school) return res.redirect("/zq-admin/schools");
-    const question = String(req.body.question || "").trim();
-    const answer   = String(req.body.answer   || "").trim();
-    const category = String(req.body.category || "custom").trim();
-    const pdfUrl   = String(req.body.pdfUrl   || "").trim();
-    const pdfLabel = String(req.body.pdfLabel || "").trim();
-    const order    = parseInt(req.body.order  || "0", 10);
+    const catId   = req.params.catId;
 
-    if (!question || !answer) {
-      return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("Question and answer are required."));
+    const ok  = req.query.success ? '<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ' + _esc(req.query.success) + "</div>" : "";
+    const err = req.query.error   ? '<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px">❌ ' + _esc(req.query.error) + "</div>" : "";
+
+    const sysCat    = SYSTEM_FAQ_CATEGORIES.find(s => s.id === catId);
+    const adminCat  = (school.faqCategories || []).find(c => c.id === catId);
+    const catName   = adminCat?.name  || sysCat?.name  || catId;
+    const catEmoji  = adminCat?.emoji || sysCat?.emoji || "❓";
+    const isSystem  = !!sysCat;
+
+    const adminItems = (school.faqItems || [])
+      .filter(q => q.categoryId === catId)
+      .sort((a, b) => (a.order||0) - (b.order||0));
+
+    // Smart default preview (generated from profile)
+    const { default: schoolFAQMod } = await import("../services/schoolFAQ.js").catch(() => ({}));
+    let defaultPreview = [];
+    if (schoolFAQMod?._generateDefaults) {
+      defaultPreview = schoolFAQMod._generateDefaults(school).filter(d => d.categoryId === catId);
     }
-    if ((school.faqItems || []).length >= 50) {
-      return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("Maximum 50 FAQ items per school."));
+
+    const defRows = defaultPreview.length
+      ? defaultPreview.map(d =>
+          "<tr style='opacity:.7'>"
+          + '<td style="font-size:11px;background:#eff6ff;color:#3b82f6;padding:3px 8px;border-radius:4px;white-space:nowrap">Auto</td>'
+          + "<td><em>" + _esc(d.question) + "</em></td>"
+          + '<td style="font-size:12px;color:var(--muted)">' + _esc((d.answer||"").slice(0, 80)) + "…</td>"
+          + "<td>✅ Active</td><td>—</td>"
+          + "</tr>"
+        ).join("")
+      : "";
+
+    const adminRows = adminItems.map((q, idx) => {
+      const active = q.active !== false;
+      return "<tr>"
+        + '<td style="font-size:11px;background:#fef9c3;color:#854d0e;padding:3px 8px;border-radius:4px;white-space:nowrap">Admin</td>'
+        + "<td><strong>" + _esc(q.question) + "</strong>"
+        + (q.question.length > 24 ? '<div style="font-size:10px;color:#dc2626">⚠️ Button shows: ' + _esc(q.question.slice(0,24)) + "</div>" : "")
+        + "</td>"
+        + '<td style="font-size:12px;color:var(--muted)">' + _esc((q.answer||"").slice(0, 80)) + (q.answer?.length > 80 ? "…" : "") + "</td>"
+        + "<td>" + (active ? "✅ Active" : "⏸️ Hidden") + "</td>"
+        + "<td style='white-space:nowrap'>"
+        + '<a href="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/edit" class="btn btn-sm btn-blue">✏️ Edit</a> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/toggle" style="display:inline"><button class="btn btn-sm btn-gray">' + (active ? "Hide" : "Show") + "</button></form> "
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/move" style="display:inline"><input type="hidden" name="dir" value="up"><button class="btn btn-sm btn-gray" title="Up">↑</button></form> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/move" style="display:inline"><input type="hidden" name="dir" value="down"><button class="btn btn-sm btn-gray" title="Down">↓</button></form> '
+        + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/delete" style="display:inline" onsubmit="return confirm(\'Delete this question?\')"><button class="btn btn-sm btn-red">🗑️</button></form>'
+        + "</td></tr>";
+    }).join("");
+
+    // Other categories for "Move to" dropdown
+    const otherCats = SYSTEM_FAQ_CATEGORIES
+      .filter(s => s.id !== catId)
+      .map(s => '<option value="' + s.id + '">' + s.emoji + " " + s.name + "</option>")
+      .join("");
+
+    // Example questions for this category
+    const EXAMPLES = {
+      fees:       ["What happens if fees are paid late?", "Can fees be paid in installments?", "Is there a registration fee?", "Are fees the same for all grades?"],
+      admissions: ["What is the waiting list process?", "Do you have an entry assessment?", "What is the maximum class size?", "Do you accept mid-year transfers?"],
+      boarding:   ["What time is lights out?", "Can pupils bring personal items?", "How often can parents visit?", "Is laundry included?"],
+      transport:  ["Is transport compulsory?", "What if my area is not on the route?", "What time does the bus leave school?", "Is there a morning and afternoon bus?"],
+      academics:  ["What remedial support is available?", "Is there a gifted learner programme?", "How often are parent-teacher meetings?", "What is the homework policy?"],
+      facilities: ["Is the swimming pool heated?", "Is there Wi-Fi for pupils?", "What security measures are in place?", "Is there CCTV on campus?"],
+      uniforms:   ["Can I buy second-hand uniform?", "Are there PE kit requirements?", "Is there a supplier price list?", "What shoes are required?"],
+      calendar:   ["When does the school year start?", "How long is each term?", "When are parent-teacher evenings?", "When is prize giving?"],
+      contact:    ["Who is the head of admissions?", "What are weekend office hours?", "Is there a parent WhatsApp group?", "How do I update my contact details?"]
+    };
+    const examples = EXAMPLES[catId] || ["How does this work?", "Tell me more", "What are the requirements?", "How do I start?"];
+    const exBtns = examples.map(q =>
+      '<button type="button" style="background:var(--bg);border:.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;margin:3px" '
+      + 'onclick="document.getElementById(\'new_q\').value=' + JSON.stringify(q) + ';document.getElementById(\'new_q\').focus()">'
+      + _esc(q) + "</button>"
+    ).join("");
+
+    res.send(layout(_esc(catEmoji + " " + catName) + " — FAQ", 
+      '<a href="/zq-admin/schools/' + school._id + '/faq" class="back-link">← Back to FAQ Manager</a>\n'
+      + ok + err
+
+      + '<div class="panel" style="margin-bottom:16px">'
+      + '<div class="panel-head"><h3>' + _esc(catEmoji + " " + catName) + "</h3>"
+      + '<span style="font-size:13px;color:var(--muted)">' + adminItems.length + " admin questions · " + defaultPreview.length + " auto-generated</span></div>"
+      + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">Auto-generated questions come from the school profile and cannot be edited here. Admin questions appear alongside them. Parents see both together — no labels.</p>'
+      + '<div style="overflow-x:auto"><table>'
+      + "<thead><tr><th>Source</th><th>Question (button title, max 24 chars)</th><th>Answer preview</th><th>Status</th><th>Actions</th></tr></thead>"
+      + "<tbody>" + defRows + adminRows + "</tbody>"
+      + "</table></div></div>"
+
+      + '<div class="panel" style="margin-bottom:16px">'
+      + "<h3>➕ Add a question to this category</h3>"
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/add">'
+      + '<input type="hidden" name="categoryId" value="' + _esc(catId) + '">'
+
+      + '<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">Quick-fill examples:</div>' + exBtns + "</div>"
+
+      + '<div class="fg" style="margin-bottom:6px">'
+      + '<label>Question (shown as list button to parents) <span style="color:red">*</span></label>'
+      + '<input id="new_q" name="question" maxlength="100" required placeholder="e.g. Can I visit the school?" oninput="document.getElementById(\'q_preview\').textContent=this.value.slice(0,24);document.getElementById(\'q_len\').textContent=this.value.length">'
+      + '<div style="font-size:11px;margin-top:3px;color:var(--muted)">Button shows first 24 chars: <strong id="q_preview"></strong> (<span id="q_len">0</span>/100 typed)</div>'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:12px">'
+      + '<label>Answer (full text shown to parent) <span style="color:red">*</span></label>'
+      + '<textarea name="answer" rows="5" required maxlength="2000" placeholder="Type the complete answer. Be specific — include times, numbers, contact details where relevant."></textarea>'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:12px">'
+      + '<label>PDF attachment URL (optional)</label>'
+      + '<input type="text" name="pdfUrl" placeholder="https://drive.google.com/... (direct download link)">'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">If provided, the PDF is sent to the parent alongside the text answer.</div>'
+      + "</div>"
+
+      + '<div class="fg" style="margin-bottom:14px"><label>PDF label (optional)</label>'
+      + '<input type="text" name="pdfLabel" placeholder="e.g. School prospectus 2026" maxlength="60"></div>'
+
+      + '<div class="fg" style="margin-bottom:14px"><label>Order (0 = first)</label>'
+      + '<input type="number" name="order" value="' + adminItems.length + '" min="0" max="999" style="width:90px"></div>'
+
+      + '<button type="submit" class="btn btn-green">➕ Add question</button>'
+      + "</form></div>"
+
+      + (adminItems.length > 0
+        ? '<div class="panel">'
+          + "<h3>📦 Move all questions in this category</h3>"
+          + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/cat/' + catId + '/delete">'
+          + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+          + '<select name="moveTo" style="flex:1"><option value="">Delete all questions in this category</option>' + otherCats + "</select>"
+          + '<button class="btn btn-red" onclick="return confirm(\'Are you sure? This cannot be undone.\')">🗑️ Delete category</button>'
+          + "</div></form></div>"
+        : "")
+    ));
+  } catch (err) {
+    res.send(layout("Error", '<div class="alert red">' + err.message + "</div>"));
+  }
+});
+
+// ── Edit question/answer ───────────────────────────────────────────────────
+router.get("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+    const q = (school.faqItems || []).find(x => x.id === req.params.qId);
+    if (!q) return res.redirect("/zq-admin/schools/" + school._id + "/faq");
+
+    const ok  = req.query.success ? '<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ' + _esc(req.query.success) + "</div>" : "";
+
+    const catOptions = SYSTEM_FAQ_CATEGORIES.map(c =>
+      '<option value="' + c.id + '"' + (q.categoryId === c.id ? " selected" : "") + ">" + c.emoji + " " + c.name + "</option>"
+    ).join("");
+
+    res.send(layout("Edit Q&A — " + _esc(school.schoolName),
+      '<a href="/zq-admin/schools/' + school._id + '/faq/cat/' + q.categoryId + '" class="back-link">← Back</a>\n'
+      + ok
+      + '<div class="panel">'
+      + "<h3>✏️ Edit question and answer</h3>"
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/edit">'
+      + '<div class="fg" style="margin-bottom:12px"><label>Category</label><select name="categoryId">' + catOptions + "</select></div>"
+      + '<div class="fg" style="margin-bottom:12px"><label>Question <span style="color:red">*</span></label>'
+      + '<input name="question" value="' + _esc(q.question) + '" maxlength="100" required></div>'
+      + '<div class="fg" style="margin-bottom:12px"><label>Answer <span style="color:red">*</span></label>'
+      + '<textarea name="answer" rows="6" required maxlength="2000">' + _esc(q.answer) + "</textarea></div>"
+      + '<div class="fg" style="margin-bottom:12px"><label>PDF URL (optional)</label>'
+      + '<input type="text" name="pdfUrl" value="' + _esc(q.pdfUrl || "") + '" placeholder="https://..."></div>'
+      + '<div class="fg" style="margin-bottom:12px"><label>PDF label</label>'
+      + '<input type="text" name="pdfLabel" value="' + _esc(q.pdfLabel || "") + '" maxlength="60"></div>'
+      + '<div class="fg" style="margin-bottom:14px"><label>Order</label>'
+      + '<input type="number" name="order" value="' + (q.order || 0) + '" min="0" max="999" style="width:90px"></div>'
+      + '<button type="submit" class="btn btn-green">💾 Save changes</button>'
+      + "</form></div>"
+    ));
+  } catch (err) {
+    res.send(layout("Error", '<div class="alert red">' + err.message + "</div>"));
+  }
+});
+
+// ── Add category ───────────────────────────────────────────────────────────
+router.post("/schools/:id/faq/cat/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const name  = String(req.body.name  || "").trim();
+    const emoji = String(req.body.emoji || "❓").trim().slice(0, 4) || "❓";
+    const order = parseInt(req.body.order || "100", 10);
+    if (!name) return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("Category name is required."));
+    const cats = school.faqCategories || [];
+    const id   = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30);
+    if (cats.find(c => c.id === id)) return res.redirect("/zq-admin/schools/" + school._id + "/faq?error=" + encodeURIComponent("A category with that name already exists."));
+    cats.push({ id, name, emoji, order, active: true });
+    school.faqCategories = cats;
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + id + "?success=" + encodeURIComponent("Category created. Add questions to it below."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Toggle category visibility ─────────────────────────────────────────────
+router.post("/schools/:id/faq/cat/:catId/toggle", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const catId = req.params.catId;
+    const cats  = school.faqCategories || [];
+    const existing = cats.find(c => c.id === catId);
+    if (existing) {
+      existing.active = !existing.active;
+    } else {
+      // Override a system category visibility
+      const sysCat = SYSTEM_FAQ_CATEGORIES.find(s => s.id === catId);
+      if (sysCat) cats.push({ id: catId, name: sysCat.name, emoji: sysCat.emoji, order: sysCat.order, active: false });
     }
-
-    const items = school.faqItems || [];
-    items.push({
-      id:       _genFaqId(),
-      category, question, answer,
-      pdfUrl:   pdfUrl   || undefined,
-      pdfLabel: pdfLabel || undefined,
-      active:   true,
-      order,
-      addedBy:  "zimquote_admin"
-    });
-    // Re-sort by order
-    items.sort((a, b) => (a.order||0) - (b.order||0));
-    school.faqItems = items;
+    school.faqCategories = cats;
     await school.save();
-
-    res.redirect("/zq-admin/schools/" + school._id + "/faq?cat=" + category + "&success=" + encodeURIComponent("Q&A item added. Parents will see it under “More Q&A”."));
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Category visibility updated."));
   } catch (err) {
     res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
   }
 });
 
-// Delete one FAQ item
-router.post("/schools/:id/faq/:itemId/delete", requireSupplierAdmin, async (req, res) => {
+// ── Move category up/down ──────────────────────────────────────────────────
+router.post("/schools/:id/faq/cat/:catId/move", requireSupplierAdmin, async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
-    school.faqItems = (school.faqItems || []).filter(f => f.id !== req.params.itemId);
-    await school.save();
-    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item deleted."));
-  } catch (err) {
-    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
-  }
-});
-
-// Toggle active/inactive
-router.post("/schools/:id/faq/:itemId/toggle", requireSupplierAdmin, async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id);
-    if (!school) return res.redirect("/zq-admin/schools");
-    const item = (school.faqItems || []).find(f => f.id === req.params.itemId);
-    if (item) item.active = !item.active;
-    await school.save();
-    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item " + (item?.active ? "activated" : "hidden") + "."));
-  } catch (err) {
-    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
-  }
-});
-
-// Move item up or down in order
-router.post("/schools/:id/faq/:itemId/move", requireSupplierAdmin, async (req, res) => {
-  try {
-    const school = await SchoolProfile.findById(req.params.id);
-    if (!school) return res.redirect("/zq-admin/schools");
+    const catId = req.params.catId;
     const dir   = req.body.dir === "up" ? -1 : 1;
-    const items = (school.faqItems || []).sort((a, b) => (a.order||0) - (b.order||0));
-    const idx   = items.findIndex(f => f.id === req.params.itemId);
-    const swap  = idx + dir;
-    if (idx >= 0 && swap >= 0 && swap < items.length) {
-      const tmp         = items[idx].order;
-      items[idx].order  = items[swap].order;
-      items[swap].order = tmp;
+    // Build merged list, find position, swap orders
+    const cats = school.faqCategories || [];
+    const existing = cats.find(c => c.id === catId);
+    const sysCat   = SYSTEM_FAQ_CATEGORIES.find(s => s.id === catId);
+    if (!existing && sysCat) cats.push({ id: catId, name: sysCat.name, emoji: sysCat.emoji, order: sysCat.order, active: true });
+    cats.sort((a, b) => (a.order||0) - (b.order||0));
+    const idx  = cats.findIndex(c => c.id === catId);
+    const swap = idx + dir;
+    if (idx >= 0 && swap >= 0 && swap < cats.length) {
+      const tmp = cats[idx].order; cats[idx].order = cats[swap].order; cats[swap].order = tmp;
     }
-    school.faqItems = items;
+    school.faqCategories = cats;
     await school.save();
-    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Item moved."));
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent("Category reordered."));
   } catch (err) {
     res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
   }
 });
 
-// Clear all FAQ items
-router.post("/schools/:id/faq/clear", requireSupplierAdmin, async (req, res) => {
+// ── Delete category (with move or delete questions) ────────────────────────
+router.post("/schools/:id/faq/cat/:catId/delete", requireSupplierAdmin, async (req, res) => {
   try {
-    await SchoolProfile.findByIdAndUpdate(req.params.id, { $set: { faqItems: [] } });
-    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?success=" + encodeURIComponent("All FAQ items cleared."));
+    const school  = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const catId   = req.params.catId;
+    const moveTo  = String(req.body.moveTo || "").trim();
+    const items   = school.faqItems || [];
+    if (moveTo) {
+      // Move questions to another category
+      items.forEach(q => { if (q.categoryId === catId) q.categoryId = moveTo; });
+    } else {
+      // Delete all questions in this category
+      school.faqItems = items.filter(q => q.categoryId !== catId);
+    }
+    school.faqCategories = (school.faqCategories || []).filter(c => c.id !== catId);
+    await school.save();
+    const msg = moveTo ? "Category deleted and questions moved." : "Category and all its questions deleted.";
+    res.redirect("/zq-admin/schools/" + school._id + "/faq?success=" + encodeURIComponent(msg));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Add question ───────────────────────────────────────────────────────────
+router.post("/schools/:id/faq/q/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school     = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const question   = String(req.body.question || "").trim();
+    const answer     = String(req.body.answer || "").trim();
+    const categoryId = String(req.body.categoryId || "contact").trim();
+    const pdfUrl     = String(req.body.pdfUrl || "").trim();
+    const pdfLabel   = String(req.body.pdfLabel || "").trim();
+    const order      = parseInt(req.body.order || "0", 10);
+    if (!question || !answer) return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Question and answer are required."));
+    const items = school.faqItems || [];
+    if (items.length >= 100) return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Maximum 100 questions per school."));
+    items.push({ id: _genFaqId(), categoryId, question, answer, pdfUrl: pdfUrl || undefined, pdfLabel: pdfLabel || undefined, active: true, order, isDefault: false });
+    school.faqItems = items;
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?success=" + encodeURIComponent("Question added. Parents will see it in this category."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Edit question/answer (POST) ────────────────────────────────────────────
+router.post("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const q = (school.faqItems || []).find(x => x.id === req.params.qId);
+    if (!q) return res.redirect("/zq-admin/schools/" + school._id + "/faq");
+    const prevCat    = q.categoryId;
+    q.categoryId     = String(req.body.categoryId || q.categoryId).trim();
+    q.question       = String(req.body.question   || q.question).trim();
+    q.answer         = String(req.body.answer     || q.answer).trim();
+    q.pdfUrl         = String(req.body.pdfUrl     || "").trim() || undefined;
+    q.pdfLabel       = String(req.body.pdfLabel   || "").trim() || undefined;
+    q.order          = parseInt(req.body.order ?? q.order, 10);
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + q.categoryId + "?success=" + encodeURIComponent("Question updated."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Toggle question active ─────────────────────────────────────────────────
+router.post("/schools/:id/faq/q/:qId/toggle", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const q = (school.faqItems || []).find(x => x.id === req.params.qId);
+    if (q) { q.active = !q.active; await school.save(); }
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + (q?.categoryId || "") + "?success=" + encodeURIComponent("Question " + (q?.active ? "activated" : "hidden") + "."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Delete question ────────────────────────────────────────────────────────
+router.post("/schools/:id/faq/q/:qId/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const q = (school.faqItems || []).find(x => x.id === req.params.qId);
+    const catId = q?.categoryId || "";
+    school.faqItems = (school.faqItems || []).filter(x => x.id !== req.params.qId);
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + catId + "?success=" + encodeURIComponent("Question deleted."));
+  } catch (err) {
+    res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Move question up/down ──────────────────────────────────────────────────
+router.post("/schools/:id/faq/q/:qId/move", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+    const q    = (school.faqItems || []).find(x => x.id === req.params.qId);
+    if (!q) return res.redirect("/zq-admin/schools/" + school._id + "/faq");
+    const dir  = req.body.dir === "up" ? -1 : 1;
+    const cats = (school.faqItems || []).filter(x => x.categoryId === q.categoryId).sort((a,b) => (a.order||0)-(b.order||0));
+    const idx  = cats.findIndex(x => x.id === q.id);
+    const swap = idx + dir;
+    if (idx >= 0 && swap >= 0 && swap < cats.length) { const tmp = cats[idx].order; cats[idx].order = cats[swap].order; cats[swap].order = tmp; }
+    await school.save();
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + q.categoryId + "?success=" + encodeURIComponent("Question reordered."));
   } catch (err) {
     res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
   }
