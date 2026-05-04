@@ -76,8 +76,27 @@ zqLinkConversions: { type: Number, default: 0 },
   monthlyViews:  { type: Number, default: 0 },
   inquiries:     { type: Number, default: 0 },
 
-  faqCategories: [{ id, name, emoji, order, active }],
-faqItems:      [{ id, categoryId, question, answer, pdfUrl, pdfLabel, active, order, isDefault }],
+  // ── FAQ & Enquiry Assistant ──────────────────────────────────────────────
+  faqCategories: [{
+    id:     { type: String, required: true },
+    name:   { type: String, required: true },
+    emoji:  { type: String, default: "❓" },
+    order:  { type: Number, default: 0 },
+    active: { type: Boolean, default: true }
+  }],
+  faqItems: [{
+    id:                 { type: String, required: true },
+    categoryId:         { type: String, required: true },
+    question:           { type: String, required: true },
+    answer:             { type: String, default: "" },
+    pdfUrl:             { type: String, default: "" },
+    pdfLabel:           { type: String, default: "" },
+    active:             { type: Boolean, default: true },
+    order:              { type: Number, default: 0 },
+    isDefault:          { type: Boolean, default: false },
+    overridesDefaultId: { type: String, default: "" },
+    actionType:         { type: String, default: "" }
+  }],
   // ── Ratings ───────────────────────────────────────────────────────────────
   rating:       { type: Number, default: 0 },
   reviewCount:  { type: Number, default: 0 },
