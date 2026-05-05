@@ -2512,14 +2512,9 @@ async function notifySuppliersOfBuyerRequest(request) {
         ? `${request.area}${request.city ? `, ${request.city}` : ""}`
         : request.city || "Zimbabwe";
 
-      const _isServiceNotif = request.isServiceRequest || _buyerRequestIsService(request.items || []);
-      const _deliveryLine = _isServiceNotif
-        ? (request.serviceAddress
-            ? `📍 Service at: ${request.serviceAddress}`
-            : "📍 Client will share their address")
-        : request.deliveryRequired
-          ? "🚚 Delivery to buyer needed"
-          : "🏠 Collection / flexible";
+      const _deliveryLine = request.deliveryRequired
+        ? "Delivery to buyer needed"
+        : "Collection / flexible";
 
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
@@ -2568,29 +2563,7 @@ async function notifySuppliersOfBuyerRequest(request) {
   return notifiedIds.length;
 }
 
-
-// ── Detect whether a buyer request is for services (vs. physical products) ──
-// Checks item names against known service keywords so we can use correct
-// language ("service address" instead of "delivery") in the buyer flow.
-function _buyerRequestIsService(items = []) {
-  const SERVICE_KEYWORDS = [
-    "install","repair","fix","service","replace","fitting","fit","plumb","drain",
-    "electric","wire","wiring","paint","build","construct","renovate","plaster",
-    "weld","clean","garden","lawn","trim","tutor","teach","lesson","photograph",
-    "video","cater","chef","design","print","brand","security","guard","account",
-    "tax","audit","legal","transport","deliver","courier","mechanic","beat","tyre",
-    "geyser","borehole","fumigat","pest","massage","barber","haircut","hair",
-    "nail","makeup","booking","hire","maintenance","service call"
-  ];
-  if (!items || !items.length) return false;
-  return items.some(item => {
-    const name = (item.product || item.service || item.raw || "").toLowerCase();
-    return SERVICE_KEYWORDS.some(kw => name.includes(kw));
-  });
-}
-
-async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, deliveryRequired = false, serviceAddress = null }) {
-  const _isServiceReq = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
+async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, deliveryRequired = false }) {
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
@@ -2599,8 +2572,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
-    deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
-    serviceAddress: serviceAddress || pendingRequest.serviceAddress || null,
+    deliveryRequired: Boolean(deliveryRequired),
     status: "open"
   });
 
@@ -2620,23 +2592,14 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
 
   const ref = buildBuyerRequestRef(request);
 
-  const _confirmIsService = _isServiceReq;
-  const _locationLine = request.area
-    ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}\n`
-    : request.city ? `📍 ${request.city}\n` : "";
-  const _deliveryLine = _confirmIsService
-    ? (request.serviceAddress ? `📍 Service address: ${request.serviceAddress}\n` : "📍 You will share your address with the provider\n")
-    : (deliveryRequired ? "🚚 Delivery required\n" : "🏠 Collection / no delivery needed\n");
-  const _sellerWord = _confirmIsService ? "service provider" : "seller";
-
-  return sendButtons(from, {
+   return sendButtons(from, {
     text:
       `✅ *Request sent* (${ref})\n\n` +
       `${formatBuyerRequestItems(request.items || [], 10)}\n\n` +
-      `${_locationLine}` +
-      `${_deliveryLine}` +
-      `📣 Sent to ${sentCount} matching ${_sellerWord}${sentCount === 1 ? "" : "s"}.\n\n` +
-      `You will receive quotes here in the chatbot.`,
+      `${request.area ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}\n` : request.city ? `📍 ${request.city}\n` : ""}` +
+      `${deliveryRequired ? "🚚 Delivery required\n" : ""}` +
+      `📣 Sent to ${sentCount} matching seller${sentCount === 1 ? "" : "s"}.\n\n` +
+      `You will receive offers here in the chatbot.`,
     buttons: [
       { id: "sup_request_sellers", title: "⚡ Request Again" },
       { id: "my_orders", title: "📋 My Orders" },
@@ -3561,10 +3524,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _directLocation = _introRequest.area
           ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}`
           : _introRequest.city ? `📍 ${_introRequest.city}` : "";
-        const _introIsService3 = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
-        const _directDelivery = _introIsService3
-          ? (_introRequest.serviceAddress ? `📍 Service at: ${_introRequest.serviceAddress}` : "📍 Client will share address")
-          : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+        const _directDelivery = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
         // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
@@ -3682,10 +3642,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introLocation  = _introRequest.area
         ? `${_introRequest.area}, ${_introRequest.city || ""}`
         : (_introRequest.city || "Zimbabwe");
-      const _introIsService4 = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
-      const _introDelivery = _introIsService4
-        ? (_introRequest.serviceAddress ? `📍 Service at: ${_introRequest.serviceAddress}` : "📍 Client will share address")
-        : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
+      const _introDelivery  = _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
       await UserSession.findOneAndUpdate(
         { phone },
@@ -4276,46 +4233,6 @@ if (buyerRequestState === "awaiting_items") {
       return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
     }).join("\n");
 
-    // Detect if these items are services — use service-appropriate language
-    const _simpleIsService = _buyerRequestIsService(parsedInline.items);
-
-    if (_simpleIsService) {
-      // Service request: ask for client address/location instead of delivery
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.buyerRequestState": "awaiting_service_address",
-            "tempData.pendingBuyerRequest": {
-              ...(pendingBuyerRequest || {}),
-              requestType: "simple",
-              items: parsedInline.items,
-              rawText: text,
-              profileType: "product",
-              city: parsedInline.city,
-              area: parsedInline.area,
-              isServiceRequest: true
-            }
-          }
-        },
-        { upsert: true }
-      );
-      return sendText(
-        from,
-        `✅ *Request captured - please check:*\n\n` +
-        `${_confirmItemLines}\n\n` +
-        `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
-        `📍 *Where should the service provider come?*\n\n` +
-        `Please type your address or location:\n` +
-        `_Examples:_\n` +
-        `_24 Mabelreign Drive, Harare_\n` +
-        `_House 7, Borrowdale, Harare_\n` +
-        `_Avondale near OK Mart_\n\n` +
-        `Type *skip* if you will share your address directly with the provider.\n` +
-        `Type *cancel* to stop.`
-      );
-    }
-
     return sendButtons(from, {
       text:
         `✅ *Request captured - please check:*\n\n` +
@@ -4431,37 +4348,6 @@ if (buyerRequestState === "awaiting_items") {
         { upsert: true }
       );
 
-      // Detect service request — skip delivery question, ask for address instead
-      const _bulkIsService = _buyerRequestIsService(pendingBuyerRequest?.items || []);
-      if (_bulkIsService) {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          {
-            $set: {
-              "tempData.buyerRequestState": "awaiting_service_address",
-              "tempData.pendingBuyerRequest": {
-                ...(pendingBuyerRequest || {}),
-                city: parsedLocation.city,
-                area: parsedLocation.area,
-                isServiceRequest: true
-              }
-            }
-          },
-          { upsert: true }
-        );
-        return sendText(
-          from,
-          `📍 *Where should the service provider come?*\n\n` +
-          `${parsedLocation.area ? `📍 ${parsedLocation.area}, ${parsedLocation.city}` : `📍 ${parsedLocation.city}`}\n\n` +
-          `Please type your full address or location:\n` +
-          `_Examples:_\n` +
-          `_24 Mabelreign Drive, Harare_\n` +
-          `_House 7, Borrowdale, Harare_\n\n` +
-          `Type *skip* if you will share your address directly with the provider.\n` +
-          `Type *cancel* to stop.`
-        );
-      }
-
       return sendButtons(from, {
         text:
           `🚚 *Do you need delivery?*\n\n` +
@@ -4474,77 +4360,6 @@ if (buyerRequestState === "awaiting_items") {
     }
   }
 
-
-
-    if (buyerRequestState === "awaiting_service_address") {
-      const _isExitSA =
-        al === "cancel" || al === "0" ||
-        al === "menu" || al === "main menu" || al === "main_menu";
-
-      if (_isExitSA) {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          {
-            $unset: {
-              "tempData.buyerRequestState": "",
-              "tempData.pendingBuyerRequest": "",
-              "tempData.buyerRequestMode": ""
-            }
-          },
-          { upsert: true }
-        );
-        return sendSuppliersMenu(from);
-      }
-
-      if (al === "back") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.buyerRequestState": "awaiting_items" } },
-          { upsert: true }
-        );
-        return sendText(
-          from,
-          `↩️ Back to your request.\n\nType your item + city again.\n\nType *cancel* to stop.`
-        );
-      }
-
-      // "skip" → finalize without a service address
-      const _saAddress = al === "skip" ? null : text.trim();
-
-      if (_saAddress && _saAddress.length < 3) {
-        return sendText(
-          from,
-          `❌ Please enter a valid address or type *skip* to share your location directly with the provider.\n\nType *cancel* to stop.`
-        );
-      }
-
-      // Store address and finalize
-      const _saFinalReq = {
-        ...(pendingBuyerRequest || {}),
-        serviceAddress: _saAddress || null,
-        deliveryRequired: false  // services travel to client; not "delivery"
-      };
-
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $unset: {
-            "tempData.buyerRequestState": "",
-            "tempData.pendingBuyerRequest": "",
-            "tempData.buyerRequestMode": ""
-          }
-        },
-        { upsert: true }
-      );
-
-      return finalizeBuyerRequestSubmission({
-        from,
-        phone,
-        pendingRequest: _saFinalReq,
-        deliveryRequired: false,
-        serviceAddress: _saAddress || null
-      });
-    }
 
   // =========================
   // 🟢 ONBOARDING GATE

@@ -204,14 +204,7 @@ export function formatRequestSummary(request) {
     items,
     "",
     locationLine,
-    (() => {
-      const _isSvc = request.isServiceRequest || (request.items || []).some(item => {
-        const n = (item.product || item.service || "").toLowerCase();
-        return ["install","repair","fix","service","replace","plumb","geyser","electric","paint","build","clean","weld","garden","tutor","photograph","cater","design","print"].some(k => n.includes(k));
-      });
-      if (_isSvc) return request.serviceAddress ? `📍 Service address: ${request.serviceAddress}` : "📍 Client will share address";
-      return request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
-    })(),
+    request.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible",
     `${statusIcon} ${statusLabel}`,
     `💬 Quotes received: ${validQuotes.length}`,
     unavailCount > 0 ? `❌ Unavailable responses: ${unavailCount}` : ""

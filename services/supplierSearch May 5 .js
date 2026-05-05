@@ -161,16 +161,9 @@ const SEARCH_SYNONYMS = {
   "curtains": ["blinds", "drapes", "home décor", "furniture", "home"],
 
   // ── PLUMBING ──────────────────────────────────────────────────────────────
-  "plumber": ["plumbing", "pipes", "geyser", "geyser installation", "geyser repair", "water pipes", "burst pipe", "tap", "toilet", "drain"],
-  "plumbing": ["plumber", "pipes", "geyser", "geyser installation", "geyser repair", "water pipes", "burst pipe", "tap", "toilet", "drain", "sink"],
-  "geyser": ["geyser installation", "geyser repair", "water heater", "hot water", "plumbing", "plumber", "thermostat replacement", "element replacement"],
-  "geyser installation": ["geyser", "water heater installation", "hot water geyser", "plumbing", "plumber"],
-  "geyser repair": ["geyser", "geyser fix", "no hot water", "water heater repair", "plumbing", "plumber"],
-  "geyser no hot water": ["geyser repair", "geyser", "hot water", "plumbing", "plumber"],
-  "hot water": ["geyser", "geyser repair", "geyser installation", "water heater", "plumbing", "plumber"],
-  "thermostat": ["thermostat replacement", "geyser", "plumbing", "plumber"],
-  "thermostat replacement": ["geyser", "thermostat", "plumbing", "plumber"],
-  "element replacement": ["geyser", "element", "plumbing", "plumber"],
+  "plumber": ["plumbing", "pipes", "geyser", "water pipes", "burst pipe", "tap", "toilet", "drain"],
+  "plumbing": ["plumber", "pipes", "geyser", "water pipes", "burst pipe", "tap", "toilet", "drain", "sink"],
+  "geyser": ["water heater", "hot water", "plumbing", "plumber"],
   "burst pipe": ["pipe", "pipes", "plumbing", "plumber", "water leak", "leak"],
   "leak": ["water leak", "burst pipe", "plumbing", "plumber", "roof leak"],
   "tap": ["faucet", "water tap", "plumbing", "plumber"],
@@ -367,44 +360,6 @@ export function expandSearchTerms(product) {
   return [lower];
 }
 
-
-// ── Helper: infer category slugs from a search term ─────────────────────────
-// Lets "geyser installation" match suppliers with categories:["plumbing"] etc.
-function _inferCategoriesFromSearch(product, expandedTerms) {
-  const SERVICE_TERM_TO_CATEGORY = {
-    "plumb": "plumbing", "geyser": "plumbing", "pipe": "plumbing", "drain": "plumbing",
-    "tap": "plumbing", "toilet": "plumbing", "borehole": "plumbing", "leak": "plumbing",
-    "electric": "electrical", "wiring": "electrical", "socket": "electrical", "lights": "electrical",
-    "generator": "electrical", "solar": "electrical",
-    "build": "construction", "construct": "construction", "renovat": "construction",
-    "plaster": "construction", "brick": "construction", "roof": "construction",
-    "paint": "painting", "painter": "painting",
-    "weld": "welding", "gate": "welding", "fabricat": "welding",
-    "clean": "cleaning", "maid": "cleaning", "laundry": "cleaning", "pest": "cleaning",
-    "garden": "gardening", "lawn": "gardening", "landscap": "gardening",
-    "tutor": "education", "teach": "education", "lesson": "education", "maths": "education",
-    "hair": "beauty", "salon": "beauty", "nail": "beauty", "makeup": "beauty", "barber": "beauty",
-    "photo": "photography", "video": "photography",
-    "cater": "catering", "chef": "catering", "cake": "catering",
-    "print": "printing", "brand": "printing", "design": "printing",
-    "security": "security", "guard": "security",
-    "account": "accounting", "tax": "accounting", "audit": "accounting",
-    "legal": "legal", "lawyer": "legal", "attorney": "legal",
-    "transport": "transport", "deliver": "transport", "courier": "transport", "truck": "transport",
-    "it support": "it", "computer repair": "it", "tech": "it",
-    "mechanic": "automotive", "panel beat": "automotive", "tyre": "automotive",
-  };
-  const cats = new Set();
-  const allTerms = [product, ...(expandedTerms || [])];
-  for (const term of allTerms) {
-    const t = (term || "").toLowerCase();
-    for (const [keyword, cat] of Object.entries(SERVICE_TERM_TO_CATEGORY)) {
-      if (t.includes(keyword)) cats.add(cat);
-    }
-  }
-  return [...cats];
-}
-
 export async function runSupplierSearch({ city, category, product, profileType, area }) {
   const _stack = new Error().stack.split('').slice(1,4).join(' | ');
   console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}" | CALLER: ${_stack}`);
@@ -430,35 +385,26 @@ export async function runSupplierSearch({ city, category, product, profileType, 
 
     const individualWords = product.split(/\s+/).filter(w => w.length > 2);
 
-    // Escape special regex chars so e.g. "geyser (install)" won't crash
-    function _safeRx(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-
-    // Infer category slugs from the search term (e.g. "geyser installation" → "plumbing")
-    const _inferredCats = _inferCategoriesFromSearch(product, searchTerms);
-
     const productOr = [
-      { listedProducts:  { $regex: _safeRx(product), $options: "i" } },
-      { products:        { $regex: _safeRx(product), $options: "i" } },
-      { "rates.service": { $regex: _safeRx(product), $options: "i" } },
-      { categories:      { $regex: _safeRx(product), $options: "i" } },
-      { businessName:    { $regex: _safeRx(product), $options: "i" } },
-
-      // Category-based match: "geyser installation" → categories: "plumbing"
-      ..._inferredCats.map(cat => ({ categories: cat })),
+      { listedProducts: { $regex: product, $options: "i" } },
+      { products: { $regex: product, $options: "i" } },
+      { "rates.service": { $regex: product, $options: "i" } },
+      { categories: { $regex: product, $options: "i" } },
+      { businessName: { $regex: product, $options: "i" } },
 
       ...searchTerms.flatMap(term => [
-        { listedProducts:  { $regex: _safeRx(term), $options: "i" } },
-        { products:        { $regex: _safeRx(term), $options: "i" } },
-        { "rates.service": { $regex: _safeRx(term), $options: "i" } },
-        { categories:      { $regex: _safeRx(term), $options: "i" } },
-        { businessName:    { $regex: _safeRx(term), $options: "i" } }
+        { listedProducts: { $regex: term, $options: "i" } },
+        { products: { $regex: term, $options: "i" } },
+        { "rates.service": { $regex: term, $options: "i" } },
+        { categories: { $regex: term, $options: "i" } },
+        { businessName: { $regex: term, $options: "i" } }
       ]),
 
       ...individualWords.flatMap(word => [
-        { listedProducts:  { $regex: _safeRx(word), $options: "i" } },
-        { products:        { $regex: _safeRx(word), $options: "i" } },
-        { "rates.service": { $regex: _safeRx(word), $options: "i" } },
-        { categories:      { $regex: _safeRx(word), $options: "i" } }
+        { listedProducts: { $regex: word, $options: "i" } },
+        { products: { $regex: word, $options: "i" } },
+        { "rates.service": { $regex: word, $options: "i" } },
+        { categories: { $regex: word, $options: "i" } }
       ])
     ];
 
