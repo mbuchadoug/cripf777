@@ -4952,7 +4952,8 @@ if (
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState) &&
-  _schoolEnquiryState !== "school_parent_enquiry"
+  _schoolEnquiryState !== "school_parent_enquiry" &&
+  !biz?.sessionState?.startsWith("sc_")
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
