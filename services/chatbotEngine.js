@@ -95,7 +95,8 @@ import {
   runSupplierOfferSearch,
   formatSupplierResults,
   formatSupplierOfferResults,
-  parseShortcodeSearch
+  parseShortcodeSearch,
+  scoreSupplierMatch
 } from "./supplierSearch.js";
 import {
   notifySupplierNewOrder,
@@ -2133,31 +2134,69 @@ function isStrongSingleVariantMatch(matches = []) {
 }
 
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null }) {
+  // ── Detect whether this is a service request or product request ────────────
+  // This drives which supplier type we prioritise and how we filter results.
+  const requestIsService = _buyerRequestIsService(items);
+
   const scoreMap = new Map();
   const topItems = items.slice(0, 5);
 
   for (const item of topItems) {
-    // Always search BOTH product and service suppliers for buyer requests
-    const productResults = await runSupplierSearch({
-      city: city || null, product: item.product, area: area || null, profileType: "product"
-    });
-    const serviceResults = await runSupplierSearch({
-      city: city || null, product: item.product, area: area || null, profileType: "service"
-    });
-    const results = [...productResults, ...serviceResults];
+    const term = item.product || "";
 
-    for (const supplier of results || []) {
-      const key = String(supplier._id);
-      const current = scoreMap.get(key) || { supplier, score: 0 };
-      current.score += 1;
-      scoreMap.set(key, current);
+    // ── Search strategy based on request type ─────────────────────────────────
+    // Service request  → search service suppliers first, product suppliers only
+    //                    if they have the exact product name (e.g. a plumbing
+    //                    supplies shop that also stocks "geyser installation kits")
+    // Product request  → search product suppliers first, service suppliers only
+    //                    if they appear with a very strong match score
+    const primaryType   = requestIsService ? "service"  : "product";
+    const secondaryType = requestIsService ? "product"  : "service";
+
+    const primaryResults = await runSupplierSearch({
+      city: city || null, product: term, area: area || null, profileType: primaryType
+    });
+    const secondaryResults = await runSupplierSearch({
+      city: city || null, product: term, area: area || null, profileType: secondaryType
+    });
+
+    // Score and accumulate — primary type results use their quality score,
+    // secondary type results require a high match score (≥25) to avoid
+    // e.g. plumbing supplies stores receiving service requests
+    const MIN_SECONDARY_SCORE = 25;  // must have rated match in products/rates, not just category
+
+    for (const supplier of primaryResults) {
+      const key      = String(supplier._id);
+      const matchScore = scoreSupplierMatch(supplier, term);
+      const entry    = scoreMap.get(key) || { supplier, score: 0, bestMatch: 0 };
+      entry.score   += Math.max(matchScore, 10);  // floor of 10 for appearing in results
+      entry.bestMatch = Math.max(entry.bestMatch, matchScore);
+      scoreMap.set(key, entry);
+    }
+
+    for (const supplier of secondaryResults) {
+      const key        = String(supplier._id);
+      const matchScore = scoreSupplierMatch(supplier, term);
+      // Only include secondary-type suppliers if they have a strong direct match
+      // (avoids product suppliers getting service requests and vice versa)
+      if (matchScore < MIN_SECONDARY_SCORE) continue;
+      const entry = scoreMap.get(key) || { supplier, score: 0, bestMatch: 0 };
+      entry.score   += matchScore;
+      entry.bestMatch = Math.max(entry.bestMatch, matchScore);
+      scoreMap.set(key, entry);
     }
   }
 
-  return [...scoreMap.values()]
+  // ── Filter: if ANY supplier has a strong match (score ≥ 25),
+  //   remove weak category-only matches (score < 10) so they don't get spammed
+  const allEntries = [...scoreMap.values()].filter(e => e.supplier?.active);
+  const bestScore  = allEntries.reduce((m, e) => Math.max(m, e.bestMatch), 0);
+  const threshold  = bestScore >= 25 ? 8 : 0;  // raise bar when good matches exist
+
+  return allEntries
+    .filter(e => e.bestMatch >= threshold || e.score >= threshold)
     .sort((a, b) => b.score - a.score)
-    .map(entry => entry.supplier)
-    .filter(s => s && s.active)
+    .map(e => e.supplier)
     .slice(0, 10);
 }
 

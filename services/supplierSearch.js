@@ -407,6 +407,77 @@ function _inferCategoriesFromSearch(product, expandedTerms) {
   return [...cats];
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORTED: Score how well a supplier matches a requested product/service term.
+// Returns a score 0-100. Higher = stronger match.
+//
+// Tiers (highest to lowest):
+//   50  — exact match in rates.service  (service supplier has this exact rate)
+//   45  — exact match in listedProducts / products
+//   30  — partial match in rates.service
+//   25  — partial match in listedProducts / products
+//   15  — match via businessName
+//    5  — match only via category tag (broad — lowest confidence)
+// ─────────────────────────────────────────────────────────────────────────────
+export function scoreSupplierMatch(supplier, searchTerm) {
+  if (!supplier || !searchTerm) return 0;
+
+  const term    = normalizeProductName(searchTerm);
+  const terms   = expandSearchTerms(term);           // term + synonyms
+  const allTerms = [term, ...terms];
+
+  function _norm(s) { return normalizeProductName(s || ""); }
+
+  // ── rates.service (service suppliers) ───────────────────────────────────
+  for (const rate of (supplier.rates || [])) {
+    const svc = _norm(rate.service);
+    if (!svc) continue;
+    if (svc === term)           return 50;   // exact
+    if (svc.includes(term) || term.includes(svc)) return 30;  // partial
+    for (const t of allTerms) {
+      if (t && (svc === t || svc.includes(t) || t.includes(svc))) return 28;
+    }
+  }
+
+  // ── listedProducts / products ────────────────────────────────────────────
+  const listedBlob = _splitServiceBlobPublic(supplier.listedProducts);
+  const prodBlob   = _splitServiceBlobPublic(supplier.products);
+  const allProds   = [...listedBlob, ...prodBlob];
+
+  for (const p of allProds) {
+    const pn = _norm(p);
+    if (!pn) continue;
+    if (pn === term)                                return 45;  // exact
+    if (pn.includes(term) || term.includes(pn))    return 25;  // partial
+    for (const t of allTerms) {
+      if (t && (pn.includes(t) || t.includes(pn))) return 22;
+    }
+  }
+
+  // ── businessName ─────────────────────────────────────────────────────────
+  const bname = _norm(supplier.businessName);
+  if (bname && (bname.includes(term) || term.includes(bname))) return 15;
+  for (const t of allTerms) {
+    if (t && bname && bname.includes(t)) return 12;
+  }
+
+  // ── category tag only (broad match) ──────────────────────────────────────
+  const cats = (supplier.categories || []).map(c => (c || "").toLowerCase());
+  const inferredCats = _inferCategoriesFromSearch(term, terms);
+  if (inferredCats.some(cat => cats.includes(cat))) return 5;
+
+  return 0;
+}
+
+// Internal helper exposed for scoreSupplierMatch — splits blob arrays
+function _splitServiceBlobPublic(arr) {
+  return (arr || []).flatMap(p => {
+    if (!p || p === "pending_upload") return [];
+    return String(p).split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+  });
+}
+
 export async function runSupplierSearch({ city, category, product, profileType, area }) {
   const _stack = new Error().stack.split('').slice(1,4).join(' | ');
   console.log(`[TRACE-RS] runSupplierSearch called: product="${product}" city="${city}" area="${area}" | CALLER: ${_stack}`);
