@@ -4373,9 +4373,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         ]
       });
     }
-  }
-
-
 
     if (buyerRequestState === "awaiting_service_address") {
       const _isExitSA = al === "cancel" || al === "0" || al === "menu" || al === "main menu" || al === "main_menu";
@@ -4411,6 +4408,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         serviceAddress: _saAddress || null
       });
     }
+  }
+
+
 
   // =========================
   // 🟢 ONBOARDING GATE
