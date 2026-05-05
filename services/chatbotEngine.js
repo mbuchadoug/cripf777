@@ -7809,7 +7809,8 @@ if (
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
-  !schoolTextStates.includes(biz.sessionState)
+  !schoolTextStates.includes(biz.sessionState) &&
+  !biz.sessionState?.startsWith("sc_")
 ) {
 
 
@@ -8156,14 +8157,15 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
   
     // Business-tool text states are now handled earlier, before marketplace free-text search.
     // Keep only the ghost-supplier-biz bypass here.
-    if (biz.name?.startsWith("pending_supplier_")) {
-      // ── If ghost biz user is mid-order or mid-listed-selection, let handlers below process it ──
+   if (biz.name?.startsWith("pending_supplier_")) {
+      // ── If ghost biz user is mid-order, mid-listed-selection, or mid-seller-chat, let handlers below process it ──
       if (
         biz.sessionState === "supplier_order_product" ||
         biz.sessionState === "supplier_order_address" ||
         biz.sessionState === "supplier_order_enter_price" ||
         biz.sessionState === "supplier_order_picking" ||
-        biz.sessionState === "supplier_select_listed_products"
+        biz.sessionState === "supplier_select_listed_products" ||
+        biz.sessionState?.startsWith("sc_")
       ) {
         // Do nothing here - fall through to the state handlers below
      } else {
