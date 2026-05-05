@@ -756,6 +756,76 @@ async function _showCategoryPage(from, schoolId, catId, page, biz, saveBiz) {
   return sendList(from,`${catEmoji} ${catName}${pageLabel} — ${school.schoolName}:`,rows.slice(0,10));
 }
 
+// ── Helper: send all attachments for a FAQ item (PDFs + images) ──────────────
+// Send text answer first, then attachments one by one.
+// PDFs → sendDocument; images (PNG/JPG/JPEG/WEBP) → sendImage (falls back to sendDocument)
+async function _sendFaqAttachments(from, item) {
+  const { sendDocument } = await import("./metaSender.js");
+
+  // Try to get sendImage — may not be in metaSender yet; fall back gracefully
+  let sendImage = null;
+  try {
+    const meta = await import("./metaSender.js");
+    if (typeof meta.sendImage === "function") sendImage = meta.sendImage;
+  } catch (_) {}
+
+  const IMAGE_TYPES = ["image/png","image/jpeg","image/jpg","image/webp"];
+
+  // Build unified attachment list: new attachments[] first, then legacy pdfUrl
+  const attachments = [];
+
+  // 1. New multi-attachment array
+  for (const att of (item.attachments || [])) {
+    if (!att.url && !att.fileId) continue;
+    attachments.push({
+      url:      att.url,
+      label:    att.label || att.originalName || "Attachment",
+      mimeType: att.mimeType || "",
+      type:     att.type || "other",
+      name:     att.originalName || att.label || "attachment"
+    });
+  }
+
+  // 2. Legacy pdfUrl field (single PDF)
+  if (!attachments.length && item.pdfUrl) {
+    attachments.push({
+      url:      item.pdfUrl,
+      label:    item.pdfLabel || item.question || "Document",
+      mimeType: "application/pdf",
+      type:     "pdf",
+      name:     ((item.pdfLabel || item.question || "document").replace(/[^a-zA-Z0-9 ]/g,"").replace(/\s+/g,"_").slice(0,40)) + ".pdf"
+    });
+  }
+
+  for (const att of attachments) {
+    try {
+      const isImage = att.type === "image" || IMAGE_TYPES.includes(att.mimeType);
+      const safeFilename = (att.name || att.label || "file")
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .slice(0, 60);
+
+      if (isImage && sendImage) {
+        // Send as WhatsApp image with caption
+        try {
+          await sendImage(from, { link: att.url, caption: att.label });
+          continue;
+        } catch (_) {
+          // fall through to sendDocument
+        }
+      }
+
+      // PDF or image fallback — send as document
+      await sendDocument(from, {
+        link:     att.url,
+        filename: safeFilename,
+        caption:  att.label
+      });
+    } catch (_) {
+      // Don't let one failed attachment block the others
+    }
+  }
+}
+
 async function _showAnswer(from, schoolId, itemId, biz, saveBiz) {
   const school = await SchoolProfile.findById(schoolId).lean();
   if (!school) return false;
@@ -766,15 +836,17 @@ async function _showAnswer(from, schoolId, itemId, biz, saveBiz) {
 
   _saveLead(from, school, "faq_view", "whatsapp_link");
 
-  if (item.pdfUrl) {
-    try {
-      const { sendDocument } = await import("./metaSender.js");
-      await sendDocument(from,{link:item.pdfUrl,filename:((item.pdfLabel||item.question).replace(/[^a-zA-Z0-9 ]/g,"").replace(/\s+/g,"_").slice(0,40))+".pdf"});
-    } catch(_) {}
+  // 1. Send text answer first
+  const buttons = _answerButtons(item, school, sid);
+  await sendButtons(from, { text: item.answer, buttons });
+
+  // 2. Send attachments after the text answer (non-blocking)
+  const hasAttachments = (item.attachments && item.attachments.length > 0) || item.pdfUrl;
+  if (hasAttachments) {
+    _sendFaqAttachments(from, item).catch(() => {});
   }
 
-  const buttons = _answerButtons(item, school, sid);
-  return sendButtons(from,{text:item.answer,buttons});
+  return true;
 }
 
 function _answerButtons(item, school, sid) {

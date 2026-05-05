@@ -115,6 +115,28 @@ const brochureUpload = multer({
     else cb(new Error("Only PDF files are allowed."));
   }
 });
+
+// ── GridFS bucket for FAQ attachments (PDF, PNG, JPG, JPEG, WEBP) ────────────
+function getFaqBucket() {
+  return new GridFSBucket(mongoose.connection.db, { bucketName: "faqAttachments" });
+}
+
+const FAQ_ALLOWED_MIMES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp"
+];
+
+const faqAttachUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    if (FAQ_ALLOWED_MIMES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only PDF, PNG, JPG, JPEG or WEBP files are allowed."));
+  }
+});
+
 router.use(express.json());
 
 // ─── Helpers (same as supplierAdmin.js) ───────────────────────────────────────
@@ -981,6 +1003,94 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
 </tbody>
         </table>` : "<em class='muted'>No payments yet.</em>"}
       </div>
+
+      <!-- ── FEES PANEL ──────────────────────────────────────────────────── -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3>💵 Fees &amp; School Charges</h3>
+          <div style="display:flex;gap:8px">
+            <a href="/zq-admin/schools/${school._id}/fees/add" class="btn btn-green btn-sm">➕ Add Fee</a>
+            <a href="/zq-admin/schools/${school._id}/fees" class="btn btn-blue btn-sm">⚙️ Manage Fees</a>
+          </div>
+        </div>
+        ${(function() {
+          const sf = school.schoolFees || [];
+          if (!sf.length) return `<p class="muted" style="font-size:13px">No fees entered yet. <a href="/zq-admin/schools/${school._id}/fees/add" class="btn-link">Add the first fee →</a></p>`;
+          return `<div style="overflow-x:auto"><table>
+            <thead><tr><th>Label</th><th>Applies to</th><th>Type</th><th>Amount</th><th>Per</th><th>Note</th><th></th></tr></thead>
+            <tbody>
+              ${sf.map(f => `<tr>
+                <td><strong>${esc(f.label)}</strong></td>
+                <td><span style="font-size:12px">${esc(f.appliesTo)}</span></td>
+                <td><span style="font-size:12px">${esc(f.feeType)}</span></td>
+                <td><strong>$${Number(f.amount||0).toFixed(2)}</strong></td>
+                <td style="font-size:12px">${esc((f.per||"term").replace("_"," "))}</td>
+                <td style="font-size:12px;color:var(--muted)">${esc(f.note||"")}</td>
+                <td style="white-space:nowrap">
+                  <a href="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/edit" class="btn btn-sm btn-blue">✏️</a>
+                  <form method="POST" action="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/delete" style="display:inline" onsubmit="return confirm('Delete this fee?')">
+                    <button class="btn btn-sm btn-red">🗑️</button>
+                  </form>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table></div>`;
+        })()}
+      </div>
+
+      <!-- ── FAQ PREVIEW PANEL ───────────────────────────────────────────── -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3>❓ Questions &amp; Answers (Enquiry Bot)</h3>
+          <div style="display:flex;gap:8px">
+            <a href="/zq-admin/schools/${school._id}/faq/q/add-page" class="btn btn-green btn-sm">➕ Add Question</a>
+            <a href="/zq-admin/schools/${school._id}/faq" class="btn btn-blue btn-sm">⚙️ Manage Q&amp;A</a>
+          </div>
+        </div>
+        ${(function() {
+          const items = school.faqItems || [];
+          const cats  = school.faqCategories || [];
+          const activeQ  = items.filter(q => q.active !== false).length;
+          const hiddenQ  = items.filter(q => q.active === false).length;
+          const numCats  = cats.length;
+
+          const SYSTEM_CATS = {fees:"💵 Fees",admissions:"📝 Admissions",boarding:"🛏️ Boarding",transport:"🚌 Transport",academics:"📊 Academics",facilities:"🏊 Facilities",uniforms:"👕 Uniforms",calendar:"📆 Calendar",contact:"📞 Contact"};
+
+          let statsHtml = `<div class="stats-grid" style="margin-bottom:14px">
+            <div class="stat-card stat-blue"><div class="stat-val">${numCats}</div><div class="stat-lbl">Custom Categories</div></div>
+            <div class="stat-card stat-green"><div class="stat-val">${activeQ}</div><div class="stat-lbl">Active Questions</div></div>
+            <div class="stat-card stat-yellow"><div class="stat-val">${hiddenQ}</div><div class="stat-lbl">Hidden Questions</div></div>
+          </div>`;
+
+          if (!items.length) {
+            return statsHtml + `<p class="muted" style="font-size:13px">No admin questions yet. Auto-generated Q&amp;A is shown to parents based on the school profile. <a href="/zq-admin/schools/${school._id}/faq" class="btn-link">Manage Q&amp;A →</a></p>`;
+          }
+
+          const preview = items.slice(0, 10);
+          const tableRows = preview.map(q => {
+            const catName = SYSTEM_CATS[q.categoryId] || (cats.find(c=>c.id===q.categoryId)?.name || q.categoryId);
+            const attCount = (q.attachments||[]).length + (q.pdfUrl ? 1 : 0);
+            return `<tr>
+              <td style="font-size:12px">${esc(catName)}</td>
+              <td>${esc(q.question)}</td>
+              <td>${q.active !== false ? badge("Active","green") : badge("Hidden","gray")}</td>
+              <td style="text-align:center">${attCount > 0 ? `📎 ${attCount}` : "-"}</td>
+              <td style="white-space:nowrap">
+                <a href="/zq-admin/schools/${school._id}/faq/q/${esc(q.id)}/edit" class="btn btn-sm btn-blue">✏️</a>
+                <form method="POST" action="/zq-admin/schools/${school._id}/faq/q/${esc(q.id)}/delete" style="display:inline" onsubmit="return confirm('Delete this question?')">
+                  <button class="btn btn-sm btn-red">🗑️</button>
+                </form>
+              </td>
+            </tr>`;
+          }).join("");
+
+          return statsHtml + `<div style="overflow-x:auto"><table>
+            <thead><tr><th>Category</th><th>Question</th><th>Status</th><th>Attachments</th><th></th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table></div>
+          ${items.length > 10 ? `<p style="margin-top:10px;font-size:13px"><a href="/zq-admin/schools/${school._id}/faq" class="btn-link">View all ${items.length} questions →</a></p>` : ""}`;
+        })()}
+      </div>
     `));
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
@@ -1043,6 +1153,14 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     res.send(layout(`Edit: ${esc(school.schoolName)}`, `
       <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to Profile</a>
       ${errorMsg}${successMsg}
+
+      <!-- ── Shortcut buttons ─────────────────────────────────────────── -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <a href="/zq-admin/schools/${school._id}/fees" class="btn btn-blue">💵 Manage Fees</a>
+        <a href="/zq-admin/schools/${school._id}/fees/add" class="btn btn-green">➕ Add Fee</a>
+        <a href="/zq-admin/schools/${school._id}/faq" class="btn btn-blue">❓ Manage Q&amp;A</a>
+        <a href="/zq-admin/schools/${school._id}/faq/q/add-page" class="btn btn-green">➕ Add Question</a>
+      </div>
 
       <div class="panel" style="max-width:900px">
         <h3>✏️ Edit School: ${esc(school.schoolName)}</h3>
@@ -1477,6 +1595,276 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STANDALONE FEES MANAGEMENT
+// These routes let admin view/add/edit/delete school fees independently of the
+// giant edit-school form. Every button on these pages is a real HTML form submit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Shared fee form fields helper ────────────────────────────────────────────
+function _feeFormFields(f = {}, title = "Add Fee") {
+  const APPLIES_OPTS = [
+    {v:"nursery",  l:"🌱 Nursery"},    {v:"ecd_a",   l:"🌱 ECD A"},
+    {v:"ecd_b",    l:"🌿 ECD B"},      {v:"grade1_4", l:"📗 Grade 1–4"},
+    {v:"grade5_7", l:"📗 Grade 5–7"},  {v:"primary",  l:"📗 Primary (Gr 1–7)"},
+    {v:"form1_4",  l:"📙 Form 1–4 (O-Level)"}, {v:"form5_6", l:"📘 Form 5–6 (A-Level)"},
+    {v:"boarding", l:"🛏️ Boarding"},  {v:"transport",l:"🚌 Transport"},
+    {v:"all",      l:"🏫 School-wide"}
+  ];
+  const TYPE_OPTS = [
+    {v:"tuition",     l:"Tuition"},          {v:"boarding",   l:"Boarding"},
+    {v:"transport",   l:"Transport"},         {v:"development",l:"Development levy"},
+    {v:"sports",      l:"Sports levy"},       {v:"it",         l:"IT / Computer levy"},
+    {v:"library",     l:"Library levy"},      {v:"exam",       l:"Exam fees"},
+    {v:"registration",l:"Registration / Admission"}, {v:"caution", l:"Caution deposit"},
+    {v:"uniform",     l:"Uniform estimate"},  {v:"other",      l:"Other"}
+  ];
+  const PER_OPTS = [
+    {v:"term",     l:"Per term"},
+    {v:"year",     l:"Per year"},
+    {v:"once_off", l:"Once-off"}
+  ];
+  function sel(opts, cur) {
+    return opts.map(o => `<option value="${esc(o.v)}"${cur===o.v?" selected":""}>${esc(o.l)}</option>`).join("");
+  }
+  return `
+    <div class="fg"><label>Fee label <span style="color:red">*</span></label>
+      <input name="label" value="${esc(f.label||"")}" placeholder="e.g. ECD A Tuition" maxlength="60" required></div>
+    <div class="fg"><label>Applies to</label>
+      <select name="appliesTo">${sel(APPLIES_OPTS, f.appliesTo||"all")}</select></div>
+    <div class="fg"><label>Fee type</label>
+      <select name="feeType">${sel(TYPE_OPTS, f.feeType||"tuition")}</select></div>
+    <div class="fg"><label>Amount (USD) <span style="color:red">*</span></label>
+      <input type="number" name="amount" value="${f.amount||0}" min="0" step="0.01" required></div>
+    <div class="fg"><label>Per</label>
+      <select name="per">${sel(PER_OPTS, f.per||"term")}</select></div>
+    <div class="fg"><label>Note (optional)</label>
+      <input name="note" value="${esc(f.note||"")}" placeholder="e.g. includes Cambridge surcharge" maxlength="80"></div>`;
+}
+
+// ── GET /zq-admin/schools/:id/fees ───────────────────────────────────────────
+router.get("/schools/:id/fees", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const ok  = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
+    const err = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>`   : "";
+
+    const sf = school.schoolFees || [];
+
+    const feesTable = sf.length
+      ? `<div style="overflow-x:auto"><table>
+          <thead><tr><th>Label</th><th>Applies to</th><th>Type</th><th>Amount</th><th>Per</th><th>Note</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${sf.map(f => `<tr>
+              <td><strong>${esc(f.label)}</strong></td>
+              <td>${esc(f.appliesTo)}</td>
+              <td>${esc(f.feeType)}</td>
+              <td><strong>$${Number(f.amount||0).toFixed(2)}</strong></td>
+              <td>${esc((f.per||"term").replace("_"," "))}</td>
+              <td style="color:var(--muted);font-size:12px">${esc(f.note||"")}</td>
+              <td style="white-space:nowrap">
+                <a href="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/edit" class="btn btn-sm btn-blue">✏️ Edit</a>
+                <form method="POST" action="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/delete" style="display:inline" onsubmit="return confirm('Delete this fee?')">
+                  <button class="btn btn-sm btn-red">🗑️ Delete</button>
+                </form>
+              </td>
+            </tr>`).join("")}
+          </tbody>
+        </table></div>`
+      : `<p style="color:var(--muted);font-size:13px">No fees entered yet.</p>`;
+
+    res.send(layout(`Fees: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to ${esc(school.schoolName)}</a>
+      ${ok}${err}
+      <div class="panel">
+        <div class="panel-head">
+          <h3>💵 Fee Schedule — ${esc(school.schoolName)}</h3>
+          <a href="/zq-admin/schools/${school._id}/fees/add" class="btn btn-green">➕ Add Fee</a>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          These fees appear exactly to parents in the ZimQuote chatbot. Be specific — include all levels your school charges.
+        </p>
+        ${feesTable}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
+
+// ── GET /zq-admin/schools/:id/fees/add ───────────────────────────────────────
+router.get("/schools/:id/fees/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const err = req.query.error ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
+
+    res.send(layout(`Add Fee: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools/${school._id}/fees" class="back-link">← Back to Fees</a>
+      ${err}
+      <div class="panel" style="max-width:700px">
+        <h3>➕ Add Fee — ${esc(school.schoolName)}</h3>
+        <form method="POST" action="/zq-admin/schools/${school._id}/fees/add" class="edit-form">
+          <div class="form-grid">
+            ${_feeFormFields()}
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-green">💾 Save Fee</button>
+            <a href="/zq-admin/schools/${school._id}/fees" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Quick-add common Zimbabwe fees -->
+      <div class="panel" style="max-width:700px">
+        <h3>⚡ Quick-fill from common Zimbabwe fees</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${[
+            {a:"nursery",  t:"tuition",     l:"Nursery Fee",      p:"term"},
+            {a:"ecd_a",    t:"tuition",     l:"ECD A Fee",        p:"term"},
+            {a:"ecd_b",    t:"tuition",     l:"ECD B Fee",        p:"term"},
+            {a:"grade1_4", t:"tuition",     l:"Grade 1–4 Fee",    p:"term"},
+            {a:"grade5_7", t:"tuition",     l:"Grade 5–7 Fee",    p:"term"},
+            {a:"primary",  t:"tuition",     l:"Primary Fee",      p:"term"},
+            {a:"form1_4",  t:"tuition",     l:"O-Level Fee",      p:"term"},
+            {a:"form5_6",  t:"tuition",     l:"A-Level Fee",      p:"term"},
+            {a:"boarding", t:"boarding",    l:"Boarding Fee",     p:"term"},
+            {a:"transport",t:"transport",   l:"Transport Fee",    p:"term"},
+            {a:"all",      t:"development", l:"Development Levy", p:"term"},
+            {a:"all",      t:"sports",      l:"Sports Levy",      p:"year"},
+            {a:"all",      t:"exam",        l:"Exam Fee",         p:"year"},
+            {a:"all",      t:"registration",l:"Registration Fee", p:"once_off"},
+            {a:"all",      t:"caution",     l:"Caution Deposit",  p:"once_off"},
+          ].map(b => `<button type="button" class="btn btn-sm btn-gray" style="font-size:11px"
+              onclick="
+                document.querySelector('[name=label]').value='${esc(b.l)}';
+                document.querySelector('[name=appliesTo]').value='${esc(b.a)}';
+                document.querySelector('[name=feeType]').value='${esc(b.t)}';
+                document.querySelector('[name=per]').value='${esc(b.p)}';
+                document.querySelector('[name=amount]').focus()
+              ">+ ${esc(b.l)}</button>`).join("")}
+        </div>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
+
+// ── POST /zq-admin/schools/:id/fees/add ──────────────────────────────────────
+router.post("/schools/:id/fees/add", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const label = String(req.body.label || "").trim();
+    if (!label) return res.redirect(`/zq-admin/schools/${school._id}/fees/add?error=` + encodeURIComponent("Fee label is required."));
+
+    const amount = parseFloat(req.body.amount) || 0;
+    function _uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+    const newFee = {
+      id:        _uid(),
+      label,
+      appliesTo: String(req.body.appliesTo || "all").trim(),
+      feeType:   String(req.body.feeType || "tuition").trim(),
+      amount,
+      per:       String(req.body.per || "term").trim(),
+      note:      String(req.body.note || "").trim()
+    };
+
+    school.schoolFees = [...(school.schoolFees || []), newFee];
+    school.markModified("schoolFees");
+    await school.save();
+
+    res.redirect(`/zq-admin/schools/${school._id}/fees?success=` + encodeURIComponent(`Fee "${label}" added.`));
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/fees/add?error=` + encodeURIComponent(err.message));
+  }
+});
+
+// ── GET /zq-admin/schools/:id/fees/:feeId/edit ───────────────────────────────
+router.get("/schools/:id/fees/:feeId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const f = (school.schoolFees || []).find(x => x.id === req.params.feeId);
+    if (!f) return res.redirect(`/zq-admin/schools/${school._id}/fees?error=` + encodeURIComponent("Fee not found."));
+
+    const err = req.query.error ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>` : "";
+
+    res.send(layout(`Edit Fee: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools/${school._id}/fees" class="back-link">← Back to Fees</a>
+      ${err}
+      <div class="panel" style="max-width:700px">
+        <h3>✏️ Edit Fee — ${esc(school.schoolName)}</h3>
+        <form method="POST" action="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/edit" class="edit-form">
+          <div class="form-grid">
+            ${_feeFormFields(f)}
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-green">💾 Save Changes</button>
+            <a href="/zq-admin/schools/${school._id}/fees" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
+  }
+});
+
+// ── POST /zq-admin/schools/:id/fees/:feeId/edit ──────────────────────────────
+router.post("/schools/:id/fees/:feeId/edit", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const f = (school.schoolFees || []).find(x => x.id === req.params.feeId);
+    if (!f) return res.redirect(`/zq-admin/schools/${school._id}/fees?error=` + encodeURIComponent("Fee not found."));
+
+    const label = String(req.body.label || "").trim();
+    if (!label) return res.redirect(`/zq-admin/schools/${school._id}/fees/${req.params.feeId}/edit?error=` + encodeURIComponent("Fee label is required."));
+
+    f.label     = label;
+    f.appliesTo = String(req.body.appliesTo || f.appliesTo).trim();
+    f.feeType   = String(req.body.feeType   || f.feeType).trim();
+    f.amount    = parseFloat(req.body.amount) || 0;
+    f.per       = String(req.body.per || f.per).trim();
+    f.note      = String(req.body.note || "").trim();
+
+    school.markModified("schoolFees");
+    await school.save();
+
+    res.redirect(`/zq-admin/schools/${school._id}/fees?success=` + encodeURIComponent(`Fee "${label}" updated.`));
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/fees/${req.params.feeId}/edit?error=` + encodeURIComponent(err.message));
+  }
+});
+
+// ── POST /zq-admin/schools/:id/fees/:feeId/delete ────────────────────────────
+router.post("/schools/:id/fees/:feeId/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id);
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const before = (school.schoolFees || []).length;
+    school.schoolFees = (school.schoolFees || []).filter(x => x.id !== req.params.feeId);
+    school.markModified("schoolFees");
+    await school.save();
+
+    const deleted = before > school.schoolFees.length;
+    res.redirect(`/zq-admin/schools/${school._id}/fees?success=` + encodeURIComponent(deleted ? "Fee deleted." : "Fee not found."));
+  } catch (err) {
+    res.redirect(`/zq-admin/schools/${req.params.id}/fees?error=` + encodeURIComponent(err.message));
+  }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADD BROCHURE
 // POST /zq-admin/schools/:id/brochure/add
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1554,6 +1942,32 @@ router.get("/schools/brochure/:filename", async (req, res) => {
 
   } catch (err) {
     console.error("[Brochure Serve]", err.message);
+    res.status(500).send("Error serving file.");
+  }
+});
+
+// ── GET /zq-admin/schools/faq-attach/:filename ────────────────────────────────
+// Serves FAQ attachments (PDF / image) — public so WhatsApp/Meta can fetch them.
+router.get("/schools/faq-attach/:filename", async (req, res) => {
+  try {
+    const bucket = getFaqBucket();
+    const files  = await bucket.find({ filename: req.params.filename }).toArray();
+
+    if (!files || files.length === 0) {
+      return res.status(404).send("File not found.");
+    }
+
+    const file = files[0];
+    const mime = file.metadata?.mimeType || "application/octet-stream";
+    res.setHeader("Content-Type",        mime);
+    res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    res.setHeader("Cache-Control",       "public, max-age=86400");
+
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.on("error", () => res.status(404).send("File not found."));
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error("[FAQ Attach Serve]", err.message);
     res.status(500).send("Error serving file.");
   }
 });
@@ -2698,9 +3112,11 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
 
     const adminRows = adminItems.map((q, idx) => {
       const active = q.active !== false;
+      const attCount = (q.attachments||[]).length + (q.pdfUrl ? 1 : 0);
+      const attBadge = attCount > 0 ? ' <span style="background:#e0f2fe;color:#0369a1;font-size:10px;padding:1px 6px;border-radius:8px">📎 ' + attCount + "</span>" : "";
       return "<tr>"
-        + '<td style="font-size:11px;background:#fef9c3;color:#854d0e;padding:3px 8px;border-radius:4px;white-space:nowrap">Admin</td>'
-        + "<td><strong>" + _esc(q.question) + "</strong>"
+        + '<td style="font-size:11px;background:#fef9c3;color:#854d0e;padding:3px 8px;border-radius:4px;white-space:nowrap">' + (q.isDefault && !q.editedDefault ? "Default" : q.isDefault ? "Edited" : "Admin") + "</td>"
+        + "<td><strong>" + _esc(q.question) + "</strong>" + attBadge
         + (q.question.length > 24 ? '<div style="font-size:10px;color:#dc2626">⚠️ Button shows: ' + _esc(q.question.slice(0,24)) + "</div>" : "")
         + "</td>"
         + '<td style="font-size:12px;color:var(--muted)">' + _esc((q.answer||"").slice(0, 80)) + (q.answer?.length > 80 ? "…" : "") + "</td>"
@@ -2754,7 +3170,7 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
 
       + '<div class="panel" style="margin-bottom:16px">'
       + "<h3>➕ Add a question to this category</h3>"
-      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/add">'
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/add" enctype="multipart/form-data">'
       + '<input type="hidden" name="categoryId" value="' + _esc(catId) + '">'
 
       + '<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">Quick-fill examples:</div>' + exBtns + "</div>"
@@ -2771,13 +3187,10 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
       + "</div>"
 
       + '<div class="fg" style="margin-bottom:12px">'
-      + '<label>PDF attachment URL (optional)</label>'
-      + '<input type="text" name="pdfUrl" placeholder="https://drive.google.com/... (direct download link)">'
-      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">If provided, the PDF is sent to the parent alongside the text answer.</div>'
+      + '<label>📎 Attach files (PDF / PNG / JPG / WEBP) — sent to parent on WhatsApp</label>'
+      + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">Select one or multiple files. Max 10MB each. Sent to parent after text answer.</div>'
       + "</div>"
-
-      + '<div class="fg" style="margin-bottom:14px"><label>PDF label (optional)</label>'
-      + '<input type="text" name="pdfLabel" placeholder="e.g. School prospectus 2026" maxlength="60"></div>'
 
       + '<div class="fg" style="margin-bottom:14px"><label>Order (0 = first)</label>'
       + '<input type="number" name="order" value="' + adminItems.length + '" min="0" max="999" style="width:90px"></div>'
@@ -2800,7 +3213,7 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
   }
 });
 
-// ── Edit question/answer ───────────────────────────────────────────────────
+// ── Edit question/answer (GET form) ────────────────────────────────────────────
 router.get("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id).lean();
@@ -2812,30 +3225,69 @@ router.get("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res
 
     const catOptions = SYSTEM_FAQ_CATEGORIES.map(c =>
       '<option value="' + c.id + '"' + (q.categoryId === c.id ? " selected" : "") + ">" + c.emoji + " " + c.name + "</option>"
-    ).join("");
+    ).concat((school.faqCategories||[]).filter(c=>!SYSTEM_FAQ_CATEGORIES.find(s=>s.id===c.id)).map(c=>
+      '<option value="' + _esc(c.id) + '"' + (q.categoryId === c.id ? " selected" : "") + ">" + _esc((c.emoji||"❓") + " " + c.name) + "</option>"
+    )).join("");
+
+    // Existing attachments section
+    const existingAtts = (q.attachments || []);
+    const legacyPdf    = q.pdfUrl ? [{ id:"__legacy__", label: q.pdfLabel||"PDF", url: q.pdfUrl, type:"pdf", originalName: q.pdfLabel||"document.pdf" }] : [];
+    const allAtts      = [...existingAtts, ...legacyPdf];
+
+    let attHtml = "";
+    if (allAtts.length) {
+      attHtml = '<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">📎 Existing attachments (sent to parents on WhatsApp):</p>'
+        + '<div style="display:flex;flex-direction:column;gap:8px">'
+        + allAtts.map(a => {
+            const icon = a.type === "image" ? "🖼️" : "📄";
+            const isLegacy = a.id === "__legacy__";
+            return '<div style="display:flex;align-items:center;gap:10px;background:var(--bg);padding:8px 12px;border-radius:8px;border:.5px solid var(--border)">'
+              + '<span>' + icon + '</span>'
+              + '<div style="flex:1">'
+              + (isLegacy
+                  ? '<input type="text" name="pdfLabel" value="' + _esc(a.label) + '" style="width:100%;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:4px 6px" placeholder="Label">'
+                  : '<input type="text" name="attLabel[' + _esc(a.id) + ']" value="' + _esc(a.label) + '" style="width:100%;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:4px 6px" placeholder="Label">')
+              + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _esc(a.originalName||a.url||"") + '</div>'
+              + '</div>'
+              + (isLegacy
+                  ? '<input type="text" name="pdfUrl" value="' + _esc(a.url||"") + '" style="width:220px;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:4px 6px" placeholder="URL">'
+                  : '<label style="font-size:11px;color:#dc2626;cursor:pointer;white-space:nowrap"><input type="checkbox" name="removeAttachment" value="' + _esc(a.id) + '"> 🗑️ Remove</label>')
+              + '</div>';
+          }).join("")
+        + "</div></div>";
+    }
+
+    const sourceBadge = q.isDefault
+      ? (q.editedDefault
+          ? '<span style="background:#fef9c3;color:#854d0e;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">Edited</span>'
+          : '<span style="background:#eff6ff;color:#3b82f6;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">Default</span>')
+      : '<span style="background:#fef9c3;color:#854d0e;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">Admin</span>';
 
     res.send(layout("Edit Q&A — " + _esc(school.schoolName),
       '<a href="/zq-admin/schools/' + school._id + '/faq/cat/' + q.categoryId + '" class="back-link">← Back</a>\n'
       + ok
       + '<div class="panel">'
-      + "<h3>✏️ Edit question and answer</h3>"
-      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/edit">'
+      + "<h3>✏️ Edit question and answer " + sourceBadge + "</h3>"
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/' + q.id + '/edit" enctype="multipart/form-data">'
       + '<div class="fg" style="margin-bottom:12px"><label>Category</label><select name="categoryId">' + catOptions + "</select></div>"
       + '<div class="fg" style="margin-bottom:12px"><label>Question <span style="color:red">*</span></label>'
       + '<input name="question" value="' + _esc(q.question) + '" maxlength="100" required></div>'
       + '<div class="fg" style="margin-bottom:12px"><label>Answer <span style="color:red">*</span></label>'
       + '<textarea name="answer" rows="6" required maxlength="2000">' + _esc(q.answer) + "</textarea></div>"
-      + '<div class="fg" style="margin-bottom:12px"><label>PDF URL (optional)</label>'
-      + '<input type="text" name="pdfUrl" value="' + _esc(q.pdfUrl || "") + '" placeholder="https://..."></div>'
-      + '<div class="fg" style="margin-bottom:12px"><label>PDF label</label>'
-      + '<input type="text" name="pdfLabel" value="' + _esc(q.pdfLabel || "") + '" maxlength="60"></div>'
+      + attHtml
+      + '<div class="fg" style="margin-bottom:12px"><label>📎 Add more files (PDF / PNG / JPG / WEBP)</label>'
+      + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">New files are added alongside existing ones. Sent to parents after text answer.</div></div>'
+      + (existingAtts.length || q.pdfUrl ? "" :
+          '<div class="fg" style="margin-bottom:12px"><label>PDF URL (optional — or use file upload above)</label>'
+          + '<input type="text" name="pdfUrl" value="' + _esc(q.pdfUrl || "") + '" placeholder="https://..."></div>')
       + '<div class="fg" style="margin-bottom:14px"><label>Order</label>'
       + '<input type="number" name="order" value="' + (q.order || 0) + '" min="0" max="999" style="width:90px"></div>'
       + '<button type="submit" class="btn btn-green">💾 Save changes</button>'
       + "</form></div>"
     ));
   } catch (err) {
-    res.send(layout("Error", '<div class="alert red">' + err.message + "</div>"));
+    res.send(layout("Error", '<div class="alert red">' + _esc(err.message) + "</div>"));
   }
 });
 
@@ -2933,8 +3385,87 @@ router.post("/schools/:id/faq/cat/:catId/delete", requireSupplierAdmin, async (r
   }
 });
 
-// ── Add question ───────────────────────────────────────────────────────────
-router.post("/schools/:id/faq/q/add", requireSupplierAdmin, async (req, res) => {
+// ── FAQ attachment upload helper ──────────────────────────────────────────────
+async function _uploadFaqAttachment(file, school, baseUrl) {
+  const bucket = getFaqBucket();
+  const ext    = path.extname(file.originalname || "").toLowerCase() || ".bin";
+  const filename = `faq_${school._id}_${Date.now()}${ext}`;
+
+  await new Promise((resolve, reject) => {
+    const uploadStream = bucket.openUploadStream(filename, {
+      contentType: file.mimetype,
+      metadata: {
+        schoolId:     school._id.toString(),
+        originalName: file.originalname,
+        mimeType:     file.mimetype
+      }
+    });
+    uploadStream.on("finish", resolve);
+    uploadStream.on("error",  reject);
+    uploadStream.end(file.buffer);
+  });
+
+  const url = `${baseUrl}/zq-admin/schools/faq-attach/${filename}`;
+  const isImage = file.mimetype.startsWith("image/");
+
+  return {
+    id:           _genFaqId(),
+    label:        file.originalname || filename,
+    url,
+    filename,
+    originalName: file.originalname || "",
+    mimeType:     file.mimetype,
+    type:         isImage ? "image" : "pdf",
+    uploadedAt:   new Date()
+  };
+}
+
+// ── Standalone GET /schools/:id/faq/q/add-page ────────────────────────────────
+// A dedicated "Add Question" page accessible from profile & edit shortcuts.
+router.get("/schools/:id/faq/q/add-page", requireSupplierAdmin, async (req, res) => {
+  try {
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const defaultCat = req.query.cat || "contact";
+    const err = req.query.error ? '<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:16px">❌ ' + _esc(req.query.error) + "</div>" : "";
+
+    const catOptions = SYSTEM_FAQ_CATEGORIES.map(c =>
+      '<option value="' + c.id + '"' + (defaultCat === c.id ? " selected" : "") + ">" + c.emoji + " " + c.name + "</option>"
+    ).concat((school.faqCategories||[]).filter(c=>!SYSTEM_FAQ_CATEGORIES.find(s=>s.id===c.id)).map(c=>
+      '<option value="' + _esc(c.id) + '"' + (defaultCat === c.id ? " selected" : "") + ">" + _esc((c.emoji||"❓") + " " + c.name) + "</option>"
+    )).join("");
+
+    res.send(layout("Add Question — " + _esc(school.schoolName),
+      '<a href="/zq-admin/schools/' + school._id + '/faq" class="back-link">← Back to FAQ Manager</a>\n'
+      + err
+      + '<div class="panel" style="max-width:700px">'
+      + '<h3>➕ Add a question — ' + _esc(school.schoolName) + "</h3>"
+      + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/add" enctype="multipart/form-data">'
+      + '<div class="fg" style="margin-bottom:12px"><label>Category <span style="color:red">*</span></label><select name="categoryId">' + catOptions + "</select></div>"
+      + '<div class="fg" style="margin-bottom:12px"><label>Question (shown to parents) <span style="color:red">*</span></label>'
+      + '<input name="question" maxlength="100" required placeholder="e.g. How do I apply for boarding?"></div>'
+      + '<div class="fg" style="margin-bottom:12px"><label>Answer (full text) <span style="color:red">*</span></label>'
+      + '<textarea name="answer" rows="5" required maxlength="2000" placeholder="Type the complete answer. Include contact details, amounts, times."></textarea></div>'
+      + '<div class="fg" style="margin-bottom:12px"><label>📎 Attach files (PDF / PNG / JPG / WEBP) — sent to parent on WhatsApp</label>'
+      + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">You can select multiple files. Max 10MB each. Sent to parent after the text answer.</div></div>'
+      + '<div class="fg" style="margin-bottom:14px"><label>Order (0 = first)</label>'
+      + '<input type="number" name="order" value="0" min="0" max="999" style="width:90px"></div>'
+      + '<button type="submit" class="btn btn-green">➕ Add question</button> '
+      + '<a href="/zq-admin/schools/' + school._id + '/faq" class="btn btn-gray">Cancel</a>'
+      + "</form></div>"
+    ));
+  } catch (err) {
+    res.send(layout("Error", '<div class="alert red">' + _esc(err.message) + "</div>"));
+  }
+});
+
+// ── Add question (POST) — supports multi-file attachments ─────────────────────
+router.post("/schools/:id/faq/q/add",
+  requireSupplierAdmin,
+  faqAttachUpload.array("attachments", 10),
+  async (req, res) => {
   try {
     const school     = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
@@ -2944,32 +3475,101 @@ router.post("/schools/:id/faq/q/add", requireSupplierAdmin, async (req, res) => 
     const pdfUrl     = String(req.body.pdfUrl || "").trim();
     const pdfLabel   = String(req.body.pdfLabel || "").trim();
     const order      = parseInt(req.body.order || "0", 10);
-    if (!question || !answer) return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Question and answer are required."));
+
+    if (!question || !answer) {
+      return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Question and answer are required."));
+    }
     const items = school.faqItems || [];
-    if (items.length >= 100) return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Maximum 100 questions per school."));
-    items.push({ id: _genFaqId(), categoryId, question, answer, pdfUrl: pdfUrl || undefined, pdfLabel: pdfLabel || undefined, active: true, order, isDefault: false });
+    if (items.length >= 100) {
+      return res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?error=" + encodeURIComponent("Maximum 100 questions per school."));
+    }
+
+    // Upload attached files to GridFS
+    const baseUrl = (process.env.APP_BASE_URL || `https://${req.headers.host}`).replace(/\/$/, "");
+    const attachments = [];
+    for (const file of (req.files || [])) {
+      try {
+        const att = await _uploadFaqAttachment(file, school, baseUrl);
+        attachments.push(att);
+      } catch (uploadErr) {
+        console.error("[FAQ attach upload]", uploadErr.message);
+      }
+    }
+
+    items.push({
+      id:          _genFaqId(),
+      categoryId,
+      question,
+      answer,
+      pdfUrl:      pdfUrl || undefined,
+      pdfLabel:    pdfLabel || undefined,
+      attachments,
+      active:      true,
+      order,
+      isDefault:   false
+    });
     school.faqItems = items;
+    school.markModified("faqItems");
     await school.save();
-    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?success=" + encodeURIComponent("Question added. Parents will see it in this category."));
+    res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + categoryId + "?success=" + encodeURIComponent("Question added." + (attachments.length ? ` ${attachments.length} file(s) attached.` : "")));
   } catch (err) {
     res.redirect("/zq-admin/schools/" + req.params.id + "/faq?error=" + encodeURIComponent(err.message));
   }
 });
 
-// ── Edit question/answer (POST) ────────────────────────────────────────────
-router.post("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res) => {
+// ── Edit question/answer (POST) — supports file upload ─────────────────────────
+router.post("/schools/:id/faq/q/:qId/edit",
+  requireSupplierAdmin,
+  faqAttachUpload.array("attachments", 10),
+  async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
     const q = (school.faqItems || []).find(x => x.id === req.params.qId);
     if (!q) return res.redirect("/zq-admin/schools/" + school._id + "/faq");
-    const prevCat    = q.categoryId;
-    q.categoryId     = String(req.body.categoryId || q.categoryId).trim();
-    q.question       = String(req.body.question   || q.question).trim();
-    q.answer         = String(req.body.answer     || q.answer).trim();
-    q.pdfUrl         = String(req.body.pdfUrl     || "").trim() || undefined;
-    q.pdfLabel       = String(req.body.pdfLabel   || "").trim() || undefined;
-    q.order          = parseInt(req.body.order ?? q.order, 10);
+
+    q.categoryId = String(req.body.categoryId || q.categoryId).trim();
+    q.question   = String(req.body.question   || q.question).trim();
+    q.answer     = String(req.body.answer     || q.answer).trim();
+    q.pdfUrl     = String(req.body.pdfUrl     || "").trim() || undefined;
+    q.pdfLabel   = String(req.body.pdfLabel   || "").trim() || undefined;
+    q.order      = parseInt(req.body.order ?? q.order, 10);
+    if (q.isDefault) { q.editedDefault = true; }
+
+    // Remove attachments the admin marked for deletion
+    const toRemove = new Set(
+      Array.isArray(req.body.removeAttachment)
+        ? req.body.removeAttachment
+        : (req.body.removeAttachment ? [req.body.removeAttachment] : [])
+    );
+    if (toRemove.size > 0) {
+      q.attachments = (q.attachments || []).filter(a => !toRemove.has(a.id));
+    }
+
+    // Upload new files
+    const baseUrl = (process.env.APP_BASE_URL || `https://${req.headers.host}`).replace(/\/$/, "");
+    const newAtts = [];
+    for (const file of (req.files || [])) {
+      try {
+        const att = await _uploadFaqAttachment(file, school, baseUrl);
+        newAtts.push(att);
+      } catch (uploadErr) {
+        console.error("[FAQ attach upload]", uploadErr.message);
+      }
+    }
+    if (newAtts.length) {
+      q.attachments = [...(q.attachments || []), ...newAtts];
+    }
+
+    // Update attachment labels if supplied
+    const labelMap = req.body.attLabel || {};
+    if (typeof labelMap === "object") {
+      (q.attachments || []).forEach(a => {
+        if (labelMap[a.id]) a.label = String(labelMap[a.id]).trim().slice(0, 80) || a.label;
+      });
+    }
+
+    school.markModified("faqItems");
     await school.save();
     res.redirect("/zq-admin/schools/" + school._id + "/faq/cat/" + q.categoryId + "?success=" + encodeURIComponent("Question updated."));
   } catch (err) {

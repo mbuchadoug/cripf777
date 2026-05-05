@@ -58,6 +58,21 @@ const termFeesSchema = new mongoose.Schema({
   term3: { type: Number, default: 0 }
 }, { _id: false });
 
+// ── FAQ attachment sub-schema ─────────────────────────────────────────────────
+// Supports PDFs, PNG, JPG, JPEG, WEBP attached to a Q&A item.
+// Stored in GridFS (faqAttachments bucket). Sent to parents on WhatsApp.
+const faqAttachmentSchema = new mongoose.Schema({
+  id:           { type: String, default: () => Date.now().toString(36) + Math.random().toString(36).slice(2,5) },
+  label:        { type: String, default: "Attachment" },
+  url:          { type: String, default: "" },      // public serving URL
+  fileId:       { type: String, default: "" },      // GridFS file _id (as string)
+  filename:     { type: String, default: "" },      // GridFS filename
+  originalName: { type: String, default: "" },
+  mimeType:     { type: String, default: "" },
+  type:         { type: String, enum: ["pdf","image","other"], default: "other" },
+  uploadedAt:   { type: Date, default: Date.now }
+}, { _id: false });
+
 const schoolProfileSchema = new mongoose.Schema({
 
   // ── Identity ───────────────────────────────────────────────────────────────
@@ -203,16 +218,28 @@ const schoolProfileSchema = new mongoose.Schema({
 
   // ── FAQ & Enquiry Assistant ────────────────────────────────────────────────
   faqCategories: [{
-    id: { type: String, required: true }, name: { type: String, required: true },
-    emoji: { type: String, default: "❓" }, order: { type: Number, default: 0 }, active: { type: Boolean, default: true }
+    id:     { type: String, required: true },
+    name:   { type: String, required: true },
+    emoji:  { type: String, default: "❓" },
+    order:  { type: Number, default: 0 },
+    active: { type: Boolean, default: true }
   }],
   faqItems: [{
-    id: { type: String, required: true }, categoryId: { type: String, required: true },
-    question: { type: String, required: true }, answer: { type: String, default: "" },
-    pdfUrl: { type: String, default: "" }, pdfLabel: { type: String, default: "" },
-    active: { type: Boolean, default: true }, order: { type: Number, default: 0 },
-    isDefault: { type: Boolean, default: false }, overridesDefaultId: { type: String, default: "" },
-    actionType: { type: String, default: "" }
+    id:                 { type: String, required: true },
+    categoryId:         { type: String, required: true },
+    question:           { type: String, required: true },
+    answer:             { type: String, default: "" },
+    // Legacy single-attachment fields (kept for compat)
+    pdfUrl:             { type: String, default: "" },
+    pdfLabel:           { type: String, default: "" },
+    // Multi-attachment support (PDF, PNG, JPG, JPEG, WEBP)
+    attachments:        { type: [faqAttachmentSchema], default: [] },
+    active:             { type: Boolean, default: true },
+    order:              { type: Number, default: 0 },
+    isDefault:          { type: Boolean, default: false },
+    editedDefault:      { type: Boolean, default: false },
+    overridesDefaultId: { type: String, default: "" },
+    actionType:         { type: String, default: "" }
   }],
 
   // ── Ratings ───────────────────────────────────────────────────────────────
