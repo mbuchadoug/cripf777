@@ -848,13 +848,15 @@ export async function sendSupplierAccountMenu(to, supplierDoc) {
     `${isService ? "Services" : "Products"}: ${supplier.products?.[0] === "pending_upload" ? "⏳ Upload pending" : productCount} · Live: ${liveCount} · ${isService ? "Rates" : "Prices"}: ${priceCount}\n` +
     `👀 Views this month: ${supplier.monthlyViews || 0} · 🛒 Orders this month: ${supplier.monthlyOrders || 0}`,
     [
-      { id: "sup_edit_products", title: isService ? "✏️ Manage Services" : "✏️ Manage Products" },
-      { id: "sup_manage_listed_products", title: "📋 Manage Listed Items" },
-      { id: "sup_update_prices", title: isService ? "💰 Update Rates" : "💰 Update Prices" },
-      { id: "sup_my_orders", title: "📦 My Orders" },
-      { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
-      { id: "sup_more_options", title: "⚙️ More Options" },
-  { id: "main_menu_back", title: "⬅ Main Menu" }
+     { id: "sup_get_my_link",   title: "📲 My Smart Link" },
+       { id: "sup_edit_products", title: isService ? "✏️ Manage Services" : "✏️ Manage Products" },
+       { id: "sup_manage_listed_products", title: "📋 Manage Listed Items" },
+       { id: "sup_update_prices", title: isService ? "💰 Update Rates" : "💰 Update Prices" },
+       { id: "sup_my_orders", title: "📦 My Orders" },
+       { id: "sup_upgrade_plan", title: "⬆️ Upgrade Plan" },
+       { id: "sup_more_options", title: "⚙️ More Options" },
+       { id: "main_menu_back", title: "⬅ Main Menu" }
+
     ]
   );
 }

@@ -10,6 +10,8 @@ import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
+import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
+
 
 const router = express.Router();
 
@@ -4018,203 +4020,8 @@ function _supQrUrl(waLink, size = 300) {
 }
 
 router.get("/suppliers/:id/chatlink", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-
-    const ok  = req.query.success ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>` : "";
-    const err = req.query.error   ? `<div style="background:#fee2e2;color:#dc2626;padding:14px;border-radius:8px;margin-bottom:16px">❌ ${esc(req.query.error)}</div>`    : "";
-
-    const waLink   = _waLinkSupplier(String(supplier._id));
-    const qrImg    = _supQrUrl(waLink, 260);
-    const isService = supplier.serviceType === "service" || supplier.profileType === "service";
-    const hasPrices = isService
-      ? (Array.isArray(supplier.rates)  && supplier.rates.length  > 0)
-      : (Array.isArray(supplier.prices) && supplier.prices.length > 0);
-
-    const typeLabel = isService ? "Service provider" : "Product supplier";
-    const priceStatus = hasPrices
-      ? `<span class="badge badge-green">✅ Prices loaded — instant quotes enabled</span>`
-      : `<span class="badge badge-yellow">⚠️ No prices — RFQ flow only</span>`;
-
-    const products = isService
-      ? (supplier.rates  || []).slice(0,6).map(r => `${r.service}${r.rate?" — "+r.rate:""}`)
-      : (supplier.prices || []).slice(0,6).map(p => `${p.product} — $${Number(p.amount).toFixed(2)}`);
-    const cataloguePreview = products.length
-      ? products.map(p => `<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9">${esc(p)}</div>`).join("")
-      : `<p style="font-size:13px;color:var(--muted)">No ${isService?"rates":"prices"} loaded yet. Buyers will use the RFQ flow.</p>`;
-
-    const PLATFORMS = [
-     { icon:"📱", label:"TikTok bio",      tip:'Paste as your bio link. Say "link in bio 👆" in videos.' },
-      { icon:"📘", label:"Facebook",         tip:"Paste in post captions, stories, Page About section." },
-      { icon:"🐦", label:"Twitter / X",      tip:"Add to your profile bio under Website." },
-      { icon:"💬", label:"WhatsApp Status",  tip:"Post the caption below weekly." },
-      { icon:"📲", label:"SMS blast",         tip:"Works on all phones, even without smartphones." },
-      { icon:"🏪", label:"Facebook Marketplace", tip:"Add to product listing descriptions." }
-    ];
-
-    const caption = `${isService?"🔧":"🏪"} ${supplier.businessName}\n📍 ${(supplier.area||supplier.location?.area)||""}${(supplier.area||supplier.location?.area)?", ":""}${supplier.city||supplier.location?.city||""}\n\n${hasPrices?"Get an instant quote — prices shown immediately.":"Request a quote — reply within hours."}\n\n👉 ${waLink}\n\n_Found via ZimQuote_`;
-
-    const platformRows = PLATFORMS.map(p => `<tr>
-      <td><strong>${p.icon} ${p.label}</strong></td>
-      <td style="font-size:12px;color:var(--muted)">${p.tip}</td>
-      <td><button class="btn btn-sm btn-gray"
-        onclick="(function(b,t){navigator.clipboard.writeText(t).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy',1800)}).catch(()=>{})})(this,${JSON.stringify(caption)})">
-        📋 Copy caption
-      </button></td>
-    </tr>`).join("");
-
-    const msgToSeller = `Hi ${supplier.businessName},
-
-Your ZimQuote chatbot link is ready! 🎉
-
-📲 Your link:
-${waLink}
-
-When anyone taps this link — on Facebook, TikTok, WhatsApp, or SMS — WhatsApp opens and your full seller profile appears instantly.
-
-Buyers can:
-${hasPrices
-  ? [
-      "• See your full catalogue with prices",
-      "• Get an instant PDF quote automatically",
-      "• Place an order (delivery or collection)",
-      "• Check stock availability"
-    ].join("\n")
-  : [
-      "• See your products and services",
-      "• Request a quote — you receive a structured item list",
-      "• Book a service with date, location, and job description",
-      "• Check stock availability"
-    ].join("\n")}
-• Contact you directly
-
-All without you being online.
-
-Share it everywhere:
-📱 TikTok → Put it as your bio link
-📘 Facebook → Paste in post captions and Marketplace listings
-💬 WhatsApp Status → Share it weekly
-📲 SMS → Send to customers in your contacts
-🖨️ Print → A QR code has been generated for you
-
-${hasPrices
-  ? "Because you have prices loaded, buyers get an instant PDF quote in under 90 seconds."
-  : "Once you load your prices in the bot, buyers will get instant PDF quotes automatically."}
-
-ZimQuote Team`;
-
-    res.send(layout(`Chatbot Link: ${esc(supplier.businessName)}`, `
-      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to ${esc(supplier.businessName)}</a>
-      ${ok}${err}
-
-      <!-- ── THE LINK ─────────────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-head">
-          <h3>📲 ZimQuote Chatbot Link</h3>
-          <span class="badge badge-green">Active — no setup needed</span>
-        </div>
-
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:18px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-            Pure WhatsApp link — no website, no domain, works on every platform
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-            <code style="font-size:13px;flex:1;word-break:break-all;background:#dcfce7;padding:9px 12px;border-radius:7px;font-family:monospace">${esc(waLink)}</code>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-            <button class="btn btn-green btn-sm"
-              onclick="(function(b){navigator.clipboard.writeText(${JSON.stringify(waLink)}).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy Link',1800)}).catch(()=>{})})(this)">
-              📋 Copy Link
-            </button>
-            <a href="${esc(waLink)}" target="_blank" class="btn btn-blue btn-sm">📱 Test on WhatsApp</a>
-            <a href="/zq-admin/suppliers/${supplier._id}/chatlink/qr" target="_blank" class="btn btn-sm btn-gray">🖨️ Print QR Poster</a>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:12px;color:#166534">${typeLabel}</span>
-            ${priceStatus}
-          </div>
-        </div>
-
-        <!-- Stats -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          <div class="stat-card stat-blue"><div class="stat-val">${supplier.zqLinkViews||0}</div><div class="stat-lbl">Link taps</div></div>
-          <div class="stat-card stat-green"><div class="stat-val">${supplier.zqLinkConversions||0}</div><div class="stat-lbl">Bot opens</div></div>
-          <div class="stat-card stat-orange"><div class="stat-val">${supplier.monthlyOrders||0}</div><div class="stat-lbl">Monthly orders</div></div>
-          <div class="stat-card stat-teal"><div class="stat-val">${supplier.completedOrders||0}</div><div class="stat-lbl">Completed orders</div></div>
-        </div>
-      </div>
-
-      <!-- ── WHAT BUYERS SEE ────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <div class="panel-head">
-          <h3>📦 What buyers see when they tap this link</h3>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap">
-          <div>
-            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Bot shows buyer</p>
-            <div style="font-size:13px;color:var(--text);line-height:1.8">
-              ${isService
-                ? "• Business name, location, rating<br>• Services offered<br>• Rate information (if loaded)<br>• Book a service (date, location, job)<br>• Request a quote<br>• Check availability<br>• Contact seller"
-                : "• Business name, location, rating<br>• Products available<br>• Prices (if loaded)<br>• Get instant quote + PDF<br>• Place an order (delivery or collection)<br>• Check stock<br>• Contact seller"}
-            </div>
-          </div>
-          <div>
-            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Current catalogue preview</p>
-            ${cataloguePreview}
-            <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn-link" style="font-size:12px;display:block;margin-top:8px">Manage products & prices →</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── QR CODE ─────────────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <h3>🖨️ QR Code</h3>
-        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
-          <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
-            <img src="${esc(qrImg)}" alt="QR Code" width="130" height="130" style="display:block">
-          </div>
-          <div>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:10px;max-width:360px">
-              This QR encodes the WhatsApp link. Scan with WhatsApp camera → bot opens instantly.
-              Print on packaging, stall boards, business cards, banners.
-            </p>
-            <a href="/zq-admin/suppliers/${supplier._id}/chatlink/qr" target="_blank" class="btn btn-blue">🖨️ Open Print-Ready Poster</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SEND TO SELLER ─────────────────────────────────────────────── -->
-      <div class="panel" style="margin-bottom:16px">
-        <h3>📨 Send link to seller</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          Send the chatbot link and instructions to <strong>${esc(supplier.phone)}</strong> via WhatsApp.
-        </p>
-        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/chatlink/send">
-          <div class="fg" style="margin-bottom:12px">
-            <label>Message (edit before sending)</label>
-            <textarea name="message" rows="18" style="font-size:12px;font-family:monospace">${esc(msgToSeller)}</textarea>
-          </div>
-          <button type="submit" class="btn btn-green">📱 Send via WhatsApp</button>
-        </form>
-      </div>
-
-      <!-- ── PLATFORM CAPTIONS ──────────────────────────────────────────── -->
-      <div class="panel">
-        <h3>📋 Ready-to-paste captions</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          Copy the right caption for each platform. The link is embedded in every one.
-        </p>
-        <table>
-          <thead><tr><th>Platform</th><th>Where to use</th><th></th></tr></thead>
-          <tbody>${platformRows}</tbody>
-        </table>
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
-  }
-});
+     res.redirect(`/zq-admin/suppliers/${req.params.id}/smart-link`);
+ });
 
 // ── Send link to seller via WhatsApp ─────────────────────────────────────────
 router.post("/suppliers/:id/chatlink/send", requireSupplierAdmin, async (req, res) => {
@@ -4284,5 +4091,10 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
     res.status(500).send(`<p>Error: ${err.message}</p>`);
   }
 });
+
+
+
+router.use("/suppliers/:id/smart-link", smartLinkRoutes);
+
 
 export default router;

@@ -113,6 +113,19 @@ import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js
 import { findSuppliersForRequest, getVagueTermClarification } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
+import {
+  parseSupplierDeepLink,
+  buildProfileCard,
+  trackLinkEvent,
+  buildDeepLink,
+  buildQrImageUrl,
+  buildSharableCaption,
+  assignSlugToSupplier,
+  LINK_SOURCES,
+} from "./supplierSmartLink.js";
+ 
+ 
+
 import SchoolProfile from "../models/schoolProfile.js";
 import {
   startSchoolRegistration,
@@ -3265,14 +3278,90 @@ Reply *menu* to start.`);
   // Must be placed HERE - after biz is declared, but before the supplier
   // search text handler (which was treating ZQ:SCHOOL:... as a product search).
   // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> arrive as plain text from wa.me links.
-  if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+   if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+ 
+    // ── ZQ:SUPPLIER — smart link handler ──────────────────────────────────
+    if (/^ZQ:SUPPLIER:[a-f0-9]{24}/i.test(text)) {
+      const _parsed = parseSupplierDeepLink(text);
+      if (_parsed) {
+        const { supplierId: _slSupplierId, source: _slSource } = _parsed;
+        try {
+          // Track view (non-blocking)
+          trackLinkEvent(_slSupplierId, { source: _slSource, isConversion: false })
+            .catch(() => {});
+ 
+          const _slSupplier = await SupplierProfile.findById(_slSupplierId).lean();
+          if (_slSupplier && _slSupplier.active) {
+            // Build the intelligent profile card
+            const _profileCard = buildProfileCard(_slSupplier);
+            const _isService   = _slSupplier.profileType === "service";
+            const _hasPrices   = (_slSupplier.prices?.length || 0) > 0 ||
+                                  (_slSupplier.rates?.length  || 0) > 0;
+ 
+            // Source attribution message (shown once so buyer knows where they came from)
+            const _srcLabel = LINK_SOURCES[_slSource] || "";
+            const _srcNote  = (_slSource && _slSource !== "direct")
+              ? `\n\n_Opened via ${_srcLabel}_`
+              : "";
+ 
+            // Send profile card
+            await sendText(from, _profileCard + _srcNote);
+ 
+            // Store seller context in session for sc_ actions to work
+            if (biz) {
+              biz.sessionData = {
+                ...(biz.sessionData || {}),
+                scSellerId:  _slSupplierId,
+                scIsService: _isService,
+                scHasPrices: _hasPrices,
+                scSource:    _slSource,
+              };
+              await saveBizSafe(biz);
+            }
+ 
+            // Send interactive menu
+            const _menuRows = [];
+            if (_hasPrices) {
+              _menuRows.push({ id: `sc_quote_${_slSupplierId}`, title: "💵 Get Instant Quote" });
+            } else {
+              _menuRows.push({ id: `sc_quote_${_slSupplierId}`, title: "💵 Request a Quote" });
+            }
+            if (_isService) {
+              _menuRows.push({ id: `sc_book_${_slSupplierId}`,  title: "📅 Book a Service" });
+            } else {
+              _menuRows.push({ id: `sc_order_${_slSupplierId}`, title: "🛒 Place an Order" });
+            }
+            _menuRows.push({ id: `sc_stock_${_slSupplierId}`,   title: _isService ? "🔍 Check Availability" : "🔍 Check Stock" });
+            _menuRows.push({ id: `sup_request_sellers`,          title: "⚡ Request Other Sellers" });
+            _menuRows.push({ id: `find_supplier`,                title: "🔍 Browse Marketplace" });
+ 
+            await sendList(from, "What would you like to do?", _menuRows);
+            return;
+ 
+          } else if (_slSupplier && !_slSupplier.active) {
+            await sendText(from,
+              `⚠️ *${_slSupplier.businessName || "This seller"}* is not currently active on ZimQuote.\n\n` +
+              `They may have paused their listing. Try browsing the marketplace for similar sellers.`
+            );
+            return sendSuppliersMenu(from);
+          } else {
+            await sendText(from, "❌ Seller not found. They may have moved or removed their listing.");
+            return sendSuppliersMenu(from);
+          }
+        } catch (_slErr) {
+          console.error("[SMART LINK]", _slErr.message);
+          // Fall through to legacy handleZqDeepLink
+        }
+      }
+    }
+ 
+    // ── ZQ:SCHOOL or fallback ──────────────────────────────────────────────
     const _zqHandled = await handleZqDeepLink({
       from, text, biz,
       saveBiz: saveBizSafe.bind(null, biz)
     });
     if (_zqHandled) return;
   }
-
     // ── GLOBAL school shortcode trigger ──────────────────────────────────────
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
@@ -9330,6 +9419,86 @@ if (
     if (handled) return;
   }
 }
+
+
+if (a === "sup_get_my_link" || a === "sup_smart_link") {
+  const _linkSupplier = await SupplierProfile.findOne({ phone });
+  if (!_linkSupplier) return sendSuppliersMenu(from);
+ 
+  // Auto-assign slug if missing
+  try {
+    if (!_linkSupplier.zqSlug) {
+      await assignSlugToSupplier(_linkSupplier._id);
+      await _linkSupplier.reload?.();
+    }
+  } catch (_) { /* slug is cosmetic, don't block */ }
+ 
+  const _lid       = String(_linkSupplier._id);
+  const _directLnk = buildDeepLink(_lid, null);
+  const _waLink    = buildDeepLink(_lid, "wa");
+  const _fbLink    = buildDeepLink(_lid, "fb");
+  const _ttLink    = buildDeepLink(_lid, "tt");
+  const _qrLink    = buildDeepLink(_lid, "qr");
+  const _waCaption = buildSharableCaption(_linkSupplier, "wa");
+ 
+  await sendText(from,
+    `📲 *Your ZimQuote Smart Link*\n\n` +
+    `This is your permanent business link. Share it anywhere — buyers tap it to see your prices, get a quote, or place an order.\n\n` +
+    `*WhatsApp Status link:*\n${_waLink}\n\n` +
+    `*Facebook link:*\n${_fbLink}\n\n` +
+    `*TikTok bio link:*\n${_ttLink}\n\n` +
+    `*QR Scan link:*\n${_qrLink}\n\n` +
+    `*How to use:*\n` +
+    `1️⃣ Copy any link above\n` +
+    `2️⃣ Post on WhatsApp Status, Facebook, TikTok bio, or print on flyers\n` +
+    `3️⃣ Buyers tap → WhatsApp opens → your profile shows with prices\n\n` +
+    `_Different from WhatsApp Business: buyers don't need to be in your contacts. Anyone with the link can get a quote or place an order._`
+  );
+ 
+  return sendButtons(from, {
+    text: `📝 *Ready-to-post WhatsApp Status caption:*\n\n${_waCaption}`,
+    buttons: [
+      { id: "sup_link_analytics", title: "📊 Link Analytics" },
+      { id: "my_supplier_account", title: "🏪 My Account" }
+    ]
+  });
+}
+ 
+// ── Supplier smart link analytics (WhatsApp) ──────────────────────────────
+if (a === "sup_link_analytics") {
+  const _anaSupplier = await SupplierProfile.findOne({ phone }).lean();
+  if (!_anaSupplier) return sendSuppliersMenu(from);
+ 
+  const _totalViews = _anaSupplier.zqLinkViews        || 0;
+  const _totalConvs = _anaSupplier.zqLinkConversions  || 0;
+  const _srcViews   = _anaSupplier.zqSourceViews       || {};
+  const _convRate   = _totalViews > 0
+    ? ((_totalConvs / _totalViews) * 100).toFixed(1)
+    : "0";
+ 
+  const _srcLines = Object.entries(LINK_SOURCES)
+    .map(([src, label]) => {
+      const v = _srcViews[src] || 0;
+      return v > 0 ? `• ${label}: ${v} views` : null;
+    })
+    .filter(Boolean)
+    .join("\n");
+ 
+  return sendButtons(from, {
+    text:
+      `📊 *Smart Link Analytics*\n\n` +
+      `👁 Total views: ${_totalViews}\n` +
+      `✅ Conversions: ${_totalConvs}\n` +
+      `📈 Conversion rate: ${_convRate}%\n\n` +
+      `*Views by source:*\n${_srcLines || "No views tracked yet"}\n\n` +
+      `_A "conversion" is when a buyer requests a quote or places an order via your link._`,
+    buttons: [
+      { id: "sup_get_my_link",      title: "📲 My Smart Link" },
+      { id: "my_supplier_account",  title: "🏪 My Account" }
+    ]
+  });
+}
+ 
 
 if (a === "my_supplier_account") {
   // Smart router: one button, correct destination based on account state

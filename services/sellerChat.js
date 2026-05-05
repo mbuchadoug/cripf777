@@ -357,6 +357,14 @@ Format: 1=price, 2=price, 3=price`;
       await _st(seller.phone, notifMsg);
     } catch (e) { /* ignore */ }
 
+     // Track smart link conversion (non-blocking)
+   if (biz?.sessionData?.scSource && biz.sessionData.scSellerId) {
+     const { trackLinkEvent } = await import("./supplierSmartLink.js");
+     trackLinkEvent(biz.sessionData.scSellerId, {
+       source: biz.sessionData.scSource,
+       isConversion: true
+     }).catch(() => {});
+   }
     return sendButtons(from, {
       text:
 `✅ *Quote request sent to ${seller.businessName}*
@@ -423,6 +431,16 @@ Valid until: ${expiry}`;
     const { sendText: _st } = await import("./metaSender.js");
     await _st(seller.phone, sellerNotif);
   } catch (e) { /* ignore */ }
+
+  //   // Track smart link conversion (non-blocking)
+   if (biz?.sessionData?.scSource && biz.sessionData.scSellerId) {
+     const { trackLinkEvent } = await import("./supplierSmartLink.js");
+     trackLinkEvent(biz.sessionData.scSellerId, {
+       source: biz.sessionData.scSource,
+       isConversion: true
+     }).catch(() => {});
+   }
+
 
   // Try to generate and send PDF
   let pdfSent = false;

@@ -111,8 +111,22 @@ rates: {
 zqSlug:            { type: String, unique: true, sparse: true },
 zqLinkViews:       { type: Number, default: 0 },
 zqLinkConversions: { type: Number, default: 0 },
+zqSourceViews: {
+  // Per-source view counts: { fb: 14, wa: 7, qr: 3, tt: 2, sms: 1, ... }
+  type: Object,
+  default: {}
+},
+zqSourceConversions: {
+  // Per-source conversion counts (buyer completed quote/order action)
+  type: Object,
+  default: {}
+},
+ 
 travelAvailable: { type: Boolean },         // service providers: do they travel to client?
 serviceArea:     { type: String },          // e.g. "Harare CBD and suburbs"
+
+
+
   // Saved by buyers
   savedBy: [{ type: String }], // array of phone numbers
 
