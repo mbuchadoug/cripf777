@@ -75,11 +75,10 @@ ${productSample || "Contact seller for full catalogue"}
 ${delivery ? "🚚 Delivery available" : "🏠 Collection only"}${seller.delivery?.areas?.length ? " — " + seller.delivery.areas.slice(0,3).join(", ") : ""}`
   );
 
-  if (isService) {
+ if (isService) {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
       { id: `sc_book_${supplierId}`,    title: "📅 Book a service" },
-      { id: `sc_stock_${supplierId}`,   title: "🔍 Check availability" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
@@ -88,7 +87,6 @@ ${delivery ? "🚚 Delivery available" : "🏠 Collection only"}${seller.deliver
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
       { id: `sc_order_${supplierId}`,   title: "🛒 Place an order" },
-      { id: `sc_stock_${supplierId}`,   title: "🔍 Check stock" },
       ...repeatBtn,
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
@@ -191,13 +189,10 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
   if (hasPrices) {
-    // Show catalogue for buyer to select from
-    const items = isService ? seller.rates : seller.prices;
-    const catalogue = items.slice(0, 15).map((item, i) => {
-      const name  = isService ? item.service : item.product;
-      const price = isService ? item.rate    : `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}`;
-      return `${i + 1}. ${name} — ${price}`;
-    }).join("\n");
+    // Show full catalogue for buyer to select from — chunked for large lists
+    const allItems = isService ? seller.rates : seller.prices;
+    const total    = allItems.length;
+    const CHUNK    = 30; // ~30 items per message stays safely under 4096 chars
 
     if (biz) {
       biz.sessionState = "sc_awaiting_items";
@@ -205,12 +200,35 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       await saveBiz(biz);
     }
 
+    // Send all items across as many messages as needed
+    for (let i = 0; i < total; i += CHUNK) {
+      const chunk    = allItems.slice(i, i + CHUNK);
+      const isFirst  = i === 0;
+      const isLast   = i + CHUNK >= total;
+
+      const lines = chunk.map((item, j) => {
+        const idx   = i + j + 1;
+        const name  = isService ? item.service : item.product;
+        const price = isService
+          ? (item.rate || "rate on request")
+          : `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}`;
+        return `${idx}. ${name} — ${price}`;
+      }).join("\n");
+
+      if (isFirst) {
+        await sendText(from,
+`💵 *${seller.businessName} — ${isService ? "Services" : "Products & prices"} (${total} item${total === 1 ? "" : "s"})*
+
+${lines}${isLast ? "" : "\n_(list continues...)_"}`
+        );
+      } else {
+        await sendText(from, `${lines}${isLast ? "" : "\n_(list continues...)_"}`);
+      }
+    }
+
+    // Send instructions as a final separate message after the list
     return sendText(from,
-`💵 *${seller.businessName} — ${isService ? "Services" : "Products & prices"}*
-
-${catalogue}
-
-*To get your quote:*
+`*To get your quote:*
 Type item numbers and quantities, e.g:
 _1×50, 3×10, 5×2_
 

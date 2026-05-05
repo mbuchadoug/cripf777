@@ -3331,8 +3331,7 @@ Reply *menu* to start.`);
             } else {
               _menuRows.push({ id: `sc_order_${_slSupplierId}`, title: "🛒 Place an Order" });
             }
-            _menuRows.push({ id: `sc_stock_${_slSupplierId}`,   title: _isService ? "🔍 Check Availability" : "🔍 Check Stock" });
-            _menuRows.push({ id: `sup_request_sellers`,          title: "⚡ Request Other Sellers" });
+          _menuRows.push({ id: `sup_request_sellers`,          title: "⚡ Request Other Sellers" });
             _menuRows.push({ id: `find_supplier`,                title: "🔍 Browse Marketplace" });
  
             await sendList(from, "What would you like to do?", _menuRows);
