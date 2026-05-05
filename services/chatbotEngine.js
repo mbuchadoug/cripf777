@@ -4476,7 +4476,10 @@ if (buyerRequestState === "awaiting_items") {
 
 
 
-    if (buyerRequestState === "awaiting_service_address") {
+   const buyerRequestState = sess?.tempData?.buyerRequestState || biz?.sessionData?.buyerRequestState || null;
+const pendingBuyerRequest = sess?.tempData?.pendingBuyerRequest || biz?.sessionData?.pendingBuyerRequest || null;
+
+if (buyerRequestState === "awaiting_service_address") {
       const _isExitSA =
         al === "cancel" || al === "0" ||
         al === "menu" || al === "main menu" || al === "main_menu";
