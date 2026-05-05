@@ -3177,7 +3177,6 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_request_mode_bulk" ||
       a === "sup_request_delivery_yes" ||
       a === "sup_request_delivery_no" ||
-      buyerRequestState === "awaiting_service_address" ||
       a.startsWith("req_offer_") ||
       a.startsWith("req_unavail_") ||
       a === "view_and_quote" ||
