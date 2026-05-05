@@ -110,6 +110,7 @@ import {
   formatRequestSummary
 } from "./buyerRequests.js";
 import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
+import { findSuppliersForRequest, getVagueTermClarification } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -2132,32 +2133,9 @@ function isStrongSingleVariantMatch(matches = []) {
 }
 
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null }) {
-  const scoreMap = new Map();
-  const topItems = items.slice(0, 5);
-
-  for (const item of topItems) {
-    // Always search BOTH product and service suppliers for buyer requests
-    const productResults = await runSupplierSearch({
-      city: city || null, product: item.product, area: area || null, profileType: "product"
-    });
-    const serviceResults = await runSupplierSearch({
-      city: city || null, product: item.product, area: area || null, profileType: "service"
-    });
-    const results = [...productResults, ...serviceResults];
-
-    for (const supplier of results || []) {
-      const key = String(supplier._id);
-      const current = scoreMap.get(key) || { supplier, score: 0 };
-      current.score += 1;
-      scoreMap.set(key, current);
-    }
-  }
-
-  return [...scoreMap.values()]
-    .sort((a, b) => b.score - a.score)
-    .map(entry => entry.supplier)
-    .filter(s => s && s.active)
-    .slice(0, 10);
+  // Delegated to requestMatchEngine.js — 3-stage matching gate.
+  // This wrapper keeps all existing callers (notifySuppliersOfBuyerRequest) unchanged.
+  return findSuppliersForRequest({ items, city, area });
 }
 
 function buildBuyerRequestRef(request) {
@@ -4062,8 +4040,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
 
 
- if (buyerRequestState === "awaiting_items") {
-  if (al === "cancel") {
+if (buyerRequestState === "awaiting_items") {
+  // ── Navigation: cancel / back / menu always clear state and return to Marketplace ──
+  const _isRequestNavExit =
+    al === "cancel" || al === "0" ||
+    al === "back" ||
+    al === "menu" || al === "main menu" || al === "main_menu";
+ 
+  if (_isRequestNavExit) {
     await UserSession.findOneAndUpdate(
       { phone },
       {
@@ -4075,11 +4059,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       },
       { upsert: true }
     );
-    return sendButtons(from, {
-      text: "✅ Request cancelled.",
-      buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
-    });
+    return sendSuppliersMenu(from);
   }
+ 
 
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
@@ -4107,9 +4089,19 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
     const vagueItems = getVagueBuyerRequestItems(parsedInline.items || []);
     if (vagueItems.length) {
+      // Try the smarter per-term clarification first (gives specific example prompts)
+      const firstVagueLabel = String(
+        vagueItems[0]?.product || vagueItems[0]?.service || vagueItems[0]?.raw || ""
+      ).trim();
+      const specificClarification = getVagueTermClarification(firstVagueLabel);
+      if (specificClarification) {
+        return sendText(
+          from,
+          `❓ *Please be more specific*\n\n` + specificClarification + `\n\nType *cancel* to stop.`
+        );
+      }
       return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
     }
-
     if (!parsedInline.city) {
       return sendText(
         from,
@@ -4211,7 +4203,11 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 }
 
     if (buyerRequestState === "awaiting_location") {
-      if (al === "cancel") {
+      const _isLocationNavExit =
+        al === "cancel" || al === "0" ||
+        al === "menu" || al === "main menu" || al === "main_menu";
+ 
+      if (_isLocationNavExit) {
         await UserSession.findOneAndUpdate(
           { phone },
           {
@@ -4223,10 +4219,22 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           },
           { upsert: true }
         );
-        return sendButtons(from, {
-          text: "✅ Request cancelled.",
-          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
-        });
+        return sendSuppliersMenu(from);
+      }
+          // "back" in awaiting_location → return to awaiting_items
+      if (al === "back") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $set: { "tempData.buyerRequestState": "awaiting_items" } },
+          { upsert: true }
+        );
+        const _backMode = pendingBuyerRequest?.requestType || "bulk";
+        return sendText(
+          from,
+          _backMode === "simple"
+            ? `↩️ Back to your request.\n\nType your item + city again.\n\nExample:\n_find cement harare_\n_find ball valve brass 20mm harare x5_\n\nType *cancel* to stop.`
+            : `↩️ Back to your item list.\n\nSend your items again (one per line or comma-separated).\n\nType *cancel* to stop.`
+        );
       }
 
       const parsedLocation = parseBuyerRequestLocationInput(text);
@@ -14098,6 +14106,7 @@ isService
 
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
+
 if (a === "sup_request_sellers") {
   await UserSession.findOneAndUpdate(
     { phone },
@@ -14114,32 +14123,63 @@ if (a === "sup_request_sellers") {
     },
     { upsert: true }
   );
-
-  return sendButtons(from, {
-    text:
-      `⚡ *Request Sellers*\n\n` +
-      `Ask multiple sellers to quote the *exact* product or service you need.\n\n` +
-      `Please type the full name so sellers can quote correctly.\n\n` +
-      `Good examples:\n` +
-      `_find ball valve brass 20mm harare_\n` +
-      `_find hp laptop core i7 cbd harare_\n` +
-      `_find school uniform size 8 chitungwiza_\n` +
-      `_find geyser installation avondale harare_\n\n` +
-      `Avoid general requests like:\n` +
-      `_find valve harare_\n` +
-      `_find laptop harare_\n` +
-      `_find plumber harare_\n\n` +
-      `For long lists, use Bulk Request instead.`,
-    buttons: [
-      { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
-      { id: "find_supplier", title: "🔍 Browse & Shop" }
+ 
+  return sendList(from,
+    `⚡ *Request Sellers*\n\n` +
+    `Send one request → reach the right sellers → compare quotes → buy faster.\n\n` +
+    `*What do you need?* Type the item or service + location.\n\n` +
+    `📦 *Product examples:*\n` +
+    `_cement 50kg x20 harare_\n` +
+    `_Toyota Aqua brake pads and service kit harare_\n\n` +
+    `🔧 *Service examples:*\n` +
+    `_electrician for DB board fault borrowdale_\n` +
+    `_plumber for blocked drain avondale_\n\n` +
+    `📋 *Multi-item list?* Use Bulk Request below.\n\n` +
+    `Format: *item/service + quantity + location*\n` +
+    `Type *cancel* to stop.`,
+    [
+      { id: "sup_request_mode_bulk",    title: "📋 Bulk / Long List" },
+      { id: "sup_request_mode_service", title: "🔧 Request a Service" },
+      { id: "find_supplier",            title: "🔍 Browse & Shop" },
     ]
-  });
+  );
 }
-
+ 
+if (a === "sup_request_mode_service") {
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $set: {
+        "tempData.buyerRequestState": "awaiting_items",
+        "tempData.buyerRequestMode": "simple",
+        "tempData.pendingBuyerRequest": {
+          requestType: "simple",
+          profileType: "service",
+          items: []
+        }
+      }
+    },
+    { upsert: true }
+  );
+ 
+  return sendText(
+    from,
+    `🔧 *Request a Service*\n\n` +
+    `Type what you need + location.\n\n` +
+    `*Examples:*\n` +
+    `_electrician for DB board fault borrowdale harare_\n` +
+    `_plumber for blocked drain avondale harare_\n` +
+    `_painter for interior walls 3 bedroom harare_\n` +
+    `_mechanic Toyota Aqua service harare_\n` +
+    `_cleaner house deep clean 4 bedroom harare_\n\n` +
+    `_Include: what the service is, any details, + city/suburb._\n\n` +
+    `Type *cancel* to stop.`
+  );
+}
+ 
 if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   const requestType = a === "sup_request_mode_bulk" ? "bulk" : "simple";
-
+ 
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -14155,14 +14195,33 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
     },
     { upsert: true }
   );
-
+ 
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Bulk Request*\n\nSend your full item list.\nUse one item per line or comma-separated.\n\nPlease make each line specific enough for quoting.\n\nGood examples:\n_110 access tees x2_\n_ball valve brass 20mm x5_\n_hp laptop core i7 x3_\n_school uniform size 8 x10_\n_geyser installation x2_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
-      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop, but type the *full* product or service name.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nAvoid vague requests like:\n_find valve harare_\n_find laptop harare_\n_find plumber harare_\n\nType *cancel* to stop.`
+      ? `📋 *Bulk Request*\n\n` +
+        `Send your full item list.\n` +
+        `Use one item per line or comma-separated.\n\n` +
+        `*Examples:*\n` +
+        `_110mm pvc pipe x20_\n` +
+        `_32mm p trap x5_\n` +
+        `_solvent cement x2_\n` +
+        `_ball valve brass 20mm x3_\n` +
+        `_geyser 150L x1_\n\n` +
+        `Include sizes, specs, quantities. End with suburb/city on the next message.\n\n` +
+        `Type *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\n` +
+        `Type the full product name + city.\n\n` +
+        `*Examples:*\n` +
+        `_find cement 50kg harare x20_\n` +
+        `_find ball valve brass 20mm harare x5_\n` +
+        `_find school uniform size 8 chitungwiza_\n` +
+        `_find Toyota Aqua brake pads harare_\n\n` +
+        `Format: *find [item] [city]* or *find [item] [suburb] [city]*\n\n` +
+        `Type *cancel* to stop.`
   );
 }
+
 
 if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
   const reqSess = await UserSession.findOne({ phone });
