@@ -737,6 +737,9 @@ router.post("/schools/new", requireSupplierAdmin, async (req, res) => {
       },
       capacity:             Number(capacity) || 0,
       curriculum:           curriculumArr,
+      feeSections,
+      levies,
+      admissionFee:         admissionFeeVal,
       fees,
       feeRange,
       facilities:           facilitiesArr,
@@ -834,11 +837,38 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Boarding</dt><dd>${esc(school.boarding || "-")}</dd>
             <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
-          <dt>Day Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
-              <span class="badge badge-${school.feeRange === 'budget' ? 'green' : school.feeRange === 'premium' ? 'orange' : 'blue'}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>
-            </dd>
-            ${(school.fees?.boardingTerm1 || 0) > 0 ? `<dt>Boarding Fees / Term</dt><dd>$${school.fees.boardingTerm1} / $${school.fees.boardingTerm2} / $${school.fees.boardingTerm3} USD</dd>` : ""}
-            ${(school.fees?.ecdTerm1 || 0) > 0 ? `<dt>ECD Fees / Term</dt><dd>$${school.fees.ecdTerm1} / $${school.fees.ecdTerm2} / $${school.fees.ecdTerm3} USD</dd>` : ""}
+          ${(function() {
+              const SEC_LABEL = {ecd:"ECD/Preschool",lowerPrimary:"Lower Primary",upperPrimary:"Upper Primary",primary:"Primary (Gr 1-7)",olevel:"O-Level (F1-4)",alevel:"A-Level (F5-6)"};
+              const ORD = ["ecd","lowerPrimary","upperPrimary","primary","olevel","alevel"];
+              const fs  = school.feeSections || {};
+              let rows  = "";
+              let hasAny = false;
+              for (const sec of ORD) {
+                const d = fs[sec]?.day;
+                if (!d || (!d.term1 && !d.term2 && !d.term3)) continue;
+                hasAny = true;
+                rows += `<dt>${SEC_LABEL[sec]} — day</dt><dd>$${d.term1||0} / $${d.term2||0} / $${d.term3||0} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
+                const b = fs[sec]?.boarding;
+                if (b?.term1 > 0) rows += `<dt>${SEC_LABEL[sec]} — boarding</dt><dd>$${b.term1} / $${b.term2||b.term1} / $${b.term3||b.term1} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
+              }
+              // Fallback to legacy flat fees when no feeSections yet
+              if (!hasAny) {
+                const f = school.fees;
+                if (f?.term1 > 0) {
+                  rows += `<dt>Day fees</dt><dd>$${f.term1} / $${f.term2||0} / $${f.term3||0} USD/term</dd>`;
+                  if (f.boardingTerm1 > 0) rows += `<dt>Boarding fees</dt><dd>$${f.boardingTerm1} / $${f.boardingTerm2||0} / $${f.boardingTerm3||0} USD/term</dd>`;
+                  if (f.ecdTerm1 > 0) rows += `<dt>ECD fees</dt><dd>$${f.ecdTerm1} / $${f.ecdTerm2||0} / $${f.ecdTerm3||0} USD/term</dd>`;
+                } else {
+                  rows += `<dt>Fees</dt><dd style="color:var(--muted)">Not yet entered — use Edit to set fees</dd>`;
+                }
+              }
+              const rangeColor = school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue";
+              if (school.feeRange) rows += `<dt>Fee range</dt><dd><span class="badge badge-${rangeColor}">${esc(school.feeRange)}</span></dd>`;
+              if ((school.levies||[]).length) rows += `<dt>Levies</dt><dd>${school.levies.map(l=>`${l.name}: $${l.amount}/${l.per.replace("_"," ")}`).join(" · ")}</dd>`;
+              if (school.admissionFee > 0) rows += `<dt>Admission fee</dt><dd>$${school.admissionFee} once-off</dd>`;
+              if (school.cautionMoney > 0) rows += `<dt>Caution money</dt><dd>$${school.cautionMoney} (refundable)</dd>`;
+              return rows;
+            })()}
             <dt>Plan</dt><dd>${badge(school.tier || "none", tierColor(school.tier))}</dd>
             <dt>Status</dt><dd>${badge(school.active ? 'Active' : 'Inactive', school.active ? 'green' : 'gray')}</dd>
             <dt>Admissions</dt><dd>${school.admissionsOpen ? "🟢 Open" : "🔴 Closed"}</dd>
@@ -1055,46 +1085,179 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="checkbox-grid">${curriculumChecks}</div>
           </div>
 
-          <!-- ── Fees (Section-based) ───────────────────────────────── -->
-          <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fee Schedule (USD per term)</p>
+          <!-- ── Fees — Zimbabwe School Structure ──────────────────── -->
+          <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fee Schedule</p>
           <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-            Enter fees for each section your school has. Leave at 0 for sections that don't apply.
-            Boarding fees only apply for boarding or day-and-boarding schools.
-            These appear directly in parent enquiry answers — keep them up to date.
+            Add each fee as it appears on your school's fee schedule. Parents see exactly these entries in the ZimQuote chatbot — so be specific.
+            You can add, edit and delete fee lines below.
           </p>
 
-          ${["ecd","lowerPrimary","upperPrimary","primary","olevel","alevel"].map(sec => {
-            const LABELS = { ecd:"ECD / Preschool", lowerPrimary:"Lower Primary (Grades 1–4)", upperPrimary:"Upper Primary (Grades 5–7)", primary:"Primary (Grades 1–7)", olevel:"O-Level (Form 1–4)", alevel:"A-Level (Form 5–6)" };
-            const ICONS  = { ecd:"🌱", lowerPrimary:"📗", upperPrimary:"📗", primary:"📗", olevel:"📙", alevel:"📘" };
-            const d = school.feeSections?.[sec]?.day || {};
-            const b = school.feeSections?.[sec]?.boarding || {};
-            const hasBoarding = school.boarding === "boarding" || school.boarding === "both";
-            return `
-            <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px;border:.5px solid var(--border)">
-              <p style="font-size:13px;font-weight:600;margin-bottom:10px">${ICONS[sec]} ${LABELS[sec]} <span style="font-weight:400;font-size:11px;color:var(--muted)">— Day fees per term</span></p>
-              <div class="form-grid" style="margin-bottom:${hasBoarding?8:0}px">
-                <div class="fg" style="margin-bottom:0"><label>Term 1 ($)</label><input type="number" name="feeDay_${sec}_t1" value="${d.term1||0}" min="0" step="0.01" /></div>
-                <div class="fg" style="margin-bottom:0"><label>Term 2 ($)</label><input type="number" name="feeDay_${sec}_t2" value="${d.term2||0}" min="0" step="0.01" /></div>
-                <div class="fg" style="margin-bottom:0"><label>Term 3 ($)</label><input type="number" name="feeDay_${sec}_t3" value="${d.term3||0}" min="0" step="0.01" /></div>
-              </div>
-              ${hasBoarding ? `
-              <p style="font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--muted)">🏠 Boarding fees for this section <span style="font-weight:400">(leave 0 if no boarding for this section)</span></p>
-              <div class="form-grid">
-                <div class="fg" style="margin-bottom:0"><label>Boarding T1 ($)</label><input type="number" name="feeBrd_${sec}_t1" value="${b.term1||0}" min="0" step="0.01" /></div>
-                <div class="fg" style="margin-bottom:0"><label>Boarding T2 ($)</label><input type="number" name="feeBrd_${sec}_t2" value="${b.term2||0}" min="0" step="0.01" /></div>
-                <div class="fg" style="margin-bottom:0"><label>Boarding T3 ($)</label><input type="number" name="feeBrd_${sec}_t3" value="${b.term3||0}" min="0" step="0.01" /></div>
-              </div>` : ""}
-            </div>`;
-          }).join("")}
+          <!-- Existing fee rows -->
+          <div id="fee-rows">
+            ${(function() {
+              const sf = school.schoolFees || [];
+              const APPLIES_OPTS = [
+                {v:"nursery",l:"🌱 Nursery"},{v:"ecd_a",l:"🌱 ECD A"},{v:"ecd_b",l:"🌿 ECD B"},
+                {v:"grade1_4",l:"📗 Grade 1–4"},{v:"grade5_7",l:"📗 Grade 5–7"},{v:"primary",l:"📗 Primary (Gr 1–7)"},
+                {v:"form1_4",l:"📙 Form 1–4 (O-Level)"},{v:"form5_6",l:"📘 Form 5–6 (A-Level)"},
+                {v:"boarding",l:"🛏️ Boarding"},{v:"transport",l:"🚌 Transport"},{v:"all",l:"🏫 School-wide"}
+              ];
+              const TYPE_OPTS = [
+                {v:"tuition",l:"Tuition"},{v:"boarding",l:"Boarding"},{v:"transport",l:"Transport"},
+                {v:"development",l:"Development levy"},{v:"sports",l:"Sports levy"},
+                {v:"it",l:"IT / Computer levy"},{v:"library",l:"Library levy"},
+                {v:"exam",l:"Exam fees"},{v:"registration",l:"Registration / Admission"},
+                {v:"caution",l:"Caution deposit"},{v:"uniform",l:"Uniform estimate"},{v:"other",l:"Other"}
+              ];
+              const PER_OPTS = [{v:"term",l:"per term"},{v:"year",l:"per year"},{v:"once_off",l:"once-off"}];
 
-          <p style="font-size:13px;font-weight:600;margin:14px 0 8px">💳 Additional Levies <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — shown to parents)</span></p>
+              function selOpts(opts, cur) {
+                return opts.map(o => `<option value="${o.v}"${cur===o.v?' selected':''}>${esc(o.l)}</option>`).join('');
+              }
+
+              // SECTION GROUPING for display
+              const SECTIONS = [
+                { title:"🌱 Preschool Fees", levels:["nursery","ecd_a","ecd_b"] },
+                { title:"📗 Primary Fees",   levels:["grade1_4","grade5_7","primary"] },
+                { title:"📙📘 Secondary Fees", levels:["form1_4","form5_6"] },
+                { title:"🛏️ Boarding / Transport", levels:["boarding","transport"] },
+                { title:"📋 Levies & Once-off", levels:["all","development","sports","it","library","exam","registration","caution","uniform","other"] }
+              ];
+
+              // Group rows by section
+              let html = '';
+              for (const sec of SECTIONS) {
+                const secFees = sf.filter(f => sec.levels.includes(f.appliesTo) || sec.levels.includes(f.feeType));
+                if (!secFees.length) continue;
+
+                html += `<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(sec.title)}</p>`;
+                secFees.forEach((f, idx) => {
+                  const globalIdx = sf.indexOf(f);
+                  html += `
+                  <div class="form-grid" style="align-items:center;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px">
+                    <div class="fg" style="margin:0"><label style="font-size:11px">Label</label>
+                      <input name="sfLabel_${globalIdx}" value="${esc(f.label)}" placeholder="e.g. ECD A Tuition" maxlength="60" /></div>
+                    <div class="fg" style="margin:0"><label style="font-size:11px">Applies to</label>
+                      <select name="sfApplies_${globalIdx}">${selOpts(APPLIES_OPTS,f.appliesTo)}</select></div>
+                    <div class="fg" style="margin:0"><label style="font-size:11px">Fee type</label>
+                      <select name="sfType_${globalIdx}">${selOpts(TYPE_OPTS,f.feeType)}</select></div>
+                    <div class="fg" style="margin:0;width:90px"><label style="font-size:11px">Amount ($)</label>
+                      <input type="number" name="sfAmount_${globalIdx}" value="${f.amount||0}" min="0" step="0.01" /></div>
+                    <div class="fg" style="margin:0"><label style="font-size:11px">Per</label>
+                      <select name="sfPer_${globalIdx}">${selOpts(PER_OPTS,f.per||'term')}</select></div>
+                    <div class="fg" style="margin:0"><label style="font-size:11px">Note (optional)</label>
+                      <input name="sfNote_${globalIdx}" value="${esc(f.note||'')}" placeholder="e.g. Cambridge extra" maxlength="80" /></div>
+                    <div style="padding-top:18px">
+                      <input type="hidden" name="sfId_${globalIdx}" value="${esc(f.id||'')}">
+                      <input type="hidden" name="sfDelete_${globalIdx}" value="no" id="sfDel_${globalIdx}">
+                      <button type="button" class="btn btn-sm btn-red" onclick="document.getElementById('sfDel_${globalIdx}').value='yes';this.parentElement.parentElement.style.opacity='.3'">🗑️</button>
+                    </div>
+                  </div>`;
+                });
+                html += '</div>';
+              }
+
+              // Ungrouped rows (shouldn't happen but handle gracefully)
+              const groupedApplies = new Set(["nursery","ecd_a","ecd_b","grade1_4","grade5_7","primary","form1_4","form5_6","boarding","transport","all"]);
+              const ungrouped = sf.filter(f => !groupedApplies.has(f.appliesTo));
+              ungrouped.forEach((f) => {
+                const globalIdx = sf.indexOf(f);
+                html += `<div class="form-grid" style="align-items:center;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px">
+                  <div class="fg" style="margin:0"><label style="font-size:11px">Label</label><input name="sfLabel_${globalIdx}" value="${esc(f.label)}" maxlength="60" /></div>
+                  <div class="fg" style="margin:0;width:90px"><label style="font-size:11px">Amount ($)</label><input type="number" name="sfAmount_${globalIdx}" value="${f.amount||0}" min="0" step="0.01" /></div>
+                  <div style="padding-top:18px"><input type="hidden" name="sfId_${globalIdx}" value="${esc(f.id||'')}"><input type="hidden" name="sfDelete_${globalIdx}" value="no" id="sfDel_${globalIdx}"><button type="button" class="btn btn-sm btn-red" onclick="document.getElementById('sfDel_${globalIdx}').value='yes';this.parentElement.parentElement.style.opacity='.3'">🗑️</button></div>
+                </div>`;
+              });
+
+              if (!sf.length) html = '<p style="color:var(--muted);font-size:13px;padding:8px 0">No fees added yet. Use the quick-add buttons below to get started.</p>';
+              return html + `<input type="hidden" name="sfCount" value="${sf.length}">`;
+            })()}
+          </div>
+
+          <!-- Quick-add fee buttons for Zimbabwe-specific levels -->
+          <div style="margin:14px 0 6px">
+            <p style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">⚡ Quick-add a fee:</p>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${[
+                {a:"nursery",t:"tuition",l:"Nursery Fee",p:"term"},
+                {a:"ecd_a",  t:"tuition",l:"ECD A Fee",  p:"term"},
+                {a:"ecd_b",  t:"tuition",l:"ECD B Fee",  p:"term"},
+                {a:"grade1_4",t:"tuition",l:"Grade 1–4 Fee",p:"term"},
+                {a:"grade5_7",t:"tuition",l:"Grade 5–7 Fee",p:"term"},
+                {a:"primary", t:"tuition",l:"Primary Fee",  p:"term"},
+                {a:"form1_4", t:"tuition",l:"O-Level Fee",  p:"term"},
+                {a:"form5_6", t:"tuition",l:"A-Level Fee",  p:"term"},
+                {a:"boarding",t:"boarding",l:"Boarding Fee", p:"term"},
+                {a:"transport",t:"transport",l:"Transport Fee",p:"term"},
+                {a:"all",t:"development",l:"Development Levy",p:"term"},
+                {a:"all",t:"sports",l:"Sports Levy",p:"year"},
+                {a:"all",t:"registration",l:"Registration Fee",p:"once_off"},
+                {a:"all",t:"caution",l:"Caution Deposit",p:"once_off"},
+              ].map(b =>
+                `<button type="button" class="btn btn-sm btn-gray" style="font-size:11px" onclick="addFeeRow('${esc(b.l)}','${esc(b.a)}','${esc(b.t)}','${esc(b.p)}')">+ ${esc(b.l)}</button>`
+              ).join('')}
+            </div>
+          </div>
+
+          <!-- New fee rows appended by JS -->
+          <div id="new-fee-rows"></div>
+          <input type="hidden" name="sfNewCount" value="0" id="sfNewCount">
+
+          <script>
+          function addFeeRow(label, appliesTo, feeType, per) {
+            var ctrEl = document.getElementById('sfNewCount');
+            var n = parseInt(ctrEl.value) || 0;
+            var AOPTS = [{v:'nursery',l:'Nursery'},{v:'ecd_a',l:'ECD A'},{v:'ecd_b',l:'ECD B'},{v:'grade1_4',l:'Grade 1-4'},{v:'grade5_7',l:'Grade 5-7'},{v:'primary',l:'Primary'},{v:'form1_4',l:'Form 1-4 (O-Level)'},{v:'form5_6',l:'Form 5-6 (A-Level)'},{v:'boarding',l:'Boarding'},{v:'transport',l:'Transport'},{v:'all',l:'School-wide'}];
+            var TOPTS = [{v:'tuition',l:'Tuition'},{v:'boarding',l:'Boarding'},{v:'transport',l:'Transport'},{v:'development',l:'Development levy'},{v:'sports',l:'Sports levy'},{v:'it',l:'IT levy'},{v:'library',l:'Library levy'},{v:'exam',l:'Exam fees'},{v:'registration',l:'Registration'},{v:'caution',l:'Caution deposit'},{v:'uniform',l:'Uniform'},{v:'other',l:'Other'}];
+            var POPTS = [{v:'term',l:'per term'},{v:'year',l:'per year'},{v:'once_off',l:'once-off'}];
+            function sel(opts,cur){return opts.map(function(o){return '<option value="'+o.v+'"'+(cur===o.v?' selected':'')+'>'+o.l+'</option>';}).join('');}
+            var div = document.createElement('div');
+            div.className='form-grid';
+            div.style.cssText='align-items:center;margin-bottom:6px;background:#dcfce7;border-radius:8px;padding:8px;border:.5px solid #16a34a';
+            div.innerHTML=
+              '<div class="fg" style="margin:0"><label style="font-size:11px">Label</label><input name="sfNewLabel_'+n+'" value="'+label+'" placeholder="Fee name" maxlength="60"></div>'+
+              '<div class="fg" style="margin:0"><label style="font-size:11px">Applies to</label><select name="sfNewApplies_'+n+'">'+sel(AOPTS,appliesTo)+'</select></div>'+
+              '<div class="fg" style="margin:0"><label style="font-size:11px">Fee type</label><select name="sfNewType_'+n+'">'+sel(TOPTS,feeType)+'</select></div>'+
+              '<div class="fg" style="margin:0;width:90px"><label style="font-size:11px">Amount ($)</label><input type="number" name="sfNewAmount_'+n+'" value="0" min="0" step="0.01"></div>'+
+              '<div class="fg" style="margin:0"><label style="font-size:11px">Per</label><select name="sfNewPer_'+n+'">'+sel(POPTS,per)+'</select></div>'+
+              '<div class="fg" style="margin:0"><label style="font-size:11px">Note</label><input name="sfNewNote_'+n+'" placeholder="Optional note" maxlength="80"></div>'+
+              '<div style="padding-top:18px"><button type="button" class="btn btn-sm btn-red" onclick="this.parentElement.parentElement.remove();var c=document.getElementById(\'sfNewCount\');c.value=parseInt(c.value)-1">X</button></div>';
+            document.getElementById('new-fee-rows').appendChild(div);
+            ctrEl.value = n + 1;
+            var amt = div.querySelector('[name="sfNewAmount_'+n+'"]');
+            if (amt) amt.focus();
+          }
+          </script>
+
+          <!-- Preschool level toggles -->
+          <div style="background:var(--bg);border-radius:10px;padding:14px;margin:16px 0;border:.5px solid var(--border)">
+            <p style="font-size:13px;font-weight:600;margin-bottom:10px">🌱 Preschool levels offered <span style="font-weight:400;font-size:11px;color:var(--muted)">(tick each level this school offers)</span></p>
+            <div style="display:flex;gap:20px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" name="preschoolNursery" value="true" ${school.preschoolLevels?.nursery?'checked':''} style="width:16px;height:16px"> 🌱 Nursery (Baby Class, age ~3)
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" name="preschoolEcdA" value="true" ${school.preschoolLevels?.ecd_a?'checked':''} style="width:16px;height:16px"> 🌱 ECD A (age ~4)
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" name="preschoolEcdB" value="true" ${school.preschoolLevels?.ecd_b?'checked':''} style="width:16px;height:16px"> 🌿 ECD B (age ~5, pre-Grade 1)
+              </label>
+            </div>
+          </div>
+
+          <!-- Payment details -->
+          <p style="font-size:13px;font-weight:600;margin:14px 0 8px">💳 Payment details <span style="font-weight:400;font-size:12px;color:var(--muted)">(shown to parents in fee answers)</span></p>
           <div class="form-grid">
-            <div class="fg"><label>Development levy ($/term)</label><input type="number" name="levyDevelopment" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("develop"))?.amount||0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Sports levy ($/year)</label><input type="number" name="levySports" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("sport"))?.amount||0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>IT / Computer levy ($/year)</label><input type="number" name="levyIT" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("it")||l.name.toLowerCase().includes("computer"))?.amount||0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Library levy ($/year)</label><input type="number" name="levyLibrary" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("library"))?.amount||0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Exam fees ($/year)</label><input type="number" name="levyExam" value="${(school.levies||[]).find(l=>l.name.toLowerCase().includes("exam"))?.amount||0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Admission / Reg fee (once-off)</label><input type="number" name="admissionFee" value="${school.admissionFee||0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>EcoCash number</label><input type="text" name="ecocashNumber" value="${esc(school.ecocashNumber||'')}" placeholder="e.g. 0777123456" /></div>
+            <div class="fg"><label>Bank details</label><input type="text" name="bankDetails" value="${esc(school.bankDetails||'')}" placeholder="e.g. CBZ, Acc: 12345678" /></div>
+          </div>
+          <div class="fg" style="margin-bottom:12px">
+            <label>Fee discounts / bursary info</label>
+            <textarea name="feeDiscounts" rows="2" placeholder="e.g. 10% sibling discount, bursaries available">${esc(school.feeDiscounts||'')}</textarea>
+          </div>
+          <div class="fg" style="margin-bottom:12px">
+            <label>Fee schedule PDF URL</label>
+            <input type="text" name="feeSchedulePdfUrl" value="${esc(school.feeSchedulePdfUrl||'')}" placeholder="https://... (direct link to fee PDF)" />
           </div>
 
           <!-- ── Facilities ──────────────────────────────────────────── -->
@@ -1171,26 +1334,75 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     const school = await SchoolProfile.findById(req.params.id);
     if (!school) return res.redirect("/zq-admin/schools");
 
- const {
+    const {
       schoolName, phone, contactPhone, city, suburb, address, email, website,
       principalName, type, gender, boarding, gradesFrom, gradesTo,
       capacity, curriculum, facilities, extramuralActivities,
-      feesTerm1, feesTerm2, feesTerm3,
-      feesBoarding1, feesBoarding2, feesBoarding3,
-      feesEcd1, feesEcd2, feesEcd3,
       registrationLink, tier, subscriptionEndsAt,
       active, admissionsOpen, verified, adminNote
     } = req.body;
 
-    const t1 = parseFloat(feesTerm1) || 0;
-    const t2 = parseFloat(feesTerm2) || t1;
-    const t3 = parseFloat(feesTerm3) || t1;
-    const b1 = parseFloat(feesBoarding1) || 0;
-    const b2 = parseFloat(feesBoarding2) || b1;
-    const b3 = parseFloat(feesBoarding3) || b1;
-    const e1 = parseFloat(feesEcd1) || 0;
-    const e2 = parseFloat(feesEcd2) || e1;
-    const e3 = parseFloat(feesEcd3) || e1;
+    // ── Parse schoolFees[] from the new per-item fee form ────────────────────
+    function _uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+    const existingCount = parseInt(req.body.sfCount||"0", 10);
+    const newFeeCount   = parseInt(req.body.sfNewCount||"0", 10);
+    const schoolFees    = [];
+
+    // Update/delete existing fee rows
+    for (let i = 0; i < existingCount; i++) {
+      if (req.body["sfDelete_"+i] === "yes") continue; // deleted
+      const label = String(req.body["sfLabel_"+i]||"").trim();
+      const amount = parseFloat(req.body["sfAmount_"+i]) || 0;
+      if (!label && !amount) continue;
+      schoolFees.push({
+        id:        String(req.body["sfId_"+i]||"").trim() || _uid(),
+        label:     label || "Fee",
+        appliesTo: String(req.body["sfApplies_"+i]||"all").trim(),
+        feeType:   String(req.body["sfType_"+i]||"tuition").trim(),
+        amount,
+        per:       String(req.body["sfPer_"+i]||"term").trim(),
+        note:      String(req.body["sfNote_"+i]||"").trim()
+      });
+    }
+
+    // Add new fee rows
+    for (let i = 0; i < newFeeCount; i++) {
+      const label = String(req.body["sfNewLabel_"+i]||"").trim();
+      const amount = parseFloat(req.body["sfNewAmount_"+i]) || 0;
+      if (!label || !amount) continue;
+      schoolFees.push({
+        id:        _uid(),
+        label,
+        appliesTo: String(req.body["sfNewApplies_"+i]||"all").trim(),
+        feeType:   String(req.body["sfNewType_"+i]||"tuition").trim(),
+        amount,
+        per:       String(req.body["sfNewPer_"+i]||"term").trim(),
+        note:      String(req.body["sfNewNote_"+i]||"").trim()
+      });
+    }
+
+    // Parse preschool level toggles
+    const preschoolLevels = {
+      nursery: req.body.preschoolNursery === "true",
+      ecd_a:   req.body.preschoolEcdA   === "true",
+      ecd_b:   req.body.preschoolEcdB   === "true",
+    };
+
+    // Build legacy fields from schoolFees for backward compat
+    const _tuitionAmt = (...levels) => {
+      for (const lvl of levels) {
+        const f = schoolFees.find(x=>x.appliesTo===lvl&&x.feeType==="tuition"&&x.amount>0);
+        if (f) return f.amount;
+      }
+      return 0;
+    };
+    const primaryAmt  = _tuitionAmt("grade1_4","grade5_7","primary")||_tuitionAmt("form1_4")||0;
+    const ecdAmt      = _tuitionAmt("ecd_b","ecd_a","nursery")||0;
+    const boardingAmt = schoolFees.find(f=>f.feeType==="boarding"&&f.amount>0)?.amount||0;
+    const repAmt      = primaryAmt||ecdAmt||_tuitionAmt("form5_6")||0;
+    const admissionFeeVal = schoolFees.find(f=>f.feeType==="registration"&&f.amount>0)?.amount||parseFloat(req.body.admissionFee)||0;
+    const cautionMoneyVal = schoolFees.find(f=>f.feeType==="caution"&&f.amount>0)?.amount||parseFloat(req.body.cautionMoney)||0;
 
     const curriculumArr = curriculum
       ? (Array.isArray(curriculum) ? curriculum : [curriculum]) : [];
@@ -1214,15 +1426,33 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     school.grades               = { from: gradesFrom?.trim() || "ECD A", to: gradesTo?.trim() || "Form 6" };
     school.capacity             = Number(capacity) || 0;
     school.curriculum           = curriculumArr;
-  school.fees = {
-      term1: t1, term2: t2, term3: t3, currency: "USD",
-      boardingTerm1: b1, boardingTerm2: b2, boardingTerm3: b3,
-      ecdTerm1: e1, ecdTerm2: e2, ecdTerm3: e3
+    // Save section-based fees
+    // Save canonical schoolFees[] and preschool levels
+    school.schoolFees      = schoolFees;
+    school.preschoolLevels = preschoolLevels;
+    school.admissionFee    = admissionFeeVal;
+    school.cautionMoney    = cautionMoneyVal;
+
+    // Sync to legacy fees fields for backward compat
+    school.fees = {
+      term1: primaryAmt, term2: primaryAmt, term3: primaryAmt, currency: "USD",
+      boardingTerm1: boardingAmt, boardingTerm2: boardingAmt, boardingTerm3: boardingAmt,
+      ecdTerm1: ecdAmt, ecdTerm2: ecdAmt, ecdTerm3: ecdAmt
     };
-    school.feeRange             = computeSchoolFeeRange(t1);
+    if (repAmt > 0) school.feeRange = computeSchoolFeeRange(repAmt);
+
+    school.markModified("schoolFees");
+    school.markModified("preschoolLevels");
+    school.markModified("fees");
     school.facilities           = facilitiesArr;
     school.extramuralActivities = extramuralArr;
     school.registrationLink     = registrationLink?.trim() || "";
+    school.ecocashNumber        = (req.body.ecocashNumber || "").trim();
+    school.bankDetails          = (req.body.bankDetails || "").trim();
+    school.feeDiscounts         = (req.body.feeDiscounts || "").trim();
+    school.bursaryInfo          = (req.body.bursaryInfo || "").trim();
+    school.feeSchedulePdfUrl    = (req.body.feeSchedulePdfUrl || "").trim();
+    school.uniformEstimate      = parseFloat(req.body.uniformEstimate) || 0;
     school.tier                 = tier || school.tier;
     school.active               = active === "true";
     school.admissionsOpen       = admissionsOpen === "true";
