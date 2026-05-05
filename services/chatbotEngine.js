@@ -3284,7 +3284,7 @@ Reply *menu* to start.`);
   const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
 
   // ── ZQ CHATBOT LINK INTERCEPT ─────────────────────────────────────────────
-  // Must be placed HERE — after biz is declared, but before the supplier
+  // Must be placed HERE - after biz is declared, but before the supplier
   // search text handler (which was treating ZQ:SCHOOL:... as a product search).
   // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> arrive as plain text from wa.me links.
   if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {

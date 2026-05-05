@@ -161,7 +161,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
         text: `✅ Fees saved: *$${t1} / $${t2} / $${t3}* per term.\n\n🌱 Do ECD / preschool fees differ from the above?`,
         buttons: [
           { id: "school_reg_ecd_fees_same", title: "Same as above" },
-          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
+          { id: "school_reg_ecd_fees_diff", title: "Different - I'll enter them" }
         ]
       });
     }
@@ -202,7 +202,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
         text: `✅ Boarding fees saved: *$${b1} / $${b2} / $${b3}* per term.\n\n🌱 Do ECD / preschool fees differ from the day fees?`,
         buttons: [
           { id: "school_reg_ecd_fees_same", title: "Same as day fees" },
-          { id: "school_reg_ecd_fees_diff", title: "Different — I'll enter them" }
+          { id: "school_reg_ecd_fees_diff", title: "Different - I'll enter them" }
         ]
       });
     }
@@ -489,14 +489,14 @@ if (a.startsWith("school_reg_boarding_")) {
     let feePrompt = `💵 *Step 9 of 12* - School fees per term (USD)\n\n`;
 
     if (hasBoardingFees && reg.boarding === "boarding") {
-      // Boarding-only school — just boarding fees
+      // Boarding-only school - just boarding fees
       feePrompt += `Enter *boarding fees* as: term1, term2, term3\nExample: *1500, 1500, 1400*\n\nOr one number if all terms equal: *1500*`;
     } else if (hasBoardingFees) {
-      // Day & Boarding — need both
+      // Day & Boarding - need both
       feePrompt += `Your school has *day and boarding* fees.\n\n`;
       feePrompt += `First, enter *day fees*: term1, term2, term3\nExample: *800, 800, 750*\n\nOr one number: *800*`;
     } else if (hasEcdFees && reg.type !== "primary" && reg.type !== "secondary") {
-      // Combined/ECD+Primary — might have different ECD fees
+      // Combined/ECD+Primary - might have different ECD fees
       feePrompt += `Enter *primary/secondary fees* per term:\nExample: *800, 800, 750*\n\nWe'll ask about ECD fees next if they differ.`;
     } else {
       feePrompt += `Enter as: *term1, term2, term3*\nExample: *800, 800, 750*\n\nOr one number if all terms equal: *800*`;

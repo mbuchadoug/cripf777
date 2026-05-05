@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FEE MODEL — Zimbabwe private school structure
+// FEE MODEL - Zimbabwe private school structure
 //
 // schoolFees[] is the canonical fee store. Each item represents one line on
 // the school's fee schedule exactly as Zimbabwean schools present it.
@@ -101,7 +101,7 @@ const schoolProfileSchema = new mongoose.Schema({
   },
 
   // ── Preschool levels offered ───────────────────────────────────────────────
-  // Each is independently toggled — a school may have Nursery + ECD B but not ECD A
+  // Each is independently toggled - a school may have Nursery + ECD B but not ECD A
   preschoolLevels: {
     nursery: { type: Boolean, default: false },
     ecd_a:   { type: Boolean, default: false },
@@ -115,7 +115,7 @@ const schoolProfileSchema = new mongoose.Schema({
   // ── Fee schedule (canonical) ───────────────────────────────────────────────
   schoolFees: { type: [schoolFeeItemSchema], default: [] },
 
-  // Computed for search — do not set manually
+  // Computed for search - do not set manually
   feeRange: { type: String, enum: ["budget","mid","premium",""], default: "" },
 
   // Payment info (shown to parents in fee answers)
@@ -291,7 +291,7 @@ schoolProfileSchema.pre("save", function (next) {
     if (admFee)   this.admissionFee = admFee;
     if (caution)  this.cautionMoney = caution;
   } else {
-    // Legacy feeSections path — backward compat
+    // Legacy feeSections path - backward compat
     const fs = this.feeSections;
     if (fs) {
       const rep =

@@ -1,5 +1,5 @@
 // services/schoolFAQ.js
-// ─── ZimQuote School — 24/7 Admissions Assistant ─────────────────────────────
+// ─── ZimQuote School - 24/7 Admissions Assistant ─────────────────────────────
 //
 // Fee data is read from school.schoolFees[] (canonical) with fallback to
 // legacy school.feeSections and school.fees for older records.
@@ -23,7 +23,7 @@ import {
 import { SCHOOL_FACILITIES, SCHOOL_EXTRAMURALACTIVITIES } from "./schoolPlans.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEVEL METADATA — Zimbabwe school structure
+// LEVEL METADATA - Zimbabwe school structure
 // ─────────────────────────────────────────────────────────────────────────────
 const LEVEL = {
   nursery:   { label: "Nursery",              short: "Nursery",    ageGuide: "age 3",    emoji: "🌱" },
@@ -97,7 +97,7 @@ function _buildFeeAnswer(school) {
   const levies   = _levyFees(school);
   const onceOff  = _onceOffFees(school);
 
-  let text = `💵 *Fee schedule — ${school.schoolName}*\n\n`;
+  let text = `💵 *Fee schedule - ${school.schoolName}*\n\n`;
 
   if (tuition.length > 0) {
     text += "*Tuition fees (per term):*\n";
@@ -201,7 +201,7 @@ const SYSTEM_CATEGORIES = [
 // ─────────────────────────────────────────────────────────────────────────────
 // DEFAULT QUESTION GENERATOR
 // Reads school.schoolFees[] + profile and generates relevant preloaded Q&A.
-// Admin Q&A is mixed in by _mergeItems() — parents see no distinction.
+// Admin Q&A is mixed in by _mergeItems() - parents see no distinction.
 // ─────────────────────────────────────────────────────────────────────────────
 function _generateDefaults(school) {
   const defaults = [];
@@ -239,21 +239,21 @@ function _generateDefaults(school) {
   } else if (feeText) {
     defaults.push({ categoryId:"fees", id:"def_fees_range", order:o++, isDefault:true,
       question: "What are the school fees?",
-      answer: `💵 *Fees — ${school.schoolName}*\n\nFee range: *${feeText}*\n\nContact us for the full fee schedule.\n📞 ${phone}`
+      answer: `💵 *Fees - ${school.schoolName}*\n\nFee range: *${feeText}*\n\nContact us for the full fee schedule.\n📞 ${phone}`
     });
   }
 
-  // Individual level fee questions — only for levels that exist
+  // Individual level fee questions - only for levels that exist
   // Preschool levels
   const preschoolFeeItems = tuitionFees.filter(f => ["nursery","ecd_a","ecd_b"].includes(f.appliesTo));
   for (const f of preschoolFeeItems) {
     const lv = LEVEL[f.appliesTo];
     defaults.push({ categoryId:"fees", id:`def_fees_${f.appliesTo}`, order:o++, isDefault:true,
       question: `${lv.emoji} How much is ${lv.short}?`,
-      answer: `${lv.emoji} *${lv.label} fees — ${school.schoolName}*\n\n` +
+      answer: `${lv.emoji} *${lv.label} fees - ${school.schoolName}*\n\n` +
         `Tuition: *$${f.amount} per term*\n` +
         (f.note ? `_${f.note}_\n` : "") +
-        (boardingFees.length > 0 ? `\nBoarding fees are separate — tap "What are boarding fees?"\n` : "") +
+        (boardingFees.length > 0 ? `\nBoarding fees are separate - tap "What are boarding fees?"\n` : "") +
         `\n📞 ${phone}`
     });
   }
@@ -263,14 +263,14 @@ function _generateDefaults(school) {
   if (primaryFeeItems.length === 1 && primaryFeeItems[0].appliesTo === "primary") {
     defaults.push({ categoryId:"fees", id:"def_fees_primary", order:o++, isDefault:true,
       question: "📗 How much is primary?",
-      answer: `📗 *Primary fees — ${school.schoolName}*\n\nTuition: *$${primaryFeeItems[0].amount} per term*\n\n📞 ${phone}`
+      answer: `📗 *Primary fees - ${school.schoolName}*\n\nTuition: *$${primaryFeeItems[0].amount} per term*\n\n📞 ${phone}`
     });
   } else if (primaryFeeItems.length > 0) {
     for (const f of primaryFeeItems) {
       const lv = LEVEL[f.appliesTo];
       defaults.push({ categoryId:"fees", id:`def_fees_${f.appliesTo}`, order:o++, isDefault:true,
         question: `${lv.emoji} How much is ${lv.short}?`,
-        answer: `${lv.emoji} *${lv.label} fees — ${school.schoolName}*\n\nTuition: *$${f.amount} per term*\n\n📞 ${phone}`
+        answer: `${lv.emoji} *${lv.label} fees - ${school.schoolName}*\n\nTuition: *$${f.amount} per term*\n\n📞 ${phone}`
       });
     }
   }
@@ -280,14 +280,14 @@ function _generateDefaults(school) {
   if (oLevel) {
     defaults.push({ categoryId:"fees", id:"def_fees_olevel", order:o++, isDefault:true,
       question: "📙 How much is O-Level?",
-      answer: `📙 *O-Level fees (Form 1–4) — ${school.schoolName}*\n\nTuition: *$${oLevel.amount} per term*\n\n📞 ${phone}`
+      answer: `📙 *O-Level fees (Form 1–4) - ${school.schoolName}*\n\nTuition: *$${oLevel.amount} per term*\n\n📞 ${phone}`
     });
   }
   const aLevel = tuitionFees.find(f => f.appliesTo === "form5_6");
   if (aLevel) {
     defaults.push({ categoryId:"fees", id:"def_fees_alevel", order:o++, isDefault:true,
       question: "📘 How much is A-Level?",
-      answer: `📘 *A-Level fees (Form 5–6) — ${school.schoolName}*\n\nTuition: *$${aLevel.amount} per term*\n\n📞 ${phone}`
+      answer: `📘 *A-Level fees (Form 5–6) - ${school.schoolName}*\n\nTuition: *$${aLevel.amount} per term*\n\n📞 ${phone}`
     });
   }
 
@@ -296,7 +296,7 @@ function _generateDefaults(school) {
     ? school.paymentMethods : ["EcoCash","InnBucks","Bank transfer","Cash at school"];
   defaults.push({ categoryId:"fees", id:"def_fees_pay", order:o++, isDefault:true,
     question: "How do I pay fees?",
-    answer: `💳 *Payment — ${school.schoolName}*\n\n` +
+    answer: `💳 *Payment - ${school.schoolName}*\n\n` +
       payMethods.map(m => `• ${m}`).join("\n") +
       (school.ecocashNumber ? `\n\n📲 EcoCash: *${school.ecocashNumber}*` : "") +
       (school.bankDetails   ? `\n🏦 ${school.bankDetails}` : "") +
@@ -307,7 +307,7 @@ function _generateDefaults(school) {
   if (school.feeDiscounts || school.bursaryInfo) {
     defaults.push({ categoryId:"fees", id:"def_fees_disc", order:o++, isDefault:true,
       question: "Are discounts available?",
-      answer: `🎁 *Discounts — ${school.schoolName}*\n\n` +
+      answer: `🎁 *Discounts - ${school.schoolName}*\n\n` +
         (school.feeDiscounts || school.bursaryInfo)
     });
   }
@@ -318,7 +318,7 @@ function _generateDefaults(school) {
   if (regFee) {
     defaults.push({ categoryId:"fees", id:"def_fees_reg", order:o++, isDefault:true,
       question: "Is there a registration fee?",
-      answer: `💳 *Registration fee — ${school.schoolName}*\n\n` +
+      answer: `💳 *Registration fee - ${school.schoolName}*\n\n` +
         `${regFee.label || "Admission fee"}: *$${regFee.amount}* (once-off, paid on joining)\n\n` +
         (school.cautionMoney > 0 ? `Caution deposit (refundable): *$${school.cautionMoney}*\n\n` : "") +
         `📞 ${phone}`
@@ -332,15 +332,15 @@ function _generateDefaults(school) {
   defaults.push({ categoryId:"admissions", id:"def_adm_status", order:o++, isDefault:true,
     question: "Are admissions open?",
     answer: admOpen
-      ? `🟢 *Admissions OPEN — ${school.schoolName}*\n\n` +
+      ? `🟢 *Admissions OPEN - ${school.schoolName}*\n\n` +
         (school.registrationLink ? `Apply online:\n👉 ${school.registrationLink}\n\n` : "") +
         `Contact admissions to start the process.\n📞 ${phone}`
-      : `🔴 *Admissions closed — ${school.schoolName}*\n\nRegister your interest and we'll contact you when admissions open.\n📞 ${phone}`
+      : `🔴 *Admissions closed - ${school.schoolName}*\n\nRegister your interest and we'll contact you when admissions open.\n📞 ${phone}`
   });
 
   defaults.push({ categoryId:"admissions", id:"def_adm_docs", order:o++, isDefault:true,
     question: "What documents do I need?",
-    answer: `📑 *Documents — ${school.schoolName}*\n\n` +
+    answer: `📑 *Documents - ${school.schoolName}*\n\n` +
       (school.enrollmentDocs ||
        "• Child's birth certificate (certified copy)\n• Parents' national IDs or passports\n• Previous school report (last term)\n• Transfer letter (if from another school)\n• 4 passport photos of child\n• Proof of residence (utility bill)") +
       (hasBoarding ? "\n• Medical certificate (boarding pupils)" : "") +
@@ -361,7 +361,7 @@ function _generateDefaults(school) {
   const ageLines = [...new Set(levelKeys)].map(k => AGE_GUIDE[k]).filter(Boolean);
   defaults.push({ categoryId:"admissions", id:"def_adm_age", order:o++, isDefault:true,
     question: "What are the age requirements?",
-    answer: `🎂 *Age requirements — ${school.schoolName}*\n\n` +
+    answer: `🎂 *Age requirements - ${school.schoolName}*\n\n` +
       (school.ageRequirements || (ageLines.length ? ageLines.join("\n") : "Contact admissions for age requirements.")) +
       `\n\n_Per Zimbabwe Ministry of Education guidelines._`
   });
@@ -370,7 +370,7 @@ function _generateDefaults(school) {
   if (pl.nursery || tuitionFees.some(f => f.appliesTo === "nursery")) {
     defaults.push({ categoryId:"admissions", id:"def_adm_nursery", order:o++, isDefault:true,
       question: "🌱 How do I enroll for Nursery?",
-      answer: `🌱 *Nursery enrollment — ${school.schoolName}*\n\n` +
+      answer: `🌱 *Nursery enrollment - ${school.schoolName}*\n\n` +
         `Age: children turning 3 by 1 March\n\n` +
         (school.registrationLink ? `Apply online:\n👉 ${school.registrationLink}\n\n` : "") +
         `Required documents:\n• Birth certificate\n• Parent/guardian ID\n• Passport photo of child\n\n📞 ${phone}`
@@ -379,7 +379,7 @@ function _generateDefaults(school) {
   if (pl.ecd_a || tuitionFees.some(f => f.appliesTo === "ecd_a")) {
     defaults.push({ categoryId:"admissions", id:"def_adm_ecd_a", order:o++, isDefault:true,
       question: "🌱 How do I enroll for ECD A?",
-      answer: `🌱 *ECD A enrollment — ${school.schoolName}*\n\n` +
+      answer: `🌱 *ECD A enrollment - ${school.schoolName}*\n\n` +
         `Age: children turning 4 by 1 March\n\n` +
         `Required documents:\n• Birth certificate (certified)\n• Parent/guardian ID\n• 2 passport photos\n• Proof of residence\n\n📞 ${phone}`
     });
@@ -387,7 +387,7 @@ function _generateDefaults(school) {
   if (pl.ecd_b || tuitionFees.some(f => f.appliesTo === "ecd_b")) {
     defaults.push({ categoryId:"admissions", id:"def_adm_ecd_b", order:o++, isDefault:true,
       question: "🌿 How do I enroll for ECD B?",
-      answer: `🌿 *ECD B enrollment — ${school.schoolName}*\n\n` +
+      answer: `🌿 *ECD B enrollment - ${school.schoolName}*\n\n` +
         `Age: children turning 5 by 1 March\n` +
         `_(ECD B is the year before Grade 1)_\n\n` +
         `Required documents:\n• Birth certificate (certified)\n• Parent/guardian ID\n• 2 passport photos\n• Proof of residence\n\n📞 ${phone}`
@@ -397,8 +397,8 @@ function _generateDefaults(school) {
   if (school.registrationLink) {
     defaults.push({ categoryId:"admissions", id:"def_adm_apply", order:o++, isDefault:true,
       question: "How do I apply online?",
-      answer: `📋 *Apply online — ${school.schoolName}*\n\n` +
-        `${admOpen ? "🟢 Admissions are open." : "🔴 Closed — you may still register interest."}\n\n` +
+      answer: `📋 *Apply online - ${school.schoolName}*\n\n` +
+        `${admOpen ? "🟢 Admissions are open." : "🔴 Closed - you may still register interest."}\n\n` +
         `👉 ${school.registrationLink}\n\n📞 ${phone}`,
       actionType: "apply"
     });
@@ -406,7 +406,7 @@ function _generateDefaults(school) {
 
   defaults.push({ categoryId:"admissions", id:"def_adm_tour", order:o++, isDefault:true,
     question: "Can I visit the school?",
-    answer: `📅 *School tours — ${school.schoolName}*\n\n` +
+    answer: `📅 *School tours - ${school.schoolName}*\n\n` +
       (school.tourInfo || "School tours are available on weekdays by appointment.") +
       `\n\n📞 ${phone}\n⏰ ${school.officeHours || "Mon–Fri, 7am–4pm"}`,
     actionType: "tour"
@@ -418,7 +418,7 @@ function _generateDefaults(school) {
   if (hasBoarding) {
     o = 0;
     if (boardingFees.length > 0) {
-      let brdAnswer = `🛏️ *Boarding fees — ${school.schoolName}*\n\n`;
+      let brdAnswer = `🛏️ *Boarding fees - ${school.schoolName}*\n\n`;
       boardingFees.forEach(f => {
         brdAnswer += `• ${f.label}: *$${f.amount}/term*\n`;
       });
@@ -432,32 +432,32 @@ function _generateDefaults(school) {
     } else if ((school.fees?.boardingTerm1 || 0) > 0) {
       defaults.push({ categoryId:"boarding", id:"def_brd_fees", order:o++, isDefault:true,
         question: "What are boarding fees?",
-        answer: `🛏️ *Boarding fees — ${school.schoolName}*\n\n$${school.fees.boardingTerm1}/term\n\n_Inclusive of accommodation and meals._`
+        answer: `🛏️ *Boarding fees - ${school.schoolName}*\n\n$${school.fees.boardingTerm1}/term\n\n_Inclusive of accommodation and meals._`
       });
     } else {
       defaults.push({ categoryId:"boarding", id:"def_brd_fees_tbc", order:o++, isDefault:true,
         question: "What are boarding fees?",
-        answer: `🛏️ *Boarding fees — ${school.schoolName}*\n\nBoarding fee information is available on request.\n📞 ${phone}`,
+        answer: `🛏️ *Boarding fees - ${school.schoolName}*\n\nBoarding fee information is available on request.\n📞 ${phone}`,
         actionType: "message"
       });
     }
 
     defaults.push({ categoryId:"boarding", id:"def_brd_info", order:o++, isDefault:true,
       question: "What does boarding include?",
-      answer: `🏠 *Boarding — ${school.schoolName}*\n\n` +
+      answer: `🏠 *Boarding - ${school.schoolName}*\n\n` +
         (school.boardingInfo || "Our boarding provides safe accommodation, meals, supervised evening prep, and pastoral care.\n\nContact us for the boarding application and requirements.") +
         `\n📞 ${phone}`
     });
 
     defaults.push({ categoryId:"boarding", id:"def_brd_apply", order:o++, isDefault:true,
       question: "How do I apply for boarding?",
-      answer: `📋 *Boarding application — ${school.schoolName}*\n\n` +
+      answer: `📋 *Boarding application - ${school.schoolName}*\n\n` +
         (school.boardingApplicationInfo || `Contact admissions for boarding application requirements.\n📞 ${phone}`)
     });
 
     defaults.push({ categoryId:"boarding", id:"def_brd_visits", order:o++, isDefault:true,
       question: "When are visiting days?",
-      answer: `📅 *Visiting days — ${school.schoolName}*\n\n` +
+      answer: `📅 *Visiting days - ${school.schoolName}*\n\n` +
         (school.visitingDays || `Contact the boarding master for the visiting day schedule.\n📞 ${phone}`)
     });
   }
@@ -470,18 +470,18 @@ function _generateDefaults(school) {
     const transFeeItem = (school.schoolFees || []).find(f => f.feeType === "transport" && f.amount > 0);
     defaults.push({ categoryId:"transport", id:"def_trans_routes", order:o++, isDefault:true,
       question: "What areas does transport cover?",
-      answer: `🗺️ *Transport routes — ${school.schoolName}*\n\n` +
+      answer: `🗺️ *Transport routes - ${school.schoolName}*\n\n` +
         (school.transportRoutes || `Contact the transport office for current routes.\n📞 ${school.transportContact || phone}`)
     });
     defaults.push({ categoryId:"transport", id:"def_trans_cost", order:o++, isDefault:true,
       question: "How much is school transport?",
-      answer: `💵 *Transport fees — ${school.schoolName}*\n\n` +
+      answer: `💵 *Transport fees - ${school.schoolName}*\n\n` +
         (transFeeItem ? `$${transFeeItem.amount}/${transFeeItem.per.replace("_"," ")}` :
          school.transportFees || `Contact the transport office for pricing.\n📞 ${school.transportContact || phone}`)
     });
     defaults.push({ categoryId:"transport", id:"def_trans_times", order:o++, isDefault:true,
       question: "What are the pick-up times?",
-      answer: `⏰ *Transport times — ${school.schoolName}*\n\n` +
+      answer: `⏰ *Transport times - ${school.schoolName}*\n\n` +
         (school.transportTimes || `Contact the transport coordinator for pick-up times.\n📞 ${school.transportContact || phone}`)
     });
   }
@@ -491,7 +491,7 @@ function _generateDefaults(school) {
   // ════════════════════════════════════════════════════════════════════════════
   o = 0;
   if (r.oLevelPassRate > 0 || r.aLevelPassRate > 0) {
-    let resText = `📊 *Exam results — ${school.schoolName}*\n\n`;
+    let resText = `📊 *Exam results - ${school.schoolName}*\n\n`;
     if (r.oLevelPassRate > 0) resText += `O-Level (${r.oLevelYear||"latest"}): *${r.oLevelPassRate}%* pass rate\n`;
     if (r.oLevel5Plus > 0)    resText += `5+ subjects: *${r.oLevel5Plus}%*\n`;
     if (r.aLevelPassRate > 0) resText += `\nA-Level (${r.aLevelYear||"latest"}): *${r.aLevelPassRate}%* pass rate\n`;
@@ -506,7 +506,7 @@ function _generateDefaults(school) {
   if (hasCambridge) {
     defaults.push({ categoryId:"academics", id:"def_acad_cambridge", order:o++, isDefault:true,
       question: "Do you offer Cambridge?",
-      answer: `📚 *Cambridge — ${school.schoolName}*\n\nYes, we offer Cambridge International curriculum` +
+      answer: `📚 *Cambridge - ${school.schoolName}*\n\nYes, we offer Cambridge International curriculum` +
         (hasZimsec ? " alongside ZIMSEC." : ".") + `\n\n📞 ${phone}`
     });
   }
@@ -514,7 +514,7 @@ function _generateDefaults(school) {
   if (hasZimsec) {
     defaults.push({ categoryId:"academics", id:"def_acad_zimsec", order:o++, isDefault:true,
       question: "What curriculum do you follow?",
-      answer: `📘 *Curriculum — ${school.schoolName}*\n\n` +
+      answer: `📘 *Curriculum - ${school.schoolName}*\n\n` +
         (hasCambridge ? "We offer both ZIMSEC and Cambridge curricula." :
          "We follow the ZIMSEC curriculum, preparing pupils for O-Level and A-Level national examinations.") +
         `\n\n📞 ${phone}`
@@ -524,7 +524,7 @@ function _generateDefaults(school) {
   if (aLevel || tuitionFees.find(f => f.appliesTo === "form5_6")) {
     defaults.push({ categoryId:"academics", id:"def_acad_alevel", order:o++, isDefault:true,
       question: "Do you offer A-Level?",
-      answer: `📘 *A-Level — ${school.schoolName}*\n\nYes, we offer Form 5 and Form 6 (A-Level / Upper 6).\n\nContact admissions for subject offerings.\n📞 ${phone}`
+      answer: `📘 *A-Level - ${school.schoolName}*\n\nYes, we offer Form 5 and Form 6 (A-Level / Upper 6).\n\nContact admissions for subject offerings.\n📞 ${phone}`
     });
   }
 
@@ -537,7 +537,7 @@ function _generateDefaults(school) {
   if (facList.length) {
     defaults.push({ categoryId:"facilities", id:"def_fac_list", order:o++, isDefault:true,
       question: "What facilities do you have?",
-      answer: `🏊 *Facilities — ${school.schoolName}*\n\n${facList.join("\n")}`
+      answer: `🏊 *Facilities - ${school.schoolName}*\n\n${facList.join("\n")}`
     });
   }
   const EXT = Object.fromEntries((SCHOOL_EXTRAMURALACTIVITIES||[]).map(e=>[e.id,e.label]));
@@ -545,7 +545,7 @@ function _generateDefaults(school) {
   if (sportsList.length) {
     defaults.push({ categoryId:"facilities", id:"def_fac_sports", order:o++, isDefault:true,
       question: "What sports and clubs are available?",
-      answer: `⚽ *Sports & extramural — ${school.schoolName}*\n\n${sportsList.join(", ")}` +
+      answer: `⚽ *Sports & extramural - ${school.schoolName}*\n\n${sportsList.join(", ")}` +
         (school.sportsAchievements ? `\n\n${school.sportsAchievements}` : "")
     });
   }
@@ -558,7 +558,7 @@ function _generateDefaults(school) {
     (school.uniformEstimate > 0 ? { amount: school.uniformEstimate } : null);
   defaults.push({ categoryId:"uniforms", id:"def_uni_info", order:o++, isDefault:true,
     question: "Where do I get the uniform?",
-    answer: `👕 *Uniform — ${school.schoolName}*\n\n` +
+    answer: `👕 *Uniform - ${school.schoolName}*\n\n` +
       (school.uniformInfo || `Uniforms are available from the school shop or an approved supplier.\n📞 ${phone}`) +
       (uniformFee ? `\n\n💡 Estimated uniform cost: ~$${uniformFee.amount}` : "")
   });
@@ -569,7 +569,7 @@ function _generateDefaults(school) {
   o = 0;
   defaults.push({ categoryId:"calendar", id:"def_cal_terms", order:o++, isDefault:true,
     question: "What are the term dates?",
-    answer: `📆 *Term calendar — ${school.schoolName}*\n\n` +
+    answer: `📆 *Term calendar - ${school.schoolName}*\n\n` +
       (school.termCalendar || `Contact the school for the current term calendar.\n📞 ${phone}`)
   });
 
@@ -577,7 +577,7 @@ function _generateDefaults(school) {
   // CONTACT CATEGORY
   // ════════════════════════════════════════════════════════════════════════════
   o = 0;
-  let contactText = `📞 *Contact — ${school.schoolName}*\n\n`;
+  let contactText = `📞 *Contact - ${school.schoolName}*\n\n`;
   if (school.principalName) contactText += `Principal: *${school.principalName}*\n`;
   contactText += `\n📞 ${phone}`;
   if (school.email)   contactText += `\n📧 ${school.email}`;
@@ -598,7 +598,7 @@ function _generateDefaults(school) {
   if (allDocs.length) {
     defaults.push({ categoryId:"contact", id:"def_con_docs", order:o++, isDefault:true,
       question: "Can I download the prospectus?",
-      answer: `📄 *Documents — ${school.schoolName}*\n\n${allDocs.map(d=>`• ${d.label}`).join("\n")}\n\nTap below to receive on WhatsApp.`,
+      answer: `📄 *Documents - ${school.schoolName}*\n\n${allDocs.map(d=>`• ${d.label}`).join("\n")}\n\nTap below to receive on WhatsApp.`,
       pdfUrl: allDocs[0]?.url,
       pdfLabel: allDocs[0]?.label,
       actionType: "docs"
@@ -641,7 +641,7 @@ function _getCategories(school, defaults) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAIN ENTRY — parent taps school chatbot link
+// MAIN ENTRY - parent taps school chatbot link
 // ─────────────────────────────────────────────────────────────────────────────
 export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source="direct", parentName="" } = {}) {
   const school = await SchoolProfile.findById(schoolId).lean();
@@ -729,7 +729,7 @@ async function _showCategoryPage(from, schoolId, catId, page, biz, saveBiz) {
 
   if (!items.length) {
     return sendButtons(from, {
-      text:`${catEmoji} *${catName} — ${school.schoolName}*\n\nNo information available yet.\n\n📞 ${school.contactPhone||school.phone}`,
+      text:`${catEmoji} *${catName} - ${school.schoolName}*\n\nNo information available yet.\n\n📞 ${school.contactPhone||school.phone}`,
       buttons:[
         {id:`sfaq_act_message_${sid}`,title:_btn("✉️ Ask us directly")},
         {id:`sfaq_back_${sid}`,title:_btn("⬅ Main menu")}
@@ -753,7 +753,7 @@ async function _showCategoryPage(from, schoolId, catId, page, biz, saveBiz) {
 
   const totalPages = Math.ceil(items.length/PAGE_SIZE);
   const pageLabel  = totalPages>1?` (${page+1}/${totalPages})`:"";
-  return sendList(from,`${catEmoji} ${catName}${pageLabel} — ${school.schoolName}:`,rows.slice(0,10));
+  return sendList(from,`${catEmoji} ${catName}${pageLabel} - ${school.schoolName}:`,rows.slice(0,10));
 }
 
 // ── Helper: send all attachments for a FAQ item (PDFs + images) ──────────────
@@ -762,7 +762,7 @@ async function _showCategoryPage(from, schoolId, catId, page, biz, saveBiz) {
 async function _sendFaqAttachments(from, item) {
   const { sendDocument } = await import("./metaSender.js");
 
-  // Try to get sendImage — may not be in metaSender yet; fall back gracefully
+  // Try to get sendImage - may not be in metaSender yet; fall back gracefully
   let sendImage = null;
   try {
     const meta = await import("./metaSender.js");
@@ -814,7 +814,7 @@ async function _sendFaqAttachments(from, item) {
         }
       }
 
-      // PDF or image fallback — send as document
+      // PDF or image fallback - send as document
       await sendDocument(from, {
         link:     att.url,
         filename: safeFilename,
@@ -871,23 +871,23 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
     case "message":
     case "enquire":
       await _sess(biz, saveBiz, "sfaq_awaiting_message", {faqSchoolId:sid});
-      return sendText(from,`✉️ *Message — ${school.schoolName}*\n\nType your question. The school will reply on WhatsApp.\n\n_Type *cancel* to go back._`);
+      return sendText(from,`✉️ *Message - ${school.schoolName}*\n\nType your question. The school will reply on WhatsApp.\n\n_Type *cancel* to go back._`);
 
     case "tour":
       await _sess(biz, saveBiz, "sfaq_awaiting_tour_date", {faqSchoolId:sid});
-      return sendText(from,`📅 *Book a tour — ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n_Type *cancel* to go back._`);
+      return sendText(from,`📅 *Book a tour - ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n_Type *cancel* to go back._`);
 
     case "apply":
       notifySchoolApplicationInterest(school.phone,school.schoolName,from).catch(()=>{});
       _saveLead(from,school,"apply","whatsapp_link");
       if (school.registrationLink) {
         return sendButtons(from,{
-          text:`📋 *Apply — ${school.schoolName}*\n\n${school.admissionsOpen?"🟢 Admissions OPEN.":"🔴 Closed — register interest."}\n\n👉 ${school.registrationLink}\n\n📞 ${phone}`,
+          text:`📋 *Apply - ${school.schoolName}*\n\n${school.admissionsOpen?"🟢 Admissions OPEN.":"🔴 Closed - register interest."}\n\n👉 ${school.registrationLink}\n\n📞 ${phone}`,
           buttons:[{id:`sfaq_act_tour_${sid}`,title:_btn("📅 Book a tour")},{id:`sfaq_back_${sid}`,title:_btn("⬅ Main menu")}]
         });
       }
       await _sess(biz,saveBiz,"sfaq_awaiting_grade",{faqSchoolId:sid});
-      return sendText(from,`📝 *Enrollment enquiry — ${school.schoolName}*\n\nWhich level are you enquiring for?\n\n_e.g. "Nursery", "ECD A", "Grade 3", "Form 1"_\n_Type *cancel* to go back._`);
+      return sendText(from,`📝 *Enrollment enquiry - ${school.schoolName}*\n\nWhich level are you enquiring for?\n\n_e.g. "Nursery", "ECD A", "Grade 3", "Form 1"_\n_Type *cancel* to go back._`);
 
     case "level_enquiry":
       // Shown as a list of available levels for targeted enquiry
@@ -911,7 +911,7 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
   }
 }
 
-// Level-specific enquiry — lists available school levels for parent to choose
+// Level-specific enquiry - lists available school levels for parent to choose
 async function _showLevelEnquiry(from, school, sid, biz, saveBiz) {
   const tuitionFees = _tuitionFees(school);
   const rows = tuitionFees.map(f => {

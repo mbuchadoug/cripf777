@@ -93,7 +93,7 @@ function _buildFeeQueue(type, boarding) {
 async function _startNextFeeSection(from, biz, saveBiz, reg) {
   const queue = reg._feeQueue || [];
   if (!queue.length) {
-    // No more sections — move to levies
+    // No more sections - move to levies
     return _goToLevies(from, biz, saveBiz, reg);
   }
 
@@ -107,7 +107,7 @@ async function _startNextFeeSection(from, biz, saveBiz, reg) {
   const isBoarding = reg.boarding === "boarding" || reg.boarding === "both";
   const hasMore    = queue.length > 0;
 
-  const stepInfo = `💵 *Fees — ${label}*`;
+  const stepInfo = `💵 *Fees - ${label}*`;
   const moreInfo = hasMore
     ? `\n_Remaining: ${queue.map(_sectionLabel).join(", ")}_`
     : "";
@@ -148,7 +148,7 @@ _Remaining: ${queue.map(_sectionLabel).join(", ")}_` : "";
 
   return sendText(from,
     (confirmMsg ? confirmMsg + "\n\n" : "") +
-    `💵 *${label} — day fees* (USD)\n\n` +
+    `💵 *${label} - day fees* (USD)\n\n` +
     `Enter per term: *term1, term2, term3*\n` +
     `Example: *900, 900, 850*\n\nIf all equal: *900*` + moreInfo
   );
@@ -255,7 +255,7 @@ export async function handleSchoolRegistrationStates({ state, from, text, biz, s
   // ── Step 8: Boarding ─────────────────────────────────────────────────────
   // (handled via action school_reg_boarding_*)
 
-  // ── Step 9: Fees — section-based ────────────────────────────────────────
+  // ── Step 9: Fees - section-based ────────────────────────────────────────
   // State: school_reg_fees_<section>
   // Sections: ecd, lowerPrimary, upperPrimary, primary, olevel, alevel
   // Each section has day fees; boarding schools also collect boarding fees per section.
@@ -1075,7 +1075,7 @@ async function _saveSchoolAndOfferPlans(from, biz, saveBiz, phone, reg) {
         feeSections:          reg.feeSections || {},
         levies:               reg.levies || [],
         admissionFee:         reg.admissionFee || 0,
-        // Legacy flat fee fields — auto-synced by pre-save hook but set here for immediate use
+        // Legacy flat fee fields - auto-synced by pre-save hook but set here for immediate use
         fees: _buildLegacyFees(reg),
         feeRange:             computeSchoolFeeRange(_primaryFeeAmount(reg)),
         facilities:           reg.facilities || [],

@@ -106,7 +106,7 @@ function getBucket() {
   return new GridFSBucket(mongoose.connection.db, { bucketName: "schoolBrochures" });
 }
 
-// ── Multer — store in memory first, then pipe to GridFS ──────────────────────
+// ── Multer - store in memory first, then pipe to GridFS ──────────────────────
 const brochureUpload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 10 * 1024 * 1024 }, // 10MB max
@@ -869,9 +869,9 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
                 const d = fs[sec]?.day;
                 if (!d || (!d.term1 && !d.term2 && !d.term3)) continue;
                 hasAny = true;
-                rows += `<dt>${SEC_LABEL[sec]} — day</dt><dd>$${d.term1||0} / $${d.term2||0} / $${d.term3||0} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
+                rows += `<dt>${SEC_LABEL[sec]} - day</dt><dd>$${d.term1||0} / $${d.term2||0} / $${d.term3||0} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
                 const b = fs[sec]?.boarding;
-                if (b?.term1 > 0) rows += `<dt>${SEC_LABEL[sec]} — boarding</dt><dd>$${b.term1} / $${b.term2||b.term1} / $${b.term3||b.term1} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
+                if (b?.term1 > 0) rows += `<dt>${SEC_LABEL[sec]} - boarding</dt><dd>$${b.term1} / $${b.term2||b.term1} / $${b.term3||b.term1} <span style="color:var(--muted);font-size:11px">USD/term</span></dd>`;
               }
               // Fallback to legacy flat fees when no feeSections yet
               if (!hasAny) {
@@ -881,7 +881,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
                   if (f.boardingTerm1 > 0) rows += `<dt>Boarding fees</dt><dd>$${f.boardingTerm1} / $${f.boardingTerm2||0} / $${f.boardingTerm3||0} USD/term</dd>`;
                   if (f.ecdTerm1 > 0) rows += `<dt>ECD fees</dt><dd>$${f.ecdTerm1} / $${f.ecdTerm2||0} / $${f.ecdTerm3||0} USD/term</dd>`;
                 } else {
-                  rows += `<dt>Fees</dt><dd style="color:var(--muted)">Not yet entered — use Edit to set fees</dd>`;
+                  rows += `<dt>Fees</dt><dd style="color:var(--muted)">Not yet entered - use Edit to set fees</dd>`;
                 }
               }
               const rangeColor = school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue";
@@ -963,7 +963,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               </div>
               <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">⬆ Upload PDF</button>
             </form>
-            <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp — no Google Drive or data needed.</p>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp - no Google Drive or data needed.</p>
             <p style="font-size:11px;color:var(--muted);margin-top:4px">⚠ Max file size: 10MB. Keep PDFs under 5MB for best WhatsApp delivery.</p>
           </div>
         <div>
@@ -1203,10 +1203,10 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="checkbox-grid">${curriculumChecks}</div>
           </div>
 
-          <!-- ── Fees — Zimbabwe School Structure ──────────────────── -->
+          <!-- ── Fees - Zimbabwe School Structure ──────────────────── -->
           <p style="font-weight:700;font-size:13px;margin-bottom:6px;margin-top:20px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fee Schedule</p>
           <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-            Add each fee as it appears on your school's fee schedule. Parents see exactly these entries in the ZimQuote chatbot — so be specific.
+            Add each fee as it appears on your school's fee schedule. Parents see exactly these entries in the ZimQuote chatbot - so be specific.
             You can add, edit and delete fee lines below.
           </p>
 
@@ -1679,11 +1679,11 @@ router.get("/schools/:id/fees", requireSupplierAdmin, async (req, res) => {
       ${ok}${err}
       <div class="panel">
         <div class="panel-head">
-          <h3>💵 Fee Schedule — ${esc(school.schoolName)}</h3>
+          <h3>💵 Fee Schedule - ${esc(school.schoolName)}</h3>
           <a href="/zq-admin/schools/${school._id}/fees/add" class="btn btn-green">➕ Add Fee</a>
         </div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-          These fees appear exactly to parents in the ZimQuote chatbot. Be specific — include all levels your school charges.
+          These fees appear exactly to parents in the ZimQuote chatbot. Be specific - include all levels your school charges.
         </p>
         ${feesTable}
       </div>
@@ -1705,7 +1705,7 @@ router.get("/schools/:id/fees/add", requireSupplierAdmin, async (req, res) => {
       <a href="/zq-admin/schools/${school._id}/fees" class="back-link">← Back to Fees</a>
       ${err}
       <div class="panel" style="max-width:700px">
-        <h3>➕ Add Fee — ${esc(school.schoolName)}</h3>
+        <h3>➕ Add Fee - ${esc(school.schoolName)}</h3>
         <form method="POST" action="/zq-admin/schools/${school._id}/fees/add" class="edit-form">
           <div class="form-grid">
             ${_feeFormFields()}
@@ -1800,7 +1800,7 @@ router.get("/schools/:id/fees/:feeId/edit", requireSupplierAdmin, async (req, re
       <a href="/zq-admin/schools/${school._id}/fees" class="back-link">← Back to Fees</a>
       ${err}
       <div class="panel" style="max-width:700px">
-        <h3>✏️ Edit Fee — ${esc(school.schoolName)}</h3>
+        <h3>✏️ Edit Fee - ${esc(school.schoolName)}</h3>
         <form method="POST" action="/zq-admin/schools/${school._id}/fees/${esc(f.id)}/edit" class="edit-form">
           <div class="form-grid">
             ${_feeFormFields(f)}
@@ -1898,7 +1898,7 @@ router.post("/schools/:id/brochure/add",
       });
 
       // ── Build the serving URL ─────────────────────────────────────────────
-      // This URL is served by the GET route below — publicly accessible
+      // This URL is served by the GET route below - publicly accessible
       const baseUrl  = process.env.APP_BASE_URL || `https://${req.headers.host}`;
       const fileUrl  = `${baseUrl}/zq-admin/schools/brochure/${filename}`;
 
@@ -1920,7 +1920,7 @@ router.post("/schools/:id/brochure/add",
 
 
 // ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
-// Serves the PDF directly — no login required so WhatsApp/Meta can fetch it
+// Serves the PDF directly - no login required so WhatsApp/Meta can fetch it
 // and parents receive it as a native WhatsApp document
 router.get("/schools/brochure/:filename", async (req, res) => {
   try {
@@ -1947,7 +1947,7 @@ router.get("/schools/brochure/:filename", async (req, res) => {
 });
 
 // ── GET /zq-admin/schools/faq-attach/:filename ────────────────────────────────
-// Serves FAQ attachments (PDF / image) — public so WhatsApp/Meta can fetch them.
+// Serves FAQ attachments (PDF / image) - public so WhatsApp/Meta can fetch them.
 router.get("/schools/faq-attach/:filename", async (req, res) => {
   try {
     const bucket = getFaqBucket();
@@ -1997,7 +1997,7 @@ router.post("/schools/:id/brochure/:index/delete", requireSupplierAdmin, async (
         }
       } catch (gfsErr) {
         console.error("[Brochure GFS Delete]", gfsErr.message);
-        // Don't block — still remove from DB even if GFS delete fails
+        // Don't block - still remove from DB even if GFS delete fails
       }
 
       school.brochures.splice(idx, 1);
@@ -2565,13 +2565,13 @@ Type *menu* to manage your listing. 🎓`
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ZIMQUOTE CHATBOT LINK PANEL — SCHOOLS
+// ZIMQUOTE CHATBOT LINK PANEL - SCHOOLS
 // The "chatbot link" is a pure wa.me deep-link. No domain. No slug. No web page.
 // When tapped on any platform it opens WhatsApp and the ZimQuote bot immediately
-// shows the school's full FAQ chatbot — fees, enrollment, tour booking, results.
+// shows the school's full FAQ chatbot - fees, enrollment, tour booking, results.
 //
 // Link format: https://wa.me/<BOT>?text=ZQ:SCHOOL:<mongoId>
-// That's it. Generated from the school's MongoDB _id — no setup required.
+// That's it. Generated from the school's MongoDB _id - no setup required.
 //
 // Routes:
 //   GET  /zq-admin/schools/:id/smartcard          → chatbot link panel
@@ -2611,7 +2611,7 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
 
     const admLine = school.admissionsOpen ? "🟢 Admissions currently OPEN" : "";
 
-    // Per-platform captions — all using the same wa.me link
+    // Per-platform captions - all using the same wa.me link
     const PLATFORMS = [
      { id:"tiktok",          icon:"📱", label:"TikTok bio",       tip:'Put as your bio link. Say "link in bio 👆" in every video.' },
       { id:"facebook",        icon:"📘", label:"Facebook",          tip:"Paste in post captions and your Page About section." },
@@ -2646,7 +2646,7 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
       </td>
       <td>${l.parentPhone
         ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,'')}?text=${encodeURIComponent('Hi '+(l.parentName||'')+(l.parentName?', ':'')+'I\'m following up from '+school.schoolName+' regarding your ZimQuote enquiry.')}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
-        : "—"}
+        : "-"}
       </td>
     </tr>`).join("");
 
@@ -2661,7 +2661,7 @@ Your ZimQuote chatbot link is ready! 🎉
 📲 Your link:
 ${waLink}
 
-When anyone taps this link — on Facebook, TikTok, WhatsApp, or SMS — WhatsApp opens and your school's full profile appears instantly in the ZimQuote chat.
+When anyone taps this link - on Facebook, TikTok, WhatsApp, or SMS - WhatsApp opens and your school's full profile appears instantly in the ZimQuote chat.
 
 Parents can:
 • See fees, facilities, and results
@@ -2689,12 +2689,12 @@ ZimQuote Team`;
       <div class="panel" style="margin-bottom:16px">
         <div class="panel-head">
           <h3>📲 ZimQuote Chatbot Link</h3>
-          <span class="badge badge-green">Active — no setup needed</span>
+          <span class="badge badge-green">Active - no setup needed</span>
         </div>
 
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:18px;margin-bottom:16px">
           <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-            Pure WhatsApp link — works on every platform, no web page, no domain
+            Pure WhatsApp link - works on every platform, no web page, no domain
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
             <code style="font-size:13px;flex:1;word-break:break-all;background:#dcfce7;padding:9px 12px;border-radius:7px;font-family:monospace">${esc(waLink)}</code>
@@ -2714,7 +2714,7 @@ ZimQuote Team`;
           </div>
           <p style="font-size:12px;color:#166534;margin-top:10px">
             When tapped, WhatsApp opens and the ZimQuote bot shows the full school chatbot:
-            fees, enrollment enquiry, tour booking, academic results, transport, facilities — all instantly.
+            fees, enrollment enquiry, tour booking, academic results, transport, facilities - all instantly.
           </p>
         </div>
 
@@ -2736,7 +2736,7 @@ ZimQuote Team`;
           </div>
           <div>
             <p style="font-size:13px;color:var(--muted);margin-bottom:10px;max-width:360px">
-              This QR code encodes the WhatsApp link directly — not a website URL.
+              This QR code encodes the WhatsApp link directly - not a website URL.
               Scanning it with WhatsApp's built-in camera opens the bot immediately.
               Print it on school gate banners, posters, notice boards, and flyers.
             </p>
@@ -2849,7 +2849,7 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
       </td>
       <td>${l.parentPhone
         ? `<a href="https://wa.me/${l.parentPhone.replace(/\D+/g,'')}?text=${encodeURIComponent('Hi '+(l.parentName||'')+(l.parentName?', ':'')+'I\'m following up from '+school.schoolName+' regarding your ZimQuote enquiry.')}" target="_blank" class="btn btn-sm btn-blue">💬 Reply</a>`
-        : "—"}
+        : "-"}
       </td>
     </tr>`).join("");
 
@@ -2864,7 +2864,7 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
       <a href="/zq-admin/schools/${school._id}/smartcard" class="back-link">← Back to Chatbot Link</a>
       <div class="panel">
         <div class="panel-head">
-          <h3>👥 All leads — ${esc(school.schoolName)}</h3>
+          <h3>👥 All leads - ${esc(school.schoolName)}</h3>
           <span style="font-size:13px;color:var(--muted)">${total} total</span>
         </div>
         ${leads.length
@@ -2946,7 +2946,7 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 // ENQUIRY & FAQ MANAGER
 // Admins manage categories, questions, answers, ordering, visibility.
 // Both system-generated defaults and admin-created items are shown together
-// to parents as one unified list — no labels, no separation.
+// to parents as one unified list - no labels, no separation.
 //
 // SchoolProfile schema additions:
 //   faqCategories: [{ id, name, emoji, order, active }]
@@ -2969,7 +2969,7 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 //   POST /schools/:id/faq/q/:qId/moveto            → move to different category
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── FAQ Manager landing — shows all categories ─────────────────────────────
+// ── FAQ Manager landing - shows all categories ─────────────────────────────
 router.get("/schools/:id/faq", requireSupplierAdmin, async (req, res) => {
   try {
     const school = await SchoolProfile.findById(req.params.id).lean();
@@ -3047,7 +3047,7 @@ router.get("/schools/:id/faq", requireSupplierAdmin, async (req, res) => {
       + '<span style="font-size:13px;color:var(--muted)">' + totalQ + ' admin Q&A · ' + activeQ + ' active</span></div>'
 
       + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">'
-      + 'Smart questions are generated automatically from the school profile and shown to parents alongside admin-created Q&A — all in the same categories, no labels. '
+      + 'Smart questions are generated automatically from the school profile and shown to parents alongside admin-created Q&A - all in the same categories, no labels. '
       + 'Use this panel to add custom questions, rename categories, control ordering, and manage visibility.'
       + "</p>"
 
@@ -3105,7 +3105,7 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
           + '<td style="font-size:11px;background:#eff6ff;color:#3b82f6;padding:3px 8px;border-radius:4px;white-space:nowrap">Auto</td>'
           + "<td><em>" + _esc(d.question) + "</em></td>"
           + '<td style="font-size:12px;color:var(--muted)">' + _esc((d.answer||"").slice(0, 80)) + "…</td>"
-          + "<td>✅ Active</td><td>—</td>"
+          + "<td>✅ Active</td><td>-</td>"
           + "</tr>"
         ).join("")
       : "";
@@ -3155,14 +3155,14 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
       + _esc(q) + "</button>"
     ).join("");
 
-    res.send(layout(_esc(catEmoji + " " + catName) + " — FAQ", 
+    res.send(layout(_esc(catEmoji + " " + catName) + " - FAQ", 
       '<a href="/zq-admin/schools/' + school._id + '/faq" class="back-link">← Back to FAQ Manager</a>\n'
       + ok + err
 
       + '<div class="panel" style="margin-bottom:16px">'
       + '<div class="panel-head"><h3>' + _esc(catEmoji + " " + catName) + "</h3>"
       + '<span style="font-size:13px;color:var(--muted)">' + adminItems.length + " admin questions · " + defaultPreview.length + " auto-generated</span></div>"
-      + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">Auto-generated questions come from the school profile and cannot be edited here. Admin questions appear alongside them. Parents see both together — no labels.</p>'
+      + '<p style="font-size:13px;color:var(--muted);margin-bottom:14px">Auto-generated questions come from the school profile and cannot be edited here. Admin questions appear alongside them. Parents see both together - no labels.</p>'
       + '<div style="overflow-x:auto"><table>'
       + "<thead><tr><th>Source</th><th>Question (button title, max 24 chars)</th><th>Answer preview</th><th>Status</th><th>Actions</th></tr></thead>"
       + "<tbody>" + defRows + adminRows + "</tbody>"
@@ -3183,11 +3183,11 @@ router.get("/schools/:id/faq/cat/:catId", requireSupplierAdmin, async (req, res)
 
       + '<div class="fg" style="margin-bottom:12px">'
       + '<label>Answer (full text shown to parent) <span style="color:red">*</span></label>'
-      + '<textarea name="answer" rows="5" required maxlength="2000" placeholder="Type the complete answer. Be specific — include times, numbers, contact details where relevant."></textarea>'
+      + '<textarea name="answer" rows="5" required maxlength="2000" placeholder="Type the complete answer. Be specific - include times, numbers, contact details where relevant."></textarea>'
       + "</div>"
 
       + '<div class="fg" style="margin-bottom:12px">'
-      + '<label>📎 Attach files (PDF / PNG / JPG / WEBP) — sent to parent on WhatsApp</label>'
+      + '<label>📎 Attach files (PDF / PNG / JPG / WEBP) - sent to parent on WhatsApp</label>'
       + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
       + '<div style="font-size:11px;color:var(--muted);margin-top:3px">Select one or multiple files. Max 10MB each. Sent to parent after text answer.</div>'
       + "</div>"
@@ -3263,7 +3263,7 @@ router.get("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res
           : '<span style="background:#eff6ff;color:#3b82f6;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">Default</span>')
       : '<span style="background:#fef9c3;color:#854d0e;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">Admin</span>';
 
-    res.send(layout("Edit Q&A — " + _esc(school.schoolName),
+    res.send(layout("Edit Q&A - " + _esc(school.schoolName),
       '<a href="/zq-admin/schools/' + school._id + '/faq/cat/' + q.categoryId + '" class="back-link">← Back</a>\n'
       + ok
       + '<div class="panel">'
@@ -3279,7 +3279,7 @@ router.get("/schools/:id/faq/q/:qId/edit", requireSupplierAdmin, async (req, res
       + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
       + '<div style="font-size:11px;color:var(--muted);margin-top:3px">New files are added alongside existing ones. Sent to parents after text answer.</div></div>'
       + (existingAtts.length || q.pdfUrl ? "" :
-          '<div class="fg" style="margin-bottom:12px"><label>PDF URL (optional — or use file upload above)</label>'
+          '<div class="fg" style="margin-bottom:12px"><label>PDF URL (optional - or use file upload above)</label>'
           + '<input type="text" name="pdfUrl" value="' + _esc(q.pdfUrl || "") + '" placeholder="https://..."></div>')
       + '<div class="fg" style="margin-bottom:14px"><label>Order</label>'
       + '<input type="number" name="order" value="' + (q.order || 0) + '" min="0" max="999" style="width:90px"></div>'
@@ -3436,18 +3436,18 @@ router.get("/schools/:id/faq/q/add-page", requireSupplierAdmin, async (req, res)
       '<option value="' + _esc(c.id) + '"' + (defaultCat === c.id ? " selected" : "") + ">" + _esc((c.emoji||"❓") + " " + c.name) + "</option>"
     )).join("");
 
-    res.send(layout("Add Question — " + _esc(school.schoolName),
+    res.send(layout("Add Question - " + _esc(school.schoolName),
       '<a href="/zq-admin/schools/' + school._id + '/faq" class="back-link">← Back to FAQ Manager</a>\n'
       + err
       + '<div class="panel" style="max-width:700px">'
-      + '<h3>➕ Add a question — ' + _esc(school.schoolName) + "</h3>"
+      + '<h3>➕ Add a question - ' + _esc(school.schoolName) + "</h3>"
       + '<form method="POST" action="/zq-admin/schools/' + school._id + '/faq/q/add" enctype="multipart/form-data">'
       + '<div class="fg" style="margin-bottom:12px"><label>Category <span style="color:red">*</span></label><select name="categoryId">' + catOptions + "</select></div>"
       + '<div class="fg" style="margin-bottom:12px"><label>Question (shown to parents) <span style="color:red">*</span></label>'
       + '<input name="question" maxlength="100" required placeholder="e.g. How do I apply for boarding?"></div>'
       + '<div class="fg" style="margin-bottom:12px"><label>Answer (full text) <span style="color:red">*</span></label>'
       + '<textarea name="answer" rows="5" required maxlength="2000" placeholder="Type the complete answer. Include contact details, amounts, times."></textarea></div>'
-      + '<div class="fg" style="margin-bottom:12px"><label>📎 Attach files (PDF / PNG / JPG / WEBP) — sent to parent on WhatsApp</label>'
+      + '<div class="fg" style="margin-bottom:12px"><label>📎 Attach files (PDF / PNG / JPG / WEBP) - sent to parent on WhatsApp</label>'
       + '<input type="file" name="attachments" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf">'
       + '<div style="font-size:11px;color:var(--muted);margin-top:3px">You can select multiple files. Max 10MB each. Sent to parent after the text answer.</div></div>'
       + '<div class="fg" style="margin-bottom:14px"><label>Order (0 = first)</label>'
@@ -3461,7 +3461,7 @@ router.get("/schools/:id/faq/q/add-page", requireSupplierAdmin, async (req, res)
   }
 });
 
-// ── Add question (POST) — supports multi-file attachments ─────────────────────
+// ── Add question (POST) - supports multi-file attachments ─────────────────────
 router.post("/schools/:id/faq/q/add",
   requireSupplierAdmin,
   faqAttachUpload.array("attachments", 10),
@@ -3517,7 +3517,7 @@ router.post("/schools/:id/faq/q/add",
   }
 });
 
-// ── Edit question/answer (POST) — supports file upload ─────────────────────────
+// ── Edit question/answer (POST) - supports file upload ─────────────────────────
 router.post("/schools/:id/faq/q/:qId/edit",
   requireSupplierAdmin,
   faqAttachUpload.array("attachments", 10),
