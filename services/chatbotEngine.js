@@ -113,19 +113,6 @@ import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js
 import { findSuppliersForRequest, getVagueTermClarification } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
-import {
-  parseSupplierDeepLink,
-  buildProfileCard,
-  trackLinkEvent,
-  buildDeepLink,
-  buildQrImageUrl,
-  buildSharableCaption,
-  assignSlugToSupplier,
-  LINK_SOURCES,
-} from "./supplierSmartLink.js";
- 
- 
-
 import SchoolProfile from "../models/schoolProfile.js";
 import {
   startSchoolRegistration,
@@ -2146,9 +2133,32 @@ function isStrongSingleVariantMatch(matches = []) {
 }
 
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null }) {
-  // Delegated to requestMatchEngine.js — 3-stage matching gate.
-  // This wrapper keeps all existing callers (notifySuppliersOfBuyerRequest) unchanged.
-  return findSuppliersForRequest({ items, city, area });
+  const scoreMap = new Map();
+  const topItems = items.slice(0, 5);
+
+  for (const item of topItems) {
+    // Always search BOTH product and service suppliers for buyer requests
+    const productResults = await runSupplierSearch({
+      city: city || null, product: item.product, area: area || null, profileType: "product"
+    });
+    const serviceResults = await runSupplierSearch({
+      city: city || null, product: item.product, area: area || null, profileType: "service"
+    });
+    const results = [...productResults, ...serviceResults];
+
+    for (const supplier of results || []) {
+      const key = String(supplier._id);
+      const current = scoreMap.get(key) || { supplier, score: 0 };
+      current.score += 1;
+      scoreMap.set(key, current);
+    }
+  }
+
+  return [...scoreMap.values()]
+    .sort((a, b) => b.score - a.score)
+    .map(entry => entry.supplier)
+    .filter(s => s && s.active)
+    .slice(0, 10);
 }
 
 function buildBuyerRequestRef(request) {
@@ -2577,10 +2587,10 @@ function _buyerRequestIsService(items = []) {
     "install","repair","fix","service","replace","fitting","fit","plumb","drain",
     "electric","wire","wiring","paint","build","construct","renovate","plaster",
     "weld","clean","garden","lawn","trim","tutor","teach","lesson","photograph",
-    "video","cater","chef","design","print","brand","security","guard","account",
-    "tax","audit","legal","transport","deliver","courier","mechanic","beat","tyre",
+    "video","cater","chef","design","print","security","guard","account",
+    "tax","audit","legal","transport","courier","mechanic","beat",
     "geyser","borehole","fumigat","pest","massage","barber","haircut","hair",
-    "nail","makeup","booking","hire","maintenance","service call"
+    "nail","makeup","booking","hire","maintenance","thermostat","element"
   ];
   if (!items || !items.length) return false;
   return items.some(item => {
@@ -2620,14 +2630,15 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
 
   const ref = buildBuyerRequestRef(request);
 
-  const _confirmIsService = _isServiceReq;
   const _locationLine = request.area
     ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}\n`
     : request.city ? `📍 ${request.city}\n` : "";
-  const _deliveryLine = _confirmIsService
-    ? (request.serviceAddress ? `📍 Service address: ${request.serviceAddress}\n` : "📍 You will share your address with the provider\n")
+  const _deliveryLine = _isServiceReq
+    ? (request.serviceAddress
+        ? `📍 Service address: ${request.serviceAddress}\n`
+        : "📍 You will share your address with the provider\n")
     : (deliveryRequired ? "🚚 Delivery required\n" : "🏠 Collection / no delivery needed\n");
-  const _sellerWord = _confirmIsService ? "service provider" : "seller";
+  const _sellerWord = _isServiceReq ? "service provider" : "seller";
 
   return sendButtons(from, {
     text:
@@ -3166,6 +3177,7 @@ a.startsWith("sup_load_preset_") ||
       a === "sup_request_mode_bulk" ||
       a === "sup_request_delivery_yes" ||
       a === "sup_request_delivery_no" ||
+      buyerRequestState === "awaiting_service_address" ||
       a.startsWith("req_offer_") ||
       a.startsWith("req_unavail_") ||
       a === "view_and_quote" ||
@@ -3315,89 +3327,14 @@ Reply *menu* to start.`);
   // Must be placed HERE - after biz is declared, but before the supplier
   // search text handler (which was treating ZQ:SCHOOL:... as a product search).
   // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> arrive as plain text from wa.me links.
-   if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
- 
-    // ── ZQ:SUPPLIER — smart link handler ──────────────────────────────────
-    if (/^ZQ:SUPPLIER:[a-f0-9]{24}/i.test(text)) {
-      const _parsed = parseSupplierDeepLink(text);
-      if (_parsed) {
-        const { supplierId: _slSupplierId, source: _slSource } = _parsed;
-        try {
-          // Track view (non-blocking)
-          trackLinkEvent(_slSupplierId, { source: _slSource, isConversion: false })
-            .catch(() => {});
- 
-          const _slSupplier = await SupplierProfile.findById(_slSupplierId).lean();
-          if (_slSupplier && _slSupplier.active) {
-            // Build the intelligent profile card
-            const _profileCard = buildProfileCard(_slSupplier);
-            const _isService   = _slSupplier.profileType === "service";
-            const _hasPrices   = (_slSupplier.prices?.length || 0) > 0 ||
-                                  (_slSupplier.rates?.length  || 0) > 0;
- 
-            // Source attribution message (shown once so buyer knows where they came from)
-            const _srcLabel = LINK_SOURCES[_slSource] || "";
-            const _srcNote  = (_slSource && _slSource !== "direct")
-              ? `\n\n_Opened via ${_srcLabel}_`
-              : "";
- 
-            // Send profile card
-            await sendText(from, _profileCard + _srcNote);
- 
-            // Store seller context in session for sc_ actions to work
-            if (biz) {
-              biz.sessionData = {
-                ...(biz.sessionData || {}),
-                scSellerId:  _slSupplierId,
-                scIsService: _isService,
-                scHasPrices: _hasPrices,
-                scSource:    _slSource,
-              };
-              await saveBizSafe(biz);
-            }
- 
-            // Send interactive menu
-            const _menuRows = [];
-            if (_hasPrices) {
-              _menuRows.push({ id: `sc_quote_${_slSupplierId}`, title: "💵 Get Instant Quote" });
-            } else {
-              _menuRows.push({ id: `sc_quote_${_slSupplierId}`, title: "💵 Request a Quote" });
-            }
-            if (_isService) {
-              _menuRows.push({ id: `sc_book_${_slSupplierId}`,  title: "📅 Book a Service" });
-            } else {
-              _menuRows.push({ id: `sc_order_${_slSupplierId}`, title: "🛒 Place an Order" });
-            }
-          _menuRows.push({ id: `sup_request_sellers`,          title: "⚡ Request Other Sellers" });
-            _menuRows.push({ id: `find_supplier`,                title: "🔍 Browse Marketplace" });
- 
-            await sendList(from, "What would you like to do?", _menuRows);
-            return;
- 
-          } else if (_slSupplier && !_slSupplier.active) {
-            await sendText(from,
-              `⚠️ *${_slSupplier.businessName || "This seller"}* is not currently active on ZimQuote.\n\n` +
-              `They may have paused their listing. Try browsing the marketplace for similar sellers.`
-            );
-            return sendSuppliersMenu(from);
-          } else {
-            await sendText(from, "❌ Seller not found. They may have moved or removed their listing.");
-            return sendSuppliersMenu(from);
-          }
-        } catch (_slErr) {
-          console.error("[SMART LINK]", _slErr.message);
-          // Fall through to legacy handleZqDeepLink
-        }
-      }
-    }
- 
-    // ── ZQ:SCHOOL or fallback ──────────────────────────────────────────────
+  if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
     const _zqHandled = await handleZqDeepLink({
       from, text, biz,
       saveBiz: saveBizSafe.bind(null, biz)
     });
     if (_zqHandled) return;
   }
+
     // ── GLOBAL school shortcode trigger ──────────────────────────────────────
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
@@ -3561,8 +3498,8 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _directLocation = _introRequest.area
           ? `📍 ${_introRequest.area}, ${_introRequest.city || ""}`
           : _introRequest.city ? `📍 ${_introRequest.city}` : "";
-        const _introIsService3 = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
-        const _directDelivery = _introIsService3
+        const _introIsServiceA = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
+        const _directDelivery = _introIsServiceA
           ? (_introRequest.serviceAddress ? `📍 Service at: ${_introRequest.serviceAddress}` : "📍 Client will share address")
           : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
@@ -3682,8 +3619,8 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introLocation  = _introRequest.area
         ? `${_introRequest.area}, ${_introRequest.city || ""}`
         : (_introRequest.city || "Zimbabwe");
-      const _introIsService4 = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
-      const _introDelivery = _introIsService4
+      const _introIsServiceB = _introRequest.isServiceRequest || _buyerRequestIsService(_introRequest.items || []);
+      const _introDelivery = _introIsServiceB
         ? (_introRequest.serviceAddress ? `📍 Service at: ${_introRequest.serviceAddress}` : "📍 Client will share address")
         : _introRequest.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible";
 
@@ -4171,14 +4108,8 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
 
 
-if (buyerRequestState === "awaiting_items") {
-  // ── Navigation: cancel / back / menu always clear state and return to Marketplace ──
-  const _isRequestNavExit =
-    al === "cancel" || al === "0" ||
-    al === "back" ||
-    al === "menu" || al === "main menu" || al === "main_menu";
- 
-  if (_isRequestNavExit) {
+ if (buyerRequestState === "awaiting_items") {
+  if (al === "cancel") {
     await UserSession.findOneAndUpdate(
       { phone },
       {
@@ -4190,9 +4121,11 @@ if (buyerRequestState === "awaiting_items") {
       },
       { upsert: true }
     );
-    return sendSuppliersMenu(from);
+    return sendButtons(from, {
+      text: "✅ Request cancelled.",
+      buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+    });
   }
- 
 
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
@@ -4220,19 +4153,9 @@ if (buyerRequestState === "awaiting_items") {
 
     const vagueItems = getVagueBuyerRequestItems(parsedInline.items || []);
     if (vagueItems.length) {
-      // Try the smarter per-term clarification first (gives specific example prompts)
-      const firstVagueLabel = String(
-        vagueItems[0]?.product || vagueItems[0]?.service || vagueItems[0]?.raw || ""
-      ).trim();
-      const specificClarification = getVagueTermClarification(firstVagueLabel);
-      if (specificClarification) {
-        return sendText(
-          from,
-          `❓ *Please be more specific*\n\n` + specificClarification + `\n\nType *cancel* to stop.`
-        );
-      }
       return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
     }
+
     if (!parsedInline.city) {
       return sendText(
         from,
@@ -4276,11 +4199,9 @@ if (buyerRequestState === "awaiting_items") {
       return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
     }).join("\n");
 
-    // Detect if these items are services — use service-appropriate language
     const _simpleIsService = _buyerRequestIsService(parsedInline.items);
 
     if (_simpleIsService) {
-      // Service request: ask for client address/location instead of delivery
       await UserSession.findOneAndUpdate(
         { phone },
         {
@@ -4302,16 +4223,15 @@ if (buyerRequestState === "awaiting_items") {
       );
       return sendText(
         from,
-        `✅ *Request captured - please check:*\n\n` +
+        `✅ *Request captured:*\n\n` +
         `${_confirmItemLines}\n\n` +
         `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
         `📍 *Where should the service provider come?*\n\n` +
-        `Please type your address or location:\n` +
+        `Type your address or location:\n` +
         `_Examples:_\n` +
         `_24 Mabelreign Drive, Harare_\n` +
-        `_House 7, Borrowdale, Harare_\n` +
-        `_Avondale near OK Mart_\n\n` +
-        `Type *skip* if you will share your address directly with the provider.\n` +
+        `_House 7, Borrowdale, Harare_\n\n` +
+        `Type *skip* to share your address directly with the provider.\n` +
         `Type *cancel* to stop.`
       );
     }
@@ -4374,11 +4294,7 @@ if (buyerRequestState === "awaiting_items") {
 }
 
     if (buyerRequestState === "awaiting_location") {
-      const _isLocationNavExit =
-        al === "cancel" || al === "0" ||
-        al === "menu" || al === "main menu" || al === "main_menu";
- 
-      if (_isLocationNavExit) {
+      if (al === "cancel") {
         await UserSession.findOneAndUpdate(
           { phone },
           {
@@ -4390,22 +4306,10 @@ if (buyerRequestState === "awaiting_items") {
           },
           { upsert: true }
         );
-        return sendSuppliersMenu(from);
-      }
-          // "back" in awaiting_location → return to awaiting_items
-      if (al === "back") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.buyerRequestState": "awaiting_items" } },
-          { upsert: true }
-        );
-        const _backMode = pendingBuyerRequest?.requestType || "bulk";
-        return sendText(
-          from,
-          _backMode === "simple"
-            ? `↩️ Back to your request.\n\nType your item + city again.\n\nExample:\n_find cement harare_\n_find ball valve brass 20mm harare x5_\n\nType *cancel* to stop.`
-            : `↩️ Back to your item list.\n\nSend your items again (one per line or comma-separated).\n\nType *cancel* to stop.`
-        );
+        return sendButtons(from, {
+          text: "✅ Request cancelled.",
+          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
+        });
       }
 
       const parsedLocation = parseBuyerRequestLocationInput(text);
@@ -4431,7 +4335,6 @@ if (buyerRequestState === "awaiting_items") {
         { upsert: true }
       );
 
-      // Detect service request — skip delivery question, ask for address instead
       const _bulkIsService = _buyerRequestIsService(pendingBuyerRequest?.items || []);
       if (_bulkIsService) {
         await UserSession.findOneAndUpdate(
@@ -4453,11 +4356,10 @@ if (buyerRequestState === "awaiting_items") {
           from,
           `📍 *Where should the service provider come?*\n\n` +
           `${parsedLocation.area ? `📍 ${parsedLocation.area}, ${parsedLocation.city}` : `📍 ${parsedLocation.city}`}\n\n` +
-          `Please type your full address or location:\n` +
-          `_Examples:_\n` +
+          `Type your full address:\n` +
           `_24 Mabelreign Drive, Harare_\n` +
           `_House 7, Borrowdale, Harare_\n\n` +
-          `Type *skip* if you will share your address directly with the provider.\n` +
+          `Type *skip* to share your address directly with the provider.\n` +
           `Type *cancel* to stop.`
         );
       }
@@ -4476,82 +4378,36 @@ if (buyerRequestState === "awaiting_items") {
 
 
 
-const buyerReqSession = await UserSession.findOne({ phone }).lean();
-
-const buyerRequestState =
-  buyerReqSession?.tempData?.buyerRequestState ||
-  biz?.sessionData?.buyerRequestState ||
-  null;
-
-const pendingBuyerRequest =
-  buyerReqSession?.tempData?.pendingBuyerRequest ||
-  biz?.sessionData?.pendingBuyerRequest ||
-  null;
-if (buyerRequestState === "awaiting_service_address") {
-      const _isExitSA =
-        al === "cancel" || al === "0" ||
-        al === "menu" || al === "main menu" || al === "main_menu";
-
+    if (buyerRequestState === "awaiting_service_address") {
+      const _isExitSA = al === "cancel" || al === "0" || al === "menu" || al === "main menu" || al === "main_menu";
       if (_isExitSA) {
         await UserSession.findOneAndUpdate(
           { phone },
-          {
-            $unset: {
-              "tempData.buyerRequestState": "",
-              "tempData.pendingBuyerRequest": "",
-              "tempData.buyerRequestMode": ""
-            }
-          },
+          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
           { upsert: true }
         );
         return sendSuppliersMenu(from);
       }
-
       if (al === "back") {
         await UserSession.findOneAndUpdate(
           { phone },
           { $set: { "tempData.buyerRequestState": "awaiting_items" } },
           { upsert: true }
         );
-        return sendText(
-          from,
-          `↩️ Back to your request.\n\nType your item + city again.\n\nType *cancel* to stop.`
-        );
+        return sendText(from, `↩️ Back to your request.\n\nType your item + city again.\n\nType *cancel* to stop.`);
       }
-
-      // "skip" → finalize without a service address
       const _saAddress = al === "skip" ? null : text.trim();
-
       if (_saAddress && _saAddress.length < 3) {
-        return sendText(
-          from,
-          `❌ Please enter a valid address or type *skip* to share your location directly with the provider.\n\nType *cancel* to stop.`
-        );
+        return sendText(from, `❌ Please enter a valid address or type *skip*.\n\nType *cancel* to stop.`);
       }
-
-      // Store address and finalize
-      const _saFinalReq = {
-        ...(pendingBuyerRequest || {}),
-        serviceAddress: _saAddress || null,
-        deliveryRequired: false  // services travel to client; not "delivery"
-      };
-
       await UserSession.findOneAndUpdate(
         { phone },
-        {
-          $unset: {
-            "tempData.buyerRequestState": "",
-            "tempData.pendingBuyerRequest": "",
-            "tempData.buyerRequestMode": ""
-          }
-        },
+        { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
         { upsert: true }
       );
-
       return finalizeBuyerRequestSubmission({
-        from,
-        phone,
-        pendingRequest: _saFinalReq,
+        from, phone,
+        pendingRequest: { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true },
         deliveryRequired: false,
         serviceAddress: _saAddress || null
       });
@@ -4714,7 +4570,7 @@ if (
     });
   }
 function _inlineParseLocation(txt) {
-    const _S = {"avondale":"Harare","borrowdale":"Harare","cbd":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","greencroft":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","mahatshula":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe","macheke":"Murehwa"};
+    const _S = {"avondale":"Harare","borrowdale":"Harare","cbd":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","greencroft":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","mabelreign":"Harare","malborough":"Harare","marlborough":"Harare","malbro":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","mahatshula":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe","macheke":"Murehwa"};
     const _C = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls","bindura","murehwa"];
     const _tc = v => String(v||"").split(" ").filter(Boolean).map(p=>p[0].toUpperCase()+p.slice(1)).join(" ");
     const raw = txt.toLowerCase().trim().replace(/^find\s+/i,"").replace(/^search\s+/i,"").replace(/\s+/g," ");
@@ -5148,8 +5004,7 @@ if (
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState) &&
-  _schoolEnquiryState !== "school_parent_enquiry" &&
-  !biz?.sessionState?.startsWith("sc_")
+  _schoolEnquiryState !== "school_parent_enquiry"
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
@@ -8005,8 +7860,7 @@ if (
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
-  !schoolTextStates.includes(biz.sessionState) &&
-  !biz.sessionState?.startsWith("sc_")
+  !schoolTextStates.includes(biz.sessionState)
 ) {
 
 
@@ -8353,15 +8207,14 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
   
     // Business-tool text states are now handled earlier, before marketplace free-text search.
     // Keep only the ghost-supplier-biz bypass here.
-   if (biz.name?.startsWith("pending_supplier_")) {
-      // ── If ghost biz user is mid-order, mid-listed-selection, or mid-seller-chat, let handlers below process it ──
+    if (biz.name?.startsWith("pending_supplier_")) {
+      // ── If ghost biz user is mid-order or mid-listed-selection, let handlers below process it ──
       if (
         biz.sessionState === "supplier_order_product" ||
         biz.sessionState === "supplier_order_address" ||
         biz.sessionState === "supplier_order_enter_price" ||
         biz.sessionState === "supplier_order_picking" ||
-        biz.sessionState === "supplier_select_listed_products" ||
-        biz.sessionState?.startsWith("sc_")
+        biz.sessionState === "supplier_select_listed_products"
       ) {
         // Do nothing here - fall through to the state handlers below
      } else {
@@ -9617,86 +9470,6 @@ if (
     if (handled) return;
   }
 }
-
-
-if (a === "sup_get_my_link" || a === "sup_smart_link") {
-  const _linkSupplier = await SupplierProfile.findOne({ phone });
-  if (!_linkSupplier) return sendSuppliersMenu(from);
- 
-  // Auto-assign slug if missing
-  try {
-    if (!_linkSupplier.zqSlug) {
-      await assignSlugToSupplier(_linkSupplier._id);
-      await _linkSupplier.reload?.();
-    }
-  } catch (_) { /* slug is cosmetic, don't block */ }
- 
-  const _lid       = String(_linkSupplier._id);
-  const _directLnk = buildDeepLink(_lid, null);
-  const _waLink    = buildDeepLink(_lid, "wa");
-  const _fbLink    = buildDeepLink(_lid, "fb");
-  const _ttLink    = buildDeepLink(_lid, "tt");
-  const _qrLink    = buildDeepLink(_lid, "qr");
-  const _waCaption = buildSharableCaption(_linkSupplier, "wa");
- 
-  await sendText(from,
-    `📲 *Your ZimQuote Smart Link*\n\n` +
-    `This is your permanent business link. Share it anywhere — buyers tap it to see your prices, get a quote, or place an order.\n\n` +
-    `*WhatsApp Status link:*\n${_waLink}\n\n` +
-    `*Facebook link:*\n${_fbLink}\n\n` +
-    `*TikTok bio link:*\n${_ttLink}\n\n` +
-    `*QR Scan link:*\n${_qrLink}\n\n` +
-    `*How to use:*\n` +
-    `1️⃣ Copy any link above\n` +
-    `2️⃣ Post on WhatsApp Status, Facebook, TikTok bio, or print on flyers\n` +
-    `3️⃣ Buyers tap → WhatsApp opens → your profile shows with prices\n\n` +
-    `_Different from WhatsApp Business: buyers don't need to be in your contacts. Anyone with the link can get a quote or place an order._`
-  );
- 
-  return sendButtons(from, {
-    text: `📝 *Ready-to-post WhatsApp Status caption:*\n\n${_waCaption}`,
-    buttons: [
-      { id: "sup_link_analytics", title: "📊 Link Analytics" },
-      { id: "my_supplier_account", title: "🏪 My Account" }
-    ]
-  });
-}
- 
-// ── Supplier smart link analytics (WhatsApp) ──────────────────────────────
-if (a === "sup_link_analytics") {
-  const _anaSupplier = await SupplierProfile.findOne({ phone }).lean();
-  if (!_anaSupplier) return sendSuppliersMenu(from);
- 
-  const _totalViews = _anaSupplier.zqLinkViews        || 0;
-  const _totalConvs = _anaSupplier.zqLinkConversions  || 0;
-  const _srcViews   = _anaSupplier.zqSourceViews       || {};
-  const _convRate   = _totalViews > 0
-    ? ((_totalConvs / _totalViews) * 100).toFixed(1)
-    : "0";
- 
-  const _srcLines = Object.entries(LINK_SOURCES)
-    .map(([src, label]) => {
-      const v = _srcViews[src] || 0;
-      return v > 0 ? `• ${label}: ${v} views` : null;
-    })
-    .filter(Boolean)
-    .join("\n");
- 
-  return sendButtons(from, {
-    text:
-      `📊 *Smart Link Analytics*\n\n` +
-      `👁 Total views: ${_totalViews}\n` +
-      `✅ Conversions: ${_totalConvs}\n` +
-      `📈 Conversion rate: ${_convRate}%\n\n` +
-      `*Views by source:*\n${_srcLines || "No views tracked yet"}\n\n` +
-      `_A "conversion" is when a buyer requests a quote or places an order via your link._`,
-    buttons: [
-      { id: "sup_get_my_link",      title: "📲 My Smart Link" },
-      { id: "my_supplier_account",  title: "🏪 My Account" }
-    ]
-  });
-}
- 
 
 if (a === "my_supplier_account") {
   // Smart router: one button, correct destination based on account state
@@ -14473,7 +14246,6 @@ isService
 
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
-
 if (a === "sup_request_sellers") {
   await UserSession.findOneAndUpdate(
     { phone },
@@ -14490,63 +14262,32 @@ if (a === "sup_request_sellers") {
     },
     { upsert: true }
   );
- 
-  return sendList(from,
-    `⚡ *Request Sellers*\n\n` +
-    `Send one request → reach the right sellers → compare quotes → buy faster.\n\n` +
-    `*What do you need?* Type the item or service + location.\n\n` +
-    `📦 *Product examples:*\n` +
-    `_cement 50kg x20 harare_\n` +
-    `_Toyota Aqua brake pads and service kit harare_\n\n` +
-    `🔧 *Service examples:*\n` +
-    `_electrician for DB board fault borrowdale_\n` +
-    `_plumber for blocked drain avondale_\n\n` +
-    `📋 *Multi-item list?* Use Bulk Request below.\n\n` +
-    `Format: *item/service + quantity + location*\n` +
-    `Type *cancel* to stop.`,
-    [
-      { id: "sup_request_mode_bulk",    title: "📋 Bulk / Long List" },
-      { id: "sup_request_mode_service", title: "🔧 Request a Service" },
-      { id: "find_supplier",            title: "🔍 Browse & Shop" },
+
+  return sendButtons(from, {
+    text:
+      `⚡ *Request Sellers*\n\n` +
+      `Ask multiple sellers to quote the *exact* product or service you need.\n\n` +
+      `Please type the full name so sellers can quote correctly.\n\n` +
+      `Good examples:\n` +
+      `_find ball valve brass 20mm harare_\n` +
+      `_find hp laptop core i7 cbd harare_\n` +
+      `_find school uniform size 8 chitungwiza_\n` +
+      `_find geyser installation avondale harare_\n\n` +
+      `Avoid general requests like:\n` +
+      `_find valve harare_\n` +
+      `_find laptop harare_\n` +
+      `_find plumber harare_\n\n` +
+      `For long lists, use Bulk Request instead.`,
+    buttons: [
+      { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
+      { id: "find_supplier", title: "🔍 Browse & Shop" }
     ]
-  );
+  });
 }
- 
-if (a === "sup_request_mode_service") {
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.buyerRequestState": "awaiting_items",
-        "tempData.buyerRequestMode": "simple",
-        "tempData.pendingBuyerRequest": {
-          requestType: "simple",
-          profileType: "service",
-          items: []
-        }
-      }
-    },
-    { upsert: true }
-  );
- 
-  return sendText(
-    from,
-    `🔧 *Request a Service*\n\n` +
-    `Type what you need + location.\n\n` +
-    `*Examples:*\n` +
-    `_electrician for DB board fault borrowdale harare_\n` +
-    `_plumber for blocked drain avondale harare_\n` +
-    `_painter for interior walls 3 bedroom harare_\n` +
-    `_mechanic Toyota Aqua service harare_\n` +
-    `_cleaner house deep clean 4 bedroom harare_\n\n` +
-    `_Include: what the service is, any details, + city/suburb._\n\n` +
-    `Type *cancel* to stop.`
-  );
-}
- 
+
 if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   const requestType = a === "sup_request_mode_bulk" ? "bulk" : "simple";
- 
+
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -14562,33 +14303,14 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
     },
     { upsert: true }
   );
- 
+
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Bulk Request*\n\n` +
-        `Send your full item list.\n` +
-        `Use one item per line or comma-separated.\n\n` +
-        `*Examples:*\n` +
-        `_110mm pvc pipe x20_\n` +
-        `_32mm p trap x5_\n` +
-        `_solvent cement x2_\n` +
-        `_ball valve brass 20mm x3_\n` +
-        `_geyser 150L x1_\n\n` +
-        `Include sizes, specs, quantities. End with suburb/city on the next message.\n\n` +
-        `Type *cancel* to stop.`
-      : `⚡ *Request Sellers*\n\n` +
-        `Type the full product name + city.\n\n` +
-        `*Examples:*\n` +
-        `_find cement 50kg harare x20_\n` +
-        `_find ball valve brass 20mm harare x5_\n` +
-        `_find school uniform size 8 chitungwiza_\n` +
-        `_find Toyota Aqua brake pads harare_\n\n` +
-        `Format: *find [item] [city]* or *find [item] [suburb] [city]*\n\n` +
-        `Type *cancel* to stop.`
+      ? `📋 *Bulk Request*\n\nSend your full item list.\nUse one item per line or comma-separated.\n\nPlease make each line specific enough for quoting.\n\nGood examples:\n_110 access tees x2_\n_ball valve brass 20mm x5_\n_hp laptop core i7 x3_\n_school uniform size 8 x10_\n_geyser installation x2_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop, but type the *full* product or service name.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nAvoid vague requests like:\n_find valve harare_\n_find laptop harare_\n_find plumber harare_\n\nType *cancel* to stop.`
   );
 }
-
 
 if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
   const reqSess = await UserSession.findOne({ phone });

@@ -374,6 +374,8 @@ function _inferCategoriesFromSearch(product, expandedTerms) {
   const SERVICE_TERM_TO_CATEGORY = {
     "plumb": "plumbing", "geyser": "plumbing", "pipe": "plumbing", "drain": "plumbing",
     "tap": "plumbing", "toilet": "plumbing", "borehole": "plumbing", "leak": "plumbing",
+    "thermostat": "plumbing", "element replace": "plumbing", "hot water": "plumbing",
+    "water heater": "plumbing", "burst": "plumbing", "fitting": "plumbing",
     "electric": "electrical", "wiring": "electrical", "socket": "electrical", "lights": "electrical",
     "generator": "electrical", "solar": "electrical",
     "build": "construction", "construct": "construction", "renovat": "construction",
@@ -482,18 +484,39 @@ let results = await SupplierProfile.find(query)
       .lean();
   }
 
+  // For service suppliers: if still 0 results with profileType filter, also try
+  // without profileType restriction (catches suppliers whose profileType may be
+  // stored differently or missing) — filter by category inferences instead
+  if (profileType === "service" && results.length === 0) {
+    const serviceRelaxedQuery = { ...query };
+    delete serviceRelaxedQuery.profileType;
+    delete serviceRelaxedQuery["location.city"];
+    results = await SupplierProfile.find(serviceRelaxedQuery)
+      .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
+      .limit(50)
+      .lean();
+    // Keep only service-type suppliers from this fallback
+    results = results.filter(s => s.profileType === "service");
+  }
+
 // AFTER:
 const preFilterCount = results.length;
+
+// Helper: split a potentially newline-joined blob into individual service names
+function _splitServiceBlob(arr) {
+  return (arr || []).flatMap(p => {
+    if (!p || p === "pending_upload") return [];
+    return String(p).split(/[\r\n,]+/).map(s => s.trim()).filter(s => s && s !== "pending_upload");
+  });
+}
 
 results = results.filter((supplier) => {
   if (supplier?.profileType === "service") {
     const hasRates = (supplier.rates || []).some(r => normalizeProductName(r?.service || ""));
-    const hasListedProducts = (supplier.listedProducts || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
-    const hasProducts = (supplier.products || []).some(p =>
-      p && p !== "pending_upload" && normalizeProductName(p)
-    );
+    const listedParts = _splitServiceBlob(supplier.listedProducts);
+    const productParts = _splitServiceBlob(supplier.products);
+    const hasListedProducts = listedParts.some(p => normalizeProductName(p));
+    const hasProducts = productParts.some(p => normalizeProductName(p));
     const passes = hasRates || hasListedProducts || hasProducts;
     if (!passes) console.log(`[TRACE-FILTER] REMOVED service supplier: ${supplier.businessName} rates=${hasRates} listed=${hasListedProducts} products=${hasProducts}`);
     return passes;
@@ -913,6 +936,9 @@ const SUBURB_TO_CITY = {
   "avondale": "Harare",
   "borrowdale": "Harare",
   "malbereign": "Harare",
+  "malborough": "Harare",
+  "marlborough": "Harare",
+  "mabelreign": "Harare",
   "mbare": "Harare",
   "highfield": "Harare",
   "glen view": "Harare",
@@ -1043,7 +1069,7 @@ function toTitleCase(value = "") {
 // Scans ALL word-window positions so city/suburb can appear anywhere in the
 // phrase. Both city and suburb can be present simultaneously.
 export function parseShortcodeSearch(input = "") {
-  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","cbd":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","greencroft":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","malbelreign":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe", "macheke":"Murehwa"};
+  const _SUBURBS = {"avondale":"Harare","borrowdale":"Harare","cbd":"Harare","mbare":"Harare","highfield":"Harare","hatfield":"Harare","greendale":"Harare","greencroft":"Harare","msasa":"Harare","eastlea":"Harare","waterfalls":"Harare","mufakose":"Harare","chitungwiza":"Harare","ruwa":"Harare","epworth":"Harare","tafara":"Harare","mabvuku":"Harare","highlands":"Harare","mount pleasant":"Harare","belgravia":"Harare","milton park":"Harare","newlands":"Harare","chisipite":"Harare","gunhill":"Harare","greystone":"Harare","strathaven":"Harare","braeside":"Harare","arcadia":"Harare","southerton":"Harare","workington":"Harare","willowvale":"Harare","graniteside":"Harare","seke":"Harare","norton":"Harare","kambuzuma":"Harare","warren park":"Harare","glen view":"Harare","glenview":"Harare","budiriro":"Harare","kuwadzana":"Harare","dzivarasekwa":"Harare","malbelreign":"Harare","mabelreign":"Harare","malborough":"Harare","marlborough":"Harare","glen norah":"Harare","glennorah":"Harare","nkulumane":"Bulawayo","luveve":"Bulawayo","entumbane":"Bulawayo","njube":"Bulawayo","mpopoma":"Bulawayo","lobengula":"Bulawayo","makokoba":"Bulawayo","tshabalala":"Bulawayo","pumula":"Bulawayo","cowdray park":"Bulawayo","magwegwe":"Bulawayo","hillside":"Bulawayo","white city":"Bulawayo","sakubva":"Mutare","dangamvura":"Mutare","chikanga":"Mutare","mambo":"Gweru","mkoba":"Gweru","senga":"Gweru","ascot":"Gweru","mucheke":"Masvingo","rujeko":"Masvingo","mbizo":"Kwekwe","amaveni":"Kwekwe", "macheke":"Murehwa"};
   const _CITIES = ["harare","bulawayo","mutare","gweru","masvingo","kwekwe","kadoma","chinhoyi","victoria falls","murehwa"];
 
   const raw = String(input || "").toLowerCase().trim()
