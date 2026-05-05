@@ -4476,10 +4476,18 @@ if (buyerRequestState === "awaiting_items") {
 
 
 
-   const buyerRequestState = sess?.tempData?.buyerRequestState || biz?.sessionData?.buyerRequestState || null;
-const pendingBuyerRequest = sess?.tempData?.pendingBuyerRequest || biz?.sessionData?.pendingBuyerRequest || null;
+const buyerReqSession = await UserSession.findOne({ phone }).lean();
 
-if (buyerRequestState === "awaiting_service_address") {
+const buyerRequestState =
+  buyerReqSession?.tempData?.buyerRequestState ||
+  biz?.sessionData?.buyerRequestState ||
+  null;
+
+const pendingBuyerRequest =
+  buyerReqSession?.tempData?.pendingBuyerRequest ||
+  biz?.sessionData?.pendingBuyerRequest ||
+  null;
+if (buyerRequestState === "awaiting_service_address") {s
       const _isExitSA =
         al === "cancel" || al === "0" ||
         al === "menu" || al === "main menu" || al === "main_menu";
