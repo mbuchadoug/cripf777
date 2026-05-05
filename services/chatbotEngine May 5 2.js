@@ -6508,46 +6508,7 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
       ];
     }
 
-    const dbProducts = await Product.find(query).sort({ name: 1 }).lean();
-
-    // ── Pull supplier profile services/products and merge into catalogue ──────
-    // Looks up the SupplierProfile linked to this business phone so that
-    // a plumber can pick "geyser installation - $150" directly from their rates.
-    let supplierItems = [];
-    const _supplierProf = await SupplierProfile.findOne({ phone }).lean();
-    if (_supplierProf) {
-      const _isServiceProf = _supplierProf.profileType === "service";
-
-      // 1. rates[] (service providers: has price already)
-      for (const rate of (_supplierProf.rates || [])) {
-        if (!rate.service) continue;
-        // Parse price from rate string like "150/job" or "$80/hr" or "80"
-        const _priceMatch = String(rate.rate || "").match(/[\d.]+/);
-        const _price = _priceMatch ? parseFloat(_priceMatch[0]) : 0;
-        // Avoid duplicating a Product already in catalogue
-        const _alreadyIn = dbProducts.some(p => p.name.toLowerCase() === rate.service.toLowerCase());
-        if (!_alreadyIn) {
-          supplierItems.push({ _id: `sp_rate_${rate._id || rate.service}`, name: rate.service, unitPrice: _price, source: "profile" });
-        }
-      }
-
-      // 2. listedProducts[] (split blob, no price)
-      const _listedBlob = (_supplierProf.listedProducts || [])
-        .flatMap(p => String(p || "").split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean));
-      for (const lp of _listedBlob) {
-        const _alreadyInDb = dbProducts.some(p => p.name.toLowerCase() === lp.toLowerCase());
-        const _alreadyInRates = supplierItems.some(s => s.name.toLowerCase() === lp.toLowerCase());
-        if (!_alreadyInDb && !_alreadyInRates) {
-          supplierItems.push({ _id: `sp_listed_${lp}`, name: lp, unitPrice: 0, source: "profile" });
-        }
-      }
-    }
-
-    // Merged list: DB products first (they have prices), then supplier profile items
-    const allProducts = [
-      ...dbProducts.map(p => ({ _id: p._id.toString(), name: p.name, unitPrice: p.unitPrice, source: "db" })),
-      ...supplierItems
-    ];
+    const allProducts = await Product.find(query).sort({ name: 1 }).lean();
 
     if (!allProducts.length) {
       biz.sessionState = "creating_invoice_add_items";
@@ -6568,30 +6529,23 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
     const start = page * PAGE_SIZE;
     const visible = allProducts.slice(start, start + PAGE_SIZE);
 
-    // Store full catalogue in session for quick-pick lookup by number
+    // Store full product list in session for quick-pick lookup by number
     biz.sessionState = "creating_invoice_pick_product";
     biz.sessionData.catalogueProducts = allProducts.map(p => ({
-      _id: p._id,
+      _id: p._id.toString(),
       name: p.name,
-      unitPrice: p.unitPrice,
-      source: p.source || "db"
+      unitPrice: p.unitPrice
     }));
     biz.sessionData.cataloguePage = page;
     await saveBizSafe(biz);
 
-    const hasSupplierItems = supplierItems.length > 0;
-    const catalogueLabel = hasSupplierItems ? "📦 *Your Products & Services*" : "📦 *Product Catalogue*";
-
     // Build numbered text list
-    const numbered = visible.map((p, i) => {
-      const priceLabel = p.unitPrice > 0
-        ? ` — ${formatMoney(p.unitPrice, biz.currency)}`
-        : p.source === "profile" ? " — (enter price)" : "";
-      return `${start + i + 1}. *${p.name}*${priceLabel}`;
-    }).join("\n");
+    const numbered = visible
+      .map((p, i) => `${start + i + 1}. *${p.name}* - ${formatMoney(p.unitPrice, biz.currency)}`)
+      .join("\n");
 
     await sendText(from,
-`${catalogueLabel}
+`📦 *Product Catalogue*
 Page ${page + 1} of ${totalPages} · ${allProducts.length} item${allProducts.length === 1 ? "" : "s"}
 
 ${numbered}
@@ -7896,59 +7850,25 @@ const shortcodeBlockedStates = [
   "sales_doc_filter",
   "client_statement_generate",
 
-  // Invoice / quote / receipt — ALL states (text input OR button navigation)
-  // Must be exhaustive: any missing state lets typed input trigger city selector
+  // Invoice / quote / receipt text-entry states
   "creating_invoice_new_client",
   "creating_invoice_new_client_phone",
-  "creating_invoice_add_items",
-  "creating_invoice_pick_product",
-  "creating_invoice_enter_catalogue_prices",
-  "creating_invoice_confirm",
-  "creating_quote_enter_catalogue_prices",
-  "creating_quote_confirm",
-  "creating_receipt_enter_catalogue_prices",
-  "creating_receipt_confirm",
-  "creating_invoice_add_note",
-  "creating_quote_add_note",
-  "creating_receipt_add_note",
-  "creating_invoice_qty",
-  "creating_invoice_add_item_text",
-  "creating_invoice_set_discount",
-  "creating_invoice_set_vat",
-  "creating_invoice_enter_prices",
   "invoice_quick_add_product_name",
   "invoice_quick_add_product_price",
+  "creating_invoice_add_items",
+  "creating_invoice_qty",
+  "creating_invoice_add_item_text",
+
   "quote_quick_add_product_name",
   "quote_quick_add_product_price",
   "receipt_quick_add_product_name",
   "receipt_quick_add_product_price",
-  "creating_quote_new_client",
-  "creating_quote_new_client_phone",
-  "creating_quote_add_items",
-  "creating_quote_pick_product",
-  "creating_quote_qty",
-  "creating_quote_add_item_text",
-  "creating_quote_set_discount",
-  "creating_quote_set_vat",
-  "creating_quote_enter_prices",
-  "creating_receipt_new_client",
-  "creating_receipt_new_client_phone",
-  "creating_receipt_add_items",
-  "creating_receipt_pick_product",
-  "creating_receipt_qty",
-  "creating_receipt_add_item_text",
-  "creating_receipt_set_discount",
-  "creating_receipt_set_vat",
-  "creating_receipt_enter_prices",
-  "payment_invoice_search",
-  "sales_doc_action",
 
   // Products & services text-entry states
   "product_add_name",
   "product_add_price",
   "product_edit_name",
   "product_edit_price",
-  "product_add_name_or_menu",
 
   // Clients / branches / settings
   "settings_currency",
@@ -7960,13 +7880,6 @@ const shortcodeBlockedStates = [
   "invite_user_phone",
   "add_client_name",
   "add_client_phone",
-  "adding_client_name",
-  "client_statement_choose_client",
-  "client_statement_generate",
-  "awaiting_address",
-  "awaiting_business_name",
-  "subscription_payment_pending",
-  "subscription_enter_ecocash",
 
   // School parent enquiry text input
   "school_parent_enquiry",

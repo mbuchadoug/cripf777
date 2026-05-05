@@ -514,20 +514,14 @@ export async function sendBranchSelectorReceipts(to) {
 
 async function _salesDocBranchSelector(to, type, label) {
   const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
   const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-  const { branches } = await ensureDefaultBranch(biz._id);
-
+const { branches } = await ensureDefaultBranch(biz._id);
   const prefix = type === "invoice" ? "view_invoices_branch_"
     : type === "quote" ? "view_quotes_branch_"
     : "view_receipts_branch_";
-
-  // ── Auto-skip branch selector if there is only one branch ─────────────────
-  if (branches.length === 1) {
-    const { handleIncomingMessage } = await import("./chatbotEngine.js");
-    return handleIncomingMessage({ from: to, action: `${prefix}${branches[0]._id}` });
-  }
 
   return sendList(to, `${label} - Select Branch`, [
     { id: `view_all_${type}s`, title: "🌍 All Branches" },
@@ -576,17 +570,11 @@ const { branches } = await ensureDefaultBranch(biz._id);
 ============================================================================= */
 export async function sendBranchSelectorNewDoc(to, docType) {
   const { getBizForPhone } = await import("./bizHelpers.js");
+  const Branch = (await import("../models/branch.js")).default;
   const biz = await getBizForPhone(to);
   if (!biz) return sendMainMenu(to);
-  const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
-  const { branches } = await ensureDefaultBranch(biz._id);
-
-  // ── Auto-skip branch selector if there is only one branch ─────────────────
-  // Fires the new_doc_branch_{docType}_{branchId} action directly
-  if (branches.length === 1) {
-    const { handleIncomingMessage } = await import("./chatbotEngine.js");
-    return handleIncomingMessage({ from: to, action: `new_doc_branch_${docType}_${branches[0]._id}` });
-  }
+ const { ensureDefaultBranch } = await import("./ensureDefaultBranch.js");
+const { branches } = await ensureDefaultBranch(biz._id);
 
   const label = docType === "invoice" ? "📄 New Invoice"
     : docType === "quote" ? "📋 New Quotation"
