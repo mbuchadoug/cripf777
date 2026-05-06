@@ -413,12 +413,12 @@ function _inferCategoriesFromSearch(product, expandedTerms) {
 // Returns a score 0-100. Higher = stronger match.
 //
 // Tiers (highest to lowest):
-//   50  — exact match in rates.service  (service supplier has this exact rate)
-//   45  — exact match in listedProducts / products
-//   30  — partial match in rates.service
-//   25  — partial match in listedProducts / products
-//   15  — match via businessName
-//    5  — match only via category tag (broad — lowest confidence)
+//   50  - exact match in rates.service  (service supplier has this exact rate)
+//   45  - exact match in listedProducts / products
+//   30  - partial match in rates.service
+//   25  - partial match in listedProducts / products
+//   15  - match via businessName
+//    5  - match only via category tag (broad - lowest confidence)
 // ─────────────────────────────────────────────────────────────────────────────
 export function scoreSupplierMatch(supplier, searchTerm) {
   if (!supplier || !searchTerm) return 0;
@@ -470,7 +470,7 @@ export function scoreSupplierMatch(supplier, searchTerm) {
   return 0;
 }
 
-// Internal helper exposed for scoreSupplierMatch — splits blob arrays
+// Internal helper exposed for scoreSupplierMatch - splits blob arrays
 function _splitServiceBlobPublic(arr) {
   return (arr || []).flatMap(p => {
     if (!p || p === "pending_upload") return [];
@@ -557,7 +557,7 @@ let results = await SupplierProfile.find(query)
 
   // For service suppliers: if still 0 results with profileType filter, also try
   // without profileType restriction (catches suppliers whose profileType may be
-  // stored differently or missing) — filter by category inferences instead
+  // stored differently or missing) - filter by category inferences instead
   if (profileType === "service" && results.length === 0) {
     const serviceRelaxedQuery = { ...query };
     delete serviceRelaxedQuery.profileType;

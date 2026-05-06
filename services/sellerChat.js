@@ -1,18 +1,18 @@
 // services/sellerChat.js
-// ─── ZimQuote Seller Chatbot — Quote, Order, Booking, Delivery ───────────────
+// ─── ZimQuote Seller Chatbot - Quote, Order, Booking, Delivery ───────────────
 //
 // Full buyer interaction flow when a buyer taps a seller's ZimQuote smart link.
 //
 // Covers:
-//   1. Seller profile display — name, location, products/services, ratings
-//   2. Instant quote (seller has prices) — full chunked catalogue, seller confirms, PDF sent
-//   3. RFQ flow (no prices) — structured list to seller via Meta template, seller prices, PDF sent
-//   4. Product order — confirm items, qty, delivery/collection choice, location
-//   5. Service booking — date/time, location, job description, confirmation
-//   6. Delivery options — deliver to buyer, collection from seller, both
-//   7. Location capture — buyer suburb/address for delivery quotes
-//   8. Repeat order — returning buyer one-tap repeat
-//   9. Complaint / after-sales — escalation flow
+//   1. Seller profile display - name, location, products/services, ratings
+//   2. Instant quote (seller has prices) - full chunked catalogue, seller confirms, PDF sent
+//   3. RFQ flow (no prices) - structured list to seller via Meta template, seller prices, PDF sent
+//   4. Product order - confirm items, qty, delivery/collection choice, location
+//   5. Service booking - date/time, location, job description, confirmation
+//   6. Delivery options - deliver to buyer, collection from seller, both
+//   7. Location capture - buyer suburb/address for delivery quotes
+//   8. Repeat order - returning buyer one-tap repeat
+//   9. Complaint / after-sales - escalation flow
 //
 // Wire in chatbotEngine.js:
 //   if (a.startsWith("sc_"))        return handleSellerChatAction({ from, action: a, biz, saveBiz });
@@ -52,7 +52,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
-  // Use profileType (correct field) — not serviceType
+  // Use profileType (correct field) - not serviceType
   const isService = seller.profileType === "service";
   const delivery  = seller.delivery?.available;
   const hasPrices = (Array.isArray(seller.prices) && seller.prices.length > 0) ||
@@ -61,9 +61,9 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? `⭐ ${Number(seller.rating).toFixed(1)} (${seller.reviewCount} review${seller.reviewCount === 1 ? "" : "s"})` : "";
 
   const productSample = isService
-    ? (seller.rates  || []).slice(0, 3).map(r => `• ${r.service}${r.rate ? " — " + r.rate : ""}`).join("\n")
+    ? (seller.rates  || []).slice(0, 3).map(r => `• ${r.service}${r.rate ? " - " + r.rate : ""}`).join("\n")
     : (seller.prices || []).filter(p => p.inStock !== false).slice(0, 5)
-        .map(p => `• ${p.product}${p.amount ? " — $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : " — price on request"}`).join("\n");
+        .map(p => `• ${p.product}${p.amount ? " - $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : " - price on request"}`).join("\n");
 
   // Store seller context in buyer's session
   if (biz) {
@@ -131,7 +131,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     if (_confirmMatch) return _scHandleQuoteConfirm(from, _confirmMatch[1].toUpperCase(), biz, saveBiz);
   if (_editMatch)    return _scHandleQuoteEdit(from, _editMatch[1].toUpperCase(), biz, saveBiz);
   if (_rfqMatch) {
-    // Seller taps "Enter Prices" on RFQ template — set edit state and prompt
+    // Seller taps "Enter Prices" on RFQ template - set edit state and prompt
     const UserSession = (await import("../models/userSession.js")).default;
     await UserSession.findOneAndUpdate(
       { phone: _normPhone(from) },
@@ -173,7 +173,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATE HANDLER — handles typed text in seller chat states
+// STATE HANDLER - handles typed text in seller chat states
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSellerChatState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sc_")) return false;
@@ -188,7 +188,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
   }
 
   // ── Seller editing prices on a pending smart-link quote ──────────────────
-  // Check UserSession directly — seller's biz.sessionState may be "ready"
+  // Check UserSession directly - seller's biz.sessionState may be "ready"
   // but they still have a pending quote draft in their session.
   {
     const UserSession = (await import("../models/userSession.js")).default;
@@ -244,7 +244,7 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
   if (hasPrices) {
-    // Send full catalogue in chunks of 30 — handles 100+ item sellers
+    // Send full catalogue in chunks of 30 - handles 100+ item sellers
     const allItems = isService ? seller.rates : seller.prices;
     const total    = allItems.length;
     const CHUNK    = 30;
@@ -266,12 +266,12 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
         const price = isService
           ? (item.rate || "rate on request")
           : `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}`;
-        return `${idx}. ${name} — ${price}`;
+        return `${idx}. ${name} - ${price}`;
       }).join("\n");
 
       if (isFirst) {
         await sendText(from,
-`💵 *${seller.businessName} — ${isService ? "Services" : "Products & prices"} (${total} item${total === 1 ? "" : "s"})*
+`💵 *${seller.businessName} - ${isService ? "Services" : "Products & prices"} (${total} item${total === 1 ? "" : "s"})*
 
 ${lines}${isLast ? "" : "\n_(list continues...)_"}`
         );
@@ -292,7 +292,7 @@ Type *done* when finished, or *cancel* to go back.`
     );
 
   } else {
-    // No prices — RFQ mode
+    // No prices - RFQ mode
     if (biz) {
       biz.sessionState = "sc_awaiting_items";
       biz.sessionData  = { ...(biz.sessionData || {}), scSellerId: supplierId, scQuoteItems: [], scRFQ: true };
@@ -304,9 +304,9 @@ Type *done* when finished, or *cancel* to go back.`
       : "e.g. _20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_";
 
     return sendText(from,
-`💵 *Quote request — ${seller.businessName}*
+`💵 *Quote request - ${seller.businessName}*
 
-List everything you need. Be as specific as possible — sizes, quantities, brands.
+List everything you need. Be as specific as possible - sizes, quantities, brands.
 
 ${productHint}
 
@@ -370,7 +370,7 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
     return sendText(from, "❌ No items added. Please list the items you need first.");
   }
 
-  // ── RFQ path — seller has no prices set ──────────────────────────────────
+  // ── RFQ path - seller has no prices set ──────────────────────────────────
   if (isRFQ) {
     const itemList = items.map((it, i) => `${i + 1}. ${it.name} × ${it.qty}`).join("\n");
     const refNum   = "RFQ-" + Date.now().toString(36).toUpperCase().slice(-6);
@@ -385,7 +385,7 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
       await saveBiz(biz);
     }
 
-    // Notify seller via existing Meta template system — works outside 24hr window
+    // Notify seller via existing Meta template system - works outside 24hr window
     await _sendSellerNotification({
       sellerPhone:  seller.phone,
       refNum,
@@ -414,7 +414,7 @@ The seller will price your request and you'll receive a PDF quote on WhatsApp.
     });
   }
 
-  // ── Priced path — calculate draft, send to seller for confirmation ────────
+  // ── Priced path - calculate draft, send to seller for confirmation ────────
   const priceItems = isService ? seller.rates : seller.prices;
   const priceMap   = {};
   for (const item of (priceItems || [])) {
@@ -435,7 +435,7 @@ The seller will price your request and you'll receive a PDF quote on WhatsApp.
     .toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
   const itemRows = lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} — $${l.unitPrice.toFixed(2)}/${isService ? "job" : "each"} = $${l.lineTotal.toFixed(2)}`
+    `${i + 1}. ${l.name} × ${l.qty} - $${l.unitPrice.toFixed(2)}/${isService ? "job" : "each"} = $${l.lineTotal.toFixed(2)}`
   ).join("\n");
 
   // Store draft in SELLER's UserSession so they can confirm or edit
@@ -458,7 +458,7 @@ The seller will price your request and you'll receive a PDF quote on WhatsApp.
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }
 
-  // Notify seller via Meta template — works outside 24hr window
+  // Notify seller via Meta template - works outside 24hr window
   await _sendSellerNotification({
     sellerPhone:  seller.phone,
     refNum,
@@ -617,11 +617,11 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   );
 
   const numbered = draft.lineItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} — current: $${l.unitPrice.toFixed(2)}`
+    `${i + 1}. ${l.name} × ${l.qty} - current: $${l.unitPrice.toFixed(2)}`
   ).join("\n");
 
   return sendText(from,
-`✏️ *Edit prices — ${refNum}*
+`✏️ *Edit prices - ${refNum}*
 
 ${numbered}
 
@@ -703,7 +703,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`✏️ *Updated quote — ${draft.refNum}*
+`✏️ *Updated quote - ${draft.refNum}*
 
 ${numbered}
 ${"─".repeat(28)}
@@ -720,7 +720,7 @@ Confirm to send to buyer, or edit again.`,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SELLER NOTIFICATION — reuses existing approved Meta template infrastructure
+// SELLER NOTIFICATION - reuses existing approved Meta template infrastructure
 // Sends supplier_new_request_v2 (with View & Quote button) or falls back to v1.
 // Works outside 24hr window. No new templates needed.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -756,7 +756,7 @@ async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, item
       if (isRFQ) {
         await sendButtons(_normPhone(sellerPhone), {
           text:
-            `📋 *New Quote Request — ${refNum}*\n\n` +
+            `📋 *New Quote Request - ${refNum}*\n\n` +
             `Buyer: ${buyerDisplay}\n\n` +
             `Items:\n${itemList}\n\n` +
             `Reply with prices: _1=12.50, 2=8.00_`,
@@ -767,7 +767,7 @@ async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, item
       } else {
         await sendButtons(_normPhone(sellerPhone), {
           text:
-            `📋 *New Quote Request — ${refNum}*\n\n` +
+            `📋 *New Quote Request - ${refNum}*\n\n` +
             `Buyer: ${buyerDisplay}\n\n` +
             `Items:\n${itemList}\n\n` +
             `${typeof total === "number" ? "Estimated total: $" + total.toFixed(2) : "Prices needed"}\n\n` +
@@ -785,20 +785,20 @@ async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, item
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUYER QUOTE DELIVERY — notifies buyer their quote is ready
+// BUYER QUOTE DELIVERY - notifies buyer their quote is ready
 // Uses sendButtons fallback (PDF already sent via sendDocument above)
 // ─────────────────────────────────────────────────────────────────────────────
 async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry, pdfSent = false }) {
   try {
     await sendButtons(_normPhone(buyerPhone), {
       text:
-`✅ *Your quote is ready — ${refNum}*
+`✅ *Your quote is ready - ${refNum}*
 
 From: *${sellerName}*
 Total: *$${Number(total).toFixed(2)} USD*
 Valid until: ${expiry}
 
-${pdfSent ? "PDF sent above — tap to open." : "Quote confirmed by seller."}`,
+${pdfSent ? "PDF sent above - tap to open." : "Quote confirmed by seller."}`,
       buttons: [
         { id: "sup_request_sellers", title: "⚡ New Request" },
         { id: "find_supplier",       title: "🔍 Browse Sellers" }
@@ -821,7 +821,7 @@ async function _scOrder(from, supplierId, biz, saveBiz) {
   if (delivery && collect) {
     return sendButtons(from, {
       text:
-`🛒 *Place an order — ${seller.businessName}*
+`🛒 *Place an order - ${seller.businessName}*
 
 How would you like to receive your order?`,
       buttons: [
@@ -851,7 +851,7 @@ async function _scOrderDeliver(from, supplierId, biz, saveBiz) {
   }
 
   return sendText(from,
-`🚚 *Delivery — ${seller.businessName}*${minOrder}${fee}
+`🚚 *Delivery - ${seller.businessName}*${minOrder}${fee}
 
 Please type your delivery address or suburb.
 
@@ -961,7 +961,7 @@ async function _scBook(from, supplierId, biz, saveBiz) {
   }
 
   return sendText(from,
-`📅 *Book a service — ${seller.businessName}*
+`📅 *Book a service - ${seller.businessName}*
 
 Where do you need the service?
 
@@ -982,7 +982,7 @@ async function _scProcessServiceLocation(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
   return sendText(from,
-`📋 *Service booking — describe the job*
+`📋 *Service booking - describe the job*
 
 Location: _${raw}_
 
@@ -1006,7 +1006,7 @@ Job: _${raw}_
 
 When would you like this done?
 
-_e.g. "Monday morning", "Any weekday after 2pm", "Urgent — today or tomorrow"_
+_e.g. "Monday morning", "Any weekday after 2pm", "Urgent - today or tomorrow"_
 Type *cancel* to go back.`
   );
 }
@@ -1039,7 +1039,7 @@ Contact buyer to confirm.`
 
   return sendButtons(from, {
     text:
-`✅ *Booking request sent — ${refNum}*
+`✅ *Booking request sent - ${refNum}*
 
 ${seller.businessName}
 📍 Location: ${location}
@@ -1071,7 +1071,7 @@ async function _scRepeat(from, supplierId, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`🔄 *Repeat last order — ${seller.businessName}*
+`🔄 *Repeat last order - ${seller.businessName}*
 
 Last order (${lastOrder.refNum}):
 ${itemSummary}
@@ -1126,7 +1126,7 @@ How was your experience?`,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SELLER PRICE REPLY HANDLER (legacy RFQ — seller replies with typed prices)
+// SELLER PRICE REPLY HANDLER (legacy RFQ - seller replies with typed prices)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSellerPriceReply(from, text, biz, saveBiz) {
   const state = biz?.sessionState;
@@ -1209,14 +1209,14 @@ async function _scProcessSellerPriceReply(from, supplierId, raw, biz, saveBiz) {
   try {
     const { sendText: _st } = await import("./metaSender.js");
     await _st(_normPhone(pending.buyerPhone),
-`💵 *Your quote is ready — ${refNum}*
+`💵 *Your quote is ready - ${refNum}*
 
 ${itemRows}
 ${"─".repeat(28)}
 *Total: $${total.toFixed(2)} USD*
 Valid until: ${expiry}
 
-${pdfSent ? "PDF sent above — tap to open." : ""}`
+${pdfSent ? "PDF sent above - tap to open." : ""}`
     );
   } catch (e) { /* ignore */ }
 
@@ -1271,4 +1271,4 @@ function _parseItemInput(raw, knownItems = [], isService = false) {
     }
   }
   return results;
-}
+}s

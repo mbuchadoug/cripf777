@@ -2160,7 +2160,7 @@ async function findSuppliersForBuyerRequest({ items = [], city = null, area = nu
       city: city || null, product: term, area: area || null, profileType: secondaryType
     });
 
-    // Score and accumulate — primary type results use their quality score,
+    // Score and accumulate - primary type results use their quality score,
     // secondary type results require a high match score (≥25) to avoid
     // e.g. plumbing supplies stores receiving service requests
     const MIN_SECONDARY_SCORE = 25;  // must have rated match in products/rates, not just category
@@ -3474,7 +3474,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       // ── Smart link quote: seller tapped "View & Quote" or "Enter Prices" ────────
     // Fires when the seller has a pending draft quote from the sc_ smart link flow
     // (stored as scPendingSellerQuote in their UserSession by sellerChat.js _scQuoteDone).
-    // This has nothing to do with BuyerRequest — it's a direct smart-link quote.
+    // This has nothing to do with BuyerRequest - it's a direct smart-link quote.
     {
       const _scDraftRaw = flowSess?.tempData?.scPendingSellerQuote;
       const _scDraft    = _scDraftRaw
@@ -3493,7 +3493,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const { handleSellerChatAction, handleSellerChatState } = await import("./sellerChat.js");
  
         if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
-          // Seller tapped template button — show them the draft quote for confirmation
+          // Seller tapped template button - show them the draft quote for confirmation
           const _scSeller  = await SupplierProfile.findById(_scDraft.supplierId).lean();
           const _scRefNum  = (_scDraft.refNum || "").toUpperCase();
           const _scItems   = (_scDraft.lineItems || []);
@@ -3502,7 +3502,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           const _scIsRFQ   = _scDraft.isRFQ || false;
  
           if (_scIsRFQ) {
-            // RFQ — seller needs to enter prices
+            // RFQ - seller needs to enter prices
             await UserSession.findOneAndUpdate(
               { phone },
               { $set: { "tempData.scSellerQuoteState": "awaiting_seller_price_edit" } },
@@ -3512,7 +3512,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               `${i + 1}. ${it.name || it.product} × ${it.qty || it.quantity || 1}`
             ).join("\n");
             return sendText(from,
-              `📋 *Quote Request — ${_scRefNum}*\n\n` +
+              `📋 *Quote Request - ${_scRefNum}*\n\n` +
               `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
               `Items:\n${_rfqItemList}\n\n` +
               `Enter your prices:\n` +
@@ -3521,14 +3521,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             );
           }
  
-          // Priced quote — show draft for confirm/edit
+          // Priced quote - show draft for confirm/edit
           const _itemRows = _scItems.map((l, i) =>
-            `${i + 1}. ${l.name} × ${l.qty} — $${Number(l.unitPrice).toFixed(2)} = $${Number(l.lineTotal).toFixed(2)}`
+            `${i + 1}. ${l.name} × ${l.qty} - $${Number(l.unitPrice).toFixed(2)} = $${Number(l.lineTotal).toFixed(2)}`
           ).join("\n");
  
           return sendButtons(from, {
             text:
-              `📋 *Quote to confirm — ${_scRefNum}*\n\n` +
+              `📋 *Quote to confirm - ${_scRefNum}*\n\n` +
               `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
               `${_itemRows}\n` +
               `${"─".repeat(28)}\n` +
@@ -6676,8 +6676,8 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
     // Build numbered text list
     const numbered = visible.map((p, i) => {
       const priceLabel = p.unitPrice > 0
-        ? ` — ${formatMoney(p.unitPrice, biz.currency)}`
-        : p.source === "profile" ? " — (enter price)" : "";
+        ? ` - ${formatMoney(p.unitPrice, biz.currency)}`
+        : p.source === "profile" ? " - (enter price)" : "";
       return `${start + i + 1}. *${p.name}*${priceLabel}`;
     }).join("\n");
 
@@ -7987,7 +7987,7 @@ const shortcodeBlockedStates = [
   "sales_doc_filter",
   "client_statement_generate",
 
-  // Invoice / quote / receipt — ALL states (text input OR button navigation)
+  // Invoice / quote / receipt - ALL states (text input OR button navigation)
   // Must be exhaustive: any missing state lets typed input trigger city selector
   "creating_invoice_new_client",
   "creating_invoice_new_client_phone",

@@ -38,7 +38,7 @@ import SupplierProfile from "../models/supplierProfile.js";
 const BOT_NUMBER   = (process.env.WHATSAPP_BOT_NUMBER || "263771143904").replace(/\D/g, "");
 const BOT_WA_URL   = `https://wa.me/${BOT_NUMBER}`;
 
-// Source codes for tracking — keep short so URLs stay clean
+// Source codes for tracking - keep short so URLs stay clean
 export const LINK_SOURCES = {
   fb:     "Facebook",
   wa:     "WhatsApp Status",
@@ -89,7 +89,7 @@ export async function findUniqueSlug(businessName, excludeSupplierId = null) {
 }
 
 /**
- * Assign a slug to a supplier (idempotent — won't overwrite an existing slug
+ * Assign a slug to a supplier (idempotent - won't overwrite an existing slug
  * unless force=true).
  * Returns the final slug string.
  */
@@ -134,7 +134,7 @@ export function buildAllLinks(supplierId) {
 
 /**
  * Build the QR code image URL for a supplier's direct deep link.
- * Uses Google Charts API — no additional npm package needed.
+ * Uses Google Charts API - no additional npm package needed.
  */
 export function buildQrImageUrl(supplierId, sizePx = 400) {
   const link = buildDeepLink(supplierId, "qr");
@@ -165,7 +165,7 @@ export async function trackLinkEvent(supplierId, { source = "direct", isConversi
 
     await SupplierProfile.findByIdAndUpdate(supplierId, { $inc: inc });
   } catch (err) {
-    // Non-critical — never throw
+    // Non-critical - never throw
     console.error("[SMART LINK TRACK]", err.message);
   }
 }
@@ -248,7 +248,7 @@ export function buildProfileCard(supplier) {
     const rates = (supplier.rates || []).slice(0, 4);
     if (rates.length) {
       catalogueLines = rates
-        .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+        .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
     } else if ((supplier.listedProducts || []).length) {
       catalogueLines = (supplier.listedProducts || []).slice(0, 4)
@@ -256,13 +256,13 @@ export function buildProfileCard(supplier) {
         .join("\n");
     }
   } else {
-    // Product supplier — prefer prices list (has amounts), fall back to listedProducts
+    // Product supplier - prefer prices list (has amounts), fall back to listedProducts
     const priced = (supplier.prices || []).filter(p => p.inStock !== false).slice(0, 6);
     if (priced.length) {
       catalogueLines = priced
         .map(p => {
           const price = p.amount ? `$${Number(p.amount).toFixed(2)}/${p.unit || "each"}` : "price on request";
-          return `• ${p.product}  —  ${price}`;
+          return `• ${p.product}  -  ${price}`;
         })
         .join("\n");
       const extra = (supplier.prices || []).length - priced.length;
@@ -351,7 +351,7 @@ export function buildSharableCaption(supplier, source = "wa") {
 
   const captions = {
     wa: [
-      `🏪 *${name}* — ${location}`,
+      `🏪 *${name}* - ${location}`,
       itemTeaser ? `📦 ${itemTeaser}` : "",
       ``,
       `💬 Get prices & quotes instantly on WhatsApp:`,
@@ -363,7 +363,7 @@ export function buildSharableCaption(supplier, source = "wa") {
       ``,
       itemTeaser ? `We stock: ${itemTeaser}` : `${isService ? "Services" : "Products"} available in ${location}`,
       ``,
-      `📲 Tap the link to browse, get a quote, or place an order — all on WhatsApp. No app downloads needed.`,
+      `📲 Tap the link to browse, get a quote, or place an order - all on WhatsApp. No app downloads needed.`,
       ``,
       link,
       `#ZimQuote #Zimbabwe #${city.replace(/\s/g, "")} #${isService ? "Services" : "Shopping"}`,
@@ -376,7 +376,7 @@ export function buildSharableCaption(supplier, source = "wa") {
     ].join("\n"),
 
     sms: [
-      `${name} — ${location}`,
+      `${name} - ${location}`,
       itemTeaser || "",
       `Get prices & quotes: ${link}`,
     ].filter(Boolean).join("\n"),

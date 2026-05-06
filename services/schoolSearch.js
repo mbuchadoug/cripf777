@@ -390,12 +390,12 @@ ${link}
 
 📱 *TikTok* → Paste as your bio link. Every video drives parents straight to your profile.
 📘 *Facebook* → Paste in posts, stories, and your page description.
-🐦 *Twitter / X* → Add to your profile bio — it shows as a rich preview card.
+🐦 *Twitter / X* → Add to your profile bio - it shows as a rich preview card.
 💬 *WhatsApp Status* → Share it weekly so your contacts can tap and enquire.
 🖨️ *Posters* → Your admin can print a QR code for school gates and events.
 📧 *Email signature* → One tap takes parents to your profile.
 
-When anyone taps this link, WhatsApp opens and your full profile appears instantly — fees, facilities, admissions, and an Enquire button. No searching needed.`,
+When anyone taps this link, WhatsApp opens and your full profile appears instantly - fees, facilities, admissions, and an Enquire button. No searching needed.`,
     buttons: [
       { id: "school_share_link_wa", title: "📤 Get Share Message" },
       { id: "school_account",       title: "⬅ Back to Menu" }
@@ -1177,7 +1177,7 @@ let feeLine = feeRangeLabel(school.feeRange);
     ? `${school.grades.from} – ${school.grades.to}`
     : "Not specified";
 
-  // ── ZQ Link footer — shown when the school has a slug ────────────────────
+  // ── ZQ Link footer - shown when the school has a slug ────────────────────
   const zqLinkLine = school.zqSlug
     ? `\n\n🔗 *Share this school:*\n${BASE_URL}/s/${school.zqSlug}`
     : "";
@@ -1296,7 +1296,7 @@ async function _downloadSchoolProfile(from, schoolId) {
     }
   }
 
-  // Legacy single PDF (old system — keep working)
+  // Legacy single PDF (old system - keep working)
   if (school.profilePdfUrl && !allDocs.some(d => d.url === school.profilePdfUrl)) {
     allDocs.push({ label: `${school.schoolName} Profile`, url: school.profilePdfUrl });
   }
@@ -1320,7 +1320,7 @@ if (allDocs.length > 0) {
     const sentAsDocs  = allDocs.filter(d => d._sent);
     const failedDocs  = allDocs.filter(d => !d._sent);
 
-    let replyText = `📄 *${school.schoolName} — Documents*\n\n`;
+    let replyText = `📄 *${school.schoolName} - Documents*\n\n`;
 
     if (sentAsDocs.length > 0) {
       replyText += `The following ${sentAsDocs.length > 1 ? "documents were" : "document was"} sent above as a file:\n`;
@@ -1526,7 +1526,7 @@ const SCHOOL_EXTRAMURALACTIVITIES_MAP = {
   environmental: "🌿 Env. Club", coding: "💻 Coding Club", science_club: "🔬 Science Club"
 };
 // ─────────────────────────────────────────────────────────────────────────────
-// SMART CARD MENU — school admin picks platform for source-tagged link
+// SMART CARD MENU - school admin picks platform for source-tagged link
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSmartCardMenu(from) {
   const phone  = from.replace(/\D+/g, "");
@@ -1549,7 +1549,7 @@ Please contact ZimQuote admin to activate your Smart Card.
 
 ${baseLink}
 
-Choose where you want to share it — we will generate a version that tracks leads from that platform:`,
+Choose where you want to share it - we will generate a version that tracks leads from that platform:`,
     [
       { id: "school_sc_src_tiktok",          title: "📱 TikTok bio link" },
       { id: "school_sc_src_facebook",         title: "📘 Facebook post / page" },
@@ -1564,7 +1564,7 @@ Choose where you want to share it — we will generate a version that tracks lea
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SMART CARD SOURCE LINK — return a source-tagged link + ready-to-paste copy
+// SMART CARD SOURCE LINK - return a source-tagged link + ready-to-paste copy
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSmartCardSourceLink(from, source) {
   const phone  = from.replace(/\D+/g, "");
@@ -1618,7 +1618,7 @@ ${shareMsg}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MY LEADS — shows the school's uncontacted leads with follow-up buttons
+// MY LEADS - shows the school's uncontacted leads with follow-up buttons
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleMyLeads(from, biz, saveBiz, page = 0) {
   const SchoolLead = (await import("../models/schoolLead.js")).default;
@@ -1688,7 +1688,7 @@ Share your Smart Card link on TikTok, Facebook, or WhatsApp Status to start rece
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FOLLOW UP LEAD — mark as contacted, send school admin a pre-filled WA link
+// FOLLOW UP LEAD - mark as contacted, send school admin a pre-filled WA link
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleFollowUpLead(from, leadId) {
   const SchoolLead = (await import("../models/schoolLead.js")).default;
@@ -1712,8 +1712,8 @@ export async function handleFollowUpLead(from, leadId) {
     : "Good morning";
 
   const prefilledMsg = lead.gradeInterest
-    ? `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} for ${lead.gradeInterest} via ZimQuote. I'd love to help — do you have any questions?`
-    : `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} via ZimQuote. I'd love to help — do you have any questions?`;
+    ? `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} for ${lead.gradeInterest} via ZimQuote. I'd love to help - do you have any questions?`
+    : `${greeting}, I'm following up from ${lead.schoolName}. You ${actionLabel} via ZimQuote. I'd love to help - do you have any questions?`;
 
   const buttons = [];
 
@@ -1723,7 +1723,7 @@ export async function handleFollowUpLead(from, leadId) {
 `✅ *Lead marked as contacted.*
 
 👤 *${lead.parentName || "Anonymous"}*${lead.parentPhone ? "\n📞 " + lead.parentPhone : ""}
-📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " — " + lead.gradeInterest : ""}
+📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " - " + lead.gradeInterest : ""}
 
 *Tap below to open a pre-filled WhatsApp message to this parent:*
 ${waLink}`
@@ -1735,7 +1735,7 @@ ${waLink}`
 `✅ *Lead marked as contacted.*
 
 👤 *${lead.parentName || "Anonymous"}*
-📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " — " + lead.gradeInterest : ""}
+📌 ${ACTION_LABELS[lead.actionType] || lead.actionType}${lead.gradeInterest ? " - " + lead.gradeInterest : ""}
 
 No phone number captured for this lead (they may not have entered their name on the Smart Card page).`
     );

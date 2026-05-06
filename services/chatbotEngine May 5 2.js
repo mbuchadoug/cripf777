@@ -2160,7 +2160,7 @@ async function findSuppliersForBuyerRequest({ items = [], city = null, area = nu
       city: city || null, product: term, area: area || null, profileType: secondaryType
     });
 
-    // Score and accumulate — primary type results use their quality score,
+    // Score and accumulate - primary type results use their quality score,
     // secondary type results require a high match score (≥25) to avoid
     // e.g. plumbing supplies stores receiving service requests
     const MIN_SECONDARY_SCORE = 25;  // must have rated match in products/rates, not just category

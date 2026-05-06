@@ -93,7 +93,7 @@ function getBucket() {
   return new GridFSBucket(mongoose.connection.db, { bucketName: "schoolBrochures" });
 }
 
-// ── Multer — store in memory first, then pipe to GridFS ──────────────────────
+// ── Multer - store in memory first, then pipe to GridFS ──────────────────────
 const brochureUpload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 10 * 1024 * 1024 }, // 10MB max
@@ -854,7 +854,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
               </div>
               <button type="submit" class="btn btn-blue btn-sm" style="white-space:nowrap">⬆ Upload PDF</button>
             </form>
-            <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp — no Google Drive or data needed.</p>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px">📁 PDF is stored on the server and sent directly to parents on WhatsApp - no Google Drive or data needed.</p>
             <p style="font-size:11px;color:var(--muted);margin-top:4px">⚠ Max file size: 10MB. Keep PDFs under 5MB for best WhatsApp delivery.</p>
           </div>
         <div>
@@ -1207,7 +1207,7 @@ router.post("/schools/:id/brochure/add",
       });
 
       // ── Build the serving URL ─────────────────────────────────────────────
-      // This URL is served by the GET route below — publicly accessible
+      // This URL is served by the GET route below - publicly accessible
       const baseUrl  = process.env.APP_BASE_URL || `https://${req.headers.host}`;
       const fileUrl  = `${baseUrl}/zq-admin/schools/brochure/${filename}`;
 
@@ -1229,7 +1229,7 @@ router.post("/schools/:id/brochure/add",
 
 
 // ── GET /zq-admin/schools/brochure/:filename ──────────────────────────────────
-// Serves the PDF directly — no login required so WhatsApp/Meta can fetch it
+// Serves the PDF directly - no login required so WhatsApp/Meta can fetch it
 // and parents receive it as a native WhatsApp document
 router.get("/schools/brochure/:filename", async (req, res) => {
   try {
@@ -1280,7 +1280,7 @@ router.post("/schools/:id/brochure/:index/delete", requireSupplierAdmin, async (
         }
       } catch (gfsErr) {
         console.error("[Brochure GFS Delete]", gfsErr.message);
-        // Don't block — still remove from DB even if GFS delete fails
+        // Don't block - still remove from DB even if GFS delete fails
       }
 
       school.brochures.splice(idx, 1);
@@ -1904,7 +1904,7 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
     const PLATFORMS = [
       { id:"tiktok",          label:"📱 TikTok", tip:"Paste as your bio link. Say 'link in bio' in every video." },
       { id:"facebook",        label:"📘 Facebook", tip:"Paste in post captions, stories, and your Page About section." },
-      { id:"twitter",         label:"🐦 Twitter / X", tip:"Add to your profile bio — unfurls as a rich preview card." },
+      { id:"twitter",         label:"🐦 Twitter / X", tip:"Add to your profile bio - unfurls as a rich preview card." },
       { id:"whatsapp_status", label:"💬 WhatsApp Status", tip:"Share weekly with the message block below." },
       { id:"qr",              label:"🖨️ QR Poster", tip:"Download, print and post at the school gate, churches, shops." },
       { id:"sms",             label:"📲 SMS", tip:"Paste in SMS blasts to parents in your contact list." }
@@ -1915,12 +1915,12 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
       return `
         <tr>
           <td><strong>${p.label}</strong></td>
-          <td><code style="font-size:11px;word-break:break-all">${slug ? esc(link) : "—"}</code></td>
+          <td><code style="font-size:11px;word-break:break-all">${slug ? esc(link) : "-"}</code></td>
           <td style="font-size:12px;color:var(--muted)">${p.tip}</td>
           ${slug ? `<td>
             <button class="btn btn-sm" style="white-space:nowrap" onclick="navigator.clipboard.writeText('${esc(link)}').then(()=>this.textContent='✅ Copied!').catch(()=>{})">📋 Copy</button>
             ${p.id==="qr" ? `<a href="${esc(SC_BASE_URL)}/s/${esc(slug)}/qr" target="_blank" class="btn btn-sm btn-blue" style="margin-left:4px">🖨️ Poster</a>` : ""}
-          </td>` : "<td>—</td>"}
+          </td>` : "<td>-</td>"}
         </tr>`;
     }).join("");
 
@@ -1942,7 +1942,7 @@ router.get("/schools/:id/smartcard", requireSupplierAdmin, async (req, res) => {
             </td>
           </tr>`).join("")}
         </tbody>
-      </table>` : "<em class='muted'>No leads yet — share your Smart Card link to start receiving leads.</em>";
+      </table>` : "<em class='muted'>No leads yet - share your Smart Card link to start receiving leads.</em>";
 
     const sourceRows = sourceBreakdown.map(s =>
       `<tr><td>${esc(SOURCE_LABELS[s._id]||s._id)}</td><td><strong>${s.count}</strong></td></tr>`
@@ -2032,7 +2032,7 @@ Your ZimQuote Smart Card is now active! 🎉
 🔗 Your Smart Card link:
 ${baseLink}
 
-Every time a parent taps this link and enters their name, you will receive a WhatsApp notification with their name and what they want — fees, a visit, a place, or your school profile PDF.
+Every time a parent taps this link and enters their name, you will receive a WhatsApp notification with their name and what they want - fees, a visit, a place, or your school profile PDF.
 
 Share this link everywhere you market your school:
 
@@ -2182,7 +2182,7 @@ router.get("/schools/:id/smartcard/leads", requireSupplierAdmin, async (req, res
       <a href="/zq-admin/schools/${school._id}/smartcard" class="back-link">← Back to Smart Card</a>
       <div class="panel">
         <div class="panel-head">
-          <h3>👥 All Leads — ${esc(school.schoolName)}</h3>
+          <h3>👥 All Leads - ${esc(school.schoolName)}</h3>
           <span style="font-size:13px;color:var(--muted)">${total} total</span>
         </div>
         ${leads.length ? `<div style="overflow-x:auto"><table>

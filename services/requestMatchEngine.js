@@ -26,7 +26,7 @@ function normalize(s = "") {
 //
 // Maps normalized keyword fragments → canonical intent category.
 // More specific entries must come before broader ones within each group.
-// These are NOT supplier category IDs — they are classification labels.
+// These are NOT supplier category IDs - they are classification labels.
 
 const INTENT_KEYWORD_MAP = [
   // ── PLUMBING SUPPLIES (products) ──────────────────────────────────────────
@@ -164,7 +164,7 @@ export const VAGUE_SINGLE_TERMS = new Set([
   "tiles", "tile", "paint", "sand", "cement", "hardware",
 ]);
 
-// Clarification prompts per vague term — what to ask the buyer
+// Clarification prompts per vague term - what to ask the buyer
 const VAGUE_CLARIFICATION = {
   plumber:      "What do you need the plumber for?\n\nExamples:\n_blocked drain avondale_\n_burst pipe borrowdale_\n_geyser installation mbare_\n_new bathroom fitting harare_",
   electrician:  "What do you need the electrician for?\n\nExamples:\n_DB board fault borrowdale_\n_house rewiring harare_\n_solar installation avondale_\n_new sockets fitted harare_",
@@ -454,7 +454,7 @@ function scoreSupplierForRequest(supplier, items, intentResult) {
   if (isServiceIntent && !hasItemMatch && allowedCats.size > 0) {
     // Grant a small base score so they're included but ranked low
     totalScore += categoryOnlyScore;
-    // hasItemMatch stays false — they'll be ranked below suppliers with matched items
+    // hasItemMatch stays false - they'll be ranked below suppliers with matched items
   }
 
   // For product intents: must have at least one item match to qualify
@@ -545,7 +545,7 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
     query.profileType = profileType;
   }
 
-  // Intentionally NOT matching businessName — that's the root cause of overmatch
+  // Intentionally NOT matching businessName - that's the root cause of overmatch
 
   let candidates = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })

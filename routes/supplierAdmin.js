@@ -3996,7 +3996,7 @@ router.post("/expiry/notify-bulk", requireSupplierAdmin, async (req, res) => {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ZIMQUOTE CHATBOT LINK PANEL — SUPPLIERS / SELLERS
+// ZIMQUOTE CHATBOT LINK PANEL - SUPPLIERS / SELLERS
 // Pure wa.me link. No domain. No slug. No web page.
 // Link: https://wa.me/<BOT>?text=ZQ:SUPPLIER:<mongoId>
 //

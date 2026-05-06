@@ -1,11 +1,11 @@
 // routes/zqLink.js
-// ─── ZimQuote Smart Card — WhatsApp Deep-Link Redirector ─────────────────────
+// ─── ZimQuote Smart Card - WhatsApp Deep-Link Redirector ─────────────────────
 //
 // Every school and seller has a shareable link:
 //   /s/:slug   → school   → fires WhatsApp bot pre-loaded with school profile
 //   /p/:slug   → supplier → fires WhatsApp bot pre-loaded with supplier profile
 //
-// The link is 100% WhatsApp — no website profile page, no web form.
+// The link is 100% WhatsApp - no website profile page, no web form.
 // When tapped (on any platform, any device):
 //   1. A minimal branded page loads instantly (< 5KB, works on EDGE)
 //   2. JavaScript fires the wa.me deep-link in the same tick
@@ -87,7 +87,7 @@ function _redirectPage({ name, subtitle, admissionsOpen, waUrl, payload, canonic
   // scan from their phone and open WhatsApp on mobile)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(canonical)}&color=085041&bgcolor=FFFFFF&qzone=1`;
 
-  // Open Graph / Twitter Card meta — description + image for social previews
+  // Open Graph / Twitter Card meta - description + image for social previews
   const ogTitle = `${name} | ZimQuote`;
   const ogDesc  = type === "school"
     ? `${subtitle}. Tap to view fees, facilities and enquire on WhatsApp via ZimQuote.`
@@ -151,14 +151,14 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
   <p class="subtitle">${esc(subtitle)}</p>
   ${admBadge}
 
-  <!-- Primary CTA — fires WhatsApp immediately -->
+  <!-- Primary CTA - fires WhatsApp immediately -->
   <a href="${esc(waUrl)}" class="wa-btn" id="waBtn">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.785 23.516a.75.75 0 001.012.86l4.612-1.63A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.347 0-4.536-.67-6.387-1.83l-.452-.267-3.35 1.184 1.139-3.267-.293-.466A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
     Open in WhatsApp
   </a>
   <p class="hint">Opens the ZimQuote bot · Your profile loads instantly</p>
 
-  <!-- Desktop fallback — shown when no WhatsApp deep-link fires -->
+  <!-- Desktop fallback - shown when no WhatsApp deep-link fires -->
   <div class="divider"></div>
   <div class="desktop-section" id="desktopSection">
     <p class="qr-label">📱 On your phone? Scan this QR code to open in WhatsApp:</p>
@@ -201,10 +201,10 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPECIFIC ROUTES FIRST — before /:slug catch-all
+// SPECIFIC ROUTES FIRST - before /:slug catch-all
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Lead conversion tracker — POST /s/:slug/track ────────────────────────────
+// ── Lead conversion tracker - POST /s/:slug/track ────────────────────────────
 // Called by the page before firing the wa.me link (optional, best-effort)
 router.post("/:slug/track", async (req, res) => {
   try {
@@ -238,7 +238,7 @@ router.post("/:slug/track", async (req, res) => {
   }
 });
 
-// ── QR poster — GET /s/:slug/qr ──────────────────────────────────────────────
+// ── QR poster - GET /s/:slug/qr ──────────────────────────────────────────────
 router.get("/:slug/qr", async (req, res) => {
   try {
     const isSupplier = req.baseUrl.startsWith("/p");
@@ -283,7 +283,7 @@ router.get("/:slug/qr", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCHOOL REDIRECT — GET /s/:slug  (catch-all, must be last)
+// SCHOOL REDIRECT - GET /s/:slug  (catch-all, must be last)
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/:slug", async (req, res) => {
   try {

@@ -128,7 +128,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Smart Link — ${esc(supplier.businessName)} - ZimQuote Admin</title>
+<title>Smart Link - ${esc(supplier.businessName)} - ZimQuote Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -244,7 +244,7 @@ td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
     <div class="card">
       <h2>WhatsApp Deep Link</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
-        This is the main link. Share it anywhere — it opens WhatsApp and loads this seller's profile automatically.
+        This is the main link. Share it anywhere - it opens WhatsApp and loads this seller's profile automatically.
       </p>
       <div class="link-box" onclick="copyText(${JSON.stringify(directLink)}, this)" title="Click to copy">
         ${esc(directLink)}
@@ -425,7 +425,7 @@ router.post("/assign", requireSupplierAdmin, async (req, res) => {
     if (!supplier) return res.redirect("/zq-admin/suppliers");
 
     if (rawSlug) {
-      // Custom slug — check uniqueness
+      // Custom slug - check uniqueness
       const existing = await SupplierProfile.findOne({
         zqSlug: rawSlug,
         _id: { $ne: supplier._id }
@@ -462,7 +462,7 @@ router.get("/qr", requireSupplierAdmin, async (req, res) => {
     res.send(`<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
-<title>QR — ${name}</title>
+<title>QR - ${name}</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 @media print{.no-print{display:none}@page{margin:12mm}}

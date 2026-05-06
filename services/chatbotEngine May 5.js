@@ -2146,7 +2146,7 @@ function isStrongSingleVariantMatch(matches = []) {
 }
 
 async function findSuppliersForBuyerRequest({ items = [], city = null, area = null }) {
-  // Delegated to requestMatchEngine.js — 3-stage matching gate.
+  // Delegated to requestMatchEngine.js - 3-stage matching gate.
   // This wrapper keeps all existing callers (notifySuppliersOfBuyerRequest) unchanged.
   return findSuppliersForRequest({ items, city, area });
 }
@@ -3280,7 +3280,7 @@ Reply *menu* to start.`);
   // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> arrive as plain text from wa.me links.
    if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
  
-    // ── ZQ:SUPPLIER — smart link handler ──────────────────────────────────
+    // ── ZQ:SUPPLIER - smart link handler ──────────────────────────────────
     if (/^ZQ:SUPPLIER:[a-f0-9]{24}/i.test(text)) {
       const _parsed = parseSupplierDeepLink(text);
       if (_parsed) {
@@ -9445,7 +9445,7 @@ if (a === "sup_get_my_link" || a === "sup_smart_link") {
  
   await sendText(from,
     `📲 *Your ZimQuote Smart Link*\n\n` +
-    `This is your permanent business link. Share it anywhere — buyers tap it to see your prices, get a quote, or place an order.\n\n` +
+    `This is your permanent business link. Share it anywhere - buyers tap it to see your prices, get a quote, or place an order.\n\n` +
     `*WhatsApp Status link:*\n${_waLink}\n\n` +
     `*Facebook link:*\n${_fbLink}\n\n` +
     `*TikTok bio link:*\n${_ttLink}\n\n` +

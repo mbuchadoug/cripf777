@@ -1,10 +1,10 @@
 // models/schoolLead.js
-// ─── ZimQuote Smart Card — Lead Database ─────────────────────────────────────
+// ─── ZimQuote Smart Card - Lead Database ─────────────────────────────────────
 //
 // Every parent who opens a Smart Card and interacts with it becomes a lead.
 // Leads are created by two paths:
-//   1. The public Smart Card page (POST /s/:slug/capture) — before WA opens
-//   2. The WhatsApp bot — when a parent enquires via the bot directly
+//   1. The public Smart Card page (POST /s/:slug/capture) - before WA opens
+//   2. The WhatsApp bot - when a parent enquires via the bot directly
 //
 // Fields marked (*) are set only by path 1 (the web page).
 
