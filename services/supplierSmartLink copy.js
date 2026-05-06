@@ -245,20 +245,13 @@ export function buildProfileCard(supplier) {
   // ── Products / services preview ───────────────────────────────────────────
   let catalogueLines = "";
   if (isService) {
-    // BUG FIX: rates[] often empty even when listedProducts[]/products[] has services.
-    // Fall through: rates → listedProducts → products — always show something real.
-    const hasRates = (supplier.rates || []).length > 0;
-    if (hasRates) {
-      catalogueLines = (supplier.rates || []).slice(0, 5)
-        .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+    const rates = (supplier.rates || []).slice(0, 4);
+    if (rates.length) {
+      catalogueLines = rates
+        .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
-    } else {
-      const serviceList = supplier.listedProducts?.length
-        ? supplier.listedProducts
-        : (supplier.products || []);
-      catalogueLines = serviceList
-        .filter(p => p && p !== "pending_upload")
-        .slice(0, 6)
+    } else if ((supplier.listedProducts || []).length) {
+      catalogueLines = (supplier.listedProducts || []).slice(0, 4)
         .map(p => `• ${p}`)
         .join("\n");
     }
@@ -282,13 +275,10 @@ export function buildProfileCard(supplier) {
   }
 
   // ── Delivery ──────────────────────────────────────────────────────────────
-  // BUG FIX: Service providers with travelAvailable=true TRAVEL TO CLIENTS.
-  // NEVER show "Collection only" for cleaning/plumbing/service providers.
   let deliveryLine = "";
   if (isService) {
     if (supplier.travelAvailable) {
-      const svcArea = supplier.serviceArea || city || location;
-      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
+      deliveryLine = `🚗 Travels to clients · ${supplier.serviceArea || city}`;
     } else {
       deliveryLine = `📍 Based in ${location}`;
     }
@@ -346,14 +336,12 @@ export function buildSharableCaption(supplier, source = "wa") {
   const location = [area, city].filter(Boolean).join(", ");
   const isService = supplier.profileType === "service";
 
-  // Top 3 items/services as a teaser — same fallback chain: rates → listedProducts → products
+  // Top 3 items/services as a teaser
   const items = isService
-    ? ((supplier.rates || []).length > 0
-        ? (supplier.rates || []).slice(0, 3).map(r => r.service)
-        : ((supplier.listedProducts || supplier.products || []).filter(p => p && p !== "pending_upload").slice(0, 3)))
-    : (supplier.prices || []).filter(p => p.inStock !== false).slice(0, 3).map(p =>
-        p.amount ? `${p.product} @ $${Number(p.amount).toFixed(2)}` : p.product
-      );
+    ? (supplier.rates || []).slice(0, 3).map(r => r.service)
+    : (supplier.prices || []).filter(p => p.inStock !== false).slice(0, 3).map(p => {
+        return p.amount ? `${p.product} @ $${Number(p.amount).toFixed(2)}` : p.product;
+      });
 
   const itemTeaser = items.length
     ? items.join(" · ")
@@ -404,82 +392,6 @@ export function buildSharableCaption(supplier, source = "wa") {
   };
 
   return captions[source] || captions.wa;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART LINK BENEFITS CARD
-// ─────────────────────────────────────────────────────────────────────────────
-// Explains to a seller why their ZimQuote link is better than WhatsApp Business,
-// Facebook, or a website — with real Zimbabwe context.
-//
-// ZIM REALITY:
-//   • Building a website costs $200-500 upfront + $15/mo hosting — most sellers can't afford it
-//   • Facebook algorithm hides posts unless you pay to boost
-//   • WhatsApp Business can't reach outside 24hr window, no PDF quotes, no analytics
-//   • ZimQuote link: FREE with subscription, works on any phone, WhatsApp-native,
-//     instant quotes, PDF delivery, seller notified every view, tracks which platform works
-//   • Economy is USD cash-based: buyers want a quote before committing, not guessing
-//   • Power cuts, data costs, bad internet: ZimQuote is lightweight, works on $1 bundles
-//
-export function buildSmartLinkBenefitsCard(supplier) {
-  const views    = supplier?.zqLinkViews || 0;
-  const converts = supplier?.zqLinkConversions || 0;
-  const sources  = supplier?.zqSourceViews || {};
-
-  const sourceLabels = {
-    fb: "Facebook", wa: "WhatsApp", tt: "TikTok",
-    qr: "QR Code", sms: "SMS/Flyer", ig: "Instagram",
-    yt: "YouTube", direct: "Direct"
-  };
-  const sourceBreakdown = Object.entries(sources)
-    .filter(([, v]) => v > 0)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 4)
-    .map(([k, v]) => `  • ${sourceLabels[k] || k}: ${v} view${v === 1 ? "" : "s"}`)
-    .join("\n");
-
-  const lines = [
-    `🔗 *Your ZimQuote Smart Link*`,
-    ``,
-    `📊 *Your stats so far:*`,
-    `  👁 ${views} profile view${views === 1 ? "" : "s"} total`,
-    `  ✅ ${converts} buyer action${converts === 1 ? "" : "s"} (quote/booking/enquiry)`,
-    sourceBreakdown ? `\n📱 *Where buyers come from:*\n${sourceBreakdown}` : "",
-    ``,
-    `─────────────────`,
-    `💡 *Why your ZimQuote link beats other options:*`,
-    ``,
-    `📱 *vs WhatsApp Business:*`,
-    `  • We reach buyers outside 24hr window — they can't`,
-    `  • We send PDF quotes automatically — they can't`,
-    `  • We show analytics per source — they don't`,
-    `  • We notify you every time someone opens your link`,
-    ``,
-    `📘 *vs Facebook page:*`,
-    `  • Facebook: buyer messages you, you quote manually (1-2 hrs lost)`,
-    `  • ZimQuote: buyer taps → quote generated → PDF sent instantly`,
-    `  • Facebook algorithm hides your posts unless you pay to boost`,
-    `  • ZimQuote: your link always works, no algorithm`,
-    ``,
-    `🌐 *vs a website:*`,
-    `  • Website: $200-500 to build, $15+/month to host`,
-    `  • ZimQuote link: FREE with your $5/month subscription`,
-    `  • Your link lives on WhatsApp — where your buyers already are`,
-    `  • No data-heavy app download needed`,
-    ``,
-    `─────────────────`,
-    `🎯 *How to get more from your link:*`,
-    `  1. Add it to your Facebook / TikTok bio`,
-    `  2. Print as QR code on flyers, receipts, business cards`,
-    `  3. Post it in your WhatsApp Status`,
-    `  4. Share in neighbourhood WhatsApp groups`,
-    `  5. Put it in your email signature / SMS`,
-    ``,
-    `Each source is tracked separately — you will see exactly`,
-    `which platform brings you the most buyers.`,
-  ].filter(l => l !== "").join("\n");
-
-  return lines;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

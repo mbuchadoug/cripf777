@@ -48,167 +48,24 @@ function _trackConversion(biz) {
 // MAIN SELLER PROFILE + MENU
 // Called when buyer opens a seller's ZimQuote smart link
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTIFY SELLER - someone opened their smart link
-// ─────────────────────────────────────────────────────────────────────────────
-// UTILITY notification (not marketing) — triggered by user action, not ZimQuote blast.
-// Compare to: bank transaction alerts, "someone viewed your listing" notifications.
-//
-// Strategy:
-//   1. Try sendButtons first (within 24hr WhatsApp session window)
-//   2. Fall back to supplier_new_buyer_request template (already approved, utility)
-//
-// NEW TEMPLATE to submit to Meta (optional improvement, recommended):
-//   Name:     supplier_link_opened
-//   Category: UTILITY  ← IMPORTANT: submit as UTILITY not MARKETING
-//   Body:
-//     👁 Someone opened your ZimQuote profile!
-//     Business: {{1}}
-//     Via: {{2}}
-//     Time: {{3}}
-//     They can request a quote, book, or send an enquiry directly.
-//     Type *menu* to see your store.
-//     This is an automated activity alert from ZimQuote.
-//   WHY UTILITY: triggered by buyer action on seller's account (not promotional content).
-//
-async function _notifySellerLinkOpened(seller, buyerPhone, source) {
-  try {
-    const sourceLabels = {
-      fb: "Facebook", wa: "WhatsApp Status", tt: "TikTok",
-      qr: "QR Code scan", sms: "SMS / Flyer", ig: "Instagram",
-      yt: "YouTube", direct: "Direct link", whatsapp_link: "WhatsApp link"
-    };
-    const sourceLabel = sourceLabels[source] || "ZimQuote link";
-    const timeStr     = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-    // ── Try sendButtons (within 24hr session) ────────────────────────────────
-    try {
-      await sendButtons(_normPhone(seller.phone), {
-        text:
-          `👁 *Someone just opened your ZimQuote profile!*\n\n` +
-          `📱 Via: ${sourceLabel}\n` +
-          `⏰ ${timeStr}\n\n` +
-          `They can see your services, request a quote, or book directly.\n\n` +
-          `💡 _Tip: Keep your services and rates updated so visitors convert._`,
-        buttons: [
-          { id: "my_supplier_account", title: "🏪 My Store" },
-          { id: "sup_request_sellers", title: "⚡ Marketplace" }
-        ]
-      });
-      return;
-    } catch (_) { /* outside 24hr window — fall through to template */ }
-
-    // ── Template fallback (works outside 24hr window) ─────────────────────────
-    // Reuse approved supplier_new_buyer_request as utility template
-    // Variables match its 4-variable body: ref, location, items-desc, delivery-line
-    const axios    = (await import("axios")).default;
-    const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-    const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-    await axios.post(
-      `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to:   _normPhone(seller.phone),
-        type: "template",
-        template: {
-          name: "supplier_new_buyer_request",
-          language: { code: "en" },
-          components: [{
-            type: "body",
-            parameters: [
-              { type: "text", text: "Profile View" },
-              { type: "text", text: sourceLabel },
-              { type: "text", text: "Someone viewed your ZimQuote profile" },
-              { type: "text", text: "Tap menu to see your store" }
-            ]
-          }]
-        }
-      },
-      { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    // Non-critical — never rethrow
-    console.warn("[SMART LINK NOTIFY]", err.message);
-  }
-}
-
 export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = "direct", parentName = "" } = {}) {
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
+  // Use profileType (correct field) - not serviceType
   const isService = seller.profileType === "service";
+  const delivery  = seller.delivery?.available;
+  const hasPrices = (Array.isArray(seller.prices) && seller.prices.length > 0) ||
+                    (Array.isArray(seller.rates)   && seller.rates.length  > 0);
+  const rating    = (seller.reviewCount || 0) > 0
+    ? `⭐ ${Number(seller.rating).toFixed(1)} (${seller.reviewCount} review${seller.reviewCount === 1 ? "" : "s"})` : "";
 
-  // ── Build services/products sample ────────────────────────────────────────
-  // BUG FIX: For service providers rates[] is often empty even when
-  // products[]/listedProducts[] has the actual service list.
-  // Fall through: rates → listedProducts → products — always show something real.
-  let productSample = "";
-  if (isService) {
-    const hasRates = Array.isArray(seller.rates) && seller.rates.length > 0;
-    if (hasRates) {
-      productSample = seller.rates.slice(0, 5)
-        .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
-        .join("\n");
-    } else {
-      const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
-      productSample = serviceList
-        .filter(p => p && p !== "pending_upload")
-        .slice(0, 6)
-        .map(s => `• ${s}`)
-        .join("\n");
-    }
-  } else {
-    const priced = (seller.prices || []).filter(p => p.inStock !== false).slice(0, 5);
-    if (priced.length) {
-      productSample = priced
-        .map(p => `• ${p.product}${p.amount ? "  —  $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : ""}`)
-        .join("\n");
-    } else {
-      const listed = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
-      productSample = listed.filter(p => p && p !== "pending_upload").slice(0, 6).map(s => `• ${s}`).join("\n");
-    }
-  }
+  const productSample = isService
+    ? (seller.rates  || []).slice(0, 3).map(r => `• ${r.service}${r.rate ? " - " + r.rate : ""}`).join("\n")
+    : (seller.prices || []).filter(p => p.inStock !== false).slice(0, 5)
+        .map(p => `• ${p.product}${p.amount ? " - $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : " - price on request"}`).join("\n");
 
-  const hasPrices = isService
-    ? (Array.isArray(seller.rates) && seller.rates.length > 0)
-    : (Array.isArray(seller.prices) && seller.prices.length > 0);
-
-  // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
-  // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
-  // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
-  let deliveryLine = "";
-  if (isService) {
-    if (seller.travelAvailable) {
-      const svcArea = seller.serviceArea
-        || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
-      deliveryLine = `🚗 Travels to clients · ${svcArea}`;
-    } else {
-      deliveryLine = `📍 Client visits provider · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  } else {
-    if (seller.delivery?.available) {
-      const rangeLabel = { area_only: "area only", city_wide: "citywide", nationwide: "nationwide" }[seller.delivery.range] || "";
-      deliveryLine = `🚚 Delivery available${rangeLabel ? " · " + rangeLabel : ""}`;
-    } else {
-      deliveryLine = `🏠 Collection · ${[seller.location?.area, seller.location?.city].filter(Boolean).join(", ")}`;
-    }
-  }
-
-  // ── Credibility signals ────────────────────────────────────────────────────
-  const ratingStr = (seller.reviewCount || 0) > 0
-    ? `⭐ ${Number(seller.rating).toFixed(1)}/5 (${seller.reviewCount} review${seller.reviewCount === 1 ? "" : "s"})` : "";
-  const ordersStr = (seller.completedOrders || 0) > 0
-    ? `✅ ${seller.completedOrders} job${seller.completedOrders === 1 ? "" : "s"} done` : "";
-  const respMin   = seller.avgResponseMinutes;
-  const respStr   = (respMin !== null && respMin !== undefined && respMin <= 240)
-    ? `⚡ Replies ${respMin <= 5 ? "instantly" : respMin <= 30 ? "within 30 min" : "within a few hours"}` : "";
-  const credLine  = [ratingStr, ordersStr, respStr].filter(Boolean).join("  ·  ");
-
-  const area     = seller.location?.area || "";
-  const city     = seller.location?.city || "";
-  const location = [area, city].filter(Boolean).join(", ");
-
-  // ── Store session context ─────────────────────────────────────────────────
+  // Store seller context in buyer's session
   if (biz) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
@@ -221,51 +78,39 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     await saveBiz(biz);
   }
 
-  // ── Notify seller someone opened their link (non-blocking) ────────────────
-  _notifySellerLinkOpened(seller, from, source).catch(() => {});
-
-  // ── Track analytics (non-blocking) ───────────────────────────────────────
-  import("./supplierSmartLink.js").then(({ trackLinkEvent }) =>
-    trackLinkEvent(supplierId, { source, isConversion: false }).catch(() => {})
-  ).catch(() => {});
-
   const hasHistory = biz?.sessionData?.scLastOrder;
   const repeatBtn  = hasHistory
     ? [{ id: `sc_repeat_${supplierId}`, title: "🔄 Repeat last order" }] : [];
 
-  // ── Profile card ─────────────────────────────────────────────────────────
-  const profileCard = [
-    `${isService ? "🔧" : "🏪"} *${seller.businessName}*${seller.verified ? " ✅" : ""}${seller.topSupplierBadge ? " 🏅" : ""}`,
-    `📍 ${location}`,
-    credLine || null,
-    ``,
-    isService ? `🛠 *Services offered:*` : `📦 *Products available:*`,
-    productSample || `_(Contact seller for full list)_`,
-    ``,
-    deliveryLine,
-    seller.address        ? `🏠 ${seller.address}` : null,
-    seller.contactDetails ? `📞 ${seller.contactDetails}` : null,
-    seller.website        ? `🌐 ${seller.website}` : null,
-  ].filter(l => l !== null).join("\n");
+  const area     = seller.location?.area || seller.area || "";
+  const city     = seller.location?.city || seller.city || "";
+  const location = [area, city].filter(Boolean).join(", ");
 
-  await sendText(from, profileCard);
+  await sendText(from,
+`${isService ? "🔧" : "🏪"} *${seller.businessName}*${seller.verified ? " ✅" : ""}${seller.topSupplierBadge ? " 🏅" : ""}
+📍 ${location}
+${rating}
+
+${isService ? "Services offered:" : "Products available:"}
+${productSample || "Contact seller for full catalogue"}
+
+${delivery ? "🚚 Delivery available" : "🏠 Collection only"}`
+  );
 
   if (isService) {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
       { id: `sc_book_${supplierId}`,    title: "📅 Book a service" },
-      { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
-      { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
+      { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
     ]);
   } else {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
       { id: `sc_order_${supplierId}`,   title: "🛒 Place an order" },
-      { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
-      { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
+      { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
     ]);
   }
@@ -319,9 +164,6 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "order_confirm":   return _scOrderConfirm(from, supplierId, biz, saveBiz);
     case "book":            return _scBook(from, supplierId, biz, saveBiz);
     case "book_confirm":    return _scBookConfirm(from, supplierId, biz, saveBiz);
-    case "enquiry":         return _scEnquiry(from, supplierId, biz, saveBiz);
-    case "smart_link":      return _scSmartLinkMenu(from, supplierId, biz, saveBiz);
-    case "smart_link_share":return _scSmartLinkShareMenu(from, supplierId, biz, saveBiz);
     case "repeat":          return _scRepeat(from, supplierId, biz, saveBiz);
     case "contact":         return _scContact(from, supplierId);
     case "review":          return _scReview(from, supplierId, biz, saveBiz);
@@ -354,11 +196,6 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     if (_sess?.tempData?.scSellerQuoteState === "awaiting_seller_price_edit") {
       return _scProcessSellerPriceEdit(from, raw, biz, saveBiz);
     }
-  }
-
-  // ── Enquiry: buyer typed their message to seller ─────────────────────────
-  if (state === "sc_awaiting_enquiry") {
-    return _scProcessEnquiry(from, supplierId, raw, biz, saveBiz);
   }
 
   // ── Quote: buyer typed item numbers/names ────────────────────────────────
@@ -1244,216 +1081,6 @@ Do you want to order the same again?`,
       { id: `sc_order_confirm_${supplierId}`, title: "✅ Yes, same order" },
       { id: `sc_order_${supplierId}`,          title: "✏️ Modify order" },
       { id: `sc_back_${supplierId}`,            title: "⬅ Cancel" }
-    ]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ENQUIRY FLOW
-// ─────────────────────────────────────────────────────────────────────────────
-// Buyer sends a free-text message directly to the seller.
-// Works for any seller/service type — no rigid form, just a message.
-//
-// WHY THIS MATTERS IN ZIM CONTEXT:
-// In Zimbabwe business is conversational. Buyers want to ask:
-//   "Do you come to Mbare on Saturdays?"
-//   "Do you have 15mm ball valves? I need 20."
-//   "Can you do a 3-bed house? How much roughly?"
-// This mirrors how business is done in the street markets and suburbs —
-// conversation first, price negotiation second, deal third.
-// No app needed, works on the cheapest Android or feature phone via WhatsApp.
-// ─────────────────────────────────────────────────────────────────────────────
-async function _scEnquiry(from, supplierId, biz, saveBiz) {
-  const seller = await SupplierProfile.findById(supplierId).lean();
-  if (!seller) return false;
-
-  const isService = seller.profileType === "service";
-
-  if (biz) {
-    biz.sessionState = "sc_awaiting_enquiry";
-    biz.sessionData  = { ...(biz.sessionData || {}), scSellerId: supplierId };
-    await saveBiz(biz);
-  }
-
-  const hint = isService
-    ? `_e.g. "Do you come to Mbare? How much for a 3-bed house clean?_\n_Are you available this Saturday morning?"_`
-    : `_e.g. "Do you have 15mm ball valves in stock?"_\n_"What is the price for a bag of cement? Do you deliver to Highfield?"_`;
-
-  return sendText(from,
-`💬 *Send an enquiry to ${seller.businessName}*
-
-Type your message or question below. Be as specific as you can.
-
-${hint}
-
-Type *cancel* to go back.`
-  );
-}
-
-async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
-  const seller = await SupplierProfile.findById(supplierId).lean();
-  if (!seller) return false;
-
-  if (!raw || raw.trim().length < 2) {
-    return sendText(from, "❌ Please type your message (at least a few words).");
-  }
-
-  if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
-
-  const buyerDisplay = _normPhone(from);
-  const sellerPhone  = _normPhone(seller.phone);
-  const refNum       = "ENQ-" + Date.now().toString(36).toUpperCase().slice(-5);
-
-  // ── Notify seller — try sendButtons (within 24hr), then template ─────────
-  try {
-    await sendButtons(sellerPhone, {
-      text:
-        `💬 *New enquiry via ZimQuote!*\n\n` +
-        `📱 From: ${buyerDisplay}\n\n` +
-        `_"${raw.slice(0, 400)}"_\n\n` +
-        `Reply directly on WhatsApp to respond.`,
-      buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }]
-    });
-  } catch (_) {
-    // Outside 24hr — use utility template
-    try {
-      const axios  = (await import("axios")).default;
-      const PID    = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-      const TOKEN  = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-      await axios.post(
-        `https://graph.facebook.com/v24.0/${PID}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to:   sellerPhone,
-          type: "template",
-          template: {
-            name: "supplier_new_buyer_request",
-            language: { code: "en" },
-            components: [{
-              type: "body",
-              parameters: [
-                { type: "text", text: refNum },
-                { type: "text", text: buyerDisplay },
-                { type: "text", text: String(raw).slice(0, 200) },
-                { type: "text", text: "Buyer enquiry via ZimQuote Smart Link" }
-              ]
-            }]
-          }
-        },
-        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-      );
-    } catch (tplErr) {
-      console.warn(`[SC ENQUIRY] template failed for ${sellerPhone}: ${tplErr.message}`);
-    }
-  }
-
-  _trackConversion(biz);
-
-  return sendButtons(from, {
-    text:
-      `✅ *Enquiry sent to ${seller.businessName}!*\n\n` +
-      `Your message:\n_"${raw.slice(0, 120)}"_\n\n` +
-      `📞 ${seller.contactDetails || seller.phone}\n\n` +
-      `The seller will reply on WhatsApp. You can also contact them directly.`,
-    buttons: [
-      { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" },
-      { id: `sc_contact_${supplierId}`, title: "📞 Contact details" }
-    ]
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SMART LINK MENU — shown to SELLERS from My Store → 📲 My Smart Link
-// ─────────────────────────────────────────────────────────────────────────────
-// WHY SELLERS NEED THIS IN ZIM:
-//   Most sellers in Zimbabwe have never tracked where their customers come from.
-//   They post on Facebook, share in WhatsApp groups, print flyers.
-//   ZimQuote Smart Link tells them EXACTLY which platform is working.
-//   That is game-changing for a seller spending $5/month on a listing —
-//   they can double down on what works and stop wasting money on what doesn't.
-//
-// WHAT MAKES IT DIFFERENT:
-//   vs WhatsApp Business: we reach outside 24hr window, auto-PDF quotes, analytics
-//   vs Facebook page:     instant quoting, order management, no algorithm
-//   vs a website:         costs $200+ to build, $15+/month to host. Our link is FREE.
-//   Zim reality:          works on cheapest Android, WhatsApp already installed,
-//                         no data-heavy app download, operates in a $1 bundle
-// ─────────────────────────────────────────────────────────────────────────────
-async function _scSmartLinkMenu(from, supplierId, biz, saveBiz) {
-  const seller = await SupplierProfile.findById(supplierId).lean();
-  if (!seller) return false;
-
-  const { buildSmartLinkBenefitsCard, buildDeepLink } = await import("./supplierSmartLink.js");
-  const card       = buildSmartLinkBenefitsCard(seller);
-  const directLink = buildDeepLink(String(seller._id));
-
-  await sendText(from, card);
-
-  return sendButtons(from, {
-    text:
-      `🔗 *Your ZimQuote Link:*\n\n` +
-      `${directLink}\n\n` +
-      `Share this link anywhere. Buyers tap it and land straight on your profile. No app download, no website needed.`,
-    buttons: [
-      { id: `sc_smart_link_share_${supplierId}`, title: "📤 Get Share Captions" },
-      { id: "my_supplier_account",                title: "🏪 Back to My Store" }
-    ]
-  });
-}
-
-async function _scSmartLinkShareMenu(from, supplierId, biz, saveBiz) {
-  const seller = await SupplierProfile.findById(supplierId).lean();
-  if (!seller) return false;
-
-  const { buildSharableCaption, buildQrImageUrl } = await import("./supplierSmartLink.js");
-
-  const waCap  = buildSharableCaption(seller, "wa");
-  const fbCap  = buildSharableCaption(seller, "fb");
-  const ttCap  = buildSharableCaption(seller, "tt");
-  const smsCap = buildSharableCaption(seller, "sms");
-  const qrUrl  = buildQrImageUrl(String(seller._id));
-
-  // Send captions as a single message so seller can copy each section
-  await sendText(from,
-`📤 *Smart Link Sharing Kit — ${seller.businessName}*
-
-─────────────────
-📱 *WhatsApp Status caption:*
-(Copy this and add to your status)
-
-${waCap}
-
-─────────────────
-📘 *Facebook caption:*
-
-${fbCap}
-
-─────────────────
-🎵 *TikTok bio:*
-
-${ttCap}
-
-─────────────────
-📄 *SMS / Flyer text:*
-
-${smsCap}
-
-─────────────────
-📸 *QR Code for printing:*
-Open in your browser to download:
-${qrUrl}
-
-_Print this QR on your receipts, cards, and flyers._
-_Customers scan it with their phone camera — no typing needed._
-
-Each link is tracked. You will see which platform (Facebook, WhatsApp, TikTok, QR) brings the most buyers.`
-  );
-
-  return sendButtons(from, {
-    text: `Tip: Post your WhatsApp Status link right now — it's the fastest way to get your first views tracked.`,
-    buttons: [
-      { id: `sc_smart_link_${supplierId}`, title: "📊 View My Stats" },
-      { id: "my_supplier_account",          title: "🏪 Back to My Store" }
     ]
   });
 }
