@@ -7,8 +7,6 @@
 //   - Supplier response speed tracking
 //   - Quote comparison formatting
 //   - Request summary formatting
-//   - Quantity parsing (spec vs qty disambiguation)
-//   - Repeat request support
 //
 // Usage: import named exports into chatbotEngine.js and your cron runner.
 //
@@ -18,109 +16,6 @@
 import BuyerRequest from "../models/buyerRequest2.js";
 import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons } from "./metaSender.js";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QUANTITY PARSING — spec numbers vs quantity numbers
-// ─────────────────────────────────────────────────────────────────────────────
-// Rule: measurement/spec suffixes (mm, kg, kW, V, etc.) stay attached to the
-// product name. Quantity is the LAST standalone number or "x N unit" pattern.
-//
-// Examples:
-//   "copper pipe 15mm, 5 lengths"  → product="copper pipe 15mm"  qty=5 unit="lengths"
-//   "HDPE pipe 20mm x10m, 3 rolls" → product="HDPE pipe 20mm x10m" qty=3 unit="rolls"
-//   "cement 50kg, 20 bags"         → product="cement 50kg"         qty=20 unit="bags"
-//   "gate valve ½\", 6"             → product="gate valve ½\""      qty=6 unit="units"
-//   "MCB 20A x4"                   → product="MCB 20A"             qty=4 unit="units"
-//   "copper pipe 15mm x20m"        → product="copper pipe 15mm x20m" qty=1 (no qty given)
-
-const SPEC_UNITS = new Set([
-  "mm","cm","m","km","ml","l","kg","g","mg","lb","lbs","oz","ft","in","inch",
-  "psi","bar","kpa","mpa","kw","kva","hp","v","volt","amp","amps","watt","w","a","ah",
-  "litre","litres","liter","liters","tonne","tonnes","ton","tons","metre","metres",
-  "meter","meters","gallon","gallons","sqm","sqft","kwh","mhz","ghz","mb","gb","tb",
-  "rpm","nm","khz","mw","gw","x10m","x20m","x6m","x3m","x1m","x2m"
-]);
-
-const QTY_UNITS = new Set([
-  "bags","bag","lengths","length","rolls","roll","sheets","sheet",
-  "pieces","pcs","pc","piece","units","unit","boxes","box","sets","set",
-  "pairs","pair","tons","coils","coil","drums","drum","metres","meters",
-  "litres","liters","lengths","tins","tin","bottles","bottle","cans","can",
-  "buckets","bucket","packs","pack","cartons","carton"
-]);
-
-/**
- * Parse a single buyer request line, correctly separating spec from quantity.
- * Returns { product, quantity, unitLabel }
- */
-export function parseBuyerRequestLineWithQty(raw = "") {
-  const line = String(raw || "").trim();
-  if (!line) return { product: line, quantity: 1, unitLabel: "units" };
-
-  // Case 1: explicit "x N unit?" at the END — always qty
-  // e.g. "copper pipe 15mm x5", "cement 50kg x 20 bags"
-  const xMatch = line.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
-  if (xMatch) {
-    const prod = xMatch[1].trim();
-    const qty  = Number(xMatch[2]);
-    const unit = xMatch[3].toLowerCase() || "units";
-    // If the unit is a spec unit (e.g. "x20m") — it's the pipe length, not qty
-    if (!SPEC_UNITS.has(unit) && qty > 0) {
-      return { product: prod, quantity: qty, unitLabel: unit || "units" };
-    }
-    // It's a spec — whole line is the product, qty defaults to 1
-    return { product: line, quantity: 1, unitLabel: "units" };
-  }
-
-  // Case 2: trailing "N unit" — qty only if unit is a known QTY unit
-  // e.g. "cement 50kg, 20 bags" → product="cement 50kg", qty=20, unit="bags"
-  const trailMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)\s+([a-zA-Z]+)$/i);
-  if (trailMatch) {
-    const prod = trailMatch[1].replace(/,\s*$/, "").trim();
-    const qty  = Number(trailMatch[2]);
-    const unit = trailMatch[3].toLowerCase();
-    if (QTY_UNITS.has(unit) && qty > 0) {
-      return { product: prod, quantity: qty, unitLabel: unit };
-    }
-  }
-
-  // Case 3: trailing bare number — only if no spec suffix follows
-  // e.g. "gate valve ½\", 6" or "copper pipe 15mm, 5"
-  const bareNumMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)$/);
-  if (bareNumMatch) {
-    const prod = bareNumMatch[1].replace(/,\s*$/, "").trim();
-    const qty  = Number(bareNumMatch[2]);
-    // Check if the product part ends with a measurement spec already (e.g. "20mm")
-    const endsWithSpec = /\d+\s*(mm|cm|kg|ml|l|m|ft|in|psi|bar|v|w|a|kw|kva|hp|ah|litre|liter)$/i.test(prod);
-    if (!endsWithSpec && qty > 0 && qty < 100000) {
-      return { product: prod, quantity: qty, unitLabel: "units" };
-    }
-  }
-
-  // Case 4: No quantity found — whole line is product, qty=1
-  return { product: line.replace(/,\s*$/, "").trim(), quantity: 1, unitLabel: "units" };
-}
-
-/**
- * Parse a full item list text into structured items.
- * Handles comma-separated and newline-separated lists.
- * Each item goes through parseBuyerRequestLineWithQty.
- */
-export function parseItemListWithQty(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-
-  // Split by newline first, then by comma if single-line
-  let lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
-  if (lines.length === 1) {
-    // Single line — might be comma-separated list
-    lines = raw.split(/,\s*/).map(l => l.trim()).filter(Boolean);
-  }
-
-  return lines
-    .map(parseBuyerRequestLineWithQty)
-    .filter(item => item.product && item.product.length > 1);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTO-CLOSE EXPIRED REQUESTS
@@ -185,15 +80,15 @@ export async function autoCloseExpiredRequests({
           ]
         });
       } else {
-        // Zero quotes — never a dead end: give 3 clear options
+        // Zero quotes - encourage retry
         await sendButtons(req.buyerPhone, {
           text:
-            `⏱ *No quotes received* (${_buildRef(req)})\n\n` +
-            `No sellers responded within ${timeoutMinutes} minutes.\n\n` +
-            `This can happen when items are specialised or no sellers in your area stock them right now.\n\n` +
-            `Your request is saved — new sellers will be notified automatically if they match.`,
+            `⏱ *Request Expired*\n\n` +
+            `No sellers responded to your request within ${timeoutMinutes} minutes.\n\n` +
+            `This can happen when no sellers in your area stock that item.\n` +
+            `Try browsing the marketplace or submit a new request with a broader description.`,
           buttons: [
-            { id: "sup_request_sellers", title: "⚡ New Request" },
+            { id: "sup_request_sellers", title: "⚡ Try Again" },
             { id: "find_supplier",       title: "🔍 Browse & Shop" }
           ]
         });
@@ -347,13 +242,7 @@ export function formatBuyerQuoteComparison(request) {
     const name  = q.supplierName || `Supplier ${qi + 1}`;
     const lines = [];
 
-    // Fast-responder badge: responded within 5 min of request creation
-    const responseTime = q.respondedAt
-      ? Math.round((new Date(q.respondedAt) - new Date(request.createdAt)) / 60000)
-      : null;
-    const fastBadge = responseTime !== null && responseTime <= 5 ? ` ⚡ ${responseTime} min` : "";
-
-    lines.push(`🏪 *${qi + 1}. ${name}*${fastBadge}`);
+    lines.push(`🏪 *${qi + 1}. ${name}*`);
 
     if ((q.items || []).length) {
       q.items.forEach(item => {
@@ -385,21 +274,6 @@ export function formatBuyerQuoteComparison(request) {
     "",
     ...blocks.join(`\n\n${divider}\n\n`).split("\n")
   ].join("\n");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET BUYER'S LAST CLOSED REQUEST (for "Repeat last request" feature)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function getBuyerLastRequest(buyerPhone) {
-  const phone = String(buyerPhone || "").replace(/\D+/g, "");
-  if (!phone) return null;
-
-  return BuyerRequest.findOne({
-    buyerPhone: { $in: [phone, `263${phone.slice(1)}`, `+263${phone.slice(1)}`] }
-  })
-    .sort({ createdAt: -1 })
-    .lean();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

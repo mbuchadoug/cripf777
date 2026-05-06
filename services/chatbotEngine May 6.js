@@ -107,14 +107,11 @@ import {
 import {
   trackSupplierResponseSpeed,
   getBuyerOpenRequests,
-  getBuyerLastRequest,
   formatBuyerQuoteComparison,
-  formatRequestSummary,
-  parseBuyerRequestLineWithQty,
-  parseItemListWithQty
+  formatRequestSummary
 } from "./buyerRequests.js";
 import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
-import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
+import { findSuppliersForRequest, getVagueTermClarification } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -2534,11 +2531,6 @@ async function notifySuppliersOfBuyerRequest(request) {
   const notifiedIds = [];
 
   for (const supplier of suppliers) {
-    // Skip sellers who have paused request notifications
-    if (supplier.pauseRequests === true) {
-      console.log(`[BUYER REQ] Skipping paused supplier ${supplier.phone}`);
-      continue;
-    }
     try {
       const ref = buildBuyerRequestRef(request);
       const itemLines = formatBuyerRequestItems(request.items || [], 12);
@@ -2663,20 +2655,6 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
 
   const sentCount = await notifySuppliersOfBuyerRequest(request);
 
-  // Save location for future use (skip the location step next time)
-  if (request.city) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.savedCity": request.city,
-          "tempData.savedArea": request.area || ""
-        }
-      },
-      { upsert: true }
-    );
-  }
-
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -2701,24 +2679,18 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
     : (deliveryRequired ? "🚚 Delivery required\n" : "🏠 Collection / no delivery needed\n");
   const _sellerWord = _isServiceReq ? "service provider" : "seller";
 
-  const _noMatchLine = sentCount === 0
-    ? `\n_No matching sellers found right now. Your request is saved — new sellers will be notified automatically._`
-    : "";
-
   return sendButtons(from, {
     text:
       `✅ *Request sent* (${ref})\n\n` +
       `${formatBuyerRequestItems(request.items || [], 10)}\n\n` +
       `${_locationLine}` +
       `${_deliveryLine}` +
-      `📣 Sent to ${sentCount} matching ${_sellerWord}${sentCount === 1 ? "" : "s"}.` +
-      `${_noMatchLine}\n\n` +
-      `Quotes will arrive here in the chatbot.\n\n` +
-      `*0 = Main menu · quotes = View quotes · repeat = Send again*`,
+      `📣 Sent to ${sentCount} matching ${_sellerWord}${sentCount === 1 ? "" : "s"}.\n\n` +
+      `You will receive quotes here in the chatbot.`,
     buttons: [
-      { id: `buyer_view_all_quotes_${request._id}`, title: "📊 View Quotes" },
-      { id: "sup_request_sellers",                   title: "⚡ Request Again" },
-      { id: "find_supplier",                         title: "🔍 Browse & Shop" }
+      { id: "sup_request_sellers", title: "⚡ Request Again" },
+      { id: "my_orders", title: "📋 My Orders" },
+      { id: "find_supplier", title: "🔍 Browse & Shop" }
     ]
   });
 }
@@ -3240,11 +3212,6 @@ a.startsWith("sup_load_preset_") ||
 
 
       a === "sup_request_sellers" ||
-      a === "sup_repeat_last_request" ||
-      a === "sup_use_saved_location" ||
-      a === "sup_change_location" ||
-      a === "sup_pause_requests" ||
-      a === "sup_resume_requests" ||
       a === "sup_request_mode_simple" ||
       a === "sup_request_mode_bulk" ||
       a === "sup_request_delivery_yes" ||
@@ -4270,8 +4237,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
 
  if (buyerRequestState === "awaiting_items") {
-  // ── Universal escape words always work in any state ────────────────────
-  if (al === "cancel" || al === "00" || al === "000") {
+  if (al === "cancel") {
     await UserSession.findOneAndUpdate(
       { phone },
       {
@@ -4285,234 +4251,141 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     );
     return sendButtons(from, {
       text: "✅ Request cancelled.",
-      buttons: [
-        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop" }
-      ]
+      buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
     });
-  }
-
-  if (al === "0" || al === "menu" || al === "main menu") {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
-      { upsert: true }
-    );
-    return sendMainMenu(from);
-  }
-
-  if (al === "help") {
-    return sendText(from,
-      `📋 *Shortcuts:*\n\n` +
-      `*0* = Main menu (always)\n` +
-      `*00* = Cancel current flow\n` +
-      `*menu* = Main menu (always)\n` +
-      `*back* = Previous step\n` +
-      `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat your last request\n` +
-      `*my requests* = View request history\n` +
-      `*help* = Show this list\n\n` +
-      `Type *0* to go to main menu now.`
-    );
-  }
-
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
-
-  if (al === "my requests" || al === "buyer_my_requests") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
 
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
   // SIMPLE MODE = one-line item + suburb/city
+   // SIMPLE MODE = one-line item + suburb/city
   if (requestMode === "simple") {
-    // ── Try to parse using the improved quantity-aware parser ──────────────
-    // First, try shortcode parser (handles "find X city" syntax)
     const parsedInline = parseInlineSimpleBuyerRequest(text);
 
-    // Also try the new parseItemListWithQty for plain descriptions
-    // e.g. "copper pipe 15mm, 5 lengths, Msasa" or "need plumber, Avondale"
-    let parsedItems = parsedInline.items;
-    let parsedCity  = parsedInline.city;
-    let parsedArea  = parsedInline.area;
-
-    // If shortcode parser didn't find items, try the new qty-aware parser
-    if (!parsedItems.length && text.trim().length > 3) {
-      // Strip trailing city/suburb from the text before parsing items
-      const locParsed = parseBuyerRequestLocationInput(text);
-      if (locParsed.city) {
-        parsedCity = locParsed.city;
-        parsedArea = locParsed.area;
-        // Remove the city/area portion from the item text
-        const textWithoutLoc = text
-          .replace(new RegExp(`,?\\s*${locParsed.city}\\b`, "i"), "")
-          .replace(new RegExp(`,?\\s*${locParsed.area || ""}\\b`, "i"), "")
-          .trim();
-        const rawItems = parseItemListWithQty(textWithoutLoc || text);
-        if (rawItems.length) {
-          parsedItems = rawItems.map(item => ({
-            product:   item.product,
-            quantity:  item.quantity,
-            unitLabel: item.unitLabel,
-            notes:     ""
-          }));
-        }
-      } else {
-        // No city found — try to parse the whole text as items
-        const rawItems = parseItemListWithQty(text);
-        if (rawItems.length) {
-          parsedItems = rawItems.map(item => ({
-            product:   item.product,
-            quantity:  item.quantity,
-            unitLabel: item.unitLabel,
-            notes:     ""
-          }));
-        }
-      }
-    }
-
-    if (!parsedItems.length) {
+    if (!parsedInline.items.length) {
       return sendText(
         from,
-        `❌ Please type what you need.\n\n` +
+        `❌ Please use the format: *find [item] [city]*\n\n` +
         `*Examples:*\n` +
-        `_copper pipe 15mm, 5 lengths_\n` +
-        `_cement 50kg x20 bags, Msasa_\n` +
-        `_need plumber, burst pipe, Avondale_\n` +
-        `_ball valve brass 20mm harare x5_\n\n` +
-        `_Tip: quantity goes at the end, after the spec numbers._\n` +
-        `Type *0* for main menu or *help* for shortcuts.`
+        `_find ball valve 20mm harare_\n` +
+        `_find cement harare_\n` +
+        `_find school uniform size 8 chitungwiza_\n` +
+        `_find plumber mbare harare_\n\n` +
+        `*Need more than 1?* Add the quantity at the end with x:\n` +
+        `_find cement harare x10_\n` +
+        `_find pipes 20mm harare x5_\n\n` +
+        `_Size/spec like 20mm stays part of the product name._\n` +
+        `Type *cancel* to stop.`
       );
     }
 
-    const vagueItems = getVagueBuyerRequestItems(parsedItems || []);
+    const vagueItems = getVagueBuyerRequestItems(parsedInline.items || []);
     if (vagueItems.length) {
       return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
     }
 
-    // ── Auto-detect service request ────────────────────────────────────────
-    const _simpleIsService = _buyerRequestIsService(parsedItems);
-
-    // ── If location was already typed, skip the location step ──────────────
-    if (parsedCity) {
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.buyerRequestState": _simpleIsService ? "awaiting_service_address" : "awaiting_delivery",
-            "tempData.pendingBuyerRequest": {
-              ...(pendingBuyerRequest || {}),
-              requestType: "simple",
-              items: parsedItems,
-              rawText: text,
-              profileType: "product",
-              city: parsedCity,
-              area: parsedArea,
-              isServiceRequest: _simpleIsService
-            }
-          }
-        },
-        { upsert: true }
+    if (!parsedInline.city) {
+      return sendText(
+        from,
+        `❌ Please include the *city* in the same request line.\n\n` +
+        `*Format:* find [item] [city]\n\n` +
+        `*Examples:*\n` +
+        `_find ball valve brass 20mm harare_\n` +
+        `_find cement harare_\n` +
+        `_find school uniform size 8 chitungwiza_\n` +
+        `_find plumber avondale harare_\n\n` +
+        `*Need more than 1?* Add x2, x3 etc at the end:\n` +
+        `_find cement harare x10_\n` +
+        `_find ball valve 20mm harare x5_`
       );
-
-      // Build confirmation lines with quantity clearly shown
-      const _confirmItemLines = (parsedItems || []).map((item, i) => {
-        const qty  = Number(item.quantity || 1);
-        const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-        const qtyStr = qty === 1 ? "_(qty: 1)_" : `qty: ${qty}${unit}`;
-        return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
-      }).join("\n");
-
-      const locationLine = parsedArea
-        ? `📍 ${parsedArea}, ${parsedCity}`
-        : `📍 ${parsedCity}`;
-
-      if (_simpleIsService) {
-        return sendText(
-          from,
-          `✅ *Request captured:*\n\n` +
-          `${_confirmItemLines}\n\n` +
-          `${locationLine}\n\n` +
-          `📍 *Where should the service provider come?*\n\n` +
-          `Type your address or suburb:\n` +
-          `_24 Mabelreign Drive, Harare_\n` +
-          `_House 7, Borrowdale, Harare_\n\n` +
-          `Type *skip* to share your address directly with the provider.\n` +
-          `Type *0* for main menu · *00* to cancel`
-        );
-      }
-
-      return sendButtons(from, {
-        text:
-          `✅ *Request captured — please check quantities:*\n\n` +
-          `${_confirmItemLines}\n\n` +
-          `${locationLine}\n\n` +
-          `_To correct a quantity, type your request again with the right amount._\n\n` +
-          `🚚 Do you need delivery?`,
-        buttons: [
-          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
-          { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
-        ]
-      });
     }
-
-    // ── No location yet — ask for it ───────────────────────────────────────
-    // Use saved location if available
-    const _savedCity = flowSess?.tempData?.savedCity || null;
-    const _savedArea = flowSess?.tempData?.savedArea || null;
 
     await UserSession.findOneAndUpdate(
       { phone },
       {
         $set: {
-          "tempData.buyerRequestState": "awaiting_location",
+          "tempData.buyerRequestState": "awaiting_delivery",
           "tempData.pendingBuyerRequest": {
             ...(pendingBuyerRequest || {}),
             requestType: "simple",
-            items: parsedItems,
+            items: parsedInline.items,
             rawText: text,
-            profileType: "product",
-            isServiceRequest: _simpleIsService
+            profileType: "product",  // DB enum value - findSuppliersForBuyerRequest searches both
+            city: parsedInline.city,
+            area: parsedInline.area
           }
         }
       },
       { upsert: true }
     );
 
-    if (_savedCity) {
-      return sendButtons(from, {
-        text:
-          `✅ *Got it:*\n\n` +
-          `${(parsedItems || []).map((item, i) => {
-            const qty  = Number(item.quantity || 1);
-            const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-            return `${i + 1}. *${item.product}* — qty ${qty}${unit}`;
-          }).join("\n")}\n\n` +
-          `📍 Use saved location *${_savedArea ? `${_savedArea}, ` : ""}${_savedCity}*?`,
-        buttons: [
-          { id: "sup_use_saved_location", title: `📍 Yes, ${_savedCity}` },
-          { id: "sup_change_location",    title: "📍 Change Location" }
-        ]
-      });
+    // ── Show clear confirmation with qty so buyer can spot any misread ───────────
+    const _confirmItemLines = (parsedInline.items || []).map((item, i) => {
+      const qty  = Number(item.quantity || 1);
+      const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+      const qtyStr = qty === 1 ? "_(qty: 1 - add x2 or x3 if you need more)_" : `qty: ${qty}${unit}`;
+      return `${i + 1}. *${item.product}*\n   ${qtyStr}`;
+    }).join("\n");
+
+    const _simpleIsService = _buyerRequestIsService(parsedInline.items);
+
+    if (_simpleIsService) {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        {
+          $set: {
+            "tempData.buyerRequestState": "awaiting_service_address",
+            "tempData.pendingBuyerRequest": {
+              ...(pendingBuyerRequest || {}),
+              requestType: "simple",
+              items: parsedInline.items,
+              rawText: text,
+              profileType: "product",
+              city: parsedInline.city,
+              area: parsedInline.area,
+              isServiceRequest: true
+            }
+          }
+        },
+        { upsert: true }
+      );
+      return sendText(
+        from,
+        `✅ *Request captured:*\n\n` +
+        `${_confirmItemLines}\n\n` +
+        `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
+        `📍 *Where should the service provider come?*\n\n` +
+        `Type your address or location:\n` +
+        `_Examples:_\n` +
+        `_24 Mabelreign Drive, Harare_\n` +
+        `_House 7, Borrowdale, Harare_\n\n` +
+        `Type *skip* to share your address directly with the provider.\n` +
+        `Type *cancel* to stop.`
+      );
     }
 
-    return sendText(
-      from,
-      `✅ *Got it. Which area are you in?*\n\n` +
-      `Reply with suburb or suburb + city:\n` +
-      `_Msasa_, _Borrowdale Harare_, _Luveve Bulawayo_\n\n` +
-      `Type *0* for main menu · *00* to cancel`
-    );
+    return sendButtons(from, {
+      text:
+        `✅ *Request captured - please check:*\n\n` +
+        `${_confirmItemLines}\n\n` +
+        `${parsedInline.area ? `📍 ${parsedInline.area}, ${parsedInline.city}` : `📍 ${parsedInline.city}`}\n\n` +
+        `_To change quantity, type your request again with e.g. x3 at the end:_\n` +
+        `_find ball valve brass 20mm harare x3_\n\n` +
+        `🚚 Do you need delivery?`,
+      buttons: [
+        { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+        { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
+      ]
+    });
   }
 
   // BULK MODE = item list first, location second
+   // BULK MODE = item list first, location second
   const items = parseBuyerRequestItems(text);
   if (!items.length) {
     return sendText(
       from,
-      `❌ Please send the items you need.\n\nExamples:\n_ball valve brass 20mm 5_\n_hp laptop core i7 3_\n_school uniform size 8 10_\n_geyser installation 2_\n\nFor long lists, send one item per line.\n\nType *0* for main menu · *00* to cancel`
+      `❌ Please send the items you need.\n\nExamples:\n_ball valve brass 20mm 5_\n_hp laptop core i7 3_\n_school uniform size 8 10_\n_geyser installation 2_\n\nFor long lists, send one item per line.\n\nType *cancel* to stop.`
     );
   }
 
@@ -4535,7 +4408,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           requestType: "bulk",
           items,
           rawText: text,
-          profileType: "product",
+          profileType: "product",  // DB enum value - findSuppliersForBuyerRequest searches both
         }
       }
     },
@@ -4544,12 +4417,12 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
   return sendText(
     from,
-    `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_\n\nType *0* for main menu`
+    `📍 *Where do you need these items?*\n\nReply with city or suburb + city.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Borrowdale, Harare_`
   );
 }
 
     if (buyerRequestState === "awaiting_location") {
-      if (al === "cancel" || al === "00" || al === "000") {
+      if (al === "cancel") {
         await UserSession.findOneAndUpdate(
           { phone },
           {
@@ -4563,31 +4436,18 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
         return sendButtons(from, {
           text: "✅ Request cancelled.",
-          buttons: [
-            { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-            { id: "find_supplier",       title: "🔍 Browse & Shop" }
-          ]
+          buttons: [{ id: "find_supplier", title: "🔍 Browse & Shop" }]
         });
-      }
-
-      if (al === "0" || al === "menu") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
-          { upsert: true }
-        );
-        return sendMainMenu(from);
       }
 
       const parsedLocation = parseBuyerRequestLocationInput(text);
       if (!parsedLocation.city) {
         return sendText(
           from,
-          `❌ Please include at least the *city*.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Avondale, Harare_\n\nType *0* for main menu`
+          `❌ Please include at least the *city*.\n\nExamples:\n_Harare_\n_Mbare, Harare_\n_Avondale, Harare_`
         );
       }
 
-      // Save location for future use
       await UserSession.findOneAndUpdate(
         { phone },
         {
@@ -4597,9 +4457,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
               ...(pendingBuyerRequest || {}),
               city: parsedLocation.city,
               area: parsedLocation.area
-            },
-            "tempData.savedCity": parsedLocation.city,
-            "tempData.savedArea": parsedLocation.area || ""
+            }
           }
         },
         { upsert: true }
@@ -4630,7 +4488,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `_24 Mabelreign Drive, Harare_\n` +
           `_House 7, Borrowdale, Harare_\n\n` +
           `Type *skip* to share your address directly with the provider.\n` +
-          `Type *0* for main menu`
+          `Type *cancel* to stop.`
         );
       }
 
@@ -4646,7 +4504,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
 
     if (buyerRequestState === "awaiting_service_address") {
-      const _isExitSA = al === "cancel" || al === "0" || al === "00" || al === "000" || al === "menu" || al === "main menu" || al === "main_menu";
+      const _isExitSA = al === "cancel" || al === "0" || al === "menu" || al === "main menu" || al === "main_menu";
       if (_isExitSA) {
         await UserSession.findOneAndUpdate(
           { phone },
@@ -4705,10 +4563,7 @@ if (!biz && ownerRole?.businessId) {
 const GREETING_WORDS = new Set([
   "hi", "hello", "hey", "hie", "howzit", "helo", "sup", "yo",
   "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
-  "help", "start", "menu", "home", "back", "cancel",
-  // Universal shortcuts
-  "0", "00", "000", "quotes", "my quotes", "repeat", "my requests",
-  "pause", "resume"
+  "help", "start", "menu", "home", "back", "cancel"
 ]);
 
 // ── Global greeting/menu guard ─────────────────────────────────────────────
@@ -4723,36 +4578,8 @@ if (
     await saveBizSafe(biz);
   }
 
-  // Route universal shortcuts regardless of state
-  if (al === "quotes" || al === "my quotes") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
-  if (al === "my requests") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "pause") {
-    return handleIncomingMessage({ from, action: "sup_pause_requests" });
-  }
-  if (al === "resume") {
-    return handleIncomingMessage({ from, action: "sup_resume_requests" });
-  }
-
   if (al === "help") {
-    await sendText(from,
-      `📋 *Shortcuts (work anywhere):*\n\n` +
-      `*0* = Main menu\n` +
-      `*00* = Cancel current flow\n` +
-      `*menu* = Main menu\n` +
-      `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat last request\n` +
-      `*my requests* = Request history\n` +
-      `*pause* = Pause request notifications (sellers)\n` +
-      `*resume* = Resume notifications (sellers)\n` +
-      `*help* = Show this list`
-    );
+    await sendText(from, "👋 Welcome to ZimQuote. Choose an option below:");
   }
 
   return sendMainMenu(from);
@@ -5201,11 +5028,6 @@ a.startsWith("sup_accept_") ||
       a.startsWith("paylist_search_") ||
 
   a === "sup_request_sellers" ||
-  a === "sup_repeat_last_request" ||
-  a === "sup_use_saved_location" ||
-  a === "sup_change_location" ||
-  a === "sup_pause_requests" ||
-  a === "sup_resume_requests" ||
   a === "sup_request_mode_simple" ||
   a === "sup_request_mode_bulk" ||
   a === "sup_request_delivery_yes" ||
@@ -11679,12 +11501,6 @@ const supplier = await SupplierProfile.create({
     biz.sessionState = "supplier_reg_choose_plan";
     await saveBizSafe(biz);
 
-    // Non-blocking: notify this new supplier of any unmatched open requests
-    // that match their categories. This turns onboarding into instant value.
-    notifyNewSellerOfUnmatchedRequests(supplier).catch(err =>
-      console.error("[RE-NOTIFY NEW SELLER]", err.message)
-    );
-
 return sendList(from,
 `🎉 *Your listing is ready!*
 
@@ -14649,60 +14465,12 @@ isService
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
 if (a === "sup_request_sellers") {
-
-  // ── Returning buyer: offer one-tap repeat of last request ─────────────────
-  const lastReq = await getBuyerLastRequest(phone);
-  if (lastReq && (lastReq.items || []).length > 0) {
-    const lastItems = formatBuyerRequestItems(lastReq.items || [], 5);
-    const lastLocation = lastReq.area
-      ? `${lastReq.area}, ${lastReq.city || ""}`
-      : (lastReq.city || "Zimbabwe");
-
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.buyerRequestState":  "awaiting_items",
-          "tempData.buyerRequestMode":   "simple",
-          "tempData.lastRequestSnapshot": {
-            items:   lastReq.items,
-            city:    lastReq.city,
-            area:    lastReq.area,
-            isServiceRequest: lastReq.isServiceRequest || false
-          }
-        }
-      },
-      { upsert: true }
-    );
-
-    return sendButtons(from, {
-      text:
-        `⚡ *Request Sellers*\n\n` +
-        `👋 Welcome back! Repeat your last request?\n\n` +
-        `📦 ${lastItems}\n` +
-        `📍 ${lastLocation}\n\n` +
-        `Or type a new request below.\n\n` +
-        `*Examples:*\n` +
-        `_copper pipe 15mm, 5 lengths_\n` +
-        `_cement 50kg x20, river sand 3m3_\n` +
-        `_need plumber, burst pipe, Avondale_\n\n` +
-        `_Tip: put quantity at the end — e.g. "copper pipe 15mm, 5 lengths"_\n` +
-        `_Spec numbers like 15mm and 50kg are never treated as quantity._\n\n` +
-        `*0 = Main menu · 00 = Cancel · help = shortcuts*`,
-      buttons: [
-        { id: "sup_repeat_last_request", title: "🔁 Repeat Last Request" },
-        { id: "sup_request_mode_bulk",   title: "📋 Bulk List" }
-      ]
-    });
-  }
-
-  // ── First-time or no prior request ────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
       $set: {
         "tempData.buyerRequestState": "awaiting_items",
-        "tempData.buyerRequestMode":  "simple",
+        "tempData.buyerRequestMode": "simple",
         "tempData.pendingBuyerRequest": {
           requestType: "simple",
           profileType: "product",
@@ -14716,50 +14484,22 @@ if (a === "sup_request_sellers") {
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `What do you need? Type your items or describe the job.\n\n` +
-      `*📦 Products:*\n` +
-      `_copper pipe 15mm, 5 lengths_\n` +
-      `_cement 50kg x20 bags, river sand 3m3_\n` +
-      `_2.5mm TE cable, 50m_\n\n` +
-      `*🔧 Services:*\n` +
-      `_need plumber, burst pipe, Avondale_\n` +
-      `_electrician for DB board, Chitungwiza_\n\n` +
-      `*Bulk list?* Use the button below.\n\n` +
-      `_Tip: put quantity last — e.g. "copper pipe 15mm, 5 lengths"_\n` +
-      `_Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
-      `*0 = Main menu · 00 = Cancel*`,
+      `Ask multiple sellers to quote the *exact* product or service you need.\n\n` +
+      `Please type the full name so sellers can quote correctly.\n\n` +
+      `Good examples:\n` +
+      `_find ball valve brass 20mm harare_\n` +
+      `_find hp laptop core i7 cbd harare_\n` +
+      `_find school uniform size 8 chitungwiza_\n` +
+      `_find geyser installation avondale harare_\n\n` +
+      `Avoid general requests like:\n` +
+      `_find valve harare_\n` +
+      `_find laptop harare_\n` +
+      `_find plumber harare_\n\n` +
+      `For long lists, use Bulk Request instead.`,
     buttons: [
-      { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
-      { id: "find_supplier",         title: "🔍 Browse & Shop" }
+      { id: "sup_request_mode_bulk", title: "📋 Bulk Request" },
+      { id: "find_supplier", title: "🔍 Browse & Shop" }
     ]
-  });
-}
-
-// ── Repeat last request: one tap resends ──────────────────────────────────────
-if (a === "sup_repeat_last_request") {
-  const reqSess = await UserSession.findOne({ phone });
-  const snapshot = reqSess?.tempData?.lastRequestSnapshot;
-
-  if (!snapshot?.items?.length) {
-    return sendText(from,
-      `❌ Last request not found. Please type a new request.\n\n` +
-      `Type *0* for main menu.`
-    );
-  }
-
-  return finalizeBuyerRequestSubmission({
-    from, phone,
-    pendingRequest: {
-      requestType:      "simple",
-      profileType:      "product",
-      items:            snapshot.items,
-      city:             snapshot.city,
-      area:             snapshot.area,
-      isServiceRequest: snapshot.isServiceRequest || false,
-      rawText:          "(repeated from last request)"
-    },
-    deliveryRequired: false,
-    serviceAddress:   null
   });
 }
 
@@ -14785,27 +14525,8 @@ if (a === "sup_request_mode_simple" || a === "sup_request_mode_bulk") {
   return sendText(
     from,
     requestType === "bulk"
-      ? `📋 *Bulk Request*\n\nSend your full item list.\nOne item per line or comma-separated.\n\n` +
-        `*Examples:*\n` +
-        `_110 access tees x2_\n` +
-        `_copper pipe 15mm, 5 lengths_\n` +
-        `_ball valve brass 20mm x5_\n` +
-        `_cement 50kg, 20 bags_\n` +
-        `_hp laptop core i7 x3_\n` +
-        `_school uniform size 8 x10_\n` +
-        `_geyser installation x2_\n\n` +
-        `*Quantity rule:* put qty at the end.\n` +
-        `_"copper pipe 15mm, 5 lengths"_ → product is "copper pipe 15mm", qty is 5.\n` +
-        `_"cement 50kg x20 bags"_ → product is "cement 50kg", qty is 20 bags.\n\n` +
-        `After sending your list, reply with your suburb/city.\n\n` +
-        `Type *0* for main menu · *00* to cancel`
-      : `⚡ *Request Sellers*\n\nType what you need. Add your suburb/city in the same message.\n\n` +
-        `*Examples:*\n` +
-        `_copper pipe 15mm, 5 lengths, Msasa_\n` +
-        `_need plumber, burst pipe, Avondale Harare_\n` +
-        `_cement 50kg x20 bags, Mbare_\n` +
-        `_electrician for DB board, Chitungwiza_\n\n` +
-        `Type *0* for main menu · *00* to cancel`
+      ? `📋 *Bulk Request*\n\nSend your full item list.\nUse one item per line or comma-separated.\n\nPlease make each line specific enough for quoting.\n\nGood examples:\n_110 access tees x2_\n_ball valve brass 20mm x5_\n_hp laptop core i7 x3_\n_school uniform size 8 x10_\n_geyser installation x2_\n\nWe ignore headings like _Stage 1_.\nAfter that, send suburb/city.\n\nType *cancel* to stop.`
+      : `⚡ *Request Sellers*\n\nUse the same shortcode/search style as Browse & Shop, but type the *full* product or service name.\n\nGood examples:\n_find ball valve brass 20mm harare_\n_find hp laptop core i7 cbd harare_\n_find school uniform size 8 chitungwiza_\n_find geyser installation avondale harare_\n\nAvoid vague requests like:\n_find valve harare_\n_find laptop harare_\n_find plumber harare_\n\nType *cancel* to stop.`
   );
 }
 
@@ -14832,123 +14553,12 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     });
   }
 
-  // Save location for future use
-  if (pendingBuyerRequest.city) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.savedCity": pendingBuyerRequest.city,
-          "tempData.savedArea": pendingBuyerRequest.area || ""
-        }
-      },
-      { upsert: true }
-    );
-  }
-
   return finalizeBuyerRequestSubmission({
     from,
     phone,
     pendingRequest: pendingBuyerRequest,
     deliveryRequired: a === "sup_request_delivery_yes"
   });
-}
-
-// ── Use saved location ──────────────────────────────────────────────────────
-if (a === "sup_use_saved_location") {
-  const reqSess = await UserSession.findOne({ phone });
-  const pendingBuyerRequest = reqSess?.tempData?.pendingBuyerRequest || null;
-  const savedCity = reqSess?.tempData?.savedCity || null;
-  const savedArea = reqSess?.tempData?.savedArea || null;
-
-  if (!pendingBuyerRequest?.items?.length || !savedCity) {
-    return sendText(from, "❌ Session expired. Please type your request again.\n\nType *0* for main menu.");
-  }
-
-  const updatedRequest = { ...pendingBuyerRequest, city: savedCity, area: savedArea };
-  const _isServiceReq = _buyerRequestIsService(updatedRequest.items || []);
-
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.pendingBuyerRequest": { ...updatedRequest, isServiceRequest: _isServiceReq }
-      }
-    },
-    { upsert: true }
-  );
-
-  if (_isServiceReq) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: { "tempData.buyerRequestState": "awaiting_service_address" } },
-      { upsert: true }
-    );
-    return sendText(
-      from,
-      `📍 *Where should the service provider come?*\n\n` +
-      `📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}\n\n` +
-      `Type your address or type *skip* to share it directly.\n` +
-      `Type *0* for main menu`
-    );
-  }
-
-  return sendButtons(from, {
-    text: `🚚 *Do you need delivery?*\n\n📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}`,
-    buttons: [
-      { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
-      { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
-    ]
-  });
-}
-
-// ── Change location ──────────────────────────────────────────────────────────
-if (a === "sup_change_location") {
-  await UserSession.findOneAndUpdate(
-    { phone },
-    { $set: { "tempData.buyerRequestState": "awaiting_location" } },
-    { upsert: true }
-  );
-  return sendText(
-    from,
-    `📍 *Which area are you in?*\n\nReply with suburb or suburb + city:\n` +
-    `_Msasa_, _Borrowdale Harare_, _Luveve Bulawayo_\n\n` +
-    `Type *0* for main menu`
-  );
-}
-
-// ── Seller pause / resume receiving requests ──────────────────────────────────
-if (al === "pause" || a === "sup_pause_requests") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-  supplier.pauseRequests = true;
-  await supplier.save();
-  return sendButtons(from, {
-    text: "⏸ *Requests paused.*\n\nYou won't receive new buyer request notifications until you resume.\n\nType *resume* or tap below to start receiving again.",
-    buttons: [
-      { id: "sup_resume_requests",     title: "▶️ Resume" },
-      { id: "my_supplier_account",     title: "🏪 My Store" }
-    ]
-  });
-}
-
-if (al === "resume" || a === "sup_resume_requests") {
-  const supplier = await SupplierProfile.findOne({ phone });
-  if (!supplier) return sendSuppliersMenu(from);
-  supplier.pauseRequests = false;
-  await supplier.save();
-  return sendButtons(from, {
-    text: "▶️ *Requests resumed.*\n\nYou'll now receive new buyer request notifications again.",
-    buttons: [
-      { id: "my_supplier_account", title: "🏪 My Store" },
-      { id: "suppliers_home",      title: "🛒 Marketplace" }
-    ]
-  });
-}
-
-// ── "quotes" shortcut — buyer views current quotes anytime ────────────────────
-if (al === "quotes" || al === "my quotes") {
-  return handleIncomingMessage({ from, action: "buyer_my_requests" });
 }
 
 if (a.startsWith("req_offer_confirm_")) {
