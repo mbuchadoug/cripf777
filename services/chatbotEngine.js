@@ -3469,6 +3469,96 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         : null;
     } catch (_) { pendingDraftQuote = null; }
 
+
+
+      // ── Smart link quote: seller tapped "View & Quote" or "Enter Prices" ────────
+    // Fires when the seller has a pending draft quote from the sc_ smart link flow
+    // (stored as scPendingSellerQuote in their UserSession by sellerChat.js _scQuoteDone).
+    // This has nothing to do with BuyerRequest — it's a direct smart-link quote.
+    {
+      const _scDraftRaw = flowSess?.tempData?.scPendingSellerQuote;
+      const _scDraft    = _scDraftRaw
+        ? (typeof _scDraftRaw === "string" ? (() => { try { return JSON.parse(_scDraftRaw); } catch { return null; } })() : _scDraftRaw)
+        : null;
+ 
+      if (_scDraft && (
+        a === "view_and_quote" ||
+        al === "view & quote" ||
+        al === "view and quote" ||
+        a?.startsWith("sc_quote_confirm_") ||
+        a?.startsWith("sc_quote_edit_") ||
+        a?.startsWith("sc_rfq_price_") ||
+        flowSess?.tempData?.scSellerQuoteState === "awaiting_seller_price_edit"
+      )) {
+        const { handleSellerChatAction, handleSellerChatState } = await import("./sellerChat.js");
+ 
+        if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
+          // Seller tapped template button — show them the draft quote for confirmation
+          const _scSeller  = await SupplierProfile.findById(_scDraft.supplierId).lean();
+          const _scRefNum  = _scDraft.refNum;
+          const _scItems   = (_scDraft.lineItems || []);
+          const _scTotal   = _scDraft.total || 0;
+          const _scExpiry  = _scDraft.expiry || "";
+          const _scIsRFQ   = _scDraft.isRFQ || false;
+ 
+          if (_scIsRFQ) {
+            // RFQ — seller needs to enter prices
+            await UserSession.findOneAndUpdate(
+              { phone },
+              { $set: { "tempData.scSellerQuoteState": "awaiting_seller_price_edit" } },
+              { upsert: true }
+            );
+            const _rfqItemList = (_scDraft.items || _scItems).map((it, i) =>
+              `${i + 1}. ${it.name || it.product} × ${it.qty || it.quantity || 1}`
+            ).join("\n");
+            return sendText(from,
+              `📋 *Quote Request — ${_scRefNum}*\n\n` +
+              `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
+              `Items:\n${_rfqItemList}\n\n` +
+              `Enter your prices:\n` +
+              `_1=12.50, 2=8.00, 3=3.00_\n\n` +
+              `Type *cancel* to discard.`
+            );
+          }
+ 
+          // Priced quote — show draft for confirm/edit
+          const _itemRows = _scItems.map((l, i) =>
+            `${i + 1}. ${l.name} × ${l.qty} — $${Number(l.unitPrice).toFixed(2)} = $${Number(l.lineTotal).toFixed(2)}`
+          ).join("\n");
+ 
+          return sendButtons(from, {
+            text:
+              `📋 *Quote to confirm — ${_scRefNum}*\n\n` +
+              `Buyer: ${_scDraft.buyerName || _scDraft.buyerPhone || "Buyer"}\n\n` +
+              `${_itemRows}\n` +
+              `${"─".repeat(28)}\n` +
+              `*Total: $${_scTotal.toFixed(2)} USD*\n\n` +
+              `Confirm to send the quote and PDF to the buyer, or edit the prices first.`,
+            buttons: [
+              { id: `sc_quote_confirm_${_scRefNum}`, title: "✅ Confirm & Send" },
+              { id: `sc_quote_edit_${_scRefNum}`,    title: "✏️ Edit Prices" }
+            ]
+          });
+        }
+ 
+        // Route all other sc_ actions (confirm, edit, rfq_price) to sellerChat action handler
+        if (a?.startsWith("sc_quote_confirm_") || a?.startsWith("sc_quote_edit_") || a?.startsWith("sc_rfq_price_")) {
+          const _handled = await handleSellerChatAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+          if (_handled) return;
+        }
+ 
+        // Seller typed a price edit while scSellerQuoteState === "awaiting_seller_price_edit"
+        if (flowSess?.tempData?.scSellerQuoteState === "awaiting_seller_price_edit" && text && !isMetaAction) {
+          const _handled = await handleSellerChatState({
+            state: "sc_awaiting_items", // triggers the UserSession check inside handleSellerChatState
+            from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+          });
+          if (_handled) return;
+        }
+      }
+    }
+ 
+
     // ── awaiting_offer_intro: supplier's FIRST reply after template ──────────────
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
     // Shows them the full item list + View & Quote button properly.
