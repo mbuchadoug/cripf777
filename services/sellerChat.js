@@ -1,4 +1,4 @@
-// services/sellerChat.js  v3.0
+// services/sellerChat.js  v3.1
 // ─── ZimQuote Seller Chatbot - Quote, Order, Smart Booking, Enquiry ───────────
 //
 // Full buyer interaction flow when a buyer opens a seller's ZimQuote smart link.
@@ -145,17 +145,16 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
-  const isService = seller.profileType === "service";
+  const isService  = seller.profileType === "service";
+  const PREVIEW_MAX = 5; // Items shown on profile card (teaser only — full list via View Catalogue button)
 
-  // ── Build services/products sample ────────────────────────────────────────
-  // BUG FIX: For service providers rates[] is often empty even when
-  // products[]/listedProducts[] has the actual service list.
+  // ── Build services/products sample (max PREVIEW_MAX shown on card) ────────
   // Fall through: rates → listedProducts → products — always show something real.
   let productSample = "";
   if (isService) {
     const hasRates = Array.isArray(seller.rates) && seller.rates.length > 0;
     if (hasRates) {
-      productSample = seller.rates.slice(0, 5)
+      productSample = seller.rates.slice(0, PREVIEW_MAX)
         .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
         .join("\n");
     } else {
@@ -167,7 +166,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
         .join("\n");
     }
   } else {
-    const priced = (seller.prices || []).filter(p => p.inStock !== false).slice(0, 5);
+    const priced = (seller.prices || []).filter(p => p.inStock !== false);
     if (priced.length) {
       productSample = priced.slice(0, PREVIEW_MAX)
         .map(p => `• ${p.product}${p.amount ? "  —  $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : ""}`)
@@ -177,8 +176,6 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       productSample = listed.filter(p => p && p !== "pending_upload").slice(0, PREVIEW_MAX).map(s => `• ${s}`).join("\n");
     }
   }
-
-  const PREVIEW_MAX = 5; // Items shown on profile card (teaser only)
 
   const hasPrices = isService
     ? (Array.isArray(seller.rates) && seller.rates.length > 0)
@@ -250,8 +247,9 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
     : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
   const extraCount = Math.max(0, catalogueTotal - PREVIEW_MAX);
+  // moreHint shown as text AND as a button below — button is the primary CTA
   const moreHint   = extraCount > 0
-    ? `_+ ${extraCount} more ${isService ? "service" : "product"}${extraCount === 1 ? "" : "s"} — tap Get Quote to see all_`
+    ? `_...and ${extraCount} more — tap "View Full Catalogue" below_`
     : null;
 
   const profileCard = [
@@ -271,9 +269,15 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   await sendText(from, profileCard);
 
+  // ── "View Full Catalogue" button — only shown when seller has more than PREVIEW_MAX ──
+  const catalogueBtn = extraCount > 0
+    ? [{ id: `sc_catalogue_${supplierId}`, title: `📋 View All ${isService ? "Services" : "Products"} (${catalogueTotal})` }]
+    : [];
+
   if (isService) {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
+      ...catalogueBtn,
       { id: `sc_book_${supplierId}`,    title: "📅 Book a service" },
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
@@ -283,6 +287,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   } else {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
+      ...catalogueBtn,
       { id: `sc_order_${supplierId}`,   title: "🛒 Place an order" },
       { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
       ...repeatBtn,
@@ -338,6 +343,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "order_deliver":   return _scOrderDeliver(from, supplierId, biz, saveBiz);
     case "order_collect":   return _scOrderCollect(from, supplierId, biz, saveBiz);
     case "order_confirm":   return _scOrderConfirm(from, supplierId, biz, saveBiz);
+    case "catalogue":       return _scCatalogue(from, supplierId, biz, saveBiz);
     case "book":            return _scBook(from, supplierId, biz, saveBiz);
     case "book_confirm":    return _scBookConfirm(from, supplierId, biz, saveBiz);
     case "book_urgent":     return _scBookUrgent(from, supplierId, biz, saveBiz);
@@ -419,6 +425,82 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
   }
 
   return false;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIEW FULL CATALOGUE
+// ─────────────────────────────────────────────────────────────────────────────
+// Triggered when buyer taps "📋 View All Services/Products (N)" button.
+// Sends the complete numbered catalogue without starting a quote session.
+// After viewing, buyer is shown the action menu again so they can request a quote.
+//
+// WHY A SEPARATE BUTTON:
+//   Profile card shows 5 items max (keeps it clean and fast to load).
+//   Buyer needs to see everything before deciding. This gives them the full picture
+//   in one tap, then they can go to "Request a quote" knowing exactly what to pick.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _scCatalogue(from, supplierId, biz, saveBiz) {
+  const seller    = await SupplierProfile.findById(supplierId).lean();
+  if (!seller) return false;
+
+  const isService = seller.profileType === "service";
+
+  // Build the full item list — same fallback chain as profile card
+  let allItems = [];
+  if (isService) {
+    if (Array.isArray(seller.rates) && seller.rates.length > 0) {
+      allItems = seller.rates;
+    } else {
+      const sl = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
+      allItems = sl.filter(s => s && s !== "pending_upload").map(s => ({ service: s, rate: "" }));
+    }
+  } else {
+    if (Array.isArray(seller.prices) && seller.prices.length > 0) {
+      allItems = seller.prices.filter(p => p.inStock !== false);
+    } else {
+      const pl = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
+      allItems = pl.filter(p => p && p !== "pending_upload").map(p => ({ product: p, amount: 0, unit: "each" }));
+    }
+  }
+
+  const total = allItems.length;
+  const CHUNK = 30;
+  const hasPrices = isService
+    ? (Array.isArray(seller.rates) && seller.rates.length > 0)
+    : (Array.isArray(seller.prices) && seller.prices.length > 0);
+
+  const header = `${isService ? "🛠" : "📦"} *${seller.businessName} — Full ${isService ? "Services" : "Catalogue"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
+
+  // Send in chunks (handles sellers with 50+ items)
+  for (let i = 0; i < total; i += CHUNK) {
+    const chunk  = allItems.slice(i, i + CHUNK);
+    const isLast = i + CHUNK >= total;
+    const lines  = chunk.map((item, j) => {
+      const idx      = i + j + 1;
+      const name     = isService ? item.service : item.product;
+      const priceStr = isService
+        ? (item.rate ? `  —  ${item.rate}` : "")
+        : (item.amount ? `  —  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "");
+      return `${idx}. ${name}${priceStr}`;
+    }).join("\n");
+
+    if (i === 0) {
+      await sendText(from, `${header}\n\n${lines}${isLast ? "" : "\n_(list continues...)_"}`);
+    } else {
+      await sendText(from, `${lines}${isLast ? "" : "\n_(list continues...)_"}`);
+    }
+  }
+
+  // After showing full catalogue → show action menu so buyer can request a quote
+  return sendButtons(from, {
+    text: `Ready to request a quote or book a ${isService ? "service" : "product"}?`,
+    buttons: [
+      { id: `sc_quote_${supplierId}`, title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
+      { id: isService ? `sc_book_${supplierId}` : `sc_order_${supplierId}`, title: isService ? "📅 Book a service" : "🛒 Place an order" },
+      { id: `sc_back_${supplierId}`,  title: "⬅ Back" }
+    ]
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1292,8 +1374,8 @@ async function _scBook(from, supplierId, biz, saveBiz) {
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
 Which service(s) do you need?
-Type the service number(s) or names.
-_e.g. "1" or "deep cleaning, carpet cleaning"_
+You can pick *multiple services* in one message.
+_e.g. "1, 2, 4" or "deep cleaning, carpet cleaning"_
 
 Type *cancel* to go back.`
     );
@@ -1305,8 +1387,9 @@ Type *cancel* to go back.`
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-What service(s) do you need, and briefly describe the job?
-_e.g. "gearbox service, Toyota Corolla 2015" or "2× sofa cleaning"_
+Which service(s) do you need? You can pick *multiple*.
+Type numbers or names, and describe the job briefly.
+_e.g. "1, 3" or "gearbox service, oil change" or "deep cleaning 3-bed house"_
 
 Type *cancel* to go back.`
     );
@@ -1326,17 +1409,31 @@ async function _scProcessBookingService(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
-  // Resolve service names from numbered input
-  let resolvedServices = raw;
+  // Resolve service names from input — supports:
+  //   Numbers:           "1, 2, 4"  → resolved to service names
+  //   Names:             "deep cleaning, carpet cleaning"  → kept as-is
+  //   Mixed:             "1, carpet cleaning"  → numbers resolved, names kept
+  let resolvedServices = raw.trim();
   try {
     const menu = JSON.parse(biz?.sessionData?.scServiceMenu || "[]");
-    const numbered = [...raw.matchAll(/(\d+)/g)].map(m => parseInt(m[1]) - 1).filter(i => i >= 0 && i < menu.length);
-    if (numbered.length > 0) {
-      resolvedServices = numbered.map(i => menu[i].service || menu[i]).join(", ");
-      if (biz) {
-        biz.sessionData = { ...biz.sessionData, scBookingServices: resolvedServices };
-        await saveBiz(biz);
+    if (menu.length > 0) {
+      // Split input by comma, process each part
+      const parts = raw.split(/,\s*/);
+      const resolved = parts.map(part => {
+        const num = parseInt(part.trim(), 10);
+        if (!isNaN(num) && num >= 1 && num <= menu.length) {
+          // Number → look up service name
+          return menu[num - 1].service || menu[num - 1] || part.trim();
+        }
+        return part.trim(); // keep as-is (name or description)
+      }).filter(Boolean);
+      if (resolved.length > 0) {
+        resolvedServices = resolved.join(", ");
       }
+    }
+    if (biz) {
+      biz.sessionData = { ...biz.sessionData, scBookingServices: resolvedServices };
+      await saveBiz(biz);
     }
   } catch (_) {}
 
