@@ -246,11 +246,11 @@ export function buildProfileCard(supplier) {
   let catalogueLines = "";
   if (isService) {
     // BUG FIX: rates[] often empty even when listedProducts[]/products[] has services.
-    // Fall through: rates → listedProducts → products — always show something real.
+    // Fall through: rates → listedProducts → products - always show something real.
     const hasRates = (supplier.rates || []).length > 0;
     if (hasRates) {
       catalogueLines = (supplier.rates || []).slice(0, 5)
-        .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+        .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
     } else {
       const serviceList = supplier.listedProducts?.length
@@ -346,7 +346,7 @@ export function buildSharableCaption(supplier, source = "wa") {
   const location = [area, city].filter(Boolean).join(", ");
   const isService = supplier.profileType === "service";
 
-  // Top 3 items/services as a teaser — same fallback chain: rates → listedProducts → products
+  // Top 3 items/services as a teaser - same fallback chain: rates → listedProducts → products
   const items = isService
     ? ((supplier.rates || []).length > 0
         ? (supplier.rates || []).slice(0, 3).map(r => r.service)
@@ -410,10 +410,10 @@ export function buildSharableCaption(supplier, source = "wa") {
 // SMART LINK BENEFITS CARD
 // ─────────────────────────────────────────────────────────────────────────────
 // Explains to a seller why their ZimQuote link is better than WhatsApp Business,
-// Facebook, or a website — with real Zimbabwe context.
+// Facebook, or a website - with real Zimbabwe context.
 //
 // ZIM REALITY:
-//   • Building a website costs $200-500 upfront + $15/mo hosting — most sellers can't afford it
+//   • Building a website costs $200-500 upfront + $15/mo hosting - most sellers can't afford it
 //   • Facebook algorithm hides posts unless you pay to boost
 //   • WhatsApp Business can't reach outside 24hr window, no PDF quotes, no analytics
 //   • ZimQuote link: FREE with subscription, works on any phone, WhatsApp-native,
@@ -450,9 +450,9 @@ export function buildSmartLinkBenefitsCard(supplier) {
     `💡 *Why your ZimQuote link beats other options:*`,
     ``,
     `📱 *vs WhatsApp Business:*`,
-    `  • We reach buyers outside 24hr window — they can't`,
-    `  • We send PDF quotes automatically — they can't`,
-    `  • We show analytics per source — they don't`,
+    `  • We reach buyers outside 24hr window - they can't`,
+    `  • We send PDF quotes automatically - they can't`,
+    `  • We show analytics per source - they don't`,
     `  • We notify you every time someone opens your link`,
     ``,
     `📘 *vs Facebook page:*`,
@@ -464,7 +464,7 @@ export function buildSmartLinkBenefitsCard(supplier) {
     `🌐 *vs a website:*`,
     `  • Website: $200-500 to build, $15+/month to host`,
     `  • ZimQuote link: FREE with your $5/month subscription`,
-    `  • Your link lives on WhatsApp — where your buyers already are`,
+    `  • Your link lives on WhatsApp - where your buyers already are`,
     `  • No data-heavy app download needed`,
     ``,
     `─────────────────`,
@@ -475,7 +475,7 @@ export function buildSmartLinkBenefitsCard(supplier) {
     `  4. Share in neighbourhood WhatsApp groups`,
     `  5. Put it in your email signature / SMS`,
     ``,
-    `Each source is tracked separately — you will see exactly`,
+    `Each source is tracked separately - you will see exactly`,
     `which platform brings you the most buyers.`,
   ].filter(l => l !== "").join("\n");
 

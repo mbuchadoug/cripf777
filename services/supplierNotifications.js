@@ -505,7 +505,7 @@ export async function runSupplierExpiryChecks() {
 //
 // ── WHY THIS IS UTILITY NOT MARKETING ────────────────────────────────────────
 // This notification is triggered by a specific user action (a buyer opening
-// the seller's profile link). It is purely informational — it tells the seller
+// the seller's profile link). It is purely informational - it tells the seller
 // what happened on their own account. Compare to: bank transaction alerts,
 // "someone viewed your listing" notifications on property sites.
 // The notification contains NO promotional content, no offers, no pricing.

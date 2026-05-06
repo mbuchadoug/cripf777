@@ -4,16 +4,16 @@
 // Full buyer interaction flow when a buyer opens a seller's ZimQuote smart link.
 //
 // KEY IMPROVEMENTS IN v3:
-//   • Profile shows top 5 items with "X more — tap Get Quote to see all" hint
+//   • Profile shows top 5 items with "X more - tap Get Quote to see all" hint
 //   • Quote flow: full numbered catalogue → buyer picks by number×qty → cart review
 //     → seller notified via Meta template (outside 24hr) → PDF quote sent to buyer
 //   • Correct terminology: services use "service/book/rate/job", products use
-//     "product/order/price/each" — never mixed
+//     "product/order/price/each" - never mixed
 //   • Intelligent booking: travelAvailable=true → seller comes to YOU (ask YOUR address)
 //                          travelAvailable=false → YOU go to seller (show their address)
 //   • Seller notifications for quotes/bookings use Meta template (outside 24hr window)
 //   • PDF quotation sent to buyer after seller approves (both priced + RFQ paths)
-//   • Urgent booking button — buyer can skip date/time typing
+//   • Urgent booking button - buyer can skip date/time typing
 //
 // QUOTE FLOWS:
 //   PRICED: Full catalogue → buyer picks → cart → seller approves → PDF to buyer
@@ -60,7 +60,7 @@ function _trackConversion(biz) {
 // ─────────────────────────────────────────────────────────────────────────────
 // NOTIFY SELLER - someone opened their smart link
 // ─────────────────────────────────────────────────────────────────────────────
-// UTILITY notification (not marketing) — triggered by user action, not ZimQuote blast.
+// UTILITY notification (not marketing) - triggered by user action, not ZimQuote blast.
 // Compare to: bank transaction alerts, "someone viewed your listing" notifications.
 //
 // Strategy:
@@ -105,7 +105,7 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
         ]
       });
       return;
-    } catch (_) { /* outside 24hr window — fall through to template */ }
+    } catch (_) { /* outside 24hr window - fall through to template */ }
 
     // ── Template fallback (works outside 24hr window) ─────────────────────────
     // Reuse approved supplier_new_buyer_request as utility template
@@ -136,7 +136,7 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
       { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    // Non-critical — never rethrow
+    // Non-critical - never rethrow
     console.warn("[SMART LINK NOTIFY]", err.message);
   }
 }
@@ -146,16 +146,16 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
   const isService  = seller.profileType === "service";
-  const PREVIEW_MAX = 5; // Items shown on profile card (teaser only — full list via View Catalogue button)
+  const PREVIEW_MAX = 5; // Items shown on profile card (teaser only - full list via View Catalogue button)
 
   // ── Build services/products sample (max PREVIEW_MAX shown on card) ────────
-  // Fall through: rates → listedProducts → products — always show something real.
+  // Fall through: rates → listedProducts → products - always show something real.
   let productSample = "";
   if (isService) {
     const hasRates = Array.isArray(seller.rates) && seller.rates.length > 0;
     if (hasRates) {
       productSample = seller.rates.slice(0, PREVIEW_MAX)
-        .map(r => `• ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+        .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
     } else {
       const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
@@ -169,7 +169,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     const priced = (seller.prices || []).filter(p => p.inStock !== false);
     if (priced.length) {
       productSample = priced.slice(0, PREVIEW_MAX)
-        .map(p => `• ${p.product}${p.amount ? "  —  $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : ""}`)
+        .map(p => `• ${p.product}${p.amount ? "  -  $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : ""}`)
         .join("\n");
     } else {
       const listed = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
@@ -242,14 +242,14 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? [{ id: `sc_repeat_${supplierId}`, title: "🔄 Repeat last order" }] : [];
 
   // ── Profile card ─────────────────────────────────────────────────────────
-  // ── X more hint — tells buyer there's more and how to see it ─────────────
+  // ── X more hint - tells buyer there's more and how to see it ─────────────
   const catalogueTotal = isService
     ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
     : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
   const extraCount = Math.max(0, catalogueTotal - PREVIEW_MAX);
-  // moreHint shown as text AND as a button below — button is the primary CTA
+  // moreHint shown as text AND as a button below - button is the primary CTA
   const moreHint   = extraCount > 0
-    ? `_...and ${extraCount} more — tap "View Full Catalogue" below_`
+    ? `_...and ${extraCount} more - tap "View Full Catalogue" below_`
     : null;
 
   const profileCard = [
@@ -269,7 +269,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   await sendText(from, profileCard);
 
-  // ── "View Full Catalogue" button — only shown when seller has more than PREVIEW_MAX ──
+  // ── "View Full Catalogue" button - only shown when seller has more than PREVIEW_MAX ──
   const catalogueBtn = extraCount > 0
     ? [{ id: `sc_catalogue_${supplierId}`, title: `📋 View All ${isService ? "Services" : "Products"} (${catalogueTotal})` }]
     : [];
@@ -399,7 +399,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     return _scProcessAddress(from, supplierId, raw, biz, saveBiz);
   }
 
-  // ── Booking: buyer chose services (PATH A — seller travels) ────────────────
+  // ── Booking: buyer chose services (PATH A - seller travels) ────────────────
   if (state === "sc_awaiting_booking_service") {
     return _scProcessBookingService(from, supplierId, raw, biz, saveBiz);
   }
@@ -409,7 +409,7 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     return _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz);
   }
 
-  // ── Booking: buyer typed job description (PATH B — client visits seller) ──
+  // ── Booking: buyer typed job description (PATH B - client visits seller) ──
   if (state === "sc_awaiting_job_desc") {
     return _scProcessJobDescription(from, supplierId, raw, biz, saveBiz);
   }
@@ -446,7 +446,7 @@ async function _scCatalogue(from, supplierId, biz, saveBiz) {
 
   const isService = seller.profileType === "service";
 
-  // Build the full item list — same fallback chain as profile card
+  // Build the full item list - same fallback chain as profile card
   let allItems = [];
   if (isService) {
     if (Array.isArray(seller.rates) && seller.rates.length > 0) {
@@ -470,7 +470,7 @@ async function _scCatalogue(from, supplierId, biz, saveBiz) {
     ? (Array.isArray(seller.rates) && seller.rates.length > 0)
     : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
-  const header = `${isService ? "🛠" : "📦"} *${seller.businessName} — Full ${isService ? "Services" : "Catalogue"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
+  const header = `${isService ? "🛠" : "📦"} *${seller.businessName} - Full ${isService ? "Services" : "Catalogue"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
 
   // Send in chunks (handles sellers with 50+ items)
   for (let i = 0; i < total; i += CHUNK) {
@@ -480,8 +480,8 @@ async function _scCatalogue(from, supplierId, biz, saveBiz) {
       const idx      = i + j + 1;
       const name     = isService ? item.service : item.product;
       const priceStr = isService
-        ? (item.rate ? `  —  ${item.rate}` : "")
-        : (item.amount ? `  —  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "");
+        ? (item.rate ? `  -  ${item.rate}` : "")
+        : (item.amount ? `  -  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "");
       return `${idx}. ${name}${priceStr}`;
     }).join("\n");
 
@@ -509,14 +509,14 @@ async function _scCatalogue(from, supplierId, biz, saveBiz) {
 // HOW IT WORKS:
 //   PRICED (seller has rates/prices set):
 //     1. Full catalogue sent to buyer in numbered list (all items, chunked 30/msg)
-//     2. Buyer replies "1×2, 3×1, 5×3" (item# × qty) — or types item names
+//     2. Buyer replies "1×2, 3×1, 5×3" (item# × qty) - or types item names
 //     3. Cart summary shown with prices and total
 //     4. Buyer taps "✅ Confirm & Send" → draft stored on seller session
 //     5. Seller notified via Meta template (works outside 24hr window)
 //     6. Seller taps "View & Quote" → confirms or edits prices
 //     7. PDF quotation auto-generated and sent to buyer via sendDocument
 //
-//   UNPRICED (no rates/prices — RFQ mode):
+//   UNPRICED (no rates/prices - RFQ mode):
 //     1. Buyer lists services/items in free text
 //     2. Seller notified via Meta template with item list
 //     3. Seller replies with prices (1=50, 2=30)
@@ -540,7 +540,7 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       allItems  = seller.rates;
       hasPrices = true;
     } else {
-      // Service provider without rates — use listedProducts as item names, go RFQ
+      // Service provider without rates - use listedProducts as item names, go RFQ
       const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
       allItems  = serviceList.filter(s => s && s !== "pending_upload").map(s => ({ service: s, rate: "" }));
       hasPrices = false;
@@ -585,22 +585,22 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       const idx  = i + j + 1;
       const name = isService ? item.service : item.product;
       const priceStr = isService
-        ? (item.rate ? `  —  ${item.rate}` : "  —  rate on request")
-        : (item.amount ? `  —  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "  —  price on request");
+        ? (item.rate ? `  -  ${item.rate}` : "  -  rate on request")
+        : (item.amount ? `  -  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "  -  price on request");
       return `${idx}. ${name}${priceStr}`;
     }).join("\n");
 
     if (isFirst) {
       const header = hasPrices
-        ? `${isService ? "🛠" : "📦"} *${seller.businessName} — ${isService ? "Services & Rates" : "Products & Prices"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`
-        : `${isService ? "🛠" : "📦"} *${seller.businessName} — ${isService ? "Services" : "Products"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
+        ? `${isService ? "🛠" : "📦"} *${seller.businessName} - ${isService ? "Services & Rates" : "Products & Prices"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`
+        : `${isService ? "🛠" : "📦"} *${seller.businessName} - ${isService ? "Services" : "Products"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
       await sendText(from, `${header}\n\n${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
     } else {
       await sendText(from, `${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
     }
   }
 
-  // ── Instructions — always sent last so buyer sees them ───────────────────
+  // ── Instructions - always sent last so buyer sees them ───────────────────
   if (hasPrices) {
     const exampleQty = isService ? "1×1, 3×2" : "1×50, 3×10, 5×2";
     return sendText(from,
@@ -615,14 +615,14 @@ ${isService
 Type *done* when finished, or *cancel* to go back.`
     );
   } else {
-    // RFQ — no prices set — free text input
+    // RFQ - no prices set - free text input
     const hint = isService
       ? "_e.g. deep cleaning 3-bed house, sofa cleaning 2-seater_"
       : "_e.g. 20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_";
     return sendText(from,
 `📝 *${isService ? "List the services you need:" : "List the products you need:"}*
 
-Be as specific as possible${isService ? " — include size, number of rooms, location type" : " — include size, brand, quantity"}.
+Be as specific as possible${isService ? " - include size, number of rooms, location type" : " - include size, brand, quantity"}.
 
 ${hint}
 
@@ -667,9 +667,9 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
-  // ── Cart summary — show price per item if available ───────────────────────
-  // Services: "1× deep cleaning — $50/job" or "1× deep cleaning — rate TBC"
-  // Products: "50× 20mm pipe — $2.00/m" or "10× valve — price TBC"
+  // ── Cart summary - show price per item if available ───────────────────────
+  // Services: "1× deep cleaning - $50/job" or "1× deep cleaning - rate TBC"
+  // Products: "50× 20mm pipe - $2.00/m" or "10× valve - price TBC"
   const priceMap = {};
   for (const item of knownItems) {
     const key = (isService ? item.service : item.product)?.toLowerCase().trim();
@@ -679,7 +679,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const summary = allItems.map(it => {
     const priceStr = priceMap[it.name?.toLowerCase().trim()];
     return priceStr
-      ? `• ${it.qty}× ${it.name}  —  ${priceStr}`
+      ? `• ${it.qty}× ${it.name}  -  ${priceStr}`
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
@@ -1151,13 +1151,13 @@ async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, tot
   try {
     await sendButtons(_normPhone(buyerPhone), {
       text:
-`✅ *Your ${isService ? "service quote" : "quote"} is ready — ${refNum}*
+`✅ *Your ${isService ? "service quote" : "quote"} is ready - ${refNum}*
 
 From: *${sellerName}*
 Total: *$${Number(total).toFixed(2)} USD*
 Valid until: ${expiry}
 
-${pdfSent ? "📄 PDF quotation sent above — tap to open and save." : "✅ Quote approved by seller."}
+${pdfSent ? "📄 PDF quotation sent above - tap to open and save." : "✅ Quote approved by seller."}
 
 This quote is valid for 48 hours. Contact the seller to confirm your order.`,
       buttons: [
@@ -1309,7 +1309,7 @@ async function _scOrderConfirm(from, supplierId, biz, saveBiz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SERVICE BOOKING FLOW — INTELLIGENT & TRAVEL-AWARE
+// SERVICE BOOKING FLOW - INTELLIGENT & TRAVEL-AWARE
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // REAL-WORLD PROBLEM SOLVED:
@@ -1321,14 +1321,14 @@ async function _scOrderConfirm(from, supplierId, biz, saveBiz) {
 //   A mechanic workshop needs: what car problem, when will you bring it, their address.
 //   These are fundamentally different conversations.
 //
-// PATH A — Seller travels to client (travelAvailable: true):
+// PATH A - Seller travels to client (travelAvailable: true):
 //   Step 1: Which services do you need? (numbered list from their catalogue)
 //   Step 2: What is your location/address? (where should we come to?)
 //   Step 3: Preferred date & time + urgency button
 //   Step 4: Review summary → Confirm
 //   Result: Seller gets BK notification via Meta template + full details
 //
-// PATH B — Client visits seller (travelAvailable: false):
+// PATH B - Client visits seller (travelAvailable: false):
 //   Step 1: Shows seller's address upfront. Which services do you need?
 //   Step 2: Describe the job (what's the problem / what do you need?)
 //   Step 3: Preferred date & time
@@ -1348,7 +1348,7 @@ async function _scBook(from, supplierId, biz, saveBiz) {
 
   // ── Build service list for step 1 ─────────────────────────────────────────
   const serviceList = seller.rates?.length > 0
-    ? seller.rates.map((r, i) => `${i + 1}. ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+    ? seller.rates.map((r, i) => `${i + 1}. ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
     : ((seller.listedProducts || seller.products || []).filter(s => s && s !== "pending_upload")
         .map((s, i) => `${i + 1}. ${s}`));
   const serviceMenu = serviceList.slice(0, 20).join("\n");
@@ -1366,9 +1366,9 @@ async function _scBook(from, supplierId, biz, saveBiz) {
   }
 
   if (travels) {
-    // PATH A: Seller comes to client — ask what service(s) first
+    // PATH A: Seller comes to client - ask what service(s) first
     return sendText(from,
-`📅 *Book a service — ${seller.businessName}*
+`📅 *Book a service - ${seller.businessName}*
 🚗 _We come to you_
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
@@ -1380,9 +1380,9 @@ _e.g. "1, 2, 4" or "deep cleaning, carpet cleaning"_
 Type *cancel* to go back.`
     );
   } else {
-    // PATH B: Client visits seller — show their address first
+    // PATH B: Client visits seller - show their address first
     return sendText(from,
-`📅 *Book a service — ${seller.businessName}*
+`📅 *Book a service - ${seller.businessName}*
 📍 _${seller.address || location}_
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
@@ -1409,7 +1409,7 @@ async function _scProcessBookingService(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
-  // Resolve service names from input — supports:
+  // Resolve service names from input - supports:
   //   Numbers:           "1, 2, 4"  → resolved to service names
   //   Names:             "deep cleaning, carpet cleaning"  → kept as-is
   //   Mixed:             "1, carpet cleaning"  → numbers resolved, names kept
@@ -1468,7 +1468,7 @@ _e.g. "Saturday morning", "Any weekday after 3pm", "Monday 10am"_
 
 Or tap Urgent if you need it done today or tomorrow.`,
     buttons: [
-      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent — ASAP" },
+      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent - ASAP" },
     ]
   });
 }
@@ -1492,12 +1492,12 @@ _e.g. "Tomorrow morning", "Saturday 9am", "Monday after 2pm"_
 
 Or tap Urgent if you need it done today.`,
     buttons: [
-      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent — Today/Tomorrow" }
+      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent - Today/Tomorrow" }
     ]
   });
 }
 
-// ── Final booking step — date/time confirmed, submit ─────────────────────────
+// ── Final booking step - date/time confirmed, submit ─────────────────────────
 async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
@@ -1535,7 +1535,7 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`✅ *Booking request sent — ${refNum}*
+`✅ *Booking request sent - ${refNum}*
 
 🏪 ${seller.businessName}
 🔧 ${isServiceType ? "Services" : "Job"}: ${services}
@@ -1545,7 +1545,7 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
 The seller will contact you to confirm and quote.
 📞 ${seller.contactDetails || seller.phone}
 
-_Keep your WhatsApp open — seller will respond here._`,
+_Keep your WhatsApp open - seller will respond here._`,
     buttons: [
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" }
@@ -1555,11 +1555,11 @@ _Keep your WhatsApp open — seller will respond here._`,
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// URGENT BOOKING — buyer taps "⚡ Urgent" instead of typing a date
+// URGENT BOOKING - buyer taps "⚡ Urgent" instead of typing a date
 // Skips date/time text entry, goes straight to booking confirmation
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scBookUrgent(from, supplierId, biz, saveBiz) {
-  return _scProcessBookingDateTime(from, supplierId, "URGENT — as soon as possible", biz, saveBiz);
+  return _scProcessBookingDateTime(from, supplierId, "URGENT - as soon as possible", biz, saveBiz);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1596,14 +1596,14 @@ Do you want to order the same again?`,
 // ENQUIRY FLOW
 // ─────────────────────────────────────────────────────────────────────────────
 // Buyer sends a free-text message directly to the seller.
-// Works for any seller/service type — no rigid form, just a message.
+// Works for any seller/service type - no rigid form, just a message.
 //
 // WHY THIS MATTERS IN ZIM CONTEXT:
 // In Zimbabwe business is conversational. Buyers want to ask:
 //   "Do you come to Mbare on Saturdays?"
 //   "Do you have 15mm ball valves? I need 20."
 //   "Can you do a 3-bed house? How much roughly?"
-// This mirrors how business is done in the street markets and suburbs —
+// This mirrors how business is done in the street markets and suburbs -
 // conversation first, price negotiation second, deal third.
 // No app needed, works on the cheapest Android or feature phone via WhatsApp.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1648,7 +1648,7 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
   const sellerPhone  = _normPhone(seller.phone);
   const refNum       = "ENQ-" + Date.now().toString(36).toUpperCase().slice(-5);
 
-  // ── Notify seller — try sendButtons (within 24hr), then template ─────────
+  // ── Notify seller - try sendButtons (within 24hr), then template ─────────
   try {
     await sendButtons(sellerPhone, {
       text:
@@ -1659,7 +1659,7 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
       buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }]
     });
   } catch (_) {
-    // Outside 24hr — use utility template
+    // Outside 24hr - use utility template
     try {
       const axios  = (await import("axios")).default;
       const PID    = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
@@ -1707,13 +1707,13 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SMART LINK MENU — shown to SELLERS from My Store → 📲 My Smart Link
+// SMART LINK MENU - shown to SELLERS from My Store → 📲 My Smart Link
 // ─────────────────────────────────────────────────────────────────────────────
 // WHY SELLERS NEED THIS IN ZIM:
 //   Most sellers in Zimbabwe have never tracked where their customers come from.
 //   They post on Facebook, share in WhatsApp groups, print flyers.
 //   ZimQuote Smart Link tells them EXACTLY which platform is working.
-//   That is game-changing for a seller spending $5/month on a listing —
+//   That is game-changing for a seller spending $5/month on a listing -
 //   they can double down on what works and stop wasting money on what doesn't.
 //
 // WHAT MAKES IT DIFFERENT:
@@ -1759,7 +1759,7 @@ async function _scSmartLinkShareMenu(from, supplierId, biz, saveBiz) {
 
   // Send captions as a single message so seller can copy each section
   await sendText(from,
-`📤 *Smart Link Sharing Kit — ${seller.businessName}*
+`📤 *Smart Link Sharing Kit - ${seller.businessName}*
 
 ─────────────────
 📱 *WhatsApp Status caption:*
@@ -1788,13 +1788,13 @@ Open in your browser to download:
 ${qrUrl}
 
 _Print this QR on your receipts, cards, and flyers._
-_Customers scan it with their phone camera — no typing needed._
+_Customers scan it with their phone camera - no typing needed._
 
 Each link is tracked. You will see which platform (Facebook, WhatsApp, TikTok, QR) brings the most buyers.`
   );
 
   return sendButtons(from, {
-    text: `Tip: Post your WhatsApp Status link right now — it's the fastest way to get your first views tracked.`,
+    text: `Tip: Post your WhatsApp Status link right now - it's the fastest way to get your first views tracked.`,
     buttons: [
       { id: `sc_smart_link_${supplierId}`, title: "📊 View My Stats" },
       { id: "my_supplier_account",          title: "🏪 Back to My Store" }
