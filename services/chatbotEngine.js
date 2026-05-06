@@ -3495,7 +3495,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
           // Seller tapped template button — show them the draft quote for confirmation
           const _scSeller  = await SupplierProfile.findById(_scDraft.supplierId).lean();
-          const _scRefNum  = _scDraft.refNum;
+          const _scRefNum  = (_scDraft.refNum || "").toUpperCase();
           const _scItems   = (_scDraft.lineItems || []);
           const _scTotal   = _scDraft.total || 0;
           const _scExpiry  = _scDraft.expiry || "";

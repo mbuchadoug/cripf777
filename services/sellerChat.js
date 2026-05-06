@@ -124,12 +124,12 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
   // ── Special: refNum-based actions (not supplierId-based) ─────────────────
   // sc_quote_confirm_QT-XXXXXX  /  sc_quote_edit_QT-XXXXXX
   // sc_rfq_price_RFQ-XXXXXX
-  const _confirmMatch = a.match(/^sc_quote_confirm_(.+)$/);
+   const _confirmMatch = a.match(/^sc_quote_confirm_(.+)$/);
   const _editMatch    = a.match(/^sc_quote_edit_(.+)$/);
   const _rfqMatch     = a.match(/^sc_rfq_price_(.+)$/);
 
-  if (_confirmMatch) return _scHandleQuoteConfirm(from, _confirmMatch[1], biz, saveBiz);
-  if (_editMatch)    return _scHandleQuoteEdit(from, _editMatch[1], biz, saveBiz);
+    if (_confirmMatch) return _scHandleQuoteConfirm(from, _confirmMatch[1].toUpperCase(), biz, saveBiz);
+  if (_editMatch)    return _scHandleQuoteEdit(from, _editMatch[1].toUpperCase(), biz, saveBiz);
   if (_rfqMatch) {
     // Seller taps "Enter Prices" on RFQ template — set edit state and prompt
     const UserSession = (await import("../models/userSession.js")).default;
@@ -507,7 +507,7 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
   const raw   = sess?.tempData?.scPendingSellerQuote;
   const draft = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
 
-  if (!draft || draft.refNum !== refNum) {
+ if (!draft || draft.refNum.toUpperCase() !== refNum.toUpperCase()) {
     return sendText(from, `❌ Quote ${refNum} not found or already sent. It may have expired.`);
   }
 
@@ -593,7 +593,7 @@ async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
   const raw   = sess?.tempData?.scPendingSellerQuote;
   const draft = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
 
-  if (!draft || draft.refNum !== refNum) {
+ if (!draft || draft.refNum.toUpperCase() !== refNum.toUpperCase()) {
     return sendText(from, `❌ Quote ${refNum} not found or already sent.`);
   }
 
