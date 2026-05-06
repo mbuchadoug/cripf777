@@ -14675,25 +14675,29 @@ if (a === "sup_request_sellers") {
       { upsert: true }
     );
 
-    return sendButtons(from, {
-      text:
-        `⚡ *Request Sellers*\n\n` +
-        `👋 Welcome back! Repeat your last request?\n\n` +
-        `📦 ${lastItems}\n` +
-        `📍 ${lastLocation}\n\n` +
-        `Or type a new request below.\n\n` +
-        `*Examples:*\n` +
-        `_copper pipe 15mm, 5 lengths_\n` +
-        `_cement 50kg x20, river sand 3m3_\n` +
-        `_need plumber, burst pipe, Avondale_\n\n` +
-        `_Tip: put quantity at the end — e.g. "copper pipe 15mm, 5 lengths"_\n` +
-        `_Spec numbers like 15mm and 50kg are never treated as quantity._\n\n` +
-        `*0 = Main menu · 00 = Cancel · help = shortcuts*`,
-      buttons: [
-        { id: "sup_repeat_last_request", title: "🔁 Repeat Last Request" },
-        { id: "sup_request_mode_bulk",   title: "📋 Bulk List" }
-      ]
-    });
+ await sendButtons(from, {
+  text:
+    `⚡ *Request Sellers*\n\n` +
+    `👋 Welcome back! Repeat your last request?\n\n` +
+    `📦 1. element replacement x1\n` +
+    `📍 Harare\n\n` +
+    `Or type a new request below.\n\n` +
+    `0=Menu • 00=Cancel`,
+  buttons: [
+    { id: "sup_repeat_last_request", title: "🔁 Repeat" },
+    { id: "sup_request_mode_bulk", title: "📋 Bulk List" }
+  ]
+});
+
+return sendText(
+  from,
+  `*Examples:*\n` +
+  `_copper pipe 15mm, 5 lengths_\n` +
+  `_cement 50kg x20_\n` +
+  `_need plumber Avondale_\n\n` +
+  `Tip: Put quantity at the end.\n` +
+  `Example: copper pipe 15mm, 5 lengths`
+);
   }
 
   // ── First-time or no prior request ────────────────────────────────────────
