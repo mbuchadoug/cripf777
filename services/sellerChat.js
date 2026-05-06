@@ -516,41 +516,53 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
 
   const { lineItems, total, expiry, buyerPhone, buyerName } = draft;
 
-  // Generate PDF
-  let pdfUrl = null;
+  // Generate and send PDF using the same generatePDF used throughout chatbotEngine.js
+  let pdfSent = false;
   try {
-    const { generateQuotePDF } = await import("./quotePdfGenerator.js");
-    const pdf = await generateQuotePDF({
-      refNum,
-      sellerName:  seller.businessName,
-      sellerPhone: seller.phone,
-      sellerCity:  seller.location?.city || seller.city,
-      buyerPhone,
-      buyerName,
-      items: lineItems,
-      total,
-      expiry
-    });
-    pdfUrl = pdf?.url || null;
-  } catch (_) { /* PDF is best-effort */ }
+    const { generatePDF } = await import("../routes/twilio_biz.js");
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
 
-  // Send PDF to buyer if generated
-  if (pdfUrl) {
-    try {
-      await sendDocument(_normPhone(buyerPhone), {
-        link: pdfUrl,
-        filename: `Quote_${refNum}.pdf`
-      });
-    } catch (_) { /* best-effort */ }
+    const { filename } = await generatePDF({
+      type:      "quote",
+      number:    refNum,
+      date:      new Date(),
+      billingTo: buyerName || _normPhone(buyerPhone),
+      items: lineItems.map(l => ({
+        item:  l.name,
+        qty:   Number(l.qty       || 1),
+        unit:  Number(l.unitPrice || 0),
+        total: Number(l.lineTotal || 0)
+      })),
+      bizMeta: {
+        name:    seller.businessName,
+        logoUrl: seller.logoUrl || "",
+        address: [
+          seller.address || "",
+          seller.location?.area || seller.area || "",
+          seller.location?.city || seller.city || ""
+        ].filter(Boolean).join(", "),
+        _id:    String(seller._id),
+        status: "quotation"
+      }
+    });
+
+    const pdfLink   = `${site}/docs/generated/quotes/${filename}`;
+    const normBuyer = _normPhone(buyerPhone);
+    await sendDocument(normBuyer, { link: pdfLink, filename });
+    pdfSent = true;
+    console.log(`[SC QUOTE PDF] ${filename} → ${normBuyer}`);
+  } catch (pdfErr) {
+    console.warn(`[SC QUOTE PDF] failed: ${pdfErr.message}`);
   }
 
-  // Notify buyer — use existing template system for outside-24hr delivery
+  // Notify buyer their quote is ready
   await _sendBuyerQuoteNotification({
     buyerPhone,
     sellerName: seller.businessName,
     refNum,
     total,
     expiry,
+    pdfSent,
   });
 
   // Clear draft from seller's session
@@ -577,7 +589,7 @@ ${itemRows}
 ${"─".repeat(28)}
 *Total: $${total.toFixed(2)} USD*
 
-${pdfUrl ? "PDF delivered to buyer." : "Quote delivered to buyer."}`,
+${pdfSent ? "PDF delivered to buyer." : "Quote delivered to buyer."}`,
     buttons: [
       { id: "my_supplier_account", title: "🏪 My Account" }
     ]
@@ -776,7 +788,7 @@ async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, item
 // BUYER QUOTE DELIVERY — notifies buyer their quote is ready
 // Uses sendButtons fallback (PDF already sent via sendDocument above)
 // ─────────────────────────────────────────────────────────────────────────────
-async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry }) {
+async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry, pdfSent = false }) {
   try {
     await sendButtons(_normPhone(buyerPhone), {
       text:
@@ -786,7 +798,7 @@ From: *${sellerName}*
 Total: *$${Number(total).toFixed(2)} USD*
 Valid until: ${expiry}
 
-PDF sent above — tap to open.`,
+${pdfSent ? "PDF sent above — tap to open." : "Quote confirmed by seller."}`,
       buttons: [
         { id: "sup_request_sellers", title: "⚡ New Request" },
         { id: "find_supplier",       title: "🔍 Browse Sellers" }
@@ -1154,19 +1166,41 @@ async function _scProcessSellerPriceReply(from, supplierId, raw, biz, saveBiz) {
 
   let pdfSent = false;
   try {
-    const { generateQuotePDF } = await import("./quotePdfGenerator.js");
+    const { generatePDF } = await import("../routes/twilio_biz.js");
     const seller = await SupplierProfile.findById(supplierId).lean();
-    const pdf    = await generateQuotePDF({
-      refNum, sellerName: seller?.businessName, sellerPhone: from,
-      sellerCity: seller?.location?.city || seller?.city,
-      buyerPhone: pending.buyerPhone, buyerName: pending.buyerName,
-      items: lineItems, total, expiry
+    const site   = (process.env.SITE_URL || "").replace(/\/$/, "");
+
+    const { filename } = await generatePDF({
+      type:      "quote",
+      number:    refNum,
+      date:      new Date(),
+      billingTo: pending.buyerName || _normPhone(pending.buyerPhone),
+      items: lineItems.map(l => ({
+        item:  l.name,
+        qty:   Number(l.qty       || 1),
+        unit:  Number(l.unitPrice || 0),
+        total: Number(l.lineTotal || 0)
+      })),
+      bizMeta: {
+        name:    seller?.businessName || "Seller",
+        logoUrl: seller?.logoUrl || "",
+        address: [
+          seller?.address || "",
+          seller?.location?.area || seller?.area || "",
+          seller?.location?.city || seller?.city || ""
+        ].filter(Boolean).join(", "),
+        _id:    String(seller?._id || supplierId),
+        status: "quotation"
+      }
     });
-    if (pdf?.url) {
-      await sendDocument(_normPhone(pending.buyerPhone), { link: pdf.url, filename: `Quote_${refNum}.pdf` });
-      pdfSent = true;
-    }
-  } catch (e) { /* ignore */ }
+
+    const pdfLink = `${site}/docs/generated/quotes/${filename}`;
+    await sendDocument(_normPhone(pending.buyerPhone), { link: pdfLink, filename });
+    pdfSent = true;
+    console.log(`[SC RFQ PDF] ${filename} → ${_normPhone(pending.buyerPhone)}`);
+  } catch (pdfErr) {
+    console.warn(`[SC RFQ PDF] failed: ${pdfErr.message}`);
+  }
 
   const itemRows = lineItems.map(l =>
     `${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)} = $${l.lineTotal.toFixed(2)}`
