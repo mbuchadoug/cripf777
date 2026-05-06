@@ -1,22 +1,31 @@
-// services/sellerChat.js
-// ─── ZimQuote Seller Chatbot - Quote, Order, Booking, Delivery ───────────────
+// services/sellerChat.js  v3.0
+// ─── ZimQuote Seller Chatbot - Quote, Order, Smart Booking, Enquiry ───────────
 //
-// Full buyer interaction flow when a buyer taps a seller's ZimQuote smart link.
+// Full buyer interaction flow when a buyer opens a seller's ZimQuote smart link.
 //
-// Covers:
-//   1. Seller profile display - name, location, products/services, ratings
-//   2. Instant quote (seller has prices) - full chunked catalogue, seller confirms, PDF sent
-//   3. RFQ flow (no prices) - structured list to seller via Meta template, seller prices, PDF sent
-//   4. Product order - confirm items, qty, delivery/collection choice, location
-//   5. Service booking - date/time, location, job description, confirmation
-//   6. Delivery options - deliver to buyer, collection from seller, both
-//   7. Location capture - buyer suburb/address for delivery quotes
-//   8. Repeat order - returning buyer one-tap repeat
-//   9. Complaint / after-sales - escalation flow
+// KEY IMPROVEMENTS IN v3:
+//   • Profile shows top 5 items with "X more — tap Get Quote to see all" hint
+//   • Quote flow: full numbered catalogue → buyer picks by number×qty → cart review
+//     → seller notified via Meta template (outside 24hr) → PDF quote sent to buyer
+//   • Correct terminology: services use "service/book/rate/job", products use
+//     "product/order/price/each" — never mixed
+//   • Intelligent booking: travelAvailable=true → seller comes to YOU (ask YOUR address)
+//                          travelAvailable=false → YOU go to seller (show their address)
+//   • Seller notifications for quotes/bookings use Meta template (outside 24hr window)
+//   • PDF quotation sent to buyer after seller approves (both priced + RFQ paths)
+//   • Urgent booking button — buyer can skip date/time typing
 //
-// Wire in chatbotEngine.js:
-//   if (a.startsWith("sc_"))        return handleSellerChatAction({ from, action: a, biz, saveBiz });
-//   if (state?.startsWith("sc_"))   return handleSellerChatState({ state, from, text, biz, saveBiz });
+// QUOTE FLOWS:
+//   PRICED: Full catalogue → buyer picks → cart → seller approves → PDF to buyer
+//   RFQ:    Free text list → seller gets template → seller prices → PDF to buyer
+//
+// BOOKING FLOWS:
+//   PATH A (seller travels): services → YOUR location → date/time [→ Urgent btn]
+//   PATH B (client visits):  services/job desc → date/time [→ Urgent btn]
+//
+// Wire in chatbotEngine.js (sc_ prefix already handled globally):
+//   if (a.startsWith("sc_"))        return handleSellerChatAction(...)
+//   if (state?.startsWith("sc_"))   return handleSellerChatState(...)
 
 import SupplierProfile from "../models/supplierProfile.js";
 import SchoolLead      from "../models/schoolLead.js";
@@ -153,21 +162,23 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
       productSample = serviceList
         .filter(p => p && p !== "pending_upload")
-        .slice(0, 6)
+        .slice(0, PREVIEW_MAX)
         .map(s => `• ${s}`)
         .join("\n");
     }
   } else {
     const priced = (seller.prices || []).filter(p => p.inStock !== false).slice(0, 5);
     if (priced.length) {
-      productSample = priced
+      productSample = priced.slice(0, PREVIEW_MAX)
         .map(p => `• ${p.product}${p.amount ? "  —  $" + Number(p.amount).toFixed(2) + "/" + (p.unit || "each") : ""}`)
         .join("\n");
     } else {
       const listed = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
-      productSample = listed.filter(p => p && p !== "pending_upload").slice(0, 6).map(s => `• ${s}`).join("\n");
+      productSample = listed.filter(p => p && p !== "pending_upload").slice(0, PREVIEW_MAX).map(s => `• ${s}`).join("\n");
     }
   }
+
+  const PREVIEW_MAX = 5; // Items shown on profile card (teaser only)
 
   const hasPrices = isService
     ? (Array.isArray(seller.rates) && seller.rates.length > 0)
@@ -234,6 +245,15 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? [{ id: `sc_repeat_${supplierId}`, title: "🔄 Repeat last order" }] : [];
 
   // ── Profile card ─────────────────────────────────────────────────────────
+  // ── X more hint — tells buyer there's more and how to see it ─────────────
+  const catalogueTotal = isService
+    ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
+    : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
+  const extraCount = Math.max(0, catalogueTotal - PREVIEW_MAX);
+  const moreHint   = extraCount > 0
+    ? `_+ ${extraCount} more ${isService ? "service" : "product"}${extraCount === 1 ? "" : "s"} — tap Get Quote to see all_`
+    : null;
+
   const profileCard = [
     `${isService ? "🔧" : "🏪"} *${seller.businessName}*${seller.verified ? " ✅" : ""}${seller.topSupplierBadge ? " 🏅" : ""}`,
     `📍 ${location}`,
@@ -241,6 +261,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ``,
     isService ? `🛠 *Services offered:*` : `📦 *Products available:*`,
     productSample || `_(Contact seller for full list)_`,
+    moreHint,
     ``,
     deliveryLine,
     seller.address        ? `🏠 ${seller.address}` : null,
@@ -319,6 +340,7 @@ export async function handleSellerChatAction({ from, action: a, biz, saveBiz }) 
     case "order_confirm":   return _scOrderConfirm(from, supplierId, biz, saveBiz);
     case "book":            return _scBook(from, supplierId, biz, saveBiz);
     case "book_confirm":    return _scBookConfirm(from, supplierId, biz, saveBiz);
+    case "book_urgent":     return _scBookUrgent(from, supplierId, biz, saveBiz);
     case "enquiry":         return _scEnquiry(from, supplierId, biz, saveBiz);
     case "smart_link":      return _scSmartLinkMenu(from, supplierId, biz, saveBiz);
     case "smart_link_share":return _scSmartLinkShareMenu(from, supplierId, biz, saveBiz);
@@ -371,17 +393,22 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     return _scProcessAddress(from, supplierId, raw, biz, saveBiz);
   }
 
+  // ── Booking: buyer chose services (PATH A — seller travels) ────────────────
+  if (state === "sc_awaiting_booking_service") {
+    return _scProcessBookingService(from, supplierId, raw, biz, saveBiz);
+  }
+
   // ── Booking: buyer typed preferred date/time ─────────────────────────────
   if (state === "sc_awaiting_booking_datetime") {
     return _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz);
   }
 
-  // ── Booking: buyer typed job description ─────────────────────────────────
+  // ── Booking: buyer typed job description (PATH B — client visits seller) ──
   if (state === "sc_awaiting_job_desc") {
     return _scProcessJobDescription(from, supplierId, raw, biz, saveBiz);
   }
 
-  // ── Booking: buyer typed service location ────────────────────────────────
+  // ── Booking: buyer typed their location (PATH A step 2) ──────────────────
   if (state === "sc_awaiting_service_location") {
     return _scProcessServiceLocation(from, supplierId, raw, biz, saveBiz);
   }
@@ -397,83 +424,127 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
 // ─────────────────────────────────────────────────────────────────────────────
 // QUOTE FLOW
 // ─────────────────────────────────────────────────────────────────────────────
+// HOW IT WORKS:
+//   PRICED (seller has rates/prices set):
+//     1. Full catalogue sent to buyer in numbered list (all items, chunked 30/msg)
+//     2. Buyer replies "1×2, 3×1, 5×3" (item# × qty) — or types item names
+//     3. Cart summary shown with prices and total
+//     4. Buyer taps "✅ Confirm & Send" → draft stored on seller session
+//     5. Seller notified via Meta template (works outside 24hr window)
+//     6. Seller taps "View & Quote" → confirms or edits prices
+//     7. PDF quotation auto-generated and sent to buyer via sendDocument
+//
+//   UNPRICED (no rates/prices — RFQ mode):
+//     1. Buyer lists services/items in free text
+//     2. Seller notified via Meta template with item list
+//     3. Seller replies with prices (1=50, 2=30)
+//     4. PDF auto-generated and sent to buyer
+//
+// TERMINOLOGY: services use "service/rate/per job", products use "product/price/each"
+// ─────────────────────────────────────────────────────────────────────────────
 async function _scQuote(from, supplierId, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
   const isService = seller.profileType === "service";
-  const hasPrices = isService
-    ? (Array.isArray(seller.rates)  && seller.rates.length  > 0)
-    : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
+  // ── Full catalogue: rates[] for services, prices[] for products ───────────
+  // Also fall back to listedProducts/products for services without rates set
+  let allItems = [];
+  let hasPrices = false;
+
+  if (isService) {
+    if (Array.isArray(seller.rates) && seller.rates.length > 0) {
+      allItems  = seller.rates;
+      hasPrices = true;
+    } else {
+      // Service provider without rates — use listedProducts as item names, go RFQ
+      const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
+      allItems  = serviceList.filter(s => s && s !== "pending_upload").map(s => ({ service: s, rate: "" }));
+      hasPrices = false;
+    }
+  } else {
+    if (Array.isArray(seller.prices) && seller.prices.length > 0) {
+      allItems  = seller.prices.filter(p => p.inStock !== false);
+      hasPrices = true;
+    } else {
+      const productList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
+      allItems  = productList.filter(p => p && p !== "pending_upload").map(p => ({ product: p, amount: 0, unit: "each" }));
+      hasPrices = false;
+    }
+  }
+
+  // ── Store session with catalogue for item-number resolution ──────────────
+  if (biz) {
+    biz.sessionState = "sc_awaiting_items";
+    biz.sessionData  = {
+      ...(biz.sessionData || {}),
+      scSellerId:      supplierId,
+      scQuoteItems:    [],
+      scRFQ:           !hasPrices,
+      scCatalogue:     JSON.stringify(allItems),  // stored for item# lookup
+      scCatalogueType: isService ? "service" : "product"
+    };
+    await saveBiz(biz);
+  }
+
+  const total = allItems.length;
+  const CHUNK = 30;
+
+  // ── Send full catalogue in chunks (handles 100+ item sellers) ────────────
+  // Profile shows 5 items as teaser. Quote flow shows EVERYTHING.
+  // This is the key UX improvement: buyer sees the full menu before choosing.
+  for (let i = 0; i < total; i += CHUNK) {
+    const chunk   = allItems.slice(i, i + CHUNK);
+    const isFirst = i === 0;
+    const isLast  = i + CHUNK >= total;
+
+    const lines = chunk.map((item, j) => {
+      const idx  = i + j + 1;
+      const name = isService ? item.service : item.product;
+      const priceStr = isService
+        ? (item.rate ? `  —  ${item.rate}` : "  —  rate on request")
+        : (item.amount ? `  —  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "  —  price on request");
+      return `${idx}. ${name}${priceStr}`;
+    }).join("\n");
+
+    if (isFirst) {
+      const header = hasPrices
+        ? `${isService ? "🛠" : "📦"} *${seller.businessName} — ${isService ? "Services & Rates" : "Products & Prices"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`
+        : `${isService ? "🛠" : "📦"} *${seller.businessName} — ${isService ? "Services" : "Products"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
+      await sendText(from, `${header}\n\n${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
+    } else {
+      await sendText(from, `${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
+    }
+  }
+
+  // ── Instructions — always sent last so buyer sees them ───────────────────
   if (hasPrices) {
-    // Send full catalogue in chunks of 30 - handles 100+ item sellers
-    const allItems = isService ? seller.rates : seller.prices;
-    const total    = allItems.length;
-    const CHUNK    = 30;
-
-    if (biz) {
-      biz.sessionState = "sc_awaiting_items";
-      biz.sessionData  = { ...(biz.sessionData || {}), scSellerId: supplierId, scQuoteItems: [] };
-      await saveBiz(biz);
-    }
-
-    for (let i = 0; i < total; i += CHUNK) {
-      const chunk   = allItems.slice(i, i + CHUNK);
-      const isFirst = i === 0;
-      const isLast  = i + CHUNK >= total;
-
-      const lines = chunk.map((item, j) => {
-        const idx   = i + j + 1;
-        const name  = isService ? item.service : item.product;
-        const price = isService
-          ? (item.rate || "rate on request")
-          : `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}`;
-        return `${idx}. ${name} - ${price}`;
-      }).join("\n");
-
-      if (isFirst) {
-        await sendText(from,
-`💵 *${seller.businessName} - ${isService ? "Services" : "Products & prices"} (${total} item${total === 1 ? "" : "s"})*
-
-${lines}${isLast ? "" : "\n_(list continues...)_"}`
-        );
-      } else {
-        await sendText(from, `${lines}${isLast ? "" : "\n_(list continues...)_"}`);
-      }
-    }
-
-    // Instructions sent after list so buyer always sees them last
+    const exampleQty = isService ? "1×1, 3×2" : "1×50, 3×10, 5×2";
     return sendText(from,
-`*To get your quote:*
-Type item numbers and quantities, e.g:
-_1×50, 3×10, 5×2_
+`📝 *Select what you need:*
+Reply with item number × quantity, e.g:
+_${exampleQty}_
 
-Or type item names: _"20mm pipe 30 metres, ball valve 10"_
+${isService
+  ? "Multiple services on one line, separated by commas.\ne.g. _1×1, 2×1, 4×2_\nQty = number of times / rooms / jobs."
+  : "Multiple items on one line.\ne.g. _1×50, 3×10, 5×2_\nQty = how many units you need."}
 
 Type *done* when finished, or *cancel* to go back.`
     );
-
   } else {
-    // No prices - RFQ mode
-    if (biz) {
-      biz.sessionState = "sc_awaiting_items";
-      biz.sessionData  = { ...(biz.sessionData || {}), scSellerId: supplierId, scQuoteItems: [], scRFQ: true };
-      await saveBiz(biz);
-    }
-
-    const productHint = isService
-      ? "e.g. _geyser installation, electrical rewiring 3-bed house_"
-      : "e.g. _20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_";
-
+    // RFQ — no prices set — free text input
+    const hint = isService
+      ? "_e.g. deep cleaning 3-bed house, sofa cleaning 2-seater_"
+      : "_e.g. 20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_";
     return sendText(from,
-`💵 *Quote request - ${seller.businessName}*
+`📝 *${isService ? "List the services you need:" : "List the products you need:"}*
 
-List everything you need. Be as specific as possible - sizes, quantities, brands.
+Be as specific as possible${isService ? " — include size, number of rooms, location type" : " — include size, brand, quantity"}.
 
-${productHint}
+${hint}
 
-Type each item on a new line or separate with commas.
+Type each ${isService ? "service" : "item"} on a new line or separate with commas.
 Type *done* when finished, or *cancel* to go back.`
     );
   }
@@ -490,8 +561,23 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     return _scQuoteDone(from, supplierId, biz, saveBiz);
   }
 
+  // ── Resolve items using stored catalogue (set in _scQuote) ────────────────
+  // This allows buyer to type "1×2, 5×1" and get real item names + prices
+  // even if they are mid-session and the seller has 80 items in their catalogue.
+  let knownItems = [];
+  try {
+    const catalogueRaw = biz?.sessionData?.scCatalogue;
+    if (catalogueRaw) knownItems = JSON.parse(catalogueRaw);
+  } catch (_) {}
+  if (!knownItems.length) {
+    // Fallback: re-read from DB
+    knownItems = isService
+      ? (seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || []).map(s => ({ service: s, rate: "" })))
+      : (seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || []).map(p => ({ product: p, amount: 0, unit: "each" })));
+  }
+
   const existingItems = biz?.sessionData?.scQuoteItems || [];
-  const newItems      = _parseItemInput(raw, isService ? seller.rates : seller.prices, isService);
+  const newItems      = _parseItemInput(raw, knownItems, isService);
   const allItems      = [...existingItems, ...newItems];
 
   if (biz) {
@@ -499,17 +585,35 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     await saveBiz(biz);
   }
 
-  const summary = allItems.map(it => `• ${it.name} × ${it.qty}`).join("\n");
+  // ── Cart summary — show price per item if available ───────────────────────
+  // Services: "1× deep cleaning — $50/job" or "1× deep cleaning — rate TBC"
+  // Products: "50× 20mm pipe — $2.00/m" or "10× valve — price TBC"
+  const priceMap = {};
+  for (const item of knownItems) {
+    const key = (isService ? item.service : item.product)?.toLowerCase().trim();
+    if (key) priceMap[key] = isService ? (item.rate || "") : (item.amount ? `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "");
+  }
+
+  const summary = allItems.map(it => {
+    const priceStr = priceMap[it.name?.toLowerCase().trim()];
+    return priceStr
+      ? `• ${it.qty}× ${it.name}  —  ${priceStr}`
+      : `• ${it.qty}× ${it.name}`;
+  }).join("\n");
+
+  const termAdd     = isService ? "service" : "item";
+  const termDone    = isRFQ ? "📤 Send Request" : (isService ? "✅ Get Service Quote" : "✅ Get Quote");
 
   return sendButtons(from, {
     text:
-`🛒 *Items in your quote:*
+`🛒 *${isService ? "Services" : "Items"} selected (${allItems.length}):*
 ${summary}
 
-Add more items, or tap below when done.`,
+Add more ${termAdd}s, or tap below when ready.`,
     buttons: [
-      { id: `sc_quote_done_${supplierId}`,  title: isRFQ ? "📤 Send Request" : "✅ Get Quote" },
-      { id: `sc_quote_clear_${supplierId}`, title: "🗑️ Start Over" }
+      { id: `sc_quote_done_${supplierId}`,  title: termDone },
+      { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" },
+      { id: `sc_back_${supplierId}`,         title: "⬅ Back" }
     ]
   });
 }
@@ -543,7 +647,7 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
       biz.sessionState = "ready";
       biz.sessionData  = {
         ...(biz.sessionData || {}),
-        scLastRFQ: { refNum, supplierId, buyerPhone, buyerName, items, timestamp: Date.now() }
+        scLastRFQ: { refNum, supplierId, buyerPhone, buyerName, items, isService, timestamp: Date.now() }
       };
       await saveBiz(biz);
     }
@@ -562,12 +666,15 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     return sendButtons(from, {
       text:
-`✅ *Quote request sent to ${seller.businessName}*
+`✅ *${isService ? "Service quote" : "Quote"} request sent to ${seller.businessName}!*
 
 Reference: *${refNum}*
-Items: ${items.length} item${items.length > 1 ? "s" : ""}
+${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}
 
-The seller will price your request and you'll receive a PDF quote on WhatsApp.
+${itemList}
+
+The seller will review and price your request.
+📄 You will receive a PDF quotation on WhatsApp once the seller responds.
 
 📞 ${seller.contactDetails || seller.phone}`,
       buttons: [
@@ -637,15 +744,19 @@ The seller will price your request and you'll receive a PDF quote on WhatsApp.
   // Tell buyer we've sent the draft to the seller for confirmation
   return sendButtons(from, {
     text:
-`⏳ *Quote sent to ${seller.businessName} for confirmation*
+`⏳ *${isService ? "Service quote" : "Quote"} sent to ${seller.businessName} for approval*
 
 Reference: *${refNum}*
 
 ${itemRows}
 ${"─".repeat(28)}
 *Estimated total: $${total.toFixed(2)} USD*
+Valid until: ${expiry}
 
-The seller will confirm or adjust the prices. You'll receive the final quote and PDF automatically.`,
+The seller will approve or adjust prices.
+📄 You will receive a *PDF quotation* on WhatsApp after the seller confirms.
+
+📞 ${seller.contactDetails || seller.phone}`,
     buttons: [
       { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" },
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" }
@@ -655,6 +766,7 @@ The seller will confirm or adjust the prices. You'll receive the final quote and
 
 async function _scQuoteClear(from, supplierId, biz, saveBiz) {
   if (biz) {
+    // Clear items but keep catalogue cache so we don't re-read DB
     biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: [], scRFQ: false };
     await saveBiz(biz);
   }
@@ -726,6 +838,7 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
     total,
     expiry,
     pdfSent,
+    isService: draft.isService || false,
   });
 
   // Clear draft from seller's session
@@ -746,13 +859,14 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
 
   return sendButtons(from, {
     text:
-`✅ *Quote ${refNum} sent to buyer!*
+`✅ *Quote ${refNum} approved and sent to buyer!*
 
 ${itemRows}
 ${"─".repeat(28)}
 *Total: $${total.toFixed(2)} USD*
 
-${pdfSent ? "PDF delivered to buyer." : "Quote delivered to buyer."}`,
+${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote confirmed and sent to buyer."}
+Valid until: ${expiry}`,
     buttons: [
       { id: "my_supplier_account", title: "🏪 My Account" }
     ]
@@ -951,17 +1065,19 @@ async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, item
 // BUYER QUOTE DELIVERY - notifies buyer their quote is ready
 // Uses sendButtons fallback (PDF already sent via sendDocument above)
 // ─────────────────────────────────────────────────────────────────────────────
-async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry, pdfSent = false }) {
+async function _sendBuyerQuoteNotification({ buyerPhone, sellerName, refNum, total, expiry, pdfSent = false, isService = false }) {
   try {
     await sendButtons(_normPhone(buyerPhone), {
       text:
-`✅ *Your quote is ready - ${refNum}*
+`✅ *Your ${isService ? "service quote" : "quote"} is ready — ${refNum}*
 
 From: *${sellerName}*
 Total: *$${Number(total).toFixed(2)} USD*
 Valid until: ${expiry}
 
-${pdfSent ? "PDF sent above - tap to open." : "Quote confirmed by seller."}`,
+${pdfSent ? "📄 PDF quotation sent above — tap to open and save." : "✅ Quote approved by seller."}
+
+This quote is valid for 48 hours. Contact the seller to confirm your order.`,
       buttons: [
         { id: "sup_request_sellers", title: "⚡ New Request" },
         { id: "find_supplier",       title: "🔍 Browse Sellers" }
@@ -1111,111 +1227,242 @@ async function _scOrderConfirm(from, supplierId, biz, saveBiz) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SERVICE BOOKING FLOW
+// SERVICE BOOKING FLOW — INTELLIGENT & TRAVEL-AWARE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// REAL-WORLD PROBLEM SOLVED:
+//   In Zimbabwe, many service providers (cleaners, plumbers, electricians) travel
+//   to the client's home or business. Others (mechanics, workshops) require the
+//   client to come to them. The booking flow was treating all services identically.
+//
+//   A cleaning crew needs: YOUR address, what rooms, preferred date.
+//   A mechanic workshop needs: what car problem, when will you bring it, their address.
+//   These are fundamentally different conversations.
+//
+// PATH A — Seller travels to client (travelAvailable: true):
+//   Step 1: Which services do you need? (numbered list from their catalogue)
+//   Step 2: What is your location/address? (where should we come to?)
+//   Step 3: Preferred date & time + urgency button
+//   Step 4: Review summary → Confirm
+//   Result: Seller gets BK notification via Meta template + full details
+//
+// PATH B — Client visits seller (travelAvailable: false):
+//   Step 1: Shows seller's address upfront. Which services do you need?
+//   Step 2: Describe the job (what's the problem / what do you need?)
+//   Step 3: Preferred date & time
+//   Step 4: Review summary → Confirm
+//   Result: Seller gets BK notification via Meta template + full details
+//
+// SELLER NOTIFICATION: Uses Meta template (outside 24hr window).
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scBook(from, supplierId, biz, saveBiz) {
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
+  const travels  = seller.travelAvailable !== false && seller.travelAvailable !== null;
+  const area     = seller.location?.area || "";
+  const city     = seller.location?.city || "";
+  const location = [area, city].filter(Boolean).join(", ");
+
+  // ── Build service list for step 1 ─────────────────────────────────────────
+  const serviceList = seller.rates?.length > 0
+    ? seller.rates.map((r, i) => `${i + 1}. ${r.service}${r.rate ? "  —  " + r.rate : ""}`)
+    : ((seller.listedProducts || seller.products || []).filter(s => s && s !== "pending_upload")
+        .map((s, i) => `${i + 1}. ${s}`));
+  const serviceMenu = serviceList.slice(0, 20).join("\n");
+  const totalSvcs   = serviceList.length;
+
   if (biz) {
-    biz.sessionState = "sc_awaiting_service_location";
-    biz.sessionData  = { ...(biz.sessionData || {}), scSellerId: supplierId };
+    biz.sessionState = travels ? "sc_awaiting_booking_service" : "sc_awaiting_job_desc";
+    biz.sessionData  = {
+      ...(biz.sessionData || {}),
+      scSellerId:      supplierId,
+      scBookingTravels: travels,
+      scServiceMenu:   JSON.stringify(seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || []).map(s => ({ service: s, rate: "" })))
+    };
     await saveBiz(biz);
   }
 
-  return sendText(from,
-`📅 *Book a service - ${seller.businessName}*
+  if (travels) {
+    // PATH A: Seller comes to client — ask what service(s) first
+    return sendText(from,
+`📅 *Book a service — ${seller.businessName}*
+🚗 _We come to you_
 
-Where do you need the service?
+${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-_Type your address or suburb, e.g. "Borrowdale, Harare"_
+Which service(s) do you need?
+Type the service number(s) or names.
+_e.g. "1" or "deep cleaning, carpet cleaning"_
+
 Type *cancel* to go back.`
-  );
+    );
+  } else {
+    // PATH B: Client visits seller — show their address first
+    return sendText(from,
+`📅 *Book a service — ${seller.businessName}*
+📍 _${seller.address || location}_
+
+${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
+
+What service(s) do you need, and briefly describe the job?
+_e.g. "gearbox service, Toyota Corolla 2015" or "2× sofa cleaning"_
+
+Type *cancel* to go back.`
+    );
+  }
 }
 
-// Stub for book_confirm (mirrors order confirm)
+// Stub for book_confirm (mirrors back to booking start)
 async function _scBookConfirm(from, supplierId, biz, saveBiz) {
   return _scBook(from, supplierId, biz, saveBiz);
 }
 
-async function _scProcessServiceLocation(from, supplierId, raw, biz, saveBiz) {
+// ── PATH A step 1 → step 2: Buyer chose services, now ask their location ─────
+async function _scProcessBookingService(from, supplierId, raw, biz, saveBiz) {
   if (biz) {
-    biz.sessionState = "sc_awaiting_job_desc";
-    biz.sessionData  = { ...(biz.sessionData || {}), scServiceLocation: raw };
+    biz.sessionState = "sc_awaiting_service_location";
+    biz.sessionData  = { ...(biz.sessionData || {}), scBookingServices: raw };
     await saveBiz(biz);
   }
+
+  // Resolve service names from numbered input
+  let resolvedServices = raw;
+  try {
+    const menu = JSON.parse(biz?.sessionData?.scServiceMenu || "[]");
+    const numbered = [...raw.matchAll(/(\d+)/g)].map(m => parseInt(m[1]) - 1).filter(i => i >= 0 && i < menu.length);
+    if (numbered.length > 0) {
+      resolvedServices = numbered.map(i => menu[i].service || menu[i]).join(", ");
+      if (biz) {
+        biz.sessionData = { ...biz.sessionData, scBookingServices: resolvedServices };
+        await saveBiz(biz);
+      }
+    }
+  } catch (_) {}
+
   return sendText(from,
-`📋 *Service booking - describe the job*
+`📍 *Where should we come to?*
 
-Location: _${raw}_
+${resolvedServices ? "Services: _" + resolvedServices + "_\n\n" : ""}Type your address or suburb.
+_e.g. "15 Samora Machel Ave, Highfield" or "Borrowdale, Harare"_
 
-Describe what needs to be done. Be specific.
-
-_e.g. "Fix leaking geyser, bathroom, first floor" or "Full house rewiring, 3-bedroom"_
 Type *cancel* to go back.`
   );
 }
 
+// ── PATH A step 2 → step 3: Got location, now ask date/time ──────────────────
+async function _scProcessServiceLocation(from, supplierId, raw, biz, saveBiz) {
+  if (biz) {
+    biz.sessionState = "sc_awaiting_booking_datetime";
+    biz.sessionData  = { ...(biz.sessionData || {}), scServiceLocation: raw };
+    await saveBiz(biz);
+  }
+
+  const services = biz?.sessionData?.scBookingServices || "";
+
+  return sendButtons(from, {
+    text:
+`📅 *When would you like this done?*
+
+${services ? "Services: _" + services + "_\n" : ""}Location: _${raw}_
+
+Type your preferred date and time.
+_e.g. "Saturday morning", "Any weekday after 3pm", "Monday 10am"_
+
+Or tap Urgent if you need it done today or tomorrow.`,
+    buttons: [
+      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent — ASAP" },
+    ]
+  });
+}
+
+// ── PATH B: Job description (client visits seller) → then date/time ───────────
 async function _scProcessJobDescription(from, supplierId, raw, biz, saveBiz) {
   if (biz) {
     biz.sessionState = "sc_awaiting_booking_datetime";
     biz.sessionData  = { ...(biz.sessionData || {}), scJobDesc: raw };
     await saveBiz(biz);
   }
-  return sendText(from,
-`📅 *Preferred date and time?*
+
+  return sendButtons(from, {
+    text:
+`📅 *When will you bring it in / visit?*
 
 Job: _${raw}_
 
-When would you like this done?
+Type your preferred date and time.
+_e.g. "Tomorrow morning", "Saturday 9am", "Monday after 2pm"_
 
-_e.g. "Monday morning", "Any weekday after 2pm", "Urgent - today or tomorrow"_
-Type *cancel* to go back.`
-  );
+Or tap Urgent if you need it done today.`,
+    buttons: [
+      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent — Today/Tomorrow" }
+    ]
+  });
 }
 
+// ── Final booking step — date/time confirmed, submit ─────────────────────────
 async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
-  const location  = biz?.sessionData?.scServiceLocation || "not specified";
-  const jobDesc   = biz?.sessionData?.scJobDesc         || "not specified";
-  const buyerName = biz?.sessionData?.scBuyerName       || "";
-  const refNum    = "BK-" + Date.now().toString(36).toUpperCase().slice(-6);
+  const travels     = biz?.sessionData?.scBookingTravels !== false;
+  const location    = biz?.sessionData?.scServiceLocation || "not specified";
+  const jobDesc     = biz?.sessionData?.scJobDesc         || "";
+  const services    = biz?.sessionData?.scBookingServices || jobDesc || "not specified";
+  const buyerName   = biz?.sessionData?.scBuyerName       || "";
+  const refNum      = "BK-" + Date.now().toString(36).toUpperCase().slice(-6);
 
   if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
 
-  try {
-    const { sendText: _st } = await import("./metaSender.js");
-    await _st(seller.phone,
-`📅 New service booking on ZimQuote.
+  // ── Notify seller via Meta template (works outside 24hr window) ───────────
+  const bookingDetails = travels
+    ? `${services} at ${location}`
+    : `${services}`;
 
-Reference: ${refNum}
-Buyer: ${buyerName || _normPhone(from)}
-Location: ${location}
-Job: ${jobDesc}
-Preferred time: ${raw}
+  await _sendSellerNotification({
+    sellerPhone:  seller.phone,
+    refNum,
+    buyerDisplay: buyerName || _normPhone(from),
+    itemList:     `Service: ${services}\nLocation: ${travels ? location : seller.address || "at your premises"}\nTime: ${raw}`,
+    itemCount:    1,
+    total:        null,
+    isRFQ:        true,
+  });
 
-Contact buyer to confirm.`
-    );
-  } catch (e) { /* ignore */ }
+  _trackConversion({ sessionData: { scSource: biz?.sessionData?.scSource, scSellerId: supplierId } });
+
+  const area = seller.location?.area || "";
+  const city = seller.location?.city || "";
+
+  const isServiceType = seller.profileType === "service";
 
   return sendButtons(from, {
     text:
-`✅ *Booking request sent - ${refNum}*
+`✅ *Booking request sent — ${refNum}*
 
-${seller.businessName}
-📍 Location: ${location}
-🔧 Job: ${jobDesc}
+🏪 ${seller.businessName}
+🔧 ${isServiceType ? "Services" : "Job"}: ${services}
+📍 ${travels ? "Location: " + location : "At: " + (seller.address || [area, city].filter(Boolean).join(", "))}
 📅 Preferred time: ${raw}
 
 The seller will contact you to confirm and quote.
-📞 ${seller.contactDetails || seller.phone}`,
+📞 ${seller.contactDetails || seller.phone}
+
+_Keep your WhatsApp open — seller will respond here._`,
     buttons: [
       { id: `sc_contact_${supplierId}`, title: "📞 Contact seller" },
       { id: `sc_back_${supplierId}`,    title: "⬅ Back to Seller" }
     ]
   });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// URGENT BOOKING — buyer taps "⚡ Urgent" instead of typing a date
+// Skips date/time text entry, goes straight to booking confirmation
+// ─────────────────────────────────────────────────────────────────────────────
+async function _scBookUrgent(from, supplierId, biz, saveBiz) {
+  return _scProcessBookingDateTime(from, supplierId, "URGENT — as soon as possible", biz, saveBiz);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1581,24 +1828,27 @@ async function _scProcessSellerPriceReply(from, supplierId, raw, biz, saveBiz) {
 
   try {
     const { sendText: _st } = await import("./metaSender.js");
-    await _st(_normPhone(pending.buyerPhone),
-`💵 *Your quote is ready - ${refNum}*
-
-${itemRows}
-${"─".repeat(28)}
-*Total: $${total.toFixed(2)} USD*
-Valid until: ${expiry}
-
-${pdfSent ? "PDF sent above - tap to open." : ""}`
-    );
-  } catch (e) { /* ignore */ }
+    await _sendBuyerQuoteNotification({
+      buyerPhone: _normPhone(pending.buyerPhone),
+      sellerName: "Seller",
+      refNum,
+      total,
+      expiry,
+      pdfSent,
+      isService: !!pending.isService,
+    });
+  } catch (e) { console.warn("[SC RFQ BUYER NOTIF]", e.message); }
 
   if (biz) { biz.sessionState = "ready"; await saveBiz(biz); }
 
-  return sendText(from,
-`✅ Quote ${refNum} sent to buyer.
-Total: $${total.toFixed(2)}${pdfSent ? "\nPDF delivered to buyer." : ""}`
-  );
+  return sendButtons(from, {
+    text:
+`✅ *Quote ${refNum} sent to buyer!*
+
+Total: $${total.toFixed(2)} USD
+${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote sent to buyer."}`,
+    buttons: [{ id: "my_supplier_account", title: "🏪 My Account" }]
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
