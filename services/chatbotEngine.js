@@ -5042,7 +5042,8 @@ if (
   text.trim().length > 2 &&
   !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState) &&
-  _schoolEnquiryState !== "school_parent_enquiry"
+  _schoolEnquiryState !== "school_parent_enquiry" &&
+  !biz?.sessionState?.startsWith("sc_")
 ) {
   console.log(`[HIT-NOBIZ-SHORTCODE] text="${text}"`);
   const { parseShortcodeSearch } = await import("./supplierSearch.js");
@@ -7985,9 +7986,9 @@ if (
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
-  !schoolTextStates.includes(biz.sessionState)
+  !schoolTextStates.includes(biz.sessionState) &&
+  !biz.sessionState?.startsWith("sc_")
 ) {
-
 
   console.log(`[HIT-BIZ-SHORTCODE] text="${text}" sessionState="${biz?.sessionState}"`);
   const shortcode = parseShortcodeSearch(text);
@@ -8333,18 +8334,20 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     // Business-tool text states are now handled earlier, before marketplace free-text search.
     // Keep only the ghost-supplier-biz bypass here.
     if (biz.name?.startsWith("pending_supplier_")) {
-      // ── If ghost biz user is mid-order or mid-listed-selection, let handlers below process it ──
+      // ── If ghost biz user is mid-order, mid-listed-selection, or mid-seller-chat, let handlers below process it ──
       if (
         biz.sessionState === "supplier_order_product" ||
         biz.sessionState === "supplier_order_address" ||
         biz.sessionState === "supplier_order_enter_price" ||
         biz.sessionState === "supplier_order_picking" ||
-        biz.sessionState === "supplier_select_listed_products"
+        biz.sessionState === "supplier_select_listed_products" ||
+        biz.sessionState?.startsWith("sc_")
       ) {
         // Do nothing here - fall through to the state handlers below
      } else {
         // Ghost biz user typed something unrecognised - try as a search first
         const shortcode = parseShortcodeSearch(text);
+ 
         if (shortcode) {
           if (shortcode.city || shortcode.area) {
             const locationLabel = shortcode.area
