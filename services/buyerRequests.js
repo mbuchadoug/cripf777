@@ -20,7 +20,7 @@ import SupplierProfile from "../models/supplierProfile.js";
 import { sendText, sendButtons } from "./metaSender.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUANTITY PARSING — spec numbers vs quantity numbers
+// QUANTITY PARSING - spec numbers vs quantity numbers
 // ─────────────────────────────────────────────────────────────────────────────
 // Rule: measurement/spec suffixes (mm, kg, kW, V, etc.) stay attached to the
 // product name. Quantity is the LAST standalone number or "x N unit" pattern.
@@ -57,22 +57,22 @@ export function parseBuyerRequestLineWithQty(raw = "") {
   const line = String(raw || "").trim();
   if (!line) return { product: line, quantity: 1, unitLabel: "units" };
 
-  // Case 1: explicit "x N unit?" at the END — always qty
+  // Case 1: explicit "x N unit?" at the END - always qty
   // e.g. "copper pipe 15mm x5", "cement 50kg x 20 bags"
   const xMatch = line.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (xMatch) {
     const prod = xMatch[1].trim();
     const qty  = Number(xMatch[2]);
     const unit = xMatch[3].toLowerCase() || "units";
-    // If the unit is a spec unit (e.g. "x20m") — it's the pipe length, not qty
+    // If the unit is a spec unit (e.g. "x20m") - it's the pipe length, not qty
     if (!SPEC_UNITS.has(unit) && qty > 0) {
       return { product: prod, quantity: qty, unitLabel: unit || "units" };
     }
-    // It's a spec — whole line is the product, qty defaults to 1
+    // It's a spec - whole line is the product, qty defaults to 1
     return { product: line, quantity: 1, unitLabel: "units" };
   }
 
-  // Case 2: trailing "N unit" — qty only if unit is a known QTY unit
+  // Case 2: trailing "N unit" - qty only if unit is a known QTY unit
   // e.g. "cement 50kg, 20 bags" → product="cement 50kg", qty=20, unit="bags"
   const trailMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)\s+([a-zA-Z]+)$/i);
   if (trailMatch) {
@@ -84,7 +84,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
     }
   }
 
-  // Case 3: trailing bare number — only if no spec suffix follows
+  // Case 3: trailing bare number - only if no spec suffix follows
   // e.g. "gate valve ½\", 6" or "copper pipe 15mm, 5"
   const bareNumMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)$/);
   if (bareNumMatch) {
@@ -97,7 +97,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
     }
   }
 
-  // Case 4: No quantity found — whole line is product, qty=1
+  // Case 4: No quantity found - whole line is product, qty=1
   return { product: line.replace(/,\s*$/, "").trim(), quantity: 1, unitLabel: "units" };
 }
 
@@ -113,7 +113,7 @@ export function parseItemListWithQty(text = "") {
   // Split by newline first, then by comma if single-line
   let lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 1) {
-    // Single line — might be comma-separated list
+    // Single line - might be comma-separated list
     lines = raw.split(/,\s*/).map(l => l.trim()).filter(Boolean);
   }
 
@@ -185,13 +185,13 @@ export async function autoCloseExpiredRequests({
           ]
         });
       } else {
-        // Zero quotes — never a dead end: give 3 clear options
+        // Zero quotes - never a dead end: give 3 clear options
         await sendButtons(req.buyerPhone, {
           text:
             `⏱ *No quotes received* (${_buildRef(req)})\n\n` +
             `No sellers responded within ${timeoutMinutes} minutes.\n\n` +
             `This can happen when items are specialised or no sellers in your area stock them right now.\n\n` +
-            `Your request is saved — new sellers will be notified automatically if they match.`,
+            `Your request is saved - new sellers will be notified automatically if they match.`,
           buttons: [
             { id: "sup_request_sellers", title: "⚡ New Request" },
             { id: "find_supplier",       title: "🔍 Browse & Shop" }

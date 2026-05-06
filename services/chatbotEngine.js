@@ -2702,7 +2702,7 @@ async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, del
   const _sellerWord = _isServiceReq ? "service provider" : "seller";
 
   const _noMatchLine = sentCount === 0
-    ? `\n_No matching sellers found right now. Your request is saved — new sellers will be notified automatically._`
+    ? `\n_No matching sellers found right now. Your request is saved - new sellers will be notified automatically._`
     : "";
 
   return sendButtons(from, {
@@ -4360,7 +4360,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           }));
         }
       } else {
-        // No city found — try to parse the whole text as items
+        // No city found - try to parse the whole text as items
         const rawItems = parseItemListWithQty(text);
         if (rawItems.length) {
           parsedItems = rawItems.map(item => ({
@@ -4446,7 +4446,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       return sendButtons(from, {
         text:
-          `✅ *Request captured — please check quantities:*\n\n` +
+          `✅ *Request captured - please check quantities:*\n\n` +
           `${_confirmItemLines}\n\n` +
           `${locationLine}\n\n` +
           `_To correct a quantity, type your request again with the right amount._\n\n` +
@@ -4458,7 +4458,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       });
     }
 
-    // ── No location yet — ask for it ───────────────────────────────────────
+    // ── No location yet - ask for it ───────────────────────────────────────
     // Use saved location if available
     const _savedCity = flowSess?.tempData?.savedCity || null;
     const _savedArea = flowSess?.tempData?.savedArea || null;
@@ -4488,7 +4488,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `${(parsedItems || []).map((item, i) => {
             const qty  = Number(item.quantity || 1);
             const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
-            return `${i + 1}. *${item.product}* — qty ${qty}${unit}`;
+            return `${i + 1}. *${item.product}* - qty ${qty}${unit}`;
           }).join("\n")}\n\n` +
           `📍 Use saved location *${_savedArea ? `${_savedArea}, ` : ""}${_savedCity}*?`,
         buttons: [
@@ -14729,7 +14729,7 @@ return sendText(
       `_need plumber, burst pipe, Avondale_\n` +
       `_electrician for DB board, Chitungwiza_\n\n` +
       `*Bulk list?* Use the button below.\n\n` +
-      `_Tip: put quantity last — e.g. "copper pipe 15mm, 5 lengths"_\n` +
+      `_Tip: put quantity last - e.g. "copper pipe 15mm, 5 lengths"_\n` +
       `_Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
       `*0 = Main menu · 00 = Cancel*`,
     buttons: [
@@ -14950,7 +14950,7 @@ if (al === "resume" || a === "sup_resume_requests") {
   });
 }
 
-// ── "quotes" shortcut — buyer views current quotes anytime ────────────────────
+// ── "quotes" shortcut - buyer views current quotes anytime ────────────────────
 if (al === "quotes" || al === "my quotes") {
   return handleIncomingMessage({ from, action: "buyer_my_requests" });
 }
