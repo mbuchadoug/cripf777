@@ -614,45 +614,89 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   }
 
   // ── Instructions - always sent last so buyer sees them ───────────────────
+  // Build dynamic examples from the seller's actual items (first 2-3 items)
+  // so the buyer never sees examples from a different industry.
+  const _ex = (idx, item) => isService
+    ? (item.service || item)
+    : (item.product || item);
+
   if (hasPrices) {
-    const exampleQty = isService ? "1×1, 3×2" : "1×50, 3×10, 5×2";
+    // Priced: show "number × qty" examples using real item numbers
+    const ex1 = allItems[0] ? `1×1` : "1×1";
+    const ex2 = allItems[2] ? `, 3×2` : (allItems[1] ? `, 2×1` : "");
+    const exampleLine = `_e.g. ${ex1}${ex2}_`;
+
+    const singleHint = allItems[0]
+      ? `_${_ex(0, allItems[0])}_ → type *1×1*`
+      : "";
+    const multiHint = allItems[1]
+      ? `_${_ex(0, allItems[0])} + ${_ex(1, allItems[1])}_ → type *1×1, 2×1*`
+      : "";
+
     return sendText(from,
 `📝 *Select what you need:*
-Reply with item number × quantity, e.g:
-_${exampleQty}_
+
+Type *item number × quantity*, e.g:
+${exampleLine}
+${singleHint ? "\n" + singleHint : ""}${multiHint ? "\n" + multiHint : ""}
 
 ${isService
-  ? "Multiple services on one line, separated by commas.\ne.g. _1×1, 2×1, 4×2_\nQty = number of times / rooms / jobs."
-  : "Multiple items on one line.\ne.g. _1×50, 3×10, 5×2_\nQty = how many units you need."}
+  ? "Qty = number of times / rooms / jobs needed."
+  : "Qty = how many units you need."}
 
 Type *done* when finished, or *cancel* to go back.`
     );
+
   } else if (isService) {
-    // RFQ service - buyer picks by number, optionally adds scope on the same line
+    // RFQ service - buyer picks by number, optionally adds scope
+    // Build examples using the seller's actual service names
+    const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
+    const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
+    const name3 = allItems[2] ? _ex(2, allItems[2]) : null;
+
+    // Pick 1-2 realistic scope hints based on what the service is
+    // (e.g. a cleaner gets "3-bed house", a plumber gets "blocked drain")
+    const scopeHints = _guessServiceScopeHint(name1);
+
+    const ex_single  = `_1_ - just pick service 1`;
+    const ex_multi   = name2 ? `_1, 2_ - pick services 1 & 2` : null;
+    const ex_scope1  = name1 ? `_1: ${scopeHints[0]}_ - service 1 + detail` : null;
+    const ex_scope2  = name1 && name2 && scopeHints[1]
+      ? `_1: ${scopeHints[0]}, 2: ${scopeHints[1]}_ - multiple with detail`
+      : null;
+
+    const examples = [ex_single, ex_multi, ex_scope1, ex_scope2]
+      .filter(Boolean).join("\n");
+
     return sendText(from,
 `📝 *Which services do you need?*
 
 Type the *number(s)* from the list above.
-You can add details after a colon or dash.
+Add details after a colon if needed.
 
-_e.g._
-_1_ - just pick one
-_1, 3, 5_ - pick several
-_1: 3-bed house_ - number + scope
-_2: 2-seater sofa, 4: office block_ - multiple with scope
+${examples}
 
 Type *done* when finished, or *cancel* to go back.`
     );
+
   } else {
-    // RFQ product - keep free text (products need brand/size/quantity detail)
+    // RFQ product - numbers work, free text also accepted
+    const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
+    const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
+
+    const ex_num  = name1 && name2 ? `_1, 3_ - pick by number` : `_1_ - pick by number`;
+    const ex_text = name1 ? `_${name1} ×5_ - or type name + qty` : null;
+
+    const examples = [ex_num, ex_text].filter(Boolean).join("\n");
+
     return sendText(from,
-`📝 *List the products you need:*
+`📝 *Which products do you need?*
 
-Type item numbers or names. Include size, brand, quantity.
+Type item *number(s)* from the list, or type the name + quantity.
 
-_e.g. 20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_
+${examples}
 
-Type each item on a new line or separate with commas.
+Include size or brand if needed.
 Type *done* when finished, or *cancel* to go back.`
     );
   }
@@ -1982,6 +2026,45 @@ ${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote sent to buyer.
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── Guess realistic scope hints from a service name ─────────────────────────
+// Returns 2 short scope examples tailored to what kind of service this is.
+// Used so the buyer sees "1: blocked drain" not "1: 3-bed house" on a plumber's page.
+function _guessServiceScopeHint(serviceName = "") {
+  const s = serviceName.toLowerCase();
+
+  if (/plumb|pipe|drain|tap|geyser|borehole|water|leak/.test(s))
+    return ["blocked drain", "leaking pipe"];
+  if (/electr|wiring|install|panel|socket|switch|fault/.test(s))
+    return ["fault finding", "new socket"];
+  if (/car|vehicle|auto|tyre|wheel|brake|engine|gearbox|service|oil/.test(s))
+    return ["sedan", "oil change"];
+  if (/roof|tile|ceiling|waterproof|gutter/.test(s))
+    return ["leaking roof", "flat roof"];
+  if (/paint|wall|interior|exterior|plaster/.test(s))
+    return ["2-room interior", "full exterior"];
+  if (/garden|lawn|grass|landscap|trim|hedge|tree/.test(s))
+    return ["small yard", "large garden"];
+  if (/pest|termite|mosquito|rodent|fumigat/.test(s))
+    return ["3-bed house", "office block"];
+  if (/weld|fabricat|gate|fence|steel|metal/.test(s))
+    return ["burglar bars", "driveway gate"];
+  if (/move|relocat|transport|deliver|truck/.test(s))
+    return ["2-bed house", "office move"];
+  if (/IT|computer|laptop|network|CCTV|camera|security/.test(s))
+    return ["home network", "CCTV setup"];
+  if (/tutor|lesson|teach|coach|train/.test(s))
+    return ["Grade 7", "A-Level"];
+  if (/cook|cater|food|meal|event/.test(s))
+    return ["50 guests", "wedding"];
+  if (/hair|salon|beauty|nail|makeup|spa/.test(s))
+    return ["relaxer", "braids"];
+  if (/sofa|upholster|furniture/.test(s))
+    return ["2-seater sofa", "dining chairs"];
+
+  // Default: cleaning (most common in ZW smart links)
+  return ["3-bed house", "office block"];
+}
+
 // ─── Parse service RFQ input: "1, 3: 3-bed house, 5: office block" ──────────
 // Supports:
 //   "1"            → service 1, qty 1, no scope
