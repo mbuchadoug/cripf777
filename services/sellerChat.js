@@ -88,53 +88,66 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
       yt: "YouTube", direct: "Direct link", whatsapp_link: "WhatsApp link"
     };
     const sourceLabel = sourceLabels[source] || "ZimQuote link";
-    const timeStr     = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const timeStr     = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+    });
+    const sellerPhone = _normPhone(seller.phone);
 
-    // ── Try sendButtons (within 24hr session) ────────────────────────────────
-    try {
-      await sendButtons(_normPhone(seller.phone), {
-        text:
-          `👁 *Someone just opened your ZimQuote profile!*\n\n` +
-          `📱 Via: ${sourceLabel}\n` +
-          `⏰ ${timeStr}\n\n` +
-          `They can see your services, request a quote, or book directly.\n\n` +
-          `💡 _Tip: Keep your services and rates updated so visitors convert._`,
-        buttons: [
-          { id: "my_supplier_account", title: "🏪 My Store" },
-          { id: "sup_request_sellers", title: "⚡ Marketplace" }
-        ]
-      });
-      return;
-    } catch (_) { /* outside 24hr window - fall through to template */ }
-
-    // ── Template fallback (works outside 24hr window) ─────────────────────────
-    // Reuse approved supplier_new_buyer_request as utility template
-    // Variables match its 4-variable body: ref, location, items-desc, delivery-line
-    const axios    = (await import("axios")).default;
     const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
     const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-    await axios.post(
-      `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to:   _normPhone(seller.phone),
-        type: "template",
-        template: {
-          name: "supplier_new_buyer_request",
-          language: { code: "en" },
-          components: [{
-            type: "body",
-            parameters: [
-              { type: "text", text: "Profile View" },
-              { type: "text", text: sourceLabel },
-              { type: "text", text: "Someone viewed your ZimQuote profile" },
-              { type: "text", text: "Tap menu to see your store" }
-            ]
-          }]
-        }
-      },
-      { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
-    );
+    const axios    = (await import("axios")).default;
+
+    // ── Try dedicated supplier_link_opened template (UTILITY - works outside 24hr) ──
+    // Submit to Meta as UTILITY with body:
+    //   👁 Someone just opened your ZimQuote profile!
+    //   Business: {{1}}
+    //   Via: {{2}}
+    //   Time: {{3}}
+    //   They can request a quote, book, or send an enquiry directly.
+    //   Type *menu* to see your store.
+    //   This is an automated activity alert from ZimQuote.
+    try {
+      await axios.post(
+        `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to:   sellerPhone,
+          type: "template",
+          template: {
+            name: "supplier_link_opened",
+            language: { code: "en" },
+            components: [{
+              type: "body",
+              parameters: [
+                { type: "text", text: seller.businessName || "Your business" },
+                { type: "text", text: sourceLabel },
+                { type: "text", text: timeStr }
+              ]
+            }]
+          }
+        },
+        { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" } }
+      );
+      console.log(`[SMART LINK NOTIFY] supplier_link_opened → ${sellerPhone} (via ${sourceLabel})`);
+      return;
+    } catch (templateErr) {
+      // Template not yet approved or not submitted - fall through to sendButtons
+      console.warn(`[SMART LINK NOTIFY] supplier_link_opened template failed (${templateErr.message}), trying sendButtons`);
+    }
+
+    // ── Fallback: sendButtons (within 24hr session only) ────────────────────
+    await sendButtons(sellerPhone, {
+      text:
+        `👁 *Someone just opened your ZimQuote profile!*\n\n` +
+        `📱 Via: ${sourceLabel}\n` +
+        `⏰ ${timeStr}\n\n` +
+        `They can see your services, request a quote, or book directly.\n\n` +
+        `💡 _Tip: Keep your services and rates updated so visitors convert._`,
+      buttons: [
+        { id: "my_supplier_account", title: "🏪 My Store" },
+        { id: "sup_request_sellers", title: "⚡ Marketplace" }
+      ]
+    });
   } catch (err) {
     // Non-critical - never rethrow
     console.warn("[SMART LINK NOTIFY]", err.message);
@@ -614,19 +627,32 @@ ${isService
 
 Type *done* when finished, or *cancel* to go back.`
     );
-  } else {
-    // RFQ - no prices set - free text input
-    const hint = isService
-      ? "_e.g. deep cleaning 3-bed house, sofa cleaning 2-seater_"
-      : "_e.g. 20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_";
+  } else if (isService) {
+    // RFQ service - buyer picks by number, optionally adds scope on the same line
     return sendText(from,
-`📝 *${isService ? "List the services you need:" : "List the products you need:"}*
+`📝 *Which services do you need?*
 
-Be as specific as possible${isService ? " - include size, number of rooms, location type" : " - include size, brand, quantity"}.
+Type the *number(s)* from the list above.
+You can add details after a colon or dash.
 
-${hint}
+_e.g._
+_1_ - just pick one
+_1, 3, 5_ - pick several
+_1: 3-bed house_ - number + scope
+_2: 2-seater sofa, 4: office block_ - multiple with scope
 
-Type each ${isService ? "service" : "item"} on a new line or separate with commas.
+Type *done* when finished, or *cancel* to go back.`
+    );
+  } else {
+    // RFQ product - keep free text (products need brand/size/quantity detail)
+    return sendText(from,
+`📝 *List the products you need:*
+
+Type item numbers or names. Include size, brand, quantity.
+
+_e.g. 20mm PVC pipe 30m, ball valve 15mm ×10, 110mm drain pipe 5m_
+
+Type each item on a new line or separate with commas.
 Type *done* when finished, or *cancel* to go back.`
     );
   }
@@ -659,7 +685,13 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   }
 
   const existingItems = biz?.sessionData?.scQuoteItems || [];
-  const newItems      = _parseItemInput(raw, knownItems, isService);
+  // For service RFQ, support "1: scope, 2: scope" shorthand (buyer types number + optional detail)
+  let newItems;
+  if (isRFQ && isService) {
+    newItems = _parseServiceRFQInput(raw, knownItems);
+  } else {
+    newItems = _parseItemInput(raw, knownItems, isService);
+  }
   const allItems      = [...existingItems, ...newItems];
 
   if (biz) {
@@ -1373,9 +1405,9 @@ async function _scBook(from, supplierId, biz, saveBiz) {
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-Which service(s) do you need?
-You can pick *multiple services* in one message.
-_e.g. "1, 2, 4" or "deep cleaning, carpet cleaning"_
+Type the *number(s)* of the service(s) you need.
+_e.g. "1" or "1, 3" or "2, 4: office block"_
+_(Add a colon after the number for extra detail)_
 
 Type *cancel* to go back.`
     );
@@ -1387,9 +1419,8 @@ Type *cancel* to go back.`
 
 ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
-Which service(s) do you need? You can pick *multiple*.
-Type numbers or names, and describe the job briefly.
-_e.g. "1, 3" or "gearbox service, oil change" or "deep cleaning 3-bed house"_
+Type the *number(s)* of the service(s) you need.
+_e.g. "1" or "1, 3" or "2: gearbox, 4: oil change"_
 
 Type *cancel* to go back.`
     );
@@ -1951,6 +1982,50 @@ ${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote sent to buyer.
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── Parse service RFQ input: "1, 3: 3-bed house, 5: office block" ──────────
+// Supports:
+//   "1"            → service 1, qty 1, no scope
+//   "1, 3"         → services 1 and 3
+//   "1: 3-bed house"  → service 1 with scope detail
+//   "2: sofa, 4: carpet 3 rooms"  → multiple with scopes
+//   Falls back gracefully to comma-split names if no numbers found
+function _parseServiceRFQInput(raw, knownItems = []) {
+  const results = [];
+
+  // Split by comma, but not commas inside a scope clause (after the colon)
+  // Strategy: split on ", " only when followed by a digit (next item number)
+  const parts = raw.split(/,\s*(?=\d)/).map(s => s.trim()).filter(Boolean);
+
+  for (const part of parts) {
+    // Match: number optionally followed by colon + scope
+    const m = part.match(/^(\d+)(?:\s*[:–\-]\s*(.+))?$/);
+    if (m) {
+      const idx   = parseInt(m[1], 10) - 1;
+      const scope = (m[2] || "").trim();
+      const item  = knownItems[idx];
+      if (item) {
+        const serviceName = item.service || String(item);
+        results.push({
+          name:  scope ? `${serviceName} (${scope})` : serviceName,
+          qty:   1,
+          price: parseFloat(item.rate) || 0
+        });
+      }
+    } else {
+      // Not a number - treat as typed service name
+      results.push({ name: part, qty: 1, price: 0 });
+    }
+  }
+
+  // If nothing resolved (e.g. buyer typed only names), fall back to name splitting
+  if (!results.length) {
+    return raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
+      .map(name => ({ name, qty: 1, price: 0 }));
+  }
+
+  return results;
+}
+
 function _parseItemInput(raw, knownItems = [], isService = false) {
   const results = [];
 
