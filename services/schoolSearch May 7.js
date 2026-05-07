@@ -15,8 +15,6 @@ import {
   notifySchoolApplicationInterest
 } from "./schoolNotifications.js";
 
-import { notifySellerSmartLinkOpened } from "./buyerRequestNotifications.js";
-
 import SupplierProfile from "../models/supplierProfile.js";
 
 // ── ZQ FAQ + Seller Chat (lazy-imported to avoid circular deps) ───────────────
@@ -284,22 +282,11 @@ export async function runSchoolShortcodeSearch({ from, text, biz, saveBiz }) {
 export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
   const raw = String(text || "").trim();
 
-  // ── SCHOOL deep link: ZQ:SCHOOL:<id> ─────────────────────────────────────
   if (/^ZQ:SCHOOL:[a-f0-9]{24}$/i.test(raw)) {
     const schoolId = raw.split(":")[2];
-
-    // Increment view counters (fire-and-forget)
     SchoolProfile.findByIdAndUpdate(schoolId, {
       $inc: { monthlyViews: 1, zqLinkConversions: 1 }
     }).catch(() => {});
-
-    // Notify school admin - works outside 24hr window via UTILITY template
-    SchoolProfile.findById(schoolId).lean().then(school => {
-      if (school?.phone) {
-        notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
-      }
-    }).catch(() => {});
-
     try {
       const { showSchoolFAQMenu } = await import("./schoolFAQ.js");
       await showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source: "whatsapp_link" });
@@ -309,39 +296,18 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
     return true;
   }
 
-  // ── SUPPLIER deep link: ZQ:SUPPLIER:<id>  or  ZQ:SUPPLIER:<id>:SRC:<src> ──
   if (/^ZQ:SUPPLIER:[a-f0-9]{24}/i.test(raw)) {
     const parts      = raw.split(":");
     const supplierId = parts[2];
-
-    // Parse SRC source code (ZQ:SUPPLIER:<id>:SRC:fb → "fb")
-    const srcIdx = parts.indexOf("SRC");
-    const source = srcIdx >= 0 && parts[srcIdx + 1] ? parts[srcIdx + 1].toLowerCase() : "direct";
-
-    // Parse any other KV params (name=xxx etc.)
-    const supKVs    = parts.slice(3).filter(p => p !== "SRC" && !["fb","wa","tt","qr","sms","ig","yt","direct"].includes(p));
-    const supParams = {};
+    const supKVs     = parts.slice(3);
+    const supParams  = {};
     for (const kv of supKVs) {
       const eq = kv.indexOf("=");
-      if (eq > 0) supParams[kv.slice(0, eq)] = decodeURIComponent(kv.slice(eq + 1));
+      if (eq > 0) supParams[kv.slice(0,eq)] = decodeURIComponent(kv.slice(eq+1));
     }
-
-    // Increment view counters (fire-and-forget)
     SupplierProfile.findByIdAndUpdate(supplierId, {
       $inc: { zqLinkViews: 1, zqLinkConversions: 1 }
     }).catch(() => {});
-
-    // Notify supplier - works outside 24hr window via supplier_link_opened UTILITY template
-    SupplierProfile.findById(supplierId).lean().then(supplier => {
-      if (supplier?.phone) {
-        notifySellerSmartLinkOpened({
-          sellerPhone:  supplier.phone,
-          businessName: supplier.businessName,
-          source
-        }).catch(() => {});
-      }
-    }).catch(() => {});
-
     try {
       const { showSellerMenu } = await import("./sellerChat.js");
       await showSellerMenu(from, supplierId, biz, saveBiz, {
@@ -375,24 +341,12 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
     SchoolProfile.findByIdAndUpdate(school._id, {
       $inc: { monthlyViews: 1, zqLinkConversions: 1 }
     }).catch(() => {});
-    // Notify school admin of the profile view (works outside 24hr window)
-    if (school.phone) {
-      notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
-    }
     await _showSchoolDetail(from, String(school._id), biz, "slug_search");
     return true;
   }
 
   const supplier = await SupplierProfile.findOne({ zqSlug: slug }).lean();
   if (supplier) {
-    // Notify supplier of the profile view (works outside 24hr window)
-    if (supplier.phone) {
-      notifySellerSmartLinkOpened({
-        sellerPhone:  supplier.phone,
-        businessName: supplier.businessName,
-        source:       "direct"
-      }).catch(() => {});
-    }
     await _showSupplierCard(from, String(supplier._id));
     return true;
   }
