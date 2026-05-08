@@ -88,10 +88,9 @@ async function _sendTemplate(to, templateName, variables = []) {
 //   await _notifyAll(school, (phone) => notifySchoolProfileView(phone, school.schoolName, parentPhone));
 // ─────────────────────────────────────────────────────────────────────────────
 async function _notifyAll(school, notifyFn) {
-  // Always notify the primary phone PLUS any extra notification contacts.
-  // notificationContacts are additional numbers - they never replace the primary.
-  const extra  = Array.isArray(school.notificationContacts) ? school.notificationContacts : [];
-  const phones = [...new Set([school.phone, ...extra])].filter(Boolean);
+  const phones = Array.isArray(school.notificationContacts) && school.notificationContacts.length
+    ? school.notificationContacts
+    : [school.phone];
 
   await Promise.allSettled(phones.map(phone => notifyFn(phone)));
 }
