@@ -815,6 +815,37 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
         .join("\n");
       // ── ADVANCE STATE immediately - no loop ────────────────────────────────
       if (isService) {
+        // ── Teacher/tourism: inject extra detail step before travel ────────────
+        const _cats      = biz.sessionData?.supplierReg?.categories || [];
+        const _isTutor   = _cats.includes("tutoring");
+        const _isTourism = _cats.includes("tourism");
+
+        if (_isTutor) {
+          biz.sessionState = "supplier_reg_teacher_details";
+          await saveBiz(biz);
+          const _msg = "✅ *" + updated.length + " rate" + (updated.length > 1 ? "s" : "") + " saved!*\n\n"
+            + previewLines + failNote + "\n\n"
+            + "📚 *What subjects do you teach and what grades?*\n\n"
+            + "Type subjects first, then grades after a pipe \"|\"\n"
+            + "_e.g. Maths, Physics, English | O-Level, A-Level_\n"
+            + "_Or: Maths, Science | Grade 6, Grade 7_\n\n"
+            + "Type *skip* to continue.";
+          return sendText(from, _msg);
+        }
+
+        if (_isTourism) {
+          biz.sessionState = "supplier_reg_tourism_details";
+          await saveBiz(biz);
+          const _msg = "✅ *" + updated.length + " rate" + (updated.length > 1 ? "s" : "") + " saved!*\n\n"
+            + previewLines + failNote + "\n\n"
+            + "🦁 *Tell us about your tourism business.*\n\n"
+            + "Type your type, then areas after a pipe \"|\"\n"
+            + "_e.g. Safari Lodge | Hwange, Victoria Falls_\n"
+            + "_Or: City Tours | Harare, Bulawayo_\n\n"
+            + "Type *skip* to continue.";
+          return sendText(from, _msg);
+        }
+
         biz.sessionState = "supplier_reg_travel";
         await saveBiz(biz);
         return sendButtons(from, {
@@ -925,6 +956,48 @@ Type your ${rateLabel} and send, or tap Skip 👇`
   });
 }
   // ── Step 4: Minimum Order ──────────────────────────────
+
+// ── Step: Teacher / Tutor details (subjects & grades) ───────────────────────
+if (state === "supplier_reg_teacher_details") {
+  const raw = (text || "").trim();
+  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
+    const parts    = raw.split(/[|\n]+/);
+    const subjects = (parts[0] || "").split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+    const grades   = (parts[1] || "").split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+    biz.sessionData.supplierReg.subjects      = subjects;
+    biz.sessionData.supplierReg.gradesOffered = grades;
+  }
+  biz.sessionState = "supplier_reg_travel";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text: "🚗 *Do you travel to students?*\n\n_Home tuition or online sessions?_",
+    buttons: [
+      { id: "sup_travel_yes", title: "✅ Yes I Travel" },
+      { id: "sup_travel_no",  title: "🏠 Student Comes to Me" }
+    ]
+  });
+}
+
+// ── Step: Tourism / Hospitality details ──────────────────────────────────────
+if (state === "supplier_reg_tourism_details") {
+  const raw = (text || "").trim();
+  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
+    const parts    = raw.split(/[|\n]+/);
+    const typeRaw  = (parts[0] || "").trim();
+    const areasRaw = parts[1] || "";
+    biz.sessionData.supplierReg.tourismType  = typeRaw;
+    biz.sessionData.supplierReg.tourismAreas = areasRaw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+  }
+  biz.sessionState = "supplier_reg_travel";
+  await saveBiz(biz);
+  return sendButtons(from, {
+    text: "🚗 *Do you pick up clients / offer transfers?*",
+    buttons: [
+      { id: "sup_travel_yes", title: "✅ Yes We Do" },
+      { id: "sup_travel_no",  title: "🏠 Clients Come to Us" }
+    ]
+  });
+}
 
 // ── Step: Business currency (injected between delivery/travel and confirm) ──
 if (state === "supplier_reg_biz_currency") {
