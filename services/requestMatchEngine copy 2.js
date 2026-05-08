@@ -135,13 +135,6 @@ const INTENT_KEYWORD_MAP = [
   // ── TUTORING & EDUCATION ─────────────────────────────────────────────────
   { pattern: /\b(tutor|tutoring|maths tutor|science tutor|english tutor|a level|o level|alevel|olevel|lessons|private lessons|home tuition|coding class|driving lessons|music lessons)\b/, intent: "tutoring_service" },
 
-  // ── TOURISM & HOSPITALITY SERVICE ─────────────────────────────────────────
-  { pattern: /\b(safari|game drive|game park|game reserve|wildlife tour|bush walk|nature walk|sunset cruise|sunrise cruise|boat cruise|houseboat|fishing trip|fishing guide|fish guide|bird watching|birding|cultural tour|village tour|city tour|heritage tour|adventure tour|hiking tour|nature tour|scenic tour|guided tour|tour guide|tour operator|tourism)\b/, intent: "tourism_service" },
-  { pattern: /\b(lodge|bush camp|safari camp|game lodge|tented camp|luxury lodge|chalet|chalet hire|self catering|airbnb|bed and breakfast|b&b|guesthouse|guest house|hotel|boutique hotel|resort|resort booking|accommodation booking)\b/, intent: "tourism_service" },
-  { pattern: /\b(victoria falls|vic falls|hwange|kariba|nyanga|chimanimani|gonarezhou|matusadona|mana pools|zambezi|lake kariba|binga|matobo|matopos|great zimbabwe|chobe|kasane)\b/, intent: "tourism_service" },
-  { pattern: /\b(boat hire|boat trip|boat charter|canoe hire|kayak hire|canoe safari|kayak safari|river cruise|island transfer|water taxi|pontoon boat|houseboat hire|speedboat|fishing boat|mokoro)\b/, intent: "tourism_service" },
-  { pattern: /\b(day trip|weekend getaway|holiday package|travel package|excursion|sightseeing|tourist transfer|airport pickup|bush dinner|sundowner|campfire|stargazing|horse riding|elephant ride|bungee|zip line|white water rafting|rafting)\b/, intent: "tourism_service" },
-
   // ── SECURITY SERVICES ─────────────────────────────────────────────────────
   { pattern: /\b(security guard|armed response|security company|security patrol|alarm system|panic button|electric fence|electric gate|gate motor)\b/, intent: "security_service" },
 
@@ -241,7 +234,6 @@ const INTENT_TO_SUPPLIER_CATEGORIES = {
   transport_service:      ["transport", "logistics", "courier", "car_hire", "truck_hire", "removals"],
   printing_service:       ["printing", "branding", "graphic_design", "signage", "printing_service"],
   tutoring_service:       ["tutoring", "education", "lessons", "tutoring_service"],
-  tourism_service:        ["tourism", "safari", "lodge", "game_drive", "boat_hire", "tours", "hospitality", "tourism_service"],
   security_service:       ["security", "security_service", "alarm_systems"],
   welding_service:        ["welding", "fabrication", "steel_work", "trades", "welding_service"],
   medical_service:        ["medical_health", "dental", "pharmacy", "health", "wellness"],
@@ -270,7 +262,6 @@ const INTENT_TO_PROFILE_TYPE = {
   transport_service:      "service",
   printing_service:       "service",
   tutoring_service:       "service",
-  tourism_service:        "service",
   security_service:       "service",
   welding_service:        "service",
   medical_service:        "service",

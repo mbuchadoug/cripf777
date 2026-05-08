@@ -847,12 +847,11 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     // Notify seller via existing Meta template system - works outside 24hr window
     await _sendSellerNotification({
-      sellerPhone:          seller.phone,
-      notificationContacts: seller.notificationContacts || [],
+      sellerPhone:  seller.phone,
       refNum,
-      buyerDisplay:         buyerName || _normPhone(buyerPhone),
-      itemList:             itemListFull,
-      itemCount:            items.length,
+      buyerDisplay: buyerName || _normPhone(buyerPhone),
+      itemList:     itemListFull,
+      itemCount:    items.length,
       isRFQ:        true,
     });
 
@@ -925,12 +924,11 @@ The seller will review and price your request.
 
   // Notify seller via Meta template - works outside 24hr window
   await _sendSellerNotification({
-    sellerPhone:          seller.phone,
-    notificationContacts: seller.notificationContacts || [],
+    sellerPhone:  seller.phone,
     refNum,
-    buyerDisplay:         buyerName || _normPhone(buyerPhone),
-    itemList:             itemRows,
-    itemCount:            lineItems.length,
+    buyerDisplay: buyerName || _normPhone(buyerPhone),
+    itemList:     itemRows,
+    itemCount:    lineItems.length,
     total,
     isRFQ:        false,
   });
@@ -1197,7 +1195,7 @@ Confirm to send to buyer, or edit again.`,
 // Sends supplier_new_request_v2 (with View & Quote button) or falls back to v1.
 // Works outside 24hr window. No new templates needed.
 // ─────────────────────────────────────────────────────────────────────────────
-async function _sendSellerNotification({ sellerPhone, notificationContacts = [], refNum, buyerDisplay, itemList, itemCount, total, isRFQ }) {
+async function _sendSellerNotification({ sellerPhone, refNum, buyerDisplay, itemList, itemCount, total, isRFQ }) {
   try {
     const { notifySupplierNewRequestTemplate } = await import("./buyerRequestNotifications.js");
 
@@ -1209,16 +1207,15 @@ async function _sendSellerNotification({ sellerPhone, notificationContacts = [],
       : totalLine;
 
     await notifySupplierNewRequestTemplate({
-      supplierPhone:        sellerPhone,
-      notificationContacts: notificationContacts,
-      requestId:            refNum,
-      ref:                  refNum,
-      locationText:         `Smart Link Quote · ${buyerDisplay}`,
+      supplierPhone: sellerPhone,
+      requestId:     refNum,
+      ref:           refNum,
+      locationText:  `Smart Link Quote · ${buyerDisplay}`,
       itemCount,
       itemSummary,
       deliveryLine,
-      fullItemLines:        String(itemList),
-      replyExamples:        "1=12.50, 2=8.00"
+      fullItemLines: String(itemList),
+      replyExamples: "1=12.50, 2=8.00"
     });
 
     console.log(`[SC NOTIF] notifySupplierNewRequestTemplate → ${sellerPhone} (${refNum})`);
@@ -1693,14 +1690,13 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
   const _peopleLine = peopleCount ? `\nPeople: ${peopleCount}` : "";
 
   await _sendSellerNotification({
-    sellerPhone:          seller.phone,
-    notificationContacts: seller.notificationContacts || [],
+    sellerPhone:  seller.phone,
     refNum,
-    buyerDisplay:         buyerName || _normPhone(from),
-    itemList:             `Service: ${services}${_peopleLine}\nLocation: ${travels ? location : seller.address || "at your premises"}\nTime: ${raw}`,
-    itemCount:            1,
-    total:                null,
-    isRFQ:                true,
+    buyerDisplay: buyerName || _normPhone(from),
+    itemList:     `Service: ${services}${_peopleLine}\nLocation: ${travels ? location : seller.address || "at your premises"}\nTime: ${raw}`,
+    itemCount:    1,
+    total:        null,
+    isRFQ:        true,
   });
 
   _trackConversion({ sessionData: { scSource: biz?.sessionData?.scSource, scSellerId: supplierId } });

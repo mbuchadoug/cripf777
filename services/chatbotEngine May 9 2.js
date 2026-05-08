@@ -2638,37 +2638,12 @@ function _buyerRequestIsService(items = []) {
     "video","cater","chef","design","print","security","guard","account",
     "tax","audit","legal","transport","courier","mechanic","beat",
     "geyser","borehole","fumigat","pest","massage","barber","haircut","hair",
-    "nail","makeup","booking","hire","maintenance","thermostat","element",
-    // ── Tourism & hospitality ─────────────────────────────────────────────────
-    "safari","game drive","game park","lodge","cruise","fishing trip","boat trip",
-    "boat hire","houseboat","tour","tours","tourism","guided","bird watching",
-    "bush walk","nature walk","cultural tour","village tour","city tour",
-    "accommodation","chalet","camp","resort","guesthouse","airbnb","sunset cruise",
-    "adventure","excursion","sightseeing","day trip","weekend","getaway","package",
-    "transfer","pickup","sundowner","rafting","zip line","bungee","horse riding",
-    "canoe","kayak","mokoro","island transfer","fishing guide","birding"
+    "nail","makeup","booking","hire","maintenance","thermostat","element"
   ];
   if (!items || !items.length) return false;
   return items.some(item => {
     const name = (item.product || item.service || item.raw || "").toLowerCase();
     return SERVICE_KEYWORDS.some(kw => name.includes(kw));
-  });
-}
-
-// ── Detect if a request is tourism-related (for context-aware prompts) ─────────
-function _buyerRequestIsTourism(items = []) {
-  const TOURISM_KEYWORDS = [
-    "safari","game drive","game park","lodge","cruise","fishing trip","boat trip",
-    "boat hire","houseboat","tour","tours","tourism","guided","bird watching",
-    "bush walk","nature walk","cultural tour","village tour","city tour",
-    "accommodation","chalet","camp","resort","guesthouse","airbnb","sunset cruise",
-    "adventure","excursion","sightseeing","day trip","getaway","package","rafting",
-    "canoe","kayak","island transfer","fishing guide","birding","game lodge"
-  ];
-  if (!items || !items.length) return false;
-  return items.some(item => {
-    const name = (item.product || item.service || item.raw || "").toLowerCase();
-    return TOURISM_KEYWORDS.some(kw => name.includes(kw));
   });
 }
 
@@ -4468,22 +4443,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `Type *skip* to share your address directly with the provider.\n` +
           `Type *0* for main menu · *00* to cancel`
         );
-      }
-
-      // ── Context-aware delivery question ────────────────────────────────────
-      const _isTourismReq = _buyerRequestIsTourism(parsedItems);
-      if (_isTourismReq) {
-        return sendButtons(from, {
-          text:
-            `✅ *Request captured:*\n\n` +
-            `${_confirmItemLines}\n\n` +
-            `${locationLine}\n\n` +
-            `📍 *Where will you be? / Where should the operator meet you?*`,
-          buttons: [
-            { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
-            { id: "sup_request_delivery_no",  title: "🏕 I'll go to the operator" }
-          ]
-        });
       }
 
       return sendButtons(from, {
@@ -14945,17 +14904,6 @@ if (a === "sup_use_saved_location") {
       `Type your address or type *skip* to share it directly.\n` +
       `Type *0* for main menu`
     );
-  }
-
-  const _isTourismSaved = _buyerRequestIsTourism(updatedRequest.items || []);
-  if (_isTourismSaved) {
-    return sendButtons(from, {
-      text: `📍 *Where will you be? Should the operator come to you?*\n\n📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}`,
-      buttons: [
-        { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
-        { id: "sup_request_delivery_no",  title: "🏕 I'll go to operator" }
-      ]
-    });
   }
 
   return sendButtons(from, {
