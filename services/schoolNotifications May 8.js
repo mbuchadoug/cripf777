@@ -79,23 +79,6 @@ async function _sendTemplate(to, templateName, variables = []) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INTERNAL: Fan out a notification to ALL registered notification contacts.
-//
-// school.notificationContacts = ["263771000001", "263772000002"]  (set by admin)
-// If empty or missing, falls back to school.phone (the single primary number).
-//
-// Usage:
-//   await _notifyAll(school, (phone) => notifySchoolProfileView(phone, school.schoolName, parentPhone));
-// ─────────────────────────────────────────────────────────────────────────────
-async function _notifyAll(school, notifyFn) {
-  const phones = Array.isArray(school.notificationContacts) && school.notificationContacts.length
-    ? school.notificationContacts
-    : [school.phone];
-
-  await Promise.allSettled(phones.map(phone => notifyFn(phone)));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify school - a parent viewed their profile
 // Template body (submitted to Meta):
 //   New school profile view on ZimQuote.
@@ -350,41 +333,4 @@ This is an automated alert from ZimQuote.`
       console.warn(`[School Notify] fallback sendText also failed for ${normalizedTo}: ${e.message}`);
     }
   }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// FAN-OUT WRAPPERS
-// These accept a full school object and notify ALL registered contacts.
-// Use these everywhere instead of the single-phone functions above.
-//
-// schoolSearch.js and other callers should use:
-//   notifyAllSchoolProfileView(school, parentPhone)
-//   notifyAllSchoolEnquiry(school, parentPhone, message)
-//   notifyAllSchoolApplicationInterest(school, parentPhone)
-//   notifyAllSchoolNewLead(school, parentName, action, source)
-//   notifyAllSchoolVisitRequest(school, parentName, source)
-//   notifyAllSchoolPlaceEnquiry(school, parentName, grade, source)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function notifyAllSchoolProfileView(school, parentPhone) {
-  await _notifyAll(school, phone => notifySchoolProfileView(phone, school.schoolName, parentPhone));
-}
-
-export async function notifyAllSchoolEnquiry(school, parentPhone, message = "") {
-  await _notifyAll(school, phone => notifySchoolEnquiry(phone, school.schoolName, parentPhone, message));
-}
-
-export async function notifyAllSchoolApplicationInterest(school, parentPhone) {
-  await _notifyAll(school, phone => notifySchoolApplicationInterest(phone, school.schoolName, parentPhone));
-}
-
-export async function notifyAllSchoolNewLead(school, parentName, action, source) {
-  await _notifyAll(school, phone => notifySchoolNewLead(phone, school.schoolName, parentName, action, source));
-}
-
-export async function notifyAllSchoolVisitRequest(school, parentName, source) {
-  await _notifyAll(school, phone => notifySchoolVisitRequest(phone, school.schoolName, parentName, source));
-}
-
-export async function notifyAllSchoolPlaceEnquiry(school, parentName, grade, source) {
-  await _notifyAll(school, phone => notifySchoolPlaceEnquiry(phone, school.schoolName, parentName, grade, source));
 }

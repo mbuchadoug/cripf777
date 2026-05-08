@@ -12,10 +12,7 @@ import {
 import {
   notifySchoolProfileView,
   notifySchoolEnquiry,
-  notifySchoolApplicationInterest,
-  notifyAllSchoolProfileView,
-  notifyAllSchoolEnquiry,
-  notifyAllSchoolApplicationInterest
+  notifySchoolApplicationInterest
 } from "./schoolNotifications.js";
 
 import { notifySellerSmartLinkOpened } from "./buyerRequestNotifications.js";
@@ -299,7 +296,7 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
     // Notify school admin - works outside 24hr window via UTILITY template
     SchoolProfile.findById(schoolId).lean().then(school => {
       if (school?.phone) {
-        notifyAllSchoolProfileView(school, from).catch(() => {});
+        notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
       }
     }).catch(() => {});
 
@@ -380,7 +377,7 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
     }).catch(() => {});
     // Notify school admin of the profile view (works outside 24hr window)
     if (school.phone) {
-      notifyAllSchoolProfileView(school, from).catch(() => {});
+      notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
     }
     await _showSchoolDetail(from, String(school._id), biz, "slug_search");
     return true;
@@ -1041,7 +1038,7 @@ You can upload a new one anytime from ⚙️ More Options.`
     await SchoolProfile.findByIdAndUpdate(schoolId, { $inc: { inquiries: 1 } });
 
     // Notify school with the actual parent message via template
-    notifyAllSchoolEnquiry(school, from, message).catch(() => {});
+    notifySchoolEnquiry(school.phone, school.schoolName, from, message).catch(() => {});
 
     // Reset session
     if (biz) {
@@ -1187,7 +1184,7 @@ async function _showSchoolDetail(from, schoolId, biz, source) {
 
   // Notify school admin that a parent opened/clicked their school
 // Notify school admin - uses Meta template for out-of-session delivery
-  notifyAllSchoolProfileView(school, from).catch(() => {});
+  notifySchoolProfileView(school.phone, school.schoolName, from).catch(() => {});
 
   const verifiedBadge  = school.verified  ? " ✅ *Verified*"   : "";
   const featuredBadge  = school.tier === "featured" ? " 🔥 *Featured*" : "";
@@ -1450,7 +1447,7 @@ async function _sendApplicationLink(from, schoolId) {
     : "🔴 *Admissions are currently CLOSED.* You can still submit an expression of interest.";
 
   // Notify the school that a parent wants to apply
-notifyAllSchoolApplicationInterest(school, from).catch(() => {});
+notifySchoolApplicationInterest(school.phone, school.schoolName, from).catch(() => {});
 
   if (school.registrationLink) {
     return sendButtons(from, {
@@ -1507,7 +1504,7 @@ ${school.email    ? `📧 Email: ${school.email}\n`   : ""}${school.address  ? `
 You can message or call the school directly on their number above.`;
 
   // Notify school of interest
-notifyAllSchoolEnquiry(school, from).catch(() => {});
+notifySchoolEnquiry(school.phone, school.schoolName, from).catch(() => {});
 
   return sendButtons(from, {
     text: contactText,
@@ -1791,6 +1788,7 @@ No phone number captured for this lead (they may not have entered their name on 
     buttons.push({ id: "school_my_leads", title: "👥 Back to Leads" });
     buttons.push({ id: "school_account",  title: "⬅ Main Menu" });
   }
+
 
   return sendButtons(from, { text: "What would you like to do next?", buttons });
 }

@@ -14,7 +14,7 @@ import { requireSupplierAdmin } from "../middleware/supplierAdminAuth.js";
 import SchoolProfile from "../models/schoolProfile.js";
 import SchoolSubscriptionPayment from "../models/schoolSubscriptionPayment.js";
 import { sendDocument, sendText } from "../services/metaSender.js";
-import { generatePDF } from "../routes/twilio_biz.js";
+import { generatePDF } from "./twilio_biz.js";
 import SchoolLead from "../models/schoolLead.js";
 import {
   SCHOOL_CITIES,
@@ -1173,55 +1173,6 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="fg"><label>School Name</label><input name="schoolName" value="${esc(school.schoolName)}" required /></div>
             <div class="fg"><label>Phone (login / WhatsApp)</label><input name="phone" value="${esc(school.phone)}" required /></div>
             <div class="fg"><label>Contact Phone (shown to parents)</label><input name="contactPhone" value="${esc(school.contactPhone || '')}" placeholder="e.g. 0242123456" /></div>
-
-            <!-- ── NOTIFICATION CONTACTS ────────────────────────────────── -->
-            <div class="fg" style="grid-column:1/-1">
-              <label>📲 Notification Contacts
-                <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
-                  — Extra numbers that receive enquiry, profile view &amp; smart link alerts (outside 24hr sessions via WhatsApp template)
-                </span>
-              </label>
-              <div id="notif-contacts-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-                ${(school.notificationContacts||[]).map((p,i)=>`
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <input name="notifContact_${i}" value="${esc(p)}"
-                           placeholder="e.g. 2637712345678"
-                           style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px" />
-                    <button type="button" onclick="this.closest('div').remove()"
-                            style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>
-                  </div>`).join("")}
-              </div>
-              <button type="button" onclick="addNotifContact()"
-                      style="padding:7px 14px;border:1px solid var(--blue);border-radius:6px;color:var(--blue);background:none;cursor:pointer;font-size:13px">
-                ➕ Add number
-              </button>
-              <input type="hidden" name="notifContactCount" id="notifContactCount" value="${(school.notificationContacts||[]).length}" />
-              <span style="display:block;font-size:11px;color:var(--muted);margin-top:6px">
-                These numbers receive the same WhatsApp template notifications as the primary number.
-                Use international format: 2637XXXXXXXX. The primary phone above always receives notifications too.
-              </span>
-            </div>
-            <script>
-              function addNotifContact() {
-                const list  = document.getElementById("notif-contacts-list");
-                const count = document.getElementById("notifContactCount");
-                const idx   = list.children.length;
-                const div   = document.createElement("div");
-                div.style = "display:flex;gap:8px;align-items:center";
-                div.innerHTML = \`<input name="notifContact_\${idx}" placeholder="e.g. 2637712345678"
-                  style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px">
-                  <button type="button" onclick="this.closest('div').remove()"
-                    style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>\`;
-                list.appendChild(div);
-                count.value = list.children.length;
-              }
-              // Keep count in sync before form submit
-              document.querySelector("form.edit-form")?.addEventListener("submit", () => {
-                const list  = document.getElementById("notif-contacts-list");
-                const count = document.getElementById("notifContactCount");
-                if (list && count) count.value = list.children.length;
-              });
-            </script>
             <div class="fg">
               <label>City</label>
               <select name="city" required>
@@ -1629,18 +1580,6 @@ router.post("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
     if (subscriptionEndsAt) {
       school.subscriptionEndsAt = new Date(subscriptionEndsAt);
     }
-
-    // ── Notification contacts (extra numbers for template alerts) ─────────────
-    const _notifCount = parseInt(req.body.notifContactCount || "0", 10);
-    const _notifRaw = [];
-    for (let i = 0; i < _notifCount; i++) {
-      const p = String(req.body["notifContact_" + i] || "").trim().replace(/\D+/g, "");
-      // Normalize Zimbabwe numbers: 07XXXXXXXX → 2637XXXXXXXX
-      const normalized = p.startsWith("0") && p.length === 10 ? "263" + p.slice(1) : p;
-      if (normalized.length >= 10) _notifRaw.push(normalized);
-    }
-    // Always deduplicate and exclude the primary phone (it always gets notified)
-    school.notificationContacts = [...new Set(_notifRaw)].filter(p => p !== school.phone.replace(/\D+/g, ""));
 
     await school.save();
 
