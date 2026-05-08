@@ -19,7 +19,6 @@ import {
 } from "./schoolNotifications.js";
 
 import { notifySellerSmartLinkOpened } from "./buyerRequestNotifications.js";
-import { notifyAllSupplierLinkOpened } from "./supplierNotifications.js";
 
 import SupplierProfile from "../models/supplierProfile.js";
 
@@ -335,10 +334,14 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
       $inc: { zqLinkViews: 1, zqLinkConversions: 1 }
     }).catch(() => {});
 
-    // Notify supplier + all notification contacts (works outside 24hr via UTILITY template)
+    // Notify supplier - works outside 24hr window via supplier_link_opened UTILITY template
     SupplierProfile.findById(supplierId).lean().then(supplier => {
       if (supplier?.phone) {
-        notifyAllSupplierLinkOpened(supplier, source).catch(() => {});
+        notifySellerSmartLinkOpened({
+          sellerPhone:  supplier.phone,
+          businessName: supplier.businessName,
+          source
+        }).catch(() => {});
       }
     }).catch(() => {});
 
@@ -387,7 +390,11 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
   if (supplier) {
     // Notify supplier of the profile view (works outside 24hr window)
     if (supplier.phone) {
-      notifyAllSupplierLinkOpened(supplier, "direct").catch(() => {});
+      notifySellerSmartLinkOpened({
+        sellerPhone:  supplier.phone,
+        businessName: supplier.businessName,
+        source:       "direct"
+      }).catch(() => {});
     }
     await _showSupplierCard(from, String(supplier._id));
     return true;

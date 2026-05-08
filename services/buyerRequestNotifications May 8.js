@@ -153,7 +153,6 @@ async function _sendTemplateV2(to, templateName, variables = []) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierNewRequestTemplate({
   supplierPhone,
-  notificationContacts = [],   // extra numbers to also notify (additive to supplierPhone)
   requestId,
   ref,
   locationText,
@@ -163,23 +162,7 @@ export async function notifySupplierNewRequestTemplate({
   fullItemLines = null,
   replyExamples = "1=12.50"
 }) {
-  // Fan out to primary phone + all extra notification contacts
-  const _extra  = Array.isArray(notificationContacts) ? notificationContacts : [];
-  const _phones = [...new Set([supplierPhone, ..._extra])].filter(Boolean).map(_normalizeZimPhone);
-
-  // Send to all phones - each independently with its own fallback chain
-  await Promise.allSettled(_phones.map(phone => _sendNewRequestToPhone({
-    phone, requestId, ref, locationText, itemCount, itemSummary,
-    deliveryLine, fullItemLines, replyExamples
-  })));
-}
-
-// ── Internal: send new request notification to a single phone ─────────────────
-async function _sendNewRequestToPhone({
-  phone: normalizedPhone, requestId, ref, locationText, itemCount,
-  itemSummary, deliveryLine, fullItemLines, replyExamples
-}) {
-  // normalizedPhone is already normalized by the caller
+  const normalizedPhone = _normalizeZimPhone(supplierPhone);
 
   // ── Build item summary line (max 1 line for template variable) ───────────────
   const _itemCount   = Number(itemCount) || 1;

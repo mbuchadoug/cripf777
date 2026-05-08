@@ -531,6 +531,31 @@ export async function runSupplierExpiryChecks() {
 //
 // Fallback: plain sendText for within-24hr sessions.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNAL: Fan out a notification to ALL registered notification contacts.
+//
+// supplier.notificationContacts = ["263771000001", "263772000002"]
+// Primary phone (supplier.phone) is ALWAYS included — contacts are additive.
+//
+// Usage:
+//   await _notifyAllSupplier(supplier, phone => notifySupplierLinkOpened(phone, name, src));
+// ─────────────────────────────────────────────────────────────────────────────
+async function _notifyAllSupplier(supplier, notifyFn) {
+  const extra  = Array.isArray(supplier.notificationContacts) ? supplier.notificationContacts : [];
+  const phones = [...new Set([supplier.phone, ...extra])].filter(Boolean);
+  await Promise.allSettled(phones.map(phone => notifyFn(phone)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: Fan-out wrapper - notify ALL contacts when smart link is opened.
+// Pass the full supplier object instead of just a phone string.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function notifyAllSupplierLinkOpened(supplier, source) {
+  await _notifyAllSupplier(supplier, phone =>
+    notifySupplierLinkOpened(phone, supplier.businessName, source)
+  );
+}
+
 export async function notifySupplierLinkOpened(supplierPhone, businessName, source) {
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(supplierPhone);

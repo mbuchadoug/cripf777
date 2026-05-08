@@ -2580,9 +2580,8 @@ async function notifySuppliersOfBuyerRequest(request) {
 
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
-        supplierPhone:        supplier.phone,
-        notificationContacts: supplier.notificationContacts || [],
-        requestId:            String(request._id),
+        supplierPhone: supplier.phone,
+        requestId:     String(request._id),
         ref,
         locationText:  _templateLocation,
         itemCount:     _templateItemCount,
