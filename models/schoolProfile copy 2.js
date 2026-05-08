@@ -78,9 +78,6 @@ const schoolProfileSchema = new mongoose.Schema({
   // ── Identity ───────────────────────────────────────────────────────────────
   phone:          { type: String, required: true, unique: true, index: true },
   contactPhone:   { type: String, default: "" },
-  // Extra numbers that receive WhatsApp template notifications (enquiries, profile views, smart link opens).
-  // Admin-managed via /zq-admin/schools/:id/edit. Primary phone always notified separately.
-  notificationContacts: { type: [String], default: [] },
   schoolName:     { type: String, required: true },
   principalName:  { type: String, default: "" },
   deputyName:     { type: String, default: "" },
