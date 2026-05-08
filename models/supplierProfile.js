@@ -22,9 +22,6 @@ location: {
 },
 address: { type: String, default: "" },
 contactDetails: { type: String, default: "" },
-  // Extra numbers that receive WhatsApp template notifications (quote requests, smart link opens).
-  // Primary phone always notified. Admin-managed via supplier edit form.
-  notificationContacts: { type: [String], default: [] },
 website: { type: String, default: "" },
   categories: [{ type: String }],
   products: [{ type: String }],
@@ -127,6 +124,16 @@ zqSourceConversions: {
  
 travelAvailable: { type: Boolean },         // service providers: do they travel to client?
 serviceArea:     { type: String },          // e.g. "Harare CBD and suburbs"
+
+  // ── PRIVATE TEACHER / TUTOR fields ──────────────────────────────────────────
+  // Set when category includes "tutoring". Searchable and shown on smart link.
+  subjects:      { type: [String], default: [] },   // e.g. ["Maths", "Physics", "English"]
+  gradesOffered: { type: [String], default: [] },   // e.g. ["O-Level", "A-Level", "Grade 7"]
+
+  // ── TOURISM & HOSPITALITY fields ────────────────────────────────────────────
+  // Set when category includes "tourism".
+  tourismType:   { type: String, default: "" },     // e.g. "Lodge", "Safari Operator", "Travel Agent"
+  tourismAreas:  { type: [String], default: [] },   // e.g. ["Hwange", "Victoria Falls", "Harare"]
 
 
 

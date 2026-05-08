@@ -719,45 +719,16 @@ export const SUPPLIER_CATEGORIES = [
 
   {
     id: "tutoring",
-    label: "📚 Private Teaching & Tutoring",
+    label: "📚 Tutoring & Education",
     types: ["service"],
     collar: "blue_collar",
     subcats: [
-      { id: "primary_tutor",      label: "Primary School (Grades 1–7)" },
+      { id: "primary_tutor",      label: "Primary School Tutoring" },
       { id: "olevel_tutor",       label: "O-Level Tutoring" },
       { id: "alevel_tutor",       label: "A-Level Tutoring" },
-      { id: "ecd_tutor",          label: "ECD / Pre-school Tutoring" },
-      { id: "maths_tutor",        label: "Mathematics" },
-      { id: "science_tutor",      label: "Science (Phy, Chem, Bio)" },
-      { id: "english_tutor",      label: "English & Literature" },
-      { id: "history_tutor",      label: "History & Geography" },
-      { id: "accounting_tutor",   label: "Accounting & Business Studies" },
-      { id: "ict_tutor",          label: "ICT & Computer Studies" },
       { id: "driving_lessons",    label: "Driving Lessons" },
       { id: "music_lessons",      label: "Music Lessons" },
-      { id: "language_classes",   label: "Language Classes" },
-      { id: "special_needs",      label: "Special Needs & Remedial" }
-    ],
-    presetKey: null
-  },
-
-  // ── TOURISM & HOSPITALITY ───────────────────────────────────────────────────
-  {
-    id: "tourism",
-    label: "🦁 Tourism & Hospitality",
-    types: ["service"],
-    collar: "white_collar",
-    subcats: [
-      { id: "safari_tours",       label: "Safari & Game Tours" },
-      { id: "city_tours",         label: "City & Cultural Tours" },
-      { id: "lodge_camp",         label: "Lodge & Bush Camp" },
-      { id: "hotel_guesthouse",   label: "Hotel & Guesthouse" },
-      { id: "airbnb_self_catering",label: "Airbnb & Self-catering" },
-      { id: "fishing_trips",      label: "Fishing & Boat Trips" },
-      { id: "adventure_tours",    label: "Adventure & Hiking Tours" },
-      { id: "victoria_falls",     label: "Victoria Falls Packages" },
-      { id: "car_hire_tourism",   label: "Car Hire & Transfers" },
-      { id: "travel_agent",       label: "Travel Agent & Packages" }
+      { id: "language_classes",   label: "Language Classes" }
     ],
     presetKey: null
   },

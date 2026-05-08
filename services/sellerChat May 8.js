@@ -397,16 +397,6 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
     }
   }
 
-  // ── Quote: people count for RFQ services ───────────────────────────────
-  if (state === "sc_awaiting_quote_people") {
-    const peopleText = raw.toLowerCase() === "skip" ? "" : raw.trim();
-    if (biz) {
-      if (peopleText) biz.sessionData = { ...(biz.sessionData || {}), scPeopleCount: peopleText };
-      await saveBiz(biz);
-    }
-    return _scQuoteDone(from, supplierId, biz, saveBiz);
-  }
-
   // ── Enquiry: buyer typed their message to seller ─────────────────────────
   if (state === "sc_awaiting_enquiry") {
     return _scProcessEnquiry(from, supplierId, raw, biz, saveBiz);
@@ -440,16 +430,6 @@ export async function handleSellerChatState({ state, from, text, biz, saveBiz })
   // ── Booking: buyer typed their location (PATH A step 2) ──────────────────
   if (state === "sc_awaiting_service_location") {
     return _scProcessServiceLocation(from, supplierId, raw, biz, saveBiz);
-  }
-
-  // ── Booking: buyer typed number of people ────────────────────────────────
-  if (state === "sc_awaiting_people_count") {
-    return _scProcessPeopleCount(from, supplierId, raw, biz, saveBiz);
-  }
-
-  // ── Booking: PATH B - buyer chose services (client visits seller) ─────────
-  if (state === "sc_awaiting_booking_service_b") {
-    return _scProcessBookingServicePathB(from, supplierId, raw, biz, saveBiz);
   }
 
   // ── Seller pricing reply (legacy unpriced RFQ without UserSession draft) ─
@@ -730,17 +710,6 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const isRFQ     = biz?.sessionData?.scRFQ;
 
   if (raw.toLowerCase() === "done") {
-    // For service RFQ, collect people count before finalising if not yet captured
-    if (isService && isRFQ && !biz?.sessionData?.scPeopleCount) {
-      if (biz) { biz.sessionState = "sc_awaiting_quote_people"; await saveBiz(biz); }
-      return sendText(from,
-`👥 *How many people / how large is the job?*
-
-_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_
-
-Type *skip* if not applicable.`
-      );
-    }
     return _scQuoteDone(from, supplierId, biz, saveBiz);
   }
 
@@ -841,29 +810,24 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
       await saveBiz(biz);
     }
 
-    // Include people/scope count in notification if captured
-    const _rfqPeople     = biz?.sessionData?.scPeopleCount;
-    const itemListFull   = _rfqPeople ? itemList + `\nPeople / scope: ${_rfqPeople}` : itemList;
-
     // Notify seller via existing Meta template system - works outside 24hr window
     await _sendSellerNotification({
       sellerPhone:  seller.phone,
       refNum,
       buyerDisplay: buyerName || _normPhone(buyerPhone),
-      itemList:     itemListFull,
+      itemList,
       itemCount:    items.length,
       isRFQ:        true,
     });
 
     _trackConversion(biz);
 
-    const _rfqPeopleSummary = _rfqPeople ? `\n👥 People / scope: ${_rfqPeople}` : "";
     return sendButtons(from, {
       text:
 `✅ *${isService ? "Service quote" : "Quote"} request sent to ${seller.businessName}!*
 
 Reference: *${refNum}*
-${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqPeopleSummary}
+${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}
 
 ${itemList}
 
@@ -1467,7 +1431,7 @@ async function _scBook(from, supplierId, biz, saveBiz) {
   const totalSvcs   = serviceList.length;
 
   if (biz) {
-    biz.sessionState = travels ? "sc_awaiting_booking_service" : "sc_awaiting_booking_service_b";
+    biz.sessionState = travels ? "sc_awaiting_booking_service" : "sc_awaiting_job_desc";
     biz.sessionData  = {
       ...(biz.sessionData || {}),
       scSellerId:      supplierId,
@@ -1501,7 +1465,6 @@ ${serviceMenu}${totalSvcs > 20 ? "\n_(+ more services available)_" : ""}
 
 Type the *number(s)* of the service(s) you need.
 _e.g. "1" or "1, 3" or "2: gearbox, 4: oil change"_
-_(Add a colon for extra detail)_
 
 Type *cancel* to go back.`
     );
@@ -1514,107 +1477,49 @@ async function _scBookConfirm(from, supplierId, biz, saveBiz) {
 }
 
 // ── PATH A step 1 → step 2: Buyer chose services, now ask their location ─────
-// ── Helper: resolve numbered/named service input to display names ─────────────
-function _resolveServiceInput(raw, menuJson) {
-  let resolved = raw.trim();
+async function _scProcessBookingService(from, supplierId, raw, biz, saveBiz) {
+  if (biz) {
+    biz.sessionState = "sc_awaiting_service_location";
+    biz.sessionData  = { ...(biz.sessionData || {}), scBookingServices: raw };
+    await saveBiz(biz);
+  }
+
+  // Resolve service names from input - supports:
+  //   Numbers:           "1, 2, 4"  → resolved to service names
+  //   Names:             "deep cleaning, carpet cleaning"  → kept as-is
+  //   Mixed:             "1, carpet cleaning"  → numbers resolved, names kept
+  let resolvedServices = raw.trim();
   try {
-    const menu = JSON.parse(menuJson || "[]");
+    const menu = JSON.parse(biz?.sessionData?.scServiceMenu || "[]");
     if (menu.length > 0) {
+      // Split input by comma, process each part
       const parts = raw.split(/,\s*/);
-      const mapped = parts.map(part => {
-        const colonIdx = part.indexOf(":");
-        const baseNum  = colonIdx > -1 ? part.slice(0, colonIdx).trim() : part.trim();
-        const scope    = colonIdx > -1 ? part.slice(colonIdx + 1).trim() : "";
-        const num = parseInt(baseNum, 10);
+      const resolved = parts.map(part => {
+        const num = parseInt(part.trim(), 10);
         if (!isNaN(num) && num >= 1 && num <= menu.length) {
-          const name = menu[num - 1].service || String(menu[num - 1]) || part.trim();
-          return scope ? name + " (" + scope + ")" : name;
+          // Number → look up service name
+          return menu[num - 1].service || menu[num - 1] || part.trim();
         }
-        return part.trim();
+        return part.trim(); // keep as-is (name or description)
       }).filter(Boolean);
-      if (mapped.length > 0) resolved = mapped.join(", ");
+      if (resolved.length > 0) {
+        resolvedServices = resolved.join(", ");
+      }
+    }
+    if (biz) {
+      biz.sessionData = { ...biz.sessionData, scBookingServices: resolvedServices };
+      await saveBiz(biz);
     }
   } catch (_) {}
-  return resolved;
-}
 
-// ── PATH A step 1: service chosen → ask people count ─────────────────────────
-async function _scProcessBookingService(from, supplierId, raw, biz, saveBiz) {
-  const resolvedServices = _resolveServiceInput(raw, biz?.sessionData?.scServiceMenu);
-  if (biz) {
-    biz.sessionState = "sc_awaiting_people_count";
-    biz.sessionData  = { ...(biz.sessionData || {}), scBookingServices: resolvedServices, scBookingPath: "A" };
-    await saveBiz(biz);
-  }
   return sendText(from,
-`👥 *How many people?*
-
-Services: _${resolvedServices}_
-
-Type the number of people.
-_e.g. "2" or "4 adults" or "2 adults 3 children"_
-
-Type *skip* if not applicable, or *cancel* to go back.`
-  );
-}
-
-// ── PATH B step 1: service chosen (client visits) → ask people count ──────────
-async function _scProcessBookingServicePathB(from, supplierId, raw, biz, saveBiz) {
-  const resolvedServices = _resolveServiceInput(raw, biz?.sessionData?.scServiceMenu);
-  if (biz) {
-    biz.sessionState = "sc_awaiting_people_count";
-    biz.sessionData  = { ...(biz.sessionData || {}), scBookingServices: resolvedServices, scBookingPath: "B" };
-    await saveBiz(biz);
-  }
-  return sendText(from,
-`👥 *How many people?*
-
-Services: _${resolvedServices}_
-
-Type the number of people.
-_e.g. "1" or "2 adults" or "group of 6"_
-
-Type *skip* if not applicable, or *cancel* to go back.`
-  );
-}
-
-// ── People count received → route to location (PATH A) or job desc (PATH B) ───
-async function _scProcessPeopleCount(from, supplierId, raw, biz, saveBiz) {
-  const path       = biz?.sessionData?.scBookingPath || "A";
-  const peopleText = (raw.toLowerCase() === "skip" || !raw.trim()) ? "" : raw.trim();
-  const services   = biz?.sessionData?.scBookingServices || "";
-
-  if (biz && peopleText) {
-    biz.sessionData = { ...(biz.sessionData || {}), scPeopleCount: peopleText };
-    await saveBiz(biz);
-  }
-
-  const peopleLine = peopleText ? `People: _${peopleText}_
-
-` : "";
-
-  if (path === "A") {
-    if (biz) { biz.sessionState = "sc_awaiting_service_location"; await saveBiz(biz); }
-    return sendText(from,
 `📍 *Where should we come to?*
 
-Services: _${services}_
-${peopleLine}Type your address or suburb.
+${resolvedServices ? "Services: _" + resolvedServices + "_\n\n" : ""}Type your address or suburb.
 _e.g. "15 Samora Machel Ave, Highfield" or "Borrowdale, Harare"_
 
 Type *cancel* to go back.`
-    );
-  } else {
-    if (biz) { biz.sessionState = "sc_awaiting_job_desc"; await saveBiz(biz); }
-    return sendText(from,
-`📝 *Describe what you need:*
-
-Services: _${services}_
-${peopleLine}_e.g. "Oil change and brake check" or "3 nights, 2 adults, need airport transfer"_
-
-Type *cancel* to go back.`
-    );
-  }
+  );
 }
 
 // ── PATH A step 2 → step 3: Got location, now ask date/time ──────────────────
@@ -1676,7 +1581,6 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
   const location    = biz?.sessionData?.scServiceLocation || "not specified";
   const jobDesc     = biz?.sessionData?.scJobDesc         || "";
   const services    = biz?.sessionData?.scBookingServices || jobDesc || "not specified";
-  const peopleCount = biz?.sessionData?.scPeopleCount     || "";
   const buyerName   = biz?.sessionData?.scBuyerName       || "";
   const refNum      = "BK-" + Date.now().toString(36).toUpperCase().slice(-6);
 
@@ -1687,13 +1591,11 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
     ? `${services} at ${location}`
     : `${services}`;
 
-  const _peopleLine = peopleCount ? `\nPeople: ${peopleCount}` : "";
-
   await _sendSellerNotification({
     sellerPhone:  seller.phone,
     refNum,
     buyerDisplay: buyerName || _normPhone(from),
-    itemList:     `Service: ${services}${_peopleLine}\nLocation: ${travels ? location : seller.address || "at your premises"}\nTime: ${raw}`,
+    itemList:     `Service: ${services}\nLocation: ${travels ? location : seller.address || "at your premises"}\nTime: ${raw}`,
     itemCount:    1,
     total:        null,
     isRFQ:        true,
@@ -1706,14 +1608,12 @@ async function _scProcessBookingDateTime(from, supplierId, raw, biz, saveBiz) {
 
   const isServiceType = seller.profileType === "service";
 
-  const _peopleSummary = peopleCount ? `\n👥 People: ${peopleCount}` : "";
-
   return sendButtons(from, {
     text:
 `✅ *Booking request sent - ${refNum}*
 
 🏪 ${seller.businessName}
-🔧 ${isServiceType ? "Services" : "Job"}: ${services}${_peopleSummary}
+🔧 ${isServiceType ? "Services" : "Job"}: ${services}
 📍 ${travels ? "Location: " + location : "At: " + (seller.address || [area, city].filter(Boolean).join(", "))}
 📅 Preferred time: ${raw}
 

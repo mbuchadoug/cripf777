@@ -8076,8 +8076,6 @@ const supplierStates = [
   "supplier_reg_payment_pending", "supplier_search_city", "supplier_decline_reason",
   "supplier_reg_type",
   "supplier_reg_travel",
-  "supplier_reg_teacher_details",
-  "supplier_reg_tourism_details",
   "supplier_reg_city",
   "supplier_reg_category",
   "supplier_reg_delivery",
@@ -11658,12 +11656,6 @@ const supplier = await SupplierProfile.create({
       profileType: reg.profileType || "product",
       rates: reg.rates || null,
       travelAvailable: reg.travelAvailable ?? null,
-      // ── Teacher fields (populated when category = tutoring) ─────────────────
-      subjects:      reg.subjects      || [],
-      gradesOffered: reg.gradesOffered || [],
-      // ── Tourism fields (populated when category = tourism) ──────────────────
-      tourismType:   reg.tourismType   || "",
-      tourismAreas:  reg.tourismAreas  || [],
       active: false,
       subscriptionStatus: "pending",
       priceUpdatedAt: reg.prices?.length ? new Date() : null

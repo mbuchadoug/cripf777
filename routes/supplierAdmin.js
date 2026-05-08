@@ -1271,6 +1271,44 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
   <label>Website</label>
   <input name="website" value="${esc(supplier.website || "")}" />
 </div>
+
+${(supplier.categories||[]).includes("tutoring") ? `
+<!-- ── TEACHER / TUTOR FIELDS ──────────────────────────── -->
+<div class="fg" style="grid-column:1/-1">
+  <label>📚 Subjects Taught
+    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
+      — Separate with commas
+    </span>
+  </label>
+  <input name="subjects" value="${esc((supplier.subjects||[]).join(", "))}"
+         placeholder="e.g. Maths, Physics, English, Accounting" />
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>🎓 Grades / Levels Offered
+    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
+      — Separate with commas
+    </span>
+  </label>
+  <input name="gradesOffered" value="${esc((supplier.gradesOffered||[]).join(", "))}"
+         placeholder="e.g. O-Level, A-Level, Grade 6, Grade 7" />
+</div>` : ""}
+
+${(supplier.categories||[]).includes("tourism") ? `
+<!-- ── TOURISM / HOSPITALITY FIELDS ────────────────────── -->
+<div class="fg">
+  <label>🦁 Tourism Type</label>
+  <input name="tourismType" value="${esc(supplier.tourismType||"")}"
+         placeholder="e.g. Safari Lodge, City Tours, Travel Agent" />
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>📍 Areas / Destinations Covered
+    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
+      — Separate with commas
+    </span>
+  </label>
+  <input name="tourismAreas" value="${esc((supplier.tourismAreas||[]).join(", "))}"
+         placeholder="e.g. Hwange, Victoria Falls, Harare, Nyanga" />
+</div>` : ""}
 <div class="fg">
   <label>Tier</label>
               <select name="tier">
@@ -1393,6 +1431,21 @@ const update = {
     update.notificationContacts = [...new Set(_notifRaw)].filter(
       p => p !== String(phone || "").trim().replace(/\D+/g, "")
     );
+
+    // ── Teacher fields ──────────────────────────────────────────────────────
+    if (req.body.subjects !== undefined) {
+      update.subjects = (req.body.subjects || "").split(",").map(s => s.trim()).filter(Boolean);
+    }
+    if (req.body.gradesOffered !== undefined) {
+      update.gradesOffered = (req.body.gradesOffered || "").split(",").map(s => s.trim()).filter(Boolean);
+    }
+    // ── Tourism fields ───────────────────────────────────────────────────────
+    if (req.body.tourismType !== undefined) {
+      update.tourismType = (req.body.tourismType || "").trim();
+    }
+    if (req.body.tourismAreas !== undefined) {
+      update.tourismAreas = (req.body.tourismAreas || "").split(",").map(s => s.trim()).filter(Boolean);
+    }
 
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);

@@ -280,6 +280,18 @@ const SEARCH_SYNONYMS = {
 
   // ── TUTORING & TEACHING ───────────────────────────────────────────────────
   "teacher": ["tutor", "tutoring", "teaching", "lesson", "lessons", "maths", "science", "english", "education", "school"],
+  "private teacher": ["tutor", "tutoring", "teaching", "lesson", "lessons", "home tuition", "education"],
+  "home tuition": ["teacher", "tutor", "tutoring", "private teacher", "lesson", "lessons"],
+  "tour": ["safari", "tourism", "tours", "game drive", "lodge", "travel", "sightseeing"],
+  "safari": ["tour", "game drive", "wildlife", "lodge", "bush camp", "nature", "tourism"],
+  "lodge": ["safari", "accommodation", "hotel", "camp", "bush lodge", "tourism", "game lodge"],
+  "tourism": ["tour", "safari", "lodge", "hotel", "guesthouse", "travel agent", "adventure", "victoria falls"],
+  "victoria falls": ["tours", "tourism", "safari", "adventure", "activities", "bungee", "rafting"],
+  "game drive": ["safari", "tour", "wildlife", "lodge", "nature", "game park"],
+  "travel agent": ["tours", "tourism", "packages", "flights", "accommodation", "holidays"],
+  "guesthouse": ["hotel", "lodge", "accommodation", "airbnb", "self catering", "bed and breakfast"],
+  "hotel": ["guesthouse", "lodge", "accommodation", "airbnb", "self catering"],
+  "accommodation": ["hotel", "guesthouse", "lodge", "airbnb", "self catering", "bed and breakfast"],
   "tutor": ["teacher", "tutoring", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
   "tutoring": ["tutor", "teacher", "teaching", "lesson", "lessons", "education", "school", "maths", "science", "english"],
   "lessons": ["tutoring", "tutor", "teacher", "teaching", "education", "school"],
