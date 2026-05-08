@@ -1073,29 +1073,60 @@ function findMatchingSupplierPriceOrPreset(supplier, requestedProduct) {
 
 function buildDraftQuoteFromRequest(supplier, request) {
   const items = Array.isArray(request?.items) ? request.items : [];
+  const isServiceSupplier = supplier?.profileType === "service";
 
   const responseItems = [];
-  const missingItems = [];
+  const missingItems  = [];
+  // Items the service supplier offers but has no fixed price for (rate on request)
+  const rorItems      = [];
 
   for (const item of items) {
     const match = findMatchingSupplierPriceOrPreset(supplier, item.product);
+
     if (!match || typeof match.amount !== "number") {
+      // ── For service suppliers: check if this service is in their rates list ──
+      // If so, it's "rate on request" not "not available"
+      if (isServiceSupplier) {
+        const norm = (s = "") => String(s).toLowerCase().replace(/[^a-z0-9]/g, " ").trim();
+        const reqNorm = norm(item.product);
+        const hasService = (supplier.rates || []).some(r =>
+          norm(r.service || "").includes(reqNorm) || reqNorm.includes(norm(r.service || ""))
+        ) || (supplier.listedProducts || supplier.products || []).some(p =>
+          norm(p).includes(reqNorm) || reqNorm.includes(norm(p))
+        );
+
+        if (hasService) {
+          rorItems.push(item.product);
+          // Include as a $0 line item so it appears in the quote
+          responseItems.push({
+            product:      item.product,
+            quantity:     Number(item.quantity || 1),
+            unit:         item.unitLabel || "service",
+            pricePerUnit: 0,
+            total:        0,
+            available:    true,
+            rateOnRequest: true,
+            autoSource:   "service_listed"
+          });
+          continue;
+        }
+      }
       missingItems.push(item.product);
       continue;
     }
 
-    const qty = Number(item.quantity || 1);
+    const qty       = Number(item.quantity || 1);
     const unitPrice = Number(match.amount);
-    const total = Number((qty * unitPrice).toFixed(2));
+    const total     = Number((qty * unitPrice).toFixed(2));
 
     responseItems.push({
-      product: item.product,
-      quantity: qty,
-      unit: match.unit || item.unitLabel || "each",
+      product:      item.product,
+      quantity:     qty,
+      unit:         match.unit || item.unitLabel || "each",
       pricePerUnit: unitPrice,
       total,
-      available: true,
-      autoSource: match.source || "unknown"
+      available:    true,
+      autoSource:   match.source || "unknown"
     });
   }
 
@@ -1106,6 +1137,7 @@ function buildDraftQuoteFromRequest(supplier, request) {
   return {
     responseItems,
     missingItems,
+    rorItems,
     totalAmount
   };
 }
@@ -2414,7 +2446,9 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
 
   const itemLines = (response.items || []).length
     ? response.items.map(i =>
-        `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)}/${i.unit || "each"} = $${Number(i.total || 0).toFixed(2)}`
+        i.rateOnRequest
+          ? `• ${i.product} x${Number(i.quantity || 1)} - _Rate on request_`
+          : `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)}/${i.unit || "each"} = $${Number(i.total || 0).toFixed(2)}`
       ).join("\n")
     : "• Seller sent a custom offer";
 
@@ -2614,6 +2648,29 @@ async function notifySuppliersOfBuyerRequest(request) {
         { upsert: true }
       );
       console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone}`);
+
+      // ── Also set awaiting_offer_intro for all notification contacts ────────────
+      // They receive the template too (fan-out in notifySupplierNewRequestTemplate)
+      // so they must also have a session so View & Quote works for them.
+      const _notifContacts = supplier.notificationContacts || [];
+      if (_notifContacts.length > 0) {
+        await Promise.allSettled(_notifContacts.map(async (nc) => {
+          const _ncNorm = String(nc).replace(/\D+/g, "");
+          const _ncPhone = _ncNorm.startsWith("0") && _ncNorm.length === 10
+            ? "263" + _ncNorm.slice(1) : _ncNorm;
+          await UserSession.findOneAndUpdate(
+            { phone: _ncPhone },
+            {
+              $set: {
+                "tempData.sellerRequestReplyState": "awaiting_offer_intro",
+                "tempData.sellerRequestId":         String(request._id)
+              }
+            },
+            { upsert: true }
+          );
+          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone}`);
+        }));
+      }
       notifiedIds.push(supplier._id);
     } catch (err) {
       console.error("[BUYER REQUEST NOTIFY]", err.message);
@@ -3660,8 +3717,11 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           supplierPhone:     _introSupplier?.phone || from,
           supplierName:      _introSupplier?.businessName || "Supplier",
           mode:              "manual_offer",
-          message:           _draft.missingItems?.length
-            ? `Quoted available items. Not priced: ${_draft.missingItems.join(", ")}`
+          message:           (_draft.missingItems?.length || _draft.rorItems?.length)
+            ? [
+                _draft.rorItems?.length  ? `Rate on request: ${_draft.rorItems.join(", ")}` : "",
+                _draft.missingItems?.length ? `Not available: ${_draft.missingItems.join(", ")}` : ""
+              ].filter(Boolean).join(" | ")
             : "",
           items:             _draft.responseItems || [],
           totalAmount:       _draft.totalAmount   || null,
@@ -3693,7 +3753,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         // ── Case 1: All items auto-priced ────────────────────────────────────
         if (_draft.responseItems.length === _introItems.length && _introItems.length > 0 && !_draft.missingItems.length) {
           const _allLines = _draft.responseItems.map((item, i) =>
-            `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}`
+            item.rateOnRequest
+              ? `${i + 1}. *${item.product}* × ${item.quantity} - _Rate on request_`
+              : `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}`
           ).join("\n");
 
           // Always send two messages: list then buttons (no length limit issues)
@@ -4092,7 +4154,10 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     const totalAmount = Number(responseItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2));
     const skippedNote = (_confirmDraft.skippedItems?.length)
       ? `Not in stock: ${_confirmDraft.skippedItems.join(", ")}`
-      : (_confirmDraft.missingItems?.length ? `Not priced: ${_confirmDraft.missingItems.join(", ")}` : "");
+      : [
+        _confirmDraft.rorItems?.length     ? `Rate on request: ${_confirmDraft.rorItems.join(", ")}` : "",
+        _confirmDraft.missingItems?.length ? `Not available: ${_confirmDraft.missingItems.join(", ")}` : ""
+      ].filter(Boolean).join(" | ");
 
     const response = {
       supplierId:        supplier._id,

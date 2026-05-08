@@ -1202,8 +1202,8 @@ async function _sendSellerNotification({ sellerPhone, notificationContacts = [],
     const { notifySupplierNewRequestTemplate } = await import("./buyerRequestNotifications.js");
 
     const totalLine     = typeof total === "number" ? `Total: $${total.toFixed(2)}` : "Prices needed from you";
-    // Pass the raw first item name only - notifySupplierNewRequestTemplate builds the "N items: X + more" wrapper
     const firstLine     = String(itemList).split("\n")[0].replace(/^\d+\.\s*/, "").trim();
+    const itemSummary   = `${itemCount} item${itemCount === 1 ? "" : "s"}: ${firstLine}${itemCount > 1 ? " + more" : ""}`;
     const deliveryLine  = isRFQ
       ? "Please reply with prices: 1=price, 2=price"
       : totalLine;
@@ -1215,7 +1215,7 @@ async function _sendSellerNotification({ sellerPhone, notificationContacts = [],
       ref:                  refNum,
       locationText:         `Smart Link Quote · ${buyerDisplay}`,
       itemCount,
-      itemSummary:          firstLine,
+      itemSummary,
       deliveryLine,
       fullItemLines:        String(itemList),
       replyExamples:        "1=12.50, 2=8.00"
