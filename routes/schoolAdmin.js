@@ -1291,14 +1291,24 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
                 { title:"📋 Levies & Once-off", levels:["all","development","sports","it","library","exam","registration","caution","uniform","other"] }
               ];
 
-              // Group rows by section
+              // Group rows by section.
+              // Use a rendered-set to guarantee each fee renders exactly once.
+              // Matching is done on f.appliesTo only to prevent a single fee from
+              // appearing in two sections and producing duplicate sfPer_N fields
+              // (which Mongoose would receive as "term,term" → validation error).
+              const _rendered = new Set();
               let html = '';
               for (const sec of SECTIONS) {
-                const secFees = sf.filter(f => sec.levels.includes(f.appliesTo) || sec.levels.includes(f.feeType));
-                if (!secFees.length) continue;
+                const secFeesFinal = sf.filter(f => {
+                  const globalIdx = sf.indexOf(f);
+                  if (_rendered.has(globalIdx)) return false;  // already placed
+                  return sec.levels.includes(f.appliesTo);
+                });
+                if (!secFeesFinal.length) continue;
+                secFeesFinal.forEach(f => _rendered.add(sf.indexOf(f)));
 
                 html += `<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(sec.title)}</p>`;
-                secFees.forEach((f, idx) => {
+                secFeesFinal.forEach((f, idx) => {
                   const globalIdx = sf.indexOf(f);
                   html += `
                   <div class="form-grid" style="align-items:center;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px">
@@ -1324,9 +1334,8 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
                 html += '</div>';
               }
 
-              // Ungrouped rows (shouldn't happen but handle gracefully)
-              const groupedApplies = new Set(["nursery","ecd_a","ecd_b","grade1_4","grade5_7","primary","form1_4","form5_6","boarding","transport","all"]);
-              const ungrouped = sf.filter(f => !groupedApplies.has(f.appliesTo));
+              // Ungrouped rows - anything not yet rendered (safety net)
+              const ungrouped = sf.filter(f => !_rendered.has(sf.indexOf(f)));
               ungrouped.forEach((f) => {
                 const globalIdx = sf.indexOf(f);
                 html += `<div class="form-grid" style="align-items:center;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px">
