@@ -899,50 +899,26 @@ The seller will review and price your request.
   const expiry = new Date(Date.now() + 48 * 3600 * 1000)
     .toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-  const itemRows = lineItems.map((l, i) => {
-    const _u = l.unit || (isService ? "job" : "each");
-    const _unitLabel = ["person","hr","hour","day","night","trip","group"].includes(_u)
-      ? `per ${_u}` : `/${_u}`;
-    return `${i + 1}. ${l.name} × ${l.qty} - $${l.unitPrice.toFixed(2)} ${_unitLabel} = $${l.lineTotal.toFixed(2)}`;
-  }).join("\n");
+  const itemRows = lineItems.map((l, i) =>
+    `${i + 1}. ${l.name} × ${l.qty} - $${l.unitPrice.toFixed(2)}/${isService ? "job" : "each"} = $${l.lineTotal.toFixed(2)}`
+  ).join("\n");
 
-  // Store draft in SELLER's UserSession (primary + all notification contacts)
-  // so any registered line can tap View & Quote and respond
+  // Store draft in SELLER's UserSession so they can confirm or edit
   try {
     const UserSession = (await import("../models/userSession.js")).default;
-    const _draftPayload = JSON.stringify({
-      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService
-    });
-    const _primaryPhone = _normPhone(seller.phone);
     await UserSession.findOneAndUpdate(
-      { phone: _primaryPhone },
+      { phone: _normPhone(seller.phone) },
       {
         $set: {
-          "tempData.scPendingSellerQuote": _draftPayload,
-          "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-          "tempData.scBuyerPhone":          buyerPhone,
+          "tempData.scPendingSellerQuote": JSON.stringify({
+            refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService
+          }),
+          "tempData.scSellerQuoteState": "awaiting_seller_quote_confirm",
+          "tempData.scBuyerPhone":       buyerPhone,
         }
       },
       { upsert: true }
     );
-    // Fan out to notification contacts - they receive the template too
-    const _notifPhones = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
-    if (_notifPhones.length > 0) {
-      await Promise.allSettled(_notifPhones.map(nc =>
-        UserSession.findOneAndUpdate(
-          { phone: nc },
-          {
-            $set: {
-              "tempData.scPendingSellerQuote": _draftPayload,
-              "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-              "tempData.scBuyerPhone":          buyerPhone,
-            }
-          },
-          { upsert: true }
-        )
-      ));
-    }
-    console.log(`[SC QUOTE] Draft stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
   } catch (err) {
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }

@@ -169,14 +169,7 @@ async function findSupplierByPhone(rawPhone) {
   } else {
     intl = digits; intlPlus = "+" + digits; local = digits;
   }
-  // Primary lookup - phone is the registered number
-  const direct = await SupplierProfile.findOne({ phone: { $in: [intl, intlPlus, local] } }).lean();
-  if (direct) return direct;
-  // Secondary lookup - phone is a notification contact (extra line)
-  // This allows notification contacts to View & Quote just like the primary phone
-  return SupplierProfile.findOne({
-    notificationContacts: { $in: [intl, intlPlus, local] }
-  }).lean();
+  return SupplierProfile.findOne({ phone: { $in: [intl, intlPlus, local] } }).lean();
 }
 
 
@@ -2301,31 +2294,18 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       ? `Note from seller: ${response.message}`
       : "";
 
-    // Build PDF line items - show "Rate on request" for unpriced service items
-    const _pdfItems = (response.items || []).map(i => {
-      if (i.rateOnRequest) {
-        return {
-          item:  i.product + " (Rate on request)",
-          qty:   Number(i.quantity || 1),
-          unit:  0,
-          total: 0
-        };
-      }
-      return {
-        item:  i.product,
-        qty:   Number(i.quantity || 1),
-        unit:  Number(i.pricePerUnit || 0),
-        total: Number(i.total || 0)
-      };
-    });
-
     const { filename } = await generatePDF({
       type:      "quote",
       number:    ref,
       date:      new Date(),
       billingTo,
       notes:     supplierNote || undefined,
-      items:     _pdfItems,
+      items: (response.items || []).map(i => ({
+        item:  i.product,
+        qty:   Number(i.quantity || 1),
+        unit:  Number(i.pricePerUnit || 0),
+        total: Number(i.total || 0)
+      })),
       bizMeta: {
         name:     supplierName,
         logoUrl:  supplier?.logoUrl || "",
@@ -2465,14 +2445,11 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   }
 
   const itemLines = (response.items || []).length
-    ? response.items.map(i => {
-        if (i.rateOnRequest) return `• ${i.product} x${Number(i.quantity || 1)} — _Rate on request_`;
-        const _unit = i.unit || "each";
-        // Show unit naturally: "per person", "per hour" etc for tourism
-        const _unitLabel = ["person","hr","hour","day","night","trip","group"].includes(_unit)
-          ? `per ${_unit}` : `/${_unit}`;
-        return `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)} ${_unitLabel} = $${Number(i.total || 0).toFixed(2)}`;
-      }).join("\n")
+    ? response.items.map(i =>
+        i.rateOnRequest
+          ? `• ${i.product} x${Number(i.quantity || 1)} - _Rate on request_`
+          : `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)}/${i.unit || "each"} = $${Number(i.total || 0).toFixed(2)}`
+      ).join("\n")
     : "• Seller sent a custom offer";
 
   const totalLine =
@@ -3718,20 +3695,11 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
       }
 
-      // ── Multi-format phone lookup (primary phone OR notification contact) ──────
+      // ── Multi-format phone lookup ─────────────────────────────────────────────
       const _introPhone2   = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-      let _introSupplier = await SupplierProfile.findOne({
+      const _introSupplier = await SupplierProfile.findOne({
         phone: { $in: [phone, _introPhone2, "+" + phone] }
       }).lean();
-      // If not found as primary, check if this phone is a notification contact
-      if (!_introSupplier) {
-        _introSupplier = await SupplierProfile.findOne({
-          notificationContacts: { $in: [phone, _introPhone2, "+" + phone] }
-        }).lean();
-        if (_introSupplier) {
-          console.log(`[OFFER INTRO] ${phone} is a notification contact for ${_introSupplier.businessName} (${_introSupplier.phone})`);
-        }
-      }
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
       const _introItems     = (_introRequest.items || []);
@@ -3850,28 +3818,18 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _blankEx     = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
         const _blankSingle = _introItems.length === 1;
 
-        // Tourism suppliers price per person/hour/day - show relevant examples
-        const _isTourismOffer = _introIsService && _buyerRequestIsTourism(_introItems);
-        const _unitExamples = _isTourismOffer
-          ? `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`
-          : (_introIsService
-            ? `*${_blankEx || "1x80/job"}*  or  *1x80/job  2x50/hr*`
-            : `*${_blankEx || "1x12.50"}*`);
-
         return sendText(from,
           `📋 *${_introRef} - Enter your prices*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
-          `*Services requested:*\n${_blankItemLines}\n` +
+          `*Items requested:*\n${_blankItemLines}\n` +
           `─────────────────\n\n` +
           `💰 *How to send your price:*\n` +
           (_blankSingle
-            ? (_isTourismOffer
-                ? `Type: *80/person*  or  *80/hour*  or  *80/day*`
-                : `Type: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`)
-            : `Type each price:\n${_unitExamples}\n\n_(item number x price/unit)_`) +
+            ? `Type the price, e.g: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`
+            : `Type each price:\n*${_blankEx}*\n\n_(item number x price)_`) +
           (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\nAdd a note: start with *msg* e.g: _80/person msg minimum 2 people_\n` +
+          `\n\nAdd a note: start with *msg* e.g: _12.00 msg available tomorrow_\n` +
           `Type *cancel* to go back.`
         );
       }
@@ -4078,12 +4036,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "", "tempData.pendingDraftQuote": "", "tempData.pendingOfferResponse": "" } },
       { upsert: true }
     );
-    console.warn(`[OFFER] Supplier not found for phone ${phone} - checked primary + notificationContacts`);
-    return sendText(from,
-      "❌ Profile not found.\n\n" +
-      "If you received a quote request, please ask your primary account holder to respond, " +
-      "or contact ZimQuote support to link your number."
-    );
+    return sendText(from, "❌ Supplier profile not found.");
   }
 
   // ── Helper: build a preview text of current draft items ───────────────────
@@ -4568,25 +4521,17 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         : `📍 ${parsedCity}`;
 
       if (_simpleIsService) {
-        const _isTourismAddr = _buyerRequestIsTourism(parsedItems);
-        return sendButtons(
+        return sendText(
           from,
-          {
-            text:
-              `✅ *Request captured:*\n\n` +
-              `${_confirmItemLines}\n\n` +
-              `${locationLine}\n\n` +
-              (_isTourismAddr
-                ? `📍 *Where will you be when the service starts?*\n\n` +
-                  `_e.g. Kariba marina, Binga Harbour, Hwange main gate_\n\n` +
-                  `Or tap Skip — you can share your exact location with the operator later.`
-                : `📍 *Where should the service provider come?*\n\n` +
-                  `_e.g. 24 Mabelreign Drive, Harare_\n\n` +
-                  `Or tap Skip — share your address directly with the provider.`),
-            buttons: [
-              { id: "sup_skip_service_address", title: "⏭ Skip (share later)" }
-            ]
-          }
+          `✅ *Request captured:*\n\n` +
+          `${_confirmItemLines}\n\n` +
+          `${locationLine}\n\n` +
+          `📍 *Where should the service provider come?*\n\n` +
+          `Type your address or suburb:\n` +
+          `_24 Mabelreign Drive, Harare_\n` +
+          `_House 7, Borrowdale, Harare_\n\n` +
+          `Type *skip* to share your address directly with the provider.\n` +
+          `Type *0* for main menu · *00* to cancel`
         );
       }
 
@@ -4825,8 +4770,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
         return sendText(from, `↩️ Back to your request.\n\nType your item + city again.\n\nType *cancel* to stop.`);
       }
-      // Accept both typed "skip" and tapping the skip button
-      const _saAddress = (al === "skip" || a === "sup_skip_service_address") ? null : text.trim();
+      const _saAddress = al === "skip" ? null : text.trim();
       if (_saAddress && _saAddress.length < 3) {
         return sendText(from, `❌ Please enter a valid address or type *skip*.\n\nType *cancel* to stop.`);
       }
@@ -12673,20 +12617,14 @@ Example: *${products.slice(0, 3).map((_, i) => ((i + 1) * 10)).join(", ")}*`
       // ── Strategy 2a: "NUMBER/UNIT" format e.g. "20/job", "50/hr", "15/trip" ──
       // This is how service suppliers naturally type rates - number/unit without name
       // We assign them positionally to the products list (in order)
-      // Accept: 80/person, 80/hr, 80/hour, 80/day, 80/night, 80/trip, 80/group, 80/job, 80/each
       const rateOnlyMatch = clean.match(/^(\d+(?:\.\d+)?)\/([a-zA-Z]+)$/);
       if (rateOnlyMatch) {
         const posIdx = updated.length; // assign to next product in order
-        const _rawUnit = rateOnlyMatch[2].toLowerCase();
-        // Normalise common aliases
-        const _normUnit = { "hour": "hr", "hours": "hr", "persons": "person",
-          "people": "person", "nights": "night", "days": "day",
-          "trips": "trip", "groups": "group" }[_rawUnit] || _rawUnit;
         if (posIdx < products.length) {
           updated.push({
             product: products[posIdx].toLowerCase(),
             amount: parseFloat(rateOnlyMatch[1]),
-            unit: _normUnit,
+            unit: rateOnlyMatch[2].toLowerCase(),
             inStock: true
           });
         } else {
@@ -17165,4 +17103,4 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
-}s
+}
