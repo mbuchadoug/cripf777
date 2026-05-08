@@ -1221,52 +1221,6 @@ router.get("/suppliers/:id/edit", requireSupplierAdmin, async (req, res) => {
   <label>Contact Details</label>
   <input name="contactDetails" value="${esc(supplier.contactDetails || "")}" />
 </div>
-
-<div class="fg" style="grid-column:1/-1">
-  <label>📲 Notification Contacts
-    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
-      — Extra numbers that receive quote request &amp; smart link alerts (outside 24hr sessions via WhatsApp template)
-    </span>
-  </label>
-  <div id="notif-contacts-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-    ${(supplier.notificationContacts||[]).map((p,i)=>`
-      <div style="display:flex;gap:8px;align-items:center">
-        <input name="notifContact_${i}" value="${esc(p)}"
-               placeholder="e.g. 2637712345678"
-               style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px" />
-        <button type="button" onclick="this.closest('div').remove();syncNotifCount()"
-                style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>
-      </div>`).join("")}
-  </div>
-  <button type="button" onclick="addNotifContact()"
-          style="padding:7px 14px;border:1px solid var(--blue);border-radius:6px;color:var(--blue);background:none;cursor:pointer;font-size:13px">
-    ➕ Add number
-  </button>
-  <input type="hidden" name="notifContactCount" id="notifContactCount" value="${(supplier.notificationContacts||[]).length}" />
-  <span style="display:block;font-size:11px;color:var(--muted);margin-top:6px">
-    Use international format: 2637XXXXXXXX. The primary phone above always receives notifications too.
-  </span>
-  <script>
-    function syncNotifCount() {
-      const list = document.getElementById("notif-contacts-list");
-      document.getElementById("notifContactCount").value = list ? list.children.length : 0;
-    }
-    function addNotifContact() {
-      const list  = document.getElementById("notif-contacts-list");
-      const idx   = list.children.length;
-      const div   = document.createElement("div");
-      div.style.cssText = "display:flex;gap:8px;align-items:center";
-      div.innerHTML = \`<input name="notifContact_\${idx}" placeholder="e.g. 2637712345678"
-        style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px">
-        <button type="button" onclick="this.closest('div').remove();syncNotifCount()"
-          style="padding:6px 12px;border:1px solid #dc2626;border-radius:6px;color:#dc2626;background:none;cursor:pointer;font-size:13px">✕</button>\`;
-      list.appendChild(div);
-      syncNotifCount();
-    }
-    document.querySelector("form.edit-form")?.addEventListener("submit", syncNotifCount);
-  </script>
-</div>
-
 <div class="fg">
   <label>Website</label>
   <input name="website" value="${esc(supplier.website || "")}" />
@@ -1380,19 +1334,6 @@ const update = {
     if (subscriptionExpiresAt) {
       update.subscriptionExpiresAt = new Date(subscriptionExpiresAt);
     }
-
-    // ── Notification contacts (extra numbers for template alerts) ──────────────
-    const _notifCount = parseInt(req.body.notifContactCount || "0", 10);
-    const _notifRaw   = [];
-    for (let i = 0; i < _notifCount; i++) {
-      const p = String(req.body["notifContact_" + i] || "").trim().replace(/\D+/g, "");
-      const normalized = p.startsWith("0") && p.length === 10 ? "263" + p.slice(1) : p;
-      if (normalized.length >= 10) _notifRaw.push(normalized);
-    }
-    // Deduplicate and exclude the primary phone (it always gets notified separately)
-    update.notificationContacts = [...new Set(_notifRaw)].filter(
-      p => p !== String(phone || "").trim().replace(/\D+/g, "")
-    );
 
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
