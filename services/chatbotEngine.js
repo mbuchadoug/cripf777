@@ -2717,22 +2717,84 @@ async function finalizeBuyerRequestSubmission({
   serviceAddress = null,
   deliveryAddress = null
 }) {
-  const _isServiceReq = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
+  if (!pendingRequest?.items?.length) {
+    return sendButtons(from, {
+      text: "❌ Request session expired. Please start again.",
+      buttons: [{ id: "sup_request_sellers", title: "⚡ Request Sellers" }]
+    });
+  }
+
+  const _isServiceReq =
+    pendingRequest.isServiceRequest ||
+    _buyerRequestIsService(pendingRequest.items || []);
 
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: pendingRequest.profileType || "product",
+    profileType: _isServiceReq ? "service" : (pendingRequest.profileType || "product"),
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
 
     deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
-    deliveryAddress: deliveryAddress || pendingRequest.deliveryAddress || null,
+    deliveryAddress: !_isServiceReq ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
 
-    serviceAddress: serviceAddress || pendingRequest.serviceAddress || null,
+    serviceAddress: _isServiceReq ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
     status: "open"
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.buyerRequestState": "",
+        "tempData.pendingBuyerRequest": "",
+        "tempData.buyerRequestMode": ""
+      }
+    },
+    { upsert: true }
+  );
+
+  const notifiedCount = await notifySuppliersOfBuyerRequest(request);
+
+  const ref = buildBuyerRequestRef(request);
+
+  const itemLines = (request.items || [])
+    .map((item, i) => {
+      const qty = Number(item.quantity || 1);
+      const unit = item.unitLabel && item.unitLabel !== "units" ? ` ${item.unitLabel}` : "";
+      return `${i + 1}. ${item.product} x${qty}${unit}`;
+    })
+    .join("\n");
+
+  const locationLine = request.area
+    ? `📍 ${request.area}, ${request.city || ""}`.trim()
+    : request.city
+      ? `📍 ${request.city}`
+      : "📍 Zimbabwe";
+
+  const deliveryLine = _isServiceReq
+    ? request.serviceAddress
+      ? `📍 Service / pickup point: ${request.serviceAddress}`
+      : "📍 Service address: buyer will share later"
+    : request.deliveryRequired
+      ? `🚚 Delivery required${request.deliveryAddress ? `\n📍 Delivery address: ${request.deliveryAddress}` : ""}`
+      : "🏠 Collection / no delivery needed";
+
+  return sendButtons(from, {
+    text:
+      `✅ *Request sent to sellers.*\n\n` +
+      `Ref: *${ref}*\n\n` +
+      `${itemLines}\n\n` +
+      `${locationLine}\n` +
+      `${deliveryLine}\n\n` +
+      `Suppliers notified: *${notifiedCount}*\n\n` +
+      `When sellers reply with prices, you’ll receive the quotation here.`,
+    buttons: [
+      { id: "buyer_my_requests", title: "📋 My Requests" },
+      { id: "sup_request_sellers", title: "⚡ New Request" }
+    ]
   });
 }
 
