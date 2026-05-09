@@ -17,7 +17,7 @@ import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
 const router = express.Router();
 
 router.use(express.json());
-
+router.use(express.urlencoded({ extended: true }));
 const ADMIN_PASSWORD = process.env.SUPPLIER_ADMIN_PASSWORD || "zimquote_admin_2026";
 
 // ── Login ──────────────────────────────────────────────────────────────────
@@ -1473,18 +1473,33 @@ const update = {
     }
 
     // ── Notification contacts (extra numbers for template alerts) ──────────────
-    const _notifCount = parseInt(req.body.notifContactCount || "0", 10);
-    const _notifRaw   = [];
-    for (let i = 0; i < _notifCount; i++) {
-      const p = String(req.body["notifContact_" + i] || "").trim().replace(/\D+/g, "");
-      const normalized = p.startsWith("0") && p.length === 10 ? "263" + p.slice(1) : p;
-      if (normalized.length >= 10) _notifRaw.push(normalized);
-    }
-    // Deduplicate and exclude the primary phone (it always gets notified separately)
-    update.notificationContacts = [...new Set(_notifRaw)].filter(
-      p => p !== String(phone || "").trim().replace(/\D+/g, "")
-    );
+   // ── Notification contacts (extra numbers for template alerts) ──────────────
+const _notifCount = parseInt(req.body.notifContactCount || "0", 10);
+const _notifRaw = [];
 
+for (let i = 0; i < _notifCount; i++) {
+  const raw = String(req.body["notifContact_" + i] || "").trim();
+  const digits = raw.replace(/\D+/g, "");
+  const normalized =
+    digits.startsWith("0") && digits.length === 10
+      ? "263" + digits.slice(1)
+      : digits;
+
+  if (normalized.length >= 10) {
+    _notifRaw.push(normalized);
+  }
+}
+
+const _primaryPhone = String(phone || "").trim().replace(/\D+/g, "");
+const _primaryNormalized =
+  _primaryPhone.startsWith("0") && _primaryPhone.length === 10
+    ? "263" + _primaryPhone.slice(1)
+    : _primaryPhone;
+
+// Deduplicate and exclude the primary phone
+update.notificationContacts = [...new Set(_notifRaw)].filter(
+  p => p && p !== _primaryNormalized
+);
     // ── Teacher fields ──────────────────────────────────────────────────────
     if (req.body.subjects !== undefined) {
       update.subjects = (req.body.subjects || "").split(",").map(s => s.trim()).filter(Boolean);

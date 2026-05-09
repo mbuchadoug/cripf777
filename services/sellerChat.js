@@ -93,6 +93,13 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
     });
     const sellerPhone = _normPhone(seller.phone);
 
+    const notifyPhones = [
+  sellerPhone,
+  ...((seller.notificationContacts || []).map(_normPhone))
+].filter(Boolean);
+
+const uniqueNotifyPhones = [...new Set(notifyPhones)];
+
     const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
     const TOKEN    = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
     const axios    = (await import("axios")).default;
@@ -111,7 +118,7 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
         `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`,
         {
           messaging_product: "whatsapp",
-          to:   sellerPhone,
+          to:   targetPhone,
           type: "template",
           template: {
             name: "supplier_link_opened",
@@ -132,11 +139,12 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
       return;
     } catch (templateErr) {
       // Template not yet approved or not submitted - fall through to sendButtons
-      console.warn(`[SMART LINK NOTIFY] supplier_link_opened template failed (${templateErr.message}), trying sendButtons`);
+      console.log(`[SMART LINK NOTIFY] supplier_link_opened → ${targetPhone} (via ${sourceLabel})`);
     }
 
     // ── Fallback: sendButtons (within 24hr session only) ────────────────────
-    await sendButtons(sellerPhone, {
+   for (const targetPhone of uniqueNotifyPhones) {
+  await sendButtons(targetPhone, {
       text:
         `👁 *Someone just opened your ZimQuote profile!*\n\n` +
         `📱 Via: ${sourceLabel}\n` +
@@ -148,6 +156,7 @@ async function _notifySellerLinkOpened(seller, buyerPhone, source) {
         { id: "sup_request_sellers", title: "⚡ Marketplace" }
       ]
     });
+  }
   } catch (err) {
     // Non-critical - never rethrow
     console.warn("[SMART LINK NOTIFY]", err.message);
@@ -1902,7 +1911,8 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
 
   // ── Notify seller - try sendButtons (within 24hr), then template ─────────
   try {
-    await sendButtons(sellerPhone, {
+   for (const targetPhone of uniqueNotifyPhones) {
+  await sendButtons(targetPhone, {
       text:
         `💬 *New enquiry via ZimQuote!*\n\n` +
         `📱 From: ${buyerDisplay}\n\n` +
@@ -1910,6 +1920,7 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
         `Reply directly on WhatsApp to respond.`,
       buttons: [{ id: "my_supplier_account", title: "🏪 My Store" }]
     });
+  }
   } catch (_) {
     // Outside 24hr - use utility template
     try {
@@ -1920,7 +1931,7 @@ async function _scProcessEnquiry(from, supplierId, raw, biz, saveBiz) {
         `https://graph.facebook.com/v24.0/${PID}/messages`,
         {
           messaging_product: "whatsapp",
-          to:   sellerPhone,
+        to:   targetPhone,
           type: "template",
           template: {
             name: "supplier_new_buyer_request",

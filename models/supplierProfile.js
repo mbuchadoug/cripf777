@@ -23,6 +23,12 @@ location: {
 address: { type: String, default: "" },
 contactDetails: { type: String, default: "" },
 website: { type: String, default: "" },
+
+notificationContacts: {
+  type: [String],
+  default: [],
+  index: true
+},
   categories: [{ type: String }],
   products: [{ type: String }],
   listedProducts: [{ type: String }],
