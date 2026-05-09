@@ -1039,6 +1039,15 @@ const successMsg = req.query.success
             <dt>Address</dt><dd>${esc(supplier.address || "-")}</dd>
             <dt>Type</dt><dd>${esc(supplier.profileType || "product")}</dd>
             <dt>Categories</dt><dd>${(supplier.categories || []).join(", ") || "-"}</dd>
+            ${(supplier.categories || []).includes("tourism") ? `
+  <dt>Tourism Type</dt><dd>${esc(supplier.tourismType || "-")}</dd>
+  <dt>Pricing Model</dt><dd>${esc(supplier.pricingModel || "-")}</dd>
+  <dt>Base Location</dt><dd>${esc(supplier.baseLocation || "-")}</dd>
+  <dt>Pickup Areas</dt><dd>${(supplier.pickupAreas || []).map(esc).join(", ") || "-"}</dd>
+  <dt>Nationwide Travel</dt><dd>${supplier.nationwideTravel ? "Yes" : "No"}</dd>
+  <dt>Max Group Size</dt><dd>${supplier.maxGroupSize || "-"}</dd>
+  <dt>Tourism Areas</dt><dd>${(supplier.tourismAreas || []).map(esc).join(", ") || "-"}</dd>
+` : ""}
             <dt>Tier</dt><dd>${badge(supplier.tier || "basic", tierColor(supplier.tier))}</dd>
             <dt>Status</dt><dd>${badge(supplier.active ? "Active" : "Inactive", supplier.active ? "green" : "gray")}</dd>
             <dt>Subscription</dt><dd>${badge(supplier.subscriptionStatus || "pending", supplier.subscriptionStatus === "active" ? "green" : "gray")}</dd>
@@ -1294,6 +1303,49 @@ ${(supplier.categories||[]).includes("tutoring") ? `
 </div>` : ""}
 
 ${(supplier.categories||[]).includes("tourism") ? `
+
+  <div class="fg">
+  <label>💲 Pricing Model</label>
+  <select name="pricingModel">
+    <option value="">Select pricing model</option>
+    <option value="per_person" ${supplier.pricingModel === "per_person" ? "selected" : ""}>Per Person</option>
+    <option value="per_trip" ${supplier.pricingModel === "per_trip" ? "selected" : ""}>Per Trip</option>
+    <option value="per_day" ${supplier.pricingModel === "per_day" ? "selected" : ""}>Per Day</option>
+    <option value="per_hour" ${supplier.pricingModel === "per_hour" ? "selected" : ""}>Per Hour</option>
+    <option value="group_package" ${supplier.pricingModel === "group_package" ? "selected" : ""}>Group Package</option>
+  </select>
+</div>
+
+<div class="fg">
+  <label>🚐 Base Location</label>
+  <input name="baseLocation"
+         value="${esc(supplier.baseLocation || "")}"
+         placeholder="e.g. Kariba, Victoria Falls" />
+</div>
+
+<div class="fg" style="grid-column:1/-1">
+  <label>📍 Pickup Areas</label>
+  <input name="pickupAreas"
+         value="${esc((supplier.pickupAreas||[]).join(", "))}"
+         placeholder="Kariba Airport, Nyamhunga, Harare CBD" />
+</div>
+
+<div class="fg">
+  <label>🌍 Nationwide Travel</label>
+  <select name="nationwideTravel">
+    <option value="false" ${!supplier.nationwideTravel ? "selected" : ""}>No</option>
+    <option value="true" ${supplier.nationwideTravel ? "selected" : ""}>Yes</option>
+  </select>
+</div>
+
+<div class="fg">
+  <label>👥 Max Group Size</label>
+  <input type="number"
+         name="maxGroupSize"
+         value="${supplier.maxGroupSize || 0}"
+         min="0"
+         placeholder="e.g. 12" />
+</div>
 <!-- ── TOURISM / HOSPITALITY FIELDS ────────────────────── -->
 <div class="fg">
   <label>🦁 Tourism Type</label>
@@ -1441,6 +1493,29 @@ const update = {
     }
     // ── Tourism fields ───────────────────────────────────────────────────────
     if (req.body.tourismType !== undefined) {
+
+      if (req.body.pricingModel !== undefined) {
+  update.pricingModel = (req.body.pricingModel || "").trim();
+}
+
+if (req.body.baseLocation !== undefined) {
+  update.baseLocation = (req.body.baseLocation || "").trim();
+}
+
+if (req.body.pickupAreas !== undefined) {
+  update.pickupAreas = (req.body.pickupAreas || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+if (req.body.nationwideTravel !== undefined) {
+  update.nationwideTravel = req.body.nationwideTravel === "true";
+}
+
+if (req.body.maxGroupSize !== undefined) {
+  update.maxGroupSize = Number(req.body.maxGroupSize) || 0;
+}
       update.tourismType = (req.body.tourismType || "").trim();
     }
     if (req.body.tourismAreas !== undefined) {
