@@ -15,7 +15,6 @@ import mongoose from "mongoose";
 import { logSearchCommand } from "./searchCommandLogger.js";
 import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
-import { logSearchCommand } from "./searchCommandLogger.js";
 import PhoneContact from "../models/phoneContact.js";
 import { sendDocument } from "./metaSender.js";
 import {
