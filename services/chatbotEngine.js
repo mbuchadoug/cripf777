@@ -4871,7 +4871,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
     return sendText(
       from,
       `❌ Please enter a proper delivery / pickup address.\n\n` +
-      `Example:\n_24 Mabelreign Drive, Harare_\n_Hotel name / lodge / pickup point_\n\n` +
+      `Example:\n_24 Mabelreign Drive, Harare_\n__\n\n` +
       `Type *cancel* to stop.`
     );
   }
