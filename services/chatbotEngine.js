@@ -3562,14 +3562,25 @@ Reply *menu* to start.`);
   // =========================
   // 📨 BUYER REQUEST / SELLER RESPONSE TEXT STATES
   // =========================
+const BUYER_REQUEST_META_ACTIONS = new Set([
+  "view_and_quote",
+  "not_available",
+  "sup_skip_service_address",
+  "sup_request_delivery_yes",
+  "sup_request_delivery_no",
+  "sup_request_delivery_flexible",
+  "sup_request_mode_simple",
+  "sup_request_mode_bulk"
+]);
+
 const isBuyerRequestMetaReply =
-  a === "view_and_quote" ||
+  BUYER_REQUEST_META_ACTIONS.has(a) ||
   al === "view & quote" ||
   al === "view and quote" ||
-  a === "not_available" ||
   al === "not available" ||
   al === "confirm" ||
-  al === "send";
+  al === "send" ||
+  al === "skip";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
@@ -4383,7 +4394,24 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
       }
 
-      // Treat as a message-only quote (send immediately with note)
+         // Do NOT allow empty service quotations.
+      // Services/tourism must include a price or clear pricing basis.
+      if (_isService) {
+        return sendText(
+          from,
+          `⚠️ Please include at least one price before sending the quote.\n\n` +
+          `Examples:\n` +
+          `_1=80/person_\n` +
+          `_1=150/trip_\n` +
+          `_1=300/night_\n` +
+          `_1=500/group_\n\n` +
+          `You can also add a note like:\n` +
+          `_1=80/person msg minimum 2 people_\n\n` +
+          `Type *cancel* to discard.`
+        );
+      }
+
+      // For products, also avoid sending empty quotations unless there is a clear note.
       const _msgResp = {
         supplierId: supplier._id, supplierPhone: supplier.phone, supplierName: supplier.businessName,
         mode: "manual_offer", message, items: [], totalAmount: null,

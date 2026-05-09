@@ -732,13 +732,23 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   if (raw.toLowerCase() === "done") {
     // For service RFQ, collect people count before finalising if not yet captured
     if (isService && isRFQ && !biz?.sessionData?.scPeopleCount) {
-      if (biz) { biz.sessionState = "sc_awaiting_quote_people"; await saveBiz(biz); }
+      const isTourism = _isTourismSupplier(seller);
+
+      if (biz) {
+        biz.sessionState = "sc_awaiting_quote_people";
+        await saveBiz(biz);
+      }
+
       return sendText(from,
-`👥 *How many people / how large is the job?*
-
-_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_
-
-Type *skip* if not applicable.`
+        isTourism
+          ? `👥 *How many people and when do you want to travel?*\n\n` +
+            `_e.g. "2 adults, 1 child, Saturday"_\n` +
+            `_e.g. "4 people, 2 nights"_\n` +
+            `_e.g. "airport transfer for 3 people"_\n\n` +
+            `Type *skip* if not sure.`
+          : `👥 *How many people / how large is the job?*\n\n` +
+            `_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_\n\n` +
+            `Type *skip* if not applicable.`
       );
     }
     return _scQuoteDone(from, supplierId, biz, saveBiz);
@@ -880,19 +890,45 @@ The seller will review and price your request.
   }
 
   // ── Priced path - calculate draft, send to seller for confirmation ────────
-  const priceItems = isService ? seller.rates : seller.prices;
+   const priceItems = isService ? seller.rates : seller.prices;
   const priceMap   = {};
+
   for (const item of (priceItems || [])) {
-    const key = (isService ? item.service : item.product).toLowerCase().trim();
-    priceMap[key] = isService ? (parseFloat(item.rate) || 0) : (parseFloat(item.amount) || 0);
+    const key = (isService ? item.service : item.product)?.toLowerCase().trim();
+    if (!key) continue;
+
+    if (isService) {
+      priceMap[key] = {
+        amount: _parseServiceRateValue(item.rate),
+        unit: _parseServiceRateUnit(item.rate, item.service)
+      };
+    } else {
+      priceMap[key] = {
+        amount: parseFloat(item.amount) || 0,
+        unit: item.unit || "each"
+      };
+    }
   }
 
   let total = 0;
   const lineItems = items.map(it => {
-    const unitPrice = priceMap[it.name.toLowerCase().trim()] || it.price || 0;
-    const lineTotal = unitPrice * (it.qty || 1);
+    const key = it.name.toLowerCase().trim();
+    const rateInfo = priceMap[key] || { amount: it.price || 0, unit: isService ? "job" : "each" };
+
+    const unitPrice = Number(rateInfo.amount || 0);
+    const unit = rateInfo.unit || (isService ? "job" : "each");
+    const qty = Number(it.qty || 1);
+    const lineTotal = unitPrice * qty;
+
     total += lineTotal;
-    return { name: it.name, qty: it.qty || 1, unitPrice, lineTotal };
+
+    return {
+      name: it.name,
+      qty,
+      unit,
+      unitPrice,
+      lineTotal
+    };
   });
 
   const refNum = "QT-" + Date.now().toString(36).toUpperCase().slice(-6);
@@ -1161,15 +1197,18 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   }
 
   // Parse price edits: "1=12.50, 2=8.00" or "1x12.50 2x8"
-  const edits = {};
-  const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)/g);
+   const edits = {};
+  const matches = text.matchAll(/(\d+)\s*[=×xX@:]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*([a-zA-Z]+))?/g);
+
   for (const m of matches) {
     const idx = parseInt(m[1]) - 1;
     if (idx >= 0 && idx < draft.lineItems.length) {
-      edits[idx] = parseFloat(m[2]);
+      edits[idx] = {
+        amount: parseFloat(m[2]),
+        unit: m[3] ? m[3].toLowerCase() : draft.lineItems[idx].unit
+      };
     }
   }
-
   if (!Object.keys(edits).length) {
     return sendText(from,
       `❌ Could not read prices.\n\n` +
@@ -1181,10 +1220,20 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   // Apply edits to draft
   let newTotal = 0;
   const updatedItems = draft.lineItems.map((l, i) => {
-    const unitPrice = edits.hasOwnProperty(i) ? edits[i] : l.unitPrice;
+    const edit = edits.hasOwnProperty(i) ? edits[i] : null;
+    const unitPrice = edit ? edit.amount : l.unitPrice;
+    const unit = edit?.unit || l.unit || "job";
     const lineTotal = unitPrice * l.qty;
+
     newTotal += lineTotal;
-    return { ...l, unitPrice, lineTotal, _edited: edits.hasOwnProperty(i) };
+
+    return {
+      ...l,
+      unit,
+      unitPrice,
+      lineTotal,
+      _edited: edits.hasOwnProperty(i)
+    };
   });
 
   const updatedDraft = { ...draft, lineItems: updatedItems, total: newTotal };
@@ -1195,7 +1244,7 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   );
 
   const numbered = updatedItems.map((l, i) =>
-    `${i + 1}. ${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)} = $${l.lineTotal.toFixed(2)}${l._edited ? " ✏️" : ""}`
+       `${i + 1}. ${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)}${_formatRateUnit(l.unit)} = $${l.lineTotal.toFixed(2)}${l._edited ? " ✏️" : ""}`
   ).join("\n");
 
   return sendButtons(from, {
@@ -2151,6 +2200,48 @@ ${pdfSent ? "📄 PDF quotation delivered to buyer." : "✅ Quote sent to buyer.
   });
 }
 
+
+
+
+function _parseServiceRateValue(rate = "") {
+  const raw = String(rate || "").trim();
+  const m = raw.match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+function _parseServiceRateUnit(rate = "", serviceName = "") {
+  const raw = String(rate || "").toLowerCase();
+
+  const explicit = raw.match(/\/\s*([a-zA-Z]+)/);
+  if (explicit) return explicit[1].toLowerCase();
+
+  return _guessServicePricingUnit(serviceName);
+}
+
+function _guessServicePricingUnit(serviceName = "") {
+  const s = String(serviceName || "").toLowerCase();
+
+  if (/sunset cruise|game drive|bush walk|bird|cultural|village|guided|tour|safari/.test(s)) return "person";
+  if (/airport transfer|transfer|pickup|taxi|shuttle/.test(s)) return "trip";
+  if (/lodge|accommodation|room|camping|tent|chalet/.test(s)) return "night";
+  if (/houseboat|boat hire|boat charter/.test(s)) return "day";
+  if (/fishing trip|full day fishing/.test(s)) return "boat";
+  if (/equipment hire|hire/.test(s)) return "day";
+
+  return "job";
+}
+
+function _formatRateUnit(unit = "job") {
+  const u = String(unit || "job").toLowerCase();
+  if (["person", "adult", "child", "group", "trip", "night", "day", "hour", "hr", "boat", "vehicle", "room"].includes(u)) {
+    return `/${u}`;
+  }
+  return `/${u || "job"}`;
+}
+
+function _isTourismSupplier(seller = {}) {
+  return (seller.categories || []).includes("tourism");
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────

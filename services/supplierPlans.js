@@ -757,6 +757,11 @@ export const SUPPLIER_CATEGORIES = [
       { id: "adventure_tours",    label: "Adventure & Hiking Tours" },
       { id: "victoria_falls",     label: "Victoria Falls Packages" },
       { id: "car_hire_tourism",   label: "Car Hire & Transfers" },
+      { id: "kariba_tourism",     label: "Kariba Tours & Lake Activities" },
+{ id: "houseboat_hire",     label: "Houseboat Hire" },
+{ id: "boat_cruise",        label: "Boat Cruises & Transfers" },
+{ id: "fishing_charters",   label: "Fishing Trips & Charters" },
+{ id: "airport_transfers",  label: "Airport & Tourism Transfers" },
       { id: "travel_agent",       label: "Travel Agent & Packages" }
     ],
     presetKey: null

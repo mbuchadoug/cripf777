@@ -22,15 +22,25 @@ export const SUBSCRIPTION_PLANS = {
 
 export const SUPPLIER_CITIES = [
   "Harare",
-  "-",
+  "Bulawayo",
   "Mutare",
   "Gweru",
   "Kwekwe",
   "Masvingo",
   "Chinhoyi",
   "Bindura",
-  "Marondera",
-  "Chegutu"
+  "Murehwa",
+
+  // Tourism / farming / regional towns
+  "Kariba",
+  "Nyamhunga",
+  "Andora",
+  "Mahombekombe",
+  "Siakobvu",
+  "Binga",
+  "Mlibizi",
+  "Victoria Falls",
+  "Hwange"
 ];
 
 // ─── Category taxonomy ────────────────────────────────────────────────────────
