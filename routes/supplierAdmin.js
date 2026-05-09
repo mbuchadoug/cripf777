@@ -13,8 +13,7 @@ import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../servi
 
 import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
 
-import SearchCommandLog from "../models/searchCommandLog.js";
-import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
+
 const router = express.Router();
 
 router.use(express.json());
