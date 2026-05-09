@@ -5,14 +5,16 @@ import SupplierProfile from "../models/supplierProfile.js";
 import SupplierOrder from "../models/supplierOrder.js";
 import SupplierSubscriptionPayment from "../models/supplierSubscriptionPayment.js";
 import PhoneContact from "../models/phoneContact.js";   // ← ADD THIS LINE
-
+import SearchCommandLog from "../models/searchCommandLog.js";
+import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
 
 import smartLinkRoutes from "./supplierSmartLinkAdmin.js";
 
-
+import SearchCommandLog from "../models/searchCommandLog.js";
+import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 const router = express.Router();
 
 router.use(express.json());
@@ -2520,8 +2522,9 @@ function layout(title, content) {
                      || t.startsWith("School:") || t.startsWith("Edit School:");
   const isOrders      = t === "Orders";
   const isPayments    = t === "Payments";
-  const isContacts    = t === "Contacts";
-  const isPresets     = t === "Presets" || t.startsWith("Preset:");
+ const isContacts    = t === "Contacts";
+const isSearchLogs  = t === "Search Logs" || t.startsWith("Contact Search Flow:") || t === "Search Log Detail";
+const isPresets     = t === "Presets" || t.startsWith("Preset:");
   const isBroadcast   = t === "Broadcast Offer";
   const isExpiry      = t === "Subscription Expiry" || t === "Expiry";
   const isDashboard   = t === "Dashboard";
@@ -2540,8 +2543,9 @@ function layout(title, content) {
     { divider: "PLATFORM" },
     { href: "/zq-admin/orders",          label: "📦 Orders",              active: isOrders },
     { href: "/zq-admin/payments",        label: "💳 Payments",            active: isPayments },
-    { href: "/zq-admin/contacts",        label: "👥 Contacts",            active: isContacts },
-    { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
+   { href: "/zq-admin/contacts",        label: "👥 Contacts",            active: isContacts },
+{ href: "/zq-admin/search-logs",     label: "🔎 Search Logs",         active: isSearchLogs },
+{ href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",     active: isBroadcast },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
   ];
@@ -4180,7 +4184,365 @@ router.post("/expiry/notify-bulk", requireSupplierAdmin, async (req, res) => {
 //     🧾 Generate Receipt
 //   </a>
 // ══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH COMMAND LOGS - Buyer command flow tracking
+// ─────────────────────────────────────────────────────────────────────────────
 
+router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
+  try {
+    const { q = "", resultMode = "", flow = "", page = 1 } = req.query;
+
+    const limit = 30;
+    const skip = (Number(page) - 1) * limit;
+
+    const query = {};
+
+    if (q) {
+      query.$or = [
+        { phone: { $regex: q, $options: "i" } },
+        { rawText: { $regex: q, $options: "i" } },
+        { normalizedText: { $regex: q, $options: "i" } },
+        { "parsed.product": { $regex: q, $options: "i" } },
+        { "parsed.service": { $regex: q, $options: "i" } },
+        { "parsed.city": { $regex: q, $options: "i" } },
+        { "parsed.area": { $regex: q, $options: "i" } }
+      ];
+    }
+
+    if (resultMode) query.resultMode = resultMode;
+    if (flow) query.flow = flow;
+
+    const [logs, total] = await Promise.all([
+      SearchCommandLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      SearchCommandLog.countDocuments(query)
+    ]);
+
+    const pages = Math.ceil(total / limit);
+    const qs = p =>
+      `?page=${p}&q=${encodeURIComponent(q)}&resultMode=${encodeURIComponent(resultMode)}&flow=${encodeURIComponent(flow)}`;
+
+    res.send(layout("Search Logs", `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>🔎 Buyer Search Commands <span class="count">${total}</span></h3>
+        </div>
+
+        <form method="GET" class="filter-form" style="margin-bottom:16px">
+          <input name="q" placeholder="Search phone, command, city, product..." value="${esc(q)}" />
+
+          <select name="resultMode">
+            <option value="">All Results</option>
+            <option ${resultMode === "offers" ? "selected" : ""} value="offers">Offers found</option>
+            <option ${resultMode === "suppliers" ? "selected" : ""} value="suppliers">Suppliers found</option>
+            <option ${resultMode === "none" ? "selected" : ""} value="none">No results</option>
+            <option ${resultMode === "error" ? "selected" : ""} value="error">Errors</option>
+          </select>
+
+          <select name="flow">
+            <option value="">All Flows</option>
+            <option ${flow === "supplier_search" ? "selected" : ""} value="supplier_search">Supplier search</option>
+            <option ${flow === "school_search" ? "selected" : ""} value="school_search">School search</option>
+            <option ${flow === "seller_chat" ? "selected" : ""} value="seller_chat">Seller chat</option>
+          </select>
+
+          <button type="submit">Filter</button>
+          <a href="/zq-admin/search-logs" class="btn-reset">Clear</a>
+        </form>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Contact</th>
+              <th>Command</th>
+              <th>Parsed</th>
+              <th>Results</th>
+              <th>Error</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td>${new Date(l.createdAt).toLocaleString()}</td>
+                <td>
+                  <a href="/zq-admin/search-logs/contact/${esc(l.phone)}" class="btn-link">
+                    ${esc(l.phone)}
+                  </a>
+                </td>
+                <td>
+                  <strong>${esc(l.rawText || "-")}</strong>
+                  <br><small>${esc(l.sessionState || "")}</small>
+                </td>
+                <td>
+                  ${esc(l.parsed?.product || l.parsed?.service || "-")}
+                  <br><small>${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}</small>
+                </td>
+                <td>
+                  ${badge(`${l.resultMode} (${l.resultCount || 0})`,
+                    l.resultMode === "none" ? "orange" :
+                    l.resultMode === "error" ? "red" : "green"
+                  )}
+                </td>
+                <td>${l.errorMessage ? `<small style="color:#dc2626">${esc(l.errorMessage).slice(0, 90)}</small>` : "-"}</td>
+                <td><a class="btn-link" href="/zq-admin/search-logs/${l._id}">Open →</a></td>
+              </tr>
+            `).join("") || `
+              <tr><td colspan="7"><em class="muted">No search logs found yet.</em></td></tr>
+            `}
+          </tbody>
+        </table>
+
+        ${pages > 1 ? `
+          <div class="pagination">
+            ${Array.from({ length: pages }, (_, i) => i + 1).map(p =>
+              `<a href="/zq-admin/search-logs${qs(p)}" class="${Number(page) === p ? "active" : ""}">${p}</a>`
+            ).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Search Logs", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.get("/search-logs/contact/:phone", requireSupplierAdmin, async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "").replace(/\D+/g, "");
+
+    const logs = await SearchCommandLog.find({ phone })
+      .sort({ createdAt: -1 })
+      .limit(80)
+      .lean();
+
+    res.send(layout(`Contact Search Flow: ${phone}`, `
+      <a href="/zq-admin/search-logs" class="back-link">← Back to Search Logs</a>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📱 Contact Search Flow: ${esc(phone)}</h3>
+          <a class="btn btn-green btn-sm" href="https://wa.me/${esc(phone)}" target="_blank">
+            Open WhatsApp
+          </a>
+        </div>
+
+        ${logs.map(l => `
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <strong>${esc(l.rawText || "-")}</strong>
+              <small>${new Date(l.createdAt).toLocaleString()}</small>
+            </div>
+
+            <p style="margin:8px 0;color:#64748b">
+              Parsed:
+              <strong>${esc(l.parsed?.product || l.parsed?.service || "-")}</strong>
+              ${[l.parsed?.area, l.parsed?.city].filter(Boolean).length
+                ? ` • ${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}`
+                : ""}
+            </p>
+
+            <p>
+              ${badge(`${l.resultMode} (${l.resultCount || 0})`,
+                l.resultMode === "none" ? "orange" :
+                l.resultMode === "error" ? "red" : "green"
+              )}
+              ${l.helped ? badge("helped", "blue") : ""}
+            </p>
+
+            ${l.errorMessage ? `<div class="alert red">${esc(l.errorMessage)}</div>` : ""}
+
+            ${(l.resultsPreview || []).length ? `
+              <ol style="margin-left:20px;margin-top:10px">
+                ${l.resultsPreview.map(r => `
+                  <li>
+                    <strong>${esc(r.supplierName || "-")}</strong>
+                    ${r.product ? ` - ${esc(r.product)}` : ""}
+                    ${r.service ? ` - ${esc(r.service)}` : ""}
+                    ${r.priceText ? ` <small>${esc(r.priceText)}</small>` : ""}
+                    <br><small>${esc([r.area, r.city].filter(Boolean).join(", "))}</small>
+                  </li>
+                `).join("")}
+              </ol>
+            ` : ""}
+
+            <div style="margin-top:10px">
+              <a href="/zq-admin/search-logs/${l._id}" class="btn-link">
+                Open this search →
+              </a>
+            </div>
+          </div>
+        `).join("") || `<div class="alert">No logs found for this contact.</div>`}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Contact Search Flow", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.get("/search-logs/:id", requireSupplierAdmin, async (req, res) => {
+  try {
+    const log = await SearchCommandLog.findById(req.params.id).lean();
+    if (!log) return res.redirect("/zq-admin/search-logs");
+
+    const searchText = log.parsed?.product || log.parsed?.service || log.rawText || "";
+    const city = log.parsed?.city || "";
+
+    const supplierQuery = { active: true };
+
+    if (city) {
+      supplierQuery["location.city"] = { $regex: `^${city}$`, $options: "i" };
+    }
+
+    if (searchText) {
+      supplierQuery.$or = [
+        { businessName: { $regex: searchText, $options: "i" } },
+        { products: { $regex: searchText, $options: "i" } },
+        { listedProducts: { $regex: searchText, $options: "i" } },
+        { "rates.service": { $regex: searchText, $options: "i" } },
+        { categories: { $regex: searchText, $options: "i" } }
+      ];
+    }
+
+    const suggestedSuppliers = await SupplierProfile.find(supplierQuery)
+      .sort({ tierRank: -1, rating: -1, createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const success = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:14px;border-radius:8px;margin-bottom:16px">
+           ✅ ${esc(req.query.success)}
+         </div>`
+      : "";
+
+    res.send(layout("Search Log Detail", `
+      <a href="/zq-admin/search-logs" class="back-link">← Back to Search Logs</a>
+      ${success}
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>🔎 Search Details</h3>
+
+          <p><strong>Contact:</strong>
+            <a href="/zq-admin/search-logs/contact/${esc(log.phone)}">${esc(log.phone)}</a>
+          </p>
+          <p><strong>Command:</strong> ${esc(log.rawText || "-")}</p>
+          <p><strong>Time:</strong> ${new Date(log.createdAt).toLocaleString()}</p>
+          <p><strong>Flow:</strong> ${esc(log.flow || "-")}</p>
+          <p><strong>Session:</strong> ${esc(log.sessionState || "-")}</p>
+          <p><strong>Parsed:</strong></p>
+          <pre style="white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #e5e7eb">${esc(JSON.stringify(log.parsed || {}, null, 2))}</pre>
+
+          <p><strong>Result:</strong>
+            ${badge(`${log.resultMode} (${log.resultCount || 0})`,
+              log.resultMode === "none" ? "orange" :
+              log.resultMode === "error" ? "red" : "green"
+            )}
+          </p>
+
+          ${log.errorMessage ? `<div class="alert red"><strong>Error:</strong><br>${esc(log.errorMessage)}</div>` : ""}
+
+          <h4 style="margin-top:18px">Results Buyer Got</h4>
+          ${(log.resultsPreview || []).length ? `
+            <ol style="margin-left:20px">
+              ${log.resultsPreview.map(r => `
+                <li>
+                  <strong>${esc(r.supplierName || "-")}</strong>
+                  ${r.product ? ` - ${esc(r.product)}` : ""}
+                  ${r.service ? ` - ${esc(r.service)}` : ""}
+                  ${r.priceText ? ` (${esc(r.priceText)})` : ""}
+                  <br><small>${esc([r.area, r.city].filter(Boolean).join(", "))}</small>
+                </li>
+              `).join("")}
+            </ol>
+          ` : `<p style="color:#64748b">No results were recorded.</p>`}
+        </div>
+
+        <div class="panel">
+          <h3>📲 Send Meta Notification</h3>
+
+          <p style="color:#64748b;font-size:13px;margin-bottom:12px">
+            This sends the approved template <strong>buyer_request_results_ready</strong>.
+            The buyer receives a ZimQuote continuation link, then the chatbot can show results inside WhatsApp.
+          </p>
+
+          <form method="POST" action="/zq-admin/search-logs/${log._id}/send-help">
+            <div class="fg">
+              <label>Request details sent in template</label>
+              <input name="searchText" value="${esc(searchText)}" />
+            </div>
+
+            <div class="fg">
+              <label>Select seller profiles to attach internally</label>
+              ${suggestedSuppliers.length ? suggestedSuppliers.map(s => `
+                <label style="display:block;margin:8px 0;padding:8px;border:1px solid #e5e7eb;border-radius:8px">
+                  <input type="checkbox" name="supplierIds" value="${s._id}">
+                  <strong>${esc(s.businessName)}</strong>
+                  <small>${esc([s.location?.area, s.location?.city].filter(Boolean).join(", "))}</small>
+                </label>
+              `).join("") : `<div class="alert orange">No suggested suppliers found. You can still send the continuation template.</div>`}
+            </div>
+
+            <button class="btn btn-green" type="submit">
+              📲 Send WhatsApp Template
+            </button>
+          </form>
+        </div>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Search Log Detail", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.post("/search-logs/:id/send-help", requireSupplierAdmin, async (req, res) => {
+  try {
+    const log = await SearchCommandLog.findById(req.params.id);
+    if (!log) return res.redirect("/zq-admin/search-logs");
+
+    let supplierIds = req.body.supplierIds || [];
+    if (!Array.isArray(supplierIds)) supplierIds = supplierIds ? [supplierIds] : [];
+
+    const suppliers = supplierIds.length
+      ? await SupplierProfile.find({ _id: { $in: supplierIds } }).lean()
+      : [];
+
+    const result = await sendBuyerSearchHelpTemplate({
+      phone: log.phone,
+      searchText: req.body.searchText || log.rawText,
+      suppliers,
+      adminNote: ""
+    });
+
+    log.helped = true;
+    log.helpNote = `Template sent. Reference: ${result.reference || ""}`;
+    log.followUpSentAt = new Date();
+
+    log.meta = {
+      ...(log.meta || {}),
+      followUpReference: result.reference || "",
+      followUpContinueLink: result.continueLink || "",
+      followUpSupplierIds: supplierIds,
+      followUpTemplate: "buyer_request_results_ready",
+      followUpOk: Boolean(result.ok)
+    };
+
+    await log.save();
+
+    res.redirect(
+      `/zq-admin/search-logs/${log._id}?success=${encodeURIComponent(
+        result.ok
+          ? `Template sent successfully. Reference ${result.reference}`
+          : `Fallback message attempted. Reference ${result.reference}`
+      )}`
+    );
+  } catch (err) {
+    res.send(layout("Send Help", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ZIMQUOTE CHATBOT LINK PANEL - SUPPLIERS / SELLERS
@@ -4283,5 +4645,300 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH COMMAND LOGS - Buyer command flow tracking
+// ─────────────────────────────────────────────────────────────────────────────
 
+router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
+  try {
+    const {
+      q = "",
+      resultMode = "",
+      flow = "",
+      page = 1
+    } = req.query;
+
+    const limit = 30;
+    const skip = (Number(page) - 1) * limit;
+
+    const query = {};
+
+    if (q) {
+      query.$or = [
+        { phone: { $regex: q, $options: "i" } },
+        { rawText: { $regex: q, $options: "i" } },
+        { normalizedText: { $regex: q, $options: "i" } },
+        { "parsed.product": { $regex: q, $options: "i" } },
+        { "parsed.city": { $regex: q, $options: "i" } },
+        { "parsed.area": { $regex: q, $options: "i" } }
+      ];
+    }
+
+    if (resultMode) query.resultMode = resultMode;
+    if (flow) query.flow = flow;
+
+    const [logs, total] = await Promise.all([
+      SearchCommandLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      SearchCommandLog.countDocuments(query)
+    ]);
+
+    const pages = Math.ceil(total / limit);
+    const qs = p =>
+      `?page=${p}&q=${encodeURIComponent(q)}&resultMode=${encodeURIComponent(resultMode)}&flow=${encodeURIComponent(flow)}`;
+
+    res.send(layout("Search Logs", `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>🔎 Buyer Search Commands <span class="count">${total}</span></h3>
+        </div>
+
+        <form method="GET" class="filter-form" style="margin-bottom:16px">
+          <input name="q" placeholder="Search phone, command, city, product..." value="${esc(q)}" />
+
+          <select name="resultMode">
+            <option value="">All Results</option>
+            <option ${resultMode === "offers" ? "selected" : ""} value="offers">Offers found</option>
+            <option ${resultMode === "suppliers" ? "selected" : ""} value="suppliers">Suppliers found</option>
+            <option ${resultMode === "none" ? "selected" : ""} value="none">No results</option>
+            <option ${resultMode === "error" ? "selected" : ""} value="error">Errors</option>
+          </select>
+
+          <select name="flow">
+            <option value="">All Flows</option>
+            <option ${flow === "supplier_search" ? "selected" : ""} value="supplier_search">Supplier search</option>
+            <option ${flow === "school_search" ? "selected" : ""} value="school_search">School search</option>
+            <option ${flow === "seller_chat" ? "selected" : ""} value="seller_chat">Seller chat</option>
+          </select>
+
+          <button type="submit">Filter</button>
+          <a href="/zq-admin/search-logs" class="btn-reset">Clear</a>
+        </form>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Contact</th>
+              <th>Command</th>
+              <th>Parsed</th>
+              <th>Results</th>
+              <th>Error</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td>${new Date(l.createdAt).toLocaleString()}</td>
+                <td><a href="/zq-admin/search-logs/contact/${esc(l.phone)}" class="btn-link">${esc(l.phone)}</a></td>
+                <td><strong>${esc(l.rawText || "-")}</strong><br><small>${esc(l.sessionState || "")}</small></td>
+                <td>
+                  ${esc(l.parsed?.product || l.parsed?.service || "-")}
+                  <br><small>${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}</small>
+                </td>
+                <td>${badge(`${l.resultMode} (${l.resultCount || 0})`, l.resultMode === "none" ? "orange" : l.resultMode === "error" ? "red" : "green")}</td>
+                <td>${l.errorMessage ? `<small style="color:#dc2626">${esc(l.errorMessage).slice(0, 90)}</small>` : "-"}</td>
+                <td><a class="btn-link" href="/zq-admin/search-logs/${l._id}">Open →</a></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+
+        ${pages > 1 ? `
+          <div class="pagination">
+            ${Array.from({ length: pages }, (_, i) => i + 1).map(p =>
+              `<a href="/zq-admin/search-logs${qs(p)}" class="${Number(page) === p ? "active" : ""}">${p}</a>`
+            ).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Search Logs", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.get("/search-logs/contact/:phone", requireSupplierAdmin, async (req, res) => {
+  try {
+    const phone = String(req.params.phone || "").replace(/\D+/g, "");
+
+    const logs = await SearchCommandLog.find({ phone })
+      .sort({ createdAt: -1 })
+      .limit(80)
+      .lean();
+
+    res.send(layout(`Contact Search Flow: ${phone}`, `
+      <a href="/zq-admin/search-logs" class="back-link">← Back to Search Logs</a>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📱 ${esc(phone)}</h3>
+          <a class="btn btn-green btn-sm" href="https://wa.me/${esc(phone)}" target="_blank">Open WhatsApp</a>
+        </div>
+
+        ${logs.map(l => `
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <strong>${esc(l.rawText || "-")}</strong>
+              <small>${new Date(l.createdAt).toLocaleString()}</small>
+            </div>
+
+            <p style="margin:8px 0;color:#64748b">
+              Parsed: <strong>${esc(l.parsed?.product || l.parsed?.service || "-")}</strong>
+              ${[l.parsed?.area, l.parsed?.city].filter(Boolean).length ? ` • ${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}` : ""}
+            </p>
+
+            <p>
+              ${badge(`${l.resultMode} (${l.resultCount || 0})`, l.resultMode === "none" ? "orange" : l.resultMode === "error" ? "red" : "green")}
+              ${l.helped ? badge("helped", "blue") : ""}
+            </p>
+
+            ${l.errorMessage ? `<div class="alert red">${esc(l.errorMessage)}</div>` : ""}
+
+            ${(l.resultsPreview || []).length ? `
+              <ol style="margin-left:20px;margin-top:10px">
+                ${l.resultsPreview.map(r => `
+                  <li>
+                    <strong>${esc(r.supplierName || "-")}</strong>
+                    ${r.product ? ` - ${esc(r.product)}` : ""}
+                    ${r.priceText ? ` <small>${esc(r.priceText)}</small>` : ""}
+                    <br><small>${esc([r.area, r.city].filter(Boolean).join(", "))}</small>
+                  </li>
+                `).join("")}
+              </ol>
+            ` : ""}
+
+            <div style="margin-top:10px">
+              <a href="/zq-admin/search-logs/${l._id}" class="btn-link">Open this search →</a>
+            </div>
+          </div>
+        `).join("") || `<div class="alert">No logs found for this contact.</div>`}
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Contact Search Flow", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.get("/search-logs/:id", requireSupplierAdmin, async (req, res) => {
+  try {
+    const log = await SearchCommandLog.findById(req.params.id).lean();
+    if (!log) return res.redirect("/zq-admin/search-logs");
+
+    const searchText = log.parsed?.product || log.parsed?.service || log.rawText || "";
+    const city = log.parsed?.city || "";
+
+    const supplierQuery = { active: true };
+
+    if (city) {
+      supplierQuery["location.city"] = { $regex: `^${city}$`, $options: "i" };
+    }
+
+    if (searchText) {
+      supplierQuery.$or = [
+        { businessName: { $regex: searchText, $options: "i" } },
+        { products: { $regex: searchText, $options: "i" } },
+        { listedProducts: { $regex: searchText, $options: "i" } },
+        { "rates.service": { $regex: searchText, $options: "i" } },
+        { categories: { $regex: searchText, $options: "i" } }
+      ];
+    }
+
+    const suggestedSuppliers = await SupplierProfile.find(supplierQuery)
+      .sort({ tierRank: -1, rating: -1, createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    res.send(layout("Search Log Detail", `
+      <a href="/zq-admin/search-logs" class="back-link">← Back to Search Logs</a>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>🔎 Search Details</h3>
+
+          <p><strong>Contact:</strong> <a href="/zq-admin/search-logs/contact/${esc(log.phone)}">${esc(log.phone)}</a></p>
+          <p><strong>Command:</strong> ${esc(log.rawText || "-")}</p>
+          <p><strong>Time:</strong> ${new Date(log.createdAt).toLocaleString()}</p>
+          <p><strong>Flow:</strong> ${esc(log.flow)}</p>
+          <p><strong>Session:</strong> ${esc(log.sessionState || "-")}</p>
+          <p><strong>Parsed:</strong> ${esc(JSON.stringify(log.parsed || {}, null, 2))}</p>
+          <p><strong>Result:</strong> ${badge(`${log.resultMode} (${log.resultCount || 0})`, log.resultMode === "none" ? "orange" : log.resultMode === "error" ? "red" : "green")}</p>
+
+          ${log.errorMessage ? `<div class="alert red"><strong>Error:</strong><br>${esc(log.errorMessage)}</div>` : ""}
+
+          <h4 style="margin-top:18px">Results Buyer Got</h4>
+          ${(log.resultsPreview || []).length ? `
+            <ol style="margin-left:20px">
+              ${log.resultsPreview.map(r => `
+                <li>
+                  <strong>${esc(r.supplierName || "-")}</strong>
+                  ${r.product ? ` - ${esc(r.product)}` : ""}
+                  ${r.priceText ? ` (${esc(r.priceText)})` : ""}
+                  <br><small>${esc([r.area, r.city].filter(Boolean).join(", "))}</small>
+                </li>
+              `).join("")}
+            </ol>
+          ` : `<p style="color:#64748b">No results were recorded.</p>`}
+        </div>
+
+        <div class="panel">
+          <h3>🛟 Help This Buyer</h3>
+
+          <form method="POST" action="/zq-admin/search-logs/${log._id}/send-help">
+            <div class="fg">
+              <label>Admin note to buyer</label>
+              <textarea name="adminNote" rows="4">We noticed your search may not have returned the right results. Here are sellers that may help.</textarea>
+            </div>
+
+            <div class="fg">
+              <label>Select seller profiles to send</label>
+              ${suggestedSuppliers.length ? suggestedSuppliers.map(s => `
+                <label style="display:block;margin:8px 0;padding:8px;border:1px solid #e5e7eb;border-radius:8px">
+                  <input type="checkbox" name="supplierIds" value="${s._id}">
+                  <strong>${esc(s.businessName)}</strong>
+                  <small>${esc([s.location?.area, s.location?.city].filter(Boolean).join(", "))}</small>
+                </label>
+              `).join("") : `<div class="alert orange">No suggested suppliers found. Search manually from Suppliers and follow up directly.</div>`}
+            </div>
+
+            <button class="btn btn-green" type="submit">📲 Send WhatsApp Follow-up</button>
+          </form>
+        </div>
+      </div>
+    `));
+  } catch (err) {
+    res.send(layout("Search Log Detail", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
+
+
+router.post("/search-logs/:id/send-help", requireSupplierAdmin, async (req, res) => {
+  try {
+    const log = await SearchCommandLog.findById(req.params.id);
+    if (!log) return res.redirect("/zq-admin/search-logs");
+
+    let supplierIds = req.body.supplierIds || [];
+    if (!Array.isArray(supplierIds)) supplierIds = [supplierIds];
+
+    const suppliers = await SupplierProfile.find({ _id: { $in: supplierIds } }).lean();
+
+    await sendBuyerSearchHelpTemplate({
+      phone: log.phone,
+      searchText: log.rawText,
+      suppliers,
+      adminNote: req.body.adminNote || ""
+    });
+
+    log.helped = true;
+    log.helpNote = req.body.adminNote || "";
+    log.followUpSentAt = new Date();
+    await log.save();
+
+    res.redirect(`/zq-admin/search-logs/${log._id}?success=1`);
+  } catch (err) {
+    res.send(layout("Send Help", `<div class="alert red">Error: ${esc(err.message)}</div>`));
+  }
+});
 export default router;

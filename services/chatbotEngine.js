@@ -12,8 +12,10 @@ import { sendList } from "./metaSender.js";
 import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
 import { PACKAGES } from "./packages.js";
 import mongoose from "mongoose";
+import { logSearchCommand } from "./searchCommandLogger.js";
 import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
+import { logSearchCommand } from "./searchCommandLogger.js";
 import PhoneContact from "../models/phoneContact.js";
 import { sendDocument } from "./metaSender.js";
 import {
@@ -5318,11 +5320,28 @@ if (parsed.city || parsed.area) {
   }
 
   if (!supplierResults.length) {
+    await logSearchCommand({
+      phone,
+      rawText: text,
+      source: "text",
+      flow: "supplier_search",
+      sessionState: biz?.sessionState || "",
+      parsed: {
+        product: shortcode.product || "",
+        city: shortcode.city || "",
+        area: shortcode.area || "",
+        profileType: shortcode.profileType || ""
+      },
+      resultMode: "none",
+      results: [],
+      botReplySummary: "No matching supplier or offer results found"
+    });
+
     return sendButtons(from, {
-      text: `😕 No results for *${cleanProduct}*${parsed.city ? ` in *${parsed.city}*` : ""}.\n\nTry a different city or search term.`,
+      text: `😕 No results for *${shortcode.product}* in *${locationLabel}*.\n\nTry searching all of Zimbabwe?`,
       buttons: [
-        { id: "find_supplier", title: "🔍 Search Again" },
-        { id: "sup_search_city_all", title: "📍 Try All Cities" }
+        { id: "sup_search_city_all", title: "📍 Search All Cities" },
+        { id: "find_supplier",       title: "🔍 Search Again" }
       ]
     });
   }
@@ -8522,6 +8541,16 @@ if (
   const shortcode = parseShortcodeSearch(text);
   console.log(`[TRACE-A] biz shortcode handler: text="${text}" sessionState="${biz?.sessionState}" shortcode=${JSON.stringify(shortcode)}`);
   if (shortcode) {
+    await logSearchCommand({
+  phone,
+  rawText: text,
+  source: "text",
+  flow: "supplier_search",
+  sessionState: biz?.sessionState || "",
+  parsed: shortcode,
+  resultMode: "unknown",
+  botReplySummary: "Buyer typed supplier shortcode search"
+});
 if (shortcode.city) {
   const locationLabel = shortcode.area
     ? `${shortcode.area}, ${shortcode.city}`
@@ -8550,17 +8579,67 @@ if (shortcode.city) {
   console.log(
     `[TRACE-B] calling runSupplierOfferSearch city="${shortcode.city}" product="${shortcode.product}" area=NULL_FIRST_PASS originalArea="${shortcode.area}"`
   );
+  let offerResults = [];
 
-  let offerResults = await runSupplierOfferSearch({
-    city: shortcode.city,
-    product: shortcode.product,
-    area: null
-  });
-  console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
+  try {
+    offerResults = await runSupplierOfferSearch({
+      city: shortcode.city,
+      product: shortcode.product,
+      area: null
+    });
 
-  // If city-level offer search returns nothing, retry across all cities,
-  // but still do NOT force area here.
-  if (!offerResults.length) {
+    console.log(`[TRACE-B2] offerResults.length=${offerResults.length}`);
+
+    // If city-level offer search returns nothing, retry across all cities,
+    // but still do NOT force area here.
+    if (!offerResults.length) {
+      offerResults = await runSupplierOfferSearch({
+        city: null,
+        product: shortcode.product,
+        area: null
+      });
+
+      console.log(`[TRACE-B3] all-cities offerResults.length=${offerResults.length}`);
+    }
+  } catch (err) {
+    await logSearchCommand({
+      phone,
+      rawText: text,
+      source: "text",
+      flow: "supplier_search",
+      sessionState: biz?.sessionState || "",
+      parsed: {
+        product: shortcode.product || "",
+        city: shortcode.city || "",
+        area: shortcode.area || "",
+        profileType: shortcode.profileType || ""
+      },
+      resultMode: "error",
+      errorMessage: err.message,
+      botReplySummary: "Supplier offer search crashed"
+    });
+
+    console.error("[SUPPLIER OFFER SEARCH ERROR]", err);
+    return sendText(from, "❌ Search failed. Please try again or type *menu*.");
+  }
+
+  if (offerResults.length) {
+    await logSearchCommand({
+      phone,
+      rawText: text,
+      source: "text",
+      flow: "supplier_search",
+      sessionState: biz?.sessionState || "",
+      parsed: {
+        product: shortcode.product || "",
+        city: shortcode.city || "",
+        area: shortcode.area || "",
+        profileType: shortcode.profileType || ""
+      },
+      resultMode: "offers",
+      results: offerResults,
+      botReplySummary: `Returned ${offerResults.length} offer results`
+    });
     offerResults = await runSupplierOfferSearch({
       city: null,
       product: shortcode.product,
@@ -8772,11 +8851,28 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     };
     await saveBizSafe(biz);
 
+     await logSearchCommand({
+      phone,
+      rawText: text,
+      source: "text",
+      flow: "supplier_search",
+      sessionState: biz?.sessionState || "",
+      parsed: {
+        product: shortcode.product || "",
+        city: shortcode.city || "",
+        area: shortcode.area || "",
+        profileType: shortcode.profileType || ""
+      },
+      resultMode: "none",
+      results: [],
+      botReplySummary: "No matching supplier or offer results found"
+    });
+
     return sendButtons(from, {
-      text: `😕 No results for *${cleanProduct}*${shortcode.city ? ` in *${shortcode.city}*` : ""}.\n\nTry searching all of Zimbabwe?`,
+      text: `😕 No results for *${shortcode.product}* in *${locationLabel}*.\n\nTry searching all of Zimbabwe?`,
       buttons: [
         { id: "sup_search_city_all", title: "📍 Search All Cities" },
-        { id: "find_supplier", title: "🔍 Search Again" }
+        { id: "find_supplier",       title: "🔍 Search Again" }
       ]
     });
   }
