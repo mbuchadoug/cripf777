@@ -3467,8 +3467,60 @@ Reply *menu* to start.`);
 
   console.log("META INCOMING:", { from, action });
 
-  const biz = await getBizForPhone(from);
-  const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
+const biz = await getBizForPhone(from);
+const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
+
+// ─────────────────────────────────────────────────────────────
+// GLOBAL COMMAND/TEXT LOGGER
+// Captures EVERY incoming text/button/list/smart-link before flows return
+// ─────────────────────────────────────────────────────────────
+try {
+  const __logSess = await UserSession.findOne({ phone }).lean();
+
+  const __rawCommand = String(action || text || "").trim();
+
+  if (__rawCommand) {
+    const __source =
+      /^ZQ:/i.test(__rawCommand) ? "smart_link" :
+      typeof isMetaAction !== "undefined" && isMetaAction ? "button" :
+      "text";
+
+    const __flow =
+      /^find\s+school/i.test(__rawCommand) || /^ZQ:SCHOOL:/i.test(__rawCommand) ? "school_search" :
+      /^find\s+/i.test(__rawCommand) || __rawCommand.startsWith("sup_") || /^ZQ:SUPPLIER:/i.test(__rawCommand) ? "supplier_search" :
+      __rawCommand.startsWith("seller_") ? "seller_chat" :
+      "main";
+
+    await logSearchCommand({
+      phone,
+      rawText: __rawCommand,
+      source: __source,
+      flow: __flow,
+      sessionState:
+        biz?.sessionState ||
+        __logSess?.tempData?.buyerRequestState ||
+        __logSess?.tempData?.orderState ||
+        __logSess?.tempData?.supplierSearchState ||
+        "",
+      parsed: {},
+      resultMode: "unknown",
+      results: [],
+      botReplySummary: "Incoming user command/text captured globally",
+      meta: {
+        text,
+        action,
+        isMetaAction: typeof isMetaAction !== "undefined" ? isMetaAction : null,
+        buyerRequestState: __logSess?.tempData?.buyerRequestState || "",
+        orderState: __logSess?.tempData?.orderState || "",
+        supplierSearchType: __logSess?.tempData?.supplierSearchType || "",
+        supplierSearchProduct: __logSess?.tempData?.supplierSearchProduct || "",
+        activeBusinessId: __logSess?.activeBusinessId || null
+      }
+    });
+  }
+} catch (err) {
+  console.warn("[GLOBAL COMMAND LOG FAILED]", err.message);
+}
 
   // ── ZQ CHATBOT LINK INTERCEPT ─────────────────────────────────────────────
   // Must be placed HERE - after biz is declared, but before the supplier
