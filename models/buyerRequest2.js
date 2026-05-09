@@ -57,10 +57,17 @@ const buyerRequestSchema = new mongoose.Schema(
     },
     rawText: { type: String, default: "" },
     items: { type: [buyerRequestItemSchema], default: [] },
-    city: { type: String, default: null },
-    area: { type: String, default: null },
-    deliveryRequired: { type: Boolean, default: false },
-    status: {
+   city: { type: String, default: null },
+area: { type: String, default: null },
+
+// For product delivery / pickup point
+deliveryRequired: { type: Boolean, default: false },
+deliveryAddress: { type: String, default: "" },
+
+// For service requests, e.g. tour pickup point, plumbing job address, repair location
+serviceAddress: { type: String, default: "" },
+
+status: {
       type: String,
       enum: ["open", "closed", "expired"],
       default: "open",

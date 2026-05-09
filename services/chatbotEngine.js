@@ -2267,8 +2267,10 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
     const supplierWebsite = supplier?.website || "";
 
     // ── Delivery / collection note ────────────────────────────────────────────
-    const deliveryNote = request.deliveryRequired
-      ? "Delivery to buyer required"
+   const deliveryNote = request.serviceAddress
+  ? `Service address: ${request.serviceAddress}`
+  : request.deliveryRequired
+    ? `Delivery to buyer required${request.deliveryAddress ? `\nDelivery address: ${request.deliveryAddress}` : ""}`
       : response.deliveryAvailable === true
         ? "Delivery available"
         : "Collection only";
@@ -2282,12 +2284,14 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       : (request.city || "Zimbabwe");
 
     // ── Build billingTo block - buyer details ─────────────────────────────────
-    const billingTo = [
-      `Request Ref: ${ref}`,
-      `Location: ${buyerArea}`,
-      buyerRef,
-      deliveryNote
-    ].filter(Boolean).join("\n");
+  const billingTo = [
+  `Request Ref: ${ref}`,
+  `Location: ${buyerArea}`,
+  request.deliveryAddress ? `Delivery address: ${request.deliveryAddress}` : "",
+  request.serviceAddress ? `Service address: ${request.serviceAddress}` : "",
+  buyerRef,
+  deliveryNote
+].filter(Boolean).join("\n");
 
     // ── Build supplier address block for bizMeta ──────────────────────────────
     const supplierAddressBlock = [
@@ -2344,7 +2348,16 @@ async function sendBuyerQuotePdf({ request, supplier, response }) {
       ? "263" + _normBuyerPdf.slice(1) : _normBuyerPdf;
 
     // ── Send the PDF document - same call signature as working invoice/receipt sends ─
-    await sendDocument(_fullBuyerPdf, { link, filename });
+    if (!site) {
+  console.error("[BUYER QUOTE PDF] SITE_URL is missing. Cannot send public PDF link.");
+  return null;
+}
+
+await sendDocument(_fullBuyerPdf, {
+  link,
+  filename,
+  caption: `📄 Quotation ${ref} from ${supplierName}`
+});
     console.log(`[BUYER QUOTE PDF] PDF dispatched to ${_fullBuyerPdf}: ${filename}`);
 
     // ── Follow-up text so buyer knows to scroll up for the PDF ───────────────────
@@ -2456,129 +2469,73 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
       text:
         `📭 *Response for ${ref}*\n\n` +
         `🏪 ${supplierName}\n` +
-        `This seller is not available for your request right now.`,
+        `This provider is not available for your request right now.`,
       buttons: [
         { id: "find_supplier", title: "🔍 Browse & Shop" },
-        { id: "my_orders", title: "📋 My Orders" }
+        { id: "sup_request_sellers", title: "⚡ Request Again" }
       ]
     });
   }
 
-  const itemLines = (response.items || []).length
-    ? response.items.map(i => {
-        if (i.rateOnRequest) return `• ${i.product} x${Number(i.quantity || 1)} — _Rate on request_`;
-        const _unit = i.unit || "each";
-        // Show unit naturally: "per person", "per hour" etc for tourism
-        const _unitLabel = ["person","hr","hour","day","night","trip","group"].includes(_unit)
-          ? `per ${_unit}` : `/${_unit}`;
-        return `• ${i.product} x${Number(i.quantity || 1)} @ $${Number(i.pricePerUnit || 0).toFixed(2)} ${_unitLabel} = $${Number(i.total || 0).toFixed(2)}`;
+  const pricedItems = (response.items || []).filter(i =>
+    i && i.available !== false && Number(i.pricePerUnit) > 0
+  );
+
+  const itemLines = pricedItems.length
+    ? pricedItems.map(i => {
+        const qty = Number(i.quantity || 1);
+        const unit = i.unit || "each";
+        const unitLabel = ["person", "hour", "hr", "day", "night", "trip", "group", "vehicle"].includes(unit)
+          ? `per ${unit}`
+          : `/${unit}`;
+
+        return `• ${i.product} x${qty} @ $${Number(i.pricePerUnit).toFixed(2)} ${unitLabel} = $${Number(i.total || 0).toFixed(2)}`;
       }).join("\n")
-    : "• Seller sent a custom offer";
+    : `• Provider sent a message but no priced items were attached.`;
 
-  const totalLine =
-    typeof response.totalAmount === "number"
-      ? `\n💵 Total: $${Number(response.totalAmount).toFixed(2)}`
-      : "";
-
-  const noteLine = response.message ? `\n📝 ${response.message}` : "";
-  const etaLine = response.etaText ? `\n⏱ ${response.etaText}` : "";
-
- // Count valid quotes received so far including this one
-  const _quoteCount = (request.responses || []).filter(
-    r => r.mode !== "unavailable" && (r.items?.length || r.message)
-  ).length;
- 
-  const _moreComingLine = request.status === "open"
-    ? `\n_Request still open - more quotes may arrive._`
+  const totalLine = typeof response.totalAmount === "number"
+    ? `\n\n💵 *Total: $${Number(response.totalAmount).toFixed(2)}*`
     : "";
- 
-  // ── Try to reach buyer with interactive message ──────────────────────────────
-  // If buyer hasn't messaged in 24hrs, fall back to Meta template to re-open session
+
+  const pickupLine = request.serviceAddress
+    ? `\n📍 Pickup/service point: ${request.serviceAddress}`
+    : "";
+
+  const noteLine = response.message
+    ? `\n📝 ${response.message}`
+    : "";
+
   const _buyerMsg = {
     text:
-      `📨 *New Seller Quote* (${ref})\n` +
-      `💬 ${_quoteCount} quote${_quoteCount === 1 ? "" : "s"} received so far\n\n` +
+      `📨 *New Seller Quote* (${ref})\n\n` +
       `🏪 *${supplierName}*\n\n` +
       `${itemLines}` +
       `${totalLine}` +
-      `${etaLine}` +
+      `${pickupLine}` +
       `${noteLine}\n\n` +
-      `📞 Contact: ${response.supplierPhone}` +
-      `${_moreComingLine}`,
+      `📞 Contact: ${response.supplierPhone || supplier?.phone || ""}`,
     buttons: [
-      { id: `buyer_view_all_quotes_${request._id}`, title: "📊 Compare All Quotes" },
-      { id: "find_supplier",                        title: "🛒 Marketplace" }
+      { id: `buyer_view_all_quotes_${request._id}`, title: "📊 Compare Quotes" },
+      { id: "find_supplier", title: "🛒 Marketplace" }
     ]
   };
 
-  let _buyerMsgSent = false;
-  try {
-    await sendButtons(request.buyerPhone, _buyerMsg);
-    _buyerMsgSent = true;
-  } catch (btnErr) {
-    console.warn(`[BUYER QUOTE NOTIFY] sendButtons failed for ${request.buyerPhone}: ${btnErr.message} - trying template`);
-  }
+  await sendButtons(request.buyerPhone, _buyerMsg);
 
-  // ── Template fallback: buyer is outside 24hr session ─────────────────────────
-  // Uses supplier_new_buyer_request template (already approved) as a session opener,
-  // then immediately sends the full interactive quote details.
-  if (!_buyerMsgSent) {
-    try {
-      const _axiosBuyer  = (await import("axios")).default;
-      const _PHONEID_B   = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
-      const _TOKEN_B     = process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
-      const _normBuyer   = String(request.buyerPhone).replace(/\D+/g, "");
-      const _fullBuyer   = _normBuyer.startsWith("0") && _normBuyer.length === 10
-        ? "263" + _normBuyer.slice(1) : _normBuyer;
+  if (pricedItems.length) {
+    const pdfLink = await sendBuyerQuotePdf({
+      request,
+      supplier,
+      response: { ...response, items: pricedItems }
+    });
 
-      const _totalStr    = typeof response.totalAmount === "number"
-        ? `$${Number(response.totalAmount).toFixed(2)}`
-        : "Price on request";
-      const _cityStr     = request.city || "Zimbabwe";
-
-      // Ping buyer via approved template to re-open their session
-      await _axiosBuyer.post(
-        `https://graph.facebook.com/v24.0/${_PHONEID_B}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to:   _fullBuyer,
-          type: "template",
-          template: {
-            name:     "supplier_new_buyer_request",
-            language: { code: "en" },
-            components: [{
-              type: "body",
-              parameters: [
-                { type: "text", text: ref },
-                { type: "text", text: _cityStr },
-                { type: "text", text: `Quote from ${supplierName}: ${_totalStr}` },
-                { type: "text", text: "Tap to view full quote" }
-              ]
-            }]
-          }
-        },
-        { headers: { Authorization: `Bearer ${_TOKEN_B}`, "Content-Type": "application/json" } }
+    if (!pdfLink) {
+      await sendText(
+        request.buyerPhone,
+        `⚠️ The PDF quotation could not be sent, but your quote details are shown above.`
       );
-      console.log(`[BUYER QUOTE NOTIFY] Template sent to buyer ${_fullBuyer} (${ref})`);
-
-      // Session now open - send full interactive quote after 2s
-      await new Promise(r => setTimeout(r, 2000));
-      await sendButtons(_fullBuyer, _buyerMsg);
-    } catch (tplErr) {
-      console.error(`[BUYER QUOTE NOTIFY] Template also failed for ${request.buyerPhone}: ${tplErr.message}`);
     }
   }
-
-  // Send PDF quotation whenever there are priced line items
-  // (message-only quotes skip PDF - nothing meaningful to put on paper)
-  if (Array.isArray(response.items) && response.items.length > 0) {
-    // Non-blocking: don't let PDF failure break the quote delivery
-    sendBuyerQuotePdf({ request, supplier, response }).catch(pdfErr =>
-      console.error("[BUYER QUOTE PDF] Failed:", pdfErr.message)
-    );
-  }
-
-  return;
 }
 async function notifySuppliersOfBuyerRequest(request) {
   const suppliers = await findSuppliersForBuyerRequest({
@@ -2752,80 +2709,30 @@ function _buyerRequestIsTourism(items = []) {
   });
 }
 
-async function finalizeBuyerRequestSubmission({ from, phone, pendingRequest, deliveryRequired = false, serviceAddress = null }) {
+async function finalizeBuyerRequestSubmission({
+  from,
+  phone,
+  pendingRequest,
+  deliveryRequired = false,
+  serviceAddress = null,
+  deliveryAddress = null
+}) {
   const _isServiceReq = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
+
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: pendingRequest.profileType || "product",  // DB storage only - search always covers both
+    profileType: pendingRequest.profileType || "product",
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
+
     deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
+    deliveryAddress: deliveryAddress || pendingRequest.deliveryAddress || null,
+
     serviceAddress: serviceAddress || pendingRequest.serviceAddress || null,
     status: "open"
-  });
-
-  const sentCount = await notifySuppliersOfBuyerRequest(request);
-
-  // Save location for future use (skip the location step next time)
-  if (request.city) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.savedCity": request.city,
-          "tempData.savedArea": request.area || ""
-        }
-      },
-      { upsert: true }
-    );
-  }
-
-  await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $unset: {
-        "tempData.buyerRequestState": "",
-        "tempData.pendingBuyerRequest": "",
-        "tempData.buyerRequestMode": ""
-      }
-    },
-    { upsert: true }
-  );
-
-  const ref = buildBuyerRequestRef(request);
-
-  const _locationLine = request.area
-    ? `📍 ${request.area}${request.city ? `, ${request.city}` : ""}\n`
-    : request.city ? `📍 ${request.city}\n` : "";
-  const _deliveryLine = _isServiceReq
-    ? (request.serviceAddress
-        ? `📍 Service address: ${request.serviceAddress}\n`
-        : "📍 You will share your address with the provider\n")
-    : (deliveryRequired ? "🚚 Delivery required\n" : "🏠 Collection / no delivery needed\n");
-  const _sellerWord = _isServiceReq ? "service provider" : "seller";
-
-  const _noMatchLine = sentCount === 0
-    ? `\n_No matching sellers found right now. Your request is saved - new sellers will be notified automatically._`
-    : "";
-
-  return sendButtons(from, {
-    text:
-      `✅ *Request sent* (${ref})\n\n` +
-      `${formatBuyerRequestItems(request.items || [], 10)}\n\n` +
-      `${_locationLine}` +
-      `${_deliveryLine}` +
-      `📣 Sent to ${sentCount} matching ${_sellerWord}${sentCount === 1 ? "" : "s"}.` +
-      `${_noMatchLine}\n\n` +
-      `Quotes will arrive here in the chatbot.\n\n` +
-      `*0 = Main menu · quotes = View quotes · repeat = Send again*`,
-    buttons: [
-      { id: `buyer_view_all_quotes_${request._id}`, title: "📊 View Quotes" },
-      { id: "sup_request_sellers",                   title: "⚡ Request Again" },
-      { id: "find_supplier",                         title: "🔍 Browse & Shop" }
-    ]
   });
 }
 
@@ -4104,6 +4011,46 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
   // 2. Action buttons as sendButtons (always shows tap buttons)
   async function _sendDraftPreview(items, skippedNames, ref, totalAmt, reqId) {
     const editedCount = items.filter(i => i._edited).length;
+
+    const cleanItems = (items || []).map(item => ({
+  product: item.product,
+  quantity: Number(item.quantity || 1),
+  unit: item.unit || "each",
+  pricePerUnit: Number(item.pricePerUnit || 0),
+  total: Number(item.total || 0),
+  available: true
+}));
+
+const cleanTotal = Number(
+  cleanItems.reduce((sum, i) => sum + Number(i.total || 0), 0).toFixed(2)
+);
+
+const pendingResponse = {
+  supplierId: supplier._id,
+  supplierPhone: supplier.phone,
+  supplierName: supplier.businessName,
+  mode: "manual_offer",
+  message: skippedNames?.length ? `Not in stock: ${skippedNames.join(", ")}` : "",
+  items: cleanItems,
+  totalAmount: cleanTotal,
+  deliveryAvailable: supplier.delivery?.available ?? null,
+  etaText: ""
+};
+
+await UserSession.findOneAndUpdate(
+  { phone },
+  {
+    $set: {
+      "tempData.pendingOfferResponse": JSON.stringify(pendingResponse),
+      "tempData.pendingDraftQuote": {
+        responseItems: cleanItems,
+        skippedItems: skippedNames || [],
+        totalAmount: cleanTotal
+      }
+    }
+  },
+  { upsert: true }
+);
     const lines = items.map((item, i) =>
       `${i + 1}. *${item.product}* × ${item.quantity} - $${Number(item.pricePerUnit).toFixed(2)} = $${Number(item.total).toFixed(2)}${item._edited ? " ✏️" : ""}`
     ).join("\n");
@@ -4834,6 +4781,64 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         ]
       });
     }
+
+if (buyerRequestState === "awaiting_delivery_address") {
+  const _isExit =
+    al === "cancel" || al === "0" || al === "00" || al === "000" ||
+    al === "menu" || al === "main menu" || al === "main_menu";
+
+  if (_isExit) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $unset: {
+          "tempData.buyerRequestState": "",
+          "tempData.pendingBuyerRequest": "",
+          "tempData.buyerRequestMode": ""
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendSuppliersMenu(from);
+  }
+
+  const deliveryAddress = String(text || "").trim();
+
+  if (!deliveryAddress || deliveryAddress.length < 5) {
+    return sendText(
+      from,
+      `❌ Please enter a proper delivery / pickup address.\n\n` +
+      `Example:\n_24 Mabelreign Drive, Harare_\n_Hotel name / lodge / pickup point_\n\n` +
+      `Type *cancel* to stop.`
+    );
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone },
+    {
+      $unset: {
+        "tempData.buyerRequestState": "",
+        "tempData.pendingBuyerRequest": "",
+        "tempData.buyerRequestMode": ""
+      }
+    },
+    { upsert: true }
+  );
+
+  return finalizeBuyerRequestSubmission({
+    from,
+    phone,
+    pendingRequest: {
+      ...(pendingBuyerRequest || {}),
+      deliveryRequired: true,
+      deliveryAddress
+    },
+    deliveryRequired: true,
+    deliveryAddress
+  });
+}
+
 
     if (buyerRequestState === "awaiting_service_address") {
       const _isExitSA = al === "cancel" || al === "0" || al === "00" || al === "000" || al === "menu" || al === "main menu" || al === "main_menu";
@@ -15041,7 +15046,6 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     });
   }
 
-  // Save location for future use
   if (pendingBuyerRequest.city) {
     await UserSession.findOneAndUpdate(
       { phone },
@@ -15055,11 +15059,35 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     );
   }
 
+  if (a === "sup_request_delivery_yes") {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState": "awaiting_delivery_address",
+          "tempData.pendingBuyerRequest": {
+            ...pendingBuyerRequest,
+            deliveryRequired: true
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    return sendText(
+      from,
+      `📍 *Please send your delivery / pickup address.*\n\n` +
+      `Example:\n_24 Mabelreign Drive, Harare_\n_Hotel name / lodge / pickup point_\n\n` +
+      `Type *0* for main menu · *cancel* to stop.`
+    );
+  }
+
   return finalizeBuyerRequestSubmission({
     from,
     phone,
     pendingRequest: pendingBuyerRequest,
-    deliveryRequired: a === "sup_request_delivery_yes"
+    deliveryRequired: false,
+    deliveryAddress: null
   });
 }
 
@@ -15198,13 +15226,41 @@ if (a.startsWith("req_offer_confirm_")) {
       $unset: {
         "tempData.sellerRequestReplyState": "",
         "tempData.sellerRequestId":         "",
-        "tempData.pendingOfferResponse":    ""
+        "tempData.pendingOfferResponse":    "",
+        "tempData.pendingDraftQuote": ""
       }
     },
     { upsert: true }
   );
 
-  if (!_confirmedResp?.supplierPhone) {
+ if (!_confirmedResp?.supplierPhone) {
+  const fallbackDraft = _confirmSess?.tempData?.pendingDraftQuote;
+
+  if (fallbackDraft?.responseItems?.length) {
+    _confirmedResp = {
+      supplierId: _confirmSup._id,
+      supplierPhone: _confirmSup.phone,
+      supplierName: _confirmSup.businessName,
+      mode: "manual_offer",
+      message: fallbackDraft.skippedItems?.length
+        ? `Not in stock: ${fallbackDraft.skippedItems.join(", ")}`
+        : "",
+      items: fallbackDraft.responseItems.map(item => ({
+        product: item.product,
+        quantity: Number(item.quantity || 1),
+        unit: item.unit || "each",
+        pricePerUnit: Number(item.pricePerUnit || 0),
+        total: Number(item.total || 0),
+        available: true
+      })),
+      totalAmount: Number(fallbackDraft.totalAmount || 0),
+      deliveryAvailable: _confirmSup.delivery?.available ?? null,
+      etaText: ""
+    };
+  }
+}
+
+if (!_confirmedResp?.supplierPhone) {
     // Pending response lost - drop back to price entry
     const _lostItems = (_confirmReq.items || []);
     const _lostLines = _lostItems.map((it, i) => `${i+1}. *${it.product}* × ${Number(it.quantity||1)}`).join("\n");
