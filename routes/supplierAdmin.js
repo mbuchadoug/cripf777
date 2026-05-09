@@ -4186,18 +4186,17 @@ router.post("/expiry/notify-bulk", requireSupplierAdmin, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // SEARCH COMMAND LOGS - Buyer command flow tracking
 // ─────────────────────────────────────────────────────────────────────────────
-
 router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
   try {
-    const { q = "", resultMode = "", flow = "", page = 1 } = req.query;
+    const { q = "", page = 1 } = req.query;
 
     const limit = 30;
     const skip = (Number(page) - 1) * limit;
 
-    const query = {};
+    const match = {};
 
     if (q) {
-      query.$or = [
+      match.$or = [
         { phone: { $regex: q, $options: "i" } },
         { rawText: { $regex: q, $options: "i" } },
         { normalizedText: { $regex: q, $options: "i" } },
@@ -4208,86 +4207,115 @@ router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
       ];
     }
 
-    if (resultMode) query.resultMode = resultMode;
-    if (flow) query.flow = flow;
-
-    const [logs, total] = await Promise.all([
-      SearchCommandLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      SearchCommandLog.countDocuments(query)
+    const contactsAgg = await SearchCommandLog.aggregate([
+      { $match: match },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$phone",
+          phone: { $first: "$phone" },
+          lastText: { $first: "$rawText" },
+          lastFlow: { $first: "$flow" },
+          lastSource: { $first: "$source" },
+          lastResultMode: { $first: "$resultMode" },
+          lastSessionState: { $first: "$sessionState" },
+          lastSeenAt: { $first: "$createdAt" },
+          totalRecords: { $sum: 1 },
+          noResultCount: {
+            $sum: { $cond: [{ $eq: ["$resultMode", "none"] }, 1, 0] }
+          },
+          errorCount: {
+            $sum: { $cond: [{ $eq: ["$resultMode", "error"] }, 1, 0] }
+          },
+          helpedCount: {
+            $sum: { $cond: ["$helped", 1, 0] }
+          }
+        }
+      },
+      { $sort: { lastSeenAt: -1 } },
+      {
+        $facet: {
+          rows: [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: "count" }]
+        }
+      }
     ]);
 
+    const rows = contactsAgg[0]?.rows || [];
+    const total = contactsAgg[0]?.total?.[0]?.count || 0;
     const pages = Math.ceil(total / limit);
-    const qs = p =>
-      `?page=${p}&q=${encodeURIComponent(q)}&resultMode=${encodeURIComponent(resultMode)}&flow=${encodeURIComponent(flow)}`;
+    const qs = p => `?page=${p}&q=${encodeURIComponent(q)}`;
 
     res.send(layout("Search Logs", `
       <div class="panel">
         <div class="panel-head">
-          <h3>🔎 Buyer Search Commands <span class="count">${total}</span></h3>
+          <h3>👥 Contact Activity <span class="count">${total}</span></h3>
         </div>
 
         <form method="GET" class="filter-form" style="margin-bottom:16px">
-          <input name="q" placeholder="Search phone, command, city, product..." value="${esc(q)}" />
-
-          <select name="resultMode">
-            <option value="">All Results</option>
-            <option ${resultMode === "offers" ? "selected" : ""} value="offers">Offers found</option>
-            <option ${resultMode === "suppliers" ? "selected" : ""} value="suppliers">Suppliers found</option>
-            <option ${resultMode === "none" ? "selected" : ""} value="none">No results</option>
-            <option ${resultMode === "error" ? "selected" : ""} value="error">Errors</option>
-          </select>
-
-          <select name="flow">
-            <option value="">All Flows</option>
-            <option ${flow === "supplier_search" ? "selected" : ""} value="supplier_search">Supplier search</option>
-            <option ${flow === "school_search" ? "selected" : ""} value="school_search">School search</option>
-            <option ${flow === "seller_chat" ? "selected" : ""} value="seller_chat">Seller chat</option>
-          </select>
-
-          <button type="submit">Filter</button>
+          <input name="q" placeholder="Search contact, text, product, city..." value="${esc(q)}" />
+          <button type="submit">Search</button>
           <a href="/zq-admin/search-logs" class="btn-reset">Clear</a>
         </form>
 
         <table>
           <thead>
             <tr>
-              <th>Time</th>
               <th>Contact</th>
-              <th>Command</th>
-              <th>Parsed</th>
-              <th>Results</th>
-              <th>Error</th>
+              <th>Last Activity</th>
+              <th>Last Text / Command</th>
+              <th>Flow</th>
+              <th>Records</th>
+              <th>Issues</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            ${logs.map(l => `
+            ${rows.map(c => `
               <tr>
-                <td>${new Date(l.createdAt).toLocaleString()}</td>
                 <td>
-                  <a href="/zq-admin/search-logs/contact/${esc(l.phone)}" class="btn-link">
-                    ${esc(l.phone)}
+                  <strong>
+                    <a href="/zq-admin/search-logs/contact/${esc(c.phone)}" class="btn-link">
+                      ${esc(c.phone)}
+                    </a>
+                  </strong>
+                  <br>
+                  <a href="https://wa.me/${esc(c.phone)}" target="_blank" class="btn-link">
+                    Open WhatsApp
                   </a>
                 </td>
+
+                <td>${new Date(c.lastSeenAt).toLocaleString()}</td>
+
                 <td>
-                  <strong>${esc(l.rawText || "-")}</strong>
-                  <br><small>${esc(l.sessionState || "")}</small>
+                  <strong>${esc(c.lastText || "-")}</strong>
+                  <br><small>${esc(c.lastSessionState || "")}</small>
                 </td>
+
                 <td>
-                  ${esc(l.parsed?.product || l.parsed?.service || "-")}
-                  <br><small>${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}</small>
+                  ${badge(c.lastFlow || "unknown", "blue")}
+                  <br><small>${esc(c.lastSource || "")}</small>
                 </td>
+
+                <td>${badge(`${c.totalRecords || 0} records`, "green")}</td>
+
                 <td>
-                  ${badge(`${l.resultMode} (${l.resultCount || 0})`,
-                    l.resultMode === "none" ? "orange" :
-                    l.resultMode === "error" ? "red" : "green"
-                  )}
+                  ${c.noResultCount ? badge(`${c.noResultCount} no result`, "orange") : ""}
+                  ${c.errorCount ? badge(`${c.errorCount} errors`, "red") : ""}
+                  ${c.helpedCount ? badge(`${c.helpedCount} helped`, "blue") : ""}
+                  ${!c.noResultCount && !c.errorCount && !c.helpedCount ? "-" : ""}
                 </td>
-                <td>${l.errorMessage ? `<small style="color:#dc2626">${esc(l.errorMessage).slice(0, 90)}</small>` : "-"}</td>
-                <td><a class="btn-link" href="/zq-admin/search-logs/${l._id}">Open →</a></td>
+
+                <td>
+                  <a class="btn-link" href="/zq-admin/search-logs/contact/${esc(c.phone)}">
+                    View Activity →
+                  </a>
+                </td>
               </tr>
             `).join("") || `
-              <tr><td colspan="7"><em class="muted">No search logs found yet.</em></td></tr>
+              <tr>
+                <td colspan="7"><em class="muted">No contact activity found yet.</em></td>
+              </tr>
             `}
           </tbody>
         </table>
@@ -4305,8 +4333,6 @@ router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
     res.send(layout("Search Logs", `<div class="alert red">Error: ${esc(err.message)}</div>`));
   }
 });
-
-
 router.get("/search-logs/contact/:phone", requireSupplierAdmin, async (req, res) => {
   try {
     const phone = String(req.params.phone || "").replace(/\D+/g, "");
@@ -4648,114 +4674,7 @@ router.use("/suppliers/:id/smart-link", smartLinkRoutes);
 // SEARCH COMMAND LOGS - Buyer command flow tracking
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.get("/search-logs", requireSupplierAdmin, async (req, res) => {
-  try {
-    const {
-      q = "",
-      resultMode = "",
-      flow = "",
-      page = 1
-    } = req.query;
 
-    const limit = 30;
-    const skip = (Number(page) - 1) * limit;
-
-    const query = {};
-
-    if (q) {
-      query.$or = [
-        { phone: { $regex: q, $options: "i" } },
-        { rawText: { $regex: q, $options: "i" } },
-        { normalizedText: { $regex: q, $options: "i" } },
-        { "parsed.product": { $regex: q, $options: "i" } },
-        { "parsed.city": { $regex: q, $options: "i" } },
-        { "parsed.area": { $regex: q, $options: "i" } }
-      ];
-    }
-
-    if (resultMode) query.resultMode = resultMode;
-    if (flow) query.flow = flow;
-
-    const [logs, total] = await Promise.all([
-      SearchCommandLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      SearchCommandLog.countDocuments(query)
-    ]);
-
-    const pages = Math.ceil(total / limit);
-    const qs = p =>
-      `?page=${p}&q=${encodeURIComponent(q)}&resultMode=${encodeURIComponent(resultMode)}&flow=${encodeURIComponent(flow)}`;
-
-    res.send(layout("Search Logs", `
-      <div class="panel">
-        <div class="panel-head">
-          <h3>🔎 Buyer Search Commands <span class="count">${total}</span></h3>
-        </div>
-
-        <form method="GET" class="filter-form" style="margin-bottom:16px">
-          <input name="q" placeholder="Search phone, command, city, product..." value="${esc(q)}" />
-
-          <select name="resultMode">
-            <option value="">All Results</option>
-            <option ${resultMode === "offers" ? "selected" : ""} value="offers">Offers found</option>
-            <option ${resultMode === "suppliers" ? "selected" : ""} value="suppliers">Suppliers found</option>
-            <option ${resultMode === "none" ? "selected" : ""} value="none">No results</option>
-            <option ${resultMode === "error" ? "selected" : ""} value="error">Errors</option>
-          </select>
-
-          <select name="flow">
-            <option value="">All Flows</option>
-            <option ${flow === "supplier_search" ? "selected" : ""} value="supplier_search">Supplier search</option>
-            <option ${flow === "school_search" ? "selected" : ""} value="school_search">School search</option>
-            <option ${flow === "seller_chat" ? "selected" : ""} value="seller_chat">Seller chat</option>
-          </select>
-
-          <button type="submit">Filter</button>
-          <a href="/zq-admin/search-logs" class="btn-reset">Clear</a>
-        </form>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Contact</th>
-              <th>Command</th>
-              <th>Parsed</th>
-              <th>Results</th>
-              <th>Error</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${logs.map(l => `
-              <tr>
-                <td>${new Date(l.createdAt).toLocaleString()}</td>
-                <td><a href="/zq-admin/search-logs/contact/${esc(l.phone)}" class="btn-link">${esc(l.phone)}</a></td>
-                <td><strong>${esc(l.rawText || "-")}</strong><br><small>${esc(l.sessionState || "")}</small></td>
-                <td>
-                  ${esc(l.parsed?.product || l.parsed?.service || "-")}
-                  <br><small>${esc([l.parsed?.area, l.parsed?.city].filter(Boolean).join(", "))}</small>
-                </td>
-                <td>${badge(`${l.resultMode} (${l.resultCount || 0})`, l.resultMode === "none" ? "orange" : l.resultMode === "error" ? "red" : "green")}</td>
-                <td>${l.errorMessage ? `<small style="color:#dc2626">${esc(l.errorMessage).slice(0, 90)}</small>` : "-"}</td>
-                <td><a class="btn-link" href="/zq-admin/search-logs/${l._id}">Open →</a></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-
-        ${pages > 1 ? `
-          <div class="pagination">
-            ${Array.from({ length: pages }, (_, i) => i + 1).map(p =>
-              `<a href="/zq-admin/search-logs${qs(p)}" class="${Number(page) === p ? "active" : ""}">${p}</a>`
-            ).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("Search Logs", `<div class="alert red">Error: ${esc(err.message)}</div>`));
-  }
-});
 
 
 router.get("/search-logs/contact/:phone", requireSupplierAdmin, async (req, res) => {
