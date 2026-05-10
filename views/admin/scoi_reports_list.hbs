@@ -134,6 +134,19 @@
       color:var(--primary);
     }
 
+
+.btn-danger{
+  background:#EF4444;
+  color:white;
+  border:2px solid #EF4444;
+}
+
+.btn-danger:hover{
+  background:#DC2626;
+  border-color:#DC2626;
+  color:white;
+  transform:translateY(-2px);
+}
     /* FILTERS */
     .filters{
       background:white;
@@ -631,6 +644,13 @@
                         📄 Gen
                       </button>
                     {{/if}}
+
+                    <button
+  onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
+  class="btn btn-danger btn-sm"
+>
+  🗑️ Delete
+</button>
                   </div>
                 </td>
               </tr>
@@ -706,6 +726,13 @@
                 📄 Generate PDF
               </button>
             {{/if}}
+
+            <button
+  onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
+  class="card-btn btn-danger"
+>
+  🗑️ Delete
+</button>
           </div>
         </div>
       {{/each}}
@@ -833,6 +860,34 @@
       btn.textContent = '📥 Generate All';
     }
   }
+
+  async function deleteReport(auditId, reportName) {
+  const safeName = reportName || "this report";
+
+  const confirmed = confirm(
+    `Are you sure you want to delete "${safeName}"?\n\nThis action cannot be undone.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const response = await fetch(`/admin/scoi/reports/${auditId}`, {
+      method: "DELETE"
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      alert("✅ Report deleted successfully");
+      window.location.reload();
+    } else {
+      alert("❌ Failed: " + (data.error || "Unknown error"));
+    }
+  } catch (error) {
+    console.error("Delete error:", error);
+    alert("❌ Failed to delete report");
+  }
+}
 </script>
 
 </body>

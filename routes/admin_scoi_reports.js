@@ -212,6 +212,40 @@ router.post("/admin/scoi/reports/generate-all-pdfs", ensureAuth, async (req, res
 });
 
 /**
+ * DELETE - Delete SCOI report
+ */
+router.delete("/admin/scoi/reports/:id", ensureAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Try placement first
+    let deleted = await PlacementAudit.findByIdAndDelete(id);
+
+    // If not placement, try special
+    if (!deleted) {
+      deleted = await SpecialScoiAudit.findByIdAndDelete(id);
+    }
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: "Report not found"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Report deleted successfully"
+    });
+  } catch (err) {
+    console.error("[delete scoi report]", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Failed to delete report"
+    });
+  }
+});
+/**
  * GET - Download PDF directly
  */
 router.get("/scoi/audits/:id/download", async (req, res) => {
