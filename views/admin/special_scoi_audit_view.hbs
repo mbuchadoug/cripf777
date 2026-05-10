@@ -6,254 +6,581 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
-    body {
-      font-family: Georgia, "Times New Roman", serif;
-      background: #ffffff;
-      color: #111;
-      margin: 40px;
-      line-height: 1.6;
+    :root {
+      --navy: #0f172a;
+      --slate: #475569;
+      --muted: #64748b;
+      --blue: #2563eb;
+      --blue-dark: #1e3a8a;
+      --gold: #d97706;
+      --green: #047857;
+      --red: #b91c1c;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --soft-blue: #eff6ff;
+      --soft-gold: #fffbeb;
+      --soft-green: #ecfdf5;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
 
-    h1, h2, h3 {
-      margin-top: 32px;
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--navy);
+      margin: 0;
+      line-height: 1.7;
+    }
+
+    .report-page {
+      max-width: 1150px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+    }
+
+    .report-header {
+      background: linear-gradient(135deg, var(--navy), var(--blue-dark));
+      color: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: var(--shadow);
+      margin-bottom: 30px;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 12px;
+      font-weight: 800;
+      color: #bfdbfe;
+      margin-bottom: 12px;
     }
 
     h1 {
-      border-bottom: 2px solid #000;
-      padding-bottom: 8px;
+      margin: 0 0 14px;
+      font-size: 36px;
+      line-height: 1.15;
+      border: none;
     }
 
-    hr {
-      margin: 32px 0;
+    h2 {
+      margin: 0;
+      font-size: 21px;
+      color: #dbeafe;
+      font-weight: 600;
     }
 
-    .meta p {
-      margin: 4px 0;
+    h3 {
+      margin-top: 0;
+      margin-bottom: 18px;
+      font-size: 21px;
+      color: var(--blue-dark);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .meta-item {
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(4px);
+    }
+
+    .meta-label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #bfdbfe;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .meta-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      word-break: break-word;
+    }
+
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 28px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .section.accent {
+      border-top: 6px solid var(--blue);
+    }
+
+    .section.gold {
+      border-top: 6px solid var(--gold);
+      background: linear-gradient(180deg, var(--soft-gold), white);
+    }
+
+    .section.green {
+      border-top: 6px solid var(--green);
+      background: linear-gradient(180deg, var(--soft-green), white);
     }
 
     .box {
-      background: #f7f7f7;
-      padding: 16px;
-      border-left: 4px solid #000;
-      margin: 16px 0;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--blue);
+      border-radius: 16px;
+      padding: 18px;
+      margin: 14px 0;
     }
 
-    ul {
-      margin-left: 20px;
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-top: 16px;
+    }
+
+    .metric-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(15,23,42,0.04);
+    }
+
+    .metric-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--blue-dark);
+      line-height: 1.2;
+    }
+
+    .metric-note {
+      color: var(--slate);
+      font-size: 14px;
+      margin-top: 10px;
     }
 
     .label {
-      font-weight: bold;
+      font-weight: 800;
+      color: var(--navy);
+    }
+
+    ul {
+      margin: 12px 0 0 22px;
+      padding: 0;
+    }
+
+    li {
+      margin-bottom: 8px;
+      color: var(--slate);
+    }
+
+    p {
+      color: var(--slate);
+    }
+
+    strong {
+      color: var(--navy);
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      list-style: none;
+      margin-left: 0;
+      padding-left: 0;
+    }
+
+    .tag-list li {
+      background: var(--soft-blue);
+      color: var(--blue-dark);
+      border: 1px solid #bfdbfe;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    hr {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .meta-grid,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .report-header {
+        padding: 28px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .report-page {
+        padding: 0 16px 50px;
+      }
     }
   </style>
 </head>
 
 <body>
 
-<h1>Special SCOI Audit Report</h1>
+<div class="report-page">
 
-<h2>{{audit.subject.name}}</h2>
+  <div class="report-header">
+    <div class="eyebrow">CRIPFCnt SCOI Intelligence Report</div>
 
-<div class="meta">
-  <p><span class="label">Audit Type:</span> {{audit.auditType}}</p>
-  <p><span class="label">Framework:</span> {{audit.framework}}</p>
-  <p><span class="label">Author:</span> {{audit.author}}</p>
-  <p><span class="label">Assessment Window:</span> {{audit.assessmentWindow.label}}</p>
-  <p><span class="label">Status:</span> {{audit.status}}</p>
-</div>
+    <h1>Special SCOI Audit Report</h1>
 
-<hr>
+    <h2>{{audit.subject.name}}</h2>
 
-<h3>Purpose</h3>
-<div class="box">
-  {{audit.purpose}}
-</div>
+    <div class="meta-grid">
 
-<hr>
+      <div class="meta-item">
+        <span class="meta-label">Audit Type</span>
+        <span class="meta-value">{{audit.auditType}}</span>
+      </div>
 
-<h3>SCOI Metrics & Actual Result</h3>
-<div class="box">
-  <p><span class="label">Visibility Rating:</span> {{audit.scores.visibility_denominator.rating}}</p>
-  <p>
-    <span class="label">Visibility Range:</span>
-    {{audit.scores.visibility_denominator.normalizedRange.[0]}}
-    -
-    {{audit.scores.visibility_denominator.normalizedRange.[1]}}
-  </p>
+      <div class="meta-item">
+        <span class="meta-label">Framework</span>
+        <span class="meta-value">{{audit.framework}}</span>
+      </div>
 
-  <p><span class="label">Responsibility Rating:</span> {{audit.scores.responsibility_numerator.rating}}</p>
-  <p>
-    <span class="label">Responsibility Range:</span>
-    {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
-    -
-    {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
-  </p>
+      <div class="meta-item">
+        <span class="meta-label">Author</span>
+        <span class="meta-value">{{audit.author}}</span>
+      </div>
 
-  {{#if audit.scores.SCOI_framework_result}}
-    <hr>
-    <p>
-      <span class="label">Actual SCOI Result Range:</span>
-      {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
-      -
-      {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
-    </p>
-    <p><span class="label">Placement:</span> {{audit.scores.SCOI_framework_result.placement}}</p>
-    <p><span class="label">Interpretation:</span> {{audit.scores.SCOI_framework_result.interpretation}}</p>
+      <div class="meta-item">
+        <span class="meta-label">Assessment Window</span>
+        <span class="meta-value">{{audit.assessmentWindow.label}}</span>
+      </div>
+
+      <div class="meta-item">
+        <span class="meta-label">Status</span>
+        <span class="meta-value">{{audit.status}}</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="section accent">
+    <h3>Purpose</h3>
+
+    <div class="box">
+      {{audit.purpose}}
+    </div>
+  </div>
+
+  <div class="section gold">
+    <h3>SCOI Metrics & Actual Result</h3>
+
+    <div class="metric-grid">
+
+      <div class="metric-card">
+        <div class="metric-title">Visibility Rating</div>
+
+        <div class="metric-value">
+          {{audit.scores.visibility_denominator.rating}}
+        </div>
+
+        <div class="metric-note">
+          Range:
+          {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+          -
+          {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-title">Responsibility Rating</div>
+
+        <div class="metric-value">
+          {{audit.scores.responsibility_numerator.rating}}
+        </div>
+
+        <div class="metric-note">
+          Range:
+          {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+          -
+          {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+        </div>
+      </div>
+
+      {{#if audit.scores.SCOI_framework_result}}
+      <div class="metric-card">
+        <div class="metric-title">Framework SCOI</div>
+
+        <div class="metric-value">
+          {{audit.scores.SCOI_framework_result.placement}}
+        </div>
+
+        <div class="metric-note">
+          {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
+          -
+          {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
+        </div>
+      </div>
+      {{/if}}
+
+      {{#if audit.scores.SCOI_event_result}}
+      <div class="metric-card">
+        <div class="metric-title">Event SCOI</div>
+
+        <div class="metric-value">
+          {{audit.scores.SCOI_event_result.placement}}
+        </div>
+
+        <div class="metric-note">
+          {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
+          -
+          {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+        </div>
+      </div>
+      {{/if}}
+
+    </div>
+
+    {{#if audit.scores.SCOI_framework_result}}
+    <div class="box">
+      <p>
+        <span class="label">Interpretation:</span>
+        {{audit.scores.SCOI_framework_result.interpretation}}
+      </p>
+    </div>
+    {{/if}}
+
+    {{#if audit.scores.SCOI_event_result}}
+    <div class="box">
+      <p>
+        <span class="label">Interpretation:</span>
+        {{audit.scores.SCOI_event_result.interpretation}}
+      </p>
+    </div>
+    {{/if}}
+
+  </div>
+
+  <div class="section accent">
+    <h3>Visibility Analysis</h3>
+
+    <div class="box">
+      <p>
+        <span class="label">Rating:</span>
+        {{audit.scores.visibility_denominator.rating}}
+      </p>
+
+      <p>
+        <span class="label">Normalized Range:</span>
+        {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+        -
+        {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+      </p>
+
+      <p class="label">Drivers:</p>
+
+      <ul>
+        {{#each audit.scores.visibility_denominator.drivers}}
+          <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="section accent">
+    <h3>Responsibility Contribution Analysis</h3>
+
+    <div class="box">
+      <p>
+        <span class="label">Rating:</span>
+        {{audit.scores.responsibility_numerator.rating}}
+      </p>
+
+      <p>
+        <span class="label">Normalized Range:</span>
+        {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+        -
+        {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+      </p>
+
+      <p class="label">Observed Signals:</p>
+
+      <ul>
+        {{#each audit.scores.responsibility_numerator.observedSignals}}
+          <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  {{#if audit.calculations}}
+  <div class="section green">
+    <h3>Calculations</h3>
+
+    {{#each audit.calculations}}
+      <div class="box">
+
+        <p>
+          <span class="label">{{@key}}</span>
+        </p>
+
+        {{#if this.value}}
+          <p>
+            <span class="label">Value:</span>
+            {{this.value}}
+          </p>
+        {{/if}}
+
+        {{#if this.formula}}
+          <p>
+            <span class="label">Formula:</span>
+            {{this.formula}}
+          </p>
+        {{/if}}
+
+        {{#if this.working}}
+          <p>
+            <span class="label">Working:</span>
+            {{this.working}}
+          </p>
+        {{/if}}
+
+        {{#if this.meaning}}
+          <p>
+            <span class="label">Meaning:</span>
+            {{this.meaning}}
+          </p>
+        {{/if}}
+
+        {{#if this.interpretation}}
+          <p>{{this.interpretation}}</p>
+        {{/if}}
+
+      </div>
+    {{/each}}
+
+  </div>
   {{/if}}
 
-  {{#if audit.scores.SCOI_event_result}}
-    <hr>
-    <p>
-      <span class="label">Actual SCOI Result Range:</span>
-      {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
-      -
-      {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
-    </p>
-    <p><span class="label">Placement:</span> {{audit.scores.SCOI_event_result.placement}}</p>
-    <p><span class="label">Interpretation:</span> {{audit.scores.SCOI_event_result.interpretation}}</p>
-  {{/if}}
+  <div class="section accent">
+    <h3>Findings</h3>
+
+    <div class="box">
+
+      <p>
+        <span class="label">Core Finding:</span>
+      </p>
+
+      <p>{{audit.findings.coreFinding}}</p>
+
+      <p class="label">Secondary Findings:</p>
+
+      <ul>
+        {{#each audit.findings.secondaryFindings}}
+          <li>{{this}}</li>
+        {{/each}}
+      </ul>
+
+      <p>
+        <span class="label">Classification:</span>
+        {{audit.findings.classification.label}}
+      </p>
+
+      <p>{{audit.findings.classification.definition}}</p>
+
+    </div>
+  </div>
+
+  <div class="section accent">
+    <h3>Civilization Risk Signals</h3>
+
+    <div class="box">
+      <ul>
+        {{#each audit.civilizationRiskSignals}}
+          <li>
+            <strong>{{this.riskLabel}}:</strong>
+            {{this.description}}
+          </li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="section gold">
+    <h3>Counterfactual Requirements</h3>
+
+    <div class="box">
+
+      <p>
+        <span class="label">Target:</span>
+        {{audit.counterfactual.goal}}
+      </p>
+
+      <ul>
+        {{#each audit.counterfactual.requirements}}
+          <li>{{this}}</li>
+        {{/each}}
+      </ul>
+
+      <p>{{audit.counterfactual.note}}</p>
+
+    </div>
+  </div>
+
+  <div class="section accent">
+    <h3>Disclaimers</h3>
+
+    <div class="box">
+      <ul>
+        {{#each audit.disclaimers}}
+          {{#if this}}
+            <li>
+              <strong>{{@key}}:</strong>
+              {{this}}
+            </li>
+          {{/if}}
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="section accent">
+    <h3>Tags</h3>
+
+    <ul class="tag-list">
+      {{#each audit.tags}}
+        <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </div>
+
 </div>
-
-<hr>
-
-<h3>Visibility Analysis</h3>
-<div class="box">
-  <p><span class="label">Rating:</span> {{audit.scores.visibility_denominator.rating}}</p>
-  <p>
-    <span class="label">Normalized Range:</span>
-    {{audit.scores.visibility_denominator.normalizedRange.[0]}}
-    -
-    {{audit.scores.visibility_denominator.normalizedRange.[1]}}
-  </p>
-
-  <p class="label">Drivers:</p>
-  <ul>
-    {{#each audit.scores.visibility_denominator.drivers}}
-      <li>{{this}}</li>
-    {{/each}}
-  </ul>
-</div>
-
-<hr>
-
-<h3>Responsibility Contribution Analysis</h3>
-<div class="box">
-  <p><span class="label">Rating:</span> {{audit.scores.responsibility_numerator.rating}}</p>
-  <p>
-    <span class="label">Normalized Range:</span>
-    {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
-    -
-    {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
-  </p>
-
-  <p class="label">Observed Signals:</p>
-  <ul>
-    {{#each audit.scores.responsibility_numerator.observedSignals}}
-      <li>{{this}}</li>
-    {{/each}}
-  </ul>
-</div>
-
-{{#if audit.calculations}}
-<hr>
-
-<h3>Calculations</h3>
-<div class="box">
-  {{#each audit.calculations}}
-    <p><span class="label">{{@key}}:</span></p>
-
-    {{#if this.value}}
-      <p><span class="label">Value:</span> {{this.value}}</p>
-    {{/if}}
-
-    {{#if this.formula}}
-      <p><span class="label">Formula:</span> {{this.formula}}</p>
-    {{/if}}
-
-    {{#if this.working}}
-      <p><span class="label">Working:</span> {{this.working}}</p>
-    {{/if}}
-
-    {{#if this.meaning}}
-      <p><span class="label">Meaning:</span> {{this.meaning}}</p>
-    {{/if}}
-
-    {{#if this.interpretation}}
-      <p>{{this.interpretation}}</p>
-    {{/if}}
-
-    <hr>
-  {{/each}}
-</div>
-{{/if}}
-
-<hr>
-
-<h3>Findings</h3>
-<div class="box">
-  <p><span class="label">Core Finding:</span></p>
-  <p>{{audit.findings.coreFinding}}</p>
-
-  <p class="label">Secondary Findings:</p>
-  <ul>
-    {{#each audit.findings.secondaryFindings}}
-      <li>{{this}}</li>
-    {{/each}}
-  </ul>
-
-  <p>
-    <span class="label">Classification:</span>
-    {{audit.findings.classification.label}}
-  </p>
-  <p>{{audit.findings.classification.definition}}</p>
-</div>
-
-<hr>
-
-<h3>Civilization Risk Signals</h3>
-<ul>
-  {{#each audit.civilizationRiskSignals}}
-    <li>
-      <strong>{{this.riskLabel}}:</strong>
-      {{this.description}}
-    </li>
-  {{/each}}
-</ul>
-
-<hr>
-
-<h3>Counterfactual Requirements</h3>
-<div class="box">
-  <p><span class="label">Target:</span> {{audit.counterfactual.goal}}</p>
-
-  <ul>
-    {{#each audit.counterfactual.requirements}}
-      <li>{{this}}</li>
-    {{/each}}
-  </ul>
-
-  <p>{{audit.counterfactual.note}}</p>
-</div>
-
-<hr>
-
-<h3>Disclaimers</h3>
-<ul>
-  {{#each audit.disclaimers}}
-    {{#if this}}
-      <li><strong>{{@key}}:</strong> {{this}}</li>
-    {{/if}}
-  {{/each}}
-</ul>
-
-<hr>
-
-<h3>Tags</h3>
-<ul>
-  {{#each audit.tags}}
-    <li>{{this}}</li>
-  {{/each}}
-</ul>
 
 </body>
 </html>
