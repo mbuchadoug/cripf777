@@ -9,36 +9,36 @@ import { computeSchoolFeeRange } from "../services/schoolPlans.js";
 // the school's fee schedule exactly as Zimbabwean schools present it.
 //
 // appliesTo values (school levels in Zimbabwe):
-//   "nursery"   – Baby Class / Nursery (age ~3)
-//   "ecd_a"     – ECD A (age ~4)
-//   "ecd_b"     – ECD B (age ~5, pre-Grade 1)
-//   "grade1_4"  – Lower Primary: Grades 1–4
-//   "grade5_7"  – Upper Primary: Grades 5–7
-//   "primary"   – Primary Grades 1–7 (when not split lower/upper)
-//   "form1_4"   – O-Level: Form 1–4
-//   "form5_6"   – A-Level: Form 5–6 / Upper 6
-//   "boarding"  – Boarding (accommodation + meals, any level)
-//   "transport" – School bus / transport
-//   "all"       – School-wide (levies, registration)
+//   "nursery"  - Baby Class / Nursery (age ~3)
+//   "ecd_a"    - ECD A (age ~4)
+//   "ecd_b"    - ECD B (age ~5, pre-Grade 1)
+//   "grade1_4" - Lower Primary: Grades 1–4
+//   "grade5_7" - Upper Primary: Grades 5–7
+//   "primary"  - Primary Grades 1–7 (when not split lower/upper)
+//   "form1_4"  - O-Level: Form 1–4
+//   "form5_6"  - A-Level: Form 5–6 / Upper 6
+//   "boarding" - Boarding (accommodation + meals, any level)
+//   "transport"- School bus / transport
+//   "all"      - School-wide (levies, registration)
 //
 // feeType values:
-//   "tuition"      – Regular term tuition
-//   "boarding"     – Boarding accommodation + meals
-//   "transport"    – School bus
-//   "development"  – Development levy
-//   "sports"       – Sports levy
-//   "it"           – IT / Computer levy
-//   "library"      – Library levy
-//   "exam"         – Exam / assessment fees
-//   "registration" – Once-off admission fee
-//   "caution"      – Refundable boarding deposit
-//   "uniform"      – Uniform estimate
-//   "other"        – Custom / other fee
+//   "tuition"     - Regular term tuition
+//   "boarding"    - Boarding accommodation + meals
+//   "transport"   - School bus
+//   "development" - Development levy
+//   "sports"      - Sports levy
+//   "it"          - IT / Computer levy
+//   "library"     - Library levy
+//   "exam"        - Exam / assessment fees
+//   "registration"- Once-off admission fee
+//   "caution"     - Refundable boarding deposit
+//   "uniform"     - Uniform estimate
+//   "other"       - Custom / other fee
 //
 // per values:
-//   "term"     – charged each term (most tuition)
-//   "year"     – charged once per year (most levies)
-//   "once_off" – charged once ever (registration, caution)
+//   "term"    - charged each term (most tuition)
+//   "year"    - charged once per year (most levies)
+//   "once_off"- charged once ever (registration, caution)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const schoolFeeItemSchema = new mongoose.Schema({

@@ -63,19 +63,24 @@ router.get("/admin/scoi/reports", ensureAuth, async (req, res) => {
  */
 router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
   try {
-    // Try placement first
     let audit = await PlacementAudit.findById(req.params.id).lean();
-    
-    // Try special if not found
-    if (!audit) {
-      audit = await SpecialScoiAudit.findById(req.params.id).lean();
+
+    if (audit) {
+      return res.render("scoi/audit_view", {
+        audit,
+        user: req.user,
+        layout: false
+      });
     }
+
+    audit = await SpecialScoiAudit.findById(req.params.id).lean();
 
     if (!audit) {
       return res.status(404).send("Report not found");
     }
 
-    res.render("scoi/audit_view", {
+    return res.render("admin/special_scoi_audit_view", {
+      title: `Special SCOI Audit- ${audit.subject?.name || "Report"}`,
       audit,
       user: req.user,
       layout: false

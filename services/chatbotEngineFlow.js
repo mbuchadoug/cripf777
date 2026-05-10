@@ -2135,11 +2135,11 @@ async function showBranchCashBalance(from, biz, branchId) {
     msg += `   • Expenses: ${cashOutExpenses} ${cur} (${expenses.length})\n`;
     const expByCategory = {};
     expenses.forEach(e => { expByCategory[e.category || "Other"] = (expByCategory[e.category || "Other"] || 0) + e.amount; });
-    Object.entries(expByCategory).forEach(([cat, amt]) => { msg += `     – ${cat}: ${amt} ${cur}\n`; });
+    Object.entries(expByCategory).forEach(([cat, amt]) => { msg += `    - ${cat}: ${amt} ${cur}\n`; });
   }
   if (cashOutPayouts > 0) {
     msg += `   • Payouts/Drawings: ${cashOutPayouts} ${cur} (${payouts.length})\n`;
-    payouts.forEach(p => { msg += `     – ${p.reason || "No reason"}: ${p.amount} ${cur}\n`; });
+    payouts.forEach(p => { msg += `    - ${p.reason || "No reason"}: ${p.amount} ${cur}\n`; });
   }
   msg += `\n━━━━━━━━━━━━━━\n`;
   msg += `${closing >= opening ? "📈" : "📉"} *Closing Balance: ${closing} ${cur}*\n`;

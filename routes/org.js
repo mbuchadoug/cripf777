@@ -17,7 +17,7 @@ import { ensureAuth } from "../middleware/authGuard.js";
 const router = Router();
 
 /* ------------------------------------------------------------------ */
-/*  Admin check – uses ADMIN_EMAILS env (comma separated)              */
+/*  Admin check- uses ADMIN_EMAILS env (comma separated)              */
 /* ------------------------------------------------------------------ */
 function ensureAdminEmails(req, res, next) {
   const adminEmails = (process.env.ADMIN_EMAILS || "")

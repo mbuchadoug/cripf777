@@ -258,7 +258,7 @@ router.get("/:slug/qr", async (req, res) => {
     const feeStr = _feeLabel(entity);
 
     res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>QR Poster – ${esc(name)}</title>
+<title>QR Poster- ${esc(name)}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"Segoe UI",sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}.poster{width:400px;border:3px solid #085041;border-radius:20px;padding:28px;text-align:center}.brand{font-size:11px;font-weight:700;color:#0F6E56;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px}h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.2}.sub{font-size:13px;color:#5a7a5a;margin-bottom:4px}.adm{display:inline-block;margin:10px 0 0;background:#E1F5EE;color:#0F6E56;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px}.adm.closed{background:#fee2e2;color:#dc2626}.qrw{margin:18px auto;padding:12px;border:1px solid #E1F5EE;border-radius:12px;display:inline-block}.qrw img{display:block;width:200px;height:200px}.cta{font-size:13px;font-weight:600;color:#0F6E56;margin-bottom:6px}.how{font-size:12px;color:#888;background:#f0faf5;border-radius:8px;padding:8px 12px;margin-bottom:14px;line-height:1.5}.foot{font-size:10px;color:#aaa}.noprint{margin-top:16px;display:flex;gap:10px;justify-content:center}@media print{.noprint{display:none!important}body{padding:0}}</style>
 </head><body>
 <div class="poster">

@@ -51,7 +51,7 @@ async function fetchRandomQuestionsFromDB(count = 5, opts = {}) {
       choices: (d.choices || []).map((c) =>
         typeof c === "string" ? { text: c } : { text: c.text }
       ),
-      // may be correctIndex or answerIndex – we only need this for scoring
+      // may be correctIndex or answerIndex- we only need this for scoring
       correctIndex:
         typeof d.correctIndex === "number"
           ? d.correctIndex

@@ -15,11 +15,11 @@ export const ACTIONS = {
   NEW_RECEIPT: "new_receipt",
 
 
-  // SALES – VIEW LISTS ✅ ADD THESE
+  // SALES- VIEW LISTS ✅ ADD THESE
 VIEW_INVOICES: "view_invoices",
 VIEW_QUOTES: "view_quotes",
 VIEW_RECEIPTS: "view_receipts",
-  // SALES – ITEM ACTIONS
+  // SALES- ITEM ACTIONS
 VIEW_DOC: "view_doc",
 DELETE_DOC: "delete_doc",
 

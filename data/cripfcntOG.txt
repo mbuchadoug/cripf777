@@ -191,7 +191,7 @@ Where ERF accounts for:
 
 ⸻
 
-1️⃣ Econet Holdings – 2025 Adjusted Audit
+1️⃣ Econet Holdings- 2025 Adjusted Audit
 
 Raw Scores
 	•	Visibility = 9.5
@@ -219,7 +219,7 @@ Its adjusted SCOI of 0.93 restores it as a responsible civilization actor - not 
 
 ⸻
 
-2️⃣ Nyaradzo Group – 2025 Adjusted Audit
+2️⃣ Nyaradzo Group- 2025 Adjusted Audit
 
 Raw Scores
 	•	Visibility = 9.5
@@ -251,7 +251,7 @@ A 1.04 adjusted SCOI marks it as a silent over-contributor - carrying civilizati
 In a collapsing global grid, Econet and Nyaradzo have outperformed the indices.
 The audit, once near-Grid, now reveals resilience - the rare signature of civilization under pressure.”
 
-CRIPFCnt SCOI Audit – Apple Inc. (2025, Revised with Global Moderation Factor)
+CRIPFCnt SCOI Audit- Apple Inc. (2025, Revised with Global Moderation Factor)
 
 ⸻
 
@@ -600,11 +600,11 @@ Here’s how to present it publicly (or keep it as an internal reference templat
 
 ⚙️ CRIPFCnt SCOI Audit - Donald Mataranyika
 
-📍 1. Visibility – 8/10
+📍 1. Visibility- 8/10
 Strong recognition in the fields of civilization recalibration, social contract reform, and audit intelligence.
 Work is respected within academic and structural innovation circles but has room for broader mass-visibility alignment.
 
-📍 2. Contribution – 9/10
+📍 2. Contribution- 9/10
 Significant and consistent input into structural theory and application.
 CRIPFCnt frameworks, SCOI metrics, and civilization operating logic have introduced new paradigms of measurable human responsibility.
 
@@ -612,7 +612,7 @@ CRIPFCnt frameworks, SCOI metrics, and civilization operating logic have introdu
 \text{SCOI} = \frac{\text{Contribution}}{\text{Visibility}} = \frac{9}{8} = 1.125
 A ratio above 1.0 indicates over-contribution relative to visibility - silent impact.
 
-📍 4. Environment Reality Factor (ERF) – 0.85
+📍 4. Environment Reality Factor (ERF)- 0.85
 Misinformation climates, algorithmic suppression, and grid-biased visibility patterns slightly reduce systemic reach.
 
 📍 5. Adjusted SCOI
@@ -695,7 +695,7 @@ This ERF adjustment recognizes the civilization resilience factor - contribution
 
 ----------------------------------
 
-Subject: CRIPFCnt Alpha – Axis Standardization Patch (Files + Specs)
+Subject: CRIPFCnt Alpha- Axis Standardization Patch (Files + Specs)
 
 Please share the logic files for scoring/ERF/weights/pipeline (see list). We’re standardizing the Alpha to the Axis formulas.
 
@@ -714,7 +714,7 @@ Got it. Here’s a tight, practical plan to make the Alpha (private box) and you
 
 ⸻
 
-CRIPFCnt Alpha – Uniformity Plan (Fast Track)
+CRIPFCnt Alpha- Uniformity Plan (Fast Track)
 
 1) Ask the developer for these files (or equivalents)
 
@@ -836,7 +836,7 @@ config/weights.json
 
 4) Example records (so outputs match across platforms)
 
-Cynefin (current standard view – not a standard-bearer, Grid origin)
+Cynefin (current standard view- not a standard-bearer, Grid origin)
 
 -----------------------------------------
 {

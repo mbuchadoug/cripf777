@@ -775,7 +775,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Type</dt><dd>${esc(school.type || "-")}</dd>
             <dt>Gender</dt><dd>${esc(school.gender || "-")}</dd>
             <dt>Boarding</dt><dd>${esc(school.boarding || "-")}</dd>
-            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
+            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")}- ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
           <dt>Day Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
               <span class="badge badge-${school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue"}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>
@@ -1005,23 +1005,23 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
 
           <p style="font-size:12px;font-weight:600;margin-bottom:8px">🏠 Day Fees</p>
           <div class="form-grid">
-            <div class="fg"><label>Day – Term 1 ($)</label><input type="number" name="feesTerm1" value="${school.fees?.term1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Day – Term 2 ($)</label><input type="number" name="feesTerm2" value="${school.fees?.term2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Day – Term 3 ($)</label><input type="number" name="feesTerm3" value="${school.fees?.term3 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day- Term 1 ($)</label><input type="number" name="feesTerm1" value="${school.fees?.term1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day- Term 2 ($)</label><input type="number" name="feesTerm2" value="${school.fees?.term2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Day- Term 3 ($)</label><input type="number" name="feesTerm3" value="${school.fees?.term3 || 0}" min="0" step="0.01" /></div>
           </div>
 
           <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🏫 Boarding Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if day school only)</span></p>
           <div class="form-grid">
-            <div class="fg"><label>Boarding – Term 1 ($)</label><input type="number" name="feesBoarding1" value="${school.fees?.boardingTerm1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Boarding – Term 2 ($)</label><input type="number" name="feesBoarding2" value="${school.fees?.boardingTerm2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>Boarding – Term 3 ($)</label><input type="number" name="feesBoarding3" value="${school.fees?.boardingTerm3 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Boarding- Term 1 ($)</label><input type="number" name="feesBoarding1" value="${school.fees?.boardingTerm1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Boarding- Term 2 ($)</label><input type="number" name="feesBoarding2" value="${school.fees?.boardingTerm2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>Boarding- Term 3 ($)</label><input type="number" name="feesBoarding3" value="${school.fees?.boardingTerm3 || 0}" min="0" step="0.01" /></div>
           </div>
 
           <p style="font-size:12px;font-weight:600;margin-bottom:8px;margin-top:14px">🌱 ECD Fees <span style="font-weight:400;color:var(--muted)">(leave 0 if same as day fees above)</span></p>
           <div class="form-grid">
-            <div class="fg"><label>ECD – Term 1 ($)</label><input type="number" name="feesEcd1" value="${school.fees?.ecdTerm1 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>ECD – Term 2 ($)</label><input type="number" name="feesEcd2" value="${school.fees?.ecdTerm2 || 0}" min="0" step="0.01" /></div>
-            <div class="fg"><label>ECD – Term 3 ($)</label><input type="number" name="feesEcd3" value="${school.fees?.ecdTerm3 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>ECD- Term 1 ($)</label><input type="number" name="feesEcd1" value="${school.fees?.ecdTerm1 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>ECD- Term 2 ($)</label><input type="number" name="feesEcd2" value="${school.fees?.ecdTerm2 || 0}" min="0" step="0.01" /></div>
+            <div class="fg"><label>ECD- Term 3 ($)</label><input type="number" name="feesEcd3" value="${school.fees?.ecdTerm3 || 0}" min="0" step="0.01" /></div>
           </div>
 
           <!-- ── Facilities ──────────────────────────────────────────── -->
@@ -1955,7 +1955,7 @@ ${school.admissionsOpen?"🟢 Admissions currently OPEN":""}
 See our full profile, fees & enquire:
 👉 ${baseLink}
 
-_Found via ZimQuote – Zimbabwe's school finder_` : "";
+_Found via ZimQuote- Zimbabwe's school finder_` : "";
 
     res.send(layout(`Smart Card: ${esc(school.schoolName)}`, `
       <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to ${esc(school.schoolName)}</a>

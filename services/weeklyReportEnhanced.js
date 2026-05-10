@@ -39,7 +39,7 @@ export async function runWeeklyReportMetaEnhanced({ biz, from }) {
   const prevTotals = calcTotals(prevData);
   const cur        = biz.currency || "USD";
 
-  const periodLabel = `${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  const periodLabel = `${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}- ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
 
   // WhatsApp summary with comparison appended
   const growth = (curr, prev) => {

@@ -671,7 +671,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Type</dt><dd>${esc(school.type || "-")}</dd>
             <dt>Gender</dt><dd>${esc(school.gender || "-")}</dd>
             <dt>Boarding</dt><dd>${esc(school.boarding || "-")}</dd>
-            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
+            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")}- ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
             <dt>Fees / Term</dt><dd>$${school.fees?.term1 || 0} / $${school.fees?.term2 || 0} / $${school.fees?.term3 || 0} USD
               <span class="badge badge-${school.feeRange === "budget" ? "green" : school.feeRange === "premium" ? "orange" : "blue"}" style="margin-left:6px">${esc(school.feeRange || "-")}</span>

@@ -169,7 +169,7 @@ router.get(
         .lean();
 
       res.render("admin/certificates", {
-        title: `Certificates – ${org.name}`,
+        title: `Certificates- ${org.name}`,
         certs: certsRaw,
         user: req.user,
         isAdmin: true,

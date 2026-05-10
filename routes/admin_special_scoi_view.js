@@ -39,7 +39,7 @@ router.get(
       }
 
       res.render("admin/special_scoi_audit_view", {
-        title: `Special SCOI Audit – ${audit.subject?.name || "Report"}`,
+        title: `Special SCOI Audit- ${audit.subject?.name || "Report"}`,
         audit,
         layout: "main"
       });

@@ -857,7 +857,7 @@ router.get("/schools/:id", requireSupplierAdmin, async (req, res) => {
             <dt>Type</dt><dd>${esc(school.type || "-")}</dd>
             <dt>Gender</dt><dd>${esc(school.gender || "-")}</dd>
             <dt>Boarding</dt><dd>${esc(school.boarding || "-")}</dd>
-            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")} – ${esc(school.grades?.to || "Form 6")}</dd>
+            <dt>Grades</dt><dd>${esc(school.grades?.from || "ECD A")}- ${esc(school.grades?.to || "Form 6")}</dd>
             <dt>Curriculum</dt><dd>${esc(curriculumText)}</dd>
           ${(function() {
               const SEC_LABEL = {ecd:"ECD/Preschool",lowerPrimary:"Lower Primary",upperPrimary:"Upper Primary",primary:"Primary (Gr 1-7)",olevel:"O-Level (F1-4)",alevel:"A-Level (F5-6)"};
@@ -2964,7 +2964,7 @@ router.get("/schools/:id/smartcard/qr", requireSupplierAdmin, async (req, res) =
       : { budget:"Under $300/term", mid:"$300–$800/term", premium:"$800+/term" }[school.feeRange] || "";
 
     res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>QR Poster – ${esc(school.schoolName)}</title>
+<title>QR Poster- ${esc(school.schoolName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,"Segoe UI",sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}

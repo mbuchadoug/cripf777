@@ -29,7 +29,7 @@ const upload = multer({
 const router = Router();
 
 /* ------------------------------------------------------------------ */
-/*  Admin check – uses ADMIN_EMAILS env (comma separated)              */
+/*  Admin check- uses ADMIN_EMAILS env (comma separated)              */
 /* ------------------------------------------------------------------ */
 function ensureAdminEmails(req, res, next) {
   const adminEmails = (process.env.ADMIN_EMAILS || "")
@@ -61,7 +61,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   const onboardingQuizzes = [
     { module: "inclusion", title: "Inclusion Is Not Absorption" },
     { module: "responsibility", title: "Responsibility Is Not Blame" },
-    { module: "grid", title: "The Grid – How the World Actually Operates" }
+    { module: "grid", title: "The Grid- How the World Actually Operates" }
   ];
 
   for (const quiz of onboardingQuizzes) {
@@ -3193,8 +3193,8 @@ router.post(
 /*  POST /admin/orgs/:slug/members/:userId/credentials                 */
 /*                                                                      */
 /*  Body: { username?, password, generateUsername? }                   */
-/*    – if username is omitted and generateUsername=true, one is made   */
-/*    – password is required and must be ≥ 8 chars                     */
+/*   - if username is omitted and generateUsername=true, one is made   */
+/*   - password is required and must be ≥ 8 chars                     */
 /* ------------------------------------------------------------------ */
 router.post(
   "/admin/orgs/:slug/members/:userId/credentials",
@@ -3572,8 +3572,8 @@ router.get(
 /*  POST /admin/orgs/:slug/members/:userId/username                    */
 /*                                                                      */
 /*  Body: { username?, generate? }                                      */
-/*    – username: custom slug (optional - validated for uniqueness)     */
-/*    – generate: true  → auto-generate if username is blank/omitted    */
+/*   - username: custom slug (optional - validated for uniqueness)     */
+/*   - generate: true  → auto-generate if username is blank/omitted    */
 /* ------------------------------------------------------------------ */
 router.post(
   "/admin/orgs/:slug/members/:userId/username",

@@ -47,7 +47,7 @@ export async function assignQuizzesForLearner({
       userId: parentUserId,
       targetRole: "student",
       module: rule.subject,
-      title: `${rule.subject.toUpperCase()} – Grade ${rule.grade}`,
+      title: `${rule.subject.toUpperCase()}- Grade ${rule.grade}`,
       questionIds: questions.map(q => String(q._id)),
       choicesOrder: questions.map(q =>
         Array.from({ length: q.choices.length }, (_, i) => i)

@@ -71,13 +71,58 @@
 
 <hr>
 
+<h3>SCOI Metrics & Actual Result</h3>
+<div class="box">
+  <p><span class="label">Visibility Rating:</span> {{audit.scores.visibility_denominator.rating}}</p>
+  <p>
+    <span class="label">Visibility Range:</span>
+    {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+   -
+    {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+  </p>
+
+  <p><span class="label">Responsibility Rating:</span> {{audit.scores.responsibility_numerator.rating}}</p>
+  <p>
+    <span class="label">Responsibility Range:</span>
+    {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+   -
+    {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+  </p>
+
+  {{#if audit.scores.SCOI_framework_result}}
+    <hr>
+    <p>
+      <span class="label">Actual SCOI Result Range:</span>
+      {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
+     -
+      {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
+    </p>
+    <p><span class="label">Placement:</span> {{audit.scores.SCOI_framework_result.placement}}</p>
+    <p><span class="label">Interpretation:</span> {{audit.scores.SCOI_framework_result.interpretation}}</p>
+  {{/if}}
+
+  {{#if audit.scores.SCOI_event_result}}
+    <hr>
+    <p>
+      <span class="label">Actual SCOI Result Range:</span>
+      {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
+     -
+      {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+    </p>
+    <p><span class="label">Placement:</span> {{audit.scores.SCOI_event_result.placement}}</p>
+    <p><span class="label">Interpretation:</span> {{audit.scores.SCOI_event_result.interpretation}}</p>
+  {{/if}}
+</div>
+
+<hr>
+
 <h3>Visibility Analysis</h3>
 <div class="box">
   <p><span class="label">Rating:</span> {{audit.scores.visibility_denominator.rating}}</p>
   <p>
     <span class="label">Normalized Range:</span>
     {{audit.scores.visibility_denominator.normalizedRange.[0]}}
-    –
+   -
     {{audit.scores.visibility_denominator.normalizedRange.[1]}}
   </p>
 
@@ -97,7 +142,7 @@
   <p>
     <span class="label">Normalized Range:</span>
     {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
-    –
+   -
     {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
   </p>
 
@@ -118,7 +163,7 @@
     <p>
       <span class="label">Estimated Range:</span>
       {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
-      –
+     -
       {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
     </p>
 
@@ -130,7 +175,7 @@
     <p>
       <span class="label">Estimated Range:</span>
       {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
-      –
+     -
       {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
     </p>
 

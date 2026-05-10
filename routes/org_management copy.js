@@ -29,7 +29,7 @@ const upload = multer({
 const router = Router();
 
 /* ------------------------------------------------------------------ */
-/*  Admin check – uses ADMIN_EMAILS env (comma separated)              */
+/*  Admin check- uses ADMIN_EMAILS env (comma separated)              */
 /* ------------------------------------------------------------------ */
 function ensureAdminEmails(req, res, next) {
   const adminEmails = (process.env.ADMIN_EMAILS || "")
@@ -61,7 +61,7 @@ async function assignOnboardingQuizzes({ orgId, userId }) {
   const onboardingQuizzes = [
     { module: "inclusion", title: "Inclusion Is Not Absorption" },
     { module: "responsibility", title: "Responsibility Is Not Blame" },
-    { module: "grid", title: "The Grid – How the World Actually Operates" }
+    { module: "grid", title: "The Grid- How the World Actually Operates" }
   ];
 
   for (const quiz of onboardingQuizzes) {

@@ -420,7 +420,7 @@ ${school.admissionsOpen ? "🟢 Admissions currently OPEN\n" : ""}
 See our full profile, fees, facilities & apply online:
 👉 ${link}
 
-_Found us on ZimQuote – Zimbabwe's school finder_
+_Found us on ZimQuote- Zimbabwe's school finder_
 ━━━━━━━━━━━━━━━━━━
 
 _Tip: Put this link in your TikTok bio. Every video you post drives parents directly to your school profile._`
@@ -1174,7 +1174,7 @@ let feeLine = feeRangeLabel(school.feeRange);
     : "⭐ No reviews yet";
 
   const gradeText      = (school.grades?.from && school.grades?.to)
-    ? `${school.grades.from} – ${school.grades.to}`
+    ? `${school.grades.from}- ${school.grades.to}`
     : "Not specified";
 
   // ── ZQ Link footer - shown when the school has a slug ────────────────────
@@ -1592,7 +1592,7 @@ ${admLine}
 See our full profile, fees & enquire:
 👉 ${link}
 
-_Found via ZimQuote – Zimbabwe's school finder_`;
+_Found via ZimQuote- Zimbabwe's school finder_`;
 
   await sendText(from,
 `🔗 *Your ${source.replace("_"," ")} Smart Card link:*

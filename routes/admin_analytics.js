@@ -53,7 +53,7 @@ function pct(num, denom) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  GET /admin/analytics  –  Main overview dashboard
+//  GET /admin/analytics -  Main overview dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/analytics", async (req, res) => {
   try {
@@ -275,7 +275,7 @@ router.get("/analytics", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  GET /admin/analytics/realtime  –  Live activity feed
+//  GET /admin/analytics/realtime -  Live activity feed
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/analytics/realtime", async (req, res) => {
   try {
@@ -324,7 +324,7 @@ router.get("/analytics/realtime", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  GET /admin/analytics/export  –  CSV download
+//  GET /admin/analytics/export -  CSV download
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/analytics/export", async (req, res) => {
   try {

@@ -4053,7 +4053,7 @@ router.get("/suppliers/:id/chatlink/qr", requireSupplierAdmin, async (req, res) 
       : (supplier.prices || []).slice(0,4).map(p=>p.product).join(" · ");
 
     res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>QR Poster – ${esc(supplier.businessName)}</title>
+<title>QR Poster- ${esc(supplier.businessName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,"Segoe UI",sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}

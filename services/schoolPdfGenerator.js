@@ -34,7 +34,7 @@ export async function generateSchoolProfilePDF(school) {
       { item: "Curriculum",          qty: 1, unit: 0, total: 0, description: curriculumText },
       { item: "Gender",              qty: 1, unit: 0, total: 0, description: genderLabels[school.gender] || school.gender },
       { item: "Boarding",            qty: 1, unit: 0, total: 0, description: boardLabels[school.boarding] || school.boarding },
-      { item: "Grades Offered",      qty: 1, unit: 0, total: 0, description: `${school.grades?.from || "ECD A"} – ${school.grades?.to || "Form 6"}` },
+      { item: "Grades Offered",      qty: 1, unit: 0, total: 0, description: `${school.grades?.from || "ECD A"}- ${school.grades?.to || "Form 6"}` },
       { item: "Fees Per Term",       qty: 1, unit: 0, total: 0, description: feeLine },
       { item: "Facilities",          qty: 1, unit: 0, total: 0, description: facilitiesText },
       { item: "Admissions",          qty: 1, unit: 0, total: 0, description: school.admissionsOpen ? "Currently OPEN" : "Currently CLOSED" },
