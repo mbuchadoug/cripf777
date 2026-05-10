@@ -111,67 +111,20 @@
 
 <hr>
 
-<h3>SCOI Result</h3>
+<h3>SCOI Event Result</h3>
 <div class="box">
+  <p>
+    <span class="label">Estimated Range:</span>
+    {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
+    –
+    {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+  </p>
 
-  {{#if audit.scores.SCOI_event_result}}
-    <p>
-      <span class="label">Estimated Range:</span>
-      {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
-      –
-      {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
-    </p>
+  <p><span class="label">Placement:</span> {{audit.scores.SCOI_event_result.placement}}</p>
 
-    <p><span class="label">Placement:</span> {{audit.scores.SCOI_event_result.placement}}</p>
-    <p>{{audit.scores.SCOI_event_result.interpretation}}</p>
-  {{/if}}
-
-  {{#if audit.scores.SCOI_framework_result}}
-    <p>
-      <span class="label">Estimated Range:</span>
-      {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
-      –
-      {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
-    </p>
-
-    <p><span class="label">Placement:</span> {{audit.scores.SCOI_framework_result.placement}}</p>
-    <p>{{audit.scores.SCOI_framework_result.interpretation}}</p>
-  {{/if}}
-
+  <p>{{audit.scores.SCOI_event_result.interpretation}}</p>
 </div>
 
-{{#if audit.calculations}}
-<hr>
-
-<h3>Calculations</h3>
-<div class="box">
-  {{#each audit.calculations}}
-    <p><span class="label">{{@key}}:</span></p>
-
-    {{#if this.value}}
-      <p><span class="label">Value:</span> {{this.value}}</p>
-    {{/if}}
-
-    {{#if this.formula}}
-      <p><span class="label">Formula:</span> {{this.formula}}</p>
-    {{/if}}
-
-    {{#if this.working}}
-      <p><span class="label">Working:</span> {{this.working}}</p>
-    {{/if}}
-
-    {{#if this.meaning}}
-      <p><span class="label">Meaning:</span> {{this.meaning}}</p>
-    {{/if}}
-
-    {{#if this.interpretation}}
-      <p>{{this.interpretation}}</p>
-    {{/if}}
-
-    <hr>
-  {{/each}}
-</div>
-{{/if}}
 <hr>
 
 <h3>Findings</h3>

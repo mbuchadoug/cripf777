@@ -39,14 +39,20 @@ const SpecialScoiAuditSchema = new mongoose.Schema({
   status: String,
   revisionPolicy: String,
 
-  scores: mongoose.Schema.Types.Mixed,
-  findings: mongoose.Schema.Types.Mixed,
+ matrix: mongoose.Schema.Types.Mixed,
+
+definitions: mongoose.Schema.Types.Mixed,
+method: mongoose.Schema.Types.Mixed,
+context: mongoose.Schema.Types.Mixed,
+
+scores: mongoose.Schema.Types.Mixed,
+calculations: mongoose.Schema.Types.Mixed,
+findings: mongoose.Schema.Types.Mixed,
 civilizationRiskSignals: mongoose.Schema.Types.Mixed,
 
-
-  counterfactual: mongoose.Schema.Types.Mixed,
-  disclaimers: mongoose.Schema.Types.Mixed,
-  tags: [String],
+counterfactual: mongoose.Schema.Types.Mixed,
+disclaimers: mongoose.Schema.Types.Mixed,
+tags: [String],
 
   price: {
     type: Number,
