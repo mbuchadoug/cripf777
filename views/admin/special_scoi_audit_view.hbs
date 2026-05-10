@@ -269,10 +269,11 @@
 
 <h3>Disclaimers</h3>
 <ul>
-  <li>{{audit.disclaimers.nonPersonal}}</li>
-  <li>{{audit.disclaimers.nonLegal}}</li>
-  <li>{{audit.disclaimers.nonFinancialAdvice}}</li>
-  <li>{{audit.disclaimers.dataLimitations}}</li>
+  {{#each audit.disclaimers}}
+    {{#if this}}
+      <li><strong>{{@key}}:</strong> {{this}}</li>
+    {{/if}}
+  {{/each}}
 </ul>
 
 <hr>
