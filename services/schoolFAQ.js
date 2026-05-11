@@ -692,27 +692,99 @@ function _catDesc(catId, school, defaults) {
   return DESCS[catId] || `${defaults.filter(d=>d.categoryId===catId).length + (school.faqItems||[]).filter(a=>a.categoryId===catId).length} answers`;
 }
 
+
+async function _showCategory(from, schoolId, categoryId, page = 0, biz, saveBiz) {
+  const school = await SchoolProfile.findById(schoolId).lean();
+  if (!school) return false;
+
+  const sid      = String(school._id);
+  const defaults = _generateDefaults(school);
+  const items    = _mergeItems(defaults, school.faqItems || [], categoryId);
+
+  if (!items.length) {
+    return sendButtons(from, {
+      text: `No information has been added for this section yet.\n\nYou can still send the school a message.`,
+      buttons: [
+        { id: `sfaq_act_message_${sid}`, title: _btn("✉️ Ask school") },
+        { id: `sfaq_back_${sid}`, title: _btn("⬅ Main menu") }
+      ]
+    });
+  }
+
+  const start = page * PAGE_SIZE;
+  const slice = items.slice(start, start + PAGE_SIZE);
+
+  const rows = slice.map(item => ({
+    id: `sfaq_item_${encodeURIComponent(item.id)}_${sid}`,
+    title: String(item.question || "Question").slice(0, 24),
+    description: String(item.answer || "").replace(/\s+/g, " ").slice(0, 72)
+  }));
+
+  if (start + PAGE_SIZE < items.length) {
+    rows.push({
+      id: `sfaq_page_${categoryId}_${page + 1}_${sid}`,
+      title: "➡ More questions"
+    });
+  }
+
+  rows.push({
+    id: `sfaq_back_${sid}`,
+    title: "⬅ Main menu"
+  });
+
+  return sendList(from, `🏫 ${school.schoolName}\n\nChoose a question:`, rows.slice(0, 10));
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTION ROUTER
 // ─────────────────────────────────────────────────────────────────────────────
-export async function handleSchoolFAQAction({ from, action:a, biz, saveBiz }) {
-  const lastUs   = a.lastIndexOf("_");
-  const schoolId = a.slice(lastUs+1);
-  const topic    = a.slice(5,lastUs);
-  if (!schoolId || schoolId.length!==24) return false;
+export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
+  const a = String(action || "").trim();
+  if (!a.startsWith("sfaq_")) return false;
 
-  await _sess(biz, saveBiz, biz?.sessionState||"sfaq_menu", { faqSchoolId:schoolId });
-
-  if (topic.startsWith("cat_"))  return _showCategoryPage(from, schoolId, topic.slice(4), 0, biz, saveBiz);
-  if (topic.startsWith("pg_"))   {
-    const parts = topic.split("_");
-    const page  = parseInt(parts[parts.length-1],10)||0;
-    const catId = parts.slice(1,-1).join("_");
-    return _showCategoryPage(from, schoolId, catId, page, biz, saveBiz);
+  // Back to the same school's FAQ menu
+  const backMatch = a.match(/^sfaq_back_([a-f0-9]{24})$/i);
+  if (backMatch) {
+    const schoolId = backMatch[1];
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
+    return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
   }
-  if (topic.startsWith("q_"))    return _showAnswer(from, schoolId, topic.slice(2), biz, saveBiz);
-  if (topic.startsWith("act_"))  return _handleAction(from, schoolId, topic.slice(4), biz, saveBiz);
-  if (topic === "back")          return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
+
+  // Category tap: sfaq_cat_fees_<schoolId>
+  const catMatch = a.match(/^sfaq_cat_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
+  if (catMatch) {
+    const categoryId = catMatch[1];
+    const schoolId   = catMatch[2];
+    await _sess(biz, saveBiz, "sfaq_category", { faqSchoolId: schoolId, faqCategoryId: categoryId });
+    return _showCategory(from, schoolId, categoryId, 0, biz, saveBiz);
+  }
+
+  // FAQ item tap: sfaq_item_<itemId>_<schoolId>
+  const itemMatch = a.match(/^sfaq_item_(.+)_([a-f0-9]{24})$/i);
+  if (itemMatch) {
+    const itemId   = decodeURIComponent(itemMatch[1]);
+    const schoolId = itemMatch[2];
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
+    return _showAnswer(from, schoolId, itemId, biz, saveBiz);
+  }
+
+  // Category pagination: sfaq_page_<categoryId>_<page>_<schoolId>
+  const pageMatch = a.match(/^sfaq_page_([a-zA-Z0-9_-]+)_(\d+)_([a-f0-9]{24})$/i);
+  if (pageMatch) {
+    const categoryId = pageMatch[1];
+    const page       = Number(pageMatch[2] || 0);
+    const schoolId   = pageMatch[3];
+    return _showCategory(from, schoolId, categoryId, page, biz, saveBiz);
+  }
+
+  // Action buttons: sfaq_act_message_<schoolId>, sfaq_act_apply_<schoolId>, etc.
+  const actMatch = a.match(/^sfaq_act_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
+  if (actMatch) {
+    const act      = actMatch[1];
+    const schoolId = actMatch[2];
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
+    return _handleAction(from, schoolId, act, biz, saveBiz);
+  }
+
   return false;
 }
 
@@ -924,6 +996,9 @@ async function _showLevelEnquiry(from, school, sid, biz, saveBiz) {
   rows.push({id:`sfaq_back_${sid}`,title:"⬅ Main menu"});
   return sendList(from,`Which level are you interested in?`,rows.slice(0,10));
 }
+
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE HANDLER

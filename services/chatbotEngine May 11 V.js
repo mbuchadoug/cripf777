@@ -9828,27 +9828,18 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
-// ── SCHOOL SMART LINK / FAQ ACTIONS ─────────────────────────────────────
-// MUST run before main-menu fallback, supplier registration, and generic handlers.
-// Parents who open school smart links may NOT have a biz record.
-if (isMetaAction && typeof a === "string" && a.startsWith("sfaq_")) {
-  const handled = await handleSchoolFAQAction({
-    from,
-    action: a,
-    biz,
-    saveBiz: biz ? saveBizSafe.bind(null, biz) : null
-  });
-
-  if (handled) return;
-
-  console.warn("[SFAQ ACTION NOT HANDLED]", { from, action: a });
-  return sendText(from, "Sorry, that school option expired. Please open the school link again.");
-}
-
 // ── Main Menu back button - always goes to start menu ────────────────────
 if (a === "main_menu_back") {
   return sendMainMenu(from);
 }
+ 
+// ── Handle sfaq_ FAQ text states for users who may not have a biz record ────────
+// This must run BEFORE supplier registration guards that would short-circuit
+if (isMetaAction && a.startsWith("sfaq_")) {
+  const handled = await handleSchoolFAQAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  if (handled) return;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🏫 SCHOOLS - Action handlers
 // ═══════════════════════════════════════════════════════════════════════════════
