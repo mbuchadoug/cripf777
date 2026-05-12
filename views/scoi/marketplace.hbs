@@ -1,895 +1,802 @@
-{{!-- views/scoi/marketplace_redesigned.hbs - PROFESSIONAL E-COMMERCE MARKETPLACE --}}
+{{!-- views/scoi/marketplace.hbs - SCOI Intelligence Marketplace --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SCOI Intelligence Marketplace | CRIPFCnt Professional Audits</title>
+  <title>SCOI Intelligence Marketplace | CRIPFCnt</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  
-  {{!-- Google Fonts - Professional Typography --}}
+  <meta name="description" content="Browse CRIPFCnt SCOI intelligence reports — civilization-grade structural audits by Donald Mataranyika." />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
-    :root{
-      /* Professional color palette - Corporate gold & navy */
-      --gold:#C9A647;
-      --gold-light:#D4B666;
-      --gold-dark:#B59537;
-      --navy:#0A1929;
-      --navy-light:#1A2937;
-      --navy-dark:#050C14;
-      --slate:#475569;
-      --slate-light:#64748B;
-      --white:#FFFFFF;
-      --cream:#FAFAF9;
-      --gray-50:#F8FAFC;
-      --gray-100:#F1F5F9;
-      --gray-200:#E2E8F0;
-      --gray-800:#1E293B;
-      
-      /* Semantic colors */
-      --success:#10B981;
-      --info:#3B82F6;
-      --warning:#F59E0B;
-      
-      /* Layout */
-      --max-width:1400px;
-      --radius:12px;
-      --radius-lg:16px;
-      --shadow:0 4px 12px rgba(10,25,41,0.08);
-      --shadow-lg:0 12px 32px rgba(10,25,41,0.12);
-      --shadow-xl:0 20px 48px rgba(10,25,41,0.16);
-      
-      /* Typography - Editorial serif for headings, sans for body */
-      --font-display:'Crimson Pro',Georgia,serif;
-      --font-body:'Work Sans',system-ui,sans-serif;
-    }
-
-    *{
-      margin:0;
-      padding:0;
-      box-sizing:border-box;
-    }
-
-    body{
-      font-family:var(--font-body);
-      background:var(--cream);
-      color:var(--navy);
-      line-height:1.6;
-    }
-
-    /* ============================================ */
-    /* NAVIGATION                                  */
-    /* ============================================ */
-    .navbar{
-      background:white;
-      border-bottom:1px solid var(--gray-200);
-      position:sticky;
-      top:0;
-      z-index:100;
-      box-shadow:var(--shadow);
-    }
-
-    .nav-container{
-      max-width:var(--max-width);
-      margin:0 auto;
-      padding:0 32px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      height:72px;
-    }
-
-    .nav-brand{
-      display:flex;
-      align-items:center;
-      gap:12px;
-    }
-
-    .brand-logo{
-      font-family:var(--font-display);
-      font-size:28px;
-      font-weight:700;
-      color:var(--navy);
-      text-decoration:none;
-      letter-spacing:-0.5px;
-    }
-
-    .brand-logo span{
-      color:var(--gold);
-    }
-
-    .brand-tag{
-      padding:4px 12px;
-      background:rgba(201,166,71,0.1);
-      border:1px solid rgba(201,166,71,0.3);
-      border-radius:999px;
-      font-size:11px;
-      font-weight:700;
-      color:var(--gold-dark);
-      text-transform:uppercase;
-      letter-spacing:0.5px;
-    }
-
-    .nav-links{
-      display:flex;
-      align-items:center;
-      gap:32px;
-    }
-
-    .nav-link{
-      color:var(--slate);
-      text-decoration:none;
-      font-weight:600;
-      font-size:14px;
-      transition:color 0.2s;
-    }
-
-    .nav-link:hover{
-      color:var(--navy);
-    }
-
-    .nav-link.active{
-      color:var(--gold);
-    }
-
-    .nav-cart{
-      position:relative;
-      padding:10px 16px;
-      background:var(--navy);
-      color:white;
-      border-radius:var(--radius);
-      text-decoration:none;
-      font-weight:700;
-      font-size:14px;
-      transition:all 0.3s;
-      display:flex;
-      align-items:center;
-      gap:8px;
-    }
-
-    .nav-cart:hover{
-      background:var(--navy-light);
-      transform:translateY(-2px);
-    }
-
-    .cart-count{
-      width:20px;
-      height:20px;
-      background:var(--gold);
-      color:var(--navy-dark);
-      border-radius:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:11px;
-      font-weight:800;
-    }
-
-    /* ============================================ */
-    /* HERO SECTION                                */
-    /* ============================================ */
-    .hero{
-      background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 100%);
-      padding:80px 0;
-      position:relative;
-      overflow:hidden;
-    }
-
-    .hero::before{
-      content:'';
-      position:absolute;
-      top:-50%;
-      right:-25%;
-      width:150%;
-      height:200%;
-      background:radial-gradient(circle,rgba(201,166,71,0.08),transparent 60%);
-      animation:pulse 20s ease infinite;
-    }
-
-    @keyframes pulse{
-      0%,100%{transform:scale(1) rotate(0deg)}
-      50%{transform:scale(1.1) rotate(5deg)}
-    }
-
-    .hero-container{
-      max-width:var(--max-width);
-      margin:0 auto;
-      padding:0 32px;
-      position:relative;
-      z-index:1;
-    }
-
-    .hero-eyebrow{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:8px 16px;
-      background:rgba(255,255,255,0.1);
-      border:1px solid rgba(255,255,255,0.2);
-      border-radius:999px;
-      color:var(--gold-light);
-      font-size:13px;
-      font-weight:700;
-      text-transform:uppercase;
-      letter-spacing:1px;
-      margin-bottom:24px;
-    }
-
-    .hero h1{
-      font-family:var(--font-display);
-      font-size:64px;
-      font-weight:700;
-      color:white;
-      line-height:1.1;
-      margin-bottom:24px;
-      max-width:900px;
-    }
-
-    .hero p{
-      font-size:20px;
-      color:rgba(255,255,255,0.85);
-      line-height:1.7;
-      max-width:720px;
-      margin-bottom:40px;
-    }
-
-    .hero-stats{
-      display:flex;
-      gap:48px;
-      margin-top:48px;
-    }
-
-    .stat-item{
-      display:flex;
-      flex-direction:column;
-    }
-
-    .stat-value{
-      font-family:var(--font-display);
-      font-size:42px;
-      font-weight:700;
-      color:var(--gold-light);
-      line-height:1;
-      margin-bottom:8px;
-    }
-
-    .stat-label{
-      font-size:14px;
-      color:rgba(255,255,255,0.7);
-      font-weight:600;
-    }
-
-    /* ============================================ */
-    /* FILTERS & SORTING                           */
-    /* ============================================ */
-    .controls-section{
-      max-width:var(--max-width);
-      margin:0 auto;
-      padding:40px 32px;
-    }
-
-    .controls-grid{
-      display:grid;
-      grid-template-columns:2fr 1fr 1fr;
-      gap:16px;
-      background:white;
-      padding:24px;
-      border-radius:var(--radius-lg);
-      box-shadow:var(--shadow);
-    }
-
-    .control-group{
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-
-    .control-label{
-      font-size:13px;
-      font-weight:700;
-      color:var(--navy);
-      text-transform:uppercase;
-      letter-spacing:0.5px;
-    }
-
-    .control-input{
-      padding:12px 16px;
-      border:2px solid var(--gray-200);
-      border-radius:var(--radius);
-      font-family:var(--font-body);
-      font-size:15px;
-      color:var(--navy);
-      background:white;
-      transition:all 0.2s;
-    }
-
-    .control-input:focus{
-      outline:none;
-      border-color:var(--gold);
-      box-shadow:0 0 0 4px rgba(201,166,71,0.1);
-    }
-
-    /* ============================================ */
-    /* PRODUCT GRID                                */
-    /* ============================================ */
-    .products-section{
-      max-width:var(--max-width);
-      margin:0 auto 80px;
-      padding:0 32px;
-    }
-
-    .section-header{
-      margin-bottom:32px;
-    }
-
-    .section-title{
-      font-family:var(--font-display);
-      font-size:36px;
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:8px;
-    }
-
-    .section-subtitle{
-      color:var(--slate);
-      font-size:16px;
-    }
-
-    .products-grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fill,minmax(380px,1fr));
-      gap:32px;
-    }
-
-    .product-card{
-      background:white;
-      border:1px solid var(--gray-200);
-      border-radius:var(--radius-lg);
-      overflow:hidden;
-      transition:all 0.3s;
-      box-shadow:var(--shadow);
-      position:relative;
-    }
-
-    .product-card:hover{
-      transform:translateY(-4px);
-      box-shadow:var(--shadow-xl);
-      border-color:var(--gold);
-    }
-
-    .product-badge{
-      position:absolute;
-      top:20px;
-      right:20px;
-      padding:6px 14px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:0.5px;
-      z-index:2;
-    }
-
-    .product-badge.premium{
-      background:var(--gold);
-      color:var(--navy-dark);
-    }
-
-    .product-badge.standard{
-      background:var(--navy);
-      color:white;
-    }
-
-    .product-header{
-      background:linear-gradient(135deg,var(--navy-dark),var(--navy));
-      padding:32px;
-      border-bottom:3px solid var(--gold);
-      position:relative;
-    }
-
-    .product-type{
-      font-size:12px;
-      font-weight:700;
-      color:var(--gold-light);
-      text-transform:uppercase;
-      letter-spacing:1px;
-      margin-bottom:12px;
-    }
-
-    .product-title{
-      font-family:var(--font-display);
-      font-size:24px;
-      font-weight:700;
-      color:white;
-      line-height:1.3;
-      margin-bottom:12px;
-    }
-
-    .product-window{
-      font-size:14px;
-      color:rgba(255,255,255,0.7);
-      display:flex;
-      align-items:center;
-      gap:6px;
-    }
-
-    .product-body{
-      padding:28px;
-    }
-
-    .product-features{
-      list-style:none;
-      margin-bottom:24px;
-    }
-
-    .product-features li{
-      display:flex;
-      align-items:flex-start;
-      gap:10px;
-      padding:8px 0;
-      font-size:14px;
-      color:var(--slate);
-      border-bottom:1px solid var(--gray-100);
-    }
-
-    .product-features li:last-child{
-      border-bottom:none;
-    }
-
-    .product-features li::before{
-      content:'✓';
-      width:20px;
-      height:20px;
-      background:rgba(201,166,71,0.1);
-      color:var(--gold-dark);
-      border-radius:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:800;
-      font-size:12px;
-      flex-shrink:0;
-      margin-top:2px;
-    }
-
-    .product-footer{
-      padding:0 28px 28px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-    }
-
-    .product-price{
-      display:flex;
-      flex-direction:column;
-    }
-
-    .price-amount{
-      font-family:var(--font-display);
-      font-size:36px;
-      font-weight:700;
-      color:var(--navy);
-      line-height:1;
-    }
-
-    .price-label{
-      font-size:12px;
-      color:var(--slate);
-      margin-top:4px;
-    }
-
-    .btn-purchase{
-      padding:14px 28px;
-      background:var(--gold);
-      color:var(--navy-dark);
-      border:none;
-      border-radius:var(--radius);
-      font-weight:700;
-      font-size:15px;
-      cursor:pointer;
-      transition:all 0.3s;
-      box-shadow:0 4px 12px rgba(201,166,71,0.3);
-      text-decoration:none;
-      display:inline-block;
-    }
-
-    .btn-purchase:hover{
-      background:var(--gold-light);
-      transform:translateY(-2px);
-      box-shadow:0 6px 16px rgba(201,166,71,0.4);
-    }
-
-    /* ============================================ */
-    /* TRUST SIGNALS                               */
-    /* ============================================ */
-    .trust-section{
-      background:white;
-      padding:60px 0;
-      border-top:1px solid var(--gray-200);
-      margin-top:80px;
-    }
-
-    .trust-container{
-      max-width:var(--max-width);
-      margin:0 auto;
-      padding:0 32px;
-    }
-
-    .trust-grid{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:40px;
-    }
-
-    .trust-item{
-      text-align:center;
-    }
-
-    .trust-icon{
-      font-size:36px;
-      margin-bottom:16px;
-    }
-
-    .trust-title{
-      font-weight:700;
-      font-size:16px;
-      color:var(--navy);
-      margin-bottom:8px;
-    }
-
-    .trust-text{
-      font-size:14px;
-      color:var(--slate);
-      line-height:1.5;
-    }
-
-    /* ============================================ */
-    /* EMPTY STATE                                 */
-    /* ============================================ */
-    .empty-state{
-      text-align:center;
-      padding:80px 32px;
-    }
-
-    .empty-icon{
-      font-size:64px;
-      margin-bottom:24px;
-      opacity:0.3;
-    }
-
-    .empty-title{
-      font-family:var(--font-display);
-      font-size:28px;
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:12px;
-    }
-
-    .empty-text{
-      color:var(--slate);
-      font-size:16px;
-      max-width:500px;
-      margin:0 auto;
-    }
-
-    /* ============================================ */
-    /* RESPONSIVE                                  */
-    /* ============================================ */
-    @media(max-width:1200px){
-      .products-grid{
-        grid-template-columns:repeat(2,1fr);
-      }
-
-      .controls-grid{
-        grid-template-columns:1fr 1fr;
-      }
-    }
-
-    @media(max-width:768px){
-      .hero h1{
-        font-size:42px;
-      }
-
-      .products-grid{
-        grid-template-columns:1fr;
-      }
-
-      .controls-grid{
-        grid-template-columns:1fr;
-      }
-
-      .trust-grid{
-        grid-template-columns:repeat(2,1fr);
-        gap:32px;
-      }
-
-      .hero-stats{
-        flex-direction:column;
-        gap:24px;
-      }
-
-      .nav-links{
-        display:none;
-      }
-    }
+    /* ── TOKENS ──────────────────────────────────────────────── */
+    :root {
+      --navy:        #1E3A5F;
+      --navy-dark:   #0F1C2E;
+      --navy-mid:    #16304f;
+      --gold:        #C9A961;
+      --gold-light:  #E5D4A6;
+      --gold-dim:    rgba(201,169,97,0.15);
+      --white:       #FFFFFF;
+      --cream:       #FAFAF8;
+      --gray-50:     #F8F9FA;
+      --gray-100:    #F1F5F9;
+      --gray-200:    #E2E8F0;
+      --gray-400:    #94A3B8;
+      --gray-600:    #475569;
+      --gray-800:    #1E293B;
+      --success:     #059669;
+      --font-serif:  'Crimson Pro', Georgia, serif;
+      --font-sans:   'Inter', system-ui, sans-serif;
+      --max-w:       1400px;
+      --r:           4px;
+      --r-lg:        8px;
+      --sh-sm:       0 2px 8px rgba(15,28,46,0.07);
+      --sh-md:       0 4px 16px rgba(15,28,46,0.11);
+      --sh-lg:       0 8px 32px rgba(15,28,46,0.15);
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior:smooth; overflow-x:hidden; }
+    body { font-family:var(--font-sans); background:var(--cream); color:var(--gray-800); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+
+    /* ── NAVBAR ──────────────────────────────────────────────── */
+    .navbar { background:var(--white); border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:500; box-shadow:var(--sh-sm); }
+    .nav-inner { max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; height:68px; }
+    .nav-brand { display:flex; align-items:center; gap:0.75rem; text-decoration:none; }
+    .brand-mark { width:42px; height:42px; background:var(--navy); border:2px solid var(--gold); display:flex; align-items:center; justify-content:center; font-family:var(--font-serif); font-weight:700; font-size:1.2rem; color:var(--gold); flex-shrink:0; }
+    .brand-name { font-family:var(--font-serif); font-size:1.6rem; font-weight:700; color:var(--navy); letter-spacing:-0.3px; }
+    .nav-pill { padding:0.25rem 0.75rem; background:var(--gold-dim); border:1px solid rgba(201,169,97,0.35); border-radius:30px; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--navy); }
+    .nav-right { display:flex; align-items:center; gap:1.5rem; }
+    .nav-link { font-size:0.9rem; font-weight:600; color:var(--gray-600); text-decoration:none; transition:color 0.2s; }
+    .nav-link:hover, .nav-link.active { color:var(--navy); }
+    .nav-btn { background:var(--navy); color:var(--white); padding:0.6rem 1.25rem; border-radius:var(--r); font-size:0.85rem; font-weight:700; text-decoration:none; transition:background 0.2s; white-space:nowrap; }
+    .nav-btn:hover { background:var(--navy-dark); }
+
+    /* user pill */
+    .user-pill { display:inline-flex; align-items:center; gap:0.5rem; padding:0.35rem 0.75rem; border:1px solid var(--gray-200); background:var(--gray-50); border-radius:999px; font-size:0.85rem; max-width:220px; }
+    .user-pill .u-email { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.82rem; color:var(--gray-600); }
+    .user-pill img { width:24px; height:24px; border-radius:50%; object-fit:cover; }
+
+    /* mobile toggle */
+    .mob-toggle { display:none; flex-direction:column; gap:5px; background:none; border:none; cursor:pointer; padding:0.4rem; z-index:600; }
+    .mob-toggle span { width:24px; height:2.5px; background:var(--navy); border-radius:2px; display:block; transition:all 0.3s; }
+    .mob-toggle.active span:nth-child(1) { transform:rotate(45deg) translate(7px,7px); }
+    .mob-toggle.active span:nth-child(2) { opacity:0; }
+    .mob-toggle.active span:nth-child(3) { transform:rotate(-45deg) translate(6px,-6px); }
+
+    /* ── HERO ────────────────────────────────────────────────── */
+    .hero { background:linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%); padding:5rem 2rem 4rem; position:relative; overflow:hidden; }
+    .hero::after { content:'SCOI'; position:absolute; right:-1rem; bottom:-2rem; font-family:var(--font-serif); font-size:14rem; font-weight:700; color:rgba(201,169,97,0.04); pointer-events:none; line-height:1; }
+    .hero-inner { max-width:var(--max-w); margin:0 auto; position:relative; z-index:1; }
+    .hero-eyebrow { display:inline-flex; align-items:center; gap:0.5rem; padding:0.4rem 1rem; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:30px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--gold-light); margin-bottom:1.5rem; }
+    .hero h1 { font-family:var(--font-serif); font-size:clamp(2.2rem,4.5vw,3.8rem); font-weight:700; color:var(--white); line-height:1.15; margin-bottom:1rem; max-width:760px; }
+    .hero h1 em { font-style:italic; color:var(--gold); }
+    .hero p { font-size:1.05rem; color:rgba(255,255,255,0.8); max-width:620px; line-height:1.7; margin-bottom:2.5rem; }
+    .hero-stats { display:flex; gap:3.5rem; flex-wrap:wrap; padding-top:2.5rem; border-top:1px solid rgba(255,255,255,0.1); }
+    .hs-num { font-family:var(--font-serif); font-size:2.2rem; font-weight:700; color:var(--gold); line-height:1; }
+    .hs-lbl { font-size:0.78rem; font-weight:600; color:rgba(255,255,255,0.6); text-transform:uppercase; letter-spacing:1px; margin-top:0.25rem; }
+
+    /* ── FILTER TOOLBAR ──────────────────────────────────────── */
+    .toolbar-wrap { background:var(--white); border-bottom:1px solid var(--gray-200); position:sticky; top:68px; z-index:400; box-shadow:var(--sh-sm); }
+    .toolbar { max-width:var(--max-w); margin:0 auto; padding:1rem 2rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
+    .toolbar-search { flex:1; min-width:200px; position:relative; }
+    .toolbar-search input { width:100%; padding:0.7rem 1rem 0.7rem 2.75rem; border:1.5px solid var(--gray-200); border-radius:var(--r); font-size:0.9rem; font-family:var(--font-sans); color:var(--gray-800); background:var(--gray-50); transition:border-color 0.2s, box-shadow 0.2s; }
+    .toolbar-search input:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(30,58,95,0.08); background:var(--white); }
+    .toolbar-search input::placeholder { color:var(--gray-400); }
+    .search-icon { position:absolute; left:0.9rem; top:50%; transform:translateY(-50%); color:var(--gray-400); pointer-events:none; font-size:0.95rem; }
+    .toolbar-selects { display:flex; gap:0.75rem; flex-wrap:wrap; }
+    .toolbar select { padding:0.7rem 2.25rem 0.7rem 0.9rem; border:1.5px solid var(--gray-200); border-radius:var(--r); font-size:0.875rem; font-family:var(--font-sans); color:var(--gray-800); background:var(--gray-50) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394A3B8'/%3E%3C/svg%3E") no-repeat right 0.75rem center; -webkit-appearance:none; appearance:none; cursor:pointer; transition:border-color 0.2s; white-space:nowrap; }
+    .toolbar select:focus { outline:none; border-color:var(--navy); }
+    .toolbar-results { font-size:0.8rem; font-weight:600; color:var(--gray-400); white-space:nowrap; margin-left:auto; }
+
+    /* ── LAYOUT ──────────────────────────────────────────────── */
+    .page-layout { max-width:var(--max-w); margin:0 auto; padding:2.5rem 2rem; display:grid; grid-template-columns:260px 1fr; gap:2.5rem; align-items:start; }
+
+    /* ── SIDEBAR FILTERS ─────────────────────────────────────── */
+    .sidebar { position:sticky; top:140px; }
+    .sidebar-card { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--r-lg); overflow:hidden; }
+    .sidebar-head { padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-200); background:var(--gray-50); display:flex; justify-content:space-between; align-items:center; }
+    .sidebar-head h3 { font-family:var(--font-serif); font-size:1.05rem; font-weight:700; color:var(--navy); }
+    .clear-btn { font-size:0.75rem; font-weight:700; color:var(--gray-400); background:none; border:none; cursor:pointer; padding:0; transition:color 0.2s; }
+    .clear-btn:hover { color:var(--navy); }
+    .sidebar-section { padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-200); }
+    .sidebar-section:last-child { border-bottom:none; }
+    .filter-label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--gray-400); margin-bottom:0.85rem; }
+    .filter-option { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.6rem; cursor:pointer; }
+    .filter-option input[type="radio"],
+    .filter-option input[type="checkbox"] { accent-color:var(--navy); width:15px; height:15px; cursor:pointer; flex-shrink:0; }
+    .filter-option label { font-size:0.875rem; color:var(--gray-600); cursor:pointer; user-select:none; }
+    .filter-count { margin-left:auto; font-size:0.75rem; font-weight:700; color:var(--gray-400); background:var(--gray-100); padding:0.1rem 0.45rem; border-radius:30px; }
+    .price-range { width:100%; }
+    .price-range input[type="range"] { width:100%; accent-color:var(--navy); margin:0.5rem 0; }
+    .price-labels { display:flex; justify-content:space-between; font-size:0.78rem; color:var(--gray-400); font-weight:600; }
+
+    /* ── MAIN CONTENT ────────────────────────────────────────── */
+    .main-content {}
+    .main-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+    .results-label { font-size:0.9rem; color:var(--gray-600); }
+    .results-label strong { color:var(--gray-800); font-weight:700; }
+    .view-toggle { display:flex; gap:0.25rem; border:1px solid var(--gray-200); border-radius:var(--r); overflow:hidden; }
+    .view-btn { padding:0.45rem 0.75rem; background:var(--white); border:none; cursor:pointer; font-size:1rem; color:var(--gray-400); transition:all 0.2s; }
+    .view-btn.active { background:var(--navy); color:var(--white); }
+
+    /* ── PRODUCT GRID ────────────────────────────────────────── */
+    .products-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1.5rem; }
+    .products-grid.list-view { grid-template-columns:1fr; }
+
+    .audit-card { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--r-lg); overflow:hidden; display:flex; flex-direction:column; transition:box-shadow 0.25s, transform 0.25s; }
+    .audit-card:hover { box-shadow:var(--sh-lg); transform:translateY(-3px); }
+
+    /* Card: grid view */
+    .audit-card .card-top { background:linear-gradient(135deg, var(--navy-dark), var(--navy-mid)); padding:1.5rem; flex:none; }
+    .kind-badge { display:inline-block; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; padding:0.28rem 0.65rem; border-radius:2px; margin-bottom:0.75rem; }
+    .kind-badge.special { background:rgba(201,169,97,0.22); color:var(--gold-light); border:1px solid rgba(201,169,97,0.4); }
+    .kind-badge.placement { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.75); border:1px solid rgba(255,255,255,0.15); }
+    .card-title { font-family:var(--font-serif); font-size:1.15rem; font-weight:700; color:var(--white); line-height:1.35; }
+    .card-window { font-size:0.75rem; color:rgba(255,255,255,0.5); margin-top:0.5rem; }
+
+    .audit-card .card-body { padding:1.25rem 1.5rem; flex:1; }
+    .card-features { list-style:none; }
+    .card-features li { font-size:0.82rem; color:var(--gray-600); padding:0.3rem 0; border-bottom:1px solid var(--gray-100); display:flex; gap:0.5rem; line-height:1.4; }
+    .card-features li:last-child { border-bottom:none; }
+    .card-features li::before { content:'✓'; color:var(--gold); font-weight:700; font-size:0.72rem; flex-shrink:0; margin-top:0.12rem; }
+
+    .audit-card .card-foot { padding:1rem 1.5rem; border-top:1px solid var(--gray-100); background:var(--gray-50); display:flex; justify-content:space-between; align-items:center; }
+    .price-block .price-amount { font-family:var(--font-serif); font-size:1.5rem; font-weight:700; color:var(--navy); line-height:1; }
+    .price-block .price-lbl { font-size:0.68rem; color:var(--gray-400); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+    .btn-buy { background:var(--navy); color:var(--white); padding:0.6rem 1.1rem; border-radius:var(--r); font-size:0.82rem; font-weight:700; border:none; cursor:pointer; text-decoration:none; display:inline-block; transition:background 0.2s; white-space:nowrap; }
+    .btn-buy:hover { background:var(--navy-dark); }
+
+    /* Card: list view */
+    .products-grid.list-view .audit-card { flex-direction:row; align-items:stretch; }
+    .products-grid.list-view .audit-card .card-top { width:260px; flex-shrink:0; border-radius:0; }
+    .products-grid.list-view .audit-card .card-body { flex:1; }
+    .products-grid.list-view .audit-card .card-foot { flex-direction:column; align-items:flex-end; gap:0.75rem; min-width:140px; justify-content:center; padding:1.25rem; }
+
+    /* ── PAGINATION ──────────────────────────────────────────── */
+    .pagination { display:flex; justify-content:center; align-items:center; gap:0.5rem; margin-top:3rem; flex-wrap:wrap; }
+    .pag-btn { width:38px; height:38px; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--gray-200); border-radius:var(--r); font-size:0.875rem; font-weight:600; color:var(--gray-600); background:var(--white); cursor:pointer; transition:all 0.2s; }
+    .pag-btn:hover { border-color:var(--navy); color:var(--navy); }
+    .pag-btn.active { background:var(--navy); color:var(--white); border-color:var(--navy); }
+    .pag-btn.disabled { opacity:0.35; pointer-events:none; }
+    .pag-btn.ellipsis { border:none; background:none; pointer-events:none; }
+    .pag-info { font-size:0.82rem; color:var(--gray-400); padding:0 0.5rem; white-space:nowrap; }
+
+    /* ── EMPTY STATE ─────────────────────────────────────────── */
+    .empty-state { text-align:center; padding:5rem 2rem; }
+    .empty-icon { font-size:3.5rem; margin-bottom:1.25rem; }
+    .empty-title { font-family:var(--font-serif); font-size:1.75rem; font-weight:700; color:var(--navy); margin-bottom:0.75rem; }
+    .empty-text { font-size:0.95rem; color:var(--gray-600); max-width:440px; margin:0 auto 2rem; line-height:1.65; }
+    .btn-reset { background:var(--navy); color:var(--white); padding:0.75rem 2rem; border-radius:var(--r); font-size:0.9rem; font-weight:700; border:none; cursor:pointer; }
+
+    /* ── TRUST SECTION ───────────────────────────────────────── */
+    .trust-section { background:var(--white); border-top:1px solid var(--gray-200); padding:4rem 2rem; }
+    .trust-inner { max-width:var(--max-w); margin:0 auto; }
+    .trust-title { text-align:center; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:var(--gray-400); margin-bottom:2.5rem; }
+    .trust-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:2rem; }
+    .trust-item { text-align:center; }
+    .trust-icon { font-size:1.75rem; margin-bottom:0.6rem; }
+    .trust-item-title { font-weight:700; font-size:0.9rem; color:var(--navy); margin-bottom:0.3rem; }
+    .trust-item-text { font-size:0.8rem; color:var(--gray-400); line-height:1.5; }
+
+    /* ── RESPONSIVE ──────────────────────────────────────────── */
+    @media (max-width: 1024px) {
+      .page-layout { grid-template-columns:1fr; }
+      .sidebar { position:static; }
+      .sidebar-card { display:none; }
+      .sidebar-card.mobile-open { display:block; margin-bottom:1.5rem; }
+      .mobile-filter-btn { display:flex; }
+      .trust-grid { grid-template-columns:repeat(2,1fr); }
+      .products-grid.list-view .audit-card { flex-direction:column; }
+      .products-grid.list-view .audit-card .card-top { width:100%; }
+      .products-grid.list-view .audit-card .card-foot { flex-direction:row; align-items:center; }
+    }
+    @media (max-width: 768px) {
+      .nav-right { gap:0.75rem; }
+      .nav-link { display:none; }
+      .mob-toggle { display:flex; }
+      .mob-nav { display:none; position:fixed; top:0; left:0; width:100%; height:100vh; background:var(--white); z-index:599; padding:5rem 2rem 2rem; flex-direction:column; gap:0; overflow-y:auto; }
+      .mob-nav.open { display:flex; }
+      .mob-nav a { display:block; padding:1rem 0; font-size:1rem; font-weight:600; color:var(--gray-800); text-decoration:none; border-bottom:1px solid var(--gray-100); }
+      .hero { padding:3.5rem 1.5rem 3rem; }
+      .hero::after { display:none; }
+      .hero h1 { font-size:2rem; }
+      .hero-stats { gap:2rem; }
+      .toolbar { padding:0.75rem 1rem; }
+      .toolbar-results { display:none; }
+      .page-layout { padding:1.5rem 1rem; gap:1.5rem; }
+      .products-grid { grid-template-columns:1fr; }
+      .trust-grid { grid-template-columns:1fr 1fr; gap:1.25rem; }
+      .main-top { flex-direction:column; align-items:flex-start; }
+    }
+
+    /* ── MOBILE FILTER TOGGLE ────────────────────────────────── */
+    .mobile-filter-btn { display:none; align-items:center; gap:0.5rem; background:var(--white); border:1.5px solid var(--gray-200); border-radius:var(--r); padding:0.6rem 1rem; font-size:0.875rem; font-weight:700; color:var(--navy); cursor:pointer; transition:border-color 0.2s; }
+    .mobile-filter-btn:hover { border-color:var(--navy); }
+    @media (max-width: 1024px) { .mobile-filter-btn { display:flex; } }
+
+    /* ── ACTIVE FILTERS CHIPS ────────────────────────────────── */
+    .active-filters { display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1.25rem; }
+    .filter-chip { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.75rem; background:rgba(30,58,95,0.08); border:1px solid rgba(30,58,95,0.15); border-radius:30px; font-size:0.78rem; font-weight:700; color:var(--navy); }
+    .chip-remove { background:none; border:none; cursor:pointer; color:var(--navy); opacity:0.6; padding:0; font-size:0.85rem; line-height:1; display:flex; align-items:center; }
+    .chip-remove:hover { opacity:1; }
+
+    /* Loading skeleton */
+    .skeleton { animation:shimmer 1.4s infinite linear; background:linear-gradient(90deg,var(--gray-100) 25%,var(--gray-50) 50%,var(--gray-100) 75%); background-size:200% 100%; border-radius:var(--r); }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   </style>
 </head>
-
 <body>
 
-<!-- ================= NAVIGATION ================= -->
+<!-- ── NAVBAR ──────────────────────────────────────────────────────── -->
 <nav class="navbar">
-  <div class="nav-container">
-    <div class="nav-brand">
-      <a href="/lms" class="brand-logo">CRIPF<span>Cnt</span></a>
-      <span class="brand-tag">Intelligence</span>
-    </div>
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <div class="brand-mark">C</div>
+      <span class="brand-name">CRIPFCnt</span>
+      <span class="nav-pill desktop-only">Intelligence</span>
+    </a>
 
-    <div class="nav-links">
+    <div class="nav-right">
+      <a href="/" class="nav-link">Home</a>
       <a href="/scoi" class="nav-link active">Marketplace</a>
-      <a href="/scoi/purchased" class="nav-link">My Audits</a>
       {{#if user}}
-        <a href="/parent/dashboard" class="nav-link">Dashboard</a>
-      {{/if}}
-    </div>
-
-    <div style="display:flex; align-items:center; gap:16px;">
-      {{#if user}}
-        <a href="/scoi/purchased" class="nav-cart">
-          📊 My Audits
-        </a>
+        <a href="/scoi/purchased" class="nav-link">My Reports</a>
+        <div class="user-pill">
+          {{#if user.photo}}<img src="{{user.photo}}" alt="Profile">{{/if}}
+          <span class="u-email">{{#if user.email}}{{user.email}}{{else}}{{user.displayName}}{{/if}}</span>
+        </div>
+        <a href="/auth/logout" class="nav-btn">Sign out</a>
       {{else}}
-        <a href="/auth/google" class="nav-cart">
-          Sign In
-        </a>
+        <a href="/auth/google" class="nav-btn">Sign In</a>
       {{/if}}
+      <button class="mob-toggle" id="mobToggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </div>
 </nav>
 
-<!-- ================= HERO ================= -->
+<!-- Mobile nav -->
+<div class="mob-nav" id="mobNav">
+  <a href="/">Home</a>
+  <a href="/scoi">Marketplace</a>
+  {{#if user}}
+    <a href="/scoi/purchased">My Reports</a>
+    <a href="/auth/logout">Sign Out</a>
+  {{else}}
+    <a href="/auth/google">Sign In</a>
+  {{/if}}
+</div>
+
+<!-- ── HERO ────────────────────────────────────────────────────────── -->
 <section class="hero">
-  <div class="hero-container">
-    <div class="hero-eyebrow">
-      🏛️ Professional Intelligence Reports
-    </div>
-
-    <h1>Civilization-Grade<br>Structural Intelligence</h1>
-
-    <p>
-      Access CRIPFCnt SCOI audits-immutable, reference-grade placement intelligence 
-      for organizations, systems, and events operating at civilization scale. 
-      Authored by Donald Mataranyika.
-    </p>
-
+  <div class="hero-inner">
+    <div class="hero-eyebrow">🏛️ Professional Intelligence Reports</div>
+    <h1>Civilization-Grade<br><em>Structural Intelligence</em></h1>
+    <p>Access CRIPFCnt SCOI audits — immutable, reference-grade placement intelligence for organizations, systems, and events operating at civilization scale. Authored by Donald Mataranyika.</p>
     <div class="hero-stats">
-      <div class="stat-item">
-        <div class="stat-value">{{audits.length}}</div>
-        <div class="stat-label">Available Reports</div>
+      <div>
+        <div class="hs-num">{{audits.length}}</div>
+        <div class="hs-lbl">Available Reports</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-value">2</div>
-        <div class="stat-label">Report Categories</div>
+      <div>
+        <div class="hs-num">2</div>
+        <div class="hs-lbl">Report Types</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-value">24/7</div>
-        <div class="stat-label">Instant Access</div>
+      <div>
+        <div class="hs-num">24/7</div>
+        <div class="hs-lbl">Instant Access</div>
+      </div>
+      <div>
+        <div class="hs-num">∞</div>
+        <div class="hs-lbl">Lifetime Access</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ================= FILTERS ================= -->
-<section class="controls-section">
-  <div class="controls-grid">
-    <div class="control-group">
-      <label class="control-label">Search Reports</label>
-      <input 
-        type="text" 
-        class="control-input" 
-        placeholder="Search by organization, system, or event..."
-        id="searchInput"
-      />
+<!-- ── TOOLBAR (sticky below nav) ──────────────────────────────────── -->
+<div class="toolbar-wrap">
+  <div class="toolbar">
+    <button class="mobile-filter-btn" id="mobileFilterBtn">
+      <span>⚙</span> Filters
+      <span id="activeFilterCount" style="display:none; background:var(--navy); color:white; width:18px; height:18px; border-radius:50%; font-size:0.7rem; font-weight:800; display:inline-flex; align-items:center; justify-content:center;"></span>
+    </button>
+    <div class="toolbar-search">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search by name, system, or keyword…" autocomplete="off" />
     </div>
-
-    <div class="control-group">
-      <label class="control-label">Category</label>
-      <select class="control-input" id="categoryFilter">
-        <option value="">All Categories</option>
-        <option value="special">Special Reports ($299)</option>
-        <option value="placement">Placement Audits ($149)</option>
+    <div class="toolbar-selects">
+      <select id="categoryFilter">
+        <option value="">All Types</option>
+        <option value="special">Special Reports</option>
+        <option value="placement">Placement Audits</option>
       </select>
-    </div>
-
-    <div class="control-group">
-      <label class="control-label">Sort By</label>
-      <select class="control-input" id="sortSelect">
+      <select id="priceFilter">
+        <option value="">Any Price</option>
+        <option value="149">£149 – Placement</option>
+        <option value="299">£299 – Special</option>
+      </select>
+      <select id="sortSelect">
         <option value="newest">Newest First</option>
         <option value="oldest">Oldest First</option>
-        <option value="price-high">Price: High to Low</option>
-        <option value="price-low">Price: Low to High</option>
+        <option value="price-high">Price: High → Low</option>
+        <option value="price-low">Price: Low → High</option>
+        <option value="az">A → Z</option>
+        <option value="za">Z → A</option>
       </select>
     </div>
+    <span class="toolbar-results" id="toolbarCount"></span>
   </div>
-</section>
+</div>
 
-<!-- ================= PRODUCTS ================= -->
-<section class="products-section">
-  {{#if audits.length}}
-    <div class="section-header">
-      <h2 class="section-title">Intelligence Reports</h2>
-      <p class="section-subtitle">
-        Archived, immutable structural audits for professional reference and strategic intelligence
-      </p>
+<!-- ── PAGE LAYOUT ─────────────────────────────────────────────────── -->
+<div class="page-layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-card" id="sidebarCard">
+      <div class="sidebar-head">
+        <h3>Filter Reports</h3>
+        <button class="clear-btn" id="clearAllBtn">Clear all</button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="filter-label">Report Type</div>
+        <label class="filter-option">
+          <input type="radio" name="sideType" value="" checked> <label>All Types</label>
+        </label>
+        <label class="filter-option">
+          <input type="radio" name="sideType" value="special">
+          <label>Special Reports</label>
+          <span class="filter-count" id="countSpecial">–</span>
+        </label>
+        <label class="filter-option">
+          <input type="radio" name="sideType" value="placement">
+          <label>Placement Audits</label>
+          <span class="filter-count" id="countPlacement">–</span>
+        </label>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="filter-label">Price</div>
+        <label class="filter-option">
+          <input type="radio" name="sidePrice" value="" checked> <label>All Prices</label>
+        </label>
+        <label class="filter-option">
+          <input type="radio" name="sidePrice" value="149"> <label>£149 – Placement</label>
+        </label>
+        <label class="filter-option">
+          <input type="radio" name="sidePrice" value="299"> <label>£299 – Special</label>
+        </label>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="filter-label">Sort By</div>
+        <select id="sideSort" style="width:100%; padding:0.6rem 2rem 0.6rem 0.75rem; border:1.5px solid var(--gray-200); border-radius:var(--r); font-size:0.875rem; background:var(--gray-50) url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394A3B8'/%3E%3C/svg%3E\") no-repeat right 0.75rem center; appearance:none;">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="price-high">Price: High → Low</option>
+          <option value="price-low">Price: Low → High</option>
+          <option value="az">A → Z</option>
+          <option value="za">Z → A</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main-content">
+
+    <!-- Active filter chips -->
+    <div class="active-filters" id="activeFilters"></div>
+
+    <div class="main-top">
+      <p class="results-label" id="resultsLabel">Loading…</p>
+      <div style="display:flex; gap:0.75rem; align-items:center;">
+        <div class="view-toggle">
+          <button class="view-btn active" id="gridViewBtn" title="Grid view">⊞</button>
+          <button class="view-btn" id="listViewBtn" title="List view">≡</button>
+        </div>
+      </div>
     </div>
 
+    {{#if audits.length}}
     <div class="products-grid" id="productsGrid">
       {{#each audits}}
-        <article class="product-card" data-category="{{this.auditKind}}" data-price="{{this.displayPrice}}">
-          
-          <span class="product-badge {{#if (eq this.auditKind 'special')}}premium{{else}}standard{{/if}}">
-            {{#if (eq this.auditKind 'special')}}Premium{{else}}Standard{{/if}}
-          </span>
-
-          <div class="product-header">
-            <div class="product-type">
-              {{#if (eq this.auditKind 'special')}}
-                Special SCOI Report
-              {{else}}
-                Placement Audit
-              {{/if}}
-            </div>
-
-            <h3 class="product-title">{{this.subject.name}}</h3>
-
-            <div class="product-window">
-              📅 {{this.assessmentWindow.label}}
-            </div>
+      <article
+        class="audit-card"
+        data-id="{{this._id}}"
+        data-kind="{{this.auditKind}}"
+        data-price="{{this.displayPrice}}"
+        data-title="{{this.subject.name}}"
+        data-window="{{this.assessmentWindow.label}}"
+        style="display:none;"
+      >
+        <div class="card-top">
+          <div class="kind-badge {{this.auditKind}}">
+            {{#if (eq this.auditKind 'special')}}Premium Special{{else}}Placement Audit{{/if}}
           </div>
-
-          <div class="product-body">
-            <ul class="product-features">
-              {{#if (eq this.auditKind 'special')}}
-                <li>Non-placement structural analysis</li>
-                <li>Civilization risk signals</li>
-                <li>Counterfactual responsibility framework</li>
-                <li>Doctrine-grade systemic diagnosis</li>
-              {{else}}
-                <li>Archived placement audit (immutable)</li>
-                <li>Dual-matrix SCOI calculation</li>
-                <li>Structural diagnosis & interpretation</li>
-                <li>Historical reference (non-retroactive)</li>
-              {{/if}}
-            </ul>
+          <h3 class="card-title">{{this.subject.name}}</h3>
+          <div class="card-window">📅 {{this.assessmentWindow.label}}</div>
+        </div>
+        <div class="card-body">
+          <ul class="card-features">
+            {{#if (eq this.auditKind 'special')}}
+              <li>Non-placement structural analysis</li>
+              <li>Civilization risk signals</li>
+              <li>Counterfactual responsibility framework</li>
+              <li>Doctrine-grade systemic diagnosis</li>
+            {{else}}
+              <li>Archived placement audit (immutable)</li>
+              <li>Dual-matrix SCOI calculation</li>
+              <li>Structural diagnosis &amp; interpretation</li>
+              <li>Historical reference (non-retroactive)</li>
+            {{/if}}
+          </ul>
+        </div>
+        <div class="card-foot">
+          <div class="price-block">
+            <div class="price-amount">£{{this.displayPrice}}</div>
+            <div class="price-lbl">One-time purchase</div>
           </div>
-
-          <div class="product-footer">
-            <div class="product-price">
-              <div class="price-amount">${{this.displayPrice}}</div>
-              <div class="price-label">One-time purchase</div>
-            </div>
-
-            <form method="POST" action="/scoi/checkout" style="margin:0;">
-              <input type="hidden" name="auditId" value="{{this._id}}">
-              <button type="submit" class="btn-purchase">
-                Purchase Report →
-              </button>
-            </form>
-          </div>
-        </article>
+          <form method="POST" action="/scoi/checkout" style="margin:0">
+            <input type="hidden" name="auditId" value="{{this._id}}">
+            <button type="submit" class="btn-buy">Purchase →</button>
+          </form>
+        </div>
+      </article>
       {{/each}}
     </div>
-  {{else}}
+
+    <!-- Empty filtered state -->
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <div class="empty-icon">🔍</div>
+      <h2 class="empty-title">No reports match your filters</h2>
+      <p class="empty-text">Try adjusting your search terms or clearing some filters to see more results.</p>
+      <button class="btn-reset" id="resetFiltersBtn">Clear All Filters</button>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+    {{else}}
     <div class="empty-state">
       <div class="empty-icon">📊</div>
-      <h2 class="empty-title">No Reports Available</h2>
-      <p class="empty-text">
-        SCOI intelligence reports are being prepared. Check back soon for 
-        civilization-grade structural audits.
-      </p>
+      <h2 class="empty-title">No Reports Available Yet</h2>
+      <p class="empty-text">SCOI intelligence reports are being prepared. Check back soon for civilization-grade structural audits authored by Donald Mataranyika.</p>
+      <a href="/" class="btn-buy" style="display:inline-block; padding:0.75rem 2rem; text-decoration:none;">Return Home</a>
     </div>
-  {{/if}}
-</section>
+    {{/if}}
 
-<!-- ================= TRUST SIGNALS ================= -->
+  </main>
+</div><!-- /page-layout -->
+
+<!-- ── TRUST SIGNALS ───────────────────────────────────────────────── -->
 <section class="trust-section">
-  <div class="trust-container">
+  <div class="trust-inner">
+    <div class="trust-title">Why professionals trust CRIPFCnt intelligence</div>
     <div class="trust-grid">
       <div class="trust-item">
         <div class="trust-icon">🔒</div>
-        <div class="trust-title">Secure Checkout</div>
-        <div class="trust-text">Stripe-powered payment processing</div>
+        <div class="trust-item-title">Secure Checkout</div>
+        <div class="trust-item-text">Stripe-powered payment processing with full encryption</div>
       </div>
-
       <div class="trust-item">
-        <div class="trust-icon">📄</div>
-        <div class="trust-title">Instant Access</div>
-        <div class="trust-text">View & download immediately after purchase</div>
+        <div class="trust-icon">⚡</div>
+        <div class="trust-item-title">Instant Access</div>
+        <div class="trust-item-text">View and download immediately after purchase</div>
       </div>
-
       <div class="trust-item">
         <div class="trust-icon">♾️</div>
-        <div class="trust-title">Lifetime Access</div>
-        <div class="trust-text">Permanent access to your purchased reports</div>
+        <div class="trust-item-title">Lifetime Access</div>
+        <div class="trust-item-text">Permanent access to every report you purchase</div>
       </div>
-
       <div class="trust-item">
         <div class="trust-icon">✍️</div>
-        <div class="trust-title">Authored by Donald Mataranyika</div>
-        <div class="trust-text">CRIPFCnt framework creator</div>
+        <div class="trust-item-title">Expert Authored</div>
+        <div class="trust-item-text">Donald Mataranyika — Chartered Secretary & CRIPFCnt creator</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ================= SCRIPTS ================= -->
 <script>
-  // Search functionality
-  const searchInput = document.getElementById('searchInput');
+(function() {
+  /* ── Config ─────────────────────────────────────────── */
+  const PAGE_SIZE = 24; // cards per page
+
+  /* ── DOM refs ───────────────────────────────────────── */
+  const searchInput    = document.getElementById('searchInput');
   const categoryFilter = document.getElementById('categoryFilter');
-  const sortSelect = document.getElementById('sortSelect');
-  const productsGrid = document.getElementById('productsGrid');
+  const priceFilter    = document.getElementById('priceFilter');
+  const sortSelect     = document.getElementById('sortSelect');
+  const sideSort       = document.getElementById('sideSort');
+  const gridEl         = document.getElementById('productsGrid');
+  const paginationEl   = document.getElementById('pagination');
+  const resultsLabel   = document.getElementById('resultsLabel');
+  const toolbarCount   = document.getElementById('toolbarCount');
+  const emptyState     = document.getElementById('emptyState');
+  const activeFiltersEl= document.getElementById('activeFilters');
+  const clearAllBtn    = document.getElementById('clearAllBtn');
+  const resetFiltersBtn= document.getElementById('resetFiltersBtn');
+  const gridViewBtn    = document.getElementById('gridViewBtn');
+  const listViewBtn    = document.getElementById('listViewBtn');
+  const mobToggle      = document.getElementById('mobToggle');
+  const mobNav         = document.getElementById('mobNav');
+  const mobileFilterBtn= document.getElementById('mobileFilterBtn');
+  const sidebarCard    = document.getElementById('sidebarCard');
 
-  function filterProducts() {
-    const searchTerm = searchInput.value.toLowerCase();
-    const category = categoryFilter.value;
-    const cards = Array.from(document.querySelectorAll('.product-card'));
+  /* ── State ──────────────────────────────────────────── */
+  let allCards   = [];
+  let filtered   = [];
+  let currentPage = 1;
+  let currentSort = 'newest';
+  let isListView  = false;
 
-    let filtered = cards.filter(card => {
-      const title = card.querySelector('.product-title').textContent.toLowerCase();
-      const cardCategory = card.dataset.category;
+  /* ── Init ───────────────────────────────────────────── */
+  function init() {
+    allCards = Array.from(document.querySelectorAll('.audit-card'));
 
-      const matchesSearch = !searchTerm || title.includes(searchTerm);
-      const matchesCategory = !category || cardCategory === category;
+    // Count badges
+    const specialCount   = allCards.filter(c => c.dataset.kind === 'special').length;
+    const placementCount = allCards.filter(c => c.dataset.kind === 'placement').length;
+    const cs = document.getElementById('countSpecial');
+    const cp = document.getElementById('countPlacement');
+    if (cs) cs.textContent = specialCount;
+    if (cp) cp.textContent = placementCount;
 
-      return matchesSearch && matchesCategory;
+    applyFilters();
+  }
+
+  /* ── Filter & sort ──────────────────────────────────── */
+  function applyFilters() {
+    const q      = searchInput.value.trim().toLowerCase();
+    const kind   = categoryFilter.value || getSideRadio('sideType');
+    const price  = priceFilter.value    || getSideRadio('sidePrice');
+    const sort   = sortSelect.value;
+
+    // Sync sidebar sort
+    if (sideSort.value !== sort) sideSort.value = sort;
+
+    filtered = allCards.filter(card => {
+      const title  = (card.dataset.title  || '').toLowerCase();
+      const window = (card.dataset.window || '').toLowerCase();
+      const matchQ = !q || title.includes(q) || window.includes(q);
+      const matchK = !kind  || card.dataset.kind  === kind;
+      const matchP = !price || card.dataset.price === price;
+      return matchQ && matchK && matchP;
     });
-
-    // Hide all cards first
-    cards.forEach(card => card.style.display = 'none');
-
-    // Show filtered cards
-    filtered.forEach(card => card.style.display = 'block');
 
     // Sort
-    sortProducts(filtered);
+    filtered = sortCards(filtered, sort);
+
+    currentPage = 1;
+    renderPage();
+    renderPagination();
+    renderActiveChips(q, kind, price);
+    updateCounts();
   }
 
-  function sortProducts(cards) {
-    const sortBy = sortSelect.value;
+  function getSideRadio(name) {
+    const checked = document.querySelector(`input[name="${name}"]:checked`);
+    return checked ? checked.value : '';
+  }
 
-    cards.sort((a, b) => {
-      const priceA = parseInt(a.dataset.price);
-      const priceB = parseInt(b.dataset.price);
-
-      switch(sortBy) {
-        case 'price-high':
-          return priceB - priceA;
-        case 'price-low':
-          return priceA - priceB;
-        case 'newest':
-          return 0; // Keep original order
-        case 'oldest':
-          return 0; // Keep original order
-        default:
-          return 0;
+  function sortCards(cards, method) {
+    return [...cards].sort((a, b) => {
+      const ta = (a.dataset.title || '').toLowerCase();
+      const tb = (b.dataset.title || '').toLowerCase();
+      const pa = parseInt(a.dataset.price) || 0;
+      const pb = parseInt(b.dataset.price) || 0;
+      // Use DOM order index as proxy for date
+      const ia = allCards.indexOf(a);
+      const ib = allCards.indexOf(b);
+      switch (method) {
+        case 'oldest':     return ia - ib;
+        case 'price-high': return pb - pa;
+        case 'price-low':  return pa - pb;
+        case 'az':         return ta.localeCompare(tb);
+        case 'za':         return tb.localeCompare(ta);
+        default:           return ib - ia; // newest = reverse DOM order
       }
     });
-
-    // Reorder in DOM
-    cards.forEach(card => {
-      productsGrid.appendChild(card);
-    });
   }
 
-  // Event listeners
-  searchInput.addEventListener('input', filterProducts);
-  categoryFilter.addEventListener('change', filterProducts);
-  sortSelect.addEventListener('change', filterProducts);
-</script>
+  /* ── Render page of cards ───────────────────────────── */
+  function renderPage() {
+    // Hide all
+    allCards.forEach(c => { c.style.display = 'none'; });
 
+    const total  = filtered.length;
+    const start  = (currentPage - 1) * PAGE_SIZE;
+    const end    = Math.min(start + PAGE_SIZE, total);
+    const pageItems = filtered.slice(start, end);
+
+    if (total === 0) {
+      emptyState.style.display = 'block';
+      paginationEl.style.display = 'none';
+    } else {
+      emptyState.style.display = 'none';
+      pageItems.forEach(c => { c.style.display = 'flex'; });
+    }
+  }
+
+  /* ── Pagination ─────────────────────────────────────── */
+  function renderPagination() {
+    const total = filtered.length;
+    const pages = Math.ceil(total / PAGE_SIZE);
+    paginationEl.innerHTML = '';
+    if (pages <= 1) return;
+
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end   = Math.min(currentPage * PAGE_SIZE, total);
+    const info  = document.createElement('span');
+    info.className = 'pag-info';
+    info.textContent = `${start}–${end} of ${total}`;
+
+    // Prev
+    const prev = makePagBtn('‹', currentPage === 1, () => { currentPage--; renderPage(); renderPagination(); scrollToGrid(); });
+    if (currentPage === 1) prev.classList.add('disabled');
+
+    // Page numbers
+    const nums = buildPageNums(pages, currentPage);
+    const numEls = nums.map(n => {
+      if (n === '…') {
+        const el = makePagBtn('…', false, null);
+        el.classList.add('ellipsis');
+        return el;
+      }
+      const el = makePagBtn(n, false, () => { currentPage = n; renderPage(); renderPagination(); scrollToGrid(); });
+      if (n === currentPage) el.classList.add('active');
+      return el;
+    });
+
+    // Next
+    const next = makePagBtn('›', currentPage === pages, () => { currentPage++; renderPage(); renderPagination(); scrollToGrid(); });
+    if (currentPage === pages) next.classList.add('disabled');
+
+    paginationEl.appendChild(prev);
+    numEls.forEach(el => paginationEl.appendChild(el));
+    paginationEl.appendChild(next);
+    paginationEl.appendChild(info);
+    paginationEl.style.display = 'flex';
+  }
+
+  function makePagBtn(label, disabled, onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'pag-btn';
+    btn.textContent = label;
+    if (disabled) btn.classList.add('disabled');
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  function buildPageNums(total, current) {
+    if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+    const pages = [];
+    if (current <= 4) {
+      pages.push(1, 2, 3, 4, 5, '…', total);
+    } else if (current >= total - 3) {
+      pages.push(1, '…', total-4, total-3, total-2, total-1, total);
+    } else {
+      pages.push(1, '…', current-1, current, current+1, '…', total);
+    }
+    return pages;
+  }
+
+  function scrollToGrid() {
+    document.querySelector('.toolbar-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* ── Update counts ──────────────────────────────────── */
+  function updateCounts() {
+    const total = filtered.length;
+    const allTotal = allCards.length;
+    const label = total === allTotal
+      ? `${total} report${total !== 1 ? 's' : ''}`
+      : `${total} of ${allTotal} reports`;
+    if (resultsLabel) resultsLabel.innerHTML = `Showing <strong>${label}</strong>`;
+    if (toolbarCount) toolbarCount.textContent = label;
+  }
+
+  /* ── Active filter chips ────────────────────────────── */
+  function renderActiveChips(q, kind, price) {
+    activeFiltersEl.innerHTML = '';
+    let count = 0;
+    if (q) { addChip(`Search: "${q}"`, () => { searchInput.value = ''; applyFilters(); }); count++; }
+    if (kind) { addChip(kind === 'special' ? 'Special Reports' : 'Placement Audits', () => { categoryFilter.value = ''; setRadio('sideType', ''); applyFilters(); }); count++; }
+    if (price) { addChip(`£${price}`, () => { priceFilter.value = ''; setRadio('sidePrice', ''); applyFilters(); }); count++; }
+
+    const badge = document.getElementById('activeFilterCount');
+    if (badge) {
+      badge.style.display = count > 0 ? 'inline-flex' : 'none';
+      badge.textContent = count;
+    }
+  }
+
+  function addChip(text, onRemove) {
+    const chip = document.createElement('span');
+    chip.className = 'filter-chip';
+    chip.innerHTML = `${text} <button class="chip-remove" title="Remove filter">✕</button>`;
+    chip.querySelector('.chip-remove').addEventListener('click', onRemove);
+    activeFiltersEl.appendChild(chip);
+  }
+
+  function setRadio(name, value) {
+    const el = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (el) el.checked = true;
+  }
+
+  /* ── View toggle ────────────────────────────────────── */
+  gridViewBtn?.addEventListener('click', () => {
+    isListView = false;
+    gridEl.classList.remove('list-view');
+    gridViewBtn.classList.add('active');
+    listViewBtn.classList.remove('active');
+    // Re-set page size for grid
+    renderPage();
+  });
+  listViewBtn?.addEventListener('click', () => {
+    isListView = true;
+    gridEl.classList.add('list-view');
+    listViewBtn.classList.add('active');
+    gridViewBtn.classList.remove('active');
+    renderPage();
+  });
+
+  /* ── Event listeners ────────────────────────────────── */
+  let searchDebounce;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 220);
+  });
+  categoryFilter?.addEventListener('change', () => { setRadio('sideType', categoryFilter.value); applyFilters(); });
+  priceFilter?.addEventListener('change', () => { setRadio('sidePrice', priceFilter.value); applyFilters(); });
+  sortSelect?.addEventListener('change', applyFilters);
+  sideSort?.addEventListener('change', () => { sortSelect.value = sideSort.value; applyFilters(); });
+
+  document.querySelectorAll('input[name="sideType"]').forEach(el => el.addEventListener('change', () => {
+    categoryFilter.value = el.value; applyFilters();
+  }));
+  document.querySelectorAll('input[name="sidePrice"]').forEach(el => el.addEventListener('change', () => {
+    priceFilter.value = el.value; applyFilters();
+  }));
+
+  clearAllBtn?.addEventListener('click', resetAll);
+  resetFiltersBtn?.addEventListener('click', resetAll);
+
+  function resetAll() {
+    searchInput.value = '';
+    categoryFilter.value = '';
+    priceFilter.value = '';
+    sortSelect.value = 'newest';
+    sideSort.value = 'newest';
+    setRadio('sideType', '');
+    setRadio('sidePrice', '');
+    applyFilters();
+  }
+
+  /* ── Mobile nav ─────────────────────────────────────── */
+  mobToggle?.addEventListener('click', () => {
+    mobToggle.classList.toggle('active');
+    mobNav.classList.toggle('open');
+    document.body.style.overflow = mobNav.classList.contains('open') ? 'hidden' : '';
+  });
+
+  /* ── Mobile filter sidebar toggle ───────────────────── */
+  mobileFilterBtn?.addEventListener('click', () => {
+    sidebarCard.classList.toggle('mobile-open');
+  });
+
+  /* ── Bootstrap ──────────────────────────────────────── */
+  init();
+})();
+</script>
 </body>
 </html>

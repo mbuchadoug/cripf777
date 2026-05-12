@@ -184,6 +184,7 @@
     .q-num { font-size:0.7rem; font-weight:700; color:var(--gold); font-family:var(--font-sans); padding-top:0.2rem; flex-shrink:0; letter-spacing:0.05em; }
     .q-text { font-size:0.95rem; line-height:1.55; color:var(--text-primary); }
 
+
     /* ── VALUE PROPOSITION ───────────────────────────────────────── */
     .value-section { background:var(--light-gray); padding:7rem 5%; }
     .value-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:2.5rem; margin-top:0; }
@@ -191,38 +192,6 @@
     .value-icon { width:56px; height:56px; background:var(--navy); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin-bottom:1.25rem; }
     .value-title { font-family:var(--font-serif); font-size:1.4rem; font-weight:700; color:var(--navy); margin-bottom:0.75rem; }
     .value-text { color:var(--dark-gray); line-height:1.7; font-size:0.95rem; }
-
-    /* ── FEATURED AUDITS ─────────────────────────────────────────── */
-    .audits-section { padding:7rem 5%; background:var(--white); }
-    .audits-section-header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:3rem; flex-wrap:wrap; gap:1.5rem; }
-    .audits-section-header .header-left { max-width:600px; }
-    .view-all-link { display:inline-flex; align-items:center; gap:0.5rem; font-weight:700; font-size:0.9rem; color:var(--navy); text-decoration:none; border-bottom:2px solid var(--gold); padding-bottom:0.2rem; transition:color 0.2s, border-color 0.2s; white-space:nowrap; }
-    .view-all-link:hover { color:var(--gold); }
-
-    /* Horizontal scroll carousel for audits on homepage */
-    .audits-carousel-wrap { position:relative; }
-    .audits-carousel { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; }
-    .audit-card { background:var(--white); border:1px solid var(--medium-gray); border-radius:2px; padding:0; overflow:hidden; transition:all 0.3s; display:flex; flex-direction:column; }
-    .audit-card:hover { box-shadow:var(--shadow-md); transform:translateY(-4px); }
-    .audit-card-header { background:linear-gradient(135deg, var(--navy-dark), var(--navy)); padding:1.5rem; position:relative; }
-    .audit-kind-badge { display:inline-block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; padding:0.3rem 0.75rem; border-radius:2px; margin-bottom:0.75rem; }
-    .audit-kind-badge.special { background:rgba(201,169,97,0.25); color:var(--gold-light); border:1px solid rgba(201,169,97,0.4); }
-    .audit-kind-badge.placement { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); border:1px solid rgba(255,255,255,0.15); }
-    .audit-card-title { font-family:var(--font-serif); font-size:1.2rem; font-weight:700; color:var(--white); line-height:1.35; }
-    .audit-card-window { font-size:0.78rem; color:rgba(255,255,255,0.55); margin-top:0.5rem; }
-    .audit-card-body { padding:1.5rem; flex:1; display:flex; flex-direction:column; }
-    .audit-features { list-style:none; margin-bottom:1.25rem; flex:1; }
-    .audit-features li { font-size:0.85rem; color:var(--dark-gray); padding:0.35rem 0; border-bottom:1px solid var(--medium-gray); display:flex; align-items:flex-start; gap:0.5rem; line-height:1.4; }
-    .audit-features li:last-child { border-bottom:none; }
-    .audit-features li::before { content:'✓'; color:var(--gold); font-weight:700; font-size:0.75rem; flex-shrink:0; margin-top:0.15rem; }
-    .audit-card-footer { padding:1.25rem 1.5rem; border-top:1px solid var(--medium-gray); display:flex; justify-content:space-between; align-items:center; background:var(--light-gray); }
-    .audit-price { font-family:var(--font-serif); font-size:1.6rem; font-weight:700; color:var(--navy); }
-    .audit-price-label { font-size:0.72rem; color:var(--dark-gray); display:block; }
-    .btn-audit-buy { background:var(--navy); color:var(--white); padding:0.65rem 1.25rem; border-radius:4px; font-size:0.85rem; font-weight:700; text-decoration:none; transition:all 0.2s; border:none; cursor:pointer; white-space:nowrap; }
-    .btn-audit-buy:hover { background:var(--navy-dark); }
-
-    /* Audit section count badge */
-    .audits-count-badge { display:inline-flex; align-items:center; gap:0.4rem; background:rgba(201,169,97,0.12); color:var(--navy); border:1px solid rgba(201,169,97,0.4); padding:0.35rem 0.9rem; border-radius:30px; font-size:0.8rem; font-weight:700; letter-spacing:0.5px; }
 
     /* ── CTA ─────────────────────────────────────────────────────── */
     .cta-section { background:var(--navy); padding:6rem 5%; text-align:center; }
@@ -252,22 +221,23 @@
     .footer-links li { margin-bottom:0.6rem; font-size:0.9rem; color:rgba(255,255,255,0.6); }
     .footer-links a { color:rgba(255,255,255,0.65); text-decoration:none; transition:color 0.3s; }
     .footer-links a:hover { color:var(--gold); }
-    .footer-bottom { border-top:1px solid rgba(255,255,255,0.1); padding-top:2rem; font-size:0.85rem; color:rgba(255,255,255,0.45); }
-    .footer-bottom a { color:rgba(255,255,255,0.55); text-decoration:none; }
+    .footer-bottom { border-top:1px solid rgba(255,255,255,0.1); padding-top:2rem; text-align:center; color:rgba(255,255,255,0.5); font-size:0.875rem; }
+    .footer-bottom a { color:rgba(255,255,255,0.6); text-decoration:none; }
     .footer-bottom a:hover { color:var(--gold); }
 
-    /* scroll reveal */
-    .reveal { opacity:0; transform:translateY(24px); transition:opacity 0.6s ease, transform 0.6s ease; }
-    .reveal.visible { opacity:1; transform:translateY(0); }
-
-    /* ── RESPONSIVE ─────────────────────────────────────────────── */
+    /* ── MOBILE ──────────────────────────────────────────────────── */
     @media (max-width:768px) {
-      .nav-links { display:none; flex-direction:column; position:fixed; top:0; left:0; width:100%; height:100vh; background:var(--white); padding:6rem 2rem 3rem; gap:0; overflow-y:auto; z-index:999; }
-      .nav-links.active { display:flex; }
-      .nav-links > li { border-bottom:1px solid var(--medium-gray); }
-      .nav-links > li > a { display:block; padding:1.1rem 0; font-size:1rem; font-weight:600; }
+      html, body { overflow-x:hidden; width:100%; }
       .mobile-menu-toggle { display:flex; }
-      body.menu-open { overflow:hidden; }
+      .nav-links { position:fixed; top:0; right:-85%; width:85%; max-width:320px; height:100vh; background:var(--white); flex-direction:column; align-items:flex-start; padding:5rem 1.5rem 2rem; gap:0; box-shadow:-4px 0 20px rgba(0,0,0,0.1); transition:right 0.3s ease; overflow-y:auto; overflow-x:hidden; z-index:1000; box-sizing:border-box; }
+      .nav-links.active { right:0; }
+      body.menu-open { overflow:hidden; position:fixed; width:100%; }
+      body::after { content:''; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); opacity:0; visibility:hidden; transition:all 0.3s; z-index:999; }
+      body.menu-open::after { opacity:1; visibility:visible; }
+      .nav-links li { width:100%; border-bottom:1px solid var(--medium-gray); box-sizing:border-box; }
+      .nav-links li:last-child { border-bottom:none; }
+      .nav-links a { display:block; padding:1.1rem 0; width:100%; font-size:1rem; box-sizing:border-box; }
+      .nav-cta { margin-top:1rem; text-align:center; width:100%; box-sizing:border-box; }
       .nav-item.dropdown { width:100%; }
       .nav-item.dropdown::after { display:none !important; }
       .dropdown-toggle { width:100%; justify-content:space-between; padding:1.1rem 0; display:flex; }
@@ -296,9 +266,6 @@
       .value-grid { grid-template-columns:1fr; gap:1.5rem; }
       .footer-grid { grid-template-columns:1fr; gap:2.5rem; }
       .book-inner { flex-direction:column; text-align:center; }
-      /* Audits section mobile */
-      .audits-carousel { grid-template-columns:1fr; }
-      .audits-section-header { flex-direction:column; align-items:flex-start; gap:1rem; }
     }
     @media (min-width:769px) {
       .mobile-only { display:none !important; }
@@ -307,8 +274,11 @@
     @media (max-width:1024px) and (min-width:769px) {
       .pillars-grid { grid-template-columns:repeat(2,1fr); }
       .value-grid { grid-template-columns:1fr 1fr; }
-      .audits-carousel { grid-template-columns:1fr 1fr; }
     }
+
+    /* scroll reveal */
+    .reveal { opacity:0; transform:translateY(24px); transition:opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity:1; transform:translateY(0); }
   </style>
 </head>
 <body>
@@ -388,7 +358,7 @@
       that names what happens in the space between effort and outcome - and what you can do about it.
     </p>
     <div class="hero-actions">
-      <a href="/scoi" class="btn btn-gold">Browse Intelligence Reports →</a>
+      <a href="/scoi" class="btn btn-gold">Run a SCOI Audit →</a>
       <a href="#videos" class="btn btn-outline">Watch the Insights</a>
     </div>
     <div class="hero-stats">
@@ -425,73 +395,6 @@
     </div>
   </div>
 </section>
-
-<!-- ── FEATURED AUDITS ─────────────────────────────────────────────────
-     Shows up to 6 featured audits. The server should pass `featuredAudits`
-     (an array of up to 6 items, newest special first, then placement).
-     The full catalogue lives at /scoi.
--->
-{{#if featuredAudits.length}}
-<section class="audits-section" id="audits">
-  <div class="section-container">
-    <div class="audits-section-header">
-      <div class="header-left">
-        <div class="section-label">Intelligence Marketplace</div>
-        <h2 class="section-title" style="margin-bottom:0.75rem;">Latest SCOI Reports</h2>
-        <p style="color:var(--dark-gray); font-size:1rem; line-height:1.65; max-width:560px;">
-          Civilization-grade structural audits authored by Donald Mataranyika. 
-          Immutable reference intelligence for organisations and systems operating at scale.
-        </p>
-        <div style="margin-top:1rem;">
-          <span class="audits-count-badge">📊 {{totalAuditCount}} reports available</span>
-        </div>
-      </div>
-      <a href="/scoi" class="view-all-link">Browse all reports →</a>
-    </div>
-
-    <div class="audits-carousel">
-      {{#each featuredAudits}}
-      <article class="audit-card reveal">
-        <div class="audit-card-header">
-          <div class="audit-kind-badge {{this.auditKind}}">
-            {{#if (eq this.auditKind 'special')}}Premium Special Report{{else}}Placement Audit{{/if}}
-          </div>
-          <h3 class="audit-card-title">{{this.subject.name}}</h3>
-          <div class="audit-card-window">📅 {{this.assessmentWindow.label}}</div>
-        </div>
-        <div class="audit-card-body">
-          <ul class="audit-features">
-            {{#if (eq this.auditKind 'special')}}
-              <li>Non-placement structural analysis</li>
-              <li>Civilization risk signals</li>
-              <li>Counterfactual responsibility framework</li>
-            {{else}}
-              <li>Archived placement audit (immutable)</li>
-              <li>Dual-matrix SCOI calculation</li>
-              <li>Structural diagnosis &amp; interpretation</li>
-            {{/if}}
-          </ul>
-        </div>
-        <div class="audit-card-footer">
-          <div>
-            <span class="audit-price">£{{this.displayPrice}}</span>
-            <span class="audit-price-label">one-time purchase</span>
-          </div>
-          <form method="POST" action="/scoi/checkout" style="margin:0;">
-            <input type="hidden" name="auditId" value="{{this._id}}">
-            <button type="submit" class="btn-audit-buy">Buy Report →</button>
-          </form>
-        </div>
-      </article>
-      {{/each}}
-    </div>
-
-    <div style="text-align:center; margin-top:3rem;">
-      <a href="/scoi" class="btn btn-gold" style="display:inline-block;">View All {{totalAuditCount}} Reports →</a>
-    </div>
-  </div>
-</section>
-{{/if}}
 
 <!-- ── FRAMEWORK / PILLARS ────────────────────────────────────────────── -->
 <section class="framework-section" id="framework">
@@ -592,7 +495,7 @@
         <h2 class="section-title">Not all success contributes. Not all contribution is seen.</h2>
         <p>The SCOI system makes the invisible measurable. An entity can have enormous visibility but minimal contribution - inflating its apparent success. Or extraordinary contribution that goes entirely unrecognised. The Adjusted SCOI corrects for the environment's difficulty, producing a fairer picture of where an individual or organisation truly stands.</p>
         <p style="font-size:0.9rem; color:rgba(255,255,255,0.55);">The Environmental Resilience Factor (ERF) accounts for operating context: economic instability, systemic inequality, geographic disadvantage. A high ERF acknowledges that the same output achieved in a harder environment represents greater structural contribution.</p>
-        <a href="/scoi" class="btn btn-gold" style="margin-top:2rem; display:inline-block;">Browse SCOI Intelligence Reports →</a>
+        <a href="/scoi" class="btn btn-gold" style="margin-top:2rem; display:inline-block;">Run a SCOI Audit →</a>
       </div>
     </div>
   </div>
@@ -644,6 +547,7 @@
     </div>
   </div>
 </section>
+
 
 <!-- ── CTA ────────────────────────────────────────────────────────────── -->
 <section class="cta-section" id="contact">
