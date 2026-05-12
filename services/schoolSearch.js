@@ -48,6 +48,23 @@ const SCHOOL_TYPE_ALIASES = {
   "high school": "secondary"
 };
 
+// Ownership/sector aliases - "private" / "government" etc.
+const SCHOOL_OWNERSHIP_ALIASES = {
+  private: "private",
+  "private school": "private",
+  "private schools": "private",
+  independent: "private",
+  government: "government",
+  "government school": "government",
+  "government schools": "government",
+  state: "government",
+  council: "government",
+  public: "government",
+  mission: "mission",
+  "church school": "mission",
+  "mission school": "mission"
+};
+
 const SCHOOL_FEE_ALIASES = {
   budget: "budget",
   cheap: "budget",
@@ -100,14 +117,97 @@ function _findSchoolCity(text = "") {
   return null;
 }
 
+// Extra suburbs that may be missing from schoolPlans.js SCHOOL_SUBURB_TO_CITY
+const _EXTRA_SCHOOL_SUBURBS = {
+  "westgate": "Harare",
+  "west gate": "Harare",
+  "tynwald": "Harare",
+  "kensington": "Harare",
+  "queensdale": "Harare",
+  "ashdown park": "Harare",
+  "helensvale": "Harare",
+  "bluffhill": "Harare",
+  "sunningdale": "Harare",
+  "meyrick park": "Harare",
+  "haig park": "Harare",
+  "sentosa": "Harare",
+  "mount hampden": "Harare",
+  "rugare": "Harare",
+  "dzivarasekwa": "Harare",
+  "st martins": "Harare",
+  "prospect": "Harare",
+  "marlborough": "Harare",
+  "mabelreign": "Harare",
+  "avondale": "Harare",
+  "avonlea": "Harare",
+  "borrowdale": "Harare",
+  "highlands": "Harare",
+  "mount pleasant": "Harare",
+  "glen view": "Harare",
+  "glenview": "Harare",
+  "kuwadzana": "Harare",
+  "warren park": "Harare",
+  "hatfield": "Harare",
+  "msasa": "Harare",
+  "greendale": "Harare",
+  "eastlea": "Harare",
+  "belgravia": "Harare",
+  "milton park": "Harare",
+  "newlands": "Harare",
+  "chisipite": "Harare",
+  "gunhill": "Harare",
+  "strathaven": "Harare",
+  "braeside": "Harare",
+  "southerton": "Harare",
+  "workington": "Harare",
+  "graniteside": "Harare",
+  "budiriro": "Harare",
+  "glen norah": "Harare",
+  "mufakose": "Harare",
+  "mabvuku": "Harare",
+  "tafara": "Harare",
+  "highfield": "Harare",
+  "mbare": "Harare",
+  "ruwa": "Harare",
+  "chitungwiza": "Harare",
+  "epworth": "Harare",
+  "norton": "Harare",
+  "hillside": "Bulawayo",
+  "nkulumane": "Bulawayo",
+  "luveve": "Bulawayo",
+  "entumbane": "Bulawayo",
+  "mpopoma": "Bulawayo",
+  "lobengula": "Bulawayo",
+  "tshabalala": "Bulawayo",
+  "pumula": "Bulawayo",
+  "mahatshula": "Bulawayo",
+  "magwegwe": "Bulawayo",
+  "white city": "Bulawayo",
+  "cowdray park": "Bulawayo",
+  "sakubva": "Mutare",
+  "dangamvura": "Mutare",
+  "chikanga": "Mutare",
+  "mambo": "Gweru",
+  "mkoba": "Gweru",
+  "senga": "Gweru",
+  "ascot": "Gweru",
+  "mucheke": "Masvingo",
+  "rujeko": "Masvingo",
+  "mbizo": "Kwekwe",
+  "amaveni": "Kwekwe"
+};
+
 function _findSchoolSuburb(text = "") {
   const normalized = _normSchoolText(text);
-  const suburbs = Object.keys(SCHOOL_SUBURB_TO_CITY || {}).sort((a, b) => b.length - a.length);
+
+  // Merge schoolPlans suburbs with local fallback (local takes precedence for gaps)
+  const merged = { ..._EXTRA_SCHOOL_SUBURBS, ...(SCHOOL_SUBURB_TO_CITY || {}) };
+  const suburbs = Object.keys(merged).sort((a, b) => b.length - a.length);
   for (const suburb of suburbs) {
     if (_includesWholePhrase(normalized, suburb)) {
       return {
         suburb: _titleCase(suburb),
-        city: SCHOOL_SUBURB_TO_CITY[suburb] || null
+        city: merged[suburb] || null
       };
     }
   }
@@ -166,6 +266,8 @@ const SCHOOL_PARSE_TRIGGERS = [
   "find girls school", "find boys school", "find mixed school",
   "find budget school", "find affordable school", "find cheap school", "find premium school",
   "find cambridge", "find zimsec",
+  "find private", "find government", "find mission", "find independent",
+  "private school", "private schools", "government school", "mission school",
   "school in", "schools in", "primary school in", "secondary school in",
   "look for school", "search school"
 ];
@@ -180,7 +282,8 @@ function _parseSchoolShortcodeSearch(text = "") {
     (normalized.includes("school") && (
       _findSchoolCity(normalized) ||
       _findSchoolSuburb(normalized) ||
-      Object.keys(SCHOOL_TYPE_ALIASES).some(k => _includesWholePhrase(normalized, k))
+      Object.keys(SCHOOL_TYPE_ALIASES).some(k => _includesWholePhrase(normalized, k)) ||
+      Object.keys(SCHOOL_OWNERSHIP_ALIASES).some(k => _includesWholePhrase(normalized, k))
     ));
 
   if (!isSchoolTrigger) return null;
@@ -189,6 +292,7 @@ function _parseSchoolShortcodeSearch(text = "") {
     city: null,
     suburb: null,
     type: null,
+    ownership: null,
     feeRange: null,
     facility: null,
     curriculum: null,
@@ -213,6 +317,11 @@ function _parseSchoolShortcodeSearch(text = "") {
   // Type
   for (const [word, value] of Object.entries(SCHOOL_TYPE_ALIASES)) {
     if (_includesWholePhrase(normalized, word)) { search.type = value; break; }
+  }
+
+  // Ownership (private / government / mission)
+  for (const [word, value] of Object.entries(SCHOOL_OWNERSHIP_ALIASES)) {
+    if (_includesWholePhrase(normalized, word)) { search.ownership = value; break; }
   }
 
   // Fee range
@@ -248,7 +357,7 @@ function _parseSchoolShortcodeSearch(text = "") {
   }
 
   const hasFilters = Boolean(
-    search.city || search.suburb || search.type || search.feeRange ||
+    search.city || search.suburb || search.type || search.ownership || search.feeRange ||
     search.facility || search.curriculum || search.gender || search.boarding ||
     typeof search.admissionsOpen === "boolean"
   );
@@ -1099,6 +1208,7 @@ if (search.curriculum) {
 }
 if (search.gender)    query.gender     = search.gender;
 if (search.boarding)  query.boarding   = search.boarding;
+if (search.ownership) query.ownership  = search.ownership;
 if (typeof search.admissionsOpen === "boolean") {
   query.admissionsOpen = search.admissionsOpen;
 }
@@ -1130,9 +1240,10 @@ if (typeof search.admissionsOpen === "boolean") {
       const q3 = { active: true };
       if (search.city)   q3.city   = query.city;
       if (search.suburb) q3.suburb = query.suburb;
-      if (search.feeRange)  q3.feeRange   = search.feeRange;
-      if (search.gender)    q3.gender     = search.gender;
-      if (search.boarding)  q3.boarding   = search.boarding;
+      if (search.feeRange)   q3.feeRange   = search.feeRange;
+      if (search.gender)     q3.gender     = search.gender;
+      if (search.boarding)   q3.boarding   = search.boarding;
+      if (search.ownership)  q3.ownership  = search.ownership;
       if (typeof search.admissionsOpen === "boolean") q3.admissionsOpen = search.admissionsOpen;
       schools = await SchoolProfile.find(q3)
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
