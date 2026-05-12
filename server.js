@@ -631,8 +631,76 @@ ${commentary}
 }
 
 // Public pages
-app.get("/", (req, res) => {
-  renderPage(res, "website/index", req, "/");
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH for server.js  — replace the existing homepage route (around line 634)
+//
+//   BEFORE:
+//     app.get("/", (req, res) => {
+//       renderPage(res, "website/index", req, "/");
+//     });
+//
+//   AFTER: (paste the block below)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Make sure these imports are present at the top of server.js (already imported
+// in the original file, but listed here for clarity):
+//
+//   import PlacementAudit   from "./models/placementAudit.js";
+//   import SpecialScoiAudit from "./models/specialScoiAudit.js";
+//
+// If SpecialScoiAudit is not yet imported at the top of server.js, add it alongside
+// the PlacementAudit import.
+
+app.get("/", async (req, res) => {
+  try {
+    // Fetch a small sample of each type to show on the homepage.
+    // We deliberately limit to 3 each (6 total) so the page stays clean.
+    const [latestSpecial, latestPlacement] = await Promise.all([
+      SpecialScoiAudit.find({ isPaid: false })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .lean(),
+      PlacementAudit.find({ status: "archived_reference" })
+        .sort({ "assessmentWindow.label": -1 })
+        .limit(3)
+        .lean(),
+    ]);
+
+    // Normalize so both types share the same shape the template expects
+    const normalizedSpecial = latestSpecial.map(a => ({
+      ...a,
+      assessmentWindow: { label: a.assessmentWindow?.label || "Special Audit" },
+      displayPrice: 299,
+      auditKind: "special",
+    }));
+
+    const normalizedPlacement = latestPlacement.map(a => ({
+      ...a,
+      displayPrice: 149,
+      auditKind: "placement",
+    }));
+
+    // Show special reports first, then placement audits
+    const featuredAudits = [...normalizedSpecial, ...normalizedPlacement];
+
+    // Also fetch the total count for the "X reports available" badge
+    const [specialTotal, placementTotal] = await Promise.all([
+      SpecialScoiAudit.countDocuments({ isPaid: false }),
+      PlacementAudit.countDocuments({ status: "archived_reference" }),
+    ]);
+
+    renderPage(res, "website/index", req, "/", {
+      featuredAudits,
+      totalAuditCount: specialTotal + placementTotal,
+    });
+  } catch (err) {
+    console.error("[Homepage]", err);
+    // Graceful fallback — render homepage without audits if DB fails
+    renderPage(res, "website/index", req, "/", {
+      featuredAudits: [],
+      totalAuditCount: 0,
+    });
+  }
 });
 
 app.get("/about", (req, res) => {
