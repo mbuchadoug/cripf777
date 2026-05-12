@@ -776,15 +776,6 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
     return _showCategory(from, schoolId, categoryId, page, biz, saveBiz);
   }
 
-  // Legacy category pagination: sfaq_pg_<catId>_<page>_<schoolId> (alias of sfaq_page_)
-  const pgMatch = a.match(/^sfaq_pg_([a-zA-Z0-9_-]+)_(\d+)_([a-f0-9]{24})$/i);
-  if (pgMatch) {
-    const categoryId = pgMatch[1];
-    const page       = Number(pgMatch[2] || 0);
-    const schoolId   = pgMatch[3];
-    return _showCategory(from, schoolId, categoryId, page, biz, saveBiz);
-  }
-
   // Action buttons: sfaq_act_message_<schoolId>, sfaq_act_apply_<schoolId>, etc.
   const actMatch = a.match(/^sfaq_act_([a-zA-Z0-9_-]+)_([a-f0-9]{24})$/i);
   if (actMatch) {
@@ -821,15 +812,15 @@ async function _showCategoryPage(from, schoolId, catId, page, biz, saveBiz) {
   const start = page*PAGE_SIZE;
   const slice = items.slice(start, start+PAGE_SIZE);
   const rows  = slice.map(item=>({
-    id:`sfaq_item_${encodeURIComponent(item.id)}_${sid}`,
+    id:`sfaq_q_${item.id}_${sid}`,
     title:item.question.slice(0,24),
     description:item.answer?(item.answer.slice(0,72).replace(/\n/g," ")):""
   }));
 
   const hasNext = start+PAGE_SIZE < items.length;
   const hasPrev = page > 0;
-  if (hasNext) rows.push({id:`sfaq_page_${catId}_${page+1}_${sid}`,title:"➡ Next"});
-  if (hasPrev) rows.push({id:`sfaq_page_${catId}_${page-1}_${sid}`,title:"⬅ Previous"});
+  if (hasNext) rows.push({id:`sfaq_pg_${catId}_${page+1}_${sid}`,title:"➡ Next"});
+  if (hasPrev) rows.push({id:`sfaq_pg_${catId}_${page-1}_${sid}`,title:"⬅ Previous"});
   rows.push({id:`sfaq_back_${sid}`,title:"⬅ Main menu"});
 
   const totalPages = Math.ceil(items.length/PAGE_SIZE);

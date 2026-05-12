@@ -1104,73 +1104,28 @@ if (typeof search.admissionsOpen === "boolean") {
 }
 
   const total   = await SchoolProfile.countDocuments(query);
-  let schools = await SchoolProfile.find(query)
+  const schools = await SchoolProfile.find(query)
     .sort({ tier: -1, rating: -1, qualityScore: -1 })  // featured first, then by rating
     .skip(skip)
     .limit(PAGE_SIZE)
     .lean();
 
-  // ── Progressive fallback: relax filters one step at a time ──────────────────
-  let fallbackLabel = null;
-
-  if (!schools.length && page === 0) {
-    // Step 1: drop suburb, keep city + type
-    if (search.suburb && (search.city || search.type)) {
-      const q2 = { ...query };
-      delete q2.suburb;
-      schools = await SchoolProfile.find(q2)
-        .sort({ tier: -1, rating: -1, qualityScore: -1 })
-        .limit(PAGE_SIZE)
-        .lean();
-      if (schools.length) fallbackLabel = `No exact match in *${search.suburb}* — showing nearby schools in *${search.city || "the area"}*:`;
-    }
-
-    // Step 2: drop type filter, keep location
-    if (!schools.length && search.type && (search.city || search.suburb)) {
-      const q3 = { active: true };
-      if (search.city)   q3.city   = query.city;
-      if (search.suburb) q3.suburb = query.suburb;
-      if (search.feeRange)  q3.feeRange   = search.feeRange;
-      if (search.gender)    q3.gender     = search.gender;
-      if (search.boarding)  q3.boarding   = search.boarding;
-      if (typeof search.admissionsOpen === "boolean") q3.admissionsOpen = search.admissionsOpen;
-      schools = await SchoolProfile.find(q3)
-        .sort({ tier: -1, rating: -1, qualityScore: -1 })
-        .limit(PAGE_SIZE)
-        .lean();
-      const typeLabel = search.type.replace("_", " + ");
-      if (schools.length) fallbackLabel = `No *${typeLabel}* schools found — showing all schools in *${search.suburb || search.city || "the area"}*:`;
-    }
-
-    // Step 3: drop all filters except city
-    if (!schools.length && search.city) {
-      schools = await SchoolProfile.find({ active: true, city: query.city })
-        .sort({ tier: -1, rating: -1, qualityScore: -1 })
-        .limit(PAGE_SIZE)
-        .lean();
-      if (schools.length) fallbackLabel = `No exact match — here are schools in *${search.city}* you might like:`;
-    }
-
-    // Step 4: truly no schools registered in this area at all
-    if (!schools.length) {
-      const filterSummary = _buildFilterSummary(search);
-      await sendText(from,
+  if (!schools.length) {
+    const filterSummary = _buildFilterSummary(search);
+    await sendText(from,
 `🏫 *No schools found*
 
-We don't have any schools listed for that search yet.
-_Filters tried: ${filterSummary}_
+Filters: ${filterSummary}
 
-📣 *Know a school we should add?* Ask them to register on ZimQuote — it's free.
-📞 ZimQuote Admin: 0789 901 058`
-      );
-      return sendButtons(from, {
-        text: "What would you like to do?",
-        buttons: [
-          { id: "school_search_refine", title: "🔄 Search Again" },
-          { id: "main_menu_back",       title: "🏠 Main Menu" }
-        ]
-      });
-    }
+Try broadening your search - remove the facility filter or select "Any Type".`
+    );
+    return sendButtons(from, {
+      text: "What would you like to do?",
+      buttons: [
+        { id: "school_search_refine", title: "🔄 Search Again" },
+        { id: "main_menu_back",       title: "🏠 Main Menu" }
+      ]
+    });
   }
 
   // ── Build result cards ────────────────────────────────────────────────────
@@ -1199,11 +1154,11 @@ _Filters tried: ${filterSummary}_
   paginationRows.push({ id: "school_search_refine", title: "🔄 New Search" });
 
   const filterSummary = _buildFilterSummary(search);
-  const headerText = fallbackLabel
-    ? `\u26a0\ufe0f ${fallbackLabel}\n\n_Tap a school to see details_`
-    : `🏫 *Schools Found: ${total}*\n📍 ${filterSummary}\n\n_Tap a school to see details_`;
 
-  return sendList(from, headerText, [...rows, ...paginationRows]);
+  return sendList(from,
+    `🏫 *Schools Found: ${total}*\n📍 ${filterSummary}\n\n_Tap a school to see details_`,
+    [...rows, ...paginationRows]
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
