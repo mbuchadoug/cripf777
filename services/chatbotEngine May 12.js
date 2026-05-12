@@ -3548,10 +3548,6 @@ try {
   "find zimsec school", "find zimsec",
   "find ib school", "find ib",
   "find a school", "look for school", "search school",
-  "find private", "find government", "find mission", "find independent",
-  "private school", "private schools",
-  "government school", "government schools",
-  "mission school", "independent school",
   "school in ", "schools in ", "primary school in ", "secondary school in "
 ];
 
