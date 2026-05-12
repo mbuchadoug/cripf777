@@ -1253,6 +1253,22 @@ if (typeof search.admissionsOpen === "boolean") {
       if (schools.length) fallbackLabel = `No *${typeLabel}* schools found — showing all schools in *${search.suburb || search.city || "the area"}*:`;
     }
 
+    // Step 2b: drop ownership, keep type + city (e.g. show all ECD schools even if not "private")
+    if (!schools.length && search.ownership && (search.type || search.city)) {
+      const q3b = { active: true };
+      if (query.city)   q3b.city = query.city;
+      if (query.type)   q3b.type = query.type;
+      if (search.feeRange)  q3b.feeRange  = search.feeRange;
+      if (search.gender)    q3b.gender    = search.gender;
+      if (search.boarding)  q3b.boarding  = search.boarding;
+      schools = await SchoolProfile.find(q3b)
+        .sort({ tier: -1, rating: -1, qualityScore: -1 })
+        .limit(PAGE_SIZE)
+        .lean();
+      const typeLabel = search.type ? search.type.replace("_", " + ") + " " : "";
+      if (schools.length) fallbackLabel = `No *${search.ownership}* ${typeLabel}schools found — showing all ${typeLabel}schools in *${search.city || "the area"}*:`;
+    }
+
     // Step 3: drop all filters except city
     if (!schools.length && search.city) {
       schools = await SchoolProfile.find({ active: true, city: query.city })
