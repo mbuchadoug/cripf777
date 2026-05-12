@@ -1,6 +1,3 @@
-// routes/scoi_marketplace.js
-// Default sort: newest uploaded first (special by createdAt desc, placement by createdAt desc)
-
 import { Router } from "express";
 import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
@@ -9,20 +6,16 @@ const router = Router();
 
 router.get("/scoi", async (req, res) => {
   try {
-    // ── Fetch both types, newest first ──────────────────────────
+    // Fetch both audit types
     const placementAudits = await PlacementAudit.find({
       status: "archived_reference"
-    })
-      .sort({ createdAt: -1 })   // newest uploaded first
-      .lean();
+    }).sort({ "assessmentWindow.label": -1 }).lean();
 
     const specialAudits = await SpecialScoiAudit.find({
       isPaid: false
-    })
-      .sort({ createdAt: -1 })   // newest uploaded first
-      .lean();
+    }).sort({ createdAt: -1 }).lean();
 
-    // ── Normalize ────────────────────────────────────────────────
+    // Normalize data structure
     const normalizedPlacement = placementAudits.map(a => ({
       ...a,
       displayPrice: 149,
@@ -38,17 +31,8 @@ router.get("/scoi", async (req, res) => {
       auditKind: "special"
     }));
 
-    // ── Merge: special first, then placement, both newest-first ──
-    // If you want a single interleaved newest-first list across both types,
-    // use the merge below instead.
-    //
-    // Option A — special block first, then placement block (current):
+    // Combine and sort
     const audits = [...normalizedSpecial, ...normalizedPlacement];
-    //
-    // Option B — true interleaved newest-first (uncomment to use):
-    // const audits = [...normalizedSpecial, ...normalizedPlacement].sort(
-    //   (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    // );
 
     res.render("scoi/marketplace", {
       user: req.user || null,

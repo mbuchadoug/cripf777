@@ -2,479 +2,953 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Special SCOI Audit | {{audit.subject.name}}</title>
+  <title>Special SCOI Audit Report | {{audit.subject.name}}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
+    /* ── TOKENS ────────────────────────────────────── */
+    :root {
+      --navy:        #0F1C2E;
+      --navy-mid:    #1E3A5F;
+      --navy-light:  #2A5080;
+      --gold:        #B8943F;
+      --gold-light:  #D4B05A;
+      --gold-rule:   #C9A961;
+      --cream:       #FAFAF7;
+      --white:       #FFFFFF;
+      --g50:         #F8F9FA;
+      --g100:        #F1F3F5;
+      --g200:        #E5E7EB;
+      --g300:        #D1D5DB;
+      --g500:        #6B7280;
+      --g700:        #374151;
+      --g900:        #111827;
+      --serif:       'Crimson Pro', Georgia, 'Times New Roman', serif;
+      --sans:        'Inter', system-ui, sans-serif;
+      --page-max:    820px;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { font-size:16px; }
+
     body {
-      margin: 0;
-      background: #f5f7fb;
-      font-family: "Source Serif 4", Georgia, serif;
-      color: #0f172a;
+      font-family:var(--serif);
+      background:var(--cream);
+      color:var(--g900);
+      line-height:1.75;
+      -webkit-font-smoothing:antialiased;
     }
 
-    .audit-report {
-      max-width: 960px;
-      margin: 60px auto;
-      background: #ffffff;
-      padding: 56px 64px;
-      box-shadow: 0 30px 80px rgba(15, 23, 42, 0.08);
-      border-radius: 14px;
-      line-height: 1.85;
+    /* ── PAGE SHELL ────────────────────────────────── */
+    .page {
+      max-width:var(--page-max);
+      margin:3rem auto 5rem;
+      background:var(--white);
+      box-shadow: 0 2px 4px rgba(15,28,46,0.04),
+                  0 8px 24px rgba(15,28,46,0.07),
+                  0 32px 64px rgba(15,28,46,0.06);
+      border-top:5px solid var(--navy);
     }
 
-    .audit-header {
-      margin-bottom: 48px;
+    /* ── COVER BAND ────────────────────────────────── */
+    .cover {
+      background:linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 100%);
+      padding:3.5rem 4rem 3rem;
+      position:relative;
+      overflow:hidden;
+    }
+    .cover::before {
+      content:'SCOI';
+      position:absolute;
+      right:-1.5rem;
+      bottom:-1.5rem;
+      font-family:var(--serif);
+      font-size:11rem;
+      font-weight:700;
+      color:rgba(255,255,255,0.04);
+      line-height:1;
+      pointer-events:none;
+      user-select:none;
+    }
+    .cover-eyebrow {
+      font-family:var(--sans);
+      font-size:0.68rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:3px;
+      color:rgba(255,255,255,0.5);
+      margin-bottom:1.25rem;
+      display:flex;
+      align-items:center;
+      gap:0.75rem;
+    }
+    .cover-eyebrow::before {
+      content:'';
+      display:inline-block;
+      width:2rem;
+      height:1.5px;
+      background:var(--gold-rule);
+      flex-shrink:0;
+    }
+    .cover-title {
+      font-family:var(--serif);
+      font-size:2.6rem;
+      font-weight:700;
+      color:var(--white);
+      line-height:1.2;
+      margin-bottom:0.5rem;
+      letter-spacing:-0.3px;
+    }
+    .cover-subtitle {
+      font-family:var(--sans);
+      font-size:0.875rem;
+      color:rgba(255,255,255,0.6);
+      font-weight:500;
+      letter-spacing:0.2px;
+      margin-bottom:2.5rem;
     }
 
-    .brand-line {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 12px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: #475569;
-      margin-bottom: 8px;
+    /* Meta grid on cover */
+    .cover-meta {
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:1.5px;
+      margin-top:2rem;
+      background:rgba(255,255,255,0.08);
+    }
+    .cm-item {
+      padding:1rem 1.25rem;
+      background:rgba(15,28,46,0.4);
+    }
+    .cm-label {
+      font-family:var(--sans);
+      font-size:0.62rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1.5px;
+      color:rgba(255,255,255,0.45);
+      margin-bottom:0.35rem;
+    }
+    .cm-value {
+      font-family:var(--sans);
+      font-size:0.8rem;
+      font-weight:600;
+      color:rgba(255,255,255,0.9);
+      line-height:1.3;
     }
 
-    .audit-header h1 {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 36px;
-      font-weight: 800;
-      margin: 0;
+    /* ── BODY CONTENT ──────────────────────────────── */
+    .body {
+      padding:3.5rem 4rem;
     }
 
-    .subtitle {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 15px;
-      color: #334155;
-      margin-top: 6px;
+    /* Gold rule divider */
+    .rule {
+      border:none;
+      border-top:1.5px solid var(--g200);
+      margin:2.75rem 0;
+    }
+    .rule-gold {
+      border-color:var(--gold-rule);
+      opacity:0.35;
     }
 
-    .audit-meta {
-      margin-top: 28px;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 18px 32px;
-      background: linear-gradient(180deg, #f8fafc, #ffffff);
-      padding: 22px 24px;
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 14px;
+    /* ── SECTIONS ──────────────────────────────────── */
+    .section {
+      margin-bottom:3rem;
+    }
+    .section:last-child { margin-bottom:0; }
+
+    .section-head {
+      display:flex;
+      align-items:center;
+      gap:1rem;
+      margin-bottom:1.5rem;
+    }
+    .section-num {
+      font-family:var(--sans);
+      font-size:0.62rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:2px;
+      color:var(--gold);
+      flex-shrink:0;
+    }
+    .section-title {
+      font-family:var(--serif);
+      font-size:1.35rem;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1.2;
+      letter-spacing:-0.2px;
+    }
+    .section-title-line {
+      flex:1;
+      height:1px;
+      background:var(--g200);
+      flex-shrink:0;
     }
 
-    .audit-meta div span {
-      display: block;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #64748b;
-      margin-bottom: 4px;
-    }
-
-    section {
-      margin-top: 52px;
-    }
-
-    h2 {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 19px;
-      font-weight: 700;
-      margin-bottom: 14px;
-    }
-
-    h2::after {
-      content: "";
-      display: block;
-      width: 52px;
-      height: 2px;
-      background: #0b3c5d;
-      margin-top: 6px;
-    }
-
+    /* Body text */
     p {
-      margin: 10px 0;
+      font-family:var(--serif);
+      font-size:1.025rem;
+      color:var(--g700);
+      line-height:1.8;
+      margin-bottom:0.75rem;
     }
+    p:last-child { margin-bottom:0; }
 
-    ul {
-      margin: 12px 0 0 20px;
+    /* Lists */
+    ul, ol {
+      padding-left:1.5rem;
+      margin:0.75rem 0;
     }
-
     li {
-      margin: 6px 0;
+      font-family:var(--serif);
+      font-size:1rem;
+      color:var(--g700);
+      line-height:1.75;
+      margin-bottom:0.4rem;
+    }
+    li strong { color:var(--navy); font-weight:700; }
+
+    /* Inline strong */
+    strong { color:var(--navy); font-weight:700; }
+
+    /* ── META TABLE (definitions, normalization) ───── */
+    .kv-table {
+      width:100%;
+      border-collapse:collapse;
+      font-family:var(--sans);
+      font-size:0.83rem;
+      margin:1rem 0;
+    }
+    .kv-table tr { border-bottom:1px solid var(--g100); }
+    .kv-table tr:last-child { border-bottom:none; }
+    .kv-table td { padding:0.6rem 0.75rem; vertical-align:top; }
+    .kv-table td:first-child { font-weight:700; color:var(--navy); width:38%; white-space:nowrap; }
+    .kv-table td:last-child  { color:var(--g700); }
+
+    /* ── SCORE BLOCKS ──────────────────────────────── */
+    .score-panel {
+      border:1px solid var(--g200);
+      border-left:4px solid var(--navy-mid);
+      margin-bottom:1.75rem;
+      background:var(--white);
+    }
+    .score-panel:last-child { margin-bottom:0; }
+    .sp-head {
+      padding:1rem 1.5rem 0.875rem;
+      border-bottom:1px solid var(--g100);
+      background:var(--g50);
+      display:flex;
+      align-items:baseline;
+      gap:1.25rem;
+      flex-wrap:wrap;
+    }
+    .sp-label {
+      font-family:var(--sans);
+      font-size:0.75rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      color:var(--g500);
+    }
+    .sp-value {
+      font-family:var(--serif);
+      font-size:2.25rem;
+      font-weight:700;
+      color:var(--navy);
+      line-height:1;
+    }
+    .sp-range {
+      font-family:var(--sans);
+      font-size:0.78rem;
+      color:var(--g500);
+      font-weight:600;
+      align-self:flex-end;
+      padding-bottom:0.25rem;
+    }
+    .sp-body {
+      padding:1.25rem 1.5rem;
+    }
+    .sp-body p {
+      font-size:0.95rem;
+      margin-bottom:0.5rem;
+    }
+    .sp-body ul { margin:0.5rem 0 0; }
+    .sp-body li { font-size:0.92rem; }
+
+    /* Placement tag */
+    .placement-tag {
+      display:inline-block;
+      padding:0.2rem 0.75rem;
+      background:rgba(15,28,46,0.08);
+      color:var(--navy);
+      font-family:var(--sans);
+      font-size:0.72rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      border-radius:2px;
+      margin-top:0.5rem;
     }
 
-    .score-block {
-      margin-top: 26px;
-      padding-left: 20px;
-      border-left: 3px solid #0b3c5d;
+    /* ── CALCULATIONS ──────────────────────────────── */
+    .calc-block {
+      background:var(--g50);
+      border:1px solid var(--g200);
+      padding:1.5rem;
+      margin-bottom:1.25rem;
+    }
+    .calc-block:last-child { margin-bottom:0; }
+    .calc-head {
+      font-family:var(--sans);
+      font-size:0.75rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      color:var(--navy-light);
+      margin-bottom:0.75rem;
+    }
+    .calc-formula {
+      font-family:'Courier New', Courier, monospace;
+      font-size:0.9rem;
+      font-weight:700;
+      color:var(--navy);
+      background:rgba(15,28,46,0.05);
+      padding:0.6rem 0.9rem;
+      border-left:3px solid var(--gold-rule);
+      margin-bottom:0.75rem;
+      line-height:1.5;
+    }
+    .calc-result {
+      font-family:var(--sans);
+      font-size:1.1rem;
+      font-weight:800;
+      color:var(--navy);
+      margin:0.5rem 0;
+    }
+    .calc-interp {
+      font-family:var(--serif);
+      font-size:0.95rem;
+      font-style:italic;
+      color:var(--g500);
+      border-top:1px solid var(--g200);
+      padding-top:0.75rem;
+      margin-top:0.75rem;
+      line-height:1.65;
     }
 
-    .score-title {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 16px;
-      font-weight: 700;
+    /* ── FINDINGS ──────────────────────────────────── */
+    .finding-core {
+      background:var(--navy);
+      color:var(--white);
+      padding:2rem 2.25rem;
+      margin-bottom:1.5rem;
+    }
+    .finding-core p {
+      font-family:var(--serif);
+      color:rgba(255,255,255,0.9);
+      font-size:1.1rem;
+      line-height:1.75;
+      margin:0;
+    }
+    .classification-block {
+      border:1px solid var(--g200);
+      padding:1.25rem 1.5rem;
+      background:var(--g50);
+      margin-top:1.5rem;
+    }
+    .class-label {
+      font-family:var(--sans);
+      font-size:0.8rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      color:var(--navy);
+      margin-bottom:0.5rem;
+    }
+    .class-def {
+      font-family:var(--serif);
+      font-size:0.975rem;
+      color:var(--g700);
+      line-height:1.7;
+      font-style:italic;
     }
 
-    .score-value {
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 24px;
-      font-weight: 800;
-      color: #0b3c5d;
-      margin: 8px 0 12px;
+    /* ── RISK SIGNALS ──────────────────────────────── */
+    .risk-item {
+      display:flex;
+      gap:1rem;
+      padding:1rem 0;
+      border-bottom:1px solid var(--g100);
+      align-items:flex-start;
+    }
+    .risk-item:last-child { border-bottom:none; }
+    .risk-bullet {
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:var(--gold-rule);
+      flex-shrink:0;
+      margin-top:0.55rem;
+    }
+    .risk-label {
+      font-family:var(--sans);
+      font-size:0.8rem;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:0.25rem;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+    .risk-desc {
+      font-family:var(--serif);
+      font-size:0.975rem;
+      color:var(--g700);
+      line-height:1.65;
     }
 
-    .interpretation {
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid #e5e7eb;
-      font-style: italic;
-      color: #334155;
+    /* ── COUNTERFACTUAL ────────────────────────────── */
+    .counter-box {
+      border:1px solid rgba(15,28,46,0.18);
+      border-left:5px solid var(--navy);
+      padding:2rem 2.25rem;
+      background:var(--g50);
+    }
+    .counter-goal {
+      font-family:var(--sans);
+      font-size:0.8rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      color:var(--navy-light);
+      margin-bottom:0.35rem;
+    }
+    .counter-goal-val {
+      font-family:var(--serif);
+      font-size:1.1rem;
+      font-weight:700;
+      color:var(--navy);
+      margin-bottom:1.25rem;
+    }
+    .counter-note {
+      font-family:var(--serif);
+      font-style:italic;
+      color:var(--g500);
+      font-size:0.95rem;
+      border-top:1px solid var(--g200);
+      padding-top:1rem;
+      margin-top:1rem;
+      line-height:1.7;
     }
 
-    .calc {
-      font-family: Inter, system-ui, sans-serif;
-      font-weight: 700;
-      color: #0b3c5d;
+    /* ── TAGS ──────────────────────────────────────── */
+    .tag-row {
+      display:flex;
+      flex-wrap:wrap;
+      gap:0.5rem;
+      margin-top:0.5rem;
+    }
+    .tag {
+      font-family:var(--sans);
+      font-size:0.72rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
+      padding:0.28rem 0.8rem;
+      border:1px solid var(--g300);
+      color:var(--g500);
     }
 
-    .notice {
-      margin-top: 64px;
-      padding: 22px 26px;
-      background: #f8fafc;
-      border-radius: 12px;
-      border-left: 5px solid #0b3c5d;
+    /* ── DISCLAIMERS ───────────────────────────────── */
+    .disclaimer-item {
+      font-family:var(--serif);
+      font-size:0.9rem;
+      color:var(--g500);
+      line-height:1.7;
+      padding:0.6rem 0;
+      border-bottom:1px solid var(--g100);
+    }
+    .disclaimer-item:last-child { border-bottom:none; }
+    .disclaimer-key {
+      font-family:var(--sans);
+      font-size:0.7rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      color:var(--navy);
+      margin-right:0.4rem;
     }
 
-    .audit-footer {
-      margin-top: 72px;
-      padding-top: 18px;
-      border-top: 1px solid #e5e7eb;
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 13px;
-      color: #64748b;
-      text-align: center;
+    /* ── FOOTER ────────────────────────────────────── */
+    .doc-footer {
+      background:var(--navy);
+      padding:2rem 4rem;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:1.5rem;
+      flex-wrap:wrap;
+    }
+    .df-brand {
+      font-family:var(--serif);
+      font-size:1.3rem;
+      font-weight:700;
+      color:var(--gold-light);
+      letter-spacing:-0.2px;
+    }
+    .df-meta {
+      font-family:var(--sans);
+      font-size:0.72rem;
+      color:rgba(255,255,255,0.45);
+      text-align:right;
+      line-height:1.6;
+    }
+    .df-rule {
+      width:100%;
+      border:none;
+      border-top:1px solid rgba(255,255,255,0.08);
+      margin:0.5rem 0;
     }
 
+    /* ── PRINT ─────────────────────────────────────── */
     @media print {
-      body {
-        background: #ffffff;
+      body { background:white; }
+      .page {
+        max-width:100%;
+        margin:0;
+        box-shadow:none;
+        border-top:none;
       }
-
-      .audit-report {
-        box-shadow: none;
-        margin: 0;
-        padding: 40px;
-      }
+      .cover { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .finding-core { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .doc-footer { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .cover-meta { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .section { page-break-inside:avoid; }
+      .score-panel { page-break-inside:avoid; }
+      .calc-block  { page-break-inside:avoid; }
+      .counter-box { page-break-inside:avoid; }
     }
 
-    @media (max-width: 768px) {
-      .audit-report {
-        margin: 20px;
-        padding: 32px 24px;
-      }
-
-      .audit-meta {
-        grid-template-columns: 1fr;
-      }
-
-      .audit-header h1 {
-        font-size: 28px;
-      }
+    /* ── RESPONSIVE ────────────────────────────────── */
+    @media (max-width:860px) {
+      .cover { padding:2.5rem 2rem 2rem; }
+      .cover-title { font-size:2rem; }
+      .cover-meta { grid-template-columns:repeat(2,1fr); }
+      .body { padding:2.5rem 2rem; }
+      .doc-footer { padding:1.75rem 2rem; flex-direction:column; align-items:flex-start; }
+      .df-meta { text-align:left; }
+    }
+    @media (max-width:540px) {
+      .cover { padding:2rem 1.25rem 1.75rem; }
+      .cover-title { font-size:1.65rem; }
+      .cover-meta { grid-template-columns:1fr 1fr; }
+      .body { padding:2rem 1.25rem; }
+      .sp-head { flex-direction:column; gap:0.25rem; }
+      .doc-footer { padding:1.5rem 1.25rem; }
+      .page { margin:0; }
+      .finding-core { padding:1.5rem 1.25rem; }
     }
   </style>
 </head>
-
 <body>
 
-<article class="audit-report">
+<article class="page">
 
-  <header class="audit-header">
-    <div class="brand-line">CRIPFCnt Framework</div>
-    <h1>Special SCOI Audit Report</h1>
-    <div class="subtitle">Special Structural Intelligence Assessment</div>
+  <!-- ══ COVER BAND ══════════════════════════════════════════ -->
+  <header class="cover">
+    <div class="cover-eyebrow">CRIPFCnt Framework · Special SCOI Audit</div>
+    <div class="cover-title">Special SCOI<br>Audit Report</div>
+    <div class="cover-subtitle">Special Structural Intelligence Assessment</div>
 
-    <div class="audit-meta">
-      <div><span>Subject</span>{{audit.subject.name}}</div>
-      <div><span>Audit Type</span>{{audit.auditType}}</div>
-      <div><span>Framework</span>{{audit.framework}}</div>
-      <div><span>Assessment Window</span>{{audit.assessmentWindow.label}}</div>
-      <div><span>Status</span>{{audit.status}}</div>
-      <div><span>Revision Policy</span>{{audit.revisionPolicy}}</div>
-      <div><span>Author</span>{{audit.author}}</div>
-      <div><span>Entity Type</span>{{audit.subject.entityType}}</div>
+    <div class="cover-meta">
+      <div class="cm-item">
+        <div class="cm-label">Subject</div>
+        <div class="cm-value">{{audit.subject.name}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Audit Type</div>
+        <div class="cm-value">{{audit.auditType}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Framework</div>
+        <div class="cm-value">{{audit.framework}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Assessment Window</div>
+        <div class="cm-value">{{audit.assessmentWindow.label}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Status</div>
+        <div class="cm-value">{{audit.status}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Revision Policy</div>
+        <div class="cm-value">{{audit.revisionPolicy}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Author</div>
+        <div class="cm-value">{{audit.author}}</div>
+      </div>
+      <div class="cm-item">
+        <div class="cm-label">Entity Type</div>
+        <div class="cm-value">{{audit.subject.entityType}}</div>
+      </div>
     </div>
   </header>
 
-  <section>
-    <h2>Purpose of Audit</h2>
-    <p>{{audit.purpose}}</p>
-  </section>
+  <!-- ══ BODY ════════════════════════════════════════════════ -->
+  <div class="body">
 
-  {{#if audit.definitions}}
-  <section>
-    <h2>Definitions</h2>
-    <ul>
-      {{#each audit.definitions}}
-        <li><strong>{{@key}}:</strong> {{this}}</li>
-      {{/each}}
-    </ul>
-  </section>
-  {{/if}}
-
-  {{#if audit.method}}
-  <section>
-    <h2>Method</h2>
-
-    {{#if audit.method.modelType}}
-      <p><strong>Model Type:</strong> {{audit.method.modelType}}</p>
-    {{/if}}
-
-    {{#if audit.method.notes}}
-      <ul>
-        {{#each audit.method.notes}}
-          <li>{{this}}</li>
-        {{/each}}
-      </ul>
-    {{/if}}
-
-    {{#if audit.method.normalization}}
-      <div class="interpretation">
-        {{#each audit.method.normalization}}
-          <p><strong>{{@key}}:</strong> {{this}}</p>
-        {{/each}}
+    <!-- 01 Purpose -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">01</span>
+        <h2 class="section-title">Purpose of Audit</h2>
+        <span class="section-title-line"></span>
       </div>
-    {{/if}}
-  </section>
-  {{/if}}
+      <p>{{audit.purpose}}</p>
+    </div>
 
-  {{#if audit.context}}
-  <section>
-    <h2>Context</h2>
-
-    {{#if audit.context.trigger}}
-      <p>{{audit.context.trigger}}</p>
-    {{/if}}
-
-    {{#if audit.context.civilizationFrame}}
-      <ul>
-        {{#each audit.context.civilizationFrame}}
-          <li>{{this}}</li>
+    {{#if audit.definitions}}
+    <hr class="rule">
+    <!-- 02 Definitions -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">02</span>
+        <h2 class="section-title">Definitions</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <table class="kv-table">
+        {{#each audit.definitions}}
+          <tr>
+            <td>{{@key}}</td>
+            <td>{{this}}</td>
+          </tr>
         {{/each}}
-      </ul>
+      </table>
+    </div>
     {{/if}}
 
-    {{#if audit.context.conditions}}
-      <p><strong>Conditions:</strong></p>
-      <ul>
-        {{#each audit.context.conditions}}
-          <li>{{this}}</li>
-        {{/each}}
-      </ul>
-    {{/if}}
-  </section>
-  {{/if}}
-
-  <section>
-    <h2>SCOI Metrics & Actual Result</h2>
-
-    <div class="score-block">
-      <div class="score-title">Visibility / Systemic Exposure</div>
-      <div class="score-value">
-        {{audit.scores.visibility_denominator.rating}}
+    {{#if audit.method}}
+    <hr class="rule">
+    <!-- 03 Method -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">03</span>
+        <h2 class="section-title">Method</h2>
+        <span class="section-title-line"></span>
       </div>
 
-      <p>
-        <strong>Normalized Range:</strong>
-        {{audit.scores.visibility_denominator.normalizedRange.[0]}}
-        -
-        {{audit.scores.visibility_denominator.normalizedRange.[1]}}
-      </p>
+      {{#if audit.method.modelType}}
+        <p><strong>Model Type:</strong> {{audit.method.modelType}}</p>
+      {{/if}}
 
-      {{#if audit.scores.visibility_denominator.drivers}}
-        <p><strong>Drivers:</strong></p>
+      {{#if audit.method.notes}}
         <ul>
-          {{#each audit.scores.visibility_denominator.drivers}}
+          {{#each audit.method.notes}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if audit.method.normalization}}
+        <table class="kv-table" style="margin-top:1rem;">
+          {{#each audit.method.normalization}}
+            <tr>
+              <td>{{@key}}</td>
+              <td>{{this}}</td>
+            </tr>
+          {{/each}}
+        </table>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{#if audit.context}}
+    <hr class="rule">
+    <!-- 04 Context -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">04</span>
+        <h2 class="section-title">Context</h2>
+        <span class="section-title-line"></span>
+      </div>
+
+      {{#if audit.context.trigger}}
+        <p>{{audit.context.trigger}}</p>
+      {{/if}}
+
+      {{#if audit.context.civilizationFrame}}
+        <ul>
+          {{#each audit.context.civilizationFrame}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if audit.context.conditions}}
+        <p style="margin-top:1rem;"><strong>Conditions:</strong></p>
+        <ul>
+          {{#each audit.context.conditions}}
             <li>{{this}}</li>
           {{/each}}
         </ul>
       {{/if}}
     </div>
+    {{/if}}
 
-    <div class="score-block">
-      <div class="score-title">Responsibility / Contribution Alignment</div>
-      <div class="score-value">
-        {{audit.scores.responsibility_numerator.rating}}
+    <hr class="rule rule-gold">
+    <!-- 05 SCOI Metrics -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">05</span>
+        <h2 class="section-title">SCOI Metrics &amp; Actual Result</h2>
+        <span class="section-title-line"></span>
       </div>
 
-      <p>
-        <strong>Normalized Range:</strong>
-        {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
-        -
-        {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
-      </p>
+      <!-- Visibility -->
+      <div class="score-panel">
+        <div class="sp-head">
+          <div class="sp-label">Visibility / Systemic Exposure</div>
+          <div class="sp-value">{{audit.scores.visibility_denominator.rating}}</div>
+          <div class="sp-range">
+            Normalised Range:
+            {{audit.scores.visibility_denominator.normalizedRange.[0]}}
+            –
+            {{audit.scores.visibility_denominator.normalizedRange.[1]}}
+          </div>
+        </div>
+        {{#if audit.scores.visibility_denominator.drivers}}
+        <div class="sp-body">
+          <p><strong>Drivers:</strong></p>
+          <ul>
+            {{#each audit.scores.visibility_denominator.drivers}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+      </div>
 
-      {{#if audit.scores.responsibility_numerator.observedSignals}}
-        <p><strong>Observed Signals:</strong></p>
-        <ul>
-          {{#each audit.scores.responsibility_numerator.observedSignals}}
-            <li>{{this}}</li>
-          {{/each}}
-        </ul>
+      <!-- Responsibility -->
+      <div class="score-panel">
+        <div class="sp-head">
+          <div class="sp-label">Responsibility / Contribution Alignment</div>
+          <div class="sp-value">{{audit.scores.responsibility_numerator.rating}}</div>
+          <div class="sp-range">
+            Normalised Range:
+            {{audit.scores.responsibility_numerator.normalizedRange.[0]}}
+            –
+            {{audit.scores.responsibility_numerator.normalizedRange.[1]}}
+          </div>
+        </div>
+        {{#if audit.scores.responsibility_numerator.observedSignals}}
+        <div class="sp-body">
+          <p><strong>Observed Signals:</strong></p>
+          <ul>
+            {{#each audit.scores.responsibility_numerator.observedSignals}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+      </div>
+
+      <!-- Framework Result -->
+      {{#if audit.scores.SCOI_framework_result}}
+      <div class="score-panel" style="border-left-color:var(--gold-rule);">
+        <div class="sp-head">
+          <div class="sp-label">SCOI Framework Result</div>
+          <div class="sp-value">
+            {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
+          </div>
+        </div>
+        <div class="sp-body">
+          <div class="placement-tag">{{audit.scores.SCOI_framework_result.placement}}</div>
+          <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_framework_result.interpretation}}</p>
+        </div>
+      </div>
+      {{/if}}
+
+      <!-- Event Result -->
+      {{#if audit.scores.SCOI_event_result}}
+      <div class="score-panel" style="border-left-color:var(--gold-rule);">
+        <div class="sp-head">
+          <div class="sp-label">SCOI Event Result</div>
+          <div class="sp-value">
+            {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}–{{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
+          </div>
+        </div>
+        <div class="sp-body">
+          <div class="placement-tag">{{audit.scores.SCOI_event_result.placement}}</div>
+          <p style="margin-top:1rem;font-style:italic;color:var(--g500);">{{audit.scores.SCOI_event_result.interpretation}}</p>
+        </div>
+      </div>
       {{/if}}
     </div>
 
-    {{#if audit.scores.SCOI_framework_result}}
-      <div class="score-block">
-        <div class="score-title">SCOI Framework Result</div>
-        <div class="score-value">
-          {{audit.scores.SCOI_framework_result.rangeEstimate.[0]}}
-          -
-          {{audit.scores.SCOI_framework_result.rangeEstimate.[1]}}
-        </div>
-
-        <p><strong>Placement:</strong> {{audit.scores.SCOI_framework_result.placement}}</p>
-
-        <div class="interpretation">
-          {{audit.scores.SCOI_framework_result.interpretation}}
-        </div>
+    {{#if audit.calculations}}
+    <hr class="rule">
+    <!-- 06 Calculations -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">06</span>
+        <h2 class="section-title">Calculations</h2>
+        <span class="section-title-line"></span>
       </div>
-    {{/if}}
-
-    {{#if audit.scores.SCOI_event_result}}
-      <div class="score-block">
-        <div class="score-title">SCOI Event Result</div>
-        <div class="score-value">
-          {{audit.scores.SCOI_event_result.rangeEstimate.[0]}}
-          -
-          {{audit.scores.SCOI_event_result.rangeEstimate.[1]}}
-        </div>
-
-        <p><strong>Placement:</strong> {{audit.scores.SCOI_event_result.placement}}</p>
-
-        <div class="interpretation">
-          {{audit.scores.SCOI_event_result.interpretation}}
-        </div>
-      </div>
-    {{/if}}
-  </section>
-
-  {{#if audit.calculations}}
-  <section>
-    <h2>Calculations</h2>
-
-    {{#each audit.calculations}}
-      <div class="score-block">
-        <div class="score-title">{{@key}}</div>
-
+      {{#each audit.calculations}}
+      <div class="calc-block">
+        <div class="calc-head">{{@key}}</div>
         {{#if this.formula}}
-          <p class="calc">{{this.formula}}</p>
+          <div class="calc-formula">{{this.formula}}</div>
         {{/if}}
-
         {{#if this.working}}
-          <p>{{this.working}}</p>
+          <p style="font-size:0.9rem;margin-bottom:0.5rem;">{{this.working}}</p>
         {{/if}}
-
         {{#if this.value}}
-          <p class="calc">≈ {{this.value}}</p>
+          <div class="calc-result">≈ {{this.value}}</div>
         {{/if}}
-
         {{#if this.meaning}}
-          <p>{{this.meaning}}</p>
+          <p style="font-size:0.9rem;">{{this.meaning}}</p>
         {{/if}}
-
         {{#if this.interpretation}}
-          <div class="interpretation">{{this.interpretation}}</div>
+          <div class="calc-interp">{{this.interpretation}}</div>
         {{/if}}
       </div>
-    {{/each}}
-  </section>
-  {{/if}}
-
-  <section>
-    <h2>Findings</h2>
-
-    <p>{{audit.findings.coreFinding}}</p>
-
-    {{#if audit.findings.secondaryFindings}}
-      <ul>
-        {{#each audit.findings.secondaryFindings}}
-          <li>{{this}}</li>
-        {{/each}}
-      </ul>
-    {{/if}}
-
-    {{#if audit.findings.classification}}
-      <div class="interpretation">
-        <p><strong>{{audit.findings.classification.label}}</strong></p>
-        <p>{{audit.findings.classification.definition}}</p>
-      </div>
-    {{/if}}
-  </section>
-
-  {{#if audit.civilizationRiskSignals}}
-  <section>
-    <h2>Civilization Risk Signals</h2>
-
-    <ul>
-      {{#each audit.civilizationRiskSignals}}
-        <li>
-          <strong>{{this.riskLabel}}:</strong>
-          {{this.description}}
-        </li>
       {{/each}}
-    </ul>
-  </section>
-  {{/if}}
-
-  {{#if audit.counterfactual}}
-  <section class="notice">
-    <h2>Counterfactual Requirements</h2>
-
-    <p><strong>Target:</strong> {{audit.counterfactual.goal}}</p>
-
-    <ul>
-      {{#each audit.counterfactual.requirements}}
-        <li>{{this}}</li>
-      {{/each}}
-    </ul>
-
-    <div class="interpretation">
-      {{audit.counterfactual.note}}
     </div>
-  </section>
-  {{/if}}
+    {{/if}}
 
-  {{#if audit.disclaimers}}
-  <section>
-    <h2>Disclaimers</h2>
+    <hr class="rule rule-gold">
+    <!-- 07 Findings -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">07</span>
+        <h2 class="section-title">Findings</h2>
+        <span class="section-title-line"></span>
+      </div>
 
-    <ul>
+      <div class="finding-core">
+        <p>{{audit.findings.coreFinding}}</p>
+      </div>
+
+      {{#if audit.findings.secondaryFindings}}
+        <ul style="margin-top:1.25rem;">
+          {{#each audit.findings.secondaryFindings}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if audit.findings.classification}}
+        <div class="classification-block">
+          <div class="class-label">{{audit.findings.classification.label}}</div>
+          <div class="class-def">{{audit.findings.classification.definition}}</div>
+        </div>
+      {{/if}}
+    </div>
+
+    {{#if audit.civilizationRiskSignals}}
+    <hr class="rule">
+    <!-- 08 Civilization Risk Signals -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">08</span>
+        <h2 class="section-title">Civilization Risk Signals</h2>
+        <span class="section-title-line"></span>
+      </div>
+      {{#each audit.civilizationRiskSignals}}
+      <div class="risk-item">
+        <div class="risk-bullet"></div>
+        <div>
+          <div class="risk-label">{{this.riskLabel}}</div>
+          <div class="risk-desc">{{this.description}}</div>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if audit.counterfactual}}
+    <hr class="rule">
+    <!-- 09 Counterfactual -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">09</span>
+        <h2 class="section-title">Counterfactual Requirements</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <div class="counter-box">
+        <div class="counter-goal">Target</div>
+        <div class="counter-goal-val">{{audit.counterfactual.goal}}</div>
+        <ul>
+          {{#each audit.counterfactual.requirements}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+        {{#if audit.counterfactual.note}}
+          <div class="counter-note">{{audit.counterfactual.note}}</div>
+        {{/if}}
+      </div>
+    </div>
+    {{/if}}
+
+    {{#if audit.disclaimers}}
+    <hr class="rule">
+    <!-- 10 Disclaimers -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">10</span>
+        <h2 class="section-title">Disclaimers</h2>
+        <span class="section-title-line"></span>
+      </div>
       {{#each audit.disclaimers}}
         {{#if this}}
-          <li><strong>{{@key}}:</strong> {{this}}</li>
+          <div class="disclaimer-item">
+            <span class="disclaimer-key">{{@key}}:</span>{{this}}
+          </div>
         {{/if}}
       {{/each}}
-    </ul>
-  </section>
-  {{/if}}
+    </div>
+    {{/if}}
 
-  {{#if audit.tags}}
-  <section>
-    <h2>Tags</h2>
+    {{#if audit.tags}}
+    <hr class="rule">
+    <!-- 11 Tags -->
+    <div class="section">
+      <div class="section-head">
+        <span class="section-num">11</span>
+        <h2 class="section-title">Tags</h2>
+        <span class="section-title-line"></span>
+      </div>
+      <div class="tag-row">
+        {{#each audit.tags}}
+          <span class="tag">{{this}}</span>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
 
-    <ul>
-      {{#each audit.tags}}
-        <li>{{this}}</li>
-      {{/each}}
-    </ul>
-  </section>
-  {{/if}}
+  </div><!-- /body -->
 
-  <footer class="audit-footer">
-    CRIPFCnt SCOI Framework | Special SCOI Audit Report
+  <!-- ══ FOOTER ══════════════════════════════════════════════ -->
+  <footer class="doc-footer">
+    <div class="df-brand">CRIPFCnt</div>
+    <hr class="df-rule">
+    <div class="df-meta">
+      CRIPFCnt SCOI Framework · Special Structural Intelligence Audit<br>
+      Authored by Donald Mataranyika · Chartered Secretary &amp; Governance Specialist<br>
+      This report is an immutable reference document. Non-retroactive.
+    </div>
   </footer>
 
 </article>
-
 </body>
 </html>

@@ -1,902 +1,436 @@
-{{!-- views/admin/scoi_reports_list_mobile_optimized.hbs - MOBILE-OPTIMIZED VERSION --}}
+{{!-- views/admin/scoi_reports_list.hbs --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>SCOI Reports Library | Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Work+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root{
-      --primary:#6366F1;
-      --success:#10B981;
-      --warning:#F59E0B;
-      --info:#3B82F6;
-      --navy:#0F172A;
-      --slate:#64748B;
-      --white:#FFFFFF;
-      --gray-50:#F8FAFC;
-      --gray-100:#F1F5F9;
-      --gray-200:#E2E8F0;
-      
-      --font-mono:'JetBrains Mono',monospace;
-      --font-body:'Work Sans',system-ui,sans-serif;
-      --shadow:0 4px 12px rgba(0,0,0,0.08);
+    :root {
+      --navy:      #0F1C2E;
+      --navy-mid:  #1E3A5F;
+      --gold:      #C9A961;
+      --white:     #FFFFFF;
+      --g50:       #F8FAFC;
+      --g100:      #F1F5F9;
+      --g200:      #E2E8F0;
+      --g400:      #94A3B8;
+      --g600:      #475569;
+      --success:   #059669;
+      --warn:      #D97706;
+      --danger:    #DC2626;
+      --info:      #2563EB;
+      --purple:    #7C3AED;
+      --sh:        0 2px 10px rgba(15,28,46,0.08);
+      --sh-lg:     0 6px 24px rgba(15,28,46,0.12);
+      --r:         6px;
+      --r-lg:      10px;
+      --font:      'Inter', system-ui, sans-serif;
     }
 
-    *{margin:0;padding:0;box-sizing:border-box}
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { overflow-x:hidden; }
+    body { font-family:var(--font); background:var(--g50); color:var(--navy); -webkit-font-smoothing:antialiased; }
 
-    body{
-      font-family:var(--font-body);
-      background:var(--gray-50);
-      color:var(--navy);
+    /* ── HEADER ───────────────────────────────────── */
+    .hdr { background:var(--white); border-bottom:1px solid var(--g200); box-shadow:var(--sh); position:sticky; top:0; z-index:200; }
+    .hdr-inner { max-width:1600px; margin:0 auto; padding:0 2rem; height:62px; display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+    .brand { font-weight:800; font-size:1.1rem; color:var(--navy); white-space:nowrap; display:flex; align-items:center; gap:0.5rem; }
+    .brand-badge { background:var(--navy); color:var(--gold); font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; padding:0.2rem 0.6rem; border-radius:3px; }
+    .nav { display:flex; gap:0.25rem; flex-wrap:wrap; }
+    .nav a { font-size:0.83rem; font-weight:600; color:var(--g600); text-decoration:none; padding:0.4rem 0.75rem; border-radius:var(--r); transition:all 0.2s; white-space:nowrap; }
+    .nav a:hover { background:var(--g100); color:var(--navy); }
+    .nav a.active { background:var(--navy); color:var(--white); }
+
+    /* ── CONTAINER ────────────────────────────────── */
+    .wrap { max-width:1600px; margin:0 auto; padding:2rem 2rem 4rem; }
+
+    /* ── PAGE HEADER ──────────────────────────────── */
+    .page-hdr { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2rem; gap:1rem; flex-wrap:wrap; }
+    .page-hdr-left h1 { font-size:1.75rem; font-weight:800; color:var(--navy); line-height:1.2; }
+    .page-hdr-left p { font-size:0.875rem; color:var(--g600); margin-top:0.3rem; }
+    .hdr-btns { display:flex; gap:0.6rem; flex-wrap:wrap; }
+
+    /* ── BUTTONS ──────────────────────────────────── */
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.6rem 1.1rem; border-radius:var(--r); font-size:0.825rem; font-weight:700; border:none; cursor:pointer; text-decoration:none; transition:all 0.2s; white-space:nowrap; line-height:1; }
+    .btn-navy  { background:var(--navy);    color:var(--white); }
+    .btn-navy:hover  { background:#162d4a; }
+    .btn-outline { background:var(--white); color:var(--g600); border:1.5px solid var(--g200); }
+    .btn-outline:hover { border-color:var(--navy); color:var(--navy); }
+    .btn-danger { background:var(--danger); color:var(--white); }
+    .btn-danger:hover { background:#b91c1c; }
+    .btn-info   { background:var(--info);   color:var(--white); }
+    .btn-info:hover   { background:#1d4ed8; }
+    .btn-success { background:var(--success); color:var(--white); }
+    .btn-success:hover { background:#047857; }
+    .btn-sm { padding:0.42rem 0.75rem; font-size:0.78rem; }
+    .btn:disabled { opacity:0.55; cursor:not-allowed; }
+
+    /* ── STATS ────────────────────────────────────── */
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.75rem; }
+    .stat { background:var(--white); border-radius:var(--r-lg); padding:1.25rem 1.5rem; box-shadow:var(--sh); border-left:4px solid var(--navy); }
+    .stat-val { font-size:2rem; font-weight:800; color:var(--navy); line-height:1; }
+    .stat-lbl { font-size:0.75rem; font-weight:700; color:var(--g400); text-transform:uppercase; letter-spacing:1px; margin-top:0.35rem; }
+
+    /* ── FILTERS ──────────────────────────────────── */
+    .filters { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); padding:1.25rem 1.5rem; margin-bottom:1.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; }
+    .fg { display:flex; flex-direction:column; gap:0.4rem; flex:1; min-width:160px; }
+    .fg label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--g600); }
+    .fg input, .fg select { padding:0.55rem 0.75rem; border:1.5px solid var(--g200); border-radius:var(--r); font-size:0.875rem; font-family:var(--font); color:var(--navy); background:var(--g50); transition:border-color 0.2s; }
+    .fg input:focus, .fg select:focus { outline:none; border-color:var(--navy); background:var(--white); }
+    .results-pill { font-size:0.78rem; font-weight:700; color:var(--g400); white-space:nowrap; align-self:flex-end; padding:0 0.25rem 0.55rem; }
+
+    /* ── TABLE (desktop) ──────────────────────────── */
+    .tbl-wrap { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; }
+    .tbl-scroll { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; min-width:900px; }
+    thead { background:var(--g50); border-bottom:2px solid var(--g200); }
+    th { padding:0.85rem 1rem; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--g600); text-align:left; white-space:nowrap; }
+    td { padding:0.9rem 1rem; border-bottom:1px solid var(--g100); font-size:0.875rem; vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background 0.15s; }
+    tbody tr:hover { background:var(--g50); }
+    .col-title { min-width:200px; }
+    .col-type  { width:100px; }
+    .col-window{ min-width:140px; }
+    .col-status{ width:100px; }
+    .col-pdf   { width:80px; }
+    .col-actions { width:210px; }
+
+    .rpt-name { font-weight:700; color:var(--navy); line-height:1.3; }
+    .rpt-meta { font-size:0.75rem; color:var(--g400); margin-top:0.2rem; }
+
+    /* action cell — fixed width, no wrapping */
+    .act-cell { display:flex; gap:0.4rem; align-items:center; flex-wrap:nowrap; }
+
+    /* ── BADGES ──────────────────────────────────── */
+    .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.22rem 0.65rem; border-radius:30px; font-size:0.7rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+    .b-special   { background:rgba(124,58,237,0.1); color:var(--purple); }
+    .b-placement { background:rgba(5,150,105,0.1);  color:var(--success); }
+    .b-avail  { background:rgba(37,99,235,0.1);   color:var(--info); }
+    .b-paid   { background:rgba(5,150,105,0.1);   color:var(--success); }
+    .b-pdf    { background:rgba(5,150,105,0.1);   color:var(--success); }
+    .b-nopdf  { background:var(--g100);            color:var(--g400); }
+
+    /* ── MOBILE CARDS ─────────────────────────────── */
+    .card-list { display:none; flex-direction:column; gap:0.85rem; }
+    .rcard { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; }
+    .rcard-head { padding:1rem 1.25rem 0.75rem; border-bottom:1px solid var(--g100); display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; }
+    .rcard-badges { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+    .rcard-name { font-size:0.95rem; font-weight:700; color:var(--navy); line-height:1.35; }
+    .rcard-body { padding:0.75rem 1.25rem; font-size:0.82rem; color:var(--g600); display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; }
+    .rcard-row { display:contents; }
+    .rcard-lbl { font-weight:700; color:var(--navy); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; align-self:center; }
+    .rcard-val { color:var(--g600); align-self:center; }
+    .rcard-foot { padding:0.85rem 1.25rem; border-top:1px solid var(--g100); background:var(--g50); display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+    .rcard-foot .btn { width:100%; }
+    .rcard-foot .btn-full { grid-column:1/-1; }
+
+    /* ── EMPTY STATE ─────────────────────────────── */
+    .empty { text-align:center; padding:5rem 2rem; background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); }
+    .empty-ico { font-size:3rem; opacity:0.3; margin-bottom:1rem; }
+    .empty h2 { font-size:1.35rem; font-weight:800; margin-bottom:0.5rem; }
+    .empty p  { font-size:0.9rem; color:var(--g600); margin-bottom:1.5rem; }
+
+    /* ── RESPONSIVE ──────────────────────────────── */
+    @media (max-width:1100px) {
+      .stats { grid-template-columns:repeat(2,1fr); }
     }
-
-    /* HEADER */
-    .header{
-      background:white;
-      border-bottom:1px solid var(--gray-200);
-      padding:20px 0;
-      box-shadow:var(--shadow);
+    @media (max-width:860px) {
+      /* swap table → cards */
+      .tbl-wrap { display:none; }
+      .card-list { display:flex; }
+      .stats { grid-template-columns:repeat(2,1fr); }
     }
-
-    .header-container{
-      max-width:1600px;
-      margin:0 auto;
-      padding:0 32px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-    }
-
-    .brand{font-weight:800;font-size:20px;color:var(--navy)}
-    
-    .nav-links{display:flex;gap:24px;align-items:center}
-    .nav-link{
-      color:var(--slate);
-      text-decoration:none;
-      font-weight:600;
-      font-size:14px;
-      transition:color 0.2s;
-    }
-    .nav-link:hover{color:var(--primary)}
-    .nav-link.active{color:var(--primary)}
-
-    /* CONTAINER */
-    .container{
-      max-width:1600px;
-      margin:0 auto;
-      padding:60px 32px;
-    }
-
-    /* PAGE HEADER */
-    .page-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      margin-bottom:40px;
-      flex-wrap:wrap;
-      gap:20px;
-    }
-
-    .header-left h1{
-      font-size:42px;
-      font-weight:800;
-      color:var(--navy);
-      margin-bottom:8px;
-    }
-
-    .header-left p{
-      font-size:16px;
-      color:var(--slate);
-    }
-
-    .header-actions{
-      display:flex;
-      gap:12px;
-    }
-
-    .btn{
-      padding:12px 24px;
-      border-radius:10px;
-      font-weight:700;
-      font-size:14px;
-      cursor:pointer;
-      transition:all 0.3s;
-      border:none;
-      text-decoration:none;
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      white-space:nowrap;
-    }
-
-    .btn-primary{
-      background:var(--primary);
-      color:white;
-      box-shadow:0 4px 12px rgba(99,102,241,0.3);
-    }
-
-    .btn-primary:hover{
-      transform:translateY(-2px);
-    }
-
-    .btn-outline{
-      background:transparent;
-      border:2px solid var(--gray-200);
-      color:var(--slate);
-    }
-
-    .btn-outline:hover{
-      border-color:var(--primary);
-      color:var(--primary);
-    }
-
-
-.btn-danger{
-  background:#EF4444;
-  color:white;
-  border:2px solid #EF4444;
-}
-
-.btn-danger:hover{
-  background:#DC2626;
-  border-color:#DC2626;
-  color:white;
-  transform:translateY(-2px);
-}
-    /* FILTERS */
-    .filters{
-      background:white;
-      padding:24px;
-      border-radius:16px;
-      box-shadow:var(--shadow);
-      margin-bottom:32px;
-      display:grid;
-      grid-template-columns:2fr 1fr 1fr auto;
-      gap:16px;
-      align-items:end;
-    }
-
-    .filter-group{
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-
-    .filter-label{
-      font-size:13px;
-      font-weight:700;
-      color:var(--navy);
-      text-transform:uppercase;
-      letter-spacing:0.5px;
-    }
-
-    .filter-input{
-      padding:10px 14px;
-      border:2px solid var(--gray-200);
-      border-radius:8px;
-      font-family:var(--font-body);
-      font-size:14px;
-      color:var(--navy);
-    }
-
-    .filter-input:focus{
-      outline:none;
-      border-color:var(--primary);
-    }
-
-    /* STATS */
-    .stats-bar{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:20px;
-      margin-bottom:32px;
-    }
-
-    .stat-card{
-      background:white;
-      padding:20px;
-      border-radius:12px;
-      box-shadow:var(--shadow);
-      border-left:4px solid var(--primary);
-    }
-
-    .stat-value{
-      font-size:32px;
-      font-weight:800;
-      color:var(--navy);
-      margin-bottom:6px;
-    }
-
-    .stat-label{
-      font-size:13px;
-      color:var(--slate);
-      font-weight:600;
-    }
-
-    /* DESKTOP TABLE */
-    .desktop-view{
-      display:block;
-    }
-
-    .mobile-view{
-      display:none;
-    }
-
-  .table-card{
-  background:white;
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  overflow-x:auto;
-  overflow-y:hidden;
-}
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-    }
-
-    table{
-  min-width:1250px;
-}
-
-    thead{
-      background:var(--gray-50);
-    }
-
-    th{
-      padding:16px 20px;
-      text-align:left;
-      font-size:12px;
-      font-weight:700;
-      color:var(--slate);
-      text-transform:uppercase;
-      letter-spacing:0.5px;
-    }
-
-    td{
-      padding:20px;
-      border-bottom:1px solid var(--gray-100);
-      font-size:14px;
-    }
-
-    tbody tr{
-      transition:background 0.2s;
-    }
-
-    tbody tr:hover{
-      background:var(--gray-50);
-    }
-
-    .report-title{
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:4px;
-    }
-
-    .report-meta{
-      font-size:12px;
-      color:var(--slate);
-    }
-
-    .badge{
-      display:inline-block;
-      padding:4px 10px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:700;
-      text-transform:uppercase;
-    }
-
-    .badge-special{
-      background:rgba(99,102,241,0.1);
-      color:#4F46E5;
-    }
-
-    .badge-placement{
-      background:rgba(16,185,129,0.1);
-      color:#047857;
-    }
-
-    .badge-paid{
-      background:rgba(16,185,129,0.1);
-      color:#047857;
-    }
-
-    .badge-unpaid{
-      background:rgba(245,158,11,0.1);
-      color:#D97706;
-    }
-
-  .action-buttons{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  align-items:center;
-  min-width:260px;
-}
-
-    .btn-sm{
-      padding:8px 14px;
-      font-size:13px;
-      border-radius:8px;
-      font-weight:600;
-      white-space:nowrap;
-    }
-
-    /* MOBILE CARD LAYOUT */
-    .report-card{
-      background:white;
-      padding:20px;
-      border-radius:12px;
-      box-shadow:var(--shadow);
-      margin-bottom:16px;
-    }
-
-    .card-header{
-      margin-bottom:16px;
-      padding-bottom:16px;
-      border-bottom:2px solid var(--gray-100);
-    }
-
-    .card-title{
-      font-size:16px;
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:8px;
-    }
-
-    .card-badges{
-      display:flex;
-      gap:8px;
-      margin-bottom:12px;
-      flex-wrap:wrap;
-    }
-
-    .card-meta{
-      font-size:13px;
-      color:var(--slate);
-      line-height:1.6;
-    }
-
-    .card-meta-row{
-      display:flex;
-      justify-content:space-between;
-      margin-bottom:6px;
-    }
-
-    .card-label{
-      font-weight:600;
-      color:var(--navy);
-    }
-
-    .card-actions{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-      margin-top:16px;
-    }
-
-    .card-btn{
-      padding:12px;
-      text-align:center;
-      font-weight:700;
-      font-size:14px;
-      border-radius:8px;
-      text-decoration:none;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
-    }
-
-    /* EMPTY STATE */
-    .empty-state{
-      text-align:center;
-      padding:80px 32px;
-    }
-
-    .empty-icon{
-      font-size:64px;
-      margin-bottom:20px;
-      opacity:0.3;
-    }
-
-    .empty-title{
-      font-size:24px;
-      font-weight:800;
-      color:var(--navy);
-      margin-bottom:12px;
-    }
-
-    .empty-text{
-      font-size:15px;
-      color:var(--slate);
-      margin-bottom:24px;
-    }
-
-    /* RESPONSIVE */
-    @media(max-width:1200px){
-      .filters{grid-template-columns:1fr 1fr;gap:12px}
-      .stats-bar{grid-template-columns:repeat(2,1fr)}
-    }
-
-    @media(max-width:768px){
-      .container{
-        padding:40px 16px;
-      }
-
-      .header-container{
-        padding:0 16px;
-        flex-direction:column;
-        gap:16px;
-        align-items:flex-start;
-      }
-
-      .nav-links{
-        width:100%;
-        overflow-x:auto;
-        gap:16px;
-      }
-
-      .page-header{
-        flex-direction:column;
-      }
-
-      .header-left h1{
-        font-size:28px;
-      }
-
-      .header-actions{
-        width:100%;
-        flex-direction:column;
-      }
-
-      .header-actions .btn{
-        width:100%;
-        justify-content:center;
-      }
-
-      .filters{
-        grid-template-columns:1fr;
-        gap:16px;
-      }
-
-      .stats-bar{
-        grid-template-columns:1fr;
-      }
-
-      /* Hide desktop table, show mobile cards */
-      .desktop-view{
-        display:none !important;
-      }
-
-      .mobile-view{
-        display:block !important;
-      }
+    @media (max-width:600px) {
+      .wrap { padding:1.25rem 1rem 3rem; }
+      .hdr-inner { padding:0 1rem; }
+      .page-hdr { flex-direction:column; }
+      .hdr-btns { width:100%; }
+      .hdr-btns .btn { flex:1; }
+      .filters { padding:1rem; }
+      .fg { min-width:100%; }
+      .stats { grid-template-columns:1fr 1fr; gap:0.75rem; }
+      .stat { padding:1rem; }
+      .stat-val { font-size:1.6rem; }
+      .rcard-foot { grid-template-columns:1fr 1fr; }
+      .nav { gap:0; }
+      .nav a { font-size:0.78rem; padding:0.35rem 0.55rem; }
     }
   </style>
 </head>
-
 <body>
 
 <!-- HEADER -->
-<header class="header">
-  <div class="header-container">
-    <div class="brand">🏛️ SCOI Admin</div>
-    <div class="nav-links">
-      <a href="/scoi" class="nav-link">Marketplace</a>
-      <a href="/admin/scoi/reports" class="nav-link active">Reports</a>
-      <a href="/admin/scoi/import" class="nav-link">Import</a>
-      <a href="/admin/scoi/financials" class="nav-link">Financials</a>
+<header class="hdr">
+  <div class="hdr-inner">
+    <div class="brand">
+      <span>🏛️ CRIPFCnt</span>
+      <span class="brand-badge">Admin</span>
     </div>
+    <nav class="nav">
+      <a href="/scoi">Marketplace</a>
+      <a href="/admin/scoi/reports" class="active">Reports</a>
+      <a href="/admin/scoi/import">Import</a>
+      <a href="/admin/scoi/financials">Financials</a>
+    </nav>
   </div>
 </header>
 
-<!-- MAIN -->
-<main class="container">
+<main class="wrap">
 
   <!-- PAGE HEADER -->
-  <div class="page-header">
-    <div class="header-left">
+  <div class="page-hdr">
+    <div class="page-hdr-left">
       <h1>SCOI Reports Library</h1>
-      <p>View, manage, and download reports</p>
+      <p>Manage, preview, and generate PDFs for all audit reports</p>
     </div>
-
-    <div class="header-actions">
-      <a href="/admin/scoi/import" class="btn btn-outline">
-        📤 Import
-      </a>
-      <button onclick="generateAllPdfs()" class="btn btn-primary">
-        📥 Generate All
-      </button>
+    <div class="hdr-btns">
+      <a href="/admin/scoi/import" class="btn btn-outline">📤 Import</a>
+      <button onclick="generateAllPdfs(this)" class="btn btn-navy">⬇ Generate All PDFs</button>
     </div>
   </div>
 
   <!-- STATS -->
-  <div class="stats-bar">
-    <div class="stat-card">
-      <div class="stat-value">{{stats.total}}</div>
-      <div class="stat-label">Total Reports</div>
+  <div class="stats">
+    <div class="stat" style="border-left-color:var(--navy)">
+      <div class="stat-val">{{stats.total}}</div>
+      <div class="stat-lbl">Total Reports</div>
     </div>
-
-    <div class="stat-card" style="border-left-color:#10B981">
-      <div class="stat-value">{{stats.placement}}</div>
-      <div class="stat-label">Placement</div>
+    <div class="stat" style="border-left-color:var(--success)">
+      <div class="stat-val">{{stats.placement}}</div>
+      <div class="stat-lbl">Placement</div>
     </div>
-
-    <div class="stat-card" style="border-left-color:#6366F1">
-      <div class="stat-value">{{stats.special}}</div>
-      <div class="stat-label">Special</div>
+    <div class="stat" style="border-left-color:var(--purple)">
+      <div class="stat-val">{{stats.special}}</div>
+      <div class="stat-lbl">Special</div>
     </div>
-
-    <div class="stat-card" style="border-left-color:#F59E0B">
-      <div class="stat-value">{{stats.withPdf}}</div>
-      <div class="stat-label">PDFs</div>
+    <div class="stat" style="border-left-color:var(--gold)">
+      <div class="stat-val">{{stats.withPdf}}</div>
+      <div class="stat-lbl">With PDF</div>
     </div>
   </div>
 
   <!-- FILTERS -->
   <div class="filters">
-    <div class="filter-group">
-      <label class="filter-label">Search</label>
-      <input 
-        type="text" 
-        class="filter-input" 
-        id="searchInput"
-        placeholder="Search..."
-      />
+    <div class="fg" style="flex:2;min-width:200px;">
+      <label for="searchInput">Search</label>
+      <input type="text" id="searchInput" placeholder="Search by name, author, type…" autocomplete="off">
     </div>
-
-    <div class="filter-group">
-      <label class="filter-label">Type</label>
-      <select class="filter-input" id="typeFilter">
-        <option value="">All</option>
+    <div class="fg">
+      <label for="typeFilter">Type</label>
+      <select id="typeFilter">
+        <option value="">All Types</option>
         <option value="placement">Placement</option>
         <option value="special">Special</option>
       </select>
     </div>
-
-    <div class="filter-group">
-      <label class="filter-label">PDF</label>
-      <select class="filter-input" id="pdfFilter">
+    <div class="fg">
+      <label for="pdfFilter">PDF Status</label>
+      <select id="pdfFilter">
         <option value="">All</option>
-        <option value="with-pdf">With PDF</option>
+        <option value="with-pdf">Has PDF</option>
         <option value="no-pdf">No PDF</option>
       </select>
     </div>
-
-    <button onclick="applyFilters()" class="btn btn-primary">
-      🔍
-    </button>
+    <span class="results-pill" id="resultsPill"></span>
   </div>
 
   {{#if reports.length}}
-    
-    <!-- DESKTOP TABLE VIEW -->
-    <div class="desktop-view">
-      <div class="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Report Details</th>
-              <th>Type</th>
-              <th>Window</th>
-              <th>Status</th>
-              <th>PDF</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="desktopTable">
-            {{#each reports}}
-              <tr data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}">
-                <td>
-                  <div class="report-title">{{this.subject.name}}</div>
-                  <div class="report-meta">
-                    {{this.author}} | {{this.subject.entityType}}
-                  </div>
-                </td>
 
-                <td>
-                  {{#if (eq this.auditKind "special")}}
-                    <span class="badge badge-special">Special</span>
-                  {{else}}
-                    <span class="badge badge-placement">Placement</span>
-                  {{/if}}
-                </td>
+  <!-- ── DESKTOP TABLE ── -->
+  <div class="tbl-wrap">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-title">Report</th>
+            <th class="col-type">Type</th>
+            <th class="col-window">Window</th>
+            <th class="col-status">Status</th>
+            <th class="col-pdf">PDF</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="desktopTable">
+          {{#each reports}}
+          <tr data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}" data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
+            <td class="col-title">
+              <div class="rpt-name">{{this.subject.name}}</div>
+              <div class="rpt-meta">{{this.author}}{{#if this.subject.entityType}} · {{this.subject.entityType}}{{/if}}</div>
+            </td>
+            <td class="col-type">
+              {{#if (eq this.auditKind "special")}}
+                <span class="badge b-special">Special</span>
+              {{else}}
+                <span class="badge b-placement">Placement</span>
+              {{/if}}
+            </td>
+            <td class="col-window">{{this.assessmentWindow.label}}</td>
+            <td class="col-status">
+              {{#if this.isPaid}}
+                <span class="badge b-paid">Paid</span>
+              {{else}}
+                <span class="badge b-avail">Available</span>
+              {{/if}}
+            </td>
+            <td class="col-pdf">
+              {{#if this.pdfUrl}}
+                <span class="badge b-pdf">✓ Yes</span>
+              {{else}}
+                <span class="badge b-nopdf">No</span>
+              {{/if}}
+            </td>
+            <td class="col-actions">
+              <div class="act-cell">
+                <a href="/admin/scoi/reports/{{this._id}}/view" target="_blank" class="btn btn-outline btn-sm">👁 View</a>
+                {{#if this.pdfUrl}}
+                  <a href="{{this.pdfUrl}}" target="_blank" class="btn btn-success btn-sm">↓ PDF</a>
+                {{else}}
+                  <button onclick="generatePdf('{{this._id}}', this)" class="btn btn-info btn-sm">⚙ Gen PDF</button>
+                {{/if}}
+                <button onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')" class="btn btn-danger btn-sm">✕</button>
+              </div>
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-                <td>{{this.assessmentWindow.label}}</td>
-
-                <td>
-                  {{#if this.isPaid}}
-                    <span class="badge badge-paid">✓ Paid</span>
-                  {{else}}
-                    <span class="badge badge-unpaid">Available</span>
-                  {{/if}}
-                </td>
-
-                <td>
-                  {{#if this.pdfUrl}}
-                    <span style="color:var(--success)">✓ Yes</span>
-                  {{else}}
-                    <span style="color:var(--slate)">No</span>
-                  {{/if}}
-                </td>
-
-                <td>
-                  <div class="action-buttons">
-                    <a 
-                      href="/admin/scoi/reports/{{this._id}}/view" 
-                      target="_blank"
-                      class="btn btn-outline btn-sm"
-                    >
-                      👁️ View
-                    </a>
-
-                    {{#if this.pdfUrl}}
-                      <a 
-                        href="{{this.pdfUrl}}" 
-                        target="_blank"
-                        class="btn btn-primary btn-sm"
-                      >
-                        📥 PDF
-                      </a>
-                    {{else}}
-                      <button 
-                        onclick="generatePdf('{{this._id}}')"
-                        class="btn btn-primary btn-sm"
-                      >
-                        📄 Gen
-                      </button>
-                    {{/if}}
-
-                    <button
-  onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
-  class="btn btn-danger btn-sm"
->
-  🗑️ Delete
-</button>
-                  </div>
-                </td>
-              </tr>
-            {{/each}}
-          </tbody>
-        </table>
+  <!-- ── MOBILE CARD LIST ── -->
+  <div class="card-list" id="mobileCards">
+    {{#each reports}}
+    <div class="rcard" data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}" data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
+      <div class="rcard-head">
+        <div>
+          <div class="rcard-badges">
+            {{#if (eq this.auditKind "special")}}
+              <span class="badge b-special">Special</span>
+            {{else}}
+              <span class="badge b-placement">Placement</span>
+            {{/if}}
+            {{#if this.isPaid}}
+              <span class="badge b-paid">Paid</span>
+            {{else}}
+              <span class="badge b-avail">Available</span>
+            {{/if}}
+            {{#if this.pdfUrl}}
+              <span class="badge b-pdf">PDF ✓</span>
+            {{/if}}
+          </div>
+          <div class="rcard-name">{{this.subject.name}}</div>
+        </div>
+      </div>
+      <div class="rcard-body">
+        <span class="rcard-lbl">Window</span><span class="rcard-val">{{this.assessmentWindow.label}}</span>
+        <span class="rcard-lbl">Author</span><span class="rcard-val">{{this.author}}</span>
+        <span class="rcard-lbl">Entity</span><span class="rcard-val">{{this.subject.entityType}}</span>
+      </div>
+      <div class="rcard-foot">
+        <a href="/admin/scoi/reports/{{this._id}}/view" target="_blank" class="btn btn-outline btn-sm">👁 View</a>
+        {{#if this.pdfUrl}}
+          <a href="{{this.pdfUrl}}" target="_blank" class="btn btn-success btn-sm">↓ PDF</a>
+        {{else}}
+          <button onclick="generatePdf('{{this._id}}', this)" class="btn btn-info btn-sm">⚙ Gen PDF</button>
+        {{/if}}
+        <button onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')" class="btn btn-danger btn-sm btn-full">✕ Delete</button>
       </div>
     </div>
-
-    <!-- MOBILE CARD VIEW -->
-    <div class="mobile-view" id="mobileCards">
-      {{#each reports}}
-        <div class="report-card" data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}">
-          <div class="card-header">
-            <div class="card-badges">
-              {{#if (eq this.auditKind "special")}}
-                <span class="badge badge-special">Special</span>
-              {{else}}
-                <span class="badge badge-placement">Placement</span>
-              {{/if}}
-              
-              {{#if this.isPaid}}
-                <span class="badge badge-paid">✓ Paid</span>
-              {{else}}
-                <span class="badge badge-unpaid">Available</span>
-              {{/if}}
-
-              {{#if this.pdfUrl}}
-                <span class="badge" style="background:rgba(16,185,129,0.1);color:#047857">PDF ✓</span>
-              {{/if}}
-            </div>
-
-            <div class="card-title">{{this.subject.name}}</div>
-          </div>
-
-          <div class="card-meta">
-            <div class="card-meta-row">
-              <span class="card-label">Window:</span>
-              <span>{{this.assessmentWindow.label}}</span>
-            </div>
-            <div class="card-meta-row">
-              <span class="card-label">Author:</span>
-              <span>{{this.author}}</span>
-            </div>
-            <div class="card-meta-row">
-              <span class="card-label">Entity:</span>
-              <span>{{this.subject.entityType}}</span>
-            </div>
-          </div>
-
-          <div class="card-actions">
-            <a 
-              href="/admin/scoi/reports/{{this._id}}/view" 
-              target="_blank"
-              class="card-btn btn-outline"
-            >
-              👁️ View
-            </a>
-
-            {{#if this.pdfUrl}}
-              <a 
-                href="{{this.pdfUrl}}" 
-                target="_blank"
-                class="card-btn btn-primary"
-              >
-                📥 Download PDF
-              </a>
-            {{else}}
-              <button 
-                onclick="generatePdf('{{this._id}}')"
-                class="card-btn btn-primary"
-              >
-                📄 Generate PDF
-              </button>
-            {{/if}}
-
-            <button
-  onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
-  class="card-btn btn-danger"
->
-  🗑️ Delete
-</button>
-          </div>
-        </div>
-      {{/each}}
-    </div>
+    {{/each}}
+  </div>
 
   {{else}}
-    
-    <div class="table-card">
-      <div class="empty-state">
-        <div class="empty-icon">📊</div>
-        <div class="empty-title">No Reports Found</div>
-        <div class="empty-text">
-          Import SCOI reports to view and manage them here
-        </div>
-        <a href="/admin/scoi/import" class="btn btn-primary">
-          📤 Import Reports
-        </a>
-      </div>
-    </div>
-
+  <div class="empty">
+    <div class="empty-ico">📊</div>
+    <h2>No Reports Found</h2>
+    <p>Import SCOI reports to view and manage them here.</p>
+    <a href="/admin/scoi/import" class="btn btn-navy">📤 Import Reports</a>
+  </div>
   {{/if}}
 
 </main>
 
-<!-- SCRIPTS -->
 <script>
-  // Filter function
+  /* ── Filter ──────────────────────────────── */
   function applyFilters() {
-    const search = document.getElementById('searchInput').value.toLowerCase();
+    const q    = (document.getElementById('searchInput').value || '').toLowerCase();
     const type = document.getElementById('typeFilter').value;
-    const pdfStatus = document.getElementById('pdfFilter').value;
+    const pdf  = document.getElementById('pdfFilter').value;
 
-    // Filter desktop table
-    const desktopRows = document.querySelectorAll('#desktopTable tr');
-    desktopRows.forEach(row => {
-      const text = row.textContent.toLowerCase();
-      const rowType = row.dataset.type;
-      const rowPdf = row.dataset.pdf;
+    let visible = 0;
 
-      const matchesSearch = !search || text.includes(search);
-      const matchesType = !type || rowType === type;
-      const matchesPdf = !pdfStatus || rowPdf === pdfStatus;
+    function matchRow(el) {
+      const text = (el.dataset.search || el.textContent).toLowerCase();
+      const ok = (!q || text.includes(q)) &&
+                 (!type || el.dataset.type === type) &&
+                 (!pdf  || el.dataset.pdf  === pdf);
+      el.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    }
 
-      row.style.display = (matchesSearch && matchesType && matchesPdf) ? '' : 'none';
-    });
+    document.querySelectorAll('#desktopTable tr').forEach(matchRow);
+    // reset visible before mobile count
+    visible = 0;
+    document.querySelectorAll('#desktopTable tr').forEach(r => { if (r.style.display !== 'none') visible++; });
+    document.querySelectorAll('#mobileCards .rcard').forEach(matchRow);
 
-    // Filter mobile cards
-    const mobileCards = document.querySelectorAll('#mobileCards .report-card');
-    mobileCards.forEach(card => {
-      const text = card.textContent.toLowerCase();
-      const cardType = card.dataset.type;
-      const cardPdf = card.dataset.pdf;
-
-      const matchesSearch = !search || text.includes(search);
-      const matchesType = !type || cardType === type;
-      const matchesPdf = !pdfStatus || cardPdf === pdfStatus;
-
-      card.style.display = (matchesSearch && matchesType && matchesPdf) ? '' : 'none';
-    });
+    const pill = document.getElementById('resultsPill');
+    if (pill) pill.textContent = visible + ' result' + (visible !== 1 ? 's' : '');
   }
 
-  // Live search
-  document.getElementById('searchInput')?.addEventListener('input', applyFilters);
+  // Debounced search
+  let _st;
+  document.getElementById('searchInput')?.addEventListener('input', () => { clearTimeout(_st); _st = setTimeout(applyFilters, 180); });
   document.getElementById('typeFilter')?.addEventListener('change', applyFilters);
   document.getElementById('pdfFilter')?.addEventListener('change', applyFilters);
 
-  // Generate single PDF
-  async function generatePdf(auditId) {
-    const btn = event.target;
+  // Set initial count
+  window.addEventListener('DOMContentLoaded', () => {
+    const n = document.querySelectorAll('#desktopTable tr').length;
+    const pill = document.getElementById('resultsPill');
+    if (pill) pill.textContent = n + ' result' + (n !== 1 ? 's' : '');
+  });
+
+  /* ── Generate single PDF ─────────────────── */
+  async function generatePdf(auditId, btn) {
+    const orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Generating...';
-
+    btn.textContent = '⏳…';
     try {
-      const response = await fetch(`/admin/scoi/reports/${auditId}/generate-pdf`, {
-        method: 'POST'
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert('✅ PDF generated successfully!');
-        window.location.reload();
-      } else {
-        alert('❌ Failed: ' + (data.error || 'Unknown error'));
-        btn.disabled = false;
-        btn.textContent = '📄 Generate PDF';
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('❌ Failed to generate PDF');
-      btn.disabled = false;
-      btn.textContent = '📄 Generate PDF';
-    }
+      const r = await fetch(`/admin/scoi/reports/${auditId}/generate-pdf`, { method:'POST' });
+      const d = await r.json();
+      if (d.success) { alert('✅ PDF generated'); location.reload(); }
+      else { alert('❌ ' + (d.error || 'Unknown error')); btn.disabled = false; btn.textContent = orig; }
+    } catch(e) { alert('❌ Request failed'); btn.disabled = false; btn.textContent = orig; }
   }
 
-  // Generate all PDFs
-  async function generateAllPdfs() {
-    if (!confirm('Generate PDFs for all reports without PDFs?')) {
-      return;
-    }
-
-    const btn = event.target;
+  /* ── Generate all PDFs ───────────────────── */
+  async function generateAllPdfs(btn) {
+    if (!confirm('Generate PDFs for all reports without PDFs?')) return;
+    const orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Working...';
-
+    btn.textContent = '⏳ Working…';
     try {
-      const response = await fetch('/admin/scoi/reports/generate-all-pdfs', {
-        method: 'POST'
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`✅ Generated ${data.generated} PDFs!`);
-        window.location.reload();
-      } else {
-        alert('❌ Failed: ' + (data.error || 'Unknown error'));
-        btn.disabled = false;
-        btn.textContent = '📥 Generate All';
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('❌ Failed to generate PDFs');
-      btn.disabled = false;
-      btn.textContent = '📥 Generate All';
-    }
+      const r = await fetch('/admin/scoi/reports/generate-all-pdfs', { method:'POST' });
+      const d = await r.json();
+      if (d.success) { alert(`✅ Generated ${d.generated} PDF(s)`); location.reload(); }
+      else { alert('❌ ' + (d.error || 'Unknown error')); btn.disabled = false; btn.textContent = orig; }
+    } catch(e) { alert('❌ Request failed'); btn.disabled = false; btn.textContent = orig; }
   }
 
-  async function deleteReport(auditId, reportName) {
-  const safeName = reportName || "this report";
-
-  const confirmed = confirm(
-    `Are you sure you want to delete "${safeName}"?\n\nThis action cannot be undone.`
-  );
-
-  if (!confirmed) return;
-
-  try {
-    const response = await fetch(`/admin/scoi/reports/${auditId}`, {
-      method: "DELETE"
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      alert("✅ Report deleted successfully");
-      window.location.reload();
-    } else {
-      alert("❌ Failed: " + (data.error || "Unknown error"));
-    }
-  } catch (error) {
-    console.error("Delete error:", error);
-    alert("❌ Failed to delete report");
+  /* ── Delete ──────────────────────────────── */
+  async function deleteReport(id, name) {
+    if (!confirm(`Delete "${name || 'this report'}"?\n\nThis cannot be undone.`)) return;
+    try {
+      const r = await fetch(`/admin/scoi/reports/${id}`, { method:'DELETE' });
+      const d = await r.json();
+      if (d.success) { alert('✅ Deleted'); location.reload(); }
+      else alert('❌ ' + (d.error || 'Unknown error'));
+    } catch(e) { alert('❌ Request failed'); }
   }
-}
 </script>
-
 </body>
 </html>
