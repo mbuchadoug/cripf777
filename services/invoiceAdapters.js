@@ -1,85 +1,80 @@
-import Business from "../models/business.js";
-import UserSession from "../models/userSession.js";
-import Client from "../models/client.js";
-import { sendList, sendText, sendButtons } from "./metaSender.js";
-
-
 /**
- * ✅ NEW: Create or get generic "Walk-in Customer" client
+ * invoiceAdapters.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Meta WhatsApp button handlers for the client-selection step of all three
+ * document flows (invoice / quotation / receipt).
+ *
+ * CHANGES FROM ORIGINAL:
+ *   • Uses preserveSessionCore() — eliminates duplicated docType / targetBranchId
+ *     extraction that existed in every function
+ *   • Uses sendAddItemPrompt() — eliminates duplicated sendButtons call
+ *   • All existing exports preserved with identical signatures
+ * ─────────────────────────────────────────────────────────────────────────────
  */
+
+import Business    from "../models/business.js";
+import UserSession from "../models/userSession.js";
+import Client      from "../models/client.js";
+import { sendList, sendText } from "./metaSender.js";
+import { preserveSessionCore, sendAddItemPrompt } from "./invoiceHelpers.js";
+
+// ─── Internal: walk-in / generic client ──────────────────────────────────────
+
 async function getOrCreateGenericClient(businessId) {
-  const genericClient = await Client.findOneAndUpdate(
-    { 
-      businessId, 
-      phone: "walk-in" 
-    },
-    { 
+  return Client.findOneAndUpdate(
+    { businessId, phone: "walk-in" },
+    {
       $setOnInsert: {
         businessId,
-        name: "Walk-in Customer",
-        phone: "walk-in",
+        name:      "Walk-in Customer",
+        phone:     "walk-in",
         isGeneric: true
       }
     },
-    { 
-      upsert: true, 
-      new: true 
-    }
+    { upsert: true, new: true }
   );
-
-  return genericClient;
 }
 
-/**
- * ✅ NEW: Handle skip client action (Meta)
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// handleSkipClient
+// Button: "⏭ Skip client"
+// Sets a generic Walk-in client and moves to item-adding.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function handleSkipClient(to) {
-  const phone = to.replace(/\D+/g, "");
+  const phone   = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
+  const biz     = await Business.findById(session?.activeBusinessId);
 
   if (!biz) return sendText(to, "❌ No active business.");
 
-  // Create or get generic client
+  const core   = preserveSessionCore(biz);
   const client = await getOrCreateGenericClient(biz._id);
 
-  // ✅ PRESERVE docType before resetting
-const docType = biz.sessionData?.docType || "invoice";
-const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
-
-biz.sessionData = {
-  docType,
-  targetBranchId, // ✅ keep it
-  clientId: client._id,
-  client,
-  items: [],
-  itemMode: null,
-  lastItem: null,
-  expectingQty: false
-};
-
+  biz.sessionData = {
+    ...core,
+    clientId:     client._id,
+    client,
+    items:        [],
+    itemMode:     null,
+    lastItem:     null,
+    expectingQty: false
+  };
   biz.sessionState = "creating_invoice_add_items";
   biz.markModified("sessionData");
   await biz.save();
 
-  return sendButtons(to, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
-  });
+  return sendAddItemPrompt(to);
 }
 
-/**
- * Meta: Use saved client
- * Maps to Twilio state: creating_invoice_choose_client_index
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// handleChooseSavedClient
+// Button: "📋 Saved client"
+// Shows a list of recent clients or falls back to new-client name entry.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function handleChooseSavedClient(to) {
-
-  const phone = to.replace(/\D+/g, "");
+  const phone   = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
+  const biz     = await Business.findById(session?.activeBusinessId);
 
   if (!biz) return sendText(to, "❌ No active business.");
 
@@ -88,19 +83,16 @@ export async function handleChooseSavedClient(to) {
     .limit(10)
     .lean();
 
-if (!clients.length) {
-  const docType = biz.sessionData?.docType || "invoice";
-  const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
+  if (!clients.length) {
+    const core = preserveSessionCore(biz);
+    biz.sessionState = "creating_invoice_new_client";
+    biz.sessionData  = { ...core };
+    biz.markModified("sessionData");
+    await biz.save();
+    return sendText(to, "No saved clients found.\n\nEnter client name:");
+  }
 
-  biz.sessionState = "creating_invoice_new_client";
-  biz.sessionData = { docType, targetBranchId };
-  biz.markModified("sessionData");
-  await biz.save();
-
-  return sendText(to, "No saved clients. Enter client name:");
-}
-
-  biz.sessionState = "creating_invoice_choose_client_index";
+  biz.sessionState              = "creating_invoice_choose_client_index";
   biz.sessionData.recentClients = clients;
   biz.markModified("sessionData");
   await biz.save();
@@ -108,72 +100,58 @@ if (!clients.length) {
   return sendList(
     to,
     "Select client",
-    clients.map(c => ({
-      id: `client_${c._id}`,
-      title: c.name || c.phone
-    }))
+    clients.map(c => ({ id: `client_${c._id}`, title: c.name || c.phone }))
   );
 }
 
-/**
- * Meta: New client from invoice
- * Maps to Twilio state: creating_invoice_new_client
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// handleNewClientFromInvoice
+// Button: "➕ New client"
+// Moves to the new-client name-entry state.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function handleNewClientFromInvoice(to) {
-  const phone = to.replace(/\D+/g, "");
+  const phone   = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
+  const biz     = await Business.findById(session?.activeBusinessId);
 
   if (!biz) return sendText(to, "❌ No active business.");
 
-  // ✅ PRESERVE docType before resetting
-const docType = biz.sessionData?.docType || "invoice";
-const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
-
-biz.sessionState = "creating_invoice_new_client";
-biz.sessionData = { docType, targetBranchId };
+  const core = preserveSessionCore(biz);
+  biz.sessionState = "creating_invoice_new_client";
+  biz.sessionData  = { ...core };
   await biz.save();
 
   return sendText(to, "Enter client name:");
 }
 
-/**
- * Meta: client picked from list
- * 🔥 FIXED: persist clientId (THIS WAS THE BUG)
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// handleClientPicked
+// List selection: user tapped a saved client from the list
+// ─────────────────────────────────────────────────────────────────────────────
 export async function handleClientPicked(to, clientId) {
-  const phone = to.replace(/\D+/g, "");
+  const phone   = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
+  const biz     = await Business.findById(session?.activeBusinessId);
 
-  if (!biz) return sendText(to, "❌ No active business.");
+  if (!biz)    return sendText(to, "❌ No active business.");
 
   const client = await Client.findById(clientId);
   if (!client) return sendText(to, "❌ Client not found.");
 
-  // ✅ PRESERVE docType before resetting
-  const docType = biz.sessionData?.docType || "invoice";
-const targetBranchId = biz.sessionData?.targetBranchId || null; // ✅ preserve
+  const core = preserveSessionCore(biz);
 
-biz.sessionData = {
-  docType,
-  targetBranchId, // ✅ keep it
-  clientId: client._id,
-  client,
-  items: [],
-  itemMode: null,
-  lastItem: null,
-  expectingQty: false
-};
+  biz.sessionData = {
+    ...core,
+    clientId:     client._id,
+    client,
+    items:        [],
+    itemMode:     null,
+    lastItem:     null,
+    expectingQty: false
+  };
   biz.sessionState = "creating_invoice_add_items";
   biz.markModified("sessionData");
   await biz.save();
 
-  return sendButtons(to, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
-  });
+  return sendAddItemPrompt(to);
 }

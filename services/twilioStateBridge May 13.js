@@ -16,17 +16,6 @@ import InvoicePayment from "../models/invoicePayment.js";
 import { runDailyReportMetaEnhanced } from "./dailyReportEnhanced.js";
 import { runWeeklyReportMetaEnhanced } from "./weeklyReportEnhanced.js";
 import { runMonthlyReportMetaEnhanced } from "./monthlyReportEnhanced.js";
-import {
-  parseCommaNames,
-  parsePickEntries,
-  findUnpricedIndexes,
-  buildUnpricedPromptText,
-  applyBulkPrices,
-  buildDocPreviewText,
-  sendDocPreview,
-  preserveSessionCore,
-  sendAddItemPrompt
-} from "./invoiceHelpers.js";
 
 
 function currencySymbol(cur) {
@@ -1567,7 +1556,7 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
     const isSame = trimmed.toLowerCase() === "same" || text === "inv_client_phone_same";
 
     const clientName = biz.sessionData.clientName || "Customer";
-    const phoneVal   = isSkip ? null : (isSame ? phone : trimmed);
+    const phoneVal = isSkip ? null : (isSame ? phone : trimmed);
 
     const client = await Client.findOneAndUpdate(
       { businessId: biz._id, ...(phoneVal ? { phone: phoneVal } : { name: clientName, phone: null }) },
@@ -1575,139 +1564,63 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
       { upsert: true, new: true }
     );
 
-    const core = preserveSessionCore(biz);
+    const docType = biz.sessionData?.docType || "invoice";
     biz.sessionData = {
-      ...core,
-      client,
-      clientId:       client._id,
-      items:          [],
-      itemMode:       null,
-      lastItem:       null,
-      expectingQty:   false,
-      lastItemSource: null
+      docType, targetBranchId: biz.sessionData?.targetBranchId, // ✅ preserve branch
+      client, clientId: client._id,
+      items: [], itemMode: null, lastItem: null, expectingQty: false, lastItemSource: null
     };
     biz.sessionState = "creating_invoice_add_items";
     await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
+
+    await sendButtons(from, {
+      text: "How would you like to add an item?",
+      buttons: [{ id: "inv_item_catalogue", title: "📦 Catalogue" }, { id: "inv_item_custom", title: "✍️ Custom item" }]
+    });
+    return true;
   }
 
   /* ===========================
      INVOICE: QUICK ADD PRODUCT (NAME)
-     Supports comma-separated bulk entry. Single name → optional price step.
-     Multiple names → save all to catalogue (no price required), then ask prices
-     for any that are unpriced, then continue with the invoice item flow.
   =========================== */
   if (state === "invoice_quick_add_product_name") {
-    const raw = trimmed;
-    if (!raw || raw.length < 2) {
-      await sendPromptWithMenu(from,
-        "❌ Enter a valid product/service name.\n\n" +
-        "_Add multiple at once with commas:_\n" +
-        "_house wiring, solar installation, geyser repair_"
-      );
-      return true;
-    }
+    const name = trimmed;
+    if (!name || name.length < 2) { await sendPromptWithMenu(from, "❌ Please enter a valid product / service name:"); return true; }
 
-    const names = parseCommaNames(raw);
-    if (names.length === 0) {
-      await sendPromptWithMenu(from, "❌ Enter at least one valid name (min 2 characters):");
-      return true;
-    }
-
-    if (names.length > 1) {
-      // ── BULK MODE: save all to catalogue without requiring prices ──────────
-      const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-      const savedProducts = await Promise.all(
-        names.map(name =>
-          Product.create({
-            businessId: biz._id,
-            branchId:   effectiveBranchId,
-            name,
-            unitPrice:  0,
-            isActive:   true
-          })
-        )
-      );
-
-      // Add all to current invoice items with unit=0 so prices can be filled
-      const newItems = savedProducts.map(p => ({ item: p.name, qty: 1, unit: 0, source: "catalogue" }));
-      biz.sessionData.items        = [...(biz.sessionData.items || []), ...newItems];
-      biz.sessionData.quickAddProduct = null;
-
-      const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items);
-      biz.sessionData.unpricedIndexes = unpricedIndexes;
-      biz.sessionState = "creating_invoice_enter_catalogue_prices";
-      await saveBizSafe(biz);
-
-      const savedLines = savedProducts.map((p, i) => `✅ ${i + 1}. ${p.name}`).join("\n");
-      return sendButtons(from, {
-        text:
-          `📦 *${savedProducts.length} items saved to catalogue*\n\n${savedLines}\n\n` +
-          buildUnpricedPromptText(biz.sessionData.items, unpricedIndexes, biz.currency || "USD"),
-        buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
-      });
-    }
-
-    // ── SINGLE NAME: ask for price (with skip option) ───────────────────────
-    biz.sessionData.quickAddProduct      = biz.sessionData.quickAddProduct || {};
-    biz.sessionData.quickAddProduct.name = names[0];
+    biz.sessionData.quickAddProduct = biz.sessionData.quickAddProduct || {};
+    biz.sessionData.quickAddProduct.name = name;
     biz.sessionState = "invoice_quick_add_product_price";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: `📦 *${names[0]}*\n\n💰 Enter the price, or skip:`,
-      buttons: [
-        { id: "inv_skip_product_price", title: "⏭ Skip Pricing" },
-        { id: ACTIONS.MAIN_MENU,        title: "🏠 Main Menu"   }
-      ]
-    });
+    await sendPromptWithMenu(from, `📦 *${name}*\n\n💰 Enter price:`);
+    return true;
   }
 
   /* ===========================
      INVOICE: QUICK ADD PRODUCT (PRICE → SAVE → ASK QTY)
-     Price is OPTIONAL — user may tap "Skip Pricing" or type 0.
   =========================== */
   if (state === "invoice_quick_add_product_price") {
-    const isSkip = text === "inv_skip_product_price" || trimmed.toLowerCase() === "skip";
-    const price  = isSkip ? 0 : Number(trimmed);
-
-    if (!isSkip && (isNaN(price) || price < 0)) {
-      return sendButtons(from, {
-        text: "❌ Enter a valid price (e.g. 10) or skip:",
-        buttons: [
-          { id: "inv_skip_product_price", title: "⏭ Skip Pricing" },
-          { id: ACTIONS.MAIN_MENU,        title: "🏠 Main Menu"   }
-        ]
-      });
-    }
+    const price = Number(trimmed);
+    if (isNaN(price) || price <= 0) { await sendPromptWithMenu(from, "❌ Enter a valid price (e.g. 10):"); return true; }
 
     const name = biz.sessionData?.quickAddProduct?.name;
-    if (!name) {
-      biz.sessionState = "creating_invoice_add_items";
-      await saveBizSafe(biz);
-      await sendText(from, "⚠️ Product/Service name missing. Try again.");
-      return sendAddItemPrompt(from);
-    }
+    if (!name) { biz.sessionState = "creating_invoice_add_items"; await saveBizSafe(biz); await sendText(from, "⚠️ Product/Service name missing. Try again."); return true; }
 
+    // ✅ Use effective branch
     const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
+
     const product = await Product.create({
-      businessId: biz._id,
-      branchId:   effectiveBranchId,
-      name,
-      unitPrice:  price,
-      isActive:   true
+      businessId: biz._id, branchId: effectiveBranchId,
+      name, unitPrice: price, isActive: true
     });
 
-    biz.sessionData.lastItem        = { description: product.name, unit: product.unitPrice, source: "catalogue" };
-    biz.sessionData.expectingQty    = true;
-    biz.sessionData.itemMode        = "catalogue";
+    biz.sessionData.lastItem = { description: product.name, unit: product.unitPrice, source: "catalogue" };
+    biz.sessionData.expectingQty = true;
+    biz.sessionData.itemMode = "catalogue";
     biz.sessionData.quickAddProduct = null;
-    biz.sessionState                = "creating_invoice_add_items";
+    biz.sessionState = "creating_invoice_add_items";
     await saveBizSafe(biz);
 
-    const priceNote = price > 0
-      ? `@ *${formatMoney(price, biz.currency)}*`
-      : `_(price will be entered on invoice)_`;
-    await sendPromptWithMenu(from, `✅ Saved: *${product.name}* ${priceNote}\n\n🔢 Enter quantity (e.g. 1):`);
+    await sendPromptWithMenu(from, `✅ Saved: *${product.name}* @ *${product.unitPrice}*\n\n🔢 Enter quantity (e.g. 1):`);
     return true;
   }
 
@@ -1718,9 +1631,37 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
 
 
 // ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
+// ── Quick-pick from numbered catalogue: "3x2, 7x1, 12x5" ─────────────────
 if (state === "creating_invoice_pick_product") {
+  const entries = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  const picked = [];
+  const errors = [];
   const catalogue = biz.sessionData?.catalogueProducts || [];
-  const { picked, errors } = parsePickEntries(trimmed, catalogue);
+
+  for (const entry of entries) {
+    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)$/);
+    if (!match) { errors.push(entry); continue; }
+
+    const itemNum = parseInt(match[1], 10);
+    const qty = parseFloat(match[2]);
+
+    if (itemNum < 1 || itemNum > catalogue.length) {
+      errors.push(`#${itemNum} out of range`);
+      continue;
+    }
+    if (isNaN(qty) || qty <= 0) {
+      errors.push(`bad qty for #${itemNum}`);
+      continue;
+    }
+
+    const product = catalogue[itemNum - 1];
+    picked.push({
+      item: product.name,
+      qty,
+      unit: product.unitPrice || 0,
+      source: "catalogue"
+    });
+  }
 
   if (!picked.length) {
     await sendText(from,
@@ -1737,154 +1678,266 @@ Type *cancel* to go back.`
 
   biz.sessionData.items = [...(biz.sessionData.items || []), ...picked];
 
-  const errorNote       = errors.length ? `⚠️ Skipped: ${errors.join(", ")}` : "";
-  const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items);
+  const errorNote = errors.length
+    ? `\n⚠️ Skipped: ${errors.join(", ")}`
+    : "";
+
+  // Find items with no price (unit = 0)
+  const unpricedIndexes = biz.sessionData.items
+    .map((item, idx) => (Number(item.unit) === 0 ? idx : null))
+    .filter(idx => idx !== null);
 
   if (unpricedIndexes.length > 0) {
     biz.sessionData.unpricedIndexes = unpricedIndexes;
     biz.sessionState = "creating_invoice_enter_catalogue_prices";
     await saveBizSafe(biz);
 
-    const promptText = buildUnpricedPromptText(biz.sessionData.items, unpricedIndexes, biz.currency || "USD");
+    // Build numbered list of ONLY unpriced items clearly showing name + qty
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
+
+    // Example: "1.50, 3, 12.50"
+    const examplePrices = unpricedIndexes
+      .map((_, i) => ((i + 1) * 3 + 1.5).toFixed(2))
+      .join(", ");
+
     return sendButtons(from, {
-      text: (errorNote ? errorNote + "\n\n" : "") +
-            `✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*\n\n` +
-            promptText,
+      text:
+`✅ *${picked.length} item${picked.length === 1 ? "" : "s"} added*${errorNote}
+
+💰 *${unpricedIndexes.length} item${unpricedIndexes.length === 1 ? " needs" : "s need"} a unit price:*
+
+${unpricedLines}
+
+─────────────────
+Enter *all prices in order*, separated by commas:
+
+_Example:_ *${examplePrices}*
+
+That means:
+${unpricedIndexes.map((itemIdx, i) => {
+  const it = biz.sessionData.items[itemIdx];
+  const exPrice = ((i + 1) * 3 + 1.5).toFixed(2);
+  return `  ${i + 1}. ${it.item} → $${exPrice} each × ${it.qty} = $${(Number(exPrice) * it.qty).toFixed(2)}`;
+}).join("\n")}
+
+_Or enter one price to apply to ALL ${unpricedIndexes.length} items._`,
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
 
+  // All priced - go straight to preview
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
-  return sendDocPreview(from, biz, errorNote);
+  return sendInvoicePreview(from, biz, errorNote);
 }
 
-// ── Enter prices for zero-price catalogue items ────────────────────────────
-// Accepts: "5.50, 3.00, 12.50"  (one per unpriced item in order)
-//      or: "5.50"               (applies same price to ALL unpriced items)
+// ── Enter prices for zero-price catalogue items ───────────────────────────
 if (state === "creating_invoice_enter_catalogue_prices") {
   const unpricedIndexes = biz.sessionData.unpricedIndexes || [];
 
   if (!unpricedIndexes.length) {
     biz.sessionState = "creating_invoice_confirm";
     await saveBizSafe(biz);
-    return sendDocPreview(from, biz);
+    return sendInvoicePreview(from, biz, "");
   }
 
-  const result = applyBulkPrices(trimmed, biz.sessionData.items, unpricedIndexes);
+  // Parse input - accept: "5.50, 3, 12.50" OR single value "5.50" for all
+  const parts = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  const allValid = parts.every(p => !isNaN(Number(p)) && Number(p) >= 0);
 
-  if (!result.ok) {
-    const promptText = buildUnpricedPromptText(biz.sessionData.items, unpricedIndexes, biz.currency || "USD");
-    await sendText(from, result.message + "\n\n" + promptText);
+  if (!allValid || parts.length === 0) {
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
+    await sendText(from,
+`❌ Invalid prices. Enter numbers only, separated by commas.
+
+Items needing prices:
+${unpricedLines}
+
+Example: *5.50, 3.00, 12.50*
+Or one price for all: *5.50*`
+    );
     return true;
   }
 
+  // Apply prices: either one price for all, or one per item in order
+  if (parts.length === 1) {
+    // Single price → apply to ALL unpriced items
+    const price = Number(parts[0]);
+    for (const itemIdx of unpricedIndexes) {
+      biz.sessionData.items[itemIdx].unit = price;
+    }
+  } else if (parts.length === unpricedIndexes.length) {
+    // One price per item in order
+    unpricedIndexes.forEach((itemIdx, i) => {
+      biz.sessionData.items[itemIdx].unit = Number(parts[i]);
+    });
+  } else {
+    // Wrong count - show clear error
+    const unpricedLines = unpricedIndexes
+      .map((itemIdx, i) => {
+        const it = biz.sessionData.items[itemIdx];
+        return `${i + 1}. *${it.item}* × ${it.qty}`;
+      })
+      .join("\n");
+    await sendText(from,
+`❌ You sent *${parts.length} price${parts.length === 1 ? "" : "s"}* but there ${unpricedIndexes.length === 1 ? "is" : "are"} *${unpricedIndexes.length} item${unpricedIndexes.length === 1 ? "" : "s"}* needing prices.
+
+Send *${unpricedIndexes.length} prices* in order:
+${unpricedLines}
+
+Example: *${unpricedIndexes.map((_, i) => ((i + 1) * 3 + 1.5).toFixed(2)).join(", ")}*
+
+Or send *one price* to apply it to all ${unpricedIndexes.length} items.`
+    );
+    return true;
+  }
+
+  // All prices saved - clear state and go to preview
   biz.sessionData.unpricedIndexes = [];
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
-  return sendDocPreview(from, biz);
+  return sendInvoicePreview(from, biz, "");
+}
+
+// ── Enter prices for zero-price catalogue items ───────────────────────────
+if (state === "creating_invoice_enter_catalogue_prices") {
+  const price = Number(trimmed);
+  if (isNaN(price) || price < 0) {
+    await sendText(from, "❌ Invalid price. Enter a number like *5.50*:");
+    return true;
+  }
+
+  const unpricedIndexes = biz.sessionData.unpricedIndexes || [];
+  const cursor = biz.sessionData.unpricedCursor || 0;
+  const targetIdx = unpricedIndexes[cursor];
+
+  if (targetIdx === undefined) {
+    // Shouldn't happen but guard it
+    biz.sessionState = "creating_invoice_confirm";
+    await saveBizSafe(biz);
+    return _sendInvoicePreview(from, biz, "");
+  }
+
+  // Save the price
+  biz.sessionData.items[targetIdx].unit = price;
+  const nextCursor = cursor + 1;
+
+  if (nextCursor < unpricedIndexes.length) {
+    // More prices needed
+    biz.sessionData.unpricedCursor = nextCursor;
+    await saveBizSafe(biz);
+
+    const nextIdx = unpricedIndexes[nextCursor];
+    const nextItem = biz.sessionData.items[nextIdx];
+    const remaining = unpricedIndexes.length - nextCursor;
+
+    return sendButtons(from, {
+      text:
+`✅ Saved $${price.toFixed(2)}
+
+💰 *Next - ${remaining} item${remaining === 1 ? "" : "s"} left:*
+
+${nextIdx + 1}. *${nextItem.item}* × ${nextItem.qty}
+
+Enter unit price:`,
+      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
+    });
+  }
+
+  // All prices entered - go to preview
+  biz.sessionData.unpricedIndexes = [];
+  biz.sessionData.unpricedCursor = 0;
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return _sendInvoicePreview(from, biz, "");
 }
 
 
 
   if (state === "creating_invoice_add_items") {
-    // Show mode-choice if nothing is in flight
+
     if (biz.sessionData.itemMode === null && !biz.sessionData.lastItem && !biz.sessionData.expectingQty) {
       biz.sessionData.itemMode = "choose";
       await saveBizSafe(biz);
-      return sendAddItemPrompt(from);
-    }
-
-    // Waiting for quantity after item description was entered
-    if (biz.sessionData.expectingQty) {
-      const qty = Number(trimmed);
-      if (isNaN(qty) || qty <= 0) { await sendPromptWithMenu(from, "❌ Invalid quantity. Enter a number like 1:"); return true; }
-
-      const lastItemData = biz.sessionData.lastItem;
-      biz.sessionData.items.push({
-        item:   lastItemData.description,
-        qty,
-        unit:   lastItemData.unit ?? 0,
-        source: lastItemData.source || "custom"
-      });
-
-      const addedSource              = lastItemData.source;
-      biz.sessionData.lastItemSource = addedSource;
-      biz.sessionData.lastItem       = null;
-      biz.sessionData.expectingQty   = false;
-
-      const addedItem = biz.sessionData.items[biz.sessionData.items.length - 1];
-
-      // Catalogue item that already has a saved price → go straight to preview
-      if (addedSource !== "custom" && Number(addedItem.unit) > 0) {
-        biz.sessionState = "creating_invoice_confirm";
-        await saveBizSafe(biz);
-        return sendDocPreview(from, biz);
-      }
-
-      // Custom item OR catalogue item with no saved price → ask price (optional skip)
-      biz.sessionState           = "creating_invoice_enter_prices";
-      biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
-      await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: `💰 *Enter unit price for:*\n${addedItem.item}\n\n_Or skip — price can be added later._`,
-        buttons: [
-          { id: "inv_skip_item_price", title: "⏭ Skip Price" },
-          { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
-        ]
-      });
-    }
-
-    // Waiting for item description (custom mode)
-    if (!isNaN(Number(trimmed))) { await sendText(from, "Please send an item description (not a number)."); return true; }
-    biz.sessionData.lastItem     = { description: trimmed, source: "custom", unit: 0 };
-    biz.sessionData.expectingQty = true;
-    await saveBizSafe(biz);
-    await sendPromptWithMenu(from, `📦 *${trimmed}*\n\n🔢 Enter quantity (e.g. 1):`);
-    return true;
-  }
-
-  /* ===========================
-     PRICE ENTRY (custom items or catalogue items with no saved price)
-     Price is OPTIONAL — user can tap "Skip Price" or type 0.
-  =========================== */
-  if (state === "creating_invoice_enter_prices") {
-    const isSkip = text === "inv_skip_item_price" || trimmed.toLowerCase() === "skip";
-    const price  = isSkip ? 0 : Number(trimmed);
-
-    if (!isSkip && (isNaN(price) || price < 0)) {
       await sendButtons(from, {
-        text: "❌ Invalid price. Enter a number (e.g. 500) or skip:",
-        buttons: [
-          { id: "inv_skip_item_price", title: "⏭ Skip Price" },
-          { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
-        ]
+        text: "How would you like to add an item?",
+        buttons: [{ id: "inv_item_catalogue", title: "📦 Catalogue" }, { id: "inv_item_custom", title: "✍️ Custom item" }]
       });
       return true;
     }
 
-    const idx = biz.sessionData.priceIndex || 0;
-    biz.sessionData.items[idx].unit = price;
-    biz.sessionData.priceIndex      = idx + 1;
-
-    // Check if next item also needs a price
-    const nextIdx  = biz.sessionData.priceIndex;
-    const nextItem = biz.sessionData.items[nextIdx];
-    if (nextItem && Number(nextItem.unit) === 0) {
+    if (!biz.sessionData.expectingQty) {
+      if (!isNaN(Number(trimmed))) { await sendText(from, "Please send an item description (not a number)."); return true; }
+      biz.sessionData.lastItem = { description: trimmed, source: "custom" };
+      biz.sessionData.expectingQty = true;
       await saveBizSafe(biz);
-      return sendButtons(from, {
-        text: `💰 *Enter price for:*\n${nextItem.item}\n\n_Or skip:_`,
-        buttons: [
-          { id: "inv_skip_item_price", title: "⏭ Skip Price" },
-          { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
-        ]
-      });
+      await sendPromptWithMenu(from, `📦 *${trimmed}*\n\n🔢 Enter quantity (e.g. 1):`);
+      return true;
     }
 
-    biz.sessionState           = "creating_invoice_confirm";
+    const qty = Number(trimmed);
+    if (isNaN(qty) || qty <= 0) { await sendPromptWithMenu(from, "❌ Invalid quantity. Enter a number like 1:"); return true; }
+
+    biz.sessionData.items.push({
+      item: biz.sessionData.lastItem.description, qty,
+      unit: biz.sessionData.lastItem.unit ?? null, source: biz.sessionData.lastItem.source
+    });
+
+    biz.sessionData.lastItemSource = biz.sessionData.lastItem.source;
+    biz.sessionData.lastItem = null;
+    biz.sessionData.expectingQty = false;
+
+    const lastItem = biz.sessionData.items[biz.sessionData.items.length - 1];
+
+    if (biz.sessionData.lastItemSource === "custom") {
+      biz.sessionState = "creating_invoice_enter_prices";
+      biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
+      await saveBizSafe(biz);
+      return sendPromptWithMenu(from, `💰 *Enter unit price for:*\n${lastItem.item}`);
+    }
+
+    biz.sessionState = "creating_invoice_confirm";
+    await saveBizSafe(biz);
+
+    const summary = biz.sessionData.items.map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+    return sendInvoiceConfirmMenu(from, `🧾 File Summary\n\n${summary}`);
+  }
+
+  /* ===========================
+     PRICE ENTRY
+  ============================ */
+  if (state === "creating_invoice_enter_prices") {
+    const price = Number(trimmed);
+    if (isNaN(price) || price < 0) { await sendPromptWithMenu(from, "❌ Invalid price. Enter a number (e.g. 500):"); return true; }
+
+    biz.sessionData.priceIndex = biz.sessionData.priceIndex || 0;
+    biz.sessionData.items[biz.sessionData.priceIndex].unit = price;
+    biz.sessionData.priceIndex++;
+
+    if (biz.sessionData.priceIndex < biz.sessionData.items.length) {
+      await saveBizSafe(biz);
+      return sendPromptWithMenu(from, `💰 *Enter price for:*\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`);
+    }
+
+    biz.sessionState = "creating_invoice_confirm";
     biz.sessionData.priceIndex = 0;
     await saveBizSafe(biz);
-    return sendDocPreview(from, biz);
+
+    const summary = biz.sessionData.items.map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+    const docType = biz.sessionData.docType || "invoice";
+    const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+    return sendInvoiceConfirmMenu(from, `🧾 ${label} Summary\n\n${summary}`);
   }
 
   /* ===========================
@@ -1986,7 +2039,10 @@ console.log("INVOICE BRANCH DEBUG", {
     biz.sessionData.discountPercent = pct;
     biz.sessionState = "creating_invoice_confirm";
     await saveBizSafe(biz);
-    return sendDocPreview(from, biz, pct > 0 ? `💸 Discount set to ${pct}%` : "");
+    const summary = biz.sessionData.items.map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+    const docTypeD = biz.sessionData.docType || "invoice";
+    const labelD = docTypeD === "invoice" ? "Invoice" : docTypeD === "quote" ? "Quotation" : "Receipt";
+    return sendInvoiceConfirmMenu(from, `🧾 ${labelD} Summary\n\n${summary}\n\n💸 Discount: ${pct}%`);
   }
 
   /* ===========================
@@ -1996,10 +2052,13 @@ console.log("INVOICE BRANCH DEBUG", {
     const pct = Number(trimmed);
     if (isNaN(pct) || pct < 0 || pct > 100) { await sendPromptWithMenu(from, "❌ Invalid VAT. Enter a percent (0-100):"); return true; }
     biz.sessionData.vatPercent = pct;
-    biz.sessionData.applyVat   = pct > 0;
+    biz.sessionData.applyVat = pct > 0;
     biz.sessionState = "creating_invoice_confirm";
     await saveBizSafe(biz);
-    return sendDocPreview(from, biz, pct > 0 ? `🧾 VAT set to ${pct}%` : "");
+    const summary = biz.sessionData.items.map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+    const docTypeV = biz.sessionData.docType || "invoice";
+    const labelV = docTypeV === "invoice" ? "Invoice" : docTypeV === "quote" ? "Quotation" : "Receipt";
+    return sendInvoiceConfirmMenu(from, `🧾 ${labelV} Summary\n\n${summary}\n\n🧾 VAT: ${pct}%`);
   }
 
   /* ===========================

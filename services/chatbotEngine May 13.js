@@ -151,19 +151,6 @@ import {
 } from "./sellerChat.js";
  
 
-import {
-  parseCommaNames,
-  parsePickEntries,
-  findUnpricedIndexes,
-  buildUnpricedPromptText,
-  applyBulkPrices,
-  buildDocPreviewText,
-  sendDocPreview,
-  preserveSessionCore,
-  sendAddItemPrompt
-} from "./invoiceHelpers.js";
- 
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function msDays(ms) { return ms / (1000 * 60 * 60 * 24); }
@@ -7078,60 +7065,15 @@ Type amount or tap Full:`,
 
 
 
- if (a === "inv_generate_pdf") {
+
+  if (a === "inv_generate_pdf") {
     if (!biz) return sendMainMenu(from);
-    // Guard: any item still priced at 0 cannot produce a valid PDF total
-    const zeroItems = (biz.sessionData.items || []).filter(i => Number(i.unit) === 0);
-    if (zeroItems.length) {
-      const names = zeroItems.map(i => `• ${i.item}`).join("\n");
-      return sendButtons(from, {
-        text:
-          `⚠️ *${zeroItems.length} item${zeroItems.length === 1 ? "" : "s"} still need a price:*\n\n` +
-          `${names}\n\nPlease set prices before generating the PDF.`,
-        buttons: [
-          { id: "inv_set_item_prices", title: "💰 Set prices" },
-          { id: "inv_cancel",          title: "❌ Cancel"      }
-        ]
-      });
-    }
+    const summary = biz.sessionData.items
+      .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`).join("\n");
+    await sendText(from, `📄 Generating PDF...\n\n${summary}`);
     await continueTwilioFlow({ from, text: "2" });
     return;
   }
- 
-
-   if (a === "inv_set_item_prices") {
-    if (!biz) return sendMainMenu(from);
-    const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items || []);
-    if (!unpricedIndexes.length) {
-      // All items now have prices — proceed directly to PDF
-      await continueTwilioFlow({ from, text: "2" });
-      return;
-    }
-    biz.sessionData.unpricedIndexes = unpricedIndexes;
-    biz.sessionState = "creating_invoice_enter_catalogue_prices";
-    await saveBizSafe(biz);
-    const promptText = buildUnpricedPromptText(biz.sessionData.items, unpricedIndexes, biz.currency || "USD");
-    return sendButtons(from, {
-      text: promptText,
-      buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
-    });
-  }
- 
-  // Skip price button from invoice_quick_add_product_price state
-  if (a === "inv_skip_product_price") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_skip_product_price" });
-    return;
-  }
- 
-  // Skip price button from creating_invoice_enter_prices state
-  if (a === "inv_skip_item_price") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_skip_item_price" });
-    return;
-  }
- 
- 
 
   if (a === "inv_set_discount") {
     if (!biz) return sendMainMenu(from);
@@ -7273,125 +7215,6 @@ _Add all prices automatically_`
       buttons: navBtns.slice(0, 3)
     });
   }
-
-
-if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
-  if (!biz) return sendMainMenu(from);
- 
-  const query = { businessId: biz._id, isActive: true };
-  let branchFilter = null;
-  if (caller && ["clerk", "manager"].includes(caller.role) && caller.branchId) {
-    branchFilter = caller.branchId;
-  } else if (caller?.role === "owner" && biz.sessionData?.targetBranchId) {
-    branchFilter = biz.sessionData.targetBranchId;
-  }
-  if (branchFilter) {
-    query.$or = [
-      { branchId: branchFilter },
-      { branchId: null },
-      { branchId: { $exists: false } }
-    ];
-  }
- 
-  const dbProducts = await Product.find(query).sort({ name: 1 }).lean();
- 
-  // Merge supplier profile rates + listed products (unchanged logic)
-  let supplierItems = [];
-  const _supplierProf = await SupplierProfile.findOne({ phone }).lean();
-  if (_supplierProf) {
-    for (const rate of (_supplierProf.rates || [])) {
-      if (!rate.service) continue;
-      const _priceMatch = String(rate.rate || "").match(/[\d.]+/);
-      const _price = _priceMatch ? parseFloat(_priceMatch[0]) : 0;
-      const _alreadyIn = dbProducts.some(p => p.name.toLowerCase() === rate.service.toLowerCase());
-      if (!_alreadyIn) {
-        supplierItems.push({ _id: `sp_rate_${rate._id || rate.service}`, name: rate.service, unitPrice: _price, source: "profile" });
-      }
-    }
-    const _listedBlob = (_supplierProf.listedProducts || [])
-      .flatMap(p => String(p || "").split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean));
-    for (const lp of _listedBlob) {
-      const _alreadyInDb    = dbProducts.some(p => p.name.toLowerCase() === lp.toLowerCase());
-      const _alreadyInRates = supplierItems.some(s => s.name.toLowerCase() === lp.toLowerCase());
-      if (!_alreadyInDb && !_alreadyInRates) {
-        supplierItems.push({ _id: `sp_listed_${lp}`, name: lp, unitPrice: 0, source: "profile" });
-      }
-    }
-  }
- 
-  const allProducts = [
-    ...dbProducts.map(p => ({ _id: p._id.toString(), name: p.name, unitPrice: p.unitPrice || 0, source: "db" })),
-    ...supplierItems
-  ];
- 
-  if (!allProducts.length) {
-    biz.sessionState = "creating_invoice_add_items";
-    biz.sessionData.itemMode = "choose_catalogue_or_custom";
-    await saveBizSafe(biz);
-    return sendButtons(from, {
-      text:
-        "📦 No items in catalogue yet.\n\n" +
-        "_Add products once, reuse them forever._\n\nWhat would you like to do?",
-      buttons: [
-        { id: "inv_add_new_product", title: "➕ Add item(s)" },
-        { id: "inv_item_custom",     title: "✍️ Custom item"  }
-      ]
-    });
-  }
- 
-  const PAGE_SIZE  = 20;
-  const page       = a.startsWith("inv_cat_page_") ? parseInt(a.replace("inv_cat_page_", ""), 10) || 0 : 0;
-  const totalPages = Math.ceil(allProducts.length / PAGE_SIZE);
-  const start      = page * PAGE_SIZE;
-  const visible    = allProducts.slice(start, start + PAGE_SIZE);
- 
-  // Store full catalogue in session for quick-pick lookup
-  biz.sessionState = "creating_invoice_pick_product";
-  biz.sessionData.catalogueProducts = allProducts.map(p => ({
-    _id: p._id, name: p.name, unitPrice: p.unitPrice || 0, source: p.source || "db"
-  }));
-  biz.sessionData.cataloguePage = page;
-  await saveBizSafe(biz);
- 
-  // Build numbered list — items with no price show _(no price)_ tag
-  const numbered = visible.map((p, i) => {
-    const num      = start + i + 1;
-    const hasPrice = Number(p.unitPrice) > 0;
-    const priceTag = hasPrice
-      ? ` — ${formatMoney(p.unitPrice, biz.currency)}`
-      : " — _(no price)_";
-    return `${num}. *${p.name}*${priceTag}`;
-  }).join("\n");
- 
-  const catalogueLabel = supplierItems.length > 0 ? "📦 *Your Products & Services*" : "📦 *Product Catalogue*";
- 
-  await sendText(from,
-`${catalogueLabel}
-Page ${page + 1} of ${totalPages} · ${allProducts.length} item${allProducts.length === 1 ? "" : "s"}
- 
-${numbered}
- 
-─────────────────
-*Quick-pick:* type *number × quantity*
-_One item:_   3x2
-_Multiple:_   3x2, 7x1, 12x5
-_No price?_   you'll be asked after picking`
-  );
- 
-  const navBtns = [];
-  if (page > 0)              navBtns.push({ id: `inv_cat_page_${page - 1}`, title: "⬅ Prev" });
-  if (page < totalPages - 1) navBtns.push({ id: `inv_cat_page_${page + 1}`, title: "➡ Next" });
-  navBtns.push({ id: "inv_item_custom", title: "✍️ Custom item" });
- 
-  return sendButtons(from, {
-    text: "Pick items by number or tap an option:",
-    buttons: navBtns.slice(0, 3)
-  });
-}
- 
-
-
-
 
 if (a === "add_another_expense") {
     if (!biz) return sendMainMenu(from);
@@ -7547,20 +7370,13 @@ if (a === "expense_generate_receipt") {
   }
 
 
- if (a === "inv_add_new_product") {
+  if (a === "inv_add_new_product") {
     if (!biz) return sendMainMenu(from);
     biz.sessionState = "invoice_quick_add_product_name";
-    biz.sessionData  = { ...biz.sessionData, itemMode: "catalogue", quickAddProduct: {} };
+    biz.sessionData = { ...biz.sessionData, itemMode: "catalogue", quickAddProduct: {} };
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text:
-        "📦 *Enter product/service name:*\n\n" +
-        "_Add multiple at once with commas:_\n" +
-        "_house wiring, solar installation, geyser repair_",
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
+    return sendButtons(from, { text: "📦 *Enter product/service name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
- 
 
   if (a === "add_another_product") {
     if (!biz) return sendMainMenu(from);
@@ -7569,14 +7385,6 @@ if (a === "expense_generate_receipt") {
     await saveBizSafe(biz);
     return sendButtons(from, { text: "📦 *Enter product name:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
-
-   if (a === "product_skip_price") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "product_skip_price" });
-    return;
-  }
- 
- 
 
   if (a === "inv_item_custom") {
     if (!biz) return sendMainMenu(from);
@@ -8004,119 +7812,47 @@ Type *done* to save`,
 
   // ── Product text input states ──────────────────────────────────────────────
 
- if (biz?.sessionState === "product_add_name") {
-    const raw = text?.trim();
-    if (!raw || raw.length < 2) {
-      await sendButtons(from, {
-        text:
-          "❌ Enter a valid product/service name.\n\n" +
-          "_Add multiple at once with commas:_\n" +
-          "_house wiring, solar installation, geyser repair_",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
+  if (biz?.sessionState === "product_add_name") {
+    const name = text?.trim();
+    if (!name || name.length < 2) {
+      await sendButtons(from, { text: "❌ Enter a valid product name:", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
       return;
     }
- 
-    const names = parseCommaNames(raw);
-    if (names.length === 0) {
-      await sendButtons(from, {
-        text: "❌ Enter at least one name (minimum 2 characters):",
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-      return;
-    }
- 
-    if (names.length > 1) {
-      // ── BULK MODE: save all with no price required ────────────────────
-      const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-      const savedProducts = await Promise.all(
-        names.map(name =>
-          Product.create({
-            businessId: biz._id,
-            branchId:   effectiveBranchId,
-            name,
-            unitPrice:  0,
-            isActive:   true,
-            createdBy:  phone
-          })
-        )
-      );
- 
-      const savedBranchId  = biz.sessionData?.targetBranchId;
-      biz.sessionState     = "product_add_name_or_menu";
-      biz.sessionData      = { targetBranchId: savedBranchId };
-      await saveBizSafe(biz);
- 
-      const lines = savedProducts.map((p, i) => `✅ ${i + 1}. ${p.name}`).join("\n");
-      await sendText(from,
-        `📦 *${savedProducts.length} item${savedProducts.length === 1 ? "" : "s"} saved*\n\n` +
-        `${lines}\n\n` +
-        `_Prices not set — you can add them when creating invoices or quotes._`
-      );
-      return sendButtons(from, {
-        text: "What would you like to do next?",
-        buttons: [
-          { id: "add_another_product", title: "➕ Add more items" },
-          { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu"      }
-        ]
-      });
-    }
- 
-    // ── SINGLE NAME: go to optional price step ────────────────────────
-    biz.sessionData.productName = names[0];
-    biz.sessionState            = "product_add_price";
+    biz.sessionData.productName = name;
+    biz.sessionState = "product_add_price";
     await saveBizSafe(biz);
-    return sendButtons(from, {
-      text: `📦 *${names[0]}*\n\n💰 Enter price, or skip:`,
-      buttons: [
-        { id: "product_skip_price", title: "⏭ Skip Pricing" },
-        { id: ACTIONS.MAIN_MENU,    title: "🏠 Main Menu"   }
-      ]
-    });
+    return sendButtons(from, { text: `📦 *${name}*\n\n💰 *Enter product price:*`, buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
- 
 
- if (biz?.sessionState === "product_add_price") {
-    const isSkip = text === "product_skip_price" || text?.trim().toLowerCase() === "skip";
-    const price  = isSkip ? 0 : Number(text?.trim());
- 
-    if (!isSkip && (isNaN(price) || price < 0)) {
-      await sendButtons(from, {
-        text: "❌ Enter a valid price (e.g. 50) or skip:",
-        buttons: [
-          { id: "product_skip_price", title: "⏭ Skip Pricing" },
-          { id: ACTIONS.MAIN_MENU,    title: "🏠 Main Menu"   }
-        ]
-      });
+  if (biz?.sessionState === "product_add_price") {
+    const price = Number(text);
+    if (isNaN(price) || price <= 0) {
+      await sendButtons(from, { text: "❌ Enter a valid price (e.g. 50):", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
       return;
     }
- 
+
     const effectiveBranchId = getEffectiveBranchId(caller, biz.sessionData);
-    const savedName         = biz.sessionData.productName;
- 
+
     await Product.create({
       businessId: biz._id,
-      branchId:   effectiveBranchId,
-      name:       savedName,
-      unitPrice:  price,
-      isActive:   true,
-      createdBy:  phone
+      branchId: effectiveBranchId,
+      name: biz.sessionData.productName,
+      unitPrice: price,
+      isActive: true,
+      createdBy: phone
     });
- 
-    const savedBranchId  = biz.sessionData?.targetBranchId;
-    biz.sessionState     = "product_add_name_or_menu";
-    biz.sessionData      = { targetBranchId: savedBranchId };
+
+    const savedName = biz.sessionData.productName;
+    biz.sessionState = "product_add_name_or_menu";
+    biz.sessionData = { targetBranchId: biz.sessionData.targetBranchId }; // preserve for next product
     await saveBizSafe(biz);
- 
-    const priceNote = price > 0
-      ? `at *${formatMoney(price, biz.currency)}*`
-      : `_(no price — can be set on invoices/quotes)_`;
-    await sendText(from, `✅ *${savedName}* saved ${priceNote}`);
+
+    await sendText(from, `✅ *${savedName}* saved at *${formatMoney(price, biz.currency)}*`);
     return sendButtons(from, {
       text: "What would you like to do next?",
       buttons: [
-        { id: "add_another_product", title: "➕ Add more items" },
-        { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu"      }
+        { id: "add_another_product", title: "➕ Add Product" },
+        { id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }
       ]
     });
   }
