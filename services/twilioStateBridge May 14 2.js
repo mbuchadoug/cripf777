@@ -2157,13 +2157,11 @@ console.log("INVOICE BRANCH DEBUG", {
       const numbered = catalogue
         .map((p, i) => `${i + 1}. *${p.name}* — ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
         .join("\n");
-      const errLine = errors.length ? `\n\n⚠️ Skipped: ${errors.join(", ")}` : "";
-      await sendText(from,
-        `❌ Couldn't read that.${errLine}\n\n${numbered}\n\n` +
-        `Enter *item number × price*:\n_1 x 12, 2 x 35, 3 x 28_`
-      );
       return sendButtons(from, {
-        text: "Type your price updates above, or cancel:",
+        text:
+          `❌ Couldn't read that.\n\n${numbered}\n\n` +
+          `Enter *item number × price*:\n_1 x 12, 2 x 35, 3 x 28_` +
+          (errors.length ? `\n\nSkipped: ${errors.join(", ")}` : ""),
         buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
       });
     }
@@ -2176,9 +2174,8 @@ console.log("INVOICE BRANCH DEBUG", {
     const { buildPriceUpdatePreviewText } = await import("./invoiceHelpers.js");
     const preview = buildPriceUpdatePreviewText(updates, biz.currency, false);
     const errNote = errors.length ? `\n\n⚠️ Skipped: ${errors.join(", ")}` : "";
-    await sendText(from, preview + errNote);
     return sendButtons(from, {
-      text: "Confirm or re-enter:",
+      text: preview + errNote,
       buttons: [
         { id: "prod_prices_confirm_save", title: "✅ Save Prices"  },
         { id: "prod_prices_confirm_edit", title: "✏️ Re-enter"     },
@@ -2210,9 +2207,8 @@ console.log("INVOICE BRANCH DEBUG", {
       const numbered = catalogue
         .map((p, i) => `${i + 1}. *${p.name}* — ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
         .join("\n");
-      await sendText(from, `✏️ *Re-enter prices:*\n\n${numbered}\n\nFormat: *1 x 12, 2 x 35*`);
       return sendButtons(from, {
-        text: "Type your price updates above, or cancel:",
+        text: `✏️ *Re-enter prices:*\n\n${numbered}\n\nFormat: *1 x 12, 2 x 35*`,
         buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
       });
     }
@@ -2272,14 +2268,12 @@ console.log("INVOICE BRANCH DEBUG", {
           return `${i + 1}. *${p.name}* — ${rate}`;
         })
         .join("\n");
-      const errLine = errors.length ? `\n\n⚠️ Skipped: ${errors.join(", ")}` : "";
-      await sendText(from,
-        `❌ Couldn't read that.${errLine}\n\n${numbered}\n\n` +
-        `Format: *1 x 20/hour, 2 x 50/job, 3 x 10/meter*\n\n` +
-        `Rate types: /job /hour /day /meter /room /visit /project`
-      );
       return sendButtons(from, {
-        text: "Type your rate updates above, or cancel:",
+        text:
+          `❌ Couldn't read that.\n\n${numbered}\n\n` +
+          `Format: *1 x 20/hour, 2 x 50/job, 3 x 10/meter*\n\n` +
+          `Rate types: /job /hour /day /meter /room /visit /project` +
+          (errors.length ? `\n\nSkipped: ${errors.join(", ")}` : ""),
         buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
       });
     }
@@ -2314,9 +2308,8 @@ console.log("INVOICE BRANCH DEBUG", {
     const { buildPriceUpdatePreviewText } = await import("./invoiceHelpers.js");
     const preview = buildPriceUpdatePreviewText(updates, biz.currency, true);
     const errNote = errors.length ? `\n\n⚠️ Skipped: ${errors.join(", ")}` : "";
-    await sendText(from, preview + errNote);
     return sendButtons(from, {
-      text: "Confirm or re-enter:",
+      text: preview + errNote,
       buttons: [
         { id: "svc_rates_confirm_save", title: "✅ Save Rates"  },
         { id: "svc_rates_confirm_edit", title: "✏️ Re-enter"    },
@@ -2370,9 +2363,8 @@ console.log("INVOICE BRANCH DEBUG", {
 
     const { buildPriceUpdatePreviewText } = await import("./invoiceHelpers.js");
     const preview = buildPriceUpdatePreviewText(updates, biz.currency, true);
-    await sendText(from, preview);
     return sendButtons(from, {
-      text: "Confirm or re-enter:",
+      text: preview,
       buttons: [
         { id: "svc_rates_confirm_save", title: "✅ Save Rates" },
         { id: "svc_rates_confirm_edit", title: "✏️ Re-enter"   },
@@ -2404,9 +2396,8 @@ console.log("INVOICE BRANCH DEBUG", {
       const numbered  = catalogue
         .map((p, i) => `${i + 1}. *${p.name}*`)
         .join("\n");
-      await sendText(from, `✏️ *Re-enter service rates:*\n\n${numbered}\n\nFormat: *1 x 20/hour, 2 x 50/job*`);
       return sendButtons(from, {
-        text: "Type your rate updates above, or cancel:",
+        text: `✏️ *Re-enter service rates:*\n\n${numbered}\n\nFormat: *1 x 20/hour, 2 x 50/job*`,
         buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
       });
     }

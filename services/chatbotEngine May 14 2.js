@@ -3352,24 +3352,6 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("view_quotes_page_") ||
         a.startsWith("view_receipts_page_") ||
       a.startsWith("view_all_products_page_") ||
-      a === "view_all_products" ||
-      a === "prod_update_prices" ||
-      a === "prod_update_rates" ||
-      a === "prod_add_products" ||
-      a === "prod_add_services" ||
-      a === "prod_preview_save" ||
-      a === "prod_preview_edit" ||
-      a === "prod_preview_cancel" ||
-      a === "prod_prices_confirm_save" ||
-      a === "prod_prices_confirm_edit" ||
-      a === "svc_rates_confirm_save" ||
-      a === "svc_rates_confirm_edit" ||
-      a === "svc_rate_per_job" ||
-      a === "svc_rate_per_hour" ||
-      a === "svc_rate_per_day" ||
-      a === "svc_rate_per_meter" ||
-      a === "svc_rate_per_room" ||
-      a === "svc_rate_per_visit" ||
       a === "suppliers_home" ||
       a === "back" ||
       a === "suppliers_home" ||
@@ -7662,17 +7644,14 @@ if (a === "expense_generate_receipt") {
     };
     await saveBizSafe(biz);
  
-    // sendText for the list (no 1024-char limit), then sendButtons for the action
-    await sendText(from,
-      `💰 *Update Product Prices*\n\n${numbered}\n\n` +
-      `─────────────────\n` +
-      `Type *item number × price*, separated by commas:\n\n` +
-      `_1 x 12_\n` +
-      `_1 x 12, 2 x 35, 3 x 28_\n\n` +
-      `This means: item number × price`
-    );
     return sendButtons(from, {
-      text: "Type your price updates above, or cancel:",
+      text:
+        `💰 *Update Product Prices*\n\n${numbered}\n\n` +
+        `─────────────────\n` +
+        `Type *item number × price*, separated by commas:\n\n` +
+        `_1 x 12_\n` +
+        `_1 x 12, 2 x 35, 3 x 28_\n\n` +
+        `This means: item number × price`,
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
@@ -7722,18 +7701,15 @@ if (a === "expense_generate_receipt") {
     };
     await saveBizSafe(biz);
  
-    // sendText for the list (no 1024-char limit), then sendButtons for the action
-    await sendText(from,
-      `💰 *Update Service Rates*\n\n${numbered}\n\n` +
-      `─────────────────\n` +
-      `Type *item number × price/rate*, separated by commas:\n\n` +
-      `_1 x 20/hour_\n` +
-      `_1 x 20/hour, 2 x 50/job, 3 x 10/meter_\n\n` +
-      `Rate types: /job /hour /day /meter /room /visit /project\n\n` +
-      `_If you leave out the rate type, we'll ask you._`
-    );
     return sendButtons(from, {
-      text: "Type your rate updates above, or cancel:",
+      text:
+        `💰 *Update Service Rates*\n\n${numbered}\n\n` +
+        `─────────────────\n` +
+        `Type *item number × price/rate*, separated by commas:\n\n` +
+        `_1 x 20/hour_\n` +
+        `_1 x 20/hour, 2 x 50/job, 3 x 10/meter_\n\n` +
+        `Rate types: /job /hour /day /meter /room /visit /project\n\n` +
+        `_If you leave out the rate type, we'll ask you._`,
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
