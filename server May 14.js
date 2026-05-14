@@ -58,7 +58,6 @@ import portalRoutes from "./routes/portal.js";
 import scoiDownloadRoutes from "./routes/scoi_download.js";
 import AuditPurchase from "./models/auditPurchase.js";
 import PlacementAudit from "./models/placementAudit.js";
-import SpecialScoiAudit from "./models/specialScoiAudit.js";
 
 import { trackPageView } from "./middleware/analyticsTracker.js";
 import adminAnalyticsRoutes from "./routes/admin_analytics.js";
