@@ -990,4 +990,4 @@ export async function sendSchoolMoreOptionsMenu(to, schoolDoc) {
     { id: "school_pay_plan",           title: "⬆️ Upgrade / Renew Plan" },
     { id: "school_account",            title: "⬅ Back" }
   ]);
-}s
+}
