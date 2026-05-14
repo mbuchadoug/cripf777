@@ -319,8 +319,8 @@
       </select>
       <select id="priceFilter">
         <option value="">Any Price</option>
-        <option value="149">£149 – Placement</option>
-        <option value="299">£299 – Special</option>
+        <option value="149">$149 – Placement</option>
+        <option value="299">$299 – Special</option>
       </select>
       <select id="sortSelect">
         <option value="newest">Newest First</option>
@@ -369,10 +369,10 @@
           <input type="radio" name="sidePrice" value="" checked> <label>All Prices</label>
         </label>
         <label class="filter-option">
-          <input type="radio" name="sidePrice" value="149"> <label>£149 – Placement</label>
+          <input type="radio" name="sidePrice" value="149"> <label>$149 – Placement</label>
         </label>
         <label class="filter-option">
-          <input type="radio" name="sidePrice" value="299"> <label>£299 – Special</label>
+          <input type="radio" name="sidePrice" value="299"> <label>$299 – Special</label>
         </label>
       </div>
 
@@ -442,7 +442,7 @@
         </div>
         <div class="card-foot">
           <div class="price-block">
-            <div class="price-amount">£{{this.displayPrice}}</div>
+            <div class="price-amount">${{this.displayPrice}}</div>
             <div class="price-lbl">One-time purchase</div>
           </div>
           <form method="POST" action="/scoi/checkout" style="margin:0">
@@ -711,7 +711,7 @@
     let count = 0;
     if (q) { addChip(`Search: "${q}"`, () => { searchInput.value = ''; applyFilters(); }); count++; }
     if (kind) { addChip(kind === 'special' ? 'Special Reports' : 'Placement Audits', () => { categoryFilter.value = ''; setRadio('sideType', ''); applyFilters(); }); count++; }
-    if (price) { addChip(`£${price}`, () => { priceFilter.value = ''; setRadio('sidePrice', ''); applyFilters(); }); count++; }
+    if (price) { addChip(`$${price}`, () => { priceFilter.value = ''; setRadio('sidePrice', ''); applyFilters(); }); count++; }
 
     const badge = document.getElementById('activeFilterCount');
     if (badge) {
