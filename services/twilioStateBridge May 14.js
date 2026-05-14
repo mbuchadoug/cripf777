@@ -1664,7 +1664,7 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
 
   /* ===========================
      INVOICE: QUICK ADD PRODUCT (PRICE → SAVE → ASK QTY)
-     Price is OPTIONAL — user may tap "Skip Pricing" or type 0.
+     Price is OPTIONAL - user may tap "Skip Pricing" or type 0.
   =========================== */
   if (state === "invoice_quick_add_product_price") {
     const isSkip = text === "inv_skip_product_price" || trimmed.toLowerCase() === "skip";
@@ -1827,7 +1827,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: `💰 *Enter unit price for:*\n${addedItem.item}\n\n_Or skip — price can be added later._`,
+        text: `💰 *Enter unit price for:*\n${addedItem.item}\n\n_Or skip - price can be added later._`,
         buttons: [
           { id: "inv_skip_item_price", title: "⏭ Skip Price" },
           { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
@@ -1846,7 +1846,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
 
   /* ===========================
      PRICE ENTRY (custom items or catalogue items with no saved price)
-     Price is OPTIONAL — user can tap "Skip Price" or type 0.
+     Price is OPTIONAL - user can tap "Skip Price" or type 0.
   =========================== */
   if (state === "creating_invoice_enter_prices") {
     const isSkip = text === "inv_skip_item_price" || trimmed.toLowerCase() === "skip";

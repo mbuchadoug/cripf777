@@ -13,7 +13,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
       : audit;
 
   if (!safeAudit || !safeAudit._id) {
-    throw new Error("Invalid audit object — missing _id");
+    throw new Error("Invalid audit object - missing _id");
   }
 
   // ── 2. Determine which view template to use ─────────────────────────────────
@@ -41,7 +41,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
       templateName,
       {
         audit:  safeAudit,
-        layout: false   // no wrapper layout — clean standalone HTML for PDF
+        layout: false   // no wrapper layout - clean standalone HTML for PDF
       },
       (err, rendered) => (err ? reject(err) : resolve(rendered))
     );
@@ -52,7 +52,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
   try {
     puppeteer = (await import("puppeteer")).default;
   } catch (err) {
-    throw new Error("Puppeteer not available — PDF generation disabled");
+    throw new Error("Puppeteer not available - PDF generation disabled");
   }
 
   const browser = await puppeteer.launch({
@@ -72,7 +72,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
     //  that falls back to system serif/sans so the layout matches.)
     await page.addStyleTag({
       content: `
-        /* PDF font fallbacks — mirrors the view's font stack */
+        /* PDF font fallbacks - mirrors the view's font stack */
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap');
       `
     });
@@ -91,7 +91,7 @@ export async function generateScoiAuditPdf({ audit, req }) {
       headerTemplate: `
         <div style="font-family:Inter,system-ui,sans-serif;font-size:9px;color:#94A3B8;
                     width:100%;padding:0 40px;box-sizing:border-box;text-align:right;">
-          CRIPFCnt SCOI Framework — Confidential Intelligence Report
+          CRIPFCnt SCOI Framework - Confidential Intelligence Report
         </div>`,
       footerTemplate: `
         <div style="font-family:Inter,system-ui,sans-serif;font-size:9px;color:#94A3B8;

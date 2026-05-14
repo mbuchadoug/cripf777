@@ -4686,10 +4686,10 @@ await UserSession.findOneAndUpdate(
               (_isTourismAddr
                 ? `📍 *Where will you be when the service starts?*\n\n` +
                   `_e.g. Kariba marina, Binga Harbour, Hwange main gate_\n\n` +
-                  `Or tap Skip — you can share your exact location with the operator later.`
+                  `Or tap Skip - you can share your exact location with the operator later.`
                 : `📍 *Where should the service provider come?*\n\n` +
                   `_e.g. 24 Mabelreign Drive, Harare_\n\n` +
-                  `Or tap Skip — share your address directly with the provider.`),
+                  `Or tap Skip - share your address directly with the provider.`),
             buttons: [
               { id: "sup_skip_service_address", title: "⏭ Skip (share later)" }
             ]
@@ -7103,7 +7103,7 @@ Type amount or tap Full:`,
     if (!biz) return sendMainMenu(from);
     const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items || []);
     if (!unpricedIndexes.length) {
-      // All items now have prices — proceed directly to PDF
+      // All items now have prices - proceed directly to PDF
       await continueTwilioFlow({ from, text: "2" });
       return;
     }
@@ -7353,13 +7353,13 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
   biz.sessionData.cataloguePage = page;
   await saveBizSafe(biz);
  
-  // Build numbered list — items with no price show _(no price)_ tag
+  // Build numbered list - items with no price show _(no price)_ tag
   const numbered = visible.map((p, i) => {
     const num      = start + i + 1;
     const hasPrice = Number(p.unitPrice) > 0;
     const priceTag = hasPrice
-      ? ` — ${formatMoney(p.unitPrice, biz.currency)}`
-      : " — _(no price)_";
+      ? ` - ${formatMoney(p.unitPrice, biz.currency)}`
+      : " - _(no price)_";
     return `${num}. *${p.name}*${priceTag}`;
   }).join("\n");
  
@@ -8051,7 +8051,7 @@ Type *done* to save`,
       await sendText(from,
         `📦 *${savedProducts.length} item${savedProducts.length === 1 ? "" : "s"} saved*\n\n` +
         `${lines}\n\n` +
-        `_Prices not set — you can add them when creating invoices or quotes._`
+        `_Prices not set - you can add them when creating invoices or quotes._`
       );
       return sendButtons(from, {
         text: "What would you like to do next?",
@@ -8110,7 +8110,7 @@ Type *done* to save`,
  
     const priceNote = price > 0
       ? `at *${formatMoney(price, biz.currency)}*`
-      : `_(no price — can be set on invoices/quotes)_`;
+      : `_(no price - can be set on invoices/quotes)_`;
     await sendText(from, `✅ *${savedName}* saved ${priceNote}`);
     return sendButtons(from, {
       text: "What would you like to do next?",

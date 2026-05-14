@@ -4706,10 +4706,10 @@ await UserSession.findOneAndUpdate(
               (_isTourismAddr
                 ? `📍 *Where will you be when the service starts?*\n\n` +
                   `_e.g. Kariba marina, Binga Harbour, Hwange main gate_\n\n` +
-                  `Or tap Skip — you can share your exact location with the operator later.`
+                  `Or tap Skip - you can share your exact location with the operator later.`
                 : `📍 *Where should the service provider come?*\n\n` +
                   `_e.g. 24 Mabelreign Drive, Harare_\n\n` +
-                  `Or tap Skip — share your address directly with the provider.`),
+                  `Or tap Skip - share your address directly with the provider.`),
             buttons: [
               { id: "sup_skip_service_address", title: "⏭ Skip (share later)" }
             ]
@@ -7123,7 +7123,7 @@ Type amount or tap Full:`,
     if (!biz) return sendMainMenu(from);
     const unpricedIndexes = findUnpricedIndexes(biz.sessionData.items || []);
     if (!unpricedIndexes.length) {
-      // All items now have prices — proceed directly to PDF
+      // All items now have prices - proceed directly to PDF
       await continueTwilioFlow({ from, text: "2" });
       return;
     }
@@ -7373,13 +7373,13 @@ if (a === "inv_item_catalogue" || a.startsWith("inv_cat_page_")) {
   biz.sessionData.cataloguePage = page;
   await saveBizSafe(biz);
  
-  // Build numbered list — items with no price show _(no price)_ tag
+  // Build numbered list - items with no price show _(no price)_ tag
   const numbered = visible.map((p, i) => {
     const num      = start + i + 1;
     const hasPrice = Number(p.unitPrice) > 0;
     const priceTag = hasPrice
-      ? ` — ${formatMoney(p.unitPrice, biz.currency)}`
-      : " — _(no price)_";
+      ? ` - ${formatMoney(p.unitPrice, biz.currency)}`
+      : " - _(no price)_";
     return `${num}. *${p.name}*${priceTag}`;
   }).join("\n");
  
@@ -7652,7 +7652,7 @@ if (a === "expense_generate_receipt") {
  
     const numbered = products.map((p, i) => {
       const price = p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_";
-      return `${i + 1}. *${p.name}* — ${price}`;
+      return `${i + 1}. *${p.name}* - ${price}`;
     }).join("\n");
  
     biz.sessionState = "product_update_prices";
@@ -7707,7 +7707,7 @@ if (a === "expense_generate_receipt") {
       const rate = p.unitPrice > 0 && p.rateUnit
         ? `${formatMoney(p.unitPrice, biz.currency)}/${p.rateUnit}`
         : p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no rate)_";
-      return `${i + 1}. *${p.name}* 🔧 — ${rate}`;
+      return `${i + 1}. *${p.name}* 🔧 - ${rate}`;
     }).join("\n");
  
     biz.sessionState = "service_update_rates";
@@ -7868,7 +7868,7 @@ if (a === "expense_generate_receipt") {
       : "_cement, river sand, pit sand, bricks_";
     return sendButtons(from, {
       text:
-        `📦 *Add ${label} — ${branch?.name || "Branch"}*\n\n` +
+        `📦 *Add ${label} - ${branch?.name || "Branch"}*\n\n` +
         `Type one or many names separated by commas:\n\n${hint}\n\n` +
         `You do not need to add prices now.`,
       buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
@@ -17254,7 +17254,7 @@ case ACTIONS.ADD_CLIENT: {
         msg += `*Products (${products.length}):*\n`;
         products.forEach((p, i) => {
           const price = p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_";
-          msg += `${i + 1}. *${p.name}* — ${price}\n`;
+          msg += `${i + 1}. *${p.name}* - ${price}\n`;
         });
       }
  
@@ -17265,7 +17265,7 @@ case ACTIONS.ADD_CLIENT: {
           const rate = p.unitPrice > 0 && p.rateUnit
             ? `${formatMoney(p.unitPrice, biz.currency)}/${p.rateUnit}`
             : p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no rate)_";
-          msg += `${products.length + i + 1}. *${p.name}* 🔧 — ${rate}\n`;
+          msg += `${products.length + i + 1}. *${p.name}* 🔧 - ${rate}\n`;
         });
       }
  

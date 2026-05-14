@@ -88,11 +88,11 @@ export function buildNumberedCatalogueText(products, currency, startAt = 1) {
       const hasPrice = Number(p.unitPrice) > 0;
       let priceTag;
       if (!hasPrice) {
-        priceTag = " — _(no price)_";
+        priceTag = " - _(no price)_";
       } else if (p.rateUnit) {
-        priceTag = ` — ${formatServiceRate(p.unitPrice, p.rateUnit, currency)}`;
+        priceTag = ` - ${formatServiceRate(p.unitPrice, p.rateUnit, currency)}`;
       } else {
-        priceTag = ` — ${formatMoney(p.unitPrice, currency)}`;
+        priceTag = ` - ${formatMoney(p.unitPrice, currency)}`;
       }
       const icon = p.isService ? " 🔧" : "";
       return `${num}. *${p.name}*${icon}${priceTag}`;
@@ -121,7 +121,7 @@ export function parsePickEntries(text, catalogue) {
   for (const entry of entries) {
     // Accepts: "3x2" | "3 x 2" | "3x2 hours" | "3 x 2 jobs"
     const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\s+(\w+))?$/);
-    if (!match) { errors.push(`"${entry}" — use _NxQTY_ format`); continue; }
+    if (!match) { errors.push(`"${entry}" - use _NxQTY_ format`); continue; }
 
     const itemNum   = parseInt(match[1], 10);
     const qty       = parseFloat(match[2]);
@@ -321,7 +321,7 @@ export function parsePriceUpdates(text, catalogue) {
   for (const entry of entries) {
     // "1 x 20/hour"  |  "1 x 50"  |  "1x50"
     const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\/(\w+))?$/);
-    if (!match) { errors.push(`"${entry}" — use _N x price_ or _N x price/rate_`); continue; }
+    if (!match) { errors.push(`"${entry}" - use _N x price_ or _N x price/rate_`); continue; }
 
     const itemNum = parseInt(match[1], 10);
     const price   = parseFloat(match[2]);
@@ -355,7 +355,7 @@ export function buildPriceUpdatePreviewText(updates, currency, isService = false
     const display = u.rateUnit
       ? formatServiceRate(u.price, u.rateUnit, currency)
       : formatMoney(u.price, currency);
-    return `${i + 1}. ${u.name} — *${display}*`;
+    return `${i + 1}. ${u.name} - *${display}*`;
   }).join("\n");
 
   return (

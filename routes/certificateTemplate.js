@@ -43,8 +43,8 @@ export function buildCertificateHtml({
   const moduleTitle = esc(quizTitle || moduleName || "Module");
   const recipientName = esc(name || "Recipient");
   const institution = esc(orgName || "CRIPFCnt Institute");
-  const scoreDisplay = esc(score != null ? String(score) : "—");
-  const pctDisplay = esc(percentage != null ? String(percentage) : "—");
+  const scoreDisplay = esc(score != null ? String(score) : "-");
+  const pctDisplay = esc(percentage != null ? String(percentage) : "-");
 
   /* ── brand config by org ── */
   const orgLow = (orgName || "").toLowerCase();

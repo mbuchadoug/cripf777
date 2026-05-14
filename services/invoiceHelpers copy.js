@@ -57,8 +57,8 @@ export function buildNumberedCatalogueText(products, currency, startAt = 1) {
       const num      = startAt + i;
       const hasPrice = Number(p.unitPrice) > 0;
       const tag      = hasPrice
-        ? ` — ${formatMoney(p.unitPrice, currency)}`
-        : " — _(no price)_";
+        ? ` - ${formatMoney(p.unitPrice, currency)}`
+        : " - _(no price)_";
       return `${num}. *${p.name}*${tag}`;
     })
     .join("\n");
@@ -83,7 +83,7 @@ export function parsePickEntries(text, catalogue) {
 
   for (const entry of entries) {
     const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)$/);
-    if (!match) { errors.push(`"${entry}" — use _NxQTY_ format`); continue; }
+    if (!match) { errors.push(`"${entry}" - use _NxQTY_ format`); continue; }
 
     const itemNum = parseInt(match[1], 10);
     const qty     = parseFloat(match[2]);

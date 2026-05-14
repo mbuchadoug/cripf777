@@ -632,7 +632,7 @@ ${commentary}
 
 // Public pages
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH for server.js  — replace the existing homepage route (around line 634)
+// PATCH for server.js  - replace the existing homepage route (around line 634)
 //
 //   BEFORE:
 //     app.get("/", (req, res) => {
@@ -695,7 +695,7 @@ app.get("/", async (req, res) => {
     });
   } catch (err) {
     console.error("[Homepage]", err);
-    // Graceful fallback — render homepage without audits if DB fails
+    // Graceful fallback - render homepage without audits if DB fails
     renderPage(res, "website/index", req, "/", {
       featuredAudits: [],
       totalAuditCount: 0,

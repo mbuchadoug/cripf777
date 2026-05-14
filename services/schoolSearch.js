@@ -1232,7 +1232,7 @@ if (typeof search.admissionsOpen === "boolean") {
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
         .limit(PAGE_SIZE)
         .lean();
-      if (schools.length) fallbackLabel = `No exact match in *${search.suburb}* — showing nearby schools in *${search.city || "the area"}*:`;
+      if (schools.length) fallbackLabel = `No exact match in *${search.suburb}* - showing nearby schools in *${search.city || "the area"}*:`;
     }
 
     // Step 2: drop type filter, keep location
@@ -1250,7 +1250,7 @@ if (typeof search.admissionsOpen === "boolean") {
         .limit(PAGE_SIZE)
         .lean();
       const typeLabel = search.type.replace("_", " + ");
-      if (schools.length) fallbackLabel = `No *${typeLabel}* schools found — showing all schools in *${search.suburb || search.city || "the area"}*:`;
+      if (schools.length) fallbackLabel = `No *${typeLabel}* schools found - showing all schools in *${search.suburb || search.city || "the area"}*:`;
     }
 
     // Step 2b: drop ownership, keep type + city (e.g. show all ECD schools even if not "private")
@@ -1266,7 +1266,7 @@ if (typeof search.admissionsOpen === "boolean") {
         .limit(PAGE_SIZE)
         .lean();
       const typeLabel = search.type ? search.type.replace("_", " + ") + " " : "";
-      if (schools.length) fallbackLabel = `No *${search.ownership}* ${typeLabel}schools found — showing all ${typeLabel}schools in *${search.city || "the area"}*:`;
+      if (schools.length) fallbackLabel = `No *${search.ownership}* ${typeLabel}schools found - showing all ${typeLabel}schools in *${search.city || "the area"}*:`;
     }
 
     // Step 3: drop all filters except city
@@ -1275,7 +1275,7 @@ if (typeof search.admissionsOpen === "boolean") {
         .sort({ tier: -1, rating: -1, qualityScore: -1 })
         .limit(PAGE_SIZE)
         .lean();
-      if (schools.length) fallbackLabel = `No exact match — here are schools in *${search.city}* you might like:`;
+      if (schools.length) fallbackLabel = `No exact match - here are schools in *${search.city}* you might like:`;
     }
 
     // Step 4: truly no schools registered in this area at all
@@ -1287,7 +1287,7 @@ if (typeof search.admissionsOpen === "boolean") {
 We don't have any schools listed for that search yet.
 _Filters tried: ${filterSummary}_
 
-📣 *Know a school we should add?* Ask them to register on ZimQuote — it's free.
+📣 *Know a school we should add?* Ask them to register on ZimQuote - it's free.
 📞 ZimQuote Admin: 0789 901 058`
       );
       return sendButtons(from, {

@@ -5,9 +5,9 @@
  * document flows (invoice / quotation / receipt).
  *
  * CHANGES FROM ORIGINAL:
- *   • Uses preserveSessionCore() — eliminates duplicated docType / targetBranchId
+ *   • Uses preserveSessionCore() - eliminates duplicated docType / targetBranchId
  *     extraction that existed in every function
- *   • Uses sendAddItemPrompt() — eliminates duplicated sendButtons call
+ *   • Uses sendAddItemPrompt() - eliminates duplicated sendButtons call
  *   • All existing exports preserved with identical signatures
  * ─────────────────────────────────────────────────────────────────────────────
  */

@@ -1178,7 +1178,7 @@ router.get("/schools/:id/edit", requireSupplierAdmin, async (req, res) => {
             <div class="fg" style="grid-column:1/-1">
               <label>📲 Notification Contacts
                 <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
-                  — Extra numbers that receive enquiry, profile view &amp; smart link alerts (outside 24hr sessions via WhatsApp template)
+                  - Extra numbers that receive enquiry, profile view &amp; smart link alerts (outside 24hr sessions via WhatsApp template)
                 </span>
               </label>
               <div id="notif-contacts-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">

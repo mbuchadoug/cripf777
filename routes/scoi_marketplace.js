@@ -42,10 +42,10 @@ router.get("/scoi", async (req, res) => {
     // If you want a single interleaved newest-first list across both types,
     // use the merge below instead.
     //
-    // Option A — special block first, then placement block (current):
+    // Option A - special block first, then placement block (current):
     const audits = [...normalizedSpecial, ...normalizedPlacement];
     //
-    // Option B — true interleaved newest-first (uncomment to use):
+    // Option B - true interleaved newest-first (uncomment to use):
     // const audits = [...normalizedSpecial, ...normalizedPlacement].sort(
     //   (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     // );

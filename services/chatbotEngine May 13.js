@@ -4673,10 +4673,10 @@ await UserSession.findOneAndUpdate(
               (_isTourismAddr
                 ? `📍 *Where will you be when the service starts?*\n\n` +
                   `_e.g. Kariba marina, Binga Harbour, Hwange main gate_\n\n` +
-                  `Or tap Skip — you can share your exact location with the operator later.`
+                  `Or tap Skip - you can share your exact location with the operator later.`
                 : `📍 *Where should the service provider come?*\n\n` +
                   `_e.g. 24 Mabelreign Drive, Harare_\n\n` +
-                  `Or tap Skip — share your address directly with the provider.`),
+                  `Or tap Skip - share your address directly with the provider.`),
             buttons: [
               { id: "sup_skip_service_address", title: "⏭ Skip (share later)" }
             ]

@@ -1664,7 +1664,7 @@ ${invoice.status === "paid" ? "Fully paid ✅" : `Balance: ${formatMoney(invoice
 
   /* ===========================
      INVOICE: QUICK ADD PRODUCT (PRICE → SAVE → ASK QTY)
-     Price is OPTIONAL — user may tap "Skip Pricing" or type 0.
+     Price is OPTIONAL - user may tap "Skip Pricing" or type 0.
   =========================== */
   if (state === "invoice_quick_add_product_price") {
     const isSkip = text === "inv_skip_product_price" || trimmed.toLowerCase() === "skip";
@@ -1827,7 +1827,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
       await saveBizSafe(biz);
       return sendButtons(from, {
-        text: `💰 *Enter unit price for:*\n${addedItem.item}\n\n_Or skip — price can be added later._`,
+        text: `💰 *Enter unit price for:*\n${addedItem.item}\n\n_Or skip - price can be added later._`,
         buttons: [
           { id: "inv_skip_item_price", title: "⏭ Skip Price" },
           { id: ACTIONS.MAIN_MENU,     title: "🏠 Main Menu" }
@@ -1846,7 +1846,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
 
   /* ===========================
      PRICE ENTRY (custom items or catalogue items with no saved price)
-     Price is OPTIONAL — user can tap "Skip Price" or type 0.
+     Price is OPTIONAL - user can tap "Skip Price" or type 0.
   =========================== */
   if (state === "creating_invoice_enter_prices") {
     const isSkip = text === "inv_skip_item_price" || trimmed.toLowerCase() === "skip";
@@ -2003,7 +2003,7 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
-     ADD PRODUCTS — PREVIEW BEFORE SAVE
+     ADD PRODUCTS - PREVIEW BEFORE SAVE
      State: product_add_preview
      Waiting for user to confirm or edit the pending list.
   =========================== */
@@ -2017,7 +2017,7 @@ console.log("INVOICE BRANCH DEBUG", {
       return sendProductsMenu(from);
     }
 
-    // "Edit List" — go back to name entry
+    // "Edit List" - go back to name entry
     if (trimmed.toLowerCase() === "edit" || text === "prod_preview_edit") {
       biz.sessionState = isService ? "service_add_name" : "product_add_name";
       biz.sessionData.pendingNames = [];
@@ -2034,12 +2034,12 @@ console.log("INVOICE BRANCH DEBUG", {
     if (trimmed.toLowerCase() === "cancel" || text === "prod_preview_cancel") {
       biz.sessionState = "ready"; biz.sessionData = {};
       await saveBizSafe(biz);
-      await sendText(from, "❌ Cancelled — nothing was saved.");
+      await sendText(from, "❌ Cancelled - nothing was saved.");
       const { sendProductsMenu } = await import("./metaMenus.js");
       return sendProductsMenu(from);
     }
 
-    // "Save" — text "save", "1", or button prod_preview_save
+    // "Save" - text "save", "1", or button prod_preview_save
     const isSave = ["save", "1", "yes"].includes(trimmed.toLowerCase()) || text === "prod_preview_save";
     if (!isSave) {
       // Re-show preview
@@ -2076,7 +2076,7 @@ console.log("INVOICE BRANCH DEBUG", {
     const lines  = saved.map((p, i) => `✅ ${i + 1}. ${p.name}`).join("\n");
     await sendText(from,
       `🎉 *${saved.length} ${plural} saved!*\n\n${lines}\n\n` +
-      `_Prices not set — use_ *Update ${label.charAt(0).toUpperCase() + label.slice(1)} ${isService ? "Rates" : "Prices"}* _to add them._`
+      `_Prices not set - use_ *Update ${label.charAt(0).toUpperCase() + label.slice(1)} ${isService ? "Rates" : "Prices"}* _to add them._`
     );
 
     biz.sessionState = "ready"; biz.sessionData = {};
@@ -2086,7 +2086,7 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
-     ADD SERVICES — NAME ENTRY
+     ADD SERVICES - NAME ENTRY
      State: service_add_name
      Identical to product_add_name but sets isService=true.
   =========================== */
@@ -2155,7 +2155,7 @@ console.log("INVOICE BRANCH DEBUG", {
 
     if (!updates.length) {
       const numbered = catalogue
-        .map((p, i) => `${i + 1}. *${p.name}* — ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
+        .map((p, i) => `${i + 1}. *${p.name}* - ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
         .join("\n");
       return sendButtons(from, {
         text:
@@ -2185,7 +2185,7 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
-     UPDATE PRODUCT PRICES — CONFIRM
+     UPDATE PRODUCT PRICES - CONFIRM
   =========================== */
   if (state === "product_update_prices_confirm") {
     const isEdit = text === "prod_prices_confirm_edit";
@@ -2205,7 +2205,7 @@ console.log("INVOICE BRANCH DEBUG", {
       await saveBizSafe(biz);
       const catalogue = biz.sessionData.updateCatalogue || [];
       const numbered = catalogue
-        .map((p, i) => `${i + 1}. *${p.name}* — ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
+        .map((p, i) => `${i + 1}. *${p.name}* - ${p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no price)_"}`)
         .join("\n");
       return sendButtons(from, {
         text: `✏️ *Re-enter prices:*\n\n${numbered}\n\nFormat: *1 x 12, 2 x 35*`,
@@ -2265,7 +2265,7 @@ console.log("INVOICE BRANCH DEBUG", {
           const rate = p.unitPrice > 0 && p.rateUnit
             ? `${formatMoney(p.unitPrice, biz.currency)}/${p.rateUnit}`
             : p.unitPrice > 0 ? formatMoney(p.unitPrice, biz.currency) : "_(no rate)_";
-          return `${i + 1}. *${p.name}* — ${rate}`;
+          return `${i + 1}. *${p.name}* - ${rate}`;
         })
         .join("\n");
       return sendButtons(from, {
@@ -2290,7 +2290,7 @@ console.log("INVOICE BRANCH DEBUG", {
 
       const u = noRateUpdates[0];
       return sendButtons(from, {
-        text: `⚠️ *${u.name}* — ${formatMoney(u.price, biz.currency)}\n\nWhat rate type?`,
+        text: `⚠️ *${u.name}* - ${formatMoney(u.price, biz.currency)}\n\nWhat rate type?`,
         buttons: [
           { id: "svc_rate_per_job",   title: "📋 Per job"   },
           { id: "svc_rate_per_hour",  title: "⏱ Per hour"  },
@@ -2300,7 +2300,7 @@ console.log("INVOICE BRANCH DEBUG", {
       });
     }
 
-    // All have rate units — show preview
+    // All have rate units - show preview
     biz.sessionData.pendingPriceUpdates = updates;
     biz.sessionState = "service_update_rates_confirm";
     await saveBizSafe(biz);
@@ -2319,7 +2319,7 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
-     SERVICE RATES — CONFIRM RATE UNIT (when user omitted /unit)
+     SERVICE RATES - CONFIRM RATE UNIT (when user omitted /unit)
   =========================== */
   if (state === "service_update_rates_confirm_unit") {
     const RATE_BUTTON_MAP = {
@@ -2346,7 +2346,7 @@ console.log("INVOICE BRANCH DEBUG", {
       await saveBizSafe(biz);
       const u = updates[nextIdx];
       return sendButtons(from, {
-        text: `⚠️ *${u.name}* — ${formatMoney(u.price, biz.currency)}\n\nWhat rate type?`,
+        text: `⚠️ *${u.name}* - ${formatMoney(u.price, biz.currency)}\n\nWhat rate type?`,
         buttons: [
           { id: "svc_rate_per_job",   title: "📋 Per job"   },
           { id: "svc_rate_per_hour",  title: "⏱ Per hour"  },
@@ -2356,7 +2356,7 @@ console.log("INVOICE BRANCH DEBUG", {
       });
     }
 
-    // All units set — show preview
+    // All units set - show preview
     biz.sessionData.pendingPriceUpdates = updates;
     biz.sessionState = "service_update_rates_confirm";
     await saveBizSafe(biz);
@@ -2374,7 +2374,7 @@ console.log("INVOICE BRANCH DEBUG", {
   }
 
   /* ===========================
-     SERVICE RATES — CONFIRM SAVE
+     SERVICE RATES - CONFIRM SAVE
   =========================== */
   if (state === "service_update_rates_confirm") {
     const isEdit   = text === "svc_rates_confirm_edit";

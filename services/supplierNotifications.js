@@ -535,7 +535,7 @@ export async function runSupplierExpiryChecks() {
 // INTERNAL: Fan out a notification to ALL registered notification contacts.
 //
 // supplier.notificationContacts = ["263771000001", "263772000002"]
-// Primary phone (supplier.phone) is ALWAYS included — contacts are additive.
+// Primary phone (supplier.phone) is ALWAYS included - contacts are additive.
 //
 // Usage:
 //   await _notifyAllSupplier(supplier, phone => notifySupplierLinkOpened(phone, name, src));
