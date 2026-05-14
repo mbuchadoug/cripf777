@@ -696,7 +696,6 @@ async function ensureCertificatesDir() {
 
 /**
  * Helper: generate certificate HTML given details
- * World-class luxury design — navy + gold, Cinzel + Cormorant Garamond
  */
 function buildCertificateHtml({
   name,
@@ -708,495 +707,235 @@ function buildCertificateHtml({
   date,
 }) {
   const esc = (s) =>
-    s == null
+    (s === undefined || s === null)
       ? ""
       : String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
+          .replace(/&/g,"&amp;")
+          .replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;");
 
-  const dateStr = date
-    ? new Date(date).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
+  const org = (orgName || "").toLowerCase();
 
-  const moduleTitle = esc(quizTitle || moduleName || "Module");
-  const recipientName = esc(name || "Recipient");
-  const institution = esc(orgName || "CRIPFCnt Institute");
-  const scoreDisplay = esc(score != null ? String(score) : "—");
-  const pctDisplay = esc(percentage != null ? String(percentage) : "—");
+  const isNyaradzo = /nyaradzo/.test(org);
+  const isCripfcnt = /cripfcnt/.test(org);
+  const isStEurit =
+  /st[\s\-]?eurit/.test(org) ||
+  /eurit/.test(org);
 
-  /* ── brand config by org ── */
-  const orgLow = (orgName || "").toLowerCase();
-  let brand = {
-    primary: "#0a1628",
-    accent:  "#b8973a",
-    accent2: "#c9a84c",
-    cream:   "#fdf8ee",
-    series:  "CRIPFCnt Learning Management System",
-  };
+const isWinchester =
+  /winchester/.test(org);
 
-  if (/nyaradzo/.test(orgLow)) {
-    brand = { ...brand, primary: "#0a2e5c", accent: "#c9a227", accent2: "#dbb84a", series: "Nyaradzo Group Training" };
-  } else if (/winchester/.test(orgLow)) {
-    brand = { ...brand, primary: "#1F3C88", accent: "#8B1E2D", accent2: "#a83040", series: "Winchester School" };
-  } else if (/st[\s-]?eurit|eurit/.test(orgLow)) {
-    brand = { ...brand, primary: "#111111", accent: "#D4AF37", accent2: "#e8c95a", series: "St Eurit International School" };
-  }
 
-  /* ── short certificate ID ── */
-  const certId = `CERT-${dateStr.replace(/-/g, "")}-${(name || "X")
-    .replace(/\s+/g, "")
-    .toUpperCase()
-    .slice(0, 6)
-    .padEnd(6, "0")}`;
+  /* ===============================
+     🎨 BRAND CONFIG
+  =============================== */
+ const brand = isStEurit
+  ? {
+      primary: "#111111", // black
+      accent: "#D4AF37",  // gold
+      logo: `${process.env.SITE_URL || ""}/assets/st-eurit-logo.png`,
+      title: "St Eurit International School Certificate"
+    }
 
-  return `<!DOCTYPE html>
-<html lang="en">
+      : isWinchester
+  ? {
+      primary: "#1F3C88", // navy blue
+      accent: "#8B1E2D",  // maroon
+      logo: `${process.env.SITE_URL || ""}/assets/winchester-logo.jpg`,
+      title: "Winchester School Certificate"
+    }
+  : isNyaradzo
+  ? {
+      primary: "#0a2e5c",
+      accent: "#c9a227",
+      logo: `${process.env.SITE_URL || ""}/assets/nyaradzo-logo.png`,
+      title: "Nyaradzo Group Training Certificate"
+    }
+  : isCripfcnt
+  ? {
+      primary: "#0f5132",
+      accent: "#20c997",
+      logo: `${process.env.SITE_URL || ""}/assets/cripfcnt-logo.png`,
+      title: "CRIPFCNT Training Certificate"
+    }
+  : {
+      primary: "#222",
+      accent: "#f1b000",
+      logo: "",
+      title: "Certificate of Completion"
+    };
+
+  return `
+<!doctype html>
+<html>
 <head>
 <meta charset="utf-8"/>
-<title>Certificate of Completion</title>
+<title>${esc(brand.title)}</title>
+
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Cinzel:wght@400;600;700&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-@page { margin: 0; size: A4; }
-
-html, body {
-  width: 210mm;
-  height: 297mm;
-  overflow: hidden;
-  background: ${brand.primary};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Cormorant Garamond', Georgia, serif;
+@page { margin: 0; }
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin:0;
+  background:#f2f2f5;
+}
+.wrap {
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:40px;
+}
+.card {
+  width:100%;
+  max-width:900px;
+  background:white;
+  padding:60px 52px 52px;
+  border-radius:14px;
+  text-align:center;
+  box-shadow:0 12px 50px rgba(0,0,0,0.12);
+  position:relative;
+  overflow:hidden;
 }
 
-.frame-outer {
-  width: 190mm;
-  min-height: 277mm;
-  background: ${brand.cream};
-  padding: 5px;
-  position: relative;
+/* TOP BAR */
+.card::before {
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:36px;
+  background:linear-gradient(
+    90deg,
+    ${brand.primary},
+    ${brand.primary}cc
+  );
 }
 
-.frame-border-1 {
-  border: 2.5px solid ${brand.accent};
-  padding: 6px;
-  position: relative;
-  min-height: calc(277mm - 10px);
+/* ACCENT STRIPE */
+.card::after {
+  content:"";
+  position:absolute;
+  top:36px;
+  left:0;
+  right:0;
+  height:6px;
+  background:${brand.accent};
 }
 
-.frame-border-2 {
-  border: 1px solid ${brand.accent};
-  padding: 32px 44px 36px;
-  position: relative;
-  min-height: calc(277mm - 22px);
-  background: ${brand.cream};
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.logo img {
+  max-height:80px;
+  margin:20px auto 10px;
 }
 
-.watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-30deg);
-  font-family: 'Cinzel', serif;
-  font-size: 80px;
-  font-weight: 700;
-  color: ${brand.accent};
-  opacity: 0.04;
-  white-space: nowrap;
-  letter-spacing: 10px;
-  pointer-events: none;
-  text-transform: uppercase;
-  z-index: 0;
+h1 {
+  margin:20px 0 6px;
+  font-size:34px;
+  color:${brand.primary};
+  font-weight:800;
 }
 
-.corner {
-  position: absolute;
-  width: 52px;
-  height: 52px;
-  z-index: 2;
-}
-.corner svg { width: 100%; height: 100%; }
-.corner.tl { top: -2px; left: -2px; }
-.corner.tr { top: -2px; right: -2px; transform: scaleX(-1); }
-.corner.bl { bottom: -2px; left: -2px; transform: scaleY(-1); }
-.corner.br { bottom: -2px; right: -2px; transform: scale(-1); }
-
-.cert-content {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
+.subtitle {
+  margin-top:8px;
+  font-size:14px;
+  color:#666;
 }
 
-.org-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: ${brand.primary};
-  color: ${brand.accent2};
-  padding: 5px 22px 5px 16px;
-  font-family: 'Cinzel', serif;
-  font-size: 8px;
-  letter-spacing: 3.5px;
-  text-transform: uppercase;
-  margin-bottom: 20px;
-}
-.org-badge .dot {
-  width: 6px; height: 6px;
-  background: ${brand.accent};
-  border-radius: 50%;
-  flex-shrink: 0;
+.recipient {
+  margin-top:30px;
+  font-size:30px;
+  font-weight:900;
+  color:#111;
 }
 
-.cert-title {
-  font-family: 'Cinzel', serif;
-  font-size: 36px;
-  font-weight: 700;
-  color: ${brand.primary};
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  line-height: 1.05;
-  margin-bottom: 5px;
+.quiz {
+  margin-top:16px;
+  font-size:20px;
+  font-weight:800;
+  color:${brand.primary};
 }
 
-.cert-subtitle {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 16px;
-  font-style: italic;
-  color: #7a6a3a;
-  letter-spacing: 2px;
-  margin-bottom: 18px;
+.details {
+  margin-top:36px;
+  display:flex;
+  justify-content:center;
+  gap:60px;
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 320px;
-  margin-bottom: 20px;
-}
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, ${brand.accent} 40%, ${brand.accent} 60%, transparent);
+.detail .val {
+  font-size:22px;
+  font-weight:900;
 }
 
-.certifies {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 13px;
-  color: #7a6040;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-.recipient-name {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 46px;
-  font-weight: 600;
-  font-style: italic;
-  color: ${brand.primary};
-  line-height: 1.1;
-  letter-spacing: 1px;
-  margin-bottom: 16px;
-  max-width: 480px;
-  word-break: break-word;
-}
-
-.completed-text {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 13px;
-  color: #7a6040;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  margin-bottom: 14px;
-}
-
-.module-box {
-  background: ${brand.primary};
-  padding: 14px 30px 16px;
-  width: 90%;
-  max-width: 480px;
-  margin-bottom: 22px;
-  position: relative;
-}
-.module-box::before,
-.module-box::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, ${brand.accent} 20%, ${brand.accent} 80%, transparent);
-}
-.module-box::before { top: 0; }
-.module-box::after  { bottom: 0; }
-
-.module-series {
-  font-family: 'Cinzel', serif;
-  font-size: 7.5px;
-  letter-spacing: 4px;
-  color: ${brand.accent};
-  text-transform: uppercase;
-  margin-bottom: 7px;
-}
-
-.module-title {
-  font-family: 'Cinzel', serif;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: ${brand.cream};
-  letter-spacing: 1.5px;
-  line-height: 1.6;
-  text-transform: uppercase;
-}
-
-.stats {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 26px;
-  width: 80%;
-  max-width: 420px;
-}
-
-.stat { flex: 1; text-align: center; }
-
-.stat-value {
-  font-family: 'Cinzel', serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: ${brand.primary};
-  line-height: 1;
-  margin-bottom: 5px;
-}
-.stat-value.gold { color: ${brand.accent}; }
-
-.stat-label {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 10px;
-  color: #7a6040;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-
-.stat-sep {
-  width: 1px;
-  height: 40px;
-  background: linear-gradient(180deg, transparent, ${brand.accent} 30%, ${brand.accent} 70%, transparent);
-}
-
-.cert-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  width: 100%;
-  margin-top: auto;
-  padding-top: 18px;
-  border-top: 1px solid #d4c89a;
-}
-
-.sig { flex: 1; text-align: center; }
-
-.sig-script {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 24px;
-  font-style: italic;
-  color: ${brand.primary};
-  margin-bottom: 4px;
-  line-height: 1;
-}
-
-.sig-line {
-  width: 130px;
-  height: 1px;
-  background: ${brand.primary};
-  margin: 0 auto 5px;
-}
-
-.sig-name {
-  font-family: 'Cinzel', serif;
-  font-size: 8px;
-  letter-spacing: 2px;
-  color: ${brand.primary};
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}
-
-.sig-role {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 10px;
-  font-style: italic;
-  color: #7a6040;
+.footer {
+  margin-top:46px;
+  font-size:13px;
+  color:#777;
 }
 
 .seal {
-  flex-shrink: 0;
-  width: 80px;
-  height: 80px;
-  margin: 0 12px;
-}
-.seal svg { width: 100%; height: 100%; }
-
-.cert-id {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 9px;
-  color: #aaa090;
-  letter-spacing: 1.2px;
-  text-align: center;
-  margin-top: 12px;
-  width: 100%;
+  display:inline-block;
+  margin-top:14px;
+  padding:10px 20px;
+  background:${brand.accent};
+  color:#111;
+  font-weight:900;
+  border-radius:8px;
 }
 </style>
 </head>
+
 <body>
+<div class="wrap">
+  <div class="card">
 
-<div class="frame-outer">
-  <div class="frame-border-1">
+    ${brand.logo ? `
+    <div class="logo">
+      <img src="${brand.logo}" />
+    </div>` : ""}
 
-    <div class="corner tl">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner tr">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner bl">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
-    <div class="corner br">
-      <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 50V7C2 4.2 4.2 2 7 2H50" stroke="${brand.accent}" stroke-width="1.5"/>
-        <path d="M2 30V7C2 4.2 4.2 2 7 2H30" stroke="${brand.accent2}" stroke-width="0.5"/>
-        <circle cx="7" cy="7" r="3" fill="${brand.accent}"/>
-        <circle cx="2" cy="2" r="1.8" fill="${brand.accent2}"/>
-        <path d="M13 2H18M2 13V18" stroke="${brand.accent}" stroke-width="0.8"/>
-      </svg>
-    </div>
+    <h1>${esc(brand.title)}</h1>
+    <div class="subtitle">This certifies that</div>
 
-    <div class="frame-border-2">
-      <div class="watermark">CRIPFCNT</div>
+    <div class="recipient">${esc(name)}</div>
 
-      <div class="cert-content">
+    <div class="subtitle">has successfully completed the quiz</div>
 
-        <div class="org-badge">
-          <span class="dot"></span>
-          ${brand.series}
-          <span class="dot"></span>
-        </div>
-
-        <h1 class="cert-title">Certificate</h1>
-        <p class="cert-subtitle">of Completion</p>
-
-        <div class="divider">
-          <div class="divider-line"></div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-                  fill="${brand.accent}"/>
-          </svg>
-          <div class="divider-line"></div>
-        </div>
-
-        <p class="certifies">This Certifies That</p>
-
-        <h2 class="recipient-name">${recipientName}</h2>
-
-        <p class="completed-text">Has Successfully Completed the Module</p>
-
-        <div class="module-box">
-          <p class="module-series">${institution} &nbsp;&middot;&nbsp; Official Record</p>
-          <p class="module-title">${moduleTitle}</p>
-        </div>
-
-        <div class="stats">
-          <div class="stat">
-            <div class="stat-value">${scoreDisplay}</div>
-            <div class="stat-label">Final Score</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat">
-            <div class="stat-value gold">${pctDisplay}%</div>
-            <div class="stat-label">Distinction</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat">
-            <div class="stat-value">${dateStr}</div>
-            <div class="stat-label">Date Awarded</div>
-          </div>
-        </div>
-
-        <div class="cert-bottom">
-          <div class="sig">
-            <div class="sig-script">Director</div>
-            <div class="sig-line"></div>
-            <div class="sig-name">Director of Learning</div>
-            <div class="sig-role">${institution}</div>
-          </div>
-
-          <div class="seal">
-            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="40" r="37" fill="${brand.primary}" stroke="${brand.accent}" stroke-width="1.5"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="${brand.accent2}" stroke-width="0.5"/>
-              <circle cx="40" cy="40" r="27" fill="none" stroke="${brand.accent}" stroke-width="0.5" stroke-dasharray="2.5 2"/>
-              <path d="M40 16l2.8 8.5H51l-7 5.2 2.7 8.5L40 33l-6.7 5.2 2.7-8.5-7-5.2h8.2L40 16z"
-                    fill="${brand.accent2}"/>
-              <text x="40" y="52" text-anchor="middle"
-                    font-family="'Cinzel', serif" font-size="6.5" font-weight="600"
-                    fill="${brand.accent2}" letter-spacing="2">CRIPFCNT</text>
-              <text x="40" y="60" text-anchor="middle"
-                    font-family="'Cinzel', serif" font-size="5"
-                    fill="${brand.accent}" letter-spacing="1.5">VERIFIED</text>
-              <circle cx="40" cy="65" r="2" fill="${brand.accent}" opacity="0.7"/>
-            </svg>
-          </div>
-
-          <div class="sig">
-            <div class="sig-script">Academic</div>
-            <div class="sig-line"></div>
-            <div class="sig-name">Chief Academic Officer</div>
-            <div class="sig-role">${institution}</div>
-          </div>
-        </div>
-
-        <p class="cert-id">
-          Certificate ID: ${certId}
-          &nbsp;&middot;&nbsp;
-          Awarded by ${institution}
-        </p>
-
-      </div>
-    </div>
-  </div>
+ <div class="quiz">
+  ${esc(quizTitle || moduleName || "Quiz")}
 </div>
 
+
+    <div class="details">
+      <div class="detail">
+        <div class="val">${esc(score)}</div>
+        <div>Score</div>
+      </div>
+      <div class="detail">
+        <div class="val">${esc(percentage)}%</div>
+        <div>Percentage</div>
+      </div>
+      <div class="detail">
+        <div class="val">${esc(
+          date
+            ? new Date(date).toISOString().slice(0,10)
+            : new Date().toISOString().slice(0,10)
+        )}</div>
+        <div>Date</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Awarded by ${esc(orgName || "Organization")}
+      <div class="seal">Verified</div>
+    </div>
+
+  </div>
+</div>
 </body>
-</html>`;
+</html>
+`;
 }
 
 
@@ -1230,11 +969,9 @@ async function generateCertificatePdf({ name, orgName, moduleName,quizTitle,  sc
       try {
         const page = await browser.newPage();
         const html = buildCertificateHtml({ name, orgName, moduleName,quizTitle, score, percentage, date });
-        await page.setContent(html, { waitUntil: "networkidle0", timeout: 45000 });
-        // Give Google Fonts an extra moment to fully render before capture
-        await new Promise((r) => setTimeout(r, 1200));
+        await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
         await page.emulateMediaType("screen");
-        await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "0", bottom: "0", left: "0", right: "0" } });
+        await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "20mm", bottom: "20mm", left: "20mm", right: "20mm" } });
         return { filepath, filename, method: "puppeteer" };
       } finally {
         try { await browser.close(); } catch (e) {}
