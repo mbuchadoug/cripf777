@@ -2,9 +2,7 @@
  * invoiceHelpers.js
  * ─────────────────────────────────────────────────────────────────────────────
  * Shared helpers for invoice / quotation / receipt flows.
- * Supports both products (qty × unit price) and services (units × rate/type).
- *
- * Place this file at:  services/invoiceHelpers.js
+ * Drop this file at:  services/invoiceHelpers.js
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -28,38 +26,12 @@ export function formatMoney(amount, currency) {
   return `${sym}${n.toFixed(2)}`;
 }
 
-// ─── Service rate types ───────────────────────────────────────────────────────
-
-export const VALID_RATE_UNITS = [
-  "job", "hour", "day", "meter", "room", "visit", "project", "km", "piece", "sqm", "night"
-];
-
-/**
- * Parse a rate string like "50/job" or "20/hour".
- * Returns { amount: number, unit: string } or null if format is invalid.
- */
-export function parseServiceRate(text) {
-  if (!text || typeof text !== "string") return null;
-  const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*\/\s*(\w+)$/i);
-  if (!match) return null;
-  const amount = parseFloat(match[1]);
-  const unit   = match[2].toLowerCase();
-  if (isNaN(amount) || amount < 0) return null;
-  return { amount, unit };
-}
-
-/**
- * Format a service rate for display: "$50/job"
- */
-export function formatServiceRate(amount, unit, currency) {
-  return `${formatMoney(amount, currency)}/${unit}`;
-}
-
 // ─── 1. Parse comma-separated product/service names ──────────────────────────
 /**
  * "house wiring, solar installation, geyser repair"
  *   → ["house wiring", "solar installation", "geyser repair"]
- * Drops entries shorter than 2 characters.
+ *
+ * Drops entries < 2 characters.
  */
 export function parseCommaNames(text) {
   if (!text || typeof text !== "string") return [];
@@ -69,15 +41,13 @@ export function parseCommaNames(text) {
     .filter(s => s.length >= 2);
 }
 
-// ─── 2. Build numbered catalogue list text ───────────────────────────────────
+// ─── 2. Build numbered catalogue text ────────────────────────────────────────
 /**
- * Builds a WhatsApp-formatted numbered list of products or services.
- * Services show their rate unit where available (e.g. "$50/job").
- * Items with no price show "(no price)".
+ * Returns a WhatsApp-formatted numbered list of catalogue items.
  *
- * @param {Array<{name, unitPrice, rateUnit?, isService?}>} products
+ * @param {Array<{name:string, unitPrice:number, source?:string}>} products
  * @param {string} currency
- * @param {number} startAt  1-based offset for pagination (default 1)
+ * @param {number} startAt  1-based page offset (default 1)
  * @returns {string}
  */
 export function buildNumberedCatalogueText(products, currency, startAt = 1) {
@@ -86,28 +56,21 @@ export function buildNumberedCatalogueText(products, currency, startAt = 1) {
     .map((p, i) => {
       const num      = startAt + i;
       const hasPrice = Number(p.unitPrice) > 0;
-      let priceTag;
-      if (!hasPrice) {
-        priceTag = " — _(no price)_";
-      } else if (p.rateUnit) {
-        priceTag = ` — ${formatServiceRate(p.unitPrice, p.rateUnit, currency)}`;
-      } else {
-        priceTag = ` — ${formatMoney(p.unitPrice, currency)}`;
-      }
-      const icon = p.isService ? " 🔧" : "";
-      return `${num}. *${p.name}*${icon}${priceTag}`;
+      const tag      = hasPrice
+        ? ` — ${formatMoney(p.unitPrice, currency)}`
+        : " — _(no price)_";
+      return `${num}. *${p.name}*${tag}`;
     })
     .join("\n");
 }
 
 // ─── 3. Parse "NxQTY" quick-pick entries ─────────────────────────────────────
 /**
- * Parses "3x2, 7x1, 12x5" against a catalogue.
- * Also supports service unit suffixes: "1x2 hours", "2x1 job".
+ * Parses "3x2, 7x1, 12x5" against a catalogue array.
  *
  * Returns:
- *   picked → [{ item, qty, unit, rateUnit, source, isService }]
- *   errors → [string]
+ *   picked  → [{ item, qty, unit, source }]  unit=0 means price still needed
+ *   errors  → [string]  human-readable descriptions of bad entries
  */
 export function parsePickEntries(text, catalogue) {
   const entries = (text || "")
@@ -119,13 +82,11 @@ export function parsePickEntries(text, catalogue) {
   const errors = [];
 
   for (const entry of entries) {
-    // Accepts: "3x2" | "3 x 2" | "3x2 hours" | "3 x 2 jobs"
-    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\s+(\w+))?$/);
+    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)$/);
     if (!match) { errors.push(`"${entry}" — use _NxQTY_ format`); continue; }
 
-    const itemNum   = parseInt(match[1], 10);
-    const qty       = parseFloat(match[2]);
-    const rateLabel = match[3] ? match[3].toLowerCase() : null;
+    const itemNum = parseInt(match[1], 10);
+    const qty     = parseFloat(match[2]);
 
     if (itemNum < 1 || itemNum > catalogue.length) {
       errors.push(`#${itemNum} out of range`); continue;
@@ -136,12 +97,10 @@ export function parsePickEntries(text, catalogue) {
 
     const product = catalogue[itemNum - 1];
     picked.push({
-      item:      product.name,
+      item:   product.name,
       qty,
-      unit:      Number(product.unitPrice) || 0,
-      rateUnit:  product.rateUnit || rateLabel || null,
-      source:    product.source || "catalogue",
-      isService: product.isService || false
+      unit:   Number(product.unitPrice) || 0,
+      source: product.source || "catalogue"
     });
   }
 
@@ -149,13 +108,22 @@ export function parsePickEntries(text, catalogue) {
 }
 
 // ─── 4. Find indexes of unpriced items ───────────────────────────────────────
+/**
+ * Returns indexes into `items` where unit === 0.
+ */
 export function findUnpricedIndexes(items) {
   return (items || [])
     .map((item, idx) => (Number(item.unit) === 0 ? idx : null))
     .filter(idx => idx !== null);
 }
 
-// ─── 5. Build unpriced items prompt ──────────────────────────────────────────
+// ─── 5. Build the "enter prices" prompt for unpriced catalogue items ──────────
+/**
+ * @param {Array}    items
+ * @param {number[]} unpricedIndexes
+ * @param {string}   currency
+ * @returns {string}
+ */
 export function buildUnpricedPromptText(items, unpricedIndexes, currency) {
   const lines = unpricedIndexes
     .map((idx, i) => `${i + 1}. *${items[idx].item}* × ${items[idx].qty}`)
@@ -179,8 +147,10 @@ export function buildUnpricedPromptText(items, unpricedIndexes, currency) {
 
 // ─── 6. Apply bulk prices to unpriced items ───────────────────────────────────
 /**
- * Parses comma-separated price input and applies it to unpriced items.
- * Mutates `items` in-place. Returns { ok: true } or { ok: false, message }.
+ * Parses user's comma-separated price input and applies it to unpriced items.
+ * Mutates `items` in place.
+ *
+ * Returns { ok: true } on success, { ok: false, message: string } on error.
  */
 export function applyBulkPrices(trimmed, items, unpricedIndexes) {
   const parts    = trimmed.split(",").map(s => s.trim()).filter(Boolean);
@@ -213,8 +183,12 @@ export function applyBulkPrices(trimmed, items, unpricedIndexes) {
 
 // ─── 7. Build full document preview text ─────────────────────────────────────
 /**
- * Builds the WhatsApp preview for invoice / quote / receipt.
- * Services show rate + units; products show qty × price.
+ * Builds the complete WhatsApp preview for invoice / quote / receipt.
+ * Shows item lines, subtotal, discount (if set), VAT (if set), TOTAL.
+ *
+ * @param {Object} biz
+ * @param {string} extraNote  Optional note appended below the label line
+ * @returns {string}
  */
 export function buildDocPreviewText(biz, extraNote = "") {
   const items       = biz.sessionData.items || [];
@@ -231,17 +205,10 @@ export function buildDocPreviewText(biz, extraNote = "") {
   const itemLines = items
     .map((it, idx) => {
       const lineTotal = Number(it.qty) * Number(it.unit);
-      if (it.isService && it.rateUnit) {
-        return (
-          `${idx + 1}. *${it.item}*\n` +
-          `   Rate: ${formatServiceRate(it.unit, it.rateUnit, currency)}\n` +
-          `   Units: ${it.qty} ${it.rateUnit}${it.qty !== 1 ? "s" : ""}\n` +
-          `   Total: *${formatMoney(lineTotal, currency)}*`
-        );
-      }
       return (
-        `${idx + 1}. *${it.item}*\n` +
-        `   Qty: ${it.qty} × ${formatMoney(it.unit, currency)} = *${formatMoney(lineTotal, currency)}*`
+        `${idx + 1}. ${it.item} × ${it.qty}` +
+        ` @ ${formatMoney(it.unit, currency)}` +
+        ` = *${formatMoney(lineTotal, currency)}*`
       );
     })
     .join("\n");
@@ -260,12 +227,21 @@ export function buildDocPreviewText(biz, extraNote = "") {
 }
 
 // ─── 8. Send document preview + confirm menu ─────────────────────────────────
+/**
+ * Sends the full preview and the confirm/edit/cancel action menu.
+ * This is THE single function all three doc types call before PDF generation.
+ */
 export async function sendDocPreview(to, biz, extraNote = "") {
   const text = buildDocPreviewText(biz, extraNote);
   return sendInvoiceConfirmMenu(to, text);
 }
 
 // ─── 9. Preserve core session fields across resets ───────────────────────────
+/**
+ * Returns { docType, targetBranchId } extracted from the current session.
+ * Call this BEFORE any wholesale `biz.sessionData = { ... }` replacement
+ * so docType and branch selection are never lost.
+ */
 export function preserveSessionCore(biz) {
   return {
     docType:        biz.sessionData?.docType        || "invoice",
@@ -274,6 +250,10 @@ export function preserveSessionCore(biz) {
 }
 
 // ─── 10. Send "add item" prompt ───────────────────────────────────────────────
+/**
+ * The standard "Catalogue / Custom item" choice buttons.
+ * All three doc flows use this identical prompt.
+ */
 export async function sendAddItemPrompt(to) {
   return sendButtons(to, {
     text: "➕ *How would you like to add an item?*",
@@ -282,84 +262,4 @@ export async function sendAddItemPrompt(to) {
       { id: "inv_item_custom",    title: "✍️ Custom item" }
     ]
   });
-}
-
-// ─── 11. Build save-preview text (before saving products/services) ────────────
-/**
- * Preview shown to the user before names are committed to the database.
- *
- * @param {string[]} names
- * @param {boolean}  isService
- * @returns {string}
- */
-export function buildSavePreviewText(names, isService = false) {
-  const label  = isService ? "service" : "product";
-  const plural = isService ? "services" : "products";
-  const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("\n");
-  return (
-    `📋 *You are about to save these ${plural}:*\n\n` +
-    `${numbered}\n\n` +
-    `💡 Prices: _Not added yet_\n` +
-    `_You can add prices later from the ${label.charAt(0).toUpperCase() + label.slice(1)}s menu._`
-  );
-}
-
-// ─── 12. Parse price-update entries: "1 x 12, 2 x 35" ────────────────────────
-/**
- * Parses "1 x 12, 2 x 35, 3 x 28" for product price updates.
- * Also accepts service rates: "1 x 20/hour, 2 x 50/job".
- *
- * @param {string} text
- * @param {Array<{name}>} catalogue
- * @returns {{ updates: Array<{index, name, price, rateUnit}>, errors: string[] }}
- */
-export function parsePriceUpdates(text, catalogue) {
-  const entries = (text || "").split(",").map(s => s.trim()).filter(Boolean);
-  const updates = [];
-  const errors  = [];
-
-  for (const entry of entries) {
-    // "1 x 20/hour"  |  "1 x 50"  |  "1x50"
-    const match = entry.match(/^(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)(?:\/(\w+))?$/);
-    if (!match) { errors.push(`"${entry}" — use _N x price_ or _N x price/rate_`); continue; }
-
-    const itemNum = parseInt(match[1], 10);
-    const price   = parseFloat(match[2]);
-    const unit    = match[3] ? match[3].toLowerCase() : null;
-
-    if (itemNum < 1 || itemNum > catalogue.length) {
-      errors.push(`#${itemNum} out of range`); continue;
-    }
-    if (isNaN(price) || price < 0) {
-      errors.push(`bad price for #${itemNum}`); continue;
-    }
-
-    updates.push({ index: itemNum - 1, name: catalogue[itemNum - 1].name, price, rateUnit: unit });
-  }
-
-  return { updates, errors };
-}
-
-// ─── 13. Build price-update preview text ─────────────────────────────────────
-/**
- * Preview shown before price updates are saved.
- *
- * @param {Array<{name, price, rateUnit}>} updates
- * @param {string}  currency
- * @param {boolean} isService
- * @returns {string}
- */
-export function buildPriceUpdatePreviewText(updates, currency, isService = false) {
-  const label = isService ? "service rates" : "product prices";
-  const lines = updates.map((u, i) => {
-    const display = u.rateUnit
-      ? formatServiceRate(u.price, u.rateUnit, currency)
-      : formatMoney(u.price, currency);
-    return `${i + 1}. ${u.name} — *${display}*`;
-  }).join("\n");
-
-  return (
-    `💰 *You are about to update ${label}:*\n\n` +
-    `${lines}`
-  );
 }

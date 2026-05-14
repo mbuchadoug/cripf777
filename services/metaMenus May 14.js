@@ -407,13 +407,10 @@ export async function sendBranchesMenu(to) {
 ============================================================================= */
 export async function sendProductsMenu(to) {
   return sendList(to, "📦 Products & Services", [
-    { id: "prod_add_products",        title: "📦 Add Products"           },
-    { id: "prod_add_services",        title: "🔧 Add Services"           },
-    { id: ACTIONS.VIEW_PRODUCTS,      title: "📋 View Products & Services"},
-    { id: "prod_update_prices",       title: "💰 Update Product Prices"  },
-    { id: "prod_update_rates",        title: "💰 Update Service Rates"   },
-    { id: ACTIONS.BULK_UPLOAD_MENU,   title: "📋 Bulk Paste List"        },
-    { id: ACTIONS.BACK,               title: "⬅ Back"                   }
+    { id: ACTIONS.ADD_PRODUCT, title: "➕ Add item" },
+    { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View items" },
+    { id: ACTIONS.BULK_UPLOAD_MENU, title: "📋 Bulk paste list" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
 
