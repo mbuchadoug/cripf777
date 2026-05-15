@@ -108,19 +108,13 @@ import {
 import {
   trackSupplierResponseSpeed,
   getBuyerOpenRequests,
+  getBuyerLastRequest,
   formatBuyerQuoteComparison,
   formatRequestSummary,
   parseBuyerRequestLineWithQty,
   parseItemListWithQty
 } from "./buyerRequests.js";
- 
- 
-import {
-  notifySupplierNewRequestTemplate,
-  sendClarificationRequestToBuyer,
-  sendClarificationReplyToSeller
-} from "./buyerRequestNotifications.js";
- 
+import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
 import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
@@ -2615,9 +2609,8 @@ async function notifySuppliersOfBuyerRequest(request) {
           : "🏠 Collection / flexible";
 
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
-    await notifySupplierNewRequestTemplate({
+      await notifySupplierNewRequestTemplate({
         supplierPhone:        supplier.phone,
-        supplier,                                      // ← NEW: for VIP check
         notificationContacts: supplier.notificationContacts || [],
         requestId:            String(request._id),
         ref,
@@ -2626,10 +2619,8 @@ async function notifySuppliersOfBuyerRequest(request) {
         itemSummary:   _notifItemLines,
         deliveryLine:  _deliveryLine,
         fullItemLines: _notifItemLines,
-        replyExamples: _notifExamples,
-        buyerPhone:    request.buyerPhone || null       // ← NEW: shown to VIP sellers
+        replyExamples: _notifExamples
       });
- 
 
       // Step 2: Immediately send interactive pricing form - template opens the session
       // so this sendButtons is always deliverable right after the template ping.
@@ -2761,11 +2752,10 @@ async function finalizeBuyerRequestSubmission({
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
-    notes: pendingRequest.notes || null,         // ← NEW
- 
+
     deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
     deliveryAddress: !_isServiceReq ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
- 
+
     serviceAddress: _isServiceReq ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
     status: "open"
   });
@@ -2808,27 +2798,20 @@ async function finalizeBuyerRequestSubmission({
       ? `🚚 Delivery required${request.deliveryAddress ? `\n📍 Delivery address: ${request.deliveryAddress}` : ""}`
       : "🏠 Collection / no delivery needed";
 
-  const _notesConfirmLine = request.notes ? `📝 ${request.notes}\n` : "";
-  const _vipDisclosure = notifiedCount > 0 ? `\n_Your contact number may be shared with verified sellers._` : "";
- 
   return sendButtons(from, {
     text:
-      `✅ *Request sent to sellers!*\n\n` +
+      `✅ *Request sent to sellers.*\n\n` +
       `Ref: *${ref}*\n\n` +
       `${itemLines}\n\n` +
       `${locationLine}\n` +
-      `${deliveryLine}\n` +
-      `${_notesConfirmLine}\n` +
-      `Sellers notified: *${notifiedCount}*\n` +
-      `_Quotes arrive here. Request closes in 15 minutes._` +
-      `${_vipDisclosure}`,
+      `${deliveryLine}\n\n` +
+      `Suppliers notified: *${notifiedCount}*\n\n` +
+      `When sellers reply with prices, you’ll receive the quotation here.`,
     buttons: [
-      { id: "buyer_my_requests",  title: "📋 My Requests" },
-      { id: "sup_request_sellers", title: "⚡ New Request"  }
+      { id: "buyer_my_requests", title: "📋 My Requests" },
+      { id: "sup_request_sellers", title: "⚡ New Request" }
     ]
   });
- 
- 
 }
 
 async function _sendSupplierCatalogueBrowser(from, supplier, cart = [], opts = {}) {
@@ -3348,7 +3331,7 @@ a.startsWith("sup_load_preset_") ||
 
 
       a === "sup_request_sellers" ||
-  
+      a === "sup_repeat_last_request" ||
       a === "sup_use_saved_location" ||
       a === "sup_change_location" ||
       a === "sup_pause_requests" ||
@@ -3642,9 +3625,6 @@ const BUYER_REQUEST_META_ACTIONS = new Set([
   "view_and_quote",
   "not_available",
   "sup_skip_service_address",
-    "sup_confirm_request_yes",
-  "sup_confirm_request_edit",
-  "sup_notes_skip",
   "sup_request_delivery_yes",
   "sup_request_delivery_no",
   "sup_request_delivery_flexible",
@@ -4021,12 +4001,10 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `─────────────────\n` +
           `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
           `The buyer receives your quote instantly.`,
-            buttons: [
-          { id: `req_offer_${sellerRequestId}`,   title: "💬 View & Quote"    },
-          { id: `req_unavail_${sellerRequestId}`, title: "❌ Not Available"   },
-          { id: `req_clarify_${sellerRequestId}`, title: "❓ Need More Info"  }
+        buttons: [
+          { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"  },
+          { id: `req_unavail_${sellerRequestId}`, title: "Not Available" }
         ]
- 
       });
     }
 
@@ -4596,16 +4574,21 @@ await UserSession.findOneAndUpdate(
       `*menu* = Main menu (always)\n` +
       `*back* = Previous step\n` +
       `*quotes* = View your current quotes\n` +
+      `*repeat* = Repeat your last request\n` +
       `*my requests* = View request history\n` +
       `*help* = Show this list\n\n` +
       `Type *0* to go to main menu now.`
     );
   }
- 
+
+  if (al === "repeat") {
+    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
+  }
+
   if (al === "my requests" || al === "buyer_my_requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
- 
+
   const requestMode = flowSess?.tempData?.buyerRequestMode || pendingBuyerRequest?.requestType || "simple";
 
   // SIMPLE MODE = one-line item + suburb/city
@@ -4711,65 +4694,57 @@ await UserSession.findOneAndUpdate(
         ? `📍 ${parsedArea}, ${parsedCity}`
         : `📍 ${parsedCity}`;
 
-   if (_simpleIsService) {
+      if (_simpleIsService) {
         const _isTourismAddr = _buyerRequestIsTourism(parsedItems);
         return sendButtons(
           from,
           {
             text:
-              `✅ *Confirm your request:*\n\n` +
-              `${_buyerRequestIsTourism(parsedItems) ? "🌍 Tourism / activity" : "🔧 Service request"}\n\n` +
+              `✅ *Request captured:*\n\n` +
               `${_confirmItemLines}\n\n` +
               `${locationLine}\n\n` +
               (_isTourismAddr
                 ? `📍 *Where will you be when the service starts?*\n\n` +
-                  `_e.g. Kariba marina, Kingdom Hotel, Hwange main gate_\n\n` +
-                  `Or tap Skip — share your exact location with the operator later.`
-                : `📍 *Where do you need this done?*\n\n` +
-                  `_Suburb, street, or landmark is fine — e.g. near Avondale shops, Mabelreign_\n\n` +
-                  `Or tap Skip — the provider will confirm address with you.`),
+                  `_e.g. Kariba marina, Binga Harbour, Hwange main gate_\n\n` +
+                  `Or tap Skip - you can share your exact location with the operator later.`
+                : `📍 *Where should the service provider come?*\n\n` +
+                  `_e.g. 24 Mabelreign Drive, Harare_\n\n` +
+                  `Or tap Skip - share your address directly with the provider.`),
             buttons: [
-              { id: "sup_skip_service_address", title: "⏭ Skip (share later)" },
-              { id: "sup_confirm_request_edit", title: "✏️ Edit items"         },
-              { id: "00",                       title: "❌ Cancel"              }
+              { id: "sup_skip_service_address", title: "⏭ Skip (share later)" }
             ]
           }
         );
       }
- 
 
       // ── Context-aware delivery question ────────────────────────────────────
       const _isTourismReq = _buyerRequestIsTourism(parsedItems);
       if (_isTourismReq) {
         return sendButtons(from, {
           text:
-            `✅ *Confirm your request:*\n\n` +
-            `🌍 Tourism / activity\n\n` +
+            `✅ *Request captured:*\n\n` +
             `${_confirmItemLines}\n\n` +
             `${locationLine}\n\n` +
-            `📍 *Where will you be? Should the operator come to you?*`,
+            `📍 *Where will you be? / Where should the operator meet you?*`,
           buttons: [
-            { id: "sup_request_delivery_yes", title: "📍 Come to my location"    },
-            { id: "sup_request_delivery_no",  title: "🏕 I'll go to the operator" },
-            { id: "00",                       title: "❌ Cancel"                  }
+            { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
+            { id: "sup_request_delivery_no",  title: "🏕 I'll go to the operator" }
           ]
         });
       }
- 
+
       return sendButtons(from, {
         text:
-          `✅ *Confirm your request:*\n\n` +
-          `📦 Product request\n\n` +
+          `✅ *Request captured - please check quantities:*\n\n` +
           `${_confirmItemLines}\n\n` +
           `${locationLine}\n\n` +
-          `🚚 *Do you need delivery?*`,
+          `_To correct a quantity, type your request again with the right amount._\n\n` +
+          `🚚 Do you need delivery?`,
         buttons: [
-          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery"  },
-          { id: "sup_request_delivery_no",  title: "🏠 No, collection" },
-          { id: "00",                       title: "❌ Cancel"          }
+          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+          { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
         ]
       });
- 
     }
 
     // ── No location yet - ask for it ───────────────────────────────────────
@@ -4948,121 +4923,71 @@ await UserSession.findOneAndUpdate(
         );
       }
 
-  return sendButtons(from, {
+      return sendButtons(from, {
         text:
           `🚚 *Do you need delivery?*\n\n` +
           `${parsedLocation.area ? `📍 ${parsedLocation.area}, ${parsedLocation.city}` : `📍 ${parsedLocation.city}`}`,
         buttons: [
-          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery"  },
-          { id: "sup_request_delivery_no",  title: "🏠 No, collection" },
-          { id: "00",                       title: "❌ Cancel"          }
+          { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+          { id: "sup_request_delivery_no", title: "🏠 No, collection" }
         ]
       });
     }
 
 if (buyerRequestState === "awaiting_delivery_address") {
-  const _isExitDA =
+  const _isExit =
     al === "cancel" || al === "0" || al === "00" || al === "000" ||
     al === "menu" || al === "main menu" || al === "main_menu";
- 
-  if (_isExitDA) {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
-      { upsert: true }
-    );
-    return sendButtons(from, {
-      text: "✅ Request cancelled.",
-      buttons: [
-        { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-        { id: "find_supplier",       title: "🔍 Browse & Shop"   }
-      ]
-    });
-  }
- 
-  // Back → return to delivery yes/no question
-  if (al === "back") {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $set: { "tempData.buyerRequestState": "awaiting_delivery" } },
-      { upsert: true }
-    );
-    const _locDA = pendingBuyerRequest?.area
-      ? `${pendingBuyerRequest.area}, ${pendingBuyerRequest.city || ""}`
-      : (pendingBuyerRequest?.city || "");
-    return sendButtons(from, {
-      text: `🚚 *Do you need delivery?*\n\n📍 ${_locDA}`,
-      buttons: [
-        { id: "sup_request_delivery_yes", title: "✅ Yes, delivery"  },
-        { id: "sup_request_delivery_no",  title: "🏠 No, collection" },
-        { id: "00",                       title: "❌ Cancel"          }
-      ]
-    });
-  }
- 
-  // Skip → proceed to notes without an address
-  if (al === "skip") {
+
+  if (_isExit) {
     await UserSession.findOneAndUpdate(
       { phone },
       {
-        $set: {
-          "tempData.buyerRequestState": "awaiting_notes",
-          "tempData.pendingBuyerRequest": { ...(pendingBuyerRequest || {}), deliveryRequired: true, deliveryAddress: null }
+        $unset: {
+          "tempData.buyerRequestState": "",
+          "tempData.pendingBuyerRequest": "",
+          "tempData.buyerRequestMode": ""
         }
       },
       { upsert: true }
     );
-    return sendButtons(from, {
-      text:
-        `📝 *Any notes for sellers?*\n\n` +
-        `Budget, urgency, brand preference, date needed — or tap Skip.`,
-      buttons: [
-        { id: "sup_notes_skip", title: "⏭ Skip notes" },
-        { id: "00",             title: "❌ Cancel"      }
-      ]
-    });
+
+    return sendSuppliersMenu(from);
   }
- 
+
   const deliveryAddress = String(text || "").trim();
- 
-  if (!deliveryAddress || deliveryAddress.length < 3) {
-    return sendButtons(from, {
-      text:
-        `❌ Please enter a delivery address or tap Skip.\n\n` +
-        `_e.g. 24 Mabelreign Drive, or just "Avondale shops"_`,
-      buttons: [
-        { id: "sup_notes_skip", title: "⏭ Skip (share later)" },
-        { id: "back",           title: "↩ Back"                },
-        { id: "00",             title: "❌ Cancel"              }
-      ]
-    });
+
+  if (!deliveryAddress || deliveryAddress.length < 5) {
+    return sendText(
+      from,
+      `❌ Please enter a proper delivery / pickup address.\n\n` +
+      `Example:\n_24 Mabelreign Drive, Harare_\n__\n\n` +
+      `Type *cancel* to stop.`
+    );
   }
- 
-  // Valid address → proceed to notes
+
   await UserSession.findOneAndUpdate(
     { phone },
     {
-      $set: {
-        "tempData.buyerRequestState": "awaiting_notes",
-        "tempData.pendingBuyerRequest": {
-          ...(pendingBuyerRequest || {}),
-          deliveryRequired: true,
-          deliveryAddress
-        }
+      $unset: {
+        "tempData.buyerRequestState": "",
+        "tempData.pendingBuyerRequest": "",
+        "tempData.buyerRequestMode": ""
       }
     },
     { upsert: true }
   );
- 
-  return sendButtons(from, {
-    text:
-      `📝 *Any notes for sellers?*\n\n` +
-      `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
-      `_e.g. "budget $120, need by Friday, cash, collect tomorrow"_`,
-    buttons: [
-      { id: "sup_notes_skip", title: "⏭ Skip notes" },
-      { id: "00",             title: "❌ Cancel"      }
-    ]
+
+  return finalizeBuyerRequestSubmission({
+    from,
+    phone,
+    pendingRequest: {
+      ...(pendingBuyerRequest || {}),
+      deliveryRequired: true,
+      deliveryAddress
+    },
+    deliveryRequired: true,
+    deliveryAddress
   });
 }
 
@@ -5075,113 +5000,36 @@ if (buyerRequestState === "awaiting_delivery_address") {
           { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
           { upsert: true }
         );
-        return sendButtons(from, {
-          text: "✅ Request cancelled.",
-          buttons: [
-            { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-            { id: "find_supplier",       title: "🔍 Browse & Shop"   }
-          ]
-        });
+        return sendSuppliersMenu(from);
       }
-      // "Edit items" button or "back" keyword → reset to awaiting_items
-      if (al === "back" || a === "sup_confirm_request_edit") {
+      if (al === "back") {
         await UserSession.findOneAndUpdate(
           { phone },
           { $set: { "tempData.buyerRequestState": "awaiting_items" } },
           { upsert: true }
         );
-        return sendButtons(from, {
-          text:
-            `↩️ *Edit your request*\n\n` +
-            `Type your item(s) and area again.\n\n` +
-            `*0* = main menu · *00* = cancel`,
-          buttons: [
-            { id: "sup_request_mode_bulk", title: "📋 Bulk mode" },
-            { id: "00",                    title: "❌ Cancel"     }
-          ]
-        });
+        return sendText(from, `↩️ Back to your request.\n\nType your item + city again.\n\nType *cancel* to stop.`);
       }
       // Accept both typed "skip" and tapping the skip button
       const _saAddress = (al === "skip" || a === "sup_skip_service_address") ? null : text.trim();
-      // Min 3 chars — suburb name like "CBD" or "town" is valid
       if (_saAddress && _saAddress.length < 3) {
-        return sendButtons(from, {
-          text: `❌ Please enter a valid area or tap Skip.\n\n_A suburb or landmark is enough — exact address not needed._`,
-          buttons: [
-            { id: "sup_skip_service_address", title: "⏭ Skip (share later)" },
-            { id: "sup_confirm_request_edit", title: "✏️ Edit items"         },
-            { id: "00",                       title: "❌ Cancel"              }
-          ]
-        });
+        return sendText(from, `❌ Please enter a valid address or type *skip*.\n\nType *cancel* to stop.`);
       }
-      // Proceed to notes step
-      await UserSession.findOneAndUpdate(
-        { phone },
-        {
-          $set: {
-            "tempData.buyerRequestState": "awaiting_notes",
-            "tempData.pendingBuyerRequest": {
-              ...(pendingBuyerRequest || {}),
-              serviceAddress: _saAddress || null,
-              isServiceRequest: true
-            }
-          }
-        },
-        { upsert: true }
-      );
-      return sendButtons(from, {
-        text:
-          `📝 *Any notes for sellers?*\n\n` +
-          `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
-          `_e.g. "budget $120, need done by Friday, prefer Msasa area"_`,
-        buttons: [
-          { id: "sup_notes_skip", title: "⏭ Skip notes"  },
-          { id: "00",             title: "❌ Cancel"       }
-        ]
-      });
-    }
- 
-  }
-
- if (buyerRequestState === "awaiting_notes") {
-    // Universal exits
-    if (al === "cancel" || al === "0" || al === "00" || al === "000" || al === "menu" || al === "main menu") {
       await UserSession.findOneAndUpdate(
         { phone },
         { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
         { upsert: true }
       );
-      return sendButtons(from, {
-        text: "✅ Request cancelled.",
-        buttons: [
-          { id: "sup_request_sellers", title: "⚡ Request Sellers" },
-          { id: "find_supplier",       title: "🔍 Browse & Shop"   }
-        ]
+      return finalizeBuyerRequestSubmission({
+        from, phone,
+        pendingRequest: { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true },
+        deliveryRequired: false,
+        serviceAddress: _saAddress || null
       });
     }
- 
-    // Skip notes — finalize without notes
-    const _skipNotes = al === "skip" || a === "sup_notes_skip";
-    const _notesText = _skipNotes ? null : text.trim() || null;
- 
-    // Finalize
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
-      { upsert: true }
-    );
-    return finalizeBuyerRequestSubmission({
-      from, phone,
-      pendingRequest: {
-        ...(pendingBuyerRequest || {}),
-        notes: _notesText
-      },
-      deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
-      deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null,
-      serviceAddress:   pendingBuyerRequest?.serviceAddress   || null
-    });
   }
- 
+
+
 
   // =========================
   // 🟢 ONBOARDING GATE
@@ -5207,10 +5055,9 @@ const GREETING_WORDS = new Set([
   "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
   "help", "start", "menu", "home", "back", "cancel",
   // Universal shortcuts
-  "0", "00", "000", "quotes", "my quotes", "my requests",
+  "0", "00", "000", "quotes", "my quotes", "repeat", "my requests",
   "pause", "resume"
 ]);
- 
 
 // ── Global greeting/menu guard ─────────────────────────────────────────────
 if (
@@ -5228,7 +5075,9 @@ if (
   if (al === "quotes" || al === "my quotes") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
-
+  if (al === "repeat") {
+    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
+  }
   if (al === "my requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
@@ -5246,7 +5095,7 @@ if (
       `*00* = Cancel current flow\n` +
       `*menu* = Main menu\n` +
       `*quotes* = View your current quotes\n` +
-    
+      `*repeat* = Repeat last request\n` +
       `*my requests* = Request history\n` +
       `*pause* = Pause request notifications (sellers)\n` +
       `*resume* = Resume notifications (sellers)\n` +
@@ -5717,10 +5566,7 @@ a.startsWith("sup_accept_") ||
       a.startsWith("paylist_search_") ||
 
   a === "sup_request_sellers" ||
- a === "sup_confirm_request_yes" ||
-  a === "sup_confirm_request_edit" ||
-  a === "sup_notes_skip" ||
-  a.startsWith("req_clarify_") ||
+  a === "sup_repeat_last_request" ||
   a === "sup_use_saved_location" ||
   a === "sup_change_location" ||
   a === "sup_pause_requests" ||
@@ -15649,6 +15495,58 @@ isService
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
 if (a === "sup_request_sellers") {
+
+  // ── Returning buyer: offer one-tap repeat of last request ─────────────────
+  const lastReq = await getBuyerLastRequest(phone);
+  if (lastReq && (lastReq.items || []).length > 0) {
+    const lastItems = formatBuyerRequestItems(lastReq.items || [], 5);
+    const lastLocation = lastReq.area
+      ? `${lastReq.area}, ${lastReq.city || ""}`
+      : (lastReq.city || "Zimbabwe");
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState":  "awaiting_items",
+          "tempData.buyerRequestMode":   "simple",
+          "tempData.lastRequestSnapshot": {
+            items:   lastReq.items,
+            city:    lastReq.city,
+            area:    lastReq.area,
+            isServiceRequest: lastReq.isServiceRequest || false
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+ await sendButtons(from, {
+  text:
+    `⚡ *Request Sellers*\n\n` +
+    `👋 Welcome back! Repeat your last request?\n\n` +
+    `📦 1. element replacement x1\n` +
+    `📍 Harare\n\n` +
+    `Or type a new request below.\n\n` +
+    `0=Menu • 00=Cancel`,
+  buttons: [
+    { id: "sup_repeat_last_request", title: "🔁 Repeat" },
+    { id: "sup_request_mode_bulk", title: "📋 Bulk List" }
+  ]
+});
+
+return sendText(
+  from,
+  `*Examples:*\n` +
+  `_copper pipe 15mm, 5 lengths_\n` +
+  `_cement 50kg x20_\n` +
+  `_need plumber Avondale_\n\n` +
+  `Tip: Put quantity at the end.\n` +
+  `Example: copper pipe 15mm, 5 lengths`
+);
+  }
+
+  // ── First-time or no prior request ────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -15664,22 +15562,21 @@ if (a === "sup_request_sellers") {
     },
     { upsert: true }
   );
- 
+
   return sendButtons(from, {
     text:
       `⚡ *Request Sellers*\n\n` +
-      `What do you need? Type your items and your area.\n\n` +
+      `What do you need? Type your items or describe the job.\n\n` +
       `*📦 Products:*\n` +
-      `_copper pipe 15mm, 5 lengths, Msasa Harare_\n` +
-      `_16mm2 x4 core cu pvc swa cable 200m, Hatfield_\n` +
-      `_cement 50kg x20 bags, river sand 2m3, Mbare_\n` +
-      `_10kw growatt inverter x2, Glen View Harare_\n\n` +
+      `_copper pipe 15mm, 5 lengths_\n` +
+      `_cement 50kg x20 bags, river sand 3m3_\n` +
+      `_2.5mm TE cable, 50m_\n\n` +
       `*🔧 Services:*\n` +
-      `_need plumber, burst pipe, Avondale Harare_\n` +
-      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
-      `_glass repair 600x900mm, Eastlea_\n\n` +
+      `_need plumber, burst pipe, Avondale_\n` +
+      `_electrician for DB board, Chitungwiza_\n\n` +
       `*Bulk list?* Use the button below.\n\n` +
-      `💡 _Put quantity at the end. Spec numbers like 15mm and 50kg stay part of the name._\n\n` +
+      `_Tip: put quantity last - e.g. "copper pipe 15mm, 5 lengths"_\n` +
+      `_Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
       `*0 = Main menu · 00 = Cancel*`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
@@ -15687,7 +15584,6 @@ if (a === "sup_request_sellers") {
     ]
   });
 }
- 
 
 // ── Repeat last request: one tap resends ──────────────────────────────────────
 if (a === "sup_repeat_last_request") {
@@ -15822,29 +15718,12 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     );
   }
 
-await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      $set: {
-        "tempData.buyerRequestState": "awaiting_notes",
-        "tempData.pendingBuyerRequest": {
-          ...pendingBuyerRequest,
-          deliveryRequired: false,
-          deliveryAddress: null
-        }
-      }
-    },
-    { upsert: true }
-  );
-  return sendButtons(from, {
-    text:
-      `📝 *Any notes for sellers?*\n\n` +
-      `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
-      `_e.g. "budget $120, cash only, need by end of week"_`,
-    buttons: [
-      { id: "sup_notes_skip", title: "⏭ Skip notes" },
-      { id: "00",             title: "❌ Cancel"      }
-    ]
+  return finalizeBuyerRequestSubmission({
+    from,
+    phone,
+    pendingRequest: pendingBuyerRequest,
+    deliveryRequired: false,
+    deliveryAddress: null
   });
 }
 
@@ -15889,12 +15768,11 @@ if (a === "sup_use_saved_location") {
 
   const _isTourismSaved = _buyerRequestIsTourism(updatedRequest.items || []);
   if (_isTourismSaved) {
- return sendButtons(from, {
+    return sendButtons(from, {
       text: `📍 *Where will you be? Should the operator come to you?*\n\n📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}`,
       buttons: [
-        { id: "sup_request_delivery_yes", title: "📍 Come to my location"    },
-        { id: "sup_request_delivery_no",  title: "🏕 I'll go to the operator" },
-        { id: "00",                       title: "❌ Cancel"                  }
+        { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
+        { id: "sup_request_delivery_no",  title: "🏕 I'll go to operator" }
       ]
     });
   }
@@ -15902,9 +15780,8 @@ if (a === "sup_use_saved_location") {
   return sendButtons(from, {
     text: `🚚 *Do you need delivery?*\n\n📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}`,
     buttons: [
-      { id: "sup_request_delivery_yes", title: "✅ Yes, delivery"  },
-      { id: "sup_request_delivery_no",  title: "🏠 No, collection" },
-      { id: "00",                       title: "❌ Cancel"          }
+      { id: "sup_request_delivery_yes", title: "✅ Yes, delivery" },
+      { id: "sup_request_delivery_no",  title: "🏠 No, collection" }
     ]
   });
 }
