@@ -108,6 +108,7 @@ import {
 import {
   trackSupplierResponseSpeed,
   getBuyerOpenRequests,
+  getBuyerLastRequest,
   formatBuyerQuoteComparison,
   formatRequestSummary,
   parseBuyerRequestLineWithQty,
