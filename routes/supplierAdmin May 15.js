@@ -1059,8 +1059,6 @@ const successMsg = req.query.success
             <dt>Monthly Orders</dt><dd>${supplier.monthlyOrders || 0}</dd>
             <dt>Total Revenue</dt><dd><strong>$${totalRevenue.toFixed(2)}</strong></dd>
             <dt>Suspended</dt><dd>${supplier.suspended ? "⛔ Yes" : "✅ No"}</dd>
-            <dt>VIP Buyer Phone</dt><dd>${supplier.revealBuyerPhone ? "🔒 Yes — buyer phone revealed on requests" : "⚪ No"}</dd>
-            <dt>VIP Visitor Phone</dt><dd>${supplier.revealVisitorPhone ? "🔒 Yes — visitor phone revealed on smart link opens" : "⚪ No"}</dd>
             <dt>Delivery</dt><dd>${supplier.delivery?.available ? "🚚 Yes" : "🏠 Collection only"}</dd>
             <dt>Min Order</dt><dd>$${supplier.minOrder || 0}</dd>
             <dt>Registered</dt><dd>${new Date(supplier.createdAt).toDateString()}</dd>
@@ -1101,10 +1099,6 @@ const successMsg = req.query.success
  </a>
   <a href="/zq-admin/suppliers/${supplier._id}/chatlink" class="btn btn-teal">
     📲 Chatbot Link
-  </a>
-
-  <a href="/zq-admin/suppliers/${supplier._id}/vip-settings" class="btn btn-purple">
-    🔒 VIP Notifications
   </a>
 </div>
         </div>
@@ -1544,8 +1538,6 @@ if (req.body.maxGroupSize !== undefined) {
       update.tourismAreas = (req.body.tourismAreas || "").split(",").map(s => s.trim()).filter(Boolean);
     }
 
-    // ── VIP notification flags (set via VIP Settings page, not edit form) ────
-    // These are managed via /suppliers/:id/vip-settings — do not overwrite here.
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
   } catch (err) {
@@ -2570,7 +2562,6 @@ const isPresets     = t === "Presets" || t.startsWith("Preset:");
 { href: "/zq-admin/expiry",          label: "⏰ Subscriptions",       active: isExpiry },
     { href: "/zq-admin/broadcast-offer", label: "📣 Broadcast Offer",     active: isBroadcast },
     { href: "/zq-admin/presets",         label: "🗂️ Presets",             active: isPresets },
-    { href: "/zq-admin/vip-sellers",      label: "🔒 VIP Sellers",         active: t === "VIP Sellers" },
   ];
 
   return `<!DOCTYPE html>
@@ -4691,168 +4682,6 @@ h1{font-size:22px;font-weight:800;color:#0a1a0a;margin-bottom:6px;line-height:1.
 });
 
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VIP NOTIFICATION SETTINGS
-// GET  /zq-admin/suppliers/:id/vip-settings  → view/edit VIP flags
-// POST /zq-admin/suppliers/:id/vip-settings  → save flags
-// ─────────────────────────────────────────────────────────────────────────────
-router.get("/suppliers/:id/vip-settings", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-
-    const successMsg = req.query.success
-      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
-      : "";
-
-    res.send(layout(esc(supplier.businessName), `
-      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
-      ${successMsg}
-
-      <div class="panel" style="max-width:600px">
-        <div class="panel-head">
-          <h3>🔒 VIP Notification Settings</h3>
-        </div>
-
-        <div style="background:#fef9c3;color:#a16207;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:13px;line-height:1.6">
-          <strong>What this does:</strong> When enabled, this seller receives an extra follow-up message
-          containing the contact number of the person who opened their profile link or sent a request.
-          Standard sellers never see these numbers. Only assign to verified, trusted sellers.
-        </div>
-
-        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/vip-settings">
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-            <thead>
-              <tr>
-                <th style="text-align:left;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Notification type</th>
-                <th style="text-align:left;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">What it does</th>
-                <th style="text-align:center;padding:10px 12px;background:#f8fafc;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Enabled</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding:14px 12px;border-bottom:1px solid #f1f5f9;font-weight:600">📦 Request buyer phone</td>
-                <td style="padding:14px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px">
-                  When a buyer sends a request and this seller is notified, a follow-up message
-                  is sent with the buyer's WhatsApp number. Seller can contact them directly.
-                </td>
-                <td style="padding:14px 12px;border-bottom:1px solid #f1f5f9;text-align:center">
-                  <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
-                    <input type="checkbox" name="revealBuyerPhone" value="true"
-                           ${supplier.revealBuyerPhone ? "checked" : ""}
-                           style="width:18px;height:18px;cursor:pointer" />
-                    <span style="font-size:13px">${supplier.revealBuyerPhone ? badge("Enabled", "green") : badge("Disabled", "gray")}</span>
-                  </label>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:14px 12px;font-weight:600">👁 Smart link visitor phone</td>
-                <td style="padding:14px 12px;color:#64748b;font-size:13px">
-                  When someone opens this seller's ZimQuote profile link, a follow-up message
-                  is sent with the visitor's WhatsApp number. Seller can follow up with them directly.
-                </td>
-                <td style="padding:14px 12px;text-align:center">
-                  <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
-                    <input type="checkbox" name="revealVisitorPhone" value="true"
-                           ${supplier.revealVisitorPhone ? "checked" : ""}
-                           style="width:18px;height:18px;cursor:pointer" />
-                    <span style="font-size:13px">${supplier.revealVisitorPhone ? badge("Enabled", "green") : badge("Disabled", "gray")}</span>
-                  </label>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div style="display:flex;gap:10px;align-items:center">
-            <button type="submit" class="btn btn-purple">🔒 Save VIP Settings</button>
-            <a href="/zq-admin/suppliers/${supplier._id}" class="btn btn-gray">Cancel</a>
-          </div>
-        </form>
-
-        <div style="margin-top:24px;padding-top:18px;border-top:1px solid #e2e8f0">
-          <h4 style="font-size:13px;font-weight:600;margin-bottom:10px;color:#64748b">Current VIP sellers (all)</h4>
-          <a href="/zq-admin/vip-sellers" class="btn-link" style="font-size:13px">View all VIP sellers →</a>
-        </div>
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
-  }
-});
-
-router.post("/suppliers/:id/vip-settings", requireSupplierAdmin, async (req, res) => {
-  try {
-    const revealBuyerPhone   = req.body.revealBuyerPhone   === "true";
-    const revealVisitorPhone = req.body.revealVisitorPhone === "true";
-
-    await SupplierProfile.findByIdAndUpdate(req.params.id, {
-      $set: { revealBuyerPhone, revealVisitorPhone }
-    });
-
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    const changes  = [];
-    if (revealBuyerPhone)   changes.push("buyer phone on requests");
-    if (revealVisitorPhone) changes.push("visitor phone on smart link opens");
-    const msg = changes.length
-      ? `VIP enabled: ${changes.join(" + ")} for ${supplier?.businessName || "this seller"}`
-      : `VIP notifications disabled for ${supplier?.businessName || "this seller"}`;
-
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/vip-settings?success=${encodeURIComponent(msg)}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/vip-settings?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── VIP Sellers overview page ──────────────────────────────────────────────
-router.get("/vip-sellers", requireSupplierAdmin, async (req, res) => {
-  try {
-    const vipSellers = await SupplierProfile.find({
-      $or: [{ revealBuyerPhone: true }, { revealVisitorPhone: true }]
-    }).sort({ businessName: 1 }).lean();
-
-    res.send(layout("VIP Sellers", `
-      <div class="panel">
-        <div class="panel-head">
-          <h3>🔒 VIP Sellers <span class="count">${vipSellers.length}</span></h3>
-          <p style="font-size:12px;color:var(--muted);margin:0">Sellers who receive buyer or visitor phone numbers in notifications.</p>
-        </div>
-
-        ${vipSellers.length ? `
-        <table>
-          <thead>
-            <tr>
-              <th>Business</th>
-              <th>Phone</th>
-              <th>City</th>
-              <th>Buyer phone</th>
-              <th>Visitor phone</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${vipSellers.map(s => `
-            <tr>
-              <td><strong>${esc(s.businessName)}</strong></td>
-              <td><code style="font-size:12px">${esc(s.phone)}</code></td>
-              <td>${esc(s.location?.city || "-")}</td>
-              <td>${s.revealBuyerPhone ? badge("Enabled", "green") : badge("Off", "gray")}</td>
-              <td>${s.revealVisitorPhone ? badge("Enabled", "green") : badge("Off", "gray")}</td>
-              <td><a href="/zq-admin/suppliers/${s._id}/vip-settings" class="btn-link">Edit →</a></td>
-            </tr>`).join("")}
-          </tbody>
-        </table>` : `
-        <div style="padding:20px;color:var(--muted);font-size:13px">
-          No VIP sellers yet. Go to any supplier profile and click
-          <strong>🔒 VIP Notifications</strong> to assign phone reveal.
-        </div>`}
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("VIP Sellers", `<div class="alert red">${err.message}</div>`));
-  }
-});
 
 router.use("/suppliers/:id/smart-link", smartLinkRoutes);
 

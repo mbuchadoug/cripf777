@@ -447,7 +447,7 @@ export async function handleZqDeepLink({ from, text, biz, saveBiz }) {
     // Notify supplier + all notification contacts (works outside 24hr via UTILITY template)
     SupplierProfile.findById(supplierId).lean().then(supplier => {
       if (supplier?.phone) {
-        notifyAllSupplierLinkOpened(supplier, source, from).catch(() => {});  // `from` = visitor's WhatsApp number
+        notifyAllSupplierLinkOpened(supplier, source).catch(() => {});
       }
     }).catch(() => {});
 
@@ -496,7 +496,7 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
   if (supplier) {
     // Notify supplier of the profile view (works outside 24hr window)
     if (supplier.phone) {
-      notifyAllSupplierLinkOpened(supplier, "direct", from).catch(() => {});  // `from` = visitor's WhatsApp number
+      notifyAllSupplierLinkOpened(supplier, "direct").catch(() => {});
     }
     await _showSupplierCard(from, String(supplier._id));
     return true;

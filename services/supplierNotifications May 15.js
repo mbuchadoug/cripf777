@@ -9,13 +9,11 @@
 // Template names must match exactly what was submitted to Meta.
 //
 // ── Templates covered: ───────────────────────────────────────────────────────
-//   supplier_trial_activated         → trial started notification
-//   supplier_offer                   → discount / payment offer blast
-//   supplier_subscription_expiring   → expiry warning (3 days / 1 day before)
-//   supplier_subscription_expired    → post-expiry notice
-//   supplier_payment_receipt         → manual payment receipt
-//   supplier_link_opened             → smart link opened (standard, no phone)
-//   supplier_link_opened_with_phone  → smart link opened (VIP, visitor phone in {{4}})
+//   supplier_trial_activated       → trial started notification
+//   supplier_offer                 → discount / payment offer blast
+//   supplier_subscription_expiring → expiry warning (3 days / 1 day before)
+//   supplier_subscription_expired  → post-expiry notice
+//   supplier_payment_receipt       → manual payment receipt
 //
 // ── Meta template body reference (submit these to Meta Business Manager): ────
 //
@@ -54,37 +52,6 @@
 //    Valid until: {{6}}
 //    Thank you for your payment. Type *menu* to access your dashboard.
 //    This is an automated receipt from ZimQuote.
-//
-//  supplier_link_opened:  (UTILITY - standard, no phone number)
-//    👁 Someone opened your ZimQuote profile!
-//    Business: {{1}}
-//    Via: {{2}}
-//    Time: {{3}}
-//    They can request a quote, book a service, or send you an enquiry.
-//    Type *menu* to view your store.
-//    This is an automated activity alert from ZimQuote.
-//
-//  supplier_link_opened_with_phone:  (UTILITY - VIP sellers only, APPROVED)
-//    👁 Someone opened your ZimQuote profile!
-//    Business: {{1}}
-//    Via: {{2}}
-//    Time: {{3}}
-//    Visitor contact: {{4}}
-//    They can request a quote, book, or send an enquiry directly.
-//    Type *menu* to view your store.
-//    This is an automated activity alert from ZimQuote.
-//
-//    Variables:
-//      {{1}} = businessName          e.g.  "Mutare Electrical Supplies"
-//      {{2}} = sourceLabel           e.g.  "QR Code scan"
-//      {{3}} = timestamp             e.g.  "15 May 2026, 09:42"
-//      {{4}} = visitor phone         e.g.  "+263 773 123 456"
-//
-// ── VIP SELLER ASSIGNMENT ────────────────────────────────────────────────────
-// Set via /zq-admin → Supplier → Edit → "VIP Notifications" section:
-//   revealBuyerPhone    = true → receives buyer phone on new request notifications
-//   revealVisitorPhone  = true → receives visitor phone on smart link open alerts
-// Or via admin WhatsApp command (see chatbotEngine.js admin section).
 
 import axios from "axios";
 import { sendText } from "./metaSender.js";
@@ -98,6 +65,7 @@ const ACCESS_TOKEN =
   process.env.META_ACCESS_TOKEN ||
   process.env.WHATSAPP_ACCESS_TOKEN;
 
+// ── Guard: warn loudly at startup if env vars are missing ────────────────────
 if (!PHONE_NUMBER_ID) {
   console.error(
     "[Supplier Notify] ⚠️  No PHONE_NUMBER_ID found in environment " +
@@ -114,22 +82,15 @@ if (!ACCESS_TOKEN) {
 }
 
 // ── Helper: normalize Zimbabwean phone numbers to international format ────────
+// Handles:  0771234567  → 263771234567
+//           263771234567 → 263771234567  (already correct, no change)
+//           +263771234567 → 263771234567 (strips the +)
 function _normalizeZimPhone(raw = "") {
   let phone = String(raw).replace(/\D+/g, "");
   if (phone.startsWith("0") && phone.length === 10) {
     phone = "263" + phone.slice(1);
   }
   return phone;
-}
-
-// ── Helper: format phone for human-readable display ───────────────────────────
-// e.g. "263773123456" → "+263 773 123 456"
-function _formatPhoneDisplay(raw = "") {
-  const digits = _normalizeZimPhone(raw);
-  if (digits.startsWith("263") && digits.length >= 12) {
-    return `+263 ${digits.slice(3, 6)} ${digits.slice(6, 9)} ${digits.slice(9)}`;
-  }
-  return digits ? `+${digits}` : "unknown";
 }
 
 // ── Helper: current timestamp in readable format ──────────────────────────────
@@ -159,7 +120,7 @@ async function _sendTemplate(to, templateName, variables = []) {
   const components = variables.length
     ? [{
         type: "body",
-        parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) }))
+        parameters: variables.map(v => ({ type: "text", text: String(v) }))
       }]
     : [];
 
@@ -184,59 +145,11 @@ async function _sendTemplate(to, templateName, variables = []) {
   );
 }
 
-// ── Low-level: send a v2 template with quick reply buttons ────────────────────
-async function _sendTemplateV2(to, templateName, variables = [], buttons = []) {
-  const phone = _normalizeZimPhone(to);
-
-  const components = [
-    {
-      type: "body",
-      parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) }))
-    },
-    ...buttons.map((payload, idx) => ({
-      type:       "button",
-      sub_type:   "quick_reply",
-      index:      String(idx),
-      parameters: [{ type: "payload", payload }]
-    }))
-  ];
-
-  await axios.post(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to:                phone,
-      type:              "template",
-      template: {
-        name:       templateName,
-        language:   { code: "en" },
-        components
-      }
-    },
-    {
-      headers: {
-        Authorization:  `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INTERNAL: Fan out a notification to ALL registered notification contacts.
-//
-// supplier.notificationContacts = ["263771000001", "263772000002"]
-// Primary phone (supplier.phone) is ALWAYS included - contacts are additive.
-// ─────────────────────────────────────────────────────────────────────────────
-async function _notifyAllSupplier(supplier, notifyFn) {
-  const extra  = Array.isArray(supplier.notificationContacts) ? supplier.notificationContacts : [];
-  const phones = [...new Set([supplier.phone, ...extra])].filter(Boolean);
-  await Promise.allSettled(phones.map(phone => notifyFn(phone)));
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify supplier - trial has been activated
 // Template: supplier_trial_activated
+// Variables: {{1}} businessName, {{2}} businessName (repeated for greeting),
+//            {{3}} plan label, {{4}} expiry date
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierTrialActivated(
   supplierPhone,
@@ -258,9 +171,12 @@ export async function notifySupplierTrialActivated(
     ]);
     console.log(`[Supplier Notify] supplier_trial_activated sent to ${normalizedTo}`);
   } catch (err) {
-    console.warn(`[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(
+      `[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`
+    );
     try {
-      await sendText(normalizedTo,
+      await sendText(
+        normalizedTo,
 `✅ *Your ZimQuote Trial Has Started!*
 
 Hi *${businessName}*!
@@ -283,6 +199,7 @@ _This is an automated message from ZimQuote._`
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Send a discount or payment offer to a supplier
 // Template: supplier_offer
+// Variables: {{1}} offer body text, {{2}} valid until date, {{3}} link/action
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierOffer(
   supplierPhone,
@@ -301,9 +218,12 @@ export async function notifySupplierOffer(
     ]);
     console.log(`[Supplier Notify] supplier_offer sent to ${normalizedTo}`);
   } catch (err) {
-    console.warn(`[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(
+      `[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`
+    );
     try {
-      await sendText(normalizedTo,
+      await sendText(
+        normalizedTo,
 `🎉 *Special Offer from ZimQuote!*
 
 ${offerText}
@@ -323,9 +243,10 @@ _This is a promotional message from ZimQuote._`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Broadcast an offer to MULTIPLE suppliers at once
+// Wraps notifySupplierOffer in a loop with a small delay to avoid Meta rate limits
 // ─────────────────────────────────────────────────────────────────────────────
 export async function broadcastSupplierOffer(
-  supplierList,
+  supplierList,   // Array of { phone, businessName } objects
   offerText,
   validUntil,
   actionLink
@@ -338,6 +259,7 @@ export async function broadcastSupplierOffer(
     } catch (_) {
       results.failed++;
     }
+    // 300ms delay between sends to avoid Meta rate limits
     await new Promise(r => setTimeout(r, 300));
   }
   console.log(`[Supplier Notify] Broadcast complete: ${results.sent} sent, ${results.failed} failed`);
@@ -347,6 +269,7 @@ export async function broadcastSupplierOffer(
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify supplier - subscription is expiring soon
 // Template: supplier_subscription_expiring
+// Variables: {{1}} businessName, {{2}} businessName, {{3}} daysLeft, {{4}} expiryDate
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierSubscriptionExpiring(
   supplierPhone,
@@ -368,9 +291,12 @@ export async function notifySupplierSubscriptionExpiring(
     ]);
     console.log(`[Supplier Notify] supplier_subscription_expiring sent to ${normalizedTo}`);
   } catch (err) {
-    console.warn(`[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(
+      `[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`
+    );
     try {
-      await sendText(normalizedTo,
+      await sendText(
+        normalizedTo,
 `⚠️ *ZimQuote Subscription Expiring Soon!*
 
 Hi *${businessName}*,
@@ -392,6 +318,7 @@ _This is an automated reminder from ZimQuote._`
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify supplier - subscription has expired
 // Template: supplier_subscription_expired
+// Variables: {{1}} businessName, {{2}} businessName, {{3}} expiryDate
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierSubscriptionExpired(
   supplierPhone,
@@ -409,9 +336,12 @@ export async function notifySupplierSubscriptionExpired(
     ]);
     console.log(`[Supplier Notify] supplier_subscription_expired sent to ${normalizedTo}`);
   } catch (err) {
-    console.warn(`[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(
+      `[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`
+    );
     try {
-      await sendText(normalizedTo,
+      await sendText(
+        normalizedTo,
 `❌ *ZimQuote Subscription Expired*
 
 Hi *${businessName}*,
@@ -433,6 +363,8 @@ _This is an automated message from ZimQuote._`
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Send a payment receipt to supplier after manual payment confirmation
 // Template: supplier_payment_receipt
+// Variables: {{1}} businessName, {{2}} tier/plan, {{3}} billingCycle,
+//            {{4}} amount, {{5}} reference, {{6}} expiryDate
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierPaymentReceipt(
   supplierPhone,
@@ -462,9 +394,12 @@ export async function notifySupplierPaymentReceipt(
     ]);
     console.log(`[Supplier Notify] supplier_payment_receipt sent to ${normalizedTo}`);
   } catch (err) {
-    console.warn(`[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`);
+    console.warn(
+      `[Supplier Notify] template failed for ${normalizedTo} (${err.message}), falling back to sendText`
+    );
     try {
-      await sendText(normalizedTo,
+      await sendText(
+        normalizedTo,
 `✅ *ZimQuote Payment Receipt*
 
 Thank you! Your payment has been confirmed.
@@ -491,37 +426,70 @@ _This is an automated receipt from ZimQuote._`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UTILITY: Run expiry checks across all active supplier subscriptions
-// Call from a cron job (e.g. daily at 08:00)
+// Call this from a cron job (e.g. daily at 08:00)
+// Sends a 3-day warning and a 1-day warning, and an expired notice.
+//
+// Usage in your cron file:
+//   import { runSupplierExpiryChecks } from "./services/supplierNotifications.js";
+//   cron.schedule("0 8 * * *", runSupplierExpiryChecks);
 // ─────────────────────────────────────────────────────────────────────────────
 export async function runSupplierExpiryChecks() {
   try {
     const SupplierProfile = (await import("../models/supplierProfile.js")).default;
     const now             = new Date();
 
+    // ── 3-day warning window: expires between 2d 23h from now and 3d 1h from now
     const warn3Start = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000);
     const warn3End   = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000 + 1  * 60 * 60 * 1000);
+
+    // ── 1-day warning window
     const warn1Start = new Date(now.getTime() + 23 * 60 * 60 * 1000);
     const warn1End   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+    // ── Just-expired window: expired in the last 2 hours
     const expiredStart = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
     const [expiring3Day, expiring1Day, justExpired] = await Promise.all([
-      SupplierProfile.find({ subscriptionStatus: "active", active: true, subscriptionExpiresAt: { $gte: warn3Start, $lte: warn3End } }).lean(),
-      SupplierProfile.find({ subscriptionStatus: "active", active: true, subscriptionExpiresAt: { $gte: warn1Start, $lte: warn1End } }).lean(),
-      SupplierProfile.find({ subscriptionStatus: "active", active: true, subscriptionExpiresAt: { $gte: expiredStart, $lte: now } }).lean()
+      SupplierProfile.find({
+        subscriptionStatus: "active",
+        active: true,
+        subscriptionExpiresAt: { $gte: warn3Start, $lte: warn3End }
+      }).lean(),
+      SupplierProfile.find({
+        subscriptionStatus: "active",
+        active: true,
+        subscriptionExpiresAt: { $gte: warn1Start, $lte: warn1End }
+      }).lean(),
+      SupplierProfile.find({
+        subscriptionStatus: "active",
+        active: true,
+        subscriptionExpiresAt: { $gte: expiredStart, $lte: now }
+      }).lean()
     ]);
 
-    console.log(`[Supplier Notify] Expiry checks: 3-day=${expiring3Day.length}, 1-day=${expiring1Day.length}, just-expired=${justExpired.length}`);
+    console.log(
+      `[Supplier Notify] Expiry checks: 3-day=${expiring3Day.length}, ` +
+      `1-day=${expiring1Day.length}, just-expired=${justExpired.length}`
+    );
 
+    // Send 3-day warnings
     for (const s of expiring3Day) {
       await notifySupplierSubscriptionExpiring(s.phone, s.businessName, s.subscriptionExpiresAt);
       await new Promise(r => setTimeout(r, 300));
     }
+
+    // Send 1-day warnings
     for (const s of expiring1Day) {
       await notifySupplierSubscriptionExpiring(s.phone, s.businessName, s.subscriptionExpiresAt);
       await new Promise(r => setTimeout(r, 300));
     }
+
+    // Handle just-expired - update DB and notify
     for (const s of justExpired) {
-      await SupplierProfile.findByIdAndUpdate(s._id, { subscriptionStatus: "expired", active: false });
+      await SupplierProfile.findByIdAndUpdate(s._id, {
+        subscriptionStatus: "expired",
+        active: false
+      });
       await notifySupplierSubscriptionExpired(s.phone, s.businessName, s.subscriptionExpiresAt);
       await new Promise(r => setTimeout(r, 300));
     }
@@ -531,70 +499,98 @@ export async function runSupplierExpiryChecks() {
     console.error("[Supplier Notify] runSupplierExpiryChecks error:", err.message);
   }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: Notify supplier - someone opened their smart link
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// ── WHY THIS IS UTILITY NOT MARKETING ────────────────────────────────────────
+// This notification is triggered by a specific user action (a buyer opening
+// the seller's profile link). It is purely informational - it tells the seller
+// what happened on their own account. Compare to: bank transaction alerts,
+// "someone viewed your listing" notifications on property sites.
+// The notification contains NO promotional content, no offers, no pricing.
+// Meta category: UTILITY  ← submit as UTILITY to avoid marketing flag.
+//
+// ── NEW TEMPLATE TO SUBMIT TO META BUSINESS MANAGER ──────────────────────────
+// Template name:  supplier_link_opened
+// Category:       UTILITY  ← CRITICAL: must be UTILITY not MARKETING
+// Language:       English
+// Template body:
+//   👁 Someone opened your ZimQuote profile!
+//   Business: {{1}}
+//   Via: {{2}}
+//   Time: {{3}}
+//   They can request a quote, book a service, or send you an enquiry.
+//   Type *menu* to view your store.
+//   This is an automated activity alert from ZimQuote.
+//
+// Variables:
+//   {{1}} = businessName
+//   {{2}} = sourceLabel (e.g. "Facebook", "QR Code scan", "WhatsApp Status")
+//   {{3}} = timestamp (e.g. "6 May 2026, 14:30")
+//
+// Fallback: plain sendText for within-24hr sessions.
+// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERNAL: Fan out a notification to ALL registered notification contacts.
+//
+// supplier.notificationContacts = ["263771000001", "263772000002"]
+// Primary phone (supplier.phone) is ALWAYS included - contacts are additive.
+//
+// Usage:
+//   await _notifyAllSupplier(supplier, phone => notifySupplierLinkOpened(phone, name, src));
+// ─────────────────────────────────────────────────────────────────────────────
+async function _notifyAllSupplier(supplier, notifyFn) {
+  const extra  = Array.isArray(supplier.notificationContacts) ? supplier.notificationContacts : [];
+  const phones = [...new Set([supplier.phone, ...extra])].filter(Boolean);
+  await Promise.allSettled(phones.map(phone => notifyFn(phone)));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: Fan-out wrapper — notify ALL contacts when smart link is opened.
-//
-// Standard sellers (revealVisitorPhone = false):
-//   → supplier_link_opened  (3 variables, no phone)
-//
-// VIP sellers (revealVisitorPhone = true):
-//   → supplier_link_opened_with_phone  (4 variables, visitor phone as {{4}})
-//     This template was submitted as UTILITY and approved by Meta.
+// PUBLIC: Fan-out wrapper - notify ALL contacts when smart link is opened.
+// Pass the full supplier object instead of just a phone string.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function notifyAllSupplierLinkOpened(supplier, source, visitorPhone = null) {
-  const _isVip = supplier?.revealVisitorPhone === true && !!visitorPhone;
+export async function notifyAllSupplierLinkOpened(supplier, source) {
   await _notifyAllSupplier(supplier, phone =>
-    notifySupplierLinkOpened(phone, supplier.businessName, source, _isVip ? visitorPhone : null)
+    notifySupplierLinkOpened(phone, supplier.businessName, source)
   );
 }
 
-export async function notifySupplierLinkOpened(supplierPhone, businessName, source, visitorPhone = null) {
+export async function notifySupplierLinkOpened(supplierPhone, businessName, source) {
   const ts           = _timestamp();
   const normalizedTo = _normalizeZimPhone(supplierPhone);
-  const isVip        = !!visitorPhone;
 
   const sourceLabels = {
-    fb:            "Facebook",
-    wa:            "WhatsApp Status",
-    tt:            "TikTok",
-    qr:            "QR Code scan",
-    sms:           "SMS / Flyer",
-    ig:            "Instagram",
-    yt:            "YouTube",
-    direct:        "Direct link",
+    fb:     "Facebook",
+    wa:     "WhatsApp Status",
+    tt:     "TikTok",
+    qr:     "QR Code scan",
+    sms:    "SMS / Flyer",
+    ig:     "Instagram",
+    yt:     "YouTube",
+    direct: "Direct link",
     whatsapp_link: "WhatsApp link"
   };
   const sourceLabel = sourceLabels[source] || "ZimQuote link";
 
   try {
-    if (isVip) {
-      // ── VIP: single template with visitor phone as {{4}} ──────────────────
-      await _sendTemplate(normalizedTo, "supplier_link_opened_with_phone", [
-        businessName || "Your business",
-        sourceLabel,
-        ts,
-        _formatPhoneDisplay(visitorPhone)
-      ]);
-      console.log(`[Supplier Notify] supplier_link_opened_with_phone → ${normalizedTo} (${sourceLabel})`);
-    } else {
-      // ── Standard: 3-variable template, no phone ───────────────────────────
-      await _sendTemplate(normalizedTo, "supplier_link_opened", [
-        businessName || "Your business",
-        sourceLabel,
-        ts
-      ]);
-      console.log(`[Supplier Notify] supplier_link_opened → ${normalizedTo} (${sourceLabel})`);
-    }
+    // Try new dedicated template first
+    await _sendTemplate(normalizedTo, "supplier_link_opened", [
+      businessName,
+      sourceLabel,
+      ts
+    ]);
+    console.log(`[Supplier Notify] supplier_link_opened → ${normalizedTo} (${sourceLabel})`);
   } catch (err) {
-    console.warn(`[Supplier Notify] link_opened template failed for ${normalizedTo} (${err.message}), falling back`);
+    console.warn(`[Supplier Notify] supplier_link_opened failed for ${normalizedTo} (${err.message}), falling back`);
+    // Fallback: plain sendText (works within 24hr session)
     try {
       await sendText(normalizedTo,
 `👁 Someone opened your ZimQuote profile!
 
 Business: ${businessName}
 Via: ${sourceLabel}
-Time: ${ts}${isVip && visitorPhone ? `\nVisitor: ${_formatPhoneDisplay(visitorPhone)}` : ""}
+Time: ${ts}
 
 They can request a quote, book a service, or send you an enquiry directly from your link.
 

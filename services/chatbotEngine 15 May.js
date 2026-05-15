@@ -114,11 +114,7 @@ import {
   parseBuyerRequestLineWithQty,
   parseItemListWithQty
 } from "./buyerRequests.js";
-import {
-  notifySupplierNewRequestTemplate,
-  sendClarificationRequestToBuyer,
-  sendClarificationReplyToSeller
-} from "./buyerRequestNotifications.js";
+import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
 import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
@@ -2615,7 +2611,6 @@ async function notifySuppliersOfBuyerRequest(request) {
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
         supplierPhone:        supplier.phone,
-        supplier,                                      // full object for VIP check
         notificationContacts: supplier.notificationContacts || [],
         requestId:            String(request._id),
         ref,
@@ -2624,8 +2619,7 @@ async function notifySuppliersOfBuyerRequest(request) {
         itemSummary:   _notifItemLines,
         deliveryLine:  _deliveryLine,
         fullItemLines: _notifItemLines,
-        replyExamples: _notifExamples,
-        buyerPhone:    request.buyerPhone || null       // shown only to VIP sellers
+        replyExamples: _notifExamples
       });
 
       // Step 2: Immediately send interactive pricing form - template opens the session
