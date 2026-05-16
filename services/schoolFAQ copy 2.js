@@ -165,22 +165,7 @@ function _buildFeeAnswer(school) {
   return text;
 }
 
-async function _sess(biz, saveBiz, state, data = {}, from = null) {
-  // Always persist to UserSession so non-biz (first-time) users are covered
-  if (from) {
-    try {
-      const phone = String(from).replace(/\D+/g,"");
-      const { default: UserSession } = await import("../models/userSession.js");
-      const setFields = {};
-      setFields["tempData.sfaqState"]    = state;
-      if (data.faqSchoolId)   setFields["tempData.sfaqSchoolId"]   = data.faqSchoolId;
-      if (data.faqCategoryId) setFields["tempData.sfaqCategoryId"] = data.faqCategoryId;
-      if (data.faqParentName) setFields["tempData.sfaqParentName"] = data.faqParentName;
-      if (data.faqSource)     setFields["tempData.sfaqSource"]     = data.faqSource;
-      await UserSession.findOneAndUpdate({ phone }, { $set: setFields }, { upsert: true });
-    } catch (_) {}
-  }
-  // Also persist to biz if available
+async function _sess(biz, saveBiz, state, data = {}) {
   if (!biz || !saveBiz) return;
   biz.sessionState = state;
   biz.sessionData  = { ...(biz.sessionData || {}), ...data };
@@ -664,7 +649,7 @@ export async function showSchoolFAQMenu(from, schoolId, biz, saveBiz, { source="
 
   SchoolProfile.findByIdAndUpdate(schoolId,{$inc:{monthlyViews:1,zqLinkConversions:1}}).catch(()=>{});
   _saveLead(from, school, "view", source, { parentName });
-  await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId:String(schoolId), faqParentName:parentName, faqSource:source }, from);
+  await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId:String(schoolId), faqParentName:parentName, faqSource:source });
 
   const defaults   = _generateDefaults(school);
   const categories = _getCategories(school, defaults);
@@ -760,7 +745,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   const backMatch = a.match(/^sfaq_back_([a-f0-9]{24})$/i);
   if (backMatch) {
     const schoolId = backMatch[1];
-    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId }, from);
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
     return showSchoolFAQMenu(from, schoolId, biz, saveBiz);
   }
 
@@ -769,7 +754,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   if (catMatch) {
     const categoryId = catMatch[1];
     const schoolId   = catMatch[2];
-    await _sess(biz, saveBiz, "sfaq_category", { faqSchoolId: schoolId, faqCategoryId: categoryId }, from);
+    await _sess(biz, saveBiz, "sfaq_category", { faqSchoolId: schoolId, faqCategoryId: categoryId });
     return _showCategory(from, schoolId, categoryId, 0, biz, saveBiz);
   }
 
@@ -778,7 +763,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   if (itemMatch) {
     const itemId   = decodeURIComponent(itemMatch[1]);
     const schoolId = itemMatch[2];
-    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId }, from);
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
     return _showAnswer(from, schoolId, itemId, biz, saveBiz);
   }
 
@@ -805,7 +790,7 @@ export async function handleSchoolFAQAction({ from, action, biz, saveBiz }) {
   if (actMatch) {
     const act      = actMatch[1];
     const schoolId = actMatch[2];
-    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId }, from);
+    await _sess(biz, saveBiz, "sfaq_menu", { faqSchoolId: schoolId });
     return _handleAction(from, schoolId, act, biz, saveBiz);
   }
 
@@ -966,11 +951,11 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
   switch (act) {
     case "message":
     case "enquire":
-      await _sess(biz, saveBiz, "sfaq_awaiting_message", {faqSchoolId:sid}, from);
+      await _sess(biz, saveBiz, "sfaq_awaiting_message", {faqSchoolId:sid});
       return sendText(from,`✉️ *Message - ${school.schoolName}*\n\nType your question. The school will reply on WhatsApp.\n\n_Type *cancel* to go back._`);
 
     case "tour":
-      await _sess(biz, saveBiz, "sfaq_awaiting_tour_date", {faqSchoolId:sid}, from);
+      await _sess(biz, saveBiz, "sfaq_awaiting_tour_date", {faqSchoolId:sid});
       return sendText(from,`📅 *Book a tour - ${school.schoolName}*\n\nType your preferred date and time:\n\n_e.g. "Monday 9am", "Any weekday morning"_\n_Type *cancel* to go back._`);
 
     case "apply":
@@ -982,7 +967,7 @@ async function _handleAction(from, schoolId, act, biz, saveBiz) {
           buttons:[{id:`sfaq_act_tour_${sid}`,title:_btn("📅 Book a tour")},{id:`sfaq_back_${sid}`,title:_btn("⬅ Main menu")}]
         });
       }
-      await _sess(biz, saveBiz, "sfaq_awaiting_grade",{faqSchoolId:sid}, from);
+      await _sess(biz,saveBiz,"sfaq_awaiting_grade",{faqSchoolId:sid});
       return sendText(from,`📝 *Enrollment enquiry - ${school.schoolName}*\n\nWhich level are you enquiring for?\n\n_e.g. "Nursery", "ECD A", "Grade 3", "Form 1"_\n_Type *cancel* to go back._`);
 
     case "level_enquiry":
@@ -1029,22 +1014,11 @@ async function _showLevelEnquiry(from, school, sid, biz, saveBiz) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) {
   if (!state?.startsWith("sfaq_")) return false;
-
-  // Primary: read from biz session (returning users)
-  // Fallback: read from UserSession.tempData (first-time users where biz=null)
-  let schoolId = biz?.sessionData?.faqSchoolId;
-  if (!schoolId) {
-    try {
-      const phone = String(from).replace(/\D+/g,"");
-      const { default: UserSession } = await import("../models/userSession.js");
-      const sess = await UserSession.findOne({ phone }).lean();
-      schoolId = sess?.tempData?.sfaqSchoolId;
-    } catch (_) {}
-  }
+  const schoolId = biz?.sessionData?.faqSchoolId;
   if (!schoolId) return false;
   const raw = (text||"").trim();
   if (["cancel","back","menu"].includes(raw.toLowerCase())) {
-    await _sess(biz, saveBiz, "sfaq_menu", from);
+    await _sess(biz,saveBiz,"sfaq_menu");
     return showSchoolFAQMenu(from,schoolId,biz,saveBiz);
   }
 
@@ -1057,7 +1031,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       notifySchoolEnquiry(school.phone,school.schoolName,from,raw).catch(()=>{});
       _saveLead(from,school,"enquiry","whatsapp_link");
       SchoolProfile.findByIdAndUpdate(schoolId,{$inc:{inquiries:1}}).catch(()=>{});
-      await _sess(biz, saveBiz, "sfaq_menu", from);
+      await _sess(biz,saveBiz,"sfaq_menu");
       return sendButtons(from,{
         text:`✅ *Message sent to ${school.schoolName}*\n\n_"${raw}"_\n\nThey will reply on WhatsApp.\n📞 ${school.contactPhone||school.phone}`,
         buttons:[
@@ -1074,7 +1048,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       const sid = String(school._id);
       notifySchoolVisitRequest(school.phone,school.schoolName,biz?.sessionData?.faqParentName||from,"WhatsApp Bot").catch(()=>{});
       _saveLead(from,school,"visit","whatsapp_link");
-      await _sess(biz, saveBiz, "sfaq_menu", from);
+      await _sess(biz,saveBiz,"sfaq_menu");
       return sendButtons(from,{
         text:`✅ *Tour request sent!*\n\n*${school.schoolName}*\nPreferred: _${raw}_\n\nThey will confirm and send directions.\n📞 ${school.contactPhone||school.phone}`,
         buttons:[
@@ -1090,7 +1064,7 @@ export async function handleSchoolFAQState({ state, from, text, biz, saveBiz }) 
       const sid = String(school._id);
       notifySchoolPlaceEnquiry(school.phone,school.schoolName,biz?.sessionData?.faqParentName||from,raw,"WhatsApp Bot").catch(()=>{});
       _saveLead(from,school,"place","whatsapp_link",{gradeInterest:raw,levelInterest:raw});
-      await _sess(biz, saveBiz, "sfaq_menu", from);
+      await _sess(biz,saveBiz,"sfaq_menu");
       return sendButtons(from,{
         text:`📝 *Enquiry received*\n\n${school.admissionsOpen?"🟢 Admissions OPEN. Your enquiry for *"+raw+"* has been sent.":"🔴 Admissions closed. Your interest in *"+raw+"* has been recorded."}`,
         buttons:[

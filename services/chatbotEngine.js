@@ -108,13 +108,16 @@ import {
 import {
   trackSupplierResponseSpeed,
   getBuyerOpenRequests,
-  getBuyerLastRequest,
   formatBuyerQuoteComparison,
   formatRequestSummary,
   parseBuyerRequestLineWithQty,
   parseItemListWithQty
 } from "./buyerRequests.js";
-import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
+import {
+  notifySupplierNewRequestTemplate,
+  sendClarificationRequestToBuyer,
+  sendClarificationReplyToSeller
+} from "./buyerRequestNotifications.js";
 import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
@@ -2611,6 +2614,7 @@ async function notifySuppliersOfBuyerRequest(request) {
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
         supplierPhone:        supplier.phone,
+        supplier,                                      // full object for VIP check
         notificationContacts: supplier.notificationContacts || [],
         requestId:            String(request._id),
         ref,
@@ -2619,7 +2623,8 @@ async function notifySuppliersOfBuyerRequest(request) {
         itemSummary:   _notifItemLines,
         deliveryLine:  _deliveryLine,
         fullItemLines: _notifItemLines,
-        replyExamples: _notifExamples
+        replyExamples: _notifExamples,
+        buyerPhone:    request.buyerPhone || null       // shown only to VIP sellers
       });
 
       // Step 2: Immediately send interactive pricing form - template opens the session
@@ -3331,7 +3336,6 @@ a.startsWith("sup_load_preset_") ||
 
 
       a === "sup_request_sellers" ||
-      a === "sup_repeat_last_request" ||
       a === "sup_use_saved_location" ||
       a === "sup_change_location" ||
       a === "sup_pause_requests" ||
@@ -3920,8 +3924,14 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _blankEx     = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
         const _blankSingle = _introItems.length === 1;
 
-        // Tourism suppliers price per person/hour/day - show relevant examples
-        const _isTourismOffer = _introIsService && _buyerRequestIsTourism(_introItems);
+        // Tourism check: ONLY show per-person/trip examples if BOTH the supplier
+        // is a tourism supplier AND the actual request items are tourism-related.
+        // A plumber or electrician (profileType=service) must never see tourism prompts.
+        const _supplierIsTourism = (supplier?.categories||[]).includes("tourism") ||
+          (_introSupplier?.categories||[]).includes("tourism");
+        const _requestIsTourism  = _buyerRequestIsTourism(_introItems);
+        const _isTourismOffer    = _supplierIsTourism && _requestIsTourism;
+
         const _unitExamples = _isTourismOffer
           ? `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`
           : (_introIsService
@@ -3932,7 +3942,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `📋 *${_introRef} - Enter your prices*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
-          `*Services requested:*\n${_blankItemLines}\n` +
+          `*${_introIsService ? "Services" : "Items"} requested:*\n${_blankItemLines}\n` +
           `─────────────────\n\n` +
           `💰 *How to send your price:*\n` +
           (_blankSingle
@@ -3941,7 +3951,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
                 : `Type: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`)
             : `Type each price:\n${_unitExamples}\n\n_(item number x price/unit)_`) +
           (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\nAdd a note: start with *msg* e.g: _80/person msg minimum 2 people_\n` +
+          `\n\nAdd a note: start with *msg* e.g: _1=80/job msg available next week_\n` +
           `Type *cancel* to go back.`
         );
       }
@@ -4493,19 +4503,19 @@ await UserSession.findOneAndUpdate(
         );
       }
 
-         // Do NOT allow empty service quotations.
-      // Services/tourism must include a price or clear pricing basis.
+      // Do NOT allow empty service quotations.
+      // Services must include a price. Show generic service examples (not tourism).
       if (_isService) {
+        const _isTourismSupplier = (supplier?.categories||[]).includes("tourism");
         return sendText(
           from,
           `⚠️ Please include at least one price before sending the quote.\n\n` +
           `Examples:\n` +
-          `_1=80/person_\n` +
-          `_1=150/trip_\n` +
-          `_1=300/night_\n` +
-          `_1=500/group_\n\n` +
-          `You can also add a note like:\n` +
-          `_1=80/person msg minimum 2 people_\n\n` +
+          (_isTourismSupplier
+            ? `_1=80/person_\n_1=150/trip_\n_1=300/night_\n`
+            : `_1=80/job_\n_1=150/hr_\n_1=500/day_\n`) +
+          `\nYou can also add a note:\n` +
+          `_1=80/job msg available from Monday_\n\n` +
           `Type *cancel* to discard.`
         );
       }
@@ -4574,18 +4584,13 @@ await UserSession.findOneAndUpdate(
       `*menu* = Main menu (always)\n` +
       `*back* = Previous step\n` +
       `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat your last request\n` +
       `*my requests* = View request history\n` +
       `*help* = Show this list\n\n` +
       `Type *0* to go to main menu now.`
     );
   }
 
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
-
-  if (al === "my requests" || al === "buyer_my_requests") {
+if (al === "my requests" || al === "buyer_my_requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
 
@@ -5055,7 +5060,7 @@ const GREETING_WORDS = new Set([
   "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
   "help", "start", "menu", "home", "back", "cancel",
   // Universal shortcuts
-  "0", "00", "000", "quotes", "my quotes", "repeat", "my requests",
+  "0", "00", "000", "quotes", "my quotes", "my requests",
   "pause", "resume"
 ]);
 
@@ -5075,9 +5080,6 @@ if (
   if (al === "quotes" || al === "my quotes") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
   if (al === "my requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
@@ -5095,7 +5097,6 @@ if (
       `*00* = Cancel current flow\n` +
       `*menu* = Main menu\n` +
       `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat last request\n` +
       `*my requests* = Request history\n` +
       `*pause* = Pause request notifications (sellers)\n` +
       `*resume* = Resume notifications (sellers)\n` +
@@ -5566,7 +5567,6 @@ a.startsWith("sup_accept_") ||
       a.startsWith("paylist_search_") ||
 
   a === "sup_request_sellers" ||
-  a === "sup_repeat_last_request" ||
   a === "sup_use_saved_location" ||
   a === "sup_change_location" ||
   a === "sup_pause_requests" ||
@@ -9399,6 +9399,15 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
       if (handled) return;
     }
 
+    // ── School FAQ for non-biz users (first-time visitors via smart link) ────
+    // biz exists here but may have null sessionState if user is not registered
+    if (!biz.sessionState && flowSess?.tempData?.sfaqState?.startsWith("sfaq_")) {
+      const handled = await handleSchoolFAQState({
+        state: flowSess.tempData.sfaqState, from, text, biz: null, saveBiz: null
+      });
+      if (handled) return;
+    }
+
     // ── Seller chatbot text states ────────────────────────────────────────────
     if (biz.sessionState?.startsWith("sc_")) {
       const handled = await handleSellerChatState({
@@ -10260,7 +10269,7 @@ if (isMetaAction && typeof a === "string" && a.startsWith("sfaq_")) {
   if (handled) return;
 
   console.warn("[SFAQ ACTION NOT HANDLED]", { from, action: a });
-  return sendText(from, "Sorry, that school option expired. Please open the school link again.");
+  return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
 }
 
 // ── Main Menu back button - always goes to start menu ────────────────────
@@ -10332,6 +10341,63 @@ if (a === "school_toggle_admissions" || a === "school_update_fees") {
   if (handled) return;
 }
  
+// ── School FAQ text state for no-biz first-time users ───────────────────────
+// A parent who opened a school smart link (ZQ:SCHOOL:...) is NOT a biz user.
+// Their sfaq state is in UserSession.tempData.sfaqState (saved by _sess in schoolFAQ.js).
+if (!biz && !isMetaAction && flowSess?.tempData?.sfaqState?.startsWith("sfaq_")) {
+  const handled = await handleSchoolFAQState({
+    state: flowSess.tempData.sfaqState, from, text, biz: null, saveBiz: null
+  });
+  if (handled) return;
+}
+
+// ── School enquiry text state for no-biz users (sent from smart link enquiry button) ─
+// biz?.sessionData?.enquirySchoolId is null for first-time users.
+// Read from UserSession.tempData instead and process the enquiry directly here.
+if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_parent_enquiry") {
+  const _seSchoolId = flowSess?.tempData?.enquirySchoolId;
+  if (_seSchoolId) {
+    const _seRaw = String(text || "").trim();
+    if (_seRaw.toLowerCase() === "cancel") {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text: "❌ Enquiry cancelled.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
+    }
+    if (!_seRaw || _seRaw.length < 3) {
+      return sendText(from, "Please type your question or message. Type *cancel* to go back.");
+    }
+    const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+    const _seSchool = await SchoolProfile.findById(_seSchoolId).lean();
+    if (_seSchool) {
+      await SchoolProfile.findByIdAndUpdate(_seSchoolId, { $inc: { inquiries: 1 } });
+      const { notifyAllSchoolEnquiry } = await import("./schoolNotifications.js");
+      notifyAllSchoolEnquiry(_seSchool, from, _seRaw).catch(() => {});
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text:
+          `✅ *Enquiry Sent to ${_seSchool.schoolName}!*\n\n` +
+          `Your message:\n_${_seRaw}_\n\n` +
+          `The school has been notified and will reply on WhatsApp.\n` +
+          `📞 ${_seSchool.contactPhone || _seSchool.phone}`,
+        buttons: [
+          { id: `school_apply_${_seSchoolId}`, title: "📝 Apply Online" },
+          { id: "find_school",                  title: "🏫 More Schools" }
+        ]
+      });
+    }
+  }
+}
+
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
 if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
   const _handled = await handleZqDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -10346,8 +10412,13 @@ if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
 if (a.startsWith("sfaq_")) {
-  const handled = await handleSchoolFAQAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  const handled = await handleSchoolFAQAction({
+    from, action: a, biz,
+    saveBiz: biz ? saveBizSafe.bind(null, biz) : null
+  });
   if (handled) return;
+  // Don't fall through to sendMainMenu - just silently ignore unhandled sfaq
+  return;
 }
 
 // ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────
@@ -15495,58 +15566,6 @@ isService
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
 if (a === "sup_request_sellers") {
-
-  // ── Returning buyer: offer one-tap repeat of last request ─────────────────
-  const lastReq = await getBuyerLastRequest(phone);
-  if (lastReq && (lastReq.items || []).length > 0) {
-    const lastItems = formatBuyerRequestItems(lastReq.items || [], 5);
-    const lastLocation = lastReq.area
-      ? `${lastReq.area}, ${lastReq.city || ""}`
-      : (lastReq.city || "Zimbabwe");
-
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.buyerRequestState":  "awaiting_items",
-          "tempData.buyerRequestMode":   "simple",
-          "tempData.lastRequestSnapshot": {
-            items:   lastReq.items,
-            city:    lastReq.city,
-            area:    lastReq.area,
-            isServiceRequest: lastReq.isServiceRequest || false
-          }
-        }
-      },
-      { upsert: true }
-    );
-
- await sendButtons(from, {
-  text:
-    `⚡ *Request Sellers*\n\n` +
-    `👋 Welcome back! Repeat your last request?\n\n` +
-    `📦 1. element replacement x1\n` +
-    `📍 Harare\n\n` +
-    `Or type a new request below.\n\n` +
-    `0=Menu • 00=Cancel`,
-  buttons: [
-    { id: "sup_repeat_last_request", title: "🔁 Repeat" },
-    { id: "sup_request_mode_bulk", title: "📋 Bulk List" }
-  ]
-});
-
-return sendText(
-  from,
-  `*Examples:*\n` +
-  `_copper pipe 15mm, 5 lengths_\n` +
-  `_cement 50kg x20_\n` +
-  `_need plumber Avondale_\n\n` +
-  `Tip: Put quantity at the end.\n` +
-  `Example: copper pipe 15mm, 5 lengths`
-);
-  }
-
-  // ── First-time or no prior request ────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -15568,48 +15587,21 @@ return sendText(
       `⚡ *Request Sellers*\n\n` +
       `What do you need? Type your items or describe the job.\n\n` +
       `*📦 Products:*\n` +
-      `_copper pipe 15mm, 5 lengths_\n` +
-      `_cement 50kg x20 bags, river sand 3m3_\n` +
-      `_2.5mm TE cable, 50m_\n\n` +
+      `_copper pipe 15mm, 5 lengths, Msasa Harare_\n` +
+      `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
+      `_16mm2 x4 core cu pvc swa cable 200m, Hatfield_\n` +
+      `_10kw growatt inverter x2, Glen View Harare_\n\n` +
       `*🔧 Services:*\n` +
-      `_need plumber, burst pipe, Avondale_\n` +
-      `_electrician for DB board, Chitungwiza_\n\n` +
+      `_need plumber, burst pipe, Avondale Harare_\n` +
+      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
+      `_glass repair 600x900mm, Eastlea_\n\n` +
       `*Bulk list?* Use the button below.\n\n` +
-      `_Tip: put quantity last - e.g. "copper pipe 15mm, 5 lengths"_\n` +
-      `_Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
+      `_Tip: put quantity last. Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
       `*0 = Main menu · 00 = Cancel*`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
       { id: "find_supplier",         title: "🔍 Browse & Shop" }
     ]
-  });
-}
-
-// ── Repeat last request: one tap resends ──────────────────────────────────────
-if (a === "sup_repeat_last_request") {
-  const reqSess = await UserSession.findOne({ phone });
-  const snapshot = reqSess?.tempData?.lastRequestSnapshot;
-
-  if (!snapshot?.items?.length) {
-    return sendText(from,
-      `❌ Last request not found. Please type a new request.\n\n` +
-      `Type *0* for main menu.`
-    );
-  }
-
-  return finalizeBuyerRequestSubmission({
-    from, phone,
-    pendingRequest: {
-      requestType:      "simple",
-      profileType:      "product",
-      items:            snapshot.items,
-      city:             snapshot.city,
-      area:             snapshot.area,
-      isServiceRequest: snapshot.isServiceRequest || false,
-      rawText:          "(repeated from last request)"
-    },
-    deliveryRequired: false,
-    serviceAddress:   null
   });
 }
 
