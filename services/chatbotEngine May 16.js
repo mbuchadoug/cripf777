@@ -7780,58 +7780,9 @@ if (a === "expense_generate_receipt") {
 
   if (a === "inv_item_custom") {
     if (!biz) return sendMainMenu(from);
-    // ── Custom item bulk entry: prompt for comma-separated names ─────────────
-    biz.sessionData.itemMode          = "custom_names";
-    biz.sessionData.pendingCustomNames = [];
-    biz.sessionState = "creating_invoice_custom_names";
+    biz.sessionData.itemMode = "custom";
     await saveBizSafe(biz);
-    const _docLabel = biz.sessionData?.docType === "quote" ? "Quotation"
-      : biz.sessionData?.docType === "receipt" ? "Receipt"
-      : "Invoice";
-    return sendButtons(from, {
-      text:
-        `✍️ *Custom items - ${_docLabel}*\n\n` +
-        `Type one item or many separated by commas:\n\n` +
-        `_labour charge_\n` +
-        `_materials, transport fee, call-out charge_\n` +
-        `_geyser installation, plumbing supplies, consultation_\n\n` +
-        `You will set quantities and prices in the next steps.`,
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
-  }
-
-  // ── Inline custom item action buttons ────────────────────────────────────
-  // ── inv_add_item: from confirm preview, user wants to add another item ─────
-  if (a === "inv_add_item") {
-    if (!biz) return sendMainMenu(from);
-    biz.sessionState = "creating_invoice_add_items";
-    biz.sessionData.itemMode          = null;
-    biz.sessionData.lastItem          = null;
-    biz.sessionData.expectingQty      = false;
-    biz.sessionData.pendingCustomNames = [];
-    await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
-  }
-
-  if (a === "inv_custom_confirm") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_custom_confirm" });
-    return;
-  }
-  if (a === "inv_custom_edit") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_custom_edit" });
-    return;
-  }
-  if (a === "inv_custom_cancel") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_custom_cancel" });
-    return;
-  }
-  if (a === "inv_custom_skip_price") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "inv_custom_skip_price" });
-    return;
+    return sendButtons(from, { text: "✍️ *Send item description:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
   }
 
   if (a === "inv_client_phone_same" || a === "inv_client_phone_skip") {
@@ -8979,15 +8930,6 @@ const shortcodeBlockedStates = [
   "creating_receipt_add_note",
   "creating_invoice_qty",
   "creating_invoice_add_item_text",
-  "creating_invoice_custom_names",
-  "creating_invoice_custom_preview",
-  "creating_invoice_custom_edit",
-  "creating_quote_custom_names",
-  "creating_quote_custom_preview",
-  "creating_quote_custom_edit",
-  "creating_receipt_custom_names",
-  "creating_receipt_custom_preview",
-  "creating_receipt_custom_edit",
   "creating_invoice_set_discount",
   "creating_invoice_set_vat",
   "creating_invoice_enter_prices",

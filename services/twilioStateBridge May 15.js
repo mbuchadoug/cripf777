@@ -1795,130 +1795,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       return sendAddItemPrompt(from);
     }
 
-    // ── CUSTOM BULK MODE: waiting for quantities block ────────────────────────
-    // State: itemMode = "custom_qty" | pendingCustomNames = [...]
-    if (biz.sessionData.itemMode === "custom_qty") {
-      const names = biz.sessionData.pendingCustomNames || [];
-      const isSingle = names.length === 1;
-
-      // Parse input: single number (e.g. "3") or NxQTY pairs (e.g. "1x2, 2x5, 3x1")
-      let qtys = [];
-      const pairMatches = trimmed.match(/\d+\s*[xX×]\s*\d+(?:\.\d+)?/g);
-
-      if (isSingle && !isNaN(Number(trimmed)) && Number(trimmed) > 0) {
-        // Single item - just type the qty directly
-        qtys = [Number(trimmed)];
-      } else if (pairMatches && pairMatches.length) {
-        // "1x2, 2x1, 3x5" format
-        for (const p of pairMatches) {
-          const m = p.match(/(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
-          const idx = parseInt(m[1], 10) - 1;
-          const qty = parseFloat(m[2]);
-          if (idx >= 0 && idx < names.length && qty > 0) qtys[idx] = qty;
-        }
-      } else {
-        // Single number for all items
-        const n = Number(trimmed);
-        if (!isNaN(n) && n > 0) {
-          qtys = names.map(() => n);
-        }
-      }
-
-      // Validate - all items must have a qty
-      const missing = names.map((_, i) => i).filter(i => !qtys[i] || qtys[i] <= 0);
-      if (missing.length) {
-        const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("\n");
-        return sendButtons(from, {
-          text:
-            `❌ *Some items are missing a quantity.*\n\n` +
-            `${numbered}\n\n` +
-            (isSingle
-              ? `Enter the quantity (e.g. *3*):`
-              : `Use *NxQTY* format, e.g. *1x2, 2x5, 3x1*\n_Or type one number to set all the same._`),
-          buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-        });
-      }
-
-      // Quantities captured → move to price entry
-      biz.sessionData.pendingCustomItems = names.map((name, i) => ({
-        item: name, qty: qtys[i] || 1, unit: 0, source: "custom"
-      }));
-      biz.sessionData.itemMode = "custom_price";
-      await saveBizSafe(biz);
-
-      const currency = biz.currency || "USD";
-      const isSingleItem = names.length === 1;
-      const itemList = names.map((n, i) => `${i + 1}. *${n}* × ${qtys[i] || 1}`).join("\n");
-      return sendButtons(from, {
-        text:
-          `💰 *Enter ${isSingleItem ? "the price" : "prices"} for:*\n\n` +
-          `${itemList}\n\n` +
-          (isSingleItem
-            ? `Type the unit price (e.g. *50*) or skip:`
-            : `Use *NxPRICE* format, e.g. *1x50, 2x120.50, 3x35*\n_Or type one price to set all the same._`),
-        buttons: [
-          { id: "inv_custom_skip_price", title: "⏭ Skip prices" },
-          { id: ACTIONS.MAIN_MENU,       title: "🏠 Main Menu"  }
-        ]
-      });
-    }
-
-    // ── CUSTOM BULK MODE: waiting for prices block ───────────────────────────
-    if (biz.sessionData.itemMode === "custom_price") {
-      const pending = biz.sessionData.pendingCustomItems || [];
-      const isSkipAll = text === "inv_custom_skip_price" || trimmed.toLowerCase() === "skip";
-
-      if (!isSkipAll) {
-        const isSingle = pending.length === 1;
-        const pairMatches = trimmed.match(/\d+\s*[xX×]\s*\d+(?:\.\d+)?/g);
-        let prices = [];
-
-        if (isSingle && !isNaN(Number(trimmed)) && Number(trimmed) >= 0) {
-          prices = [Number(trimmed)];
-        } else if (pairMatches && pairMatches.length) {
-          for (const p of pairMatches) {
-            const m = p.match(/(\d+)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
-            const idx = parseInt(m[1], 10) - 1;
-            const price = parseFloat(m[2]);
-            if (idx >= 0 && idx < pending.length && price >= 0) prices[idx] = price;
-          }
-        } else {
-          const n = Number(trimmed);
-          if (!isNaN(n) && n >= 0) prices = pending.map(() => n);
-        }
-
-        if (prices.length === 0 || prices.some((p, i) => pending[i] !== undefined && p === undefined)) {
-          return sendButtons(from, {
-            text:
-              `❌ *Couldn't read the prices.*\n\n` +
-              `${isSingle
-                ? `Type the price (e.g. *50*) or skip:`
-                : `Use *NxPRICE* format, e.g. *1x50, 2x120.50*\nOr one price for all.`}`,
-            buttons: [
-              { id: "inv_custom_skip_price", title: "⏭ Skip prices" },
-              { id: ACTIONS.MAIN_MENU,       title: "🏠 Main Menu"  }
-            ]
-          });
-        }
-
-        // Apply prices
-        prices.forEach((price, i) => {
-          if (pending[i] !== undefined) pending[i].unit = price;
-        });
-      }
-      // isSkipAll → prices stay at 0
-
-      // Push all pending items into the main items array
-      biz.sessionData.items = [...(biz.sessionData.items || []), ...pending];
-      biz.sessionData.pendingCustomItems = [];
-      biz.sessionData.pendingCustomNames = [];
-      biz.sessionData.itemMode = null;
-      biz.sessionState = "creating_invoice_confirm";
-      await saveBizSafe(biz);
-      return sendDocPreview(from, biz);
-    }
-
-    // ── CATALOGUE MODE: waiting for quantity after picking a catalogue item ───
+    // Waiting for quantity after item description was entered
     if (biz.sessionData.expectingQty) {
       const qty = Number(trimmed);
       if (isNaN(qty) || qty <= 0) { await sendPromptWithMenu(from, "❌ Invalid quantity. Enter a number like 1:"); return true; }
@@ -1945,7 +1822,7 @@ if (state === "creating_invoice_enter_catalogue_prices") {
         return sendDocPreview(from, biz);
       }
 
-      // Catalogue item with no saved price → ask price
+      // Custom item OR catalogue item with no saved price → ask price (optional skip)
       biz.sessionState           = "creating_invoice_enter_prices";
       biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
       await saveBizSafe(biz);
@@ -1958,145 +1835,13 @@ if (state === "creating_invoice_enter_catalogue_prices") {
       });
     }
 
-    // Fallback: unexpected text in add_items mode
+    // Waiting for item description (custom mode)
+    if (!isNaN(Number(trimmed))) { await sendText(from, "Please send an item description (not a number)."); return true; }
+    biz.sessionData.lastItem     = { description: trimmed, source: "custom", unit: 0 };
+    biz.sessionData.expectingQty = true;
     await saveBizSafe(biz);
-    return sendAddItemPrompt(from);
-  }
-
-
-  /* ===========================
-     CUSTOM ITEM NAME ENTRY
-     State: creating_invoice_custom_names
-     User types comma-separated item names, then sees a preview.
-  =========================== */
-  if (state === "creating_invoice_custom_names") {
-    const rawNames = parseCommaNames(trimmed);
-    if (!rawNames.length) {
-      return sendButtons(from, {
-        text:
-          `❌ *No valid items found.*\n\n` +
-          `Type item names separated by commas:\n\n` +
-          `_labour charge, materials, transport fee_`,
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-
-    biz.sessionData.pendingCustomNames = rawNames;
-    biz.sessionState = "creating_invoice_custom_preview";
-    await saveBizSafe(biz);
-
-    const numbered = rawNames.map((n, i) => `${i + 1}. ${n}`).join("\n");
-    const isSingle = rawNames.length === 1;
-    return sendButtons(from, {
-      text:
-        `📋 *${isSingle ? "Your item" : `Your ${rawNames.length} items`}:*\n\n` +
-        `${numbered}\n\n` +
-        `Tap *Confirm* to set quantities and prices, or *Edit* to change the list.`,
-      buttons: [
-        { id: "inv_custom_confirm", title: "✅ Confirm" },
-        { id: "inv_custom_edit",    title: "✏️ Edit"    },
-        { id: "inv_custom_cancel",  title: "❌ Cancel"  }
-      ]
-    });
-  }
-
-
-  /* ===========================
-     CUSTOM ITEM NAME PREVIEW
-     State: creating_invoice_custom_preview
-     User sees numbered list and can edit or confirm.
-  =========================== */
-  if (state === "creating_invoice_custom_preview") {
-    const names  = biz.sessionData.pendingCustomNames || [];
-    const isEdit = text === "inv_custom_edit" || trimmed.toLowerCase() === "edit";
-    const isCancel = text === "inv_custom_cancel" || trimmed.toLowerCase() === "cancel";
-    const isConfirm = text === "inv_custom_confirm" || ["ok","yes","confirm"].includes(trimmed.toLowerCase());
-
-    if (isCancel) {
-      biz.sessionData.pendingCustomNames = [];
-      biz.sessionData.itemMode = null;
-      biz.sessionState = "creating_invoice_add_items";
-      await saveBizSafe(biz);
-      return sendAddItemPrompt(from);
-    }
-
-    if (isEdit) {
-      biz.sessionState = "creating_invoice_custom_edit";
-      await saveBizSafe(biz);
-      const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("\n");
-      return sendButtons(from, {
-        text:
-          `✏️ *Edit your items:*\n\n` +
-          `Current list:\n${numbered}\n\n` +
-          `Type the new list, comma-separated.\n` +
-          `_e.g. labour charge, materials, transport fee_`,
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-
-    if (!isConfirm) {
-      // Re-show preview
-      const numbered = names.map((n, i) => `${i + 1}. ${n}`).join("\n");
-      return sendButtons(from, {
-        text:
-          `📋 *Your items:*\n\n${numbered}\n\n` +
-          `Tap *Confirm* to continue, or *Edit* to change.`,
-        buttons: [
-          { id: "inv_custom_confirm", title: "✅ Confirm" },
-          { id: "inv_custom_edit",    title: "✏️ Edit"    },
-          { id: "inv_custom_cancel",  title: "❌ Cancel"  }
-        ]
-      });
-    }
-
-    // Confirmed → move to quantity entry
-    const isSingle = names.length === 1;
-    biz.sessionData.itemMode = "custom_qty";
-    biz.sessionState = "creating_invoice_add_items";
-    await saveBizSafe(biz);
-    const itemList = names.map((n, i) => `${i + 1}. *${n}*`).join("\n");
-    return sendButtons(from, {
-      text:
-        `🔢 *Enter quantities for:*\n\n` +
-        `${itemList}\n\n` +
-        (isSingle
-          ? `Type the quantity (e.g. *3*):`
-          : `Use *NxQTY* format, e.g. *1x2, 2x5, 3x1*\n_Or type one number to apply to all._`),
-      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-    });
-  }
-
-  /* ===========================
-     CUSTOM ITEM EDIT (re-enter names)
-     State: creating_invoice_custom_edit
-  =========================== */
-  if (state === "creating_invoice_custom_edit") {
-    const rawNames = parseCommaNames(trimmed);
-    if (!rawNames.length) {
-      return sendButtons(from, {
-        text:
-          `❌ No valid items found.\n\n` +
-          `Type item names separated by commas:\n` +
-          `_e.g. labour charge, materials, transport fee_`,
-        buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
-      });
-    }
-
-    biz.sessionData.pendingCustomNames = rawNames;
-    biz.sessionState = "creating_invoice_custom_preview";
-    await saveBizSafe(biz);
-
-    const numbered = rawNames.map((n, i) => `${i + 1}. ${n}`).join("\n");
-    return sendButtons(from, {
-      text:
-        `📋 *Your items (${rawNames.length}):*\n\n${numbered}\n\n` +
-        `Tap *Confirm* to add quantities and prices.`,
-      buttons: [
-        { id: "inv_custom_confirm", title: "✅ Confirm" },
-        { id: "inv_custom_edit",    title: "✏️ Edit"    },
-        { id: "inv_custom_cancel",  title: "❌ Cancel"  }
-      ]
-    });
+    await sendPromptWithMenu(from, `📦 *${trimmed}*\n\n🔢 Enter quantity (e.g. 1):`);
+    return true;
   }
 
   /* ===========================
