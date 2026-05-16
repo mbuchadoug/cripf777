@@ -308,17 +308,7 @@ export function buildProfileCard(supplier) {
     ? `Min order: $${Number(supplier.minOrder).toFixed(2)}`
     : "";
 
-  // ── Hospitality-specific card assembly ───────────────────────────────────
-  const isHospitality = supplier.profileType === "hospitality";
-
-  if (isHospitality) {
-    return _buildHospitalityCard(supplier, {
-      name, location, city, area, verifiedBadge, topBadge, ratingLine,
-      ordersLine, responseLine, catalogueLines, deliveryLine, minOrderLine
-    });
-  }
-
-  // ── Standard card (product / service) ─────────────────────────────────────
+  // ── Assemble card ─────────────────────────────────────────────────────────
   const lines = [
     `${isService ? "🔧" : "🏪"} *${name}*${verifiedBadge}${topBadge}`,
     `📍 ${location}`,
@@ -337,101 +327,6 @@ export function buildProfileCard(supplier) {
   lines.push(""); // separator before logistics
   lines.push(deliveryLine);
   if (minOrderLine) lines.push(minOrderLine);
-
-  return lines.join("\n");
-}
-
-// ─── Hospitality profile card ────────────────────────────────────────────────
-
-function _buildHospitalityCard(supplier, { name, location, verifiedBadge, topBadge, ratingLine, ordersLine, responseLine }) {
-  const city    = supplier.location?.city || "";
-  const areas   = (supplier.tourismAreas || []).join(", ");
-  const locLine = areas ? `📍 ${location} · 🌍 Serves: ${areas}` : `📍 ${location}`;
-
-  // Subtype label
-  const SUBTYPE_LABELS = {
-    lodge:          "🌿 Lodge",
-    hotel:          "🏨 Hotel",
-    guesthouse:     "🏡 Guesthouse / B&B",
-    self_catering:  "🍳 Self-Catering",
-    campsite:       "⛺ Campsite",
-    safari_operator:"🦁 Safari Operator",
-    tour_guide:     "🗺 Tour Guide",
-    boat_hire:      "⛵ Boat Hire",
-    travel_agency:  "✈️ Travel Agency",
-  };
-  const subtypes = (supplier.tourismSubtype || []);
-  const subtypeLabel = subtypes.map(s => SUBTYPE_LABELS[s] || s).join(" · ") || "🏨 Hospitality";
-
-  // Room types with nightly rates
-  let roomLines = "";
-  if ((supplier.roomTypes || []).length > 0) {
-    roomLines = (supplier.roomTypes || []).slice(0, 5).map(rt => {
-      const price = rt.pricePerNight > 0
-        ? `$${Number(rt.pricePerNight).toFixed(0)}/night`
-        : "Price on request";
-      const cap = rt.capacity > 0 ? ` · Sleeps ${rt.capacity}` : "";
-      return `• ${rt.name} — ${price}${cap}`;
-    }).join("\n");
-  } else if ((supplier.products || []).length > 0) {
-    // Fallback: products[] holds room names entered during registration
-    roomLines = (supplier.products || []).slice(0, 5).map(p => `• ${p}`).join("\n");
-  } else if ((supplier.rates || []).length > 0) {
-    // Safari/tour operator: rates are per-activity
-    roomLines = (supplier.rates || []).slice(0, 5)
-      .map(r => `• ${r.service}${r.rate ? " — " + r.rate : ""}`).join("\n");
-  }
-
-  // Facilities
-  const FACILITY_LABELS = {
-    wifi: "📶 WiFi", pool: "🏊 Pool", hot_shower: "🚿 Hot shower",
-    breakfast: "🍳 Breakfast", en_suite: "🚪 En-suite", generator: "⚡ Power",
-    dstv: "📺 DSTV", braai: "🔥 Braai", aircon: "❄️ AC",
-    game_drives: "🦁 Game drives", fishing: "🎣 Fishing",
-    boat_hire: "⛵ Boats", conference: "🏢 Conference",
-    restaurant: "🍽 Restaurant", laundry: "👕 Laundry",
-    parking: "🅿️ Parking", pets_allowed: "🐕 Pets OK",
-    child_friendly: "👶 Kids OK"
-  };
-  const facilCodes = supplier.facilities || [];
-  const facilLine = facilCodes.length
-    ? facilCodes.slice(0, 8).map(f => FACILITY_LABELS[f] || f).join("  ·  ")
-    : "";
-
-  // Check-in/out
-  const ciLine = (supplier.checkInTime || supplier.checkOutTime)
-    ? `⏰ Check-in: ${supplier.checkInTime || "?"} · Check-out: ${supplier.checkOutTime || "?"}`
-    : "";
-
-  // Capacity
-  const capLine = supplier.maxCapacity > 0 ? `👥 Sleeps up to ${supplier.maxCapacity} guests` : "";
-
-  // Rating/credibility
-  const credibility = [ratingLine, ordersLine, responseLine].filter(Boolean).join(" · ");
-
-  const lines = [
-    `🏨 *${name}*${verifiedBadge}${topBadge}`,
-    subtypeLabel,
-    locLine,
-  ];
-
-  if (credibility) lines.push(credibility);
-  if (capLine) lines.push(capLine);
-
-  if (roomLines) {
-    lines.push(""); // separator
-    const isActivity = !subtypes.some(s => ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s));
-    lines.push(isActivity ? "🎯 *Activities & Pricing:*" : "🛏 *Rooms & Rates:*");
-    lines.push(roomLines);
-  }
-
-  if (facilLine) {
-    lines.push(""); // separator
-    lines.push(`🏷 *Facilities:*`);
-    lines.push(facilLine);
-  }
-
-  if (ciLine) lines.push(ciLine);
 
   return lines.join("\n");
 }
@@ -465,33 +360,6 @@ export function buildSharableCaption(supplier, source = "wa") {
     : (supplier.listedProducts || []).slice(0, 3).join(" · ");
 
   const link = buildDeepLink(String(supplier._id), source);
-
-  // Hospitality-specific caption
-  if (supplier.profileType === "hospitality") {
-    const subtypes = (supplier.tourismSubtype || []);
-    const isAccom  = subtypes.some(s => ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s));
-    const hospLink = buildDeepLink(String(supplier._id), source);
-    const facilities = (supplier.facilities || []).slice(0, 4).map(f => ({
-      wifi:"WiFi", pool:"Pool", breakfast:"Breakfast", en_suite:"En-suite",
-      braai:"Braai", aircon:"AC", game_drives:"Game Drives", fishing:"Fishing"
-    }[f] || f)).join(" · ");
-
-    const hospCaptions = {
-      wa:  [`🏨 *${name}* - ${location}`,
-            itemTeaser ? `🛏 ${itemTeaser}` : "",
-            facilities ? `✅ ${facilities}` : "",
-            ``, `📲 Request a quote or check availability on WhatsApp:`, hospLink].filter(Boolean).join("\n"),
-      fb:  [isAccom ? `🌿 Looking for a perfect stay? ${name} is now on ZimQuote!` : `🦁 Adventures await! ${name} is now on ZimQuote!`,
-            ``, itemTeaser || `${isAccom ? "Accommodation" : "Tours & Activities"} in ${location}`,
-            facilities ? `✅ ${facilities}` : "",
-            ``, `📲 Request a quote instantly on WhatsApp — no app download needed.`, ``, hospLink,
-            `#ZimQuote #Zimbabwe #Tourism #${city.replace(/\s/g,"")}`].filter(Boolean).join("\n"),
-      tt:  [`Book your stay at ${name} on ZimQuote 👇`, hospLink, `#ZimQuote #ZimbabweTourism #${name.replace(/\s/g,"")}`].join("\n"),
-      sms: [`${name} - ${location}`, itemTeaser || "", `Get availability & quotes: ${hospLink}`].filter(Boolean).join("\n"),
-      ig:  [`🏨 ${name} | ${location}`, itemTeaser ? `✔ ${itemTeaser}` : "", facilities ? `✅ ${facilities}` : "", ``, `Request a quote on WhatsApp 👇`, hospLink, `#ZimQuote #Zimbabwe #${city.replace(/\s/g,"")} #Tourism`].filter(Boolean).join("\n"),
-    };
-    return hospCaptions[source] || hospCaptions.wa;
-  }
 
   const captions = {
     wa: [

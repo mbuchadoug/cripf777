@@ -103,16 +103,6 @@ export const CATEGORY_SERVICE_EXAMPLES = {
   beauty:              ["hair braiding", "nails", "makeup", "massage"],
   photography:         ["wedding photos", "passport photos", "events coverage", "drone footage"],
   tutoring:            ["maths tutor", "O-Level prep", "A-Level tuition", "driving lessons"],
-  // ── Hospitality & Tourism ───────────────────────────────────────────────────
-  lodge:               ["Double room", "Twin room", "Family chalet", "Self-catering unit", "Bush chalet"],
-  hotel:               ["Standard room", "Deluxe room", "Suite", "Family room", "Conference room"],
-  guesthouse:          ["En-suite double", "Twin room with breakfast", "Self-catering unit"],
-  safari_operator:     ["Game drive (morning)", "Game drive (afternoon)", "Night drive", "Walking safari", "Bush walk"],
-  boat_hire:           ["Sunset cruise", "Fishing trip (half day)", "Houseboat hire", "Kayak hire", "Pontoon boat hire"],
-  tour_guide:          ["Victoria Falls tour", "City tour Harare", "Great Zimbabwe tour", "Cultural village tour", "Bird watching tour"],
-  self_catering:       ["2-bedroom chalet", "4-bed cottage", "Studio unit", "Family self-catering unit"],
-  campsite:            ["Powered camping site", "Tent site (no power)", "Caravan site", "Group camping area"],
-  travel_agency:       ["Safari package (5 days)", "Victoria Falls package", "Holiday package", "Airport transfer"],
   it_support:          ["laptop repair", "wifi setup", "CCTV installation", "phone repair"],
   security:            ["security guard", "alarm installation", "access control", "electric fence"],
   services:            ["plumbing", "welding", "painting"],
@@ -213,10 +203,9 @@ What would you like to list?`,
 
 What would you like to list?`,
     [
-      { id: "reg_type_product",     title: "📦 I Sell Products"         },
-      { id: "reg_type_service",     title: "🧰 I Offer Services"        },
-      { id: "reg_type_hospitality", title: "🏨 Lodge / Hotel / Tourism" },
-      { id: "reg_type_school",      title: "🏫 I Run a School"          }
+      { id: "reg_type_product", title: "📦 I Sell Products" },
+      { id: "reg_type_service", title: "🧰 I Offer Services" },
+      { id: "reg_type_school",  title: "🏫 I Run a School" }
     ]
   );
 }
@@ -229,18 +218,6 @@ export async function handleSupplierRegistrationStates({
   // ── Step 1: Business Name ──────────────────────────────
  // ── Step 0: Listing type chosen via button (product/service handled in chatbotEngine)
   // School name free-text entry after "reg_type_school" button
-  // ── Hospitality-specific state routes ────────────────────────────────────────
-  const HOSPITALITY_STATES = new Set([
-    "supplier_reg_hospitality_subtype",
-    "supplier_reg_hospitality_areas",
-    "supplier_reg_hospitality_rooms",
-    "supplier_reg_hospitality_activities",
-    "supplier_reg_hospitality_rates",
-    "supplier_reg_hospitality_facilities",
-    "supplier_reg_checkin",
-  ]);
-  // Hospitality states are handled in the full state chain below.
-
   if (state === "school_reg_name") {
     const name = text.trim();
     if (!name || name.length < 2) {
@@ -389,27 +366,6 @@ if (state === "supplier_reg_website") {
   biz.sessionData.supplierReg.website = website;
 
   const profileType = biz.sessionData.supplierReg.profileType || "product";
-
-  if (profileType === "hospitality") {
-    biz.sessionState = "supplier_reg_hospitality_subtype";
-    await saveBiz(biz);
-
-    return sendList(from,
-      `🏨 *What type of hospitality business are you?*\n\n` +
-      `_You can select the option that best describes you.\nIf you offer both a lodge AND safaris, pick the primary one — you can update later._`,
-      [
-        { id: "sup_hosp_type_lodge",           title: "🌿 Lodge / Bush Camp"         },
-        { id: "sup_hosp_type_hotel",            title: "🏨 Hotel / Motel"             },
-        { id: "sup_hosp_type_guesthouse",       title: "🏡 Guesthouse / B&B"          },
-        { id: "sup_hosp_type_self_catering",    title: "🍳 Self-Catering / Chalet"    },
-        { id: "sup_hosp_type_campsite",         title: "⛺ Campsite / Caravan Park"   },
-        { id: "sup_hosp_type_safari_operator",  title: "🦁 Safari / Game Drive"       },
-        { id: "sup_hosp_type_tour_guide",       title: "🗺 Tour Guide / City Tours"   },
-        { id: "sup_hosp_type_boat_hire",        title: "⛵ Boat Hire / Cruises"       },
-        { id: "sup_hosp_type_lodge__safari_operator", title: "🌿🦁 Lodge + Safaris"  }
-      ]
-    );
-  }
 
   if (profileType === "service") {
     biz.sessionState = "supplier_reg_collar";
@@ -1022,263 +978,7 @@ if (state === "supplier_reg_teacher_details") {
   });
 }
 
-// ─── HOSPITALITY / TOURISM REGISTRATION STATES ──────────────────────────────
-// These handle the extended registration flow for lodges, hotels, safari operators, etc.
-
-// Step: hospitality_subtype is handled via button (chatbotEngine routes sup_hosp_type_ buttons)
-// The button sets tourismSubtype[] and advances to supplier_reg_hospitality_areas
-
-// Step: Areas/destinations
-if (state === "supplier_reg_hospitality_areas") {
-  const raw = (text || "").trim();
-
-  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
-    const areas = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-    biz.sessionData.supplierReg.tourismAreas = areas;
-  }
-
-  // Move to room types / services entry
-  const subtype = (biz.sessionData.supplierReg.tourismSubtype || [])[0] || "";
-  const isAccommodation = ["lodge","hotel","guesthouse","self_catering","campsite"].includes(subtype);
-
-  if (isAccommodation) {
-    biz.sessionState = "supplier_reg_hospitality_rooms";
-    await saveBiz(biz);
-    return sendText(from,
-      `🛏 *What room or accommodation types do you offer?*\n\n` +
-      `Type your types separated by commas.\n\n` +
-      `Examples:\n` +
-      `_Double room, Twin room, Family chalet, Presidential suite_\n` +
-      `_Self-catering unit, Honeymoon chalet, Dormitory_\n` +
-      `_Bush chalet, Tent (fully equipped), Caravan site_\n\n` +
-      `_Type *skip* to add these later._`
-    );
-  }
-
-  // For safari operators, tour guides, boat hire — go to services listing
-  biz.sessionState = "supplier_reg_hospitality_activities";
-  await saveBiz(biz);
-  return sendText(from,
-    `🦁 *What activities or services do you offer?*\n\n` +
-    `Type your services separated by commas.\n\n` +
-    `Examples:\n` +
-    `_Game drive, Night drive, Bird watching, Bush walk_\n` +
-    `_Sunset cruise, Fishing trip, Kayak hire, Houseboat hire_\n` +
-    `_Victoria Falls tour, Cultural village tour, City tour_\n` +
-    `_Airport transfer, Full-day safari package_\n\n` +
-    `_Type *skip* to add these later._`
-  );
-}
-
-// Step: Room types (accommodation providers)
-if (state === "supplier_reg_hospitality_rooms") {
-  const raw = (text || "").trim();
-
-  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
-    const rooms = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-    // Store as products[] for catalogue display
-    biz.sessionData.supplierReg.products = rooms;
-    // Also build roomTypes[] with placeholders — nightly rates entered in next step
-    biz.sessionData.supplierReg.roomTypes = rooms.map(name => ({
-      name, capacity: 2, pricePerNight: 0, currency: "USD", description: ""
-    }));
-  }
-
-  biz.sessionState = "supplier_reg_hospitality_rates";
-  await saveBiz(biz);
-  const rooms = biz.sessionData.supplierReg.products || [];
-  if (!rooms.length) {
-    biz.sessionState = "supplier_reg_hospitality_facilities";
-    await saveBiz(biz);
-    return _showHospFacilitiesPrompt(from, biz);
-  }
-
-  const numbered = rooms.map((r, i) => `${i + 1}. ${r}`).join("\n");
-  return sendButtons(from, {
-    text:
-      `💰 *Set your nightly rates (USD)*\n\n` +
-      `${numbered}\n\n` +
-      `─────────────────\n` +
-      `Enter rates using item number x price:\n\n` +
-      `*Single room:*\n_1 x 80_\n\n` +
-      `*Multiple rooms:*\n_1 x 80, 2 x 120, 3 x 150_\n\n` +
-      `*All the same rate:*\n_80_ _(applied to all)_\n\n` +
-      `_All prices are per night per room._`,
-    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip For Now" }]
-  });
-}
-
-// Step: Activities (non-accommodation hospitality providers)
-if (state === "supplier_reg_hospitality_activities") {
-  const raw = (text || "").trim();
-
-  if (raw.toLowerCase() !== "skip" && raw.length > 1) {
-    const activities = raw.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-    biz.sessionData.supplierReg.products = activities;
-    // Store as rates with per-person/per-trip defaults
-    biz.sessionData.supplierReg.rates = activities.map(service => ({
-      service, rate: ""
-    }));
-  }
-
-  biz.sessionState = "supplier_reg_hospitality_rates";
-  await saveBiz(biz);
-  const activities = biz.sessionData.supplierReg.products || [];
-  if (!activities.length) {
-    biz.sessionState = "supplier_reg_hospitality_facilities";
-    await saveBiz(biz);
-    return _showHospFacilitiesPrompt(from, biz);
-  }
-
-  const numbered = activities.map((a, i) => `${i + 1}. ${a}`).join("\n");
-  return sendButtons(from, {
-    text:
-      `💰 *Set your rates (USD)*\n\n` +
-      `${numbered}\n\n` +
-      `─────────────────\n` +
-      `Enter rates using item number x price/unit:\n\n` +
-      `_1 x 80/person_\n` +
-      `_2 x 150/trip_\n` +
-      `_3 x 200/group_\n` +
-      `_1 x 80/person, 2 x 150/trip_\n\n` +
-      `_Accepted units: /person  /trip  /day  /hour  /group  /boat_`,
-    buttons: [{ id: "sup_skip_prices", title: "⏭ Skip For Now" }]
-  });
-}
-
-// Step: Hospitality rates (nightly or per-activity)
-// Note: the price parsing state "supplier_reg_prices" handles the actual input;
-// we just route there with the right context set above.
-
-// Step: Facilities selection for hospitality suppliers
-if (state === "supplier_reg_hospitality_facilities") {
-  // Handled by sup_hosp_fac_toggle_ buttons — this state collects typed input as fallback
-  const raw = (text || "").trim();
-  const _DONE_WORDS = ["done", "next", "skip", "continue", "ok", "okay"];
-
-  if (_DONE_WORDS.includes(raw.toLowerCase()) || text === "sup_hosp_facilities_done") {
-    biz.sessionState = "supplier_reg_checkin";
-    await saveBiz(biz);
-    return sendText(from,
-      `⏰ *Check-in and check-out times? (Optional)*\n\n` +
-      `Type both separated by a slash.\n\n` +
-      `Examples:\n` +
-      `_2pm / 10am_\n` +
-      `_14:00 / 10:00_\n` +
-      `_Flexible check-in available_\n\n` +
-      `_Type *skip* to set later._`
-    );
-  }
-
-  // If they typed facility names as text
-  if (raw.length > 2) {
-    const facilityMap = {
-      "wifi": "wifi", "wi-fi": "wifi", "internet": "wifi",
-      "pool": "pool", "swimming pool": "pool",
-      "hot shower": "hot_shower", "shower": "hot_shower",
-      "breakfast": "breakfast", "b&b": "breakfast",
-      "en suite": "en_suite", "en-suite": "en_suite", "ensuite": "en_suite",
-      "generator": "generator", "solar": "generator",
-      "dstv": "dstv", "tv": "dstv",
-      "braai": "braai", "bbq": "braai", "barbeque": "braai",
-      "aircon": "aircon", "air conditioning": "aircon",
-      "game drives": "game_drives", "safari": "game_drives",
-      "fishing": "fishing",
-      "boat hire": "boat_hire", "boat": "boat_hire",
-      "conference": "conference",
-      "restaurant": "restaurant", "bar": "bar",
-      "laundry": "laundry", "parking": "parking",
-      "pets": "pets_allowed", "child friendly": "child_friendly"
-    };
-    const existing = biz.sessionData.supplierReg.facilities || [];
-    const typed = raw.toLowerCase();
-    const matched = [];
-    for (const [key, code] of Object.entries(facilityMap)) {
-      if (typed.includes(key) && !existing.includes(code)) matched.push(code);
-    }
-    if (matched.length) {
-      biz.sessionData.supplierReg.facilities = [...existing, ...matched];
-      await saveBiz(biz);
-      return sendButtons(from, {
-        text: `✅ Added: ${matched.map(f => f.replace("_", " ")).join(", ")}\n\nAdd more or tap Done:`,
-        buttons: [{ id: "sup_hosp_facilities_done", title: "✅ Done" }]
-      });
-    }
-  }
-
-  return _showHospFacilitiesPrompt(from, biz);
-}
-
-// Step: Check-in / check-out times
-if (state === "supplier_reg_checkin") {
-  const raw = (text || "").trim();
-
-  if (raw.toLowerCase() !== "skip" && raw.length > 2) {
-    const parts = raw.split(/[/\\|]+/).map(s => s.trim()).filter(Boolean);
-    biz.sessionData.supplierReg.checkInTime  = parts[0] || "";
-    biz.sessionData.supplierReg.checkOutTime = parts[1] || "";
-  }
-
-  // Route to min order / confirm
-  biz.sessionData.supplierReg.minOrder      = 0;
-  biz.sessionData.supplierReg.travelAvailable = true; // hospitality providers always "come to"
-  biz.sessionState = "supplier_reg_biz_currency";
-  await saveBiz(biz);
-  return sendButtons(from, {
-    text: "💱 *Almost done! What currency does your business use?*",
-    buttons: [
-      { id: "sup_biz_cur_USD", title: "💵 USD ($)" },
-      { id: "sup_biz_cur_ZWL", title: "🇿🇼 ZWL (Z$)" },
-      { id: "sup_biz_cur_ZAR", title: "🇿🇦 ZAR (R)" }
-    ]
-  });
-}
-
-// ── Facilities prompt helper ───────────────────────────────────────────────
-async function _showHospFacilitiesPrompt(from, biz) {
-  const existing = biz.sessionData.supplierReg.facilities || [];
-  const ALL_FACILITIES = [
-    { code: "wifi",          label: "📶 WiFi"                },
-    { code: "pool",          label: "🏊 Swimming pool"       },
-    { code: "hot_shower",    label: "🚿 Hot shower"          },
-    { code: "breakfast",     label: "🍳 Breakfast included"  },
-    { code: "en_suite",      label: "🚪 En-suite bathrooms"  },
-    { code: "generator",     label: "⚡ Generator/solar"     },
-    { code: "dstv",          label: "📺 DSTV / TV"           },
-    { code: "braai",         label: "🔥 Braai / BBQ"         },
-    { code: "aircon",        label: "❄️ Air conditioning"    },
-    { code: "game_drives",   label: "🦁 Game drives"         },
-    { code: "fishing",       label: "🎣 Fishing"             },
-    { code: "boat_hire",     label: "⛵ Boat hire"           },
-    { code: "conference",    label: "🏢 Conference room"     },
-    { code: "restaurant",    label: "🍽 Restaurant / bar"   },
-    { code: "laundry",       label: "👕 Laundry"             },
-    { code: "parking",       label: "🅿️ Parking"             },
-    { code: "pets_allowed",  label: "🐕 Pets allowed"        },
-    { code: "child_friendly",label: "👶 Child-friendly"      }
-  ];
-
-  const { sendList } = await import("./metaSender.js");
-
-  const facilityRows = ALL_FACILITIES.map(f => ({
-    id:          `sup_hosp_fac_toggle_${f.code}`,
-    title:       existing.includes(f.code) ? `✅ ${f.label}` : f.label,
-    description: existing.includes(f.code) ? "Tap to remove" : "Tap to add"
-  }));
-
-  facilityRows.push({ id: "sup_hosp_facilities_done", title: "✅ Done — save facilities" });
-
-  const selected = existing.length
-    ? `\n\n_Selected: ${existing.map(f => f.replace("_", " ")).join(", ")}_`
-    : "";
-
-  return sendList(from,
-    `🏨 *What facilities do you offer?*${selected}\n\nTap to add or remove:`,
-    facilityRows.slice(0, 10) // WhatsApp list limit
-  );
-}
-
-// ── Step: Tourism / Hospitality details (legacy — kept for backward compat) ──
+// ── Step: Tourism / Hospitality details ──────────────────────────────────────
 if (state === "supplier_reg_tourism_details") {
   const raw = (text || "").trim();
   if (raw.toLowerCase() !== "skip" && raw.length > 1) {

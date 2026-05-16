@@ -2713,9 +2713,7 @@ function _buyerRequestIsService(items = []) {
   });
 }
 
-// ── Detect if a request is tourism/hospitality-related (for context-aware prompts) ─
-// Uses classifyRequestItems from requestMatchEngine for accuracy.
-// Falls back to keyword list for lightweight checks.
+// ── Detect if a request is tourism-related (for context-aware prompts) ─────────
 function _buyerRequestIsTourism(items = []) {
   const TOURISM_KEYWORDS = [
     "safari","game drive","game park","lodge","cruise","fishing trip","boat trip",
@@ -3288,11 +3286,7 @@ a === "my_orders" ||
       a.startsWith("exp_quick_save_") ||
   a === "reg_type_product" ||
       a === "reg_type_service" ||
-      a === "reg_type_hospitality" ||
       a === "reg_type_school" ||
-      a.startsWith("sup_hosp_type_") ||
-      a === "sup_hosp_facilities_done" ||
-      a.startsWith("sup_hosp_fac_toggle_") ||
       a.startsWith("sup_collar_") ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
@@ -3930,24 +3924,16 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _blankEx     = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
         const _blankSingle = _introItems.length === 1;
 
-        // Hospitality check: ONLY show per-night/person/room examples if the supplier
-        // has profileType="hospitality". Plumbers/electricians/product sellers
-        // NEVER see tourism or hospitality prompts regardless of categories.
-        const _supplierIsHospitality = supplier?.profileType === "hospitality" ||
-          _introSupplier?.profileType === "hospitality";
+        // Tourism check: ONLY show per-person/trip examples if BOTH the supplier
+        // is a tourism supplier AND the actual request items are tourism-related.
+        // A plumber or electrician (profileType=service) must never see tourism prompts.
+        const _supplierIsTourism = (supplier?.categories||[]).includes("tourism") ||
+          (_introSupplier?.categories||[]).includes("tourism");
         const _requestIsTourism  = _buyerRequestIsTourism(_introItems);
-        const _isTourismOffer    = _supplierIsHospitality && _requestIsTourism;
-
-        // Determine if request is specifically an accommodation (nights/room) request
-        const _isAccommodation = _isTourismOffer &&
-          ["hospitality_stay"].includes(
-            (() => { try { const {classifyRequestItems} = require("./requestMatchEngine.js"); return classifyRequestItems(_introItems).dominant; } catch(_){return "other";} })()
-          );
+        const _isTourismOffer    = _supplierIsTourism && _requestIsTourism;
 
         const _unitExamples = _isTourismOffer
-          ? (_isAccommodation
-            ? `*1x80/night*  or  *1x80/night  2x120/night*\n_Accepted units: /night  /room  /person  /person/night_`
-            : `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`)
+          ? `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`
           : (_introIsService
             ? `*${_blankEx || "1x80/job"}*  or  *1x80/job  2x50/hr*`
             : `*${_blankEx || "1x12.50"}*`);
@@ -4517,22 +4503,20 @@ await UserSession.findOneAndUpdate(
         );
       }
 
-      // Do NOT allow empty service/hospitality quotations.
-      // Show correct examples based on profileType — never show /person /trip to plumbers.
+      // Do NOT allow empty service quotations.
+      // Services must include a price. Show generic service examples (not tourism).
       if (_isService) {
-        const _isHospSupplier = supplier?.profileType === "hospitality";
+        const _isTourismSupplier = (supplier?.categories||[]).includes("tourism");
         return sendText(
           from,
           `⚠️ Please include at least one price before sending the quote.\n\n` +
           `Examples:\n` +
-          (_isHospSupplier
-            ? `_1=80/night_\n_1=120/night_\n_1=80/person_\n_1=150/trip_\n`
+          (_isTourismSupplier
+            ? `_1=80/person_\n_1=150/trip_\n_1=300/night_\n`
             : `_1=80/job_\n_1=150/hr_\n_1=500/day_\n`) +
           `\nYou can also add a note:\n` +
-          (_isHospSupplier
-            ? `_1=80/night msg includes breakfast, WiFi and braai area_\n`
-            : `_1=80/job msg available from Monday_\n`) +
-          `\nType *cancel* to discard.`
+          `_1=80/job msg available from Monday_\n\n` +
+          `Type *cancel* to discard.`
         );
       }
 
@@ -5541,10 +5525,6 @@ const allowedWithoutBiz =
  a === "sup_search_type_product" ||
       a === "sup_search_type_service" ||
      a === "reg_type_school" ||
-      a === "reg_type_hospitality" ||
-      a.startsWith("sup_hosp_type_") ||
-      a === "sup_hosp_facilities_done" ||
-      a.startsWith("sup_hosp_fac_toggle_") ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
 
@@ -8892,10 +8872,6 @@ const supplierStates = [
   "supplier_reg_travel",
   "supplier_reg_teacher_details",
   "supplier_reg_tourism_details",
-  "supplier_reg_hospitality_subtype",
-  "supplier_reg_hospitality_rooms",
-  "supplier_reg_hospitality_facilities",
-  "supplier_reg_hospitality_areas",
   "supplier_reg_city",
   "supplier_reg_category",
   "supplier_reg_delivery",
@@ -11713,30 +11689,16 @@ if (a === "reg_type_product" || a === "reg_type_service") {
   const profileType = a === "reg_type_service" ? "service" : "product";
 
   biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = { profileType };
+  biz.sessionData.supplierReg = {
+    profileType
+  };
+
   biz.sessionState = "supplier_reg_name";
   await saveBizSafe(biz);
 
-  return sendText(from, `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`);
-}
-
-// ── Hospitality / Tourism registration entry ──────────────────────────────
-if (a === "reg_type_hospitality") {
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = { profileType: "hospitality" };
-  biz.sessionState = "supplier_reg_name";
-  await saveBizSafe(biz);
-
-  return sendText(from,
-    `🏨 *Lodge / Hotel / Tourism Registration*\n\n` +
-    `What is your business name?\n\n` +
-    `_Examples:_\n` +
-    `_Wilderness Lodge Kariba_\n` +
-    `_Safari Dreams Hwange_\n` +
-    `_Victoria Falls Guesthouse_\n` +
-    `_Lake View Self-Catering Nyanga_`
+  return sendText(
+    from,
+    `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`
   );
 }
 
@@ -11851,52 +11813,6 @@ if (a === "sup_cat_more_2") {
 
   return sendList(from, "🗂 More Categories (Page 2)", moreRows);
 }
-
-  // ── Hospitality subtype selection buttons ────────────────────────────────────
-  // sup_hosp_type_lodge__safari_operator → tourismSubtype = ["lodge","safari_operator"]
-  if (a.startsWith("sup_hosp_type_")) {
-    if (!biz) return sendMainMenu(from);
-    const subtypes = a.replace("sup_hosp_type_", "").split("__").filter(Boolean);
-    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-    biz.sessionData.supplierReg.tourismSubtype = subtypes;
-
-    // Determine the categories array from subtypes
-    const subtypeCatMap = {
-      lodge:           "lodge",          hotel:           "hotel",
-      guesthouse:      "guesthouse",     self_catering:   "self_catering",
-      campsite:        "campsite",       safari_operator: "safari",
-      tour_guide:      "tours",          boat_hire:       "boat_hire",
-      travel_agency:   "tourism"
-    };
-    const cats = [...new Set(subtypes.map(s => subtypeCatMap[s]).filter(Boolean)), "tourism", "hospitality", "accommodation"];
-    biz.sessionData.supplierReg.categories = cats;
-    biz.sessionState = "supplier_reg_hospitality_areas";
-    await saveBizSafe(biz);
-
-    return sendText(from,
-      `🌍 *Which areas or destinations do you serve?*\n\n` +
-      `Type the areas separated by commas.\n\n` +
-      `Examples:\n` +
-      `_Kariba, Nyamhunga, Andora_\n` +
-      `_Hwange National Park, Victoria Falls_\n` +
-      `_Nyanga, Eastern Highlands_\n` +
-      `_Harare, Bulawayo (for city tours)_\n` +
-      `_Victoria Falls, Zambezi National Park_\n\n` +
-      `_Type *skip* to use your main location._`
-    );
-  }
-
-  if (a === "sup_hosp_facilities_done") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "sup_hosp_facilities_done" });
-    return;
-  }
-
-  if (a.startsWith("sup_hosp_fac_toggle_")) {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: a });
-    return;
-  }
 
   // ── Travel yes/no during service registration ─────────────────────────────
 if (a === "sup_travel_yes") {
@@ -12705,16 +12621,9 @@ const supplier = await SupplierProfile.create({
       // ── Teacher fields (populated when category = tutoring) ─────────────────
       subjects:      reg.subjects      || [],
       gradesOffered: reg.gradesOffered || [],
-      // ── Tourism / Hospitality fields ─────────────────────────────────────────
-      tourismType:    reg.tourismType    || "",       // legacy single-string
-      tourismAreas:   reg.tourismAreas   || [],
-      tourismSubtype: reg.tourismSubtype || [],       // ["lodge","safari_operator",...]
-      facilities:     reg.facilities     || [],       // ["wifi","pool","breakfast",...]
-      roomTypes:      reg.roomTypes      || [],       // [{ name, capacity, pricePerNight }]
-      maxCapacity:    reg.maxCapacity    || 0,
-      checkInTime:    reg.checkInTime    || "",
-      checkOutTime:   reg.checkOutTime   || "",
-      mealPlan:       reg.mealPlan       || "not_applicable",
+      // ── Tourism fields (populated when category = tourism) ──────────────────
+      tourismType:   reg.tourismType   || "",
+      tourismAreas:  reg.tourismAreas  || [],
       active: false,
       subscriptionStatus: "pending",
       priceUpdatedAt: reg.prices?.length ? new Date() : null

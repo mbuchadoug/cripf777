@@ -9,8 +9,6 @@
 //  - For product requests, at least one item must match listedProducts/prices/products/rates.
 //  - Category-only match is fallback for service requests only.
 //  - Generic single-word requests are flagged for clarification, not sent blind.
-//  - HOSPITALITY intents NEVER match plumbing/electrical/product suppliers.
-//  - PRODUCT/SERVICE intents NEVER match hospitality suppliers.
 
 import SupplierProfile from "../models/supplierProfile.js";
 
@@ -28,10 +26,7 @@ function normalize(s = "") {
 //
 // Maps normalized keyword fragments → canonical intent category.
 // More specific entries must come before broader ones within each group.
-//
-// NEW: hospitality_stay   = lodge, hotel, guesthouse, accommodation, nights
-//      tourism_activity   = safari, game drive, boat cruise, tour, rafting
-// These two NEVER cross-match with product or general service suppliers.
+// These are NOT supplier category IDs - they are classification labels.
 
 const INTENT_KEYWORD_MAP = [
   // ── PLUMBING SUPPLIES (products) ──────────────────────────────────────────
@@ -82,6 +77,7 @@ const INTENT_KEYWORD_MAP = [
   { pattern: /\b(engine oil|gear oil|transmission fluid|diff oil|power steering fluid|coolant|antifreeze|brake cleaner|carb cleaner|grease)\b/, intent: "car_spares" },
   { pattern: /\b(tyre|tire|rim|alloy wheel|hub cap|spare wheel|tyre sealant)\b/, intent: "car_spares" },
   { pattern: /\b(service kit|major service kit|minor service kit|car parts|auto parts|spare parts|vehicle parts|car accessories|car supplies)\b/, intent: "car_spares" },
+  // Named car models strongly signal car spares context
   { pattern: /\b(toyota|honda|mazda|nissan|mitsubishi|isuzu|ford|bmw|mercedes|vw|volkswagen|hyundai|kia|suzuki|subaru|peugeot|renault|benz)\b.*\b(part|spare|service|kit|pad|filter|oil|belt|pump|bearing|sensor|brake)\b/, intent: "car_spares" },
   { pattern: /\b(aqua|vitz|fielder|axio|ist|wish|spacio|corolla|hilux|ranger|amarok|d4d|d4|rav4|rush|prado|land cruiser|allion|premio|harrier)\b/, intent: "car_spares" },
 
@@ -139,6 +135,13 @@ const INTENT_KEYWORD_MAP = [
   // ── TUTORING & EDUCATION ─────────────────────────────────────────────────
   { pattern: /\b(tutor|tutoring|maths tutor|science tutor|english tutor|a level|o level|alevel|olevel|lessons|private lessons|home tuition|coding class|driving lessons|music lessons)\b/, intent: "tutoring_service" },
 
+  // ── TOURISM & HOSPITALITY SERVICE ─────────────────────────────────────────
+  { pattern: /\b(safari|game drive|game park|game reserve|wildlife tour|bush walk|nature walk|sunset cruise|sunrise cruise|boat cruise|houseboat|fishing trip|fishing guide|fish guide|bird watching|birding|cultural tour|village tour|city tour|heritage tour|adventure tour|hiking tour|nature tour|scenic tour|guided tour|tour guide|tour operator|tourism)\b/, intent: "tourism_service" },
+  { pattern: /\b(lodge|bush camp|safari camp|game lodge|tented camp|luxury lodge|chalet|chalet hire|self catering|airbnb|bed and breakfast|b&b|guesthouse|guest house|hotel|boutique hotel|resort|resort booking|accommodation booking)\b/, intent: "tourism_service" },
+ { pattern: /\b(victoria falls|vic falls|hwange|kariba|nyamhunga|andora|mahombekombe|siakobvu|mlibizi|nyanga|chimanimani|gonarezhou|matusadona|mana pools|zambezi|lake kariba|binga|matobo|matopos|great zimbabwe|chobe|kasane)\b/, intent: "tourism_service" },
+  { pattern: /\b(boat hire|boat trip|boat charter|canoe hire|kayak hire|canoe safari|kayak safari|river cruise|island transfer|water taxi|pontoon boat|houseboat hire|speedboat|fishing boat|mokoro)\b/, intent: "tourism_service" },
+  { pattern: /\b(day trip|weekend getaway|holiday package|travel package|excursion|sightseeing|tourist transfer|airport pickup|bush dinner|sundowner|campfire|stargazing|horse riding|elephant ride|bungee|zip line|white water rafting|rafting)\b/, intent: "tourism_service" },
+
   // ── SECURITY SERVICES ─────────────────────────────────────────────────────
   { pattern: /\b(security guard|armed response|security company|security patrol|alarm system|panic button|electric fence|electric gate|gate motor)\b/, intent: "security_service" },
 
@@ -149,70 +152,27 @@ const INTENT_KEYWORD_MAP = [
   { pattern: /\b(dentist|dental|teeth clean|tooth extract|filling|root canal|denture|braces|orthodon)\b/, intent: "medical_service" },
   { pattern: /\b(doctor|clinic|gp|general practitioner|physiotherapist|physiotherapy|optician|optical|glasses|optometrist|psychologist|counsellor|nutritionist|dietitian)\b/, intent: "medical_service" },
   { pattern: /\b(pharmacy|chemist|medicine|pills|prescription|supplement|vitamin|first aid)\b/, intent: "medical_service" },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // HOSPITALITY — ACCOMMODATION (stay, sleep, check in)
-  // IMPORTANT: These ONLY match profileType="hospitality" suppliers.
-  // They will NEVER match plumbers, electricians, product sellers, etc.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  // Accommodation keywords — very specific to overnight stays
-  { pattern: /\b(lodge|game lodge|safari lodge|bush lodge|tented camp|luxury lodge|bush camp|nature lodge|riverside lodge|lakeside lodge)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(hotel|boutique hotel|motel|inn|guesthouse|guest house|bed and breakfast|b&b|airbnb|holiday home|self catering|self-catering|chalet|cottage|villa|rondavel|hut hire)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(resort|resort booking|accommodation|accommodation booking|stay|overnight stay|overnight accommodation|place to stay|sleep|sleeps)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(room booking|room for|rooms for|double room|twin room|single room|family room|suite|honeymoon suite|chalet hire|cabin hire)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(houseboat|houseboat hire|houseboat booking|pontoon boat|floating cabin)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(campsite|camping site|camping spot|caravan park|camp booking|tent site)\b/, intent: "hospitality_stay" },
-
-  // Night / nights is the clearest accommodation signal
-  { pattern: /\b(\d+\s+night|\d+\s+nights|one night|two nights|three nights|four nights|five nights|weekend stay|long weekend|midweek)\b/, intent: "hospitality_stay" },
-
-  // Famous Zim destinations combined with stay-words — strong accommodation signal
-  { pattern: /\b(victoria falls|vic falls|hwange|kariba|lake kariba|nyanga|chimanimani|gonarezhou|mana pools|binga|matobo|matopos|great zimbabwe|vumba|nyanga mountains|eastern highlands)\b.*\b(night|nights|stay|lodge|hotel|room|chalet|book|accommodation)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(book|booking|reserve|reservation)\b.*\b(lodge|hotel|chalet|room|guesthouse|chalet|camp|stay)\b/, intent: "hospitality_stay" },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // TOURISM — ACTIVITIES (day trips, experiences, guided)
-  // These match safari operators, tour guides, boat hire — NOT accommodation.
-  // A lodge that ALSO does game drives will have tourismSubtype including both.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  { pattern: /\b(safari|game drive|game drives|game park|game reserve|wildlife tour|wildlife safari|bush walk|bush safari|nature walk|guided walk|walking safari|night drive|night safari)\b/, intent: "tourism_activity" },
-  { pattern: /\b(bird watching|birding|birding tour|bird guide|birdwatching)\b/, intent: "tourism_activity" },
-  { pattern: /\b(sunset cruise|sunrise cruise|boat cruise|river cruise|lake cruise|sundowner cruise|evening cruise)\b/, intent: "tourism_activity" },
-  { pattern: /\b(boat hire|boat trip|boat charter|canoe hire|kayak hire|canoe safari|kayak safari|mokoro|mokoro ride|water taxi|speedboat hire|fishing boat hire)\b/, intent: "tourism_activity" },
-  { pattern: /\b(white water rafting|rafting|river rafting|gorge swing|bungee|bungee jump|zip line|zipline|abseil)\b/, intent: "tourism_activity" },
-  { pattern: /\b(horse riding|horse ride|elephant ride|elephant back safari|lion walk|cheetah encounter|rhino encounter|wildlife encounter)\b/, intent: "tourism_activity" },
-  { pattern: /\b(city tour|heritage tour|cultural tour|village tour|guided tour|tour guide|sightseeing|scenic tour|walking tour)\b/, intent: "tourism_activity" },
-  { pattern: /\b(fishing trip|fishing guide|tiger fish|tigerfish|kariba fishing|lake fishing|river fishing|angling)\b/, intent: "tourism_activity" },
-  { pattern: /\b(day trip|day excursion|half day trip|full day trip|weekend trip|bush dinner|sundowner|campfire dinner|stargazing)\b/, intent: "tourism_activity" },
-  { pattern: /\b(victoria falls tour|vic falls activities|falls tour|spray view|viewpoint tour|devil's pool)\b/, intent: "tourism_activity" },
-  { pattern: /\b(airport transfer|tourist transfer|arrival transfer|departure transfer|shuttle service)\b/, intent: "tourism_activity" },
-  { pattern: /\b(holiday package|travel package|all inclusive|full package|bush package|safari package|tour package)\b/, intent: "tourism_activity" },
 ];
 
 // ─── VAGUE SINGLE TERMS ───────────────────────────────────────────────────────
+// These terms alone (with no qualifying words) must trigger a clarification prompt.
+// "plumber" by itself → ask what for. "ball valve 20mm" → enough detail, no prompt.
 export const VAGUE_SINGLE_TERMS = new Set([
-  // Generic trades
+  // Generic trades (person title alone)
   "plumber", "electrician", "mechanic", "builder", "contractor", "welder",
   "carpenter", "painter", "cleaner", "gardener", "driver", "technician",
-  // Generic product categories
+  // Generic product categories alone
   "valve", "valves", "pipe", "pipes", "fitting", "fittings", "cable", "cables",
   "spares", "parts", "service", "repair", "fix", "maintenance",
   "panel", "board", "unit", "pump", "motor", "switch", "connector",
   "bracket", "nut", "bolt", "screw",
-  // Ambiguous general terms
+  // Other single ambiguous terms
   "supplies", "materials", "equipment", "goods", "items", "products",
   "tiles", "tile", "paint", "sand", "cement", "hardware",
-  // Hospitality vague terms — destination alone or property type alone
-  "lodge", "hotel", "accommodation", "guesthouse", "chalet", "room",
-  "kariba", "hwange", "nyanga", "victoria falls", "vic falls",
-  "safari", "tour", "cruise",
 ]);
 
-// Clarification prompts per vague term
+// Clarification prompts per vague term - what to ask the buyer
 const VAGUE_CLARIFICATION = {
-  // ── Trade services ──────────────────────────────────────────────────────────
   plumber:      "What do you need the plumber for?\n\nExamples:\n_blocked drain avondale_\n_burst pipe borrowdale_\n_geyser installation mbare_\n_new bathroom fitting harare_",
   electrician:  "What do you need the electrician for?\n\nExamples:\n_DB board fault borrowdale_\n_house rewiring harare_\n_solar installation avondale_\n_new sockets fitted harare_",
   mechanic:     "What do you need the mechanic for?\n\nExamples:\n_Toyota Aqua service harare_\n_engine diagnosis harare_\n_gearbox repair harare_\n_panel beating harare_",
@@ -223,7 +183,6 @@ const VAGUE_CLARIFICATION = {
   painter:      "What painting do you need done?\n\nExamples:\n_interior house painting harare_\n_exterior walls harare_\n_roof painting harare_",
   cleaner:      "What cleaning service do you need?\n\nExamples:\n_house deep clean harare_\n_office cleaning harare_\n_carpet cleaning harare_",
   gardener:     "What garden work do you need?\n\nExamples:\n_grass cutting weekly harare_\n_tree trimming harare_\n_full garden cleanup harare_",
-  // ── Product terms ───────────────────────────────────────────────────────────
   valve:        "Please include the type and size.\n\nExamples:\n_ball valve brass 20mm_\n_gate valve 25mm_\n_ball valve 15mm_",
   pipe:         "Please include the type and size.\n\nExamples:\n_110mm pvc pipe_\n_22mm copper pipe_\n_20mm hdpe pipe_",
   cable:        "Please include the type and size.\n\nExamples:\n_2.5mm flat twin cable_\n_16mm armoured cable_\n_4mm earth wire_",
@@ -232,128 +191,34 @@ const VAGUE_CLARIFICATION = {
   tiles:        "Please include the type and size.\n\nExamples:\n_600x600 porcelain floor tiles harare_\n_300x600 wall tiles harare_\n_200x200 ceramic tiles harare_",
   tile:         "Please include the type and size.\n\nExamples:\n_600x600 porcelain floor tile harare_\n_300x600 wall tile harare_",
   hardware:     "Please include the specific item you need.\n\nExamples:\n_50 bags cement harare_\n_river sand 2 loads harare_\n_110mm pvc pipe x10 harare_",
-  // ── Hospitality vague terms — need more context ─────────────────────────────
-  lodge:
-    "Which area and how many nights?\n\n" +
-    "Examples:\n" +
-    "_lodge near Kariba 3 nights 2 adults_\n" +
-    "_bush lodge Hwange 2 nights family of 4_\n" +
-    "_luxury lodge Victoria Falls 1 night honeymoon_\n" +
-    "_self-catering lodge Nyanga 4 nights_",
-  hotel:
-    "Which city and how many nights?\n\n" +
-    "Examples:\n" +
-    "_hotel Bulawayo 2 nights double room_\n" +
-    "_hotel Harare CBD 1 night single room_\n" +
-    "_hotel Victoria Falls 3 nights family_",
-  accommodation:
-    "What type of accommodation and where?\n\n" +
-    "Examples:\n" +
-    "_lodge near Kariba 3 nights 2 adults_\n" +
-    "_guesthouse Bulawayo 2 nights_\n" +
-    "_self-catering Nyanga 5 nights family_\n" +
-    "_hotel Victoria Falls 1 night_",
-  guesthouse:
-    "Which area and how many nights?\n\n" +
-    "Examples:\n" +
-    "_guesthouse Bulawayo 2 nights double room_\n" +
-    "_guesthouse Harare Avondale 1 night_",
-  chalet:
-    "Which area and how many nights?\n\n" +
-    "Examples:\n" +
-    "_chalet Kariba 3 nights 4 adults_\n" +
-    "_self-catering chalet Nyanga 5 nights family_",
-  room:
-    "What type of room and where?\n\n" +
-    "Examples:\n" +
-    "_double room hotel Bulawayo 2 nights_\n" +
-    "_family room lodge Kariba 3 nights_",
-  safari:
-    "What safari activity do you want?\n\n" +
-    "Examples:\n" +
-    "_game drive Hwange National Park 2 adults_\n" +
-    "_full day safari Hwange 4 people_\n" +
-    "_walking safari Mana Pools 2 adults_\n" +
-    "_night drive Hwange 3 people_",
-  tour:
-    "What type of tour and where?\n\n" +
-    "Examples:\n" +
-    "_Victoria Falls tour 2 adults_\n" +
-    "_city tour Bulawayo 3 people_\n" +
-    "_cultural village tour Harare_\n" +
-    "_heritage tour Great Zimbabwe 4 people_",
-  cruise:
-    "What type of cruise and where?\n\n" +
-    "Examples:\n" +
-    "_sunset cruise Kariba 4 people_\n" +
-    "_boat cruise Lake Kariba 6 people half day_\n" +
-    "_houseboat hire Kariba 8 people 3 nights_",
-  kariba:
-    "What do you need at Kariba?\n\n" +
-    "Examples:\n" +
-    "_lodge near Kariba 3 nights 2 adults_\n" +
-    "_houseboat hire Kariba 6 people 2 nights_\n" +
-    "_sunset cruise Kariba 4 people_\n" +
-    "_fishing guide Kariba tigerfish 3 people_",
-  hwange:
-    "What do you need at Hwange?\n\n" +
-    "Examples:\n" +
-    "_game drive Hwange National Park 2 adults_\n" +
-    "_lodge near Hwange 2 nights 2 people_\n" +
-    "_full day safari Hwange 4 adults_",
-  nyanga:
-    "What do you need at Nyanga?\n\n" +
-    "Examples:\n" +
-    "_self-catering chalet Nyanga 4 nights family of 5_\n" +
-    "_lodge Nyanga mountains 3 nights 2 adults_\n" +
-    "_hiking tour Nyanga 2 people_",
-  "victoria falls":
-    "What do you need at Victoria Falls?\n\n" +
-    "Examples:\n" +
-    "_Victoria Falls tour 2 adults_\n" +
-    "_bungee jumping Vic Falls_\n" +
-    "_white water rafting Victoria Falls 4 people_\n" +
-    "_lodge Victoria Falls 2 nights_",
-  "vic falls":
-    "What do you need at Vic Falls?\n\n" +
-    "Examples:\n" +
-    "_game drive near Vic Falls 2 adults_\n" +
-    "_hotel Victoria Falls 2 nights double room_\n" +
-    "_sunset cruise Zambezi 4 people_",
 };
 
 /**
  * Returns a clarification prompt string if the item name is vague and alone,
  * or null if the item is specific enough to proceed.
+ * Used in chatbotEngine awaiting_items state.
  */
 export function getVagueTermClarification(itemName = "") {
-  const norm     = normalize(itemName);
-  const tokens   = norm.split(" ").filter(Boolean).filter(t => t.length > 1);
-  const FILLER   = new Set([
-    "a","an","the","for","of","and","with","in","on","to","my","need","want",
-    "looking","harare","bulawayo","mutare","gweru","kwekwe","masvingo","x","qty"
-  ]);
+  const norm = normalize(itemName);
+  const tokens = norm.split(" ").filter(Boolean).filter(t => t.length > 1);
+  // Filter out location words and quantity indicators before checking vagueness
+  const FILLER = new Set(["a","an","the","for","of","and","with","in","on","to","my","need","want","looking","harare","bulawayo","mutare","gweru","kwekwe","masvingo","x","qty"]);
   const meaningful = tokens.filter(t => !FILLER.has(t) && !/^\d+$/.test(t));
 
-  // Multi-token = usually specific enough (e.g. "lodge near Kariba 3 nights")
-  if (meaningful.length > 2) return null;
-
-  // Check two-word combos for hospitality destinations
-  const twoWord = meaningful.slice(0, 2).join(" ");
-  if (VAGUE_SINGLE_TERMS.has(twoWord)) {
-    return VAGUE_CLARIFICATION[twoWord] || null;
-  }
-
-  if (meaningful.length !== 1) return null;
+  if (meaningful.length !== 1) return null; // multi-token = specific enough
   const singleToken = meaningful[0];
   if (!VAGUE_SINGLE_TERMS.has(singleToken)) return null;
 
-  return VAGUE_CLARIFICATION[singleToken] ||
-    `Please add more detail for *${singleToken}* so suppliers can quote correctly.`;
+  const prompt = VAGUE_CLARIFICATION[singleToken];
+  if (prompt) return prompt;
+
+  // Generic fallback for terms in VAGUE_SINGLE_TERMS without specific prompt
+  return `Please add more detail to your request for *${singleToken}* so sellers can quote correctly.\n\nInclude: type, size, brand, model, or exact service needed.`;
 }
 
 // ─── Intent → Supplier Category IDs ─────────────────────────────────────────
-// Maps intent → the category values in SupplierProfile.categories[]
+// Maps intent category → the values that appear in SupplierProfile.categories[]
+// These must match the actual category IDs in supplierPlans.js / the DB.
 
 const INTENT_TO_SUPPLIER_CATEGORIES = {
   plumbing_supplies:      ["plumbing_supplies", "hardware", "building_materials", "plumbing"],
@@ -376,28 +241,14 @@ const INTENT_TO_SUPPLIER_CATEGORIES = {
   transport_service:      ["transport", "logistics", "courier", "car_hire", "truck_hire", "removals"],
   printing_service:       ["printing", "branding", "graphic_design", "signage", "printing_service"],
   tutoring_service:       ["tutoring", "education", "lessons", "tutoring_service"],
+  tourism_service:        ["tourism", "safari", "lodge", "game_drive", "boat_hire", "tours", "hospitality", "tourism_service"],
   security_service:       ["security", "security_service", "alarm_systems"],
   welding_service:        ["welding", "fabrication", "steel_work", "trades", "welding_service"],
   medical_service:        ["medical_health", "dental", "pharmacy", "health", "wellness"],
-
-  // ── HOSPITALITY — accommodation stays ─────────────────────────────────────
-  // These categories must ONLY be present on profileType="hospitality" suppliers.
-  // Matching is further enforced by the profileType gate in scoreSupplierForRequest.
-  hospitality_stay:       ["lodge", "hotel", "guesthouse", "self_catering", "campsite",
-                           "hospitality", "accommodation", "tourism", "tourism_service"],
-
-  // ── TOURISM — activities (game drives, cruises, tours) ─────────────────────
-  // Matches safari operators, tour guides, boat hire — AND lodges that also offer activities.
-  tourism_activity:       ["safari_operator", "tour_guide", "boat_hire", "safari", "tours",
-                           "game_drive", "boat_hire", "tourism", "tourism_service",
-                           "lodge", "hospitality"],
-
   other:                  [],
 };
 
-// ── profileType gate per intent ───────────────────────────────────────────────
-// "hospitality" = new third profileType for lodges, hotels, safari operators, etc.
-// null = search both product and service
+// Which profileType to target for each intent
 const INTENT_TO_PROFILE_TYPE = {
   plumbing_supplies:      "product",
   plumbing_service:       "service",
@@ -419,17 +270,18 @@ const INTENT_TO_PROFILE_TYPE = {
   transport_service:      "service",
   printing_service:       "service",
   tutoring_service:       "service",
+  tourism_service:        "service",
   security_service:       "service",
   welding_service:        "service",
   medical_service:        "service",
-  // Hospitality intents ONLY match profileType="hospitality"
-  hospitality_stay:       "hospitality",
-  tourism_activity:       "hospitality",
-  other:                  null,
+  other:                  null, // search both
 };
 
 // ─── Intent Classification ────────────────────────────────────────────────────
 
+/**
+ * Classify a single item string → intent category string.
+ */
 function classifyItem(itemName = "") {
   const norm = normalize(itemName);
   for (const { pattern, intent } of INTENT_KEYWORD_MAP) {
@@ -439,20 +291,20 @@ function classifyItem(itemName = "") {
 }
 
 /**
- * Classify an array of request items → { intents, dominant, profileType, isHospitality }
- * isHospitality = true when dominant is hospitality_stay or tourism_activity.
- * This flag is used downstream to gate quoting prompts and notification text.
+ * Classify an array of request items → { intents: Set, dominant: string, profileType: string|null }
+ * dominant = the most frequent intent (or "other" if all are "other")
  */
 export function classifyRequestItems(items = []) {
   const counts = {};
   for (const item of items) {
-    const label  = String(item?.product || item?.service || item?.raw || "");
+    const label = String(item?.product || item?.service || item?.raw || "");
     const intent = classifyItem(label);
     counts[intent] = (counts[intent] || 0) + 1;
   }
 
   const intents = new Set(Object.keys(counts));
 
+  // dominant = highest count; prefer non-"other" over "other"
   let dominant = "other";
   let maxCount = 0;
   for (const [intent, count] of Object.entries(counts)) {
@@ -461,10 +313,9 @@ export function classifyRequestItems(items = []) {
   }
   if (dominant === "other" && intents.size > 0) dominant = [...intents][0];
 
-  const profileType    = INTENT_TO_PROFILE_TYPE[dominant] ?? null;
-  const isHospitality  = dominant === "hospitality_stay" || dominant === "tourism_activity";
+  const profileType = INTENT_TO_PROFILE_TYPE[dominant] ?? null;
 
-  return { intents, dominant, profileType, isHospitality };
+  return { intents, dominant, profileType };
 }
 
 // ─── Item-Level Scoring ───────────────────────────────────────────────────────
@@ -495,13 +346,6 @@ const ITEM_ALIASES = {
   "led bulb":          ["led lamp", "energy saver", "cfl", "light bulb"],
   "water pump":        ["submersible pump", "surface pump", "centrifugal pump"],
   "generator":         ["genset", "diesel generator", "petrol generator"],
-  // Hospitality aliases
-  "game drive":        ["wildlife drive", "bush drive", "safari drive", "morning drive", "afternoon drive"],
-  "sunset cruise":     ["boat cruise", "evening cruise", "lake cruise", "river cruise", "sundowner"],
-  "double room":       ["twin room", "standard room", "en-suite room"],
-  "family room":       ["family chalet", "family suite", "family accommodation"],
-  "self catering":     ["self-catering", "kitchen unit", "self catering unit"],
-  "fishing trip":      ["fishing guide", "tigerfish", "kariba fishing"],
 };
 
 function getAliases(term = "") {
@@ -528,28 +372,33 @@ function getAllSupplierItemNames(supplier) {
   for (const r of supplier.rates || []) {
     if (r?.service) names.push(normalize(r.service));
   }
-  // Include room types for hospitality suppliers
-  for (const rt of supplier.roomTypes || []) {
-    if (rt?.name) names.push(normalize(rt.name));
-  }
   return names;
 }
 
+/**
+ * Score a single request item against a supplier's catalogue.
+ * Returns: { score, matchType }
+ * matchType: "exact" | "substring" | "alias" | "none"
+ */
 function scoreItemAgainstSupplier(itemName = "", supplierItemNames = []) {
   const req = normalize(itemName);
   if (!req || !supplierItemNames.length) return { score: 0, matchType: "none" };
 
+  // Exact match
   if (supplierItemNames.some(n => n === req)) return { score: 30, matchType: "exact" };
 
+  // Substring match (item is part of listed name or listed name is part of item)
   const reqTokens = req.split(" ").filter(t => t.length > 2);
   for (const n of supplierItemNames) {
     if (n.includes(req) || req.includes(n)) return { score: 15, matchType: "substring" };
+    // Token overlap: at least 2 meaningful tokens match
     const nTokens = n.split(" ").filter(t => t.length > 2);
-    const overlap  = reqTokens.filter(t => nTokens.includes(t));
+    const overlap = reqTokens.filter(t => nTokens.includes(t));
     if (overlap.length >= 2) return { score: 12, matchType: "substring" };
     if (overlap.length === 1 && reqTokens.length === 1) return { score: 8, matchType: "substring" };
   }
 
+  // Alias match
   const aliases = getAliases(req);
   for (const alias of aliases) {
     if (supplierItemNames.some(n => n.includes(alias) || alias.includes(n))) {
@@ -560,59 +409,47 @@ function scoreItemAgainstSupplier(itemName = "", supplierItemNames = []) {
   return { score: 0, matchType: "none" };
 }
 
-// ─── Supplier Scoring ─────────────────────────────────────────────────────────
+// ─── 3-Stage Matching Gate ────────────────────────────────────────────────────
 
+/**
+ * Score a supplier against the full request.
+ * Returns { totalScore, hasItemMatch } or null if fails eligibility.
+ *
+ * Stage 1: Eligibility (active, not suspended, subscription active/trial)
+ * Stage 2: Category gate (must match at least one allowed category)
+ * Stage 3: Item-level scoring
+ */
 function scoreSupplierForRequest(supplier, items, intentResult) {
-  const { dominant, profileType, isHospitality } = intentResult;
+  const { dominant, profileType } = intentResult;
 
-  // Stage 1: Eligibility
+  // ── Stage 1: Eligibility ──────────────────────────────────────────────────
   if (!supplier.active) return null;
   if (supplier.suspended === true) return null;
   const subStatus = supplier.subscriptionStatus;
   if (subStatus !== "active" && subStatus !== "trial") return null;
 
-  // Stage 2a: HARD SEPARATION — hospitality suppliers ONLY receive hospitality requests
-  // and non-hospitality suppliers NEVER receive hospitality requests.
-  const supplierIsHospitality = supplier.profileType === "hospitality";
-
-  if (isHospitality && !supplierIsHospitality) {
-    // Hospitality request → reject non-hospitality supplier entirely
-    // e.g. plumber who listed "tourism" in categories still gets rejected
-    return null;
-  }
-  if (!isHospitality && supplierIsHospitality) {
-    // Non-hospitality request → reject hospitality supplier
-    // e.g. lodge doesn't get requests for cement or plumbing
-    return null;
-  }
-
-  // Stage 2b: Category gate
+  // ── Stage 2: Category gate ────────────────────────────────────────────────
   const allowedCats = new Set(INTENT_TO_SUPPLIER_CATEGORIES[dominant] || []);
   if (allowedCats.size > 0) {
     const supplierCats = Array.isArray(supplier.categories) ? supplier.categories : [];
-
-    // For hospitality: also check tourismSubtype
-    const allSupplierCats = [
-      ...supplierCats,
-      ...(supplier.tourismSubtype || [])
-    ];
-
-    const hasCategory = allSupplierCats.some(c => allowedCats.has(String(c).toLowerCase()));
-    if (!hasCategory) return null;
+    const hasCategory = supplierCats.some(c => allowedCats.has(String(c).toLowerCase()));
+    if (!hasCategory) return null; // businessName alone does NOT qualify
   }
 
-  // Stage 2c: ProfileType gate (for non-hospitality intents)
-  if (!isHospitality && profileType && supplier.profileType && supplier.profileType !== profileType) {
-    const isHardMismatch =
-      (profileType === "service" && supplier.profileType === "product") ||
-      (profileType === "product" && supplier.profileType === "service");
+  // ProfileType gate (if intent clearly indicates product or service)
+  if (profileType && supplier.profileType && supplier.profileType !== profileType) {
+    // Allow slight mismatch for hybrid suppliers (e.g. plumbing_supplies supplier who also does installs)
+    // Only hard-exclude if the mismatch is stark
+    const isHardMismatch = (profileType === "service" && supplier.profileType === "product") ||
+                           (profileType === "product" && supplier.profileType === "service");
     if (isHardMismatch && dominant !== "other") return null;
   }
 
-  // Stage 3: Item-level scoring
+  // ── Stage 3: Item-level scoring ───────────────────────────────────────────
   const supplierItemNames = getAllSupplierItemNames(supplier);
-  let totalScore  = 0;
+  let totalScore = 0;
   let hasItemMatch = false;
+  let categoryOnlyScore = 2; // base for category match alone
 
   for (const item of items) {
     const label = String(item?.product || item?.service || item?.raw || "");
@@ -621,18 +458,18 @@ function scoreSupplierForRequest(supplier, items, intentResult) {
     if (matchType !== "none") hasItemMatch = true;
   }
 
-  // For service/hospitality intents: category match alone qualifies (no item catalogue required)
-  const isServiceIntent = dominant.endsWith("_service") || isHospitality ||
-    INTENT_TO_PROFILE_TYPE[dominant] === "service";
-
+  // For service intents: category match alone is enough (no item catalogue required)
+  const isServiceIntent = dominant.endsWith("_service") || INTENT_TO_PROFILE_TYPE[dominant] === "service";
   if (isServiceIntent && !hasItemMatch && allowedCats.size > 0) {
-    totalScore += 2; // small base score for category match
+    // Grant a small base score so they're included but ranked low
+    totalScore += categoryOnlyScore;
+    // hasItemMatch stays false - they'll be ranked below suppliers with matched items
   }
 
-  // For product intents: must have at least one item match
+  // For product intents: must have at least one item match to qualify
   if (!isServiceIntent && !hasItemMatch) return null;
 
-  // Boost by tier and credibility
+  // Boost by tier
   totalScore += (supplier.tierRank || 1) * 2;
   totalScore += Math.min(supplier.credibilityScore || 0, 10);
 
@@ -642,36 +479,26 @@ function scoreSupplierForRequest(supplier, items, intentResult) {
 // ─── City / Area Matching ─────────────────────────────────────────────────────
 
 const CITY_ALIASES = {
-  "harare":          ["harare", "hre", "salisbury"],
-  "bulawayo":        ["bulawayo", "byo", "bula"],
-  "mutare":          ["mutare", "umtali"],
-  "gweru":           ["gweru", "gwelo"],
-  "masvingo":        ["masvingo", "fort victoria"],
-  "kwekwe":          ["kwekwe", "que que"],
-  "kadoma":          ["kadoma", "gatooma"],
-  "chinhoyi":        ["chinhoyi", "sinoia"],
-  "bindura":         ["bindura"],
-  "victoria falls":  ["victoria falls", "vic falls", "livingstone area"],
-  "hwange":          ["hwange", "wankie"],
-  "chiredzi":        ["chiredzi"],
-  "zvishavane":      ["zvishavane", "shabani"],
-  "beitbridge":      ["beitbridge"],
-  "rusape":          ["rusape"],
-  "chipinge":        ["chipinge"],
-  "chegutu":         ["chegutu", "hartley"],
-  "redcliff":        ["redcliff"],
-  "chitungwiza":     ["chitungwiza", "chitu"],
-  "epworth":         ["epworth"],
-  // Tourism areas — map to the city nearest the attraction
-  "kariba":          ["kariba", "lake kariba", "nyamhunga", "andora"],
-  "nyanga":          ["nyanga", "nyanga mountains", "eastern highlands", "troutbeck"],
-  "binga":           ["binga", "mlibizi", "siakobvu"],
-  "chimanimani":     ["chimanimani", "chipinge"],
-  "gonarezhou":      ["gonarezhou", "chiredzi"],
-  "mana pools":      ["mana pools", "chirundu"],
-  "matobo":          ["matobo", "matopos", "bulawayo"],
-  "great zimbabwe":  ["great zimbabwe", "masvingo"],
-  "vumba":           ["vumba", "mutare"],
+  "harare":       ["harare", "hre", "salisbury"],
+  "bulawayo":     ["bulawayo", "byo", "bula"],
+  "mutare":       ["mutare", "umtali"],
+  "gweru":        ["gweru", "gwelo"],
+  "masvingo":     ["masvingo", "fort victoria"],
+  "kwekwe":       ["kwekwe", "que que"],
+  "kadoma":       ["kadoma", "gatooma"],
+  "chinhoyi":     ["chinhoyi", "sinoia"],
+  "bindura":      ["bindura"],
+  "victoria falls":["victoria falls", "vic falls"],
+  "hwange":       ["hwange", "wankie"],
+  "chiredzi":     ["chiredzi"],
+  "zvishavane":   ["zvishavane", "shabani"],
+  "beitbridge":   ["beitbridge"],
+  "rusape":       ["rusape"],
+  "chipinge":     ["chipinge"],
+  "chegutu":      ["chegutu", "hartley"],
+  "redcliff":     ["redcliff"],
+  "chitungwiza":  ["chitungwiza", "chitu"],
+  "epworth":      ["epworth"],
 };
 
 function normalizeCityForSearch(cityInput = "") {
@@ -684,14 +511,25 @@ function normalizeCityForSearch(cityInput = "") {
 
 // ─── Main Export: findSuppliersForRequest ─────────────────────────────────────
 
+/**
+ * Replacement for the old findSuppliersForBuyerRequest in chatbotEngine.js.
+ * Uses the 3-stage gate instead of broad runSupplierSearch.
+ *
+ * @param {Object} opts
+ * @param {Array}  opts.items   - Array of { product, quantity, ... }
+ * @param {string} opts.city    - City string (may be raw user input)
+ * @param {string} opts.area    - Area/suburb string
+ * @returns {Array} Array of SupplierProfile documents, sorted by score desc, max 12
+ */
 export async function findSuppliersForRequest({ items = [], city = null, area = null }) {
   if (!items.length) return [];
 
   const intentResult = classifyRequestItems(items);
-  const { dominant, profileType, isHospitality } = intentResult;
+  const { dominant, profileType } = intentResult;
 
   const allowedCats = INTENT_TO_SUPPLIER_CATEGORIES[dominant] || [];
 
+  // ── Build focused DB query ────────────────────────────────────────────────
   const query = {
     active: true,
     $and: [
@@ -700,69 +538,43 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
     ],
   };
 
-  // Hard profileType gate in DB query — prevents cross-contamination at fetch level
-  if (isHospitality) {
-    query.profileType = "hospitality";
-  } else if (profileType && dominant !== "other") {
-    // For non-hospitality: only exclude hospitality suppliers
-    query.profileType = { $ne: "hospitality" };
-    if (profileType) query.profileType = profileType;
-  } else {
-    // "other" intent: still exclude hospitality suppliers from general results
-    query.profileType = { $ne: "hospitality" };
-  }
-
   // Location gate
   const normalizedCity = normalizeCityForSearch(city || "");
   if (normalizedCity) {
-    // For hospitality, also check tourismAreas
-    if (isHospitality) {
-      query.$or = [
-        { "location.city": new RegExp(`^${normalizedCity}$`, "i") },
-        { tourismAreas: new RegExp(normalizedCity, "i") }
-      ];
-    } else {
-      query["location.city"] = new RegExp(`^${normalizedCity}$`, "i");
-    }
+    query["location.city"] = new RegExp(`^${normalizedCity}$`, "i");
   }
 
-  // Category gate (narrow fetch before scoring)
+  // Category gate in DB query (narrow the fetch before scoring)
   if (allowedCats.length > 0) {
-    if (isHospitality) {
-      // For hospitality: check categories OR tourismSubtype
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { categories: { $in: allowedCats } },
-          { tourismSubtype: { $in: allowedCats } }
-        ]
-      });
-    } else {
-      query.categories = { $in: allowedCats };
-    }
+    query.categories = { $in: allowedCats };
   }
+
+  // ProfileType gate (hard filter for non-ambiguous intents)
+  if (profileType && dominant !== "other") {
+    query.profileType = profileType;
+  }
+
+  // Intentionally NOT matching businessName - that's the root cause of overmatch
 
   let candidates = await SupplierProfile.find(query)
     .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
     .limit(80)
     .lean();
 
-  // Relax city if no results (especially useful for rural/tourist areas)
+  // If city filter returned 0 results, relax city constraint and retry
   if (normalizedCity && candidates.length === 0) {
     const relaxedQuery = { ...query };
     delete relaxedQuery["location.city"];
-    if (relaxedQuery.$or) delete relaxedQuery.$or;
     candidates = await SupplierProfile.find(relaxedQuery)
       .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
       .limit(80)
       .lean();
   }
 
-  // Relax category if intent is "other"
+  // If category filter returned 0 results and intent is "other", relax category
   if (candidates.length === 0 && dominant === "other") {
     const openQuery = {
       active: true,
-      profileType: { $ne: "hospitality" },
       $and: [
         { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
         { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] },
@@ -775,21 +587,22 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
       .lean();
   }
 
+  // ── Score and filter ──────────────────────────────────────────────────────
   const scored = [];
   for (const supplier of candidates) {
     const result = scoreSupplierForRequest(supplier, items, intentResult);
-    if (result) scored.push({ supplier, ...result });
+    if (result) {
+      scored.push({ supplier, ...result });
+    }
   }
 
+  // Sort: item match first, then by totalScore desc
   scored.sort((a, b) => {
     if (b.hasItemMatch !== a.hasItemMatch) return b.hasItemMatch ? 1 : -1;
     return b.totalScore - a.totalScore;
   });
 
-  console.log(
-    `[REQUEST-MATCH] intent="${dominant}" profileType="${profileType}" isHospitality=${isHospitality}` +
-    ` city="${normalizedCity}" candidates=${candidates.length} qualified=${scored.length}`
-  );
+  console.log(`[REQUEST-MATCH] intent="${dominant}" profileType="${profileType}" city="${normalizedCity}" candidates=${candidates.length} qualified=${scored.length}`);
 
   return scored.slice(0, 12).map(e => e.supplier);
 }
@@ -797,78 +610,69 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
 // ─────────────────────────────────────────────────────────────────────────────
 // RE-NOTIFY NEW SELLERS OF UNMATCHED SAVED REQUESTS
 // ─────────────────────────────────────────────────────────────────────────────
+// Called when a new supplier registers. Finds open requests from the last 48 hrs
+// that match their categories and notifies them immediately.
+// This turns new seller onboarding into an instant revenue event.
+//
+// Usage: call after a new SupplierProfile is created and activated.
 
 export async function notifyNewSellerOfUnmatchedRequests(supplier) {
   try {
     if (!supplier?.active || !supplier?.categories?.length) return 0;
 
+    // Dynamically import to avoid circular deps
     const BuyerRequest = (await import("../models/buyerRequest2.js")).default;
-    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const openRequests = await BuyerRequest.find({
-      status:             "open",
-      createdAt:          { $gte: cutoff },
-      notifiedSuppliers:  { $ne: supplier._id }
-    }).sort({ createdAt: -1 }).limit(5).lean();
+      status: "open",
+      createdAt: { $gte: cutoff },
+      // Only requests where this supplier was NOT already notified
+      notifiedSuppliers: { $ne: supplier._id }
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
 
     if (!openRequests.length) return 0;
 
     let notified = 0;
     for (const req of openRequests) {
       try {
+        // Quick intent check: does this request match supplier's categories?
+        const { classifyRequestItems } = await import("./requestMatchEngine.js");
         const intentResult = classifyRequestItems(req.items || []);
-
-        // Hard check: don't send hospitality requests to non-hospitality suppliers and vice versa
-        const reqIsHospitality  = intentResult.isHospitality;
-        const suppIsHospitality = supplier.profileType === "hospitality";
-        if (reqIsHospitality !== suppIsHospitality) continue;
-
-        const allowedCats = INTENT_TO_SUPPLIER_CATEGORIES[intentResult.dominant] || [];
-        const suppCats    = [
-          ...(supplier.categories || []),
-          ...(supplier.tourismSubtype || [])
-        ];
-        const matches = allowedCats.some(c => suppCats.includes(c));
+        const allowedCats  = INTENT_TO_SUPPLIER_CATEGORIES[intentResult.dominant] || [];
+        const suppCats     = supplier.categories || [];
+        const matches      = allowedCats.some(c => suppCats.includes(c));
         if (!matches) continue;
 
         // City match
         const supplierCity = normalize(supplier.location?.city || "");
         const requestCity  = normalize(req.city || "");
-        if (supplierCity && requestCity && supplierCity !== requestCity) {
-          // For tourism areas: check tourismAreas too
-          if (suppIsHospitality) {
-            const areaMatch = (supplier.tourismAreas || []).some(a =>
-              normalize(a).includes(requestCity) || requestCity.includes(normalize(a))
-            );
-            if (!areaMatch) continue;
-          } else {
-            continue;
-          }
-        }
+        if (supplierCity && requestCity && supplierCity !== requestCity) continue;
 
+        // Send template notification to the new seller
         const { notifySupplierNewRequestTemplate } = await import("./buyerRequestNotifications.js");
         const ref       = `REQ-${String(req._id).slice(-4).toUpperCase()}`;
         const itemLines = (req.items || []).slice(0, 5)
           .map((i, idx) => `${idx + 1}. ${i.product} x${i.quantity || 1}`)
           .join("\n");
-        const location  = req.area ? `${req.area}, ${req.city || ""}` : (req.city || "Zimbabwe");
-
-        // For hospitality requests: use nights/guests in delivery line
-        const deliveryLine = reqIsHospitality
-          ? `🏨 ${req.nights || "?"} nights · ${req.guests || "?"} guests`
-          : (req.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible");
+        const location  = req.area
+          ? `${req.area}, ${req.city || ""}`
+          : (req.city || "Zimbabwe");
 
         await notifySupplierNewRequestTemplate({
           supplierPhone: supplier.phone,
-          supplier,
           requestId:     String(req._id),
           ref,
           locationText:  location,
           itemCount:     (req.items || []).length,
           itemSummary:   itemLines,
-          deliveryLine
+          deliveryLine:  req.deliveryRequired ? "🚚 Delivery needed" : "🏠 Collection / flexible"
         });
 
+        // Mark this supplier as notified so they don't get it again
         await BuyerRequest.findByIdAndUpdate(req._id, {
           $addToSet: { notifiedSuppliers: supplier._id }
         });
