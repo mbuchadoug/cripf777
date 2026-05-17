@@ -1119,9 +1119,6 @@ const supplier = await SupplierProfile.create({
   checkInTime:     (req.body.checkInTime  || "").trim(),
   checkOutTime:    (req.body.checkOutTime || "").trim(),
   mealPlan:        req.body.mealPlan || "not_applicable",
-  // Sync products[] and listedProducts[] from roomTypes so smart link + sellerChat work
-  products:        roomTypes.length > 0 ? roomTypes.map(rt => rt.name.toLowerCase()) : [],
-  listedProducts:  roomTypes.length > 0 ? roomTypes.map(rt => rt.name)               : [],
 });
 
     // ── 7. Link SupplierProfile ID back onto the Business ─────────────────
@@ -1867,11 +1864,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
         if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, restRate: rest, currency: "USD" });
       }
       update.roomTypes = roomTypes;
-      // Always sync products[] from roomTypes so smart link + sellerChat show services
-      if (roomTypes.length > 0) {
-        update.products       = roomTypes.map(rt => rt.name.toLowerCase());
-        update.listedProducts = roomTypes.map(rt => rt.name);
-      }
+      if (roomTypes.length > 0) update.products = roomTypes.map(rt => rt.name.toLowerCase());
     }
     // Parse extra services: "Conference room, 50, half day"
     if (req.body.extraServices !== undefined) {

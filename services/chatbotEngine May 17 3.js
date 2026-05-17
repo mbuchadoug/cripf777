@@ -12730,10 +12730,6 @@ const supplier = await SupplierProfile.create({
       facilities:     reg.facilities     || [],       // ["wifi","pool","breakfast",...]
       roomTypes:      reg.roomTypes      || [],       // [{ name, capacity, pricePerNight, restRate }]
       extraServices:  reg.extraServices  || [],       // [{ name, price, unit }]
-      // ── Sync products[] from roomTypes so smart link + sellerChat can find them ──
-      products: (reg.roomTypes || []).length > 0
-        ? (reg.roomTypes || []).map(rt => rt.name.toLowerCase()).filter(Boolean)
-        : (reg.products || []),
       maxCapacity:    reg.maxCapacity    || 0,
       checkInTime:    reg.checkInTime    || "",
       checkOutTime:   reg.checkOutTime   || "",
