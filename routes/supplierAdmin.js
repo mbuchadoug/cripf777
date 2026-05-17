@@ -1706,6 +1706,7 @@ ${supplier.profileType === "hospitality" ? `
               <select name="profileType">
                 <option ${supplier.profileType === "product" ? "selected" : ""} value="product">Product Supplier</option>
                 <option ${supplier.profileType === "service" ? "selected" : ""} value="service">Service Provider</option>
+                <option ${supplier.profileType === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
               </select>
             </div>
             <div class="fg">
@@ -1840,7 +1841,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
       if (!existingCats.includes("tourism"))       existingCats.push("tourism");
       update.categories = existingCats;
     }
-    if (req.body.facilities !== undefined) {
+    if (req.body.facilities !== undefined || update.profileType === "hospitality") {
       const rawFac = req.body.facilities || [];
       update.facilities = Array.isArray(rawFac) ? rawFac : [rawFac].filter(Boolean);
     }
@@ -1857,7 +1858,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
       update.mealPlan = req.body.mealPlan || "not_applicable";
     }
     // Parse room types: "Double room, 2, 80" or with rest rate "Double room, 2, 80, 45"
-    if (req.body.roomTypes !== undefined) {
+    if (req.body.roomTypes !== undefined || update.profileType === "hospitality") {
       const roomTypes = [];
       for (const line of (req.body.roomTypes || "").split("\n")) {
         const parts = line.split(",").map(s => s.trim());
@@ -1875,7 +1876,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
       }
     }
     // Parse extra services: "Conference room, 50, half day"
-    if (req.body.extraServices !== undefined) {
+    if (req.body.extraServices !== undefined || update.profileType === "hospitality") {
       const extraServices = [];
       for (const line of (req.body.extraServices || "").split("\n")) {
         const parts = line.split(",").map(s => s.trim());
@@ -1892,6 +1893,16 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
 
     // ── VIP notification flags (set via VIP Settings page, not edit form) ────
     // These are managed via /suppliers/:id/vip-settings - do not overwrite here.
+
+    // Safety guard: never silently downgrade a hospitality supplier to product/service
+    // if the form somehow submitted without the hospitality option selected.
+    // Fetch the current record and preserve profileType if it's hospitality and
+    // the submitted value is missing or invalid.
+    if (!update.profileType || !["product","service","hospitality"].includes(update.profileType)) {
+      const _existing = await SupplierProfile.findById(req.params.id).select("profileType").lean();
+      if (_existing?.profileType) update.profileType = _existing.profileType;
+    }
+
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
   } catch (err) {
