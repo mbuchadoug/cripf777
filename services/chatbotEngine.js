@@ -2780,7 +2780,10 @@ async function finalizeBuyerRequestSubmission({
 
   const _isServiceReq    = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
   const _isTourismReq2   = _buyerRequestIsTourism(pendingRequest.items || []);
-  const _storedProfileType = _isTourismReq2 ? "hospitality" : (_isServiceReq ? "service" : (pendingRequest.profileType || "product"));
+  // BuyerRequest.profileType enum only accepts "product" or "service" — hospitality is not a valid value.
+  // We use "service" for hospitality/tourism requests (they behave like services: no delivery, service address).
+  // The hospitality flag is re-derived at notify time from the item names via _buyerRequestIsTourism().
+  const _storedProfileType = (_isTourismReq2 || _isServiceReq) ? "service" : (pendingRequest.profileType || "product");
 
   const request = await BuyerRequest.create({
     buyerPhone: from,
@@ -2791,10 +2794,10 @@ async function finalizeBuyerRequestSubmission({
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
 
-    deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
-    deliveryAddress: !_isServiceReq ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
+    deliveryRequired: (_isServiceReq || _isTourismReq2) ? false : Boolean(deliveryRequired),
+    deliveryAddress: !(_isServiceReq || _isTourismReq2) ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
 
-    serviceAddress: _isServiceReq ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
+    serviceAddress: (_isServiceReq || _isTourismReq2) ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
     status: "open"
   });
 
