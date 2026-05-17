@@ -1,4 +1,4 @@
-a// services/schoolSearch.js
+// services/schoolSearch.js
 // ─── ZimQuote Schools - Parent Search Engine ──────────────────────────────────
 
 import SchoolProfile from "../models/schoolProfile.js";
@@ -494,16 +494,11 @@ export async function handleSchoolSlugSearch({ from, text, biz, saveBiz }) {
 
   const supplier = await SupplierProfile.findOne({ zqSlug: slug }).lean();
   if (supplier) {
+    // Notify supplier of the profile view (works outside 24hr window)
     if (supplier.phone) {
-      notifyAllSupplierLinkOpened(supplier, "direct", from).catch(() => {});
+      notifyAllSupplierLinkOpened(supplier, "direct", from).catch(() => {});  // `from` = visitor's WhatsApp number
     }
-    // Route through showSellerMenu for full hospitality/service/product experience
-    try {
-      const { showSellerMenu } = await import("./sellerChat.js");
-      await showSellerMenu(from, String(supplier._id), biz, saveBiz, { source: "direct" });
-    } catch (_) {
-      await _showSupplierCard(from, String(supplier._id));
-    }
+    await _showSupplierCard(from, String(supplier._id));
     return true;
   }
 
@@ -1447,16 +1442,6 @@ ${rating}
 // PRIVATE: supplier detail card (for ZQ deep-link / slug search)
 // ─────────────────────────────────────────────────────────────────────────────
 async function _showSupplierCard(from, supplierId) {
-  // Try the full showSellerMenu first — it handles all profileTypes properly
-  try {
-    const { showSellerMenu } = await import("./sellerChat.js");
-    await showSellerMenu(from, supplierId, null, null, { source: "direct" });
-    return;
-  } catch (sellerChatErr) {
-    console.warn("[_showSupplierCard] showSellerMenu failed, using fallback:", sellerChatErr.message);
-  }
-
-  // ── Fallback card (should rarely be reached) ──────────────────────────────
   const supplier = await SupplierProfile.findById(supplierId).lean();
   if (!supplier) {
     return sendButtons(from, {
@@ -1465,88 +1450,41 @@ async function _showSupplierCard(from, supplierId) {
     });
   }
 
-  const isHospitality = supplier.profileType === "hospitality";
-  const isService     = supplier.profileType === "service";
-  const location      = [supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ");
-  const rating        = (supplier.reviewCount || 0) > 0
-    ? "⭐ " + Number(supplier.rating).toFixed(1) + " (" + supplier.reviewCount + " review" + (supplier.reviewCount === 1 ? "" : "s") + ")"
-    : "";
+  const isService   = supplier.serviceType === "service";
+  const productList = (supplier.products || []).slice(0, 8).join(", ") || "See catalogue";
+  const delivery    = supplier.delivery?.available ? "🚚 Delivers to buyers" : "🏠 Collection only";
+  const rating      = (supplier.reviewCount || 0) > 0
+    ? `⭐ ${Number(supplier.rating).toFixed(1)} (${supplier.reviewCount} reviews)`
+    : "⭐ No reviews yet";
 
-  let cardText;
-  if (isHospitality) {
-    const FACILITY_LABELS = {
-      wifi:"📶 WiFi", pool:"🏊 Pool", hot_shower:"🚿 Hot shower", breakfast:"🍳 Breakfast",
-      en_suite:"🚪 En-suite", generator:"⚡ Power", dstv:"📺 DSTV", braai:"🔥 Braai",
-      aircon:"❄️ AC", game_drives:"🦁 Game drives", fishing:"🎣 Fishing",
-      conference:"🏢 Conference", restaurant:"🍽 Restaurant", laundry:"👕 Laundry",
-      parking:"🅿️ Parking", pets_allowed:"🐕 Pets OK", child_friendly:"👶 Child-friendly"
-    };
-    const SUBTYPE_LABELS = {
-      lodge:"🌿 Lodge", hotel:"🏨 Hotel", guesthouse:"🏡 Guesthouse/B&B",
-      self_catering:"🍳 Self-Catering", campsite:"⛺ Campsite",
-      safari_operator:"🦁 Safari Operator", tour_guide:"🗺 Tour Guide",
-      boat_hire:"⛵ Boat Hire", travel_agency:"✈️ Travel Agency"
-    };
-    const subtypeLabel = (supplier.tourismSubtype || []).map(s => SUBTYPE_LABELS[s] || s).join(" · ") || "🏨 Hospitality";
-    const roomLines = (supplier.roomTypes || []).map(rt => {
-      const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
-      const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
-      const rates = [night, rest].filter(Boolean).join(" · ");
-      return "• " + rt.name + (rates ? "  —  " + rates : "  —  price on request") + (rt.capacity > 0 ? " (sleeps " + rt.capacity + ")" : "");
-    });
-    const extraLines = (supplier.extraServices || []).slice(0, 4).map(es =>
-      "• " + es.name + (es.price > 0 ? "  —  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
-    );
-    const facilLine = (supplier.facilities || []).slice(0, 8).map(f => FACILITY_LABELS[f] || f).join("  ·  ");
-    const ciLine = (supplier.checkInTime || supplier.checkOutTime)
-      ? "⏰ Check-in: " + (supplier.checkInTime || "?") + "  ·  Check-out: " + (supplier.checkOutTime || "?") : "";
-
-    cardText = [
-      "🏨 *" + supplier.businessName + "*" + (supplier.verified ? " ✅" : ""),
-      subtypeLabel,
-      "📍 " + location,
-      rating,
-      "",
-      "🛏 *Rooms & Rates:*",
-      ...roomLines.length ? roomLines : ["_(Contact for availability)_"],
-      ...(extraLines.length ? ["", "➕ *Extra Services:*", ...extraLines] : []),
-      ...(facilLine ? ["", "🏷 *Facilities:*", facilLine] : []),
-      ...(ciLine ? [ciLine] : []),
-      "",
-      ...(supplier.address        ? ["🏠 " + supplier.address]        : []),
-      ...(supplier.contactDetails ? ["📞 " + supplier.contactDetails] : []),
-    ].filter(l => l !== null && l !== undefined).join("\n");
-
-    return sendButtons(from, {
-      text: cardText,
-      buttons: [
-        { id: "sc_quote_" + supplierId,   title: "🛏 Book / Get a quote" },
-        { id: "sc_enquiry_" + supplierId, title: "💬 Send an enquiry"    }
-      ]
-    });
-  }
-
-  // Standard product/service fallback
   const priceSummary = isService
     ? (Array.isArray(supplier.rates) && supplier.rates.length
-        ? supplier.rates.slice(0, 3).map(r => r.service + (r.rate ? " — " + r.rate : "")).join(", ")
+        ? supplier.rates.slice(0, 3).map(r => `${r.service} (${r.rate})`).join(", ")
         : "_Rates on request_")
     : (Array.isArray(supplier.prices) && supplier.prices.length
-        ? supplier.prices.slice(0, 3).map(p => p.product + " $" + Number(p.amount).toFixed(2)).join(", ")
+        ? supplier.prices.slice(0, 3).map(p => `${p.product} $${Number(p.amount).toFixed(2)}`).join(", ")
         : "_Prices on request_");
 
-  cardText =
-    (isService ? "🔧" : "🏪") + " *" + supplier.businessName + "*" + (supplier.verified ? " ✅" : "") + "\n" +
-    "📍 " + location + "\n\n" +
-    (isService ? "🛠 *Services:*" : "📦 *Products:*") + " " + priceSummary + "\n" +
-    (supplier.address ? "🏠 " + supplier.address + "\n" : "") +
-    (supplier.contactDetails ? "📞 " + supplier.contactDetails : "");
+  const zqLinkLine = supplier.zqSlug
+    ? `\n\n🔗 *Share this seller:*\n${BASE_URL}/p/${supplier.zqSlug}`
+    : "";
+
+  const detailText =
+`🏪 *${supplier.businessName}*
+📍 ${supplier.area ? supplier.area + ", " : ""}${supplier.city}
+
+${isService ? "🔧" : "📦"} *${isService ? "Services" : "Products"}:* ${productList}
+
+💰 *Pricing:* ${priceSummary}
+${delivery}
+
+${rating}${zqLinkLine}`;
 
   return sendButtons(from, {
-    text: cardText,
+    text: detailText,
     buttons: [
-      { id: "sc_quote_" + supplierId,   title: isService ? "💵 Request a quote" : "💵 Get instant quote" },
-      { id: "sc_enquiry_" + supplierId, title: "💬 Send an enquiry" }
+      { id: `sup_enquire_${supplierId}`, title: "✉️ Send Enquiry" },
+      { id: `sup_view_${supplierId}`,    title: "📋 Full Profile" }
     ]
   });
 }

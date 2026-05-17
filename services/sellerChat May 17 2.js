@@ -268,7 +268,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       scSource:    source,
       scBuyerName: parentName
     };
-    if (saveBiz) await saveBiz(biz);
+    await saveBiz(biz);
   }
 
   // ── Notify seller someone opened their link (non-blocking) ────────────────
