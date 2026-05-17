@@ -99,12 +99,6 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 
     const totalRevenue = revenue[0]?.total || 0;
 
-    const [hospitalityActive, productActive, serviceActive] = await Promise.all([
-      SupplierProfile.countDocuments({ profileType: "hospitality", active: true }),
-      SupplierProfile.countDocuments({ profileType: "product",     active: true }),
-      SupplierProfile.countDocuments({ profileType: "service",     active: true })
-    ]);
-
     res.send(layout("Dashboard", `
       <div class="stats-grid">
         ${stat(totalSuppliers, "Total Suppliers", "")}
@@ -114,18 +108,6 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
         ${stat(pendingOrders, "Pending Orders", "yellow")}
         ${stat(completedOrders, "Completed Orders", "teal")}
         ${stat("$" + totalRevenue.toFixed(2), "Subscription Revenue", "purple")}
-      </div>
-
-      <div class="stats-grid">
-        <a href="/zq-admin/suppliers?type=product" style="text-decoration:none">
-          ${stat(productActive, "📦 Product Suppliers", "")}
-        </a>
-        <a href="/zq-admin/suppliers?type=service" style="text-decoration:none">
-          ${stat(serviceActive, "🔧 Service Providers", "")}
-        </a>
-        <a href="/zq-admin/suppliers?type=hospitality" style="text-decoration:none">
-          ${stat(hospitalityActive, "🏨 Hospitality / Tourism", "teal")}
-        </a>
       </div>
 
       <div class="two-col">
@@ -169,7 +151,7 @@ router.get("/", requireSupplierAdmin, async (req, res) => {
 // ── Suppliers List ─────────────────────────────────────────────────────────
 router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
   try {
-    const { search = "", status = "", tier = "", type = "", page = 1 } = req.query;
+    const { search = "", status = "", tier = "", page = 1 } = req.query;
     const limit = 20;
     const skip = (Number(page) - 1) * limit;
 
@@ -181,10 +163,9 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
         { "location.city": { $regex: search, $options: "i" } }
       ];
     }
-    if (status === "active")   query.active = true;
+    if (status === "active") query.active = true;
     if (status === "inactive") query.active = false;
-    if (tier)   query.tier = tier;
-    if (type)   query.profileType = type;
+    if (tier) query.tier = tier;
 
     const [suppliers, total] = await Promise.all([
       SupplierProfile.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -192,7 +173,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
     ]);
 
     const pages = Math.ceil(total / limit);
-    const qs = (p) => `?page=${p}&search=${encodeURIComponent(search)}&status=${status}&tier=${tier}&type=${type}`;
+    const qs = (p) => `?page=${p}&search=${encodeURIComponent(search)}&status=${status}&tier=${tier}`;
 
     res.send(layout("Suppliers", `
 <div class="panel">
@@ -213,12 +194,6 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
                 <option ${tier === "pro" ? "selected" : ""} value="pro">Pro</option>
                 <option ${tier === "featured" ? "selected" : ""} value="featured">Featured</option>
               </select>
-              <select name="type">
-                <option value="">All Types</option>
-                <option ${type === "product" ? "selected" : ""} value="product">📦 Product Suppliers</option>
-                <option ${type === "service" ? "selected" : ""} value="service">🔧 Service Providers</option>
-                <option ${type === "hospitality" ? "selected" : ""} value="hospitality">🏨 Hospitality / Tourism</option>
-              </select>
               <button type="submit">Filter</button>
               <a href="/zq-admin/suppliers" class="btn-reset">Clear</a>
             </form>
@@ -237,10 +212,7 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
               <td><strong>${esc(s.businessName)}</strong></td>
               <td>${esc(s.phone)}</td>
               <td>${esc(s.location?.city || "-")}</td>
-              <td><span class="type-pill">${
-                s.profileType === "hospitality" ? "🏨 " + (s.tourismSubtype?.[0] || "hospitality") :
-                s.profileType === "service" ? "🔧 service" : "📦 product"
-              }</span></td>
+              <td><span class="type-pill">${s.profileType || "product"}</span></td>
               <td>${badge(s.tier || "basic", tierColor(s.tier))}</td>
               <td>${badge(s.active ? "Active" : "Inactive", s.active ? "green" : "gray")}</td>
               <td>${s.completedOrders || 0}</td>
@@ -448,7 +420,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
               <select name="profileType" id="profileTypeSelect" required onchange="toggleCategoryGroups()">
                 <option value="product">📦 Product Supplier</option>
                 <option value="service">🔧 Service Provider</option>
-                <option value="hospitality">🏨 Lodge / Hotel / Tourism</option>
               </select>
             </div>
             <div class="fg">
@@ -557,89 +528,6 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           </div>
         </div>
 
-        <!-- ── SECTION 4b: Hospitality / Tourism Details ──────────────── -->
-        <div id="hospitalityWrap" style="display:none;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-          <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
-            4b. Hospitality & Tourism Details
-          </p>
-
-          <div class="form-grid">
-            <div class="fg">
-              <label>Business Sub-type <span style="font-weight:400;font-size:11px;text-transform:none">(select all that apply)</span></label>
-              <div style="display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--border);border-radius:7px">
-                ${[
-                  ["lodge","🌿 Lodge / Bush Camp"],["hotel","🏨 Hotel / Motel"],
-                  ["guesthouse","🏡 Guesthouse / B&B"],["self_catering","🍳 Self-Catering / Chalet"],
-                  ["campsite","⛺ Campsite / Caravan Park"],["safari_operator","🦁 Safari Operator / Game Drives"],
-                  ["tour_guide","🗺 Tour Guide / City Tours"],["boat_hire","⛵ Boat Hire / Cruises"],
-                  ["travel_agency","✈️ Travel Agency / Packages"]
-                ].map(([val,label]) => `
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text)">
-                  <input type="checkbox" name="tourismSubtype" value="${val}" style="width:15px;height:15px"> ${label}
-                </label>`).join("")}
-              </div>
-            </div>
-            <div class="fg">
-              <label>Tourism Areas / Destinations</label>
-              <textarea name="tourismAreas" rows="3"
-                placeholder="e.g. Kariba, Hwange, Victoria Falls, Nyanga"></textarea>
-              <span style="font-size:11px;color:var(--muted)">Comma-separated. Areas/parks/destinations this operator serves.</span>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="fg">
-              <label>Check-in Time</label>
-              <input name="checkInTime" placeholder="e.g. 14:00 or 2pm" />
-            </div>
-            <div class="fg">
-              <label>Check-out Time</label>
-              <input name="checkOutTime" placeholder="e.g. 10:00 or 10am" />
-            </div>
-            <div class="fg">
-              <label>Max Capacity (total guests)</label>
-              <input type="number" name="maxCapacity" value="0" min="0" placeholder="e.g. 20" />
-            </div>
-            <div class="fg">
-              <label>Meal Plan</label>
-              <select name="mealPlan">
-                <option value="not_applicable">Not applicable</option>
-                <option value="room_only">Room only</option>
-                <option value="bed_breakfast">Bed & Breakfast</option>
-                <option value="half_board">Half Board</option>
-                <option value="full_board">Full Board</option>
-                <option value="self_catering">Self-Catering</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="fg full" style="margin-top:10px">
-            <label>Facilities</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid var(--border);border-radius:7px">
-              ${[
-                ["wifi","📶 WiFi"],["pool","🏊 Pool"],["hot_shower","🚿 Hot shower"],
-                ["breakfast","🍳 Breakfast"],["en_suite","🚪 En-suite"],["generator","⚡ Generator/Solar"],
-                ["dstv","📺 DSTV"],["braai","🔥 Braai/BBQ"],["aircon","❄️ Air conditioning"],
-                ["game_drives","🦁 Game drives"],["fishing","🎣 Fishing"],["boat_hire","⛵ Boat hire"],
-                ["conference","🏢 Conference room"],["restaurant","🍽 Restaurant/Bar"],["laundry","👕 Laundry"],
-                ["parking","🅿️ Parking"],["pets_allowed","🐕 Pets allowed"],["child_friendly","👶 Child-friendly"]
-              ].map(([val,label]) => `
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--text);font-weight:400;text-transform:none;letter-spacing:0">
-                <input type="checkbox" name="facilities" value="${val}" style="width:14px;height:14px"> ${label}
-              </label>`).join("")}
-            </div>
-          </div>
-
-          <div class="fg full" style="margin-top:12px">
-            <label>Room Types (one per line: <code>name, capacity, price/night</code>)</label>
-            <textarea name="roomTypes" rows="5"
-              placeholder="Double room, 2, 80&#10;Twin room, 2, 80&#10;Family chalet, 6, 150&#10;Self-catering unit, 4, 120&#10;Presidential suite, 2, 250"></textarea>
-            <span style="font-size:11px;color:var(--muted)">
-              For lodges/hotels only. Format: <code>Room name, max guests, price per night (USD)</code>
-            </span>
-          </div>
-        </div>
-
         <!-- ── SECTION 5: Subscription & Activation ─────────────────── -->
         <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
           <p style="font-weight:700;font-size:13px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
@@ -718,23 +606,14 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
     }
 
            function toggleCategoryGroups() {
-      const pt = document.getElementById("profileTypeSelect").value;
-      const isService      = pt === "service";
-      const isHospitality  = pt === "hospitality";
-      const isProduct      = !isService && !isHospitality;
+      const isService = document.getElementById("profileTypeSelect").value === "service";
 
-      document.getElementById("productCatWrap").style.display   = isProduct ? "" : "none";
-      document.getElementById("serviceCatWrap").style.display   = isService ? "" : "none";
-      document.getElementById("deliveryWrap").style.display     = isProduct ? "" : "none";
-      document.getElementById("travelWrap").style.display       = isService ? "" : "none";
-      document.getElementById("pricesWrap").style.display       = isProduct ? "" : "none";
-      document.getElementById("ratesWrap").style.display        = isService ? "" : "none";
-      document.getElementById("hospitalityWrap").style.display  = isHospitality ? "" : "none";
-
-      // For hospitality: the products textarea becomes "Room types / activities"
-      const productsSection = document.getElementById("productsTextarea")?.closest("div.fg");
-      if (productsSection) productsSection.style.display = isHospitality ? "none" : "";
-      document.getElementById("presetToolsWrap").style.display  = isProduct ? "" : "none";
+      document.getElementById("productCatWrap").style.display = isService ? "none" : "";
+      document.getElementById("serviceCatWrap").style.display = isService ? "" : "none";
+      document.getElementById("deliveryWrap").style.display = isService ? "none" : "";
+      document.getElementById("travelWrap").style.display = isService ? "" : "none";
+      document.getElementById("pricesWrap").style.display = isService ? "none" : "";
+      document.getElementById("ratesWrap").style.display = isService ? "" : "none";
 
       document.getElementById("productsLabel").textContent = isService
         ? "Services (comma-separated)"
@@ -746,7 +625,12 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
 
       document.getElementById("subcatWrap").style.display = "none";
       document.getElementById("subcategorySelect").innerHTML = '<option value="">All / General</option>';
+
+      // show preset tools only for product suppliers
+      document.getElementById("presetToolsWrap").style.display = isService ? "none" : "";
       document.getElementById("useCategoryPreset").value = "false";
+
+      // reset preset selector when switching modes
       const presetSelector = document.getElementById("presetSelector");
       if (presetSelector) presetSelector.value = "";
     }
@@ -904,44 +788,6 @@ const {
     const category = profileType === "service" ? serviceCategory : productCategory;
     const categories = category ? [category.trim()] : [];
 
-    // ── Hospitality fields from form ─────────────────────────────────────────
-    let tourismSubtype = [];
-    if (profileType === "hospitality") {
-      const rawSubtypes = req.body.tourismSubtype || [];
-      tourismSubtype = Array.isArray(rawSubtypes) ? rawSubtypes : [rawSubtypes].filter(Boolean);
-      // Auto-build categories from subtypes so requestMatchEngine can find this supplier
-      const subtypeToCat = {
-        lodge:"lodge", hotel:"hotel", guesthouse:"guesthouse", self_catering:"self_catering",
-        campsite:"campsite", safari_operator:"safari", tour_guide:"tours",
-        boat_hire:"boat_hire", travel_agency:"tourism"
-      };
-      for (const st of tourismSubtype) {
-        const cat = subtypeToCat[st];
-        if (cat && !categories.includes(cat)) categories.push(cat);
-      }
-      if (!categories.includes("hospitality"))  categories.push("hospitality");
-      if (!categories.includes("accommodation")) categories.push("accommodation");
-      if (!categories.includes("tourism"))       categories.push("tourism");
-    }
-
-    // Parse room types: "Double room, 2, 80" → { name, capacity, pricePerNight }
-    const roomTypes = [];
-    if (profileType === "hospitality" && req.body.roomTypes) {
-      for (const line of req.body.roomTypes.split("\n")) {
-        const parts = line.split(",").map(s => s.trim());
-        const name  = parts[0];
-        const cap   = parseInt(parts[1]) || 2;
-        const price = parseFloat(parts[2]) || 0;
-        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, currency: "USD" });
-      }
-    }
-
-    const rawFacilities = req.body.facilities || [];
-    const facilities = Array.isArray(rawFacilities) ? rawFacilities : [rawFacilities].filter(Boolean);
-    const tourismAreas = profileType === "hospitality"
-      ? (req.body.tourismAreas || "").split(",").map(s => s.trim()).filter(Boolean)
-      : [];
-
     let productList = (products || "")
       .split(",")
       .map(p => p.trim().toLowerCase())
@@ -1097,16 +943,7 @@ const supplier = await SupplierProfile.create({
   credibilityScore: 0,
   adminNote: adminNote?.trim()
     ? `[Admin registered on ${now.toDateString()}] ${adminNote.trim()}`
-    : `[Admin registered on ${now.toDateString()}]`,
-  // ── Hospitality fields ──────────────────────────────────────────────────
-  tourismSubtype:  tourismSubtype  || [],
-  tourismAreas:    tourismAreas    || [],
-  facilities:      facilities      || [],
-  roomTypes:       roomTypes       || [],
-  maxCapacity:     Number(req.body.maxCapacity) || 0,
-  checkInTime:     (req.body.checkInTime  || "").trim(),
-  checkOutTime:    (req.body.checkOutTime || "").trim(),
-  mealPlan:        req.body.mealPlan || "not_applicable",
+    : `[Admin registered on ${now.toDateString()}]`
 });
 
     // ── 7. Link SupplierProfile ID back onto the Business ─────────────────
@@ -1203,33 +1040,13 @@ const successMsg = req.query.success
             <dt>Address</dt><dd>${esc(supplier.address || "-")}</dd>
             <dt>Type</dt><dd>${esc(supplier.profileType || "product")}</dd>
             <dt>Categories</dt><dd>${(supplier.categories || []).join(", ") || "-"}</dd>
-            ${supplier.profileType === "hospitality" ? `
-  <dt>Business Subtype</dt><dd>${(supplier.tourismSubtype || []).map(s =>
-    ({lodge:"🌿 Lodge",hotel:"🏨 Hotel",guesthouse:"🏡 Guesthouse/B&B",
-      self_catering:"🍳 Self-Catering",campsite:"⛺ Campsite",
-      safari_operator:"🦁 Safari Operator",tour_guide:"🗺 Tour Guide",
-      boat_hire:"⛵ Boat Hire",travel_agency:"✈️ Travel Agency"}[s] || s)
-  ).join(", ") || "-"}</dd>
-  <dt>Areas / Destinations</dt><dd>${(supplier.tourismAreas || []).join(", ") || "-"}</dd>
-  <dt>Facilities</dt><dd>${(supplier.facilities || []).map(f =>
-    ({wifi:"📶 WiFi",pool:"🏊 Pool",hot_shower:"🚿 Hot shower",breakfast:"🍳 Breakfast",
-      en_suite:"🚪 En-suite",generator:"⚡ Generator",dstv:"📺 DSTV",braai:"🔥 Braai",
-      aircon:"❄️ AC",game_drives:"🦁 Game drives",fishing:"🎣 Fishing",
-      boat_hire:"⛵ Boats",conference:"🏢 Conference",restaurant:"🍽 Restaurant",
-      laundry:"👕 Laundry",parking:"🅿️ Parking",pets_allowed:"🐕 Pets OK",
-      child_friendly:"👶 Kids OK"}[f] || f)
-  ).join("  ·  ") || "None set"}</dd>
-  <dt>Capacity</dt><dd>${supplier.maxCapacity > 0 ? supplier.maxCapacity + " guests max" : "-"}</dd>
-  <dt>Check-in / out</dt><dd>${supplier.checkInTime || supplier.checkOutTime
-    ? (supplier.checkInTime || "?") + " / " + (supplier.checkOutTime || "?") : "-"}</dd>
-  <dt>Meal Plan</dt><dd>${{room_only:"Room only",bed_breakfast:"Bed & Breakfast",
-    half_board:"Half Board",full_board:"Full Board",self_catering:"Self-Catering",
-    not_applicable:"-"}[supplier.mealPlan] || "-"}</dd>
-  <dt>Room Types</dt><dd>${(supplier.roomTypes || []).length
-    ? (supplier.roomTypes || []).map(rt => rt.name + (rt.pricePerNight > 0 ? " ($" + rt.pricePerNight + "/night)" : "")).join(", ")
-    : "-"}</dd>
-` : (supplier.categories || []).includes("tourism") ? `
+            ${(supplier.categories || []).includes("tourism") ? `
   <dt>Tourism Type</dt><dd>${esc(supplier.tourismType || "-")}</dd>
+  <dt>Pricing Model</dt><dd>${esc(supplier.pricingModel || "-")}</dd>
+  <dt>Base Location</dt><dd>${esc(supplier.baseLocation || "-")}</dd>
+  <dt>Pickup Areas</dt><dd>${(supplier.pickupAreas || []).map(esc).join(", ") || "-"}</dd>
+  <dt>Nationwide Travel</dt><dd>${supplier.nationwideTravel ? "Yes" : "No"}</dd>
+  <dt>Max Group Size</dt><dd>${supplier.maxGroupSize || "-"}</dd>
   <dt>Tourism Areas</dt><dd>${(supplier.tourismAreas || []).map(esc).join(", ") || "-"}</dd>
 ` : ""}
             <dt>Tier</dt><dd>${badge(supplier.tier || "basic", tierColor(supplier.tier))}</dd>
@@ -1266,15 +1083,9 @@ const successMsg = req.query.success
     🎁 Manual Activation
   </a>
 
-  ${supplier.profileType === "hospitality" ? `
-  <a href="/zq-admin/suppliers/${supplier._id}/hospitality" class="btn btn-blue">
-    🛏 Manage Rooms & Activities
-  </a>
-  ` : `
   <a href="/zq-admin/suppliers/${supplier._id}/products" class="btn btn-blue">
     📦 Manage Products
   </a>
-  `}
 
   <a href="/zq-admin/suppliers/${supplier._id}/live-items" class="btn btn-purple">
     📌 Manage Live Items
@@ -1338,33 +1149,6 @@ Products (${(supplier.products || []).length})
                 <tr><td>${esc(r.service)}</td><td>${esc(r.rate)}</td></tr>`).join("")}
               </tbody>
             </table>
-          </div>` : ""}
-
-          ${supplier.profileType === "hospitality" && (supplier.roomTypes || []).length ? `
-          <div class="panel">
-            <div class="panel-head">
-              <h3>🛏 Rooms & Accommodation (${(supplier.roomTypes || []).length})</h3>
-              <a href="/zq-admin/suppliers/${supplier._id}/hospitality" class="btn-link">Manage →</a>
-            </div>
-            <table>
-              <thead><tr><th>Room Type</th><th>Capacity</th><th>Price / Night</th></tr></thead>
-              <tbody>
-                ${(supplier.roomTypes || []).map(rt => `
-                <tr>
-                  <td><strong>${esc(rt.name)}</strong></td>
-                  <td>${rt.capacity || "-"} guests</td>
-                  <td>${rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) : "<em class='muted'>not set</em>"}</td>
-                </tr>`).join("")}
-              </tbody>
-            </table>
-          </div>` : ""}
-
-          ${supplier.profileType === "hospitality" && (supplier.facilities || []).length ? `
-          <div class="panel">
-            <h3>🏷 Facilities</h3>
-            <div class="tag-cloud">
-              ${(supplier.facilities || []).map(f => facilityTag(f)).join("")}
-            </div>
           </div>` : ""}
         </div>
       </div>
@@ -1525,103 +1309,65 @@ ${(supplier.categories||[]).includes("tutoring") ? `
          placeholder="e.g. O-Level, A-Level, Grade 6, Grade 7" />
 </div>` : ""}
 
-${supplier.profileType === "hospitality" ? `
+${(supplier.categories||[]).includes("tourism") ? `
 
-<div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#f0fdf4;border-radius:8px;border-left:3px solid #22c55e">
-  <strong style="font-size:12px;color:#15803d;text-transform:uppercase;letter-spacing:.4px">🏨 Hospitality &amp; Tourism Fields</strong>
-</div>
-
-<div class="fg" style="grid-column:1/-1">
-  <label>Business Sub-type <span style="font-weight:400;font-size:11px;text-transform:none">(check all that apply)</span></label>
-  <div style="display:flex;flex-wrap:wrap;gap:10px;padding:12px;border:1px solid var(--border);border-radius:7px">
-    ${[["lodge","🌿 Lodge / Bush Camp"],["hotel","🏨 Hotel / Motel"],
-       ["guesthouse","🏡 Guesthouse / B&B"],["self_catering","🍳 Self-Catering"],
-       ["campsite","⛺ Campsite"],["safari_operator","🦁 Safari Operator"],
-       ["tour_guide","🗺 Tour Guide"],["boat_hire","⛵ Boat Hire"],
-       ["travel_agency","✈️ Travel Agency"]
-    ].map(([val,label]) =>
-      '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text)">' +
-      '<input type="checkbox" name="tourismSubtype" value="' + val + '"' +
-      ((supplier.tourismSubtype||[]).includes(val) ? ' checked' : '') +
-      ' style="width:15px;height:15px"> ' + label + '</label>'
-    ).join("")}
-  </div>
-</div>
-
-<div class="fg" style="grid-column:1/-1">
-  <label>🌍 Areas / Destinations Served</label>
-  <input name="tourismAreas" value="${esc((supplier.tourismAreas||[]).join(", "))}"
-         placeholder="e.g. Kariba, Hwange, Victoria Falls, Nyanga" />
-</div>
-
-<div class="fg">
-  <label>⏰ Check-in Time</label>
-  <input name="checkInTime" value="${esc(supplier.checkInTime || "")}"
-         placeholder="e.g. 14:00 or 2pm" />
-</div>
-<div class="fg">
-  <label>⏰ Check-out Time</label>
-  <input name="checkOutTime" value="${esc(supplier.checkOutTime || "")}"
-         placeholder="e.g. 10:00 or 10am" />
-</div>
-<div class="fg">
-  <label>👥 Max Capacity (guests)</label>
-  <input type="number" name="maxCapacity" value="${supplier.maxCapacity || 0}" min="0" />
-</div>
-<div class="fg">
-  <label>🍽 Meal Plan</label>
-  <select name="mealPlan">
-    ${[["not_applicable","Not applicable"],["room_only","Room only"],
-       ["bed_breakfast","Bed & Breakfast"],["half_board","Half Board"],
-       ["full_board","Full Board"],["self_catering","Self-Catering"]
-    ].map(([val,lbl]) =>
-      '<option value="' + val + '"' + (supplier.mealPlan === val ? ' selected' : '') + '>' + lbl + '</option>'
-    ).join("")}
+  <div class="fg">
+  <label>💲 Pricing Model</label>
+  <select name="pricingModel">
+    <option value="">Select pricing model</option>
+    <option value="per_person" ${supplier.pricingModel === "per_person" ? "selected" : ""}>Per Person</option>
+    <option value="per_trip" ${supplier.pricingModel === "per_trip" ? "selected" : ""}>Per Trip</option>
+    <option value="per_day" ${supplier.pricingModel === "per_day" ? "selected" : ""}>Per Day</option>
+    <option value="per_hour" ${supplier.pricingModel === "per_hour" ? "selected" : ""}>Per Hour</option>
+    <option value="group_package" ${supplier.pricingModel === "group_package" ? "selected" : ""}>Group Package</option>
   </select>
 </div>
 
-<div class="fg" style="grid-column:1/-1">
-  <label>🏷 Facilities</label>
-  <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px;border:1px solid var(--border);border-radius:7px">
-    ${[["wifi","📶 WiFi"],["pool","🏊 Pool"],["hot_shower","🚿 Hot shower"],
-       ["breakfast","🍳 Breakfast incl."],["en_suite","🚪 En-suite"],["generator","⚡ Generator/Solar"],
-       ["dstv","📺 DSTV/TV"],["braai","🔥 Braai/BBQ"],["aircon","❄️ Air con"],
-       ["game_drives","🦁 Game drives"],["fishing","🎣 Fishing"],["boat_hire","⛵ Boat hire"],
-       ["conference","🏢 Conference"],["restaurant","🍽 Restaurant/Bar"],["laundry","👕 Laundry"],
-       ["parking","🅿️ Parking"],["pets_allowed","🐕 Pets OK"],["child_friendly","👶 Child-friendly"]
-    ].map(([val,lbl]) =>
-      '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--text);font-weight:400;text-transform:none;letter-spacing:0">' +
-      '<input type="checkbox" name="facilities" value="' + val + '"' +
-      ((supplier.facilities||[]).includes(val) ? ' checked' : '') +
-      ' style="width:14px;height:14px"> ' + lbl + '</label>'
-    ).join("")}
-  </div>
+<div class="fg">
+  <label>🚐 Base Location</label>
+  <input name="baseLocation"
+         value="${esc(supplier.baseLocation || "")}"
+         placeholder="e.g. Kariba, Victoria Falls" />
 </div>
 
 <div class="fg" style="grid-column:1/-1">
-  <label>🛏 Room Types &amp; Nightly Rates
-    <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">
-      — one per line: <code>name, max guests, price/night</code>
+  <label>📍 Pickup Areas</label>
+  <input name="pickupAreas"
+         value="${esc((supplier.pickupAreas||[]).join(", "))}"
+         placeholder="Kariba Airport, Nyamhunga, Harare CBD" />
+</div>
+
+<div class="fg">
+  <label>🌍 Nationwide Travel</label>
+  <select name="nationwideTravel">
+    <option value="false" ${!supplier.nationwideTravel ? "selected" : ""}>No</option>
+    <option value="true" ${supplier.nationwideTravel ? "selected" : ""}>Yes</option>
+  </select>
+</div>
+
+<div class="fg">
+  <label>👥 Max Group Size</label>
+  <input type="number"
+         name="maxGroupSize"
+         value="${supplier.maxGroupSize || 0}"
+         min="0"
+         placeholder="e.g. 12" />
+</div>
+<!-- ── TOURISM / HOSPITALITY FIELDS ────────────────────── -->
+<div class="fg">
+  <label>🦁 Tourism Type</label>
+  <input name="tourismType" value="${esc(supplier.tourismType||"")}"
+         placeholder="e.g. Safari Lodge, City Tours, Travel Agent" />
+</div>
+<div class="fg" style="grid-column:1/-1">
+  <label>📍 Areas / Destinations Covered
+    <span style="font-weight:400;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0">
+      - Separate with commas
     </span>
   </label>
-  <textarea name="roomTypes" rows="6">${(supplier.roomTypes||[]).map(rt =>
-    rt.name + ", " + (rt.capacity||2) + ", " + (rt.pricePerNight||0)
-  ).join("\n")}</textarea>
-  <span style="font-size:11px;color:var(--muted)">
-    Example: <code>Double room, 2, 80</code> &nbsp;|&nbsp; <code>Family chalet, 6, 150</code> &nbsp;|&nbsp; <code>Game drive (morning), 2, 80</code>
-  </span>
-</div>
-
-` : (supplier.categories||[]).includes("tourism") ? `
-<div class="fg">
-  <label>🦁 Tourism Type (legacy)</label>
-  <input name="tourismType" value="${esc(supplier.tourismType||"")}" />
-</div>
-<div class="fg" style="grid-column:1/-1">
-  <label>📍 Tourism Areas</label>
-  <input name="tourismAreas" value="${esc((supplier.tourismAreas||[]).join(", "))}" />
-</div>
-` : ""}
+  <input name="tourismAreas" value="${esc((supplier.tourismAreas||[]).join(", "))}"
+         placeholder="e.g. Hwange, Victoria Falls, Harare, Nyanga" />
+</div>` : ""}
 <div class="fg">
   <label>Tier</label>
               <select name="tier">
@@ -1767,66 +1513,35 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
     if (req.body.gradesOffered !== undefined) {
       update.gradesOffered = (req.body.gradesOffered || "").split(",").map(s => s.trim()).filter(Boolean);
     }
-    // ── Hospitality & Tourism fields ─────────────────────────────────────────
-    // Always save tourismAreas if present
+    // ── Tourism fields ───────────────────────────────────────────────────────
+    if (req.body.tourismType !== undefined) {
+
+      if (req.body.pricingModel !== undefined) {
+  update.pricingModel = (req.body.pricingModel || "").trim();
+}
+
+if (req.body.baseLocation !== undefined) {
+  update.baseLocation = (req.body.baseLocation || "").trim();
+}
+
+if (req.body.pickupAreas !== undefined) {
+  update.pickupAreas = (req.body.pickupAreas || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+if (req.body.nationwideTravel !== undefined) {
+  update.nationwideTravel = req.body.nationwideTravel === "true";
+}
+
+if (req.body.maxGroupSize !== undefined) {
+  update.maxGroupSize = Number(req.body.maxGroupSize) || 0;
+}
+      update.tourismType = (req.body.tourismType || "").trim();
+    }
     if (req.body.tourismAreas !== undefined) {
       update.tourismAreas = (req.body.tourismAreas || "").split(",").map(s => s.trim()).filter(Boolean);
-    }
-    // New hospitality fields (profileType=hospitality suppliers)
-    if (req.body.tourismSubtype !== undefined || update.profileType === "hospitality") {
-      const rawSubtypes = req.body.tourismSubtype || [];
-      update.tourismSubtype = Array.isArray(rawSubtypes) ? rawSubtypes : [rawSubtypes].filter(Boolean);
-      // Auto-sync categories from subtypes
-      const subtypeToCat = {
-        lodge:"lodge", hotel:"hotel", guesthouse:"guesthouse", self_catering:"self_catering",
-        campsite:"campsite", safari_operator:"safari", tour_guide:"tours",
-        boat_hire:"boat_hire", travel_agency:"tourism"
-      };
-      const existingCats = update.categories || [];
-      for (const st of update.tourismSubtype) {
-        const cat = subtypeToCat[st];
-        if (cat && !existingCats.includes(cat)) existingCats.push(cat);
-      }
-      if (!existingCats.includes("hospitality"))  existingCats.push("hospitality");
-      if (!existingCats.includes("accommodation")) existingCats.push("accommodation");
-      if (!existingCats.includes("tourism"))       existingCats.push("tourism");
-      update.categories = existingCats;
-    }
-    if (req.body.facilities !== undefined) {
-      const rawFac = req.body.facilities || [];
-      update.facilities = Array.isArray(rawFac) ? rawFac : [rawFac].filter(Boolean);
-    }
-    if (req.body.maxCapacity !== undefined) {
-      update.maxCapacity = Number(req.body.maxCapacity) || 0;
-    }
-    if (req.body.checkInTime !== undefined) {
-      update.checkInTime = (req.body.checkInTime || "").trim();
-    }
-    if (req.body.checkOutTime !== undefined) {
-      update.checkOutTime = (req.body.checkOutTime || "").trim();
-    }
-    if (req.body.mealPlan !== undefined) {
-      update.mealPlan = req.body.mealPlan || "not_applicable";
-    }
-    // Parse room types from textarea: "Double room, 2, 80"
-    if (req.body.roomTypes !== undefined) {
-      const roomTypes = [];
-      for (const line of (req.body.roomTypes || "").split("\n")) {
-        const parts = line.split(",").map(s => s.trim());
-        const name  = parts[0];
-        const cap   = parseInt(parts[1]) || 2;
-        const price = parseFloat(parts[2]) || 0;
-        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, currency: "USD" });
-      }
-      update.roomTypes = roomTypes;
-      // Also sync products[] from room type names for catalogue display
-      if (roomTypes.length > 0) {
-        update.products = roomTypes.map(rt => rt.name.toLowerCase());
-      }
-    }
-    // Legacy field — keep saving if present for backward compat
-    if (req.body.tourismType !== undefined) {
-      update.tourismType = (req.body.tourismType || "").trim();
     }
 
     // ── VIP notification flags (set via VIP Settings page, not edit form) ────
@@ -2198,395 +1913,6 @@ Type *menu* to access your seller dashboard, manage your products and receive or
     res.redirect(`/zq-admin/suppliers/${req.params.id}?success=${encodeURIComponent("Supplier activated! Business account and WhatsApp access are ready.")}`);
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
-  }
-});
-
-
-// ── Hospitality: Manage Rooms & Activities ────────────────────────────────
-router.get("/suppliers/:id/hospitality", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id).lean();
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    if (supplier.profileType !== "hospitality") {
-      return res.redirect(`/zq-admin/suppliers/${supplier._id}/products`);
-    }
-
-    const successMsg = req.query.success
-      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:16px">✅ ${esc(req.query.success)}</div>`
-      : "";
-
-    const SUBTYPE_LABELS = {
-      lodge:"🌿 Lodge",hotel:"🏨 Hotel",guesthouse:"🏡 Guesthouse/B&B",
-      self_catering:"🍳 Self-Catering",campsite:"⛺ Campsite",
-      safari_operator:"🦁 Safari Operator",tour_guide:"🗺 Tour Guide",
-      boat_hire:"⛵ Boat Hire",travel_agency:"✈️ Travel Agency"
-    };
-    const subtypeLabel = (supplier.tourismSubtype||[]).map(s => SUBTYPE_LABELS[s]||s).join(" · ") || "Hospitality";
-    const isAccom = (supplier.tourismSubtype||[]).some(s =>
-      ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s)
-    );
-    const isActivity = (supplier.tourismSubtype||[]).some(s =>
-      ["safari_operator","tour_guide","boat_hire","travel_agency"].includes(s)
-    );
-
-    const FACILITY_LABELS = {
-      wifi:"📶 WiFi",pool:"🏊 Pool",hot_shower:"🚿 Hot shower",breakfast:"🍳 Breakfast",
-      en_suite:"🚪 En-suite",generator:"⚡ Generator/Solar",dstv:"📺 DSTV",braai:"🔥 Braai",
-      aircon:"❄️ AC",game_drives:"🦁 Game drives",fishing:"🎣 Fishing",boat_hire:"⛵ Boat hire",
-      conference:"🏢 Conference",restaurant:"🍽 Restaurant",laundry:"👕 Laundry",
-      parking:"🅿️ Parking",pets_allowed:"🐕 Pets OK",child_friendly:"👶 Child-friendly"
-    };
-
-    res.send(layout(`Hospitality: ${esc(supplier.businessName)}`, `
-      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
-      ${successMsg}
-
-      <!-- Profile summary banner -->
-      <div style="background:linear-gradient(135deg,#064e3b,#065f46);color:#fff;border-radius:12px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-        <div>
-          <div style="font-size:18px;font-weight:700">${esc(supplier.businessName)}</div>
-          <div style="font-size:13px;opacity:.85;margin-top:3px">${subtypeLabel} · 📍 ${esc(supplier.location?.area||"")}, ${esc(supplier.location?.city||"")}</div>
-          ${(supplier.tourismAreas||[]).length ? `<div style="font-size:12px;opacity:.7;margin-top:2px">🌍 ${supplier.tourismAreas.join(", ")}</div>` : ""}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${supplier.checkInTime||supplier.checkOutTime ? `<div style="background:rgba(255,255,255,.15);padding:6px 12px;border-radius:8px;font-size:12px">⏰ In: ${esc(supplier.checkInTime||"?")} · Out: ${esc(supplier.checkOutTime||"?")}</div>` : ""}
-          ${supplier.maxCapacity > 0 ? `<div style="background:rgba(255,255,255,.15);padding:6px 12px;border-radius:8px;font-size:12px">👥 Up to ${supplier.maxCapacity} guests</div>` : ""}
-        </div>
-      </div>
-
-      <div class="two-col">
-
-        <!-- LEFT: Rooms / Activities -->
-        <div>
-          ${isAccom ? `
-          <div class="panel">
-            <div class="panel-head">
-              <h3>🛏 Room Types (${(supplier.roomTypes||[]).length})</h3>
-            </div>
-            ${(supplier.roomTypes||[]).length ? `
-            <table>
-              <thead><tr><th>Room Type</th><th>Max Guests</th><th>Price / Night</th><th></th></tr></thead>
-              <tbody>
-                ${(supplier.roomTypes||[]).map((rt,i) => `
-                <tr>
-                  <td><strong>${esc(rt.name)}</strong></td>
-                  <td>${rt.capacity||"-"}</td>
-                  <td>${rt.pricePerNight > 0 ? `<strong>$${Number(rt.pricePerNight).toFixed(0)}</strong>` : "<em class='muted'>not set</em>"}</td>
-                  <td>
-                    <a href="/zq-admin/suppliers/${supplier._id}/hospitality/edit-room/${i}" class="btn-link" style="font-size:12px">Edit</a>
-                    &nbsp;
-                    <a href="/zq-admin/suppliers/${supplier._id}/hospitality/delete-room/${i}"
-                       class="btn-link" style="color:#ef4444;font-size:12px"
-                       onclick="return confirm('Delete this room type?')">Del</a>
-                  </td>
-                </tr>`).join("")}
-              </tbody>
-            </table>` : `<p class="muted" style="margin-bottom:14px">No room types added yet.</p>`}
-
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/add-room" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-              <p style="font-weight:600;font-size:13px;margin-bottom:10px">➕ Add Room Type</p>
-              <div class="form-grid" style="margin-bottom:10px">
-                <div class="fg">
-                  <label>Room Name</label>
-                  <input name="roomName" placeholder="e.g. Double room, Family chalet" required />
-                </div>
-                <div class="fg">
-                  <label>Max Guests</label>
-                  <input type="number" name="capacity" value="2" min="1" max="50" />
-                </div>
-                <div class="fg">
-                  <label>Price per Night (USD)</label>
-                  <input type="number" name="pricePerNight" value="0" min="0" step="0.5" />
-                </div>
-                <div class="fg">
-                  <label>Description (optional)</label>
-                  <input name="description" placeholder="e.g. Lake view, en-suite bathroom" />
-                </div>
-              </div>
-              <button type="submit" class="btn btn-green btn-sm">➕ Add Room</button>
-            </form>
-          </div>` : ""}
-
-          ${isActivity ? `
-          <div class="panel">
-            <div class="panel-head">
-              <h3>🎯 Activities & Services (${(supplier.rates||[]).length})</h3>
-            </div>
-            ${(supplier.rates||[]).length ? `
-            <table>
-              <thead><tr><th>Activity</th><th>Rate</th><th></th></tr></thead>
-              <tbody>
-                ${(supplier.rates||[]).map((r,i) => `
-                <tr>
-                  <td><strong>${esc(r.service)}</strong></td>
-                  <td>${esc(r.rate||"not set")}</td>
-                  <td>
-                    <a href="/zq-admin/suppliers/${supplier._id}/hospitality/delete-activity/${i}"
-                       class="btn-link" style="color:#ef4444;font-size:12px"
-                       onclick="return confirm('Delete this activity?')">Del</a>
-                  </td>
-                </tr>`).join("")}
-              </tbody>
-            </table>` : `<p class="muted" style="margin-bottom:14px">No activities added yet.</p>`}
-
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/add-activity" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-              <p style="font-weight:600;font-size:13px;margin-bottom:10px">➕ Add Activity</p>
-              <div class="form-grid" style="margin-bottom:10px">
-                <div class="fg">
-                  <label>Activity Name</label>
-                  <input name="activityName" placeholder="e.g. Morning game drive, Sunset cruise" required />
-                </div>
-                <div class="fg">
-                  <label>Rate</label>
-                  <input name="rate" placeholder="e.g. $80/person, $150/trip, $200/group" />
-                </div>
-              </div>
-              <button type="submit" class="btn btn-green btn-sm">➕ Add Activity</button>
-            </form>
-          </div>` : ""}
-
-          <!-- Bulk room / activity edit -->
-          <div class="panel">
-            <h3>✏️ Bulk Edit Rooms / Activities</h3>
-            <p style="color:var(--muted);font-size:12px;margin-bottom:12px">
-              One per line: <code>name, max guests, price/night</code> (for rooms) or <code>name, rate</code> (for activities)
-            </p>
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/bulk-save">
-              <div class="fg full" style="margin-bottom:12px">
-                <label>Rooms (name, capacity, price/night)</label>
-                <textarea name="roomTypes" rows="6">${(supplier.roomTypes||[]).map(rt =>
-                  rt.name + ", " + (rt.capacity||2) + ", " + (rt.pricePerNight||0)
-                ).join("\n")}</textarea>
-              </div>
-              <div class="fg full" style="margin-bottom:12px">
-                <label>Activities (name, rate)</label>
-                <textarea name="activities" rows="5">${(supplier.rates||[]).map(r =>
-                  r.service + (r.rate ? ", " + r.rate : "")
-                ).join("\n")}</textarea>
-              </div>
-              <button type="submit" class="btn btn-blue">💾 Save All</button>
-            </form>
-          </div>
-        </div>
-
-        <!-- RIGHT: Facilities + Settings -->
-        <div>
-          <div class="panel">
-            <div class="panel-head">
-              <h3>🏷 Facilities</h3>
-            </div>
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/save-facilities">
-              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-                ${[["wifi","📶 WiFi"],["pool","🏊 Swimming pool"],["hot_shower","🚿 Hot shower"],
-                   ["breakfast","🍳 Breakfast included"],["en_suite","🚪 En-suite bathrooms"],
-                   ["generator","⚡ Generator / Solar power"],["dstv","📺 DSTV / Satellite TV"],
-                   ["braai","🔥 Braai / BBQ area"],["aircon","❄️ Air conditioning"],
-                   ["game_drives","🦁 Game drives on-site"],["fishing","🎣 Fishing"],
-                   ["boat_hire","⛵ Boat hire"],["conference","🏢 Conference facilities"],
-                   ["restaurant","🍽 Restaurant / Bar"],["laundry","👕 Laundry service"],
-                   ["parking","🅿️ Parking"],["pets_allowed","🐕 Pets allowed"],
-                   ["child_friendly","👶 Child-friendly"]
-                ].map(([val,lbl]) =>
-                  `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;border-bottom:1px solid #f8fafc">
-                    <input type="checkbox" name="facilities" value="${val}"
-                           ${(supplier.facilities||[]).includes(val) ? "checked" : ""}
-                           style="width:15px;height:15px">
-                    <span style="font-size:13px">${lbl}</span>
-                  </label>`
-                ).join("")}
-              </div>
-              <button type="submit" class="btn btn-blue btn-sm">💾 Save Facilities</button>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h3>⚙️ Property Settings</h3>
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/save-settings">
-              <div class="fg" style="margin-bottom:12px">
-                <label>Check-in Time</label>
-                <input name="checkInTime" value="${esc(supplier.checkInTime||"")}" placeholder="e.g. 14:00" />
-              </div>
-              <div class="fg" style="margin-bottom:12px">
-                <label>Check-out Time</label>
-                <input name="checkOutTime" value="${esc(supplier.checkOutTime||"")}" placeholder="e.g. 10:00" />
-              </div>
-              <div class="fg" style="margin-bottom:12px">
-                <label>Max Capacity (total guests)</label>
-                <input type="number" name="maxCapacity" value="${supplier.maxCapacity||0}" min="0" />
-              </div>
-              <div class="fg" style="margin-bottom:12px">
-                <label>Meal Plan</label>
-                <select name="mealPlan">
-                  ${[["not_applicable","Not applicable"],["room_only","Room only"],
-                     ["bed_breakfast","Bed & Breakfast"],["half_board","Half Board"],
-                     ["full_board","Full Board"],["self_catering","Self-Catering"]
-                  ].map(([val,lbl]) =>
-                    `<option value="${val}"${supplier.mealPlan===val?" selected":""}>${lbl}</option>`
-                  ).join("")}
-                </select>
-              </div>
-              <div class="fg" style="margin-bottom:16px">
-                <label>Areas / Destinations Served</label>
-                <input name="tourismAreas" value="${esc((supplier.tourismAreas||[]).join(", "))}"
-                       placeholder="e.g. Kariba, Hwange, Victoria Falls" />
-              </div>
-              <button type="submit" class="btn btn-blue btn-sm">💾 Save Settings</button>
-            </form>
-          </div>
-        </div>
-      </div>
-    `));
-  } catch (err) {
-    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
-  }
-});
-
-// ── Hospitality: Add room type ──────────────────────────────────────────────
-router.post("/suppliers/:id/hospitality/add-room", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const { roomName, capacity, pricePerNight, description } = req.body;
-    if (!roomName?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-    supplier.roomTypes = supplier.roomTypes || [];
-    supplier.roomTypes.push({
-      name:         roomName.trim(),
-      capacity:     Number(capacity) || 2,
-      pricePerNight:Number(pricePerNight) || 0,
-      currency:     "USD",
-      description:  (description || "").trim()
-    });
-    // Sync products[] for catalogue
-    supplier.products = supplier.roomTypes.map(rt => rt.name.toLowerCase());
-    supplier.markModified("roomTypes");
-    await supplier.save();
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Room type added: " + roomName.trim())}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── Hospitality: Delete room type ───────────────────────────────────────────
-router.get("/suppliers/:id/hospitality/delete-room/:index", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const idx = Number(req.params.index);
-    if (!isNaN(idx) && idx >= 0 && idx < (supplier.roomTypes||[]).length) {
-      const removed = supplier.roomTypes[idx].name;
-      supplier.roomTypes.splice(idx, 1);
-      supplier.products = supplier.roomTypes.map(rt => rt.name.toLowerCase());
-      supplier.markModified("roomTypes");
-      await supplier.save();
-      return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Deleted: " + removed)}`);
-    }
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  }
-});
-
-// ── Hospitality: Add activity (rate) ────────────────────────────────────────
-router.post("/suppliers/:id/hospitality/add-activity", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const { activityName, rate } = req.body;
-    if (!activityName?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-    supplier.rates = supplier.rates || [];
-    supplier.rates.push({ service: activityName.trim(), rate: (rate||"").trim() });
-    supplier.markModified("rates");
-    await supplier.save();
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Activity added: " + activityName.trim())}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── Hospitality: Delete activity ────────────────────────────────────────────
-router.get("/suppliers/:id/hospitality/delete-activity/:index", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const idx = Number(req.params.index);
-    if (!isNaN(idx) && idx >= 0 && idx < (supplier.rates||[]).length) {
-      const removed = supplier.rates[idx].service;
-      supplier.rates.splice(idx, 1);
-      supplier.markModified("rates");
-      await supplier.save();
-      return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Deleted: " + removed)}`);
-    }
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  }
-});
-
-// ── Hospitality: Bulk save rooms + activities ───────────────────────────────
-router.post("/suppliers/:id/hospitality/bulk-save", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-
-    // Parse room types
-    const roomTypes = [];
-    for (const line of (req.body.roomTypes||"").split("\n")) {
-      const parts = line.split(",").map(s => s.trim());
-      const name  = parts[0];
-      if (!name || name.length < 2) continue;
-      roomTypes.push({
-        name, capacity: parseInt(parts[1])||2,
-        pricePerNight: parseFloat(parts[2])||0, currency: "USD", description: ""
-      });
-    }
-    // Parse activities
-    const rates = [];
-    for (const line of (req.body.activities||"").split("\n")) {
-      const parts   = line.split(",").map(s => s.trim());
-      const service = parts[0];
-      if (!service || service.length < 2) continue;
-      rates.push({ service, rate: parts.slice(1).join(",").trim() });
-    }
-
-    supplier.roomTypes = roomTypes;
-    supplier.rates     = rates;
-    supplier.products  = roomTypes.map(rt => rt.name.toLowerCase());
-    supplier.markModified("roomTypes");
-    supplier.markModified("rates");
-    await supplier.save();
-
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent(`Saved ${roomTypes.length} rooms, ${rates.length} activities`)}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── Hospitality: Save facilities ────────────────────────────────────────────
-router.post("/suppliers/:id/hospitality/save-facilities", requireSupplierAdmin, async (req, res) => {
-  try {
-    const rawFac   = req.body.facilities || [];
-    const facilities = Array.isArray(rawFac) ? rawFac : [rawFac].filter(Boolean);
-    await SupplierProfile.findByIdAndUpdate(req.params.id, { facilities });
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Facilities saved (" + facilities.length + " selected)")}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  }
-});
-
-// ── Hospitality: Save property settings ─────────────────────────────────────
-router.post("/suppliers/:id/hospitality/save-settings", requireSupplierAdmin, async (req, res) => {
-  try {
-    const { checkInTime, checkOutTime, maxCapacity, mealPlan, tourismAreas } = req.body;
-    await SupplierProfile.findByIdAndUpdate(req.params.id, {
-      checkInTime:  (checkInTime  || "").trim(),
-      checkOutTime: (checkOutTime || "").trim(),
-      maxCapacity:  Number(maxCapacity) || 0,
-      mealPlan:     mealPlan || "not_applicable",
-      tourismAreas: (tourismAreas||"").split(",").map(s => s.trim()).filter(Boolean)
-    });
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Property settings saved")}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
   }
 });
 
@@ -3173,48 +2499,6 @@ router.get("/payments", requireSupplierAdmin, async (req, res) => {
   }
 });
 
-
-// ── Hospitality facility tag helper (avoids nested template literals) ──────────
-function facilityTag(code) {
-  const labels = {
-    wifi:          "📶 WiFi",
-    pool:          "🏊 Pool",
-    hot_shower:    "🚿 Hot shower",
-    breakfast:     "🍳 Breakfast",
-    en_suite:      "🚪 En-suite",
-    generator:     "⚡ Generator/Solar",
-    dstv:          "📺 DSTV",
-    braai:         "🔥 Braai",
-    aircon:        "❄️ AC",
-    game_drives:   "🦁 Game drives",
-    fishing:       "🎣 Fishing",
-    boat_hire:     "⛵ Boat hire",
-    conference:    "🏢 Conference",
-    restaurant:    "🍽 Restaurant",
-    laundry:       "👕 Laundry",
-    parking:       "🅿️ Parking",
-    pets_allowed:  "🐕 Pets OK",
-    child_friendly:"👶 Child-friendly"
-  };
-  return "<span class=\"tag\">" + (labels[code] || code) + "</span>";
-}
-
-// ── Hospitality subtype label helper ─────────────────────────────────────────
-function subtypeLabel(code) {
-  const labels = {
-    lodge:          "🌿 Lodge",
-    hotel:          "🏨 Hotel",
-    guesthouse:     "🏡 Guesthouse/B&B",
-    self_catering:  "🍳 Self-Catering",
-    campsite:       "⛺ Campsite",
-    safari_operator:"🦁 Safari Operator",
-    tour_guide:     "🗺 Tour Guide",
-    boat_hire:      "⛵ Boat Hire",
-    travel_agency:  "✈️ Travel Agency"
-  };
-  return labels[code] || code;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────
 function esc(str) {
   if (str === null || str === undefined) return "";
@@ -3255,8 +2539,7 @@ function layout(title, content) {
                      || t.startsWith("Products:") || t.startsWith("Send Offer:")
                      || t.startsWith("Receipt:") || t === "Add Price"
                      || t === "Edit Price" || t === "Add Rate"
-                     || t === "Manage Live Items"
-                     || t.startsWith("Hospitality:") || t === "VIP Sellers";
+                     || t === "Manage Live Items";
   const isSchools     = t === "Schools" || t === "Register School"
                      || t.startsWith("School:") || t.startsWith("Edit School:");
   const isOrders      = t === "Orders";
