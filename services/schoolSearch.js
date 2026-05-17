@@ -1,4 +1,4 @@
-a// services/schoolSearch.js
+// services/schoolSearch.js
 // ─── ZimQuote Schools - Parent Search Engine ──────────────────────────────────
 
 import SchoolProfile from "../models/schoolProfile.js";
