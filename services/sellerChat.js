@@ -1,4 +1,4 @@
-// services/sellerChat.js  v3.1
+// services/sellerChat.js  v3.2
 // ─── ZimQuote Seller Chatbot - Quote, Order, Smart Booking, Enquiry ───────────
 //
 // Full buyer interaction flow when a buyer opens a seller's ZimQuote smart link.
@@ -647,13 +647,34 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   let hasPrices = false;
 
   if (isHospitality) {
-    // Hospitality: merge roomTypes (night + rest), extraServices, activities
-    // Each item becomes a selectable line in the catalogue
-    const roomItems = (seller.roomTypes || []).map(rt => {
-      const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
-      const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
-      const rate  = [night, rest].filter(Boolean).join("  ·  ");
-      return { service: rt.name, rate: rate || "", _isRoom: true };
+    // Hospitality: split each roomType into separate overnight and rest/day-use items.
+    // This lets the buyer select ONLY the rate they want (e.g. rest only, not night).
+    // A room with both pricePerNight and restRate becomes TWO numbered catalogue entries.
+    const roomItems = (seller.roomTypes || []).flatMap(rt => {
+      const items = [];
+      if (rt.pricePerNight > 0) {
+        items.push({
+          service:   rt.name + " (overnight)",
+          rate:      "$" + Number(rt.pricePerNight).toFixed(0) + "/night",
+          _isRoom:   true,
+          _rateType: "night",
+          _unitPrice: Number(rt.pricePerNight)
+        });
+      }
+      if (rt.restRate > 0) {
+        items.push({
+          service:   rt.name + " (rest/day use)",
+          rate:      "$" + Number(rt.restRate).toFixed(0) + "/rest",
+          _isRoom:   true,
+          _rateType: "rest",
+          _unitPrice: Number(rt.restRate)
+        });
+      }
+      // Room with no prices at all - keep as single unpriced entry
+      if (!rt.pricePerNight && !rt.restRate) {
+        items.push({ service: rt.name, rate: "", _isRoom: true });
+      }
+      return items;
     });
     const extraItems = (seller.extraServices || []).map(es => ({
       service: es.name,
@@ -883,12 +904,29 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     // Fallback: re-read from DB
     const isHospitality = seller.profileType === "hospitality";
     if (isHospitality) {
-      // Accommodation: room types + rest rates + extra services all become selectable items
-      const roomItems = (seller.roomTypes || []).map(rt => ({
-        service: rt.name,
-        rate: rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : "",
-        restRate: rt.restRate > 0 ? "$" + Number(rt.restRate).toFixed(0) + "/rest" : null
-      }));
+      // Split each roomType into separate overnight and rest/day-use items (mirrors _scQuote).
+      // This ensures item-number resolution works correctly when catalogue is rebuilt from DB.
+      const roomItems = (seller.roomTypes || []).flatMap(rt => {
+        const items = [];
+        if (rt.pricePerNight > 0) {
+          items.push({
+            service:    rt.name + " (overnight)",
+            rate:       "$" + Number(rt.pricePerNight).toFixed(0) + "/night",
+            _unitPrice: Number(rt.pricePerNight)
+          });
+        }
+        if (rt.restRate > 0) {
+          items.push({
+            service:    rt.name + " (rest/day use)",
+            rate:       "$" + Number(rt.restRate).toFixed(0) + "/rest",
+            _unitPrice: Number(rt.restRate)
+          });
+        }
+        if (!rt.pricePerNight && !rt.restRate) {
+          items.push({ service: rt.name, rate: "" });
+        }
+        return items;
+      });
       const extraItems = (seller.extraServices || []).map(es => ({
         service: es.name,
         rate: es.price > 0 ? "$" + Number(es.price).toFixed(2) + "/" + (es.unit || "service") : ""
@@ -1023,23 +1061,35 @@ The seller will review and price your request.
   }
 
   // ── Priced path - calculate draft, send to seller for confirmation ────────
-   const priceItems = isService ? seller.rates : seller.prices;
+  const isHospitality = seller.profileType === "hospitality";
   const priceMap   = {};
 
-  for (const item of (priceItems || [])) {
-    const key = (isService ? item.service : item.product)?.toLowerCase().trim();
-    if (!key) continue;
-
-    if (isService) {
-      priceMap[key] = {
-        amount: _parseServiceRateValue(item.rate),
-        unit: _parseServiceRateUnit(item.rate, item.service)
-      };
-    } else {
-      priceMap[key] = {
-        amount: parseFloat(item.amount) || 0,
-        unit: item.unit || "each"
-      };
+  if (isHospitality) {
+    // For hospitality, prices come from the session catalogue (_unitPrice set on each split item).
+    // We rebuild the catalogue here the same way _scQuote() does so keys match exactly.
+    const roomItems = (seller.roomTypes || []).flatMap(rt => {
+      const items = [];
+      if (rt.pricePerNight > 0) items.push({ service: rt.name + " (overnight)",    _unitPrice: Number(rt.pricePerNight), _unit: "night" });
+      if (rt.restRate       > 0) items.push({ service: rt.name + " (rest/day use)", _unitPrice: Number(rt.restRate),       _unit: "rest"  });
+      if (!rt.pricePerNight && !rt.restRate) items.push({ service: rt.name, _unitPrice: 0, _unit: "night" });
+      return items;
+    });
+    const extraItems    = (seller.extraServices || []).map(es => ({ service: es.name, _unitPrice: Number(es.price) || 0, _unit: es.unit || "service" }));
+    const activityItems = (seller.rates         || []).map(r  => ({ service: r.service, _unitPrice: _parseServiceRateValue(r.rate), _unit: _parseServiceRateUnit(r.rate, r.service) }));
+    for (const item of [...roomItems, ...extraItems, ...activityItems]) {
+      const key = item.service?.toLowerCase().trim();
+      if (key) priceMap[key] = { amount: item._unitPrice, unit: item._unit };
+    }
+  } else {
+    const priceItems = isService ? seller.rates : seller.prices;
+    for (const item of (priceItems || [])) {
+      const key = (isService ? item.service : item.product)?.toLowerCase().trim();
+      if (!key) continue;
+      if (isService) {
+        priceMap[key] = { amount: _parseServiceRateValue(item.rate), unit: _parseServiceRateUnit(item.rate, item.service) };
+      } else {
+        priceMap[key] = { amount: parseFloat(item.amount) || 0, unit: item.unit || "each" };
+      }
     }
   }
 
