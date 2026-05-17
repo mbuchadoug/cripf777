@@ -647,41 +647,50 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   let hasPrices = false;
 
   if (isHospitality) {
-    // Hospitality: split each roomType into separate overnight and rest/day-use items.
-    // This lets the buyer select ONLY the rate they want (e.g. rest only, not night).
+    // Hospitality: split each roomType into SEPARATE overnight and rest/day-use items.
+    // This lets buyers select ONLY the rate they want (e.g. rest only, or night only).
     // A room with both pricePerNight and restRate becomes TWO numbered catalogue entries.
     const roomItems = (seller.roomTypes || []).flatMap(rt => {
       const items = [];
       if (rt.pricePerNight > 0) {
         items.push({
-          service:   rt.name + " (overnight)",
-          rate:      "$" + Number(rt.pricePerNight).toFixed(0) + "/night",
-          _isRoom:   true,
-          _rateType: "night",
-          _unitPrice: Number(rt.pricePerNight)
+          service:    rt.name + " (overnight)",
+          rate:       "$" + Number(rt.pricePerNight).toFixed(0) + "/night",
+          _unitPrice: Number(rt.pricePerNight),
+          _unit:      "night",
+          _isRoom:    true,
+          _rateType:  "night"
         });
       }
       if (rt.restRate > 0) {
         items.push({
-          service:   rt.name + " (rest/day use)",
-          rate:      "$" + Number(rt.restRate).toFixed(0) + "/rest",
-          _isRoom:   true,
-          _rateType: "rest",
-          _unitPrice: Number(rt.restRate)
+          service:    rt.name + " (rest/day use)",
+          rate:       "$" + Number(rt.restRate).toFixed(0) + "/rest",
+          _unitPrice: Number(rt.restRate),
+          _unit:      "rest",
+          _isRoom:    true,
+          _rateType:  "rest"
         });
       }
       // Room with no prices at all - keep as single unpriced entry
       if (!rt.pricePerNight && !rt.restRate) {
-        items.push({ service: rt.name, rate: "", _isRoom: true });
+        items.push({ service: rt.name, rate: "", _isRoom: true, _unitPrice: 0, _unit: "night" });
       }
       return items;
     });
     const extraItems = (seller.extraServices || []).map(es => ({
-      service: es.name,
-      rate: es.price > 0 ? "$" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "",
-      _isExtra: true
+      service:    es.name,
+      rate:       es.price > 0 ? "$" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "",
+      _unitPrice: Number(es.price) || 0,
+      _unit:      es.unit || "service",
+      _isExtra:   true
     }));
-    const activityItems = (seller.rates || []).map(r => ({ service: r.service, rate: r.rate || "" }));
+    const activityItems = (seller.rates || []).map(r => ({
+      service:    r.service,
+      rate:       r.rate || "",
+      _unitPrice: _parseServiceRateValue(r.rate),
+      _unit:      _parseServiceRateUnit(r.rate, r.service)
+    }));
     allItems  = [...roomItems, ...extraItems, ...activityItems];
     hasPrices = allItems.some(i => i.rate && i.rate.length > 0);
   } else if (isService) {
@@ -749,16 +758,27 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
   // ── Hospitality instructions prompt ──────────────────────────────────────
   if (isHospitality) {
-    const ex1 = allItems[0]?.service || "Double room";
-    const ex2 = allItems[1]?.service || null;
-    const exLine = ex2 ? `_1_ or _1, 2_ (for multiple)` : `_1_`;
+    const ex1Name = allItems[0]?.service || "Double room (overnight)";
+    const ex2Name = allItems[1]?.service || null;
+    const ex1Rate = allItems[0]?.rate    || "";
+    const ex2Rate = allItems[1]?.rate    || "";
+
+    // Show qty examples: 1×1 for 1 night, 1×3 for 3 nights, 2×2 for 2 rooms 2 nights
+    const exLine = ex2Name
+      ? `_1_ or _2_ (one item)   _1×3_ (item 1, qty 3)   _1, 2_ (both items)`
+      : `_1_ (select item 1)   _1×3_ (item 1, qty/nights 3)`;
+
     return sendButtons(from, {
       text:
         `🛏 *Which room or service do you need?*\n\n` +
-        `Type the item number(s) from the list above.\n\n` +
+        `Type the *item number* from the list above.\n` +
+        `Add *×qty* for multiple nights or rooms.\n\n` +
         `${exLine}\n\n` +
-        `Or type the name:\n` +
-        `_${ex1}_\n\n` +
+        `Examples:\n` +
+        `_1_ → 1× ${ex1Name}${ex1Rate ? " (" + ex1Rate + ")" : ""}\n` +
+        `_1×3_ → 3× ${ex1Name} (e.g. 3 nights)\n` +
+        (ex2Name ? `_2_ → 1× ${ex2Name}${ex2Rate ? " (" + ex2Rate + ")" : ""}\n` : "") +
+        `_1×2, 2×1_ → mix of both\n\n` +
         `Then type *done* to send your request, or *cancel* to go back.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" }]
     });
@@ -857,81 +877,60 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
-  const isService = seller.profileType === "service";
-  const isRFQ     = biz?.sessionData?.scRFQ;
+  const isService     = seller.profileType === "service";
+  const isHospitality = seller.profileType === "hospitality";
+  const isRFQ         = biz?.sessionData?.scRFQ;
 
   if (raw.toLowerCase() === "done") {
+    // For hospitality: ask check-in/scope before finalising if not yet captured
+    if (isHospitality && !biz?.sessionData?.scPeopleCount) {
+      if (biz) { biz.sessionState = "sc_awaiting_quote_people"; await saveBiz(biz); }
+      return sendText(from,
+        `🛏 *How many guests and how many nights?*\n\n` +
+        `_e.g. "2 adults 3 nights"_\n` +
+        `_e.g. "family of 4 double room 2 nights"_\n` +
+        `_e.g. "1 person rest/day use"_\n\n` +
+        `Type *skip* if not sure yet.`
+      );
+    }
     // For service RFQ, collect people count before finalising if not yet captured
     if (isService && isRFQ && !biz?.sessionData?.scPeopleCount) {
       const isTourism = _isTourismSupplier(seller);
-
-      if (biz) {
-        biz.sessionState = "sc_awaiting_quote_people";
-        await saveBiz(biz);
-      }
-
-      const isAccom = _isAccommodationSupplier(seller);
+      if (biz) { biz.sessionState = "sc_awaiting_quote_people"; await saveBiz(biz); }
       return sendText(from,
-        isAccom
-          ? `🛏 *How many guests and how many nights?*\n\n` +
-            `_e.g. "2 adults 3 nights"_\n` +
-            `_e.g. "family of 4 double room 2 nights"_\n` +
-            `_e.g. "1 person rest/day use"_\n\n` +
-            `Type *skip* if not sure yet.`
-          : isTourism
-            ? `👥 *How many people and when?*\n\n` +
-              `_e.g. "2 adults Saturday morning"_\n` +
-              `_e.g. "4 people full day"_\n` +
-              `_e.g. "group of 6 sunset cruise"_\n\n` +
-              `Type *skip* if not sure.`
-            : `👥 *How many people / how large is the job?*\n\n` +
-              `_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_\n\n` +
-              `Type *skip* if not applicable.`
+        isTourism
+          ? `👥 *How many people and when?*\n\n` +
+            `_e.g. "2 adults Saturday morning"_\n` +
+            `_e.g. "4 people full day"_\n` +
+            `_e.g. "group of 6 sunset cruise"_\n\n` +
+            `Type *skip* if not sure.`
+          : `👥 *How many people / how large is the job?*\n\n` +
+            `_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_\n\n` +
+            `Type *skip* if not applicable.`
       );
     }
     return _scQuoteDone(from, supplierId, biz, saveBiz);
   }
 
   // ── Resolve items using stored catalogue (set in _scQuote) ────────────────
-  // This allows buyer to type "1×2, 5×1" and get real item names + prices
-  // even if they are mid-session and the seller has 80 items in their catalogue.
   let knownItems = [];
   try {
     const catalogueRaw = biz?.sessionData?.scCatalogue;
     if (catalogueRaw) knownItems = JSON.parse(catalogueRaw);
   } catch (_) {}
+
   if (!knownItems.length) {
-    // Fallback: re-read from DB
-    const isHospitality = seller.profileType === "hospitality";
+    // Fallback: re-read from DB using same split logic as _scQuote
     if (isHospitality) {
-      // Split each roomType into separate overnight and rest/day-use items (mirrors _scQuote).
-      // This ensures item-number resolution works correctly when catalogue is rebuilt from DB.
       const roomItems = (seller.roomTypes || []).flatMap(rt => {
         const items = [];
-        if (rt.pricePerNight > 0) {
-          items.push({
-            service:    rt.name + " (overnight)",
-            rate:       "$" + Number(rt.pricePerNight).toFixed(0) + "/night",
-            _unitPrice: Number(rt.pricePerNight)
-          });
-        }
-        if (rt.restRate > 0) {
-          items.push({
-            service:    rt.name + " (rest/day use)",
-            rate:       "$" + Number(rt.restRate).toFixed(0) + "/rest",
-            _unitPrice: Number(rt.restRate)
-          });
-        }
-        if (!rt.pricePerNight && !rt.restRate) {
-          items.push({ service: rt.name, rate: "" });
-        }
+        if (rt.pricePerNight > 0) items.push({ service: rt.name + " (overnight)",    rate: "$" + Number(rt.pricePerNight).toFixed(0) + "/night", _unitPrice: Number(rt.pricePerNight), _unit: "night" });
+        if (rt.restRate       > 0) items.push({ service: rt.name + " (rest/day use)", rate: "$" + Number(rt.restRate).toFixed(0)       + "/rest",  _unitPrice: Number(rt.restRate),       _unit: "rest"  });
+        if (!rt.pricePerNight && !rt.restRate) items.push({ service: rt.name, rate: "", _unitPrice: 0, _unit: "night" });
         return items;
       });
-      const extraItems = (seller.extraServices || []).map(es => ({
-        service: es.name,
-        rate: es.price > 0 ? "$" + Number(es.price).toFixed(2) + "/" + (es.unit || "service") : ""
-      }));
-      const activityItems = (seller.rates || []).map(r => ({ service: r.service, rate: r.rate || "" }));
+      const extraItems    = (seller.extraServices || []).map(es => ({ service: es.name, rate: es.price > 0 ? "$" + Number(es.price).toFixed(2) + "/" + (es.unit || "service") : "", _unitPrice: Number(es.price) || 0, _unit: es.unit || "service" }));
+      const activityItems = (seller.rates         || []).map(r  => ({ service: r.service, rate: r.rate || "", _unitPrice: _parseServiceRateValue(r.rate), _unit: _parseServiceRateUnit(r.rate, r.service) }));
       knownItems = [...roomItems, ...extraItems, ...activityItems];
     } else {
       knownItems = isService
@@ -941,42 +940,57 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   }
 
   const existingItems = biz?.sessionData?.scQuoteItems || [];
-  // For service RFQ, support "1: scope, 2: scope" shorthand (buyer types number + optional detail)
+
+  // ── Parse buyer input ─────────────────────────────────────────────────────
+  // Hospitality and services both use item-number based selection.
+  // _parseHospitalityInput handles: "1", "1×3", "2", "1×2, 2×1", "1,2"
+  // For typed names (no number match), fall back to name lookup.
   let newItems;
-  if (isRFQ && isService) {
+  if (isHospitality) {
+    newItems = _parseHospitalityInput(raw, knownItems);
+  } else if (isRFQ && isService) {
     newItems = _parseServiceRFQInput(raw, knownItems);
   } else {
     newItems = _parseItemInput(raw, knownItems, isService);
   }
-  const allItems      = [...existingItems, ...newItems];
+
+  const allItems = [...existingItems, ...newItems];
 
   if (biz) {
     biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: allItems };
     await saveBiz(biz);
   }
 
-  // ── Cart summary - show price per item if available ───────────────────────
-  // Services: "1× deep cleaning - $50/job" or "1× deep cleaning - rate TBC"
-  // Products: "50× 20mm pipe - $2.00/m" or "10× valve - price TBC"
+  // ── Cart summary ──────────────────────────────────────────────────────────
+  // Build priceMap keyed on service/product name (lowercase) for display
   const priceMap = {};
   for (const item of knownItems) {
-    const key = (isService ? item.service : item.product)?.toLowerCase().trim();
-    if (key) priceMap[key] = isService ? (item.rate || "") : (item.amount ? `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "");
+    const key = (isHospitality || isService ? item.service : item.product)?.toLowerCase().trim();
+    if (!key) continue;
+    if (isHospitality) {
+      priceMap[key] = item.rate || "";
+    } else if (isService) {
+      priceMap[key] = item.rate || "";
+    } else {
+      priceMap[key] = item.amount ? `$${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "";
+    }
   }
 
   const summary = allItems.map(it => {
     const priceStr = priceMap[it.name?.toLowerCase().trim()];
     return priceStr
-      ? `• ${it.qty}× ${it.name}  -  ${priceStr}`
+      ? `• ${it.qty}× ${it.name}  —  ${priceStr}`
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
-  const termAdd     = isService ? "service" : "item";
-  const termDone    = isRFQ ? "📤 Send Request" : (isService ? "✅ Get Service Quote" : "✅ Get Quote");
+  const termAdd  = isHospitality ? "room/service" : (isService ? "service" : "item");
+  const termDone = isRFQ && !isHospitality
+    ? "📤 Send Request"
+    : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
   return sendButtons(from, {
     text:
-`🛒 *${isService ? "Services" : "Items"} selected (${allItems.length}):*
+`🛒 *${isHospitality ? "Rooms/Services" : (isService ? "Services" : "Items")} selected (${allItems.length}):*
 ${summary}
 
 Add more ${termAdd}s, or tap below when ready.`,
@@ -1062,24 +1076,22 @@ The seller will review and price your request.
 
   // ── Priced path - calculate draft, send to seller for confirmation ────────
   const isHospitality = seller.profileType === "hospitality";
-  const priceMap   = {};
+  const priceMap = {};
 
   if (isHospitality) {
-    // For hospitality, prices come from the session catalogue (_unitPrice set on each split item).
-    // We rebuild the catalogue here the same way _scQuote() does so keys match exactly.
-    const roomItems = (seller.roomTypes || []).flatMap(rt => {
-      const items = [];
-      if (rt.pricePerNight > 0) items.push({ service: rt.name + " (overnight)",    _unitPrice: Number(rt.pricePerNight), _unit: "night" });
-      if (rt.restRate       > 0) items.push({ service: rt.name + " (rest/day use)", _unitPrice: Number(rt.restRate),       _unit: "rest"  });
-      if (!rt.pricePerNight && !rt.restRate) items.push({ service: rt.name, _unitPrice: 0, _unit: "night" });
-      return items;
+    // Build price lookup from roomTypes (split into overnight + rest entries, same as catalogue)
+    (seller.roomTypes || []).forEach(rt => {
+      if (rt.pricePerNight > 0) priceMap[(rt.name + " (overnight)").toLowerCase()]    = { amount: Number(rt.pricePerNight), unit: "night" };
+      if (rt.restRate       > 0) priceMap[(rt.name + " (rest/day use)").toLowerCase()] = { amount: Number(rt.restRate),       unit: "rest"  };
+      // Unpriced room fallback
+      if (!rt.pricePerNight && !rt.restRate) priceMap[rt.name.toLowerCase()] = { amount: 0, unit: "night" };
     });
-    const extraItems    = (seller.extraServices || []).map(es => ({ service: es.name, _unitPrice: Number(es.price) || 0, _unit: es.unit || "service" }));
-    const activityItems = (seller.rates         || []).map(r  => ({ service: r.service, _unitPrice: _parseServiceRateValue(r.rate), _unit: _parseServiceRateUnit(r.rate, r.service) }));
-    for (const item of [...roomItems, ...extraItems, ...activityItems]) {
-      const key = item.service?.toLowerCase().trim();
-      if (key) priceMap[key] = { amount: item._unitPrice, unit: item._unit };
-    }
+    (seller.extraServices || []).forEach(es => {
+      if (es.name) priceMap[es.name.toLowerCase()] = { amount: Number(es.price) || 0, unit: es.unit || "service" };
+    });
+    (seller.rates || []).forEach(r => {
+      if (r.service) priceMap[r.service.toLowerCase()] = { amount: _parseServiceRateValue(r.rate), unit: _parseServiceRateUnit(r.rate, r.service) };
+    });
   } else {
     const priceItems = isService ? seller.rates : seller.prices;
     for (const item of (priceItems || [])) {
@@ -2538,6 +2550,50 @@ function _parseServiceRFQInput(raw, knownItems = []) {
   if (!results.length) {
     return raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
       .map(name => ({ name, qty: 1, price: 0 }));
+  }
+
+  return results;
+}
+
+// ─── Parse hospitality item input: "1", "2", "1×3", "1×2, 2×1", "1, 2" ────────
+// Supports:
+//   "1"       → item 1, qty 1
+//   "2"       → item 2, qty 1
+//   "1×3"     → item 1, qty 3 (e.g. 3 nights)
+//   "1×2, 2"  → item 1 qty 2 + item 2 qty 1
+//   "1, 2"    → item 1 qty 1 + item 2 qty 1
+// Falls back to name lookup if no numbers found
+function _parseHospitalityInput(raw, knownItems = []) {
+  const results = [];
+
+  // Split on commas — each segment is one item selection
+  const parts = raw.split(/,\s*/).map(s => s.trim()).filter(Boolean);
+
+  for (const part of parts) {
+    // Match: number optionally followed by ×qty (or xQty)
+    const m = part.match(/^(\d+)(?:\s*[×xX]\s*(\d+(?:\.\d+)?))?$/);
+    if (m) {
+      const idx  = parseInt(m[1], 10) - 1;
+      const qty  = m[2] ? parseFloat(m[2]) : 1;
+      const item = knownItems[idx];
+      if (item) {
+        results.push({
+          name:  item.service,
+          qty,
+          price: item._unitPrice || 0,
+          unit:  item._unit || "night"
+        });
+      }
+    } else {
+      // No number match — try name lookup (buyer typed the name)
+      const lc = part.toLowerCase().trim();
+      const found = knownItems.find(i => i.service?.toLowerCase().trim() === lc);
+      if (found) {
+        results.push({ name: found.service, qty: 1, price: found._unitPrice || 0, unit: found._unit || "night" });
+      } else {
+        results.push({ name: part, qty: 1, price: 0, unit: "night" });
+      }
+    }
   }
 
   return results;
