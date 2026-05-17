@@ -3969,8 +3969,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         // Hospitality check: ONLY show per-night/person/room examples if the supplier
         // has profileType="hospitality". Plumbers/electricians/product sellers
         // NEVER see tourism or hospitality prompts regardless of categories.
-        const _supplierIsHospitality = supplier?.profileType === "hospitality" ||
-          _introSupplier?.profileType === "hospitality";
+        const _supplierIsHospitality = _introSupplier?.profileType === "hospitality";
         const _requestIsTourism  = _buyerRequestIsTourism(_introItems);
         const _isTourismOffer    = _supplierIsHospitality && _requestIsTourism;
 
