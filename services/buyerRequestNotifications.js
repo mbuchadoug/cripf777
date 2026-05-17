@@ -3,17 +3,17 @@
 //
 // TWO REQUEST NOTIFICATION TIERS:
 //
-//   supplier_new_request_v2          (standard — all sellers, no phone number)
+//   supplier_new_request_v2          (standard - all sellers, no phone number)
 //     Has QUICK REPLY buttons. Supplier taps "💬 View & Quote" directly.
 //
-//   supplier_new_request_v2_with_phone  (VIP — admin-selected sellers only)
+//   supplier_new_request_v2_with_phone  (VIP - admin-selected sellers only)
 //     Same as v2 but includes buyer's phone number as {{5}}.
 //     Only sent when supplier.revealBuyerPhone === true.
 //
 // TWO SMART LINK NOTIFICATION TIERS:
 //
-//   supplier_link_opened             (standard — all sellers, no visitor phone)
-//   supplier_link_opened_with_phone  (VIP — includes visitor phone as {{4}})
+//   supplier_link_opened             (standard - all sellers, no visitor phone)
+//   supplier_link_opened_with_phone  (VIP - includes visitor phone as {{4}})
 //     Only sent when supplier.revealVisitorPhone === true.
 //
 // CLARIFICATION TEMPLATES (new):
@@ -22,7 +22,7 @@
 //   supplier_clarification_reply     (sent to SELLER when buyer answers)
 //
 // ─── HOW TO SWITCH TEMPLATES ─────────────────────────────────────────────────
-//   USE_V2_TEMPLATE = true  (already on — do not change)
+//   USE_V2_TEMPLATE = true  (already on - do not change)
 //
 // ─── VIP PHONE REVEAL ────────────────────────────────────────────────────────
 //   Set supplier.revealBuyerPhone = true  to enable request phone reveal.
@@ -52,14 +52,14 @@
 //     Type *menu* to see your store.
 //     This is an automated activity alert from ZimQuote.
 //
-//   supplier_clarification_request  (UTILITY — sent to buyer)
+//   supplier_clarification_request  (UTILITY - sent to buyer)
 //     A seller needs more details to quote your request!
 //     Request: {{1}}
 //     Their question: {{2}}
 //     Please reply with the details so they can send you a correct quote.
 //     This is an automated message from ZimQuote.
 //
-//   supplier_clarification_reply  (UTILITY — sent to seller when buyer answers)
+//   supplier_clarification_reply  (UTILITY - sent to seller when buyer answers)
 //     The buyer answered your question for request {{1}}:
 //     {{2}}
 //     Tap View & Quote to proceed with your pricing.
@@ -173,7 +173,7 @@ async function _sendTemplateWithOneButton(to, templateName, variables = []) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify a supplier of a new buyer request
 //
-// supplier object (or just supplierPhone string) — if object, checks revealBuyerPhone
+// supplier object (or just supplierPhone string) - if object, checks revealBuyerPhone
 // for VIP notification. buyerPhone is only passed when supplier is an object.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySupplierNewRequestTemplate({
@@ -188,7 +188,7 @@ export async function notifySupplierNewRequestTemplate({
   deliveryLine    = "Collection / flexible",
   fullItemLines   = null,
   replyExamples   = "1=12.50",
-  buyerPhone      = null    // buyer's number — only shown to VIP sellers
+  buyerPhone      = null    // buyer's number - only shown to VIP sellers
 }) {
   const _extra  = Array.isArray(notificationContacts) ? notificationContacts : [];
   const _phones = [...new Set([supplierPhone, ..._extra])].filter(Boolean).map(_normalizeZimPhone);
@@ -282,14 +282,14 @@ async function _sendNewRequestToPhone({
 //
 // supplier: full SupplierProfile object (for VIP check + notification contacts)
 // source: "fb" | "wa" | "tt" | "qr" | "sms" | "ig" | "yt" | "direct"
-// visitorPhone: optional — only shown when supplier.revealVisitorPhone === true
+// visitorPhone: optional - only shown when supplier.revealVisitorPhone === true
 // ─────────────────────────────────────────────────────────────────────────────
 export async function notifySellerSmartLinkOpened({
   sellerPhone,
   supplier      = null,  // full SupplierProfile object (for VIP check)
   businessName,
   source        = "direct",
-  visitorPhone  = null   // visitor's number — only shown to VIP sellers
+  visitorPhone  = null   // visitor's number - only shown to VIP sellers
 }) {
   const _isVip = supplier?.revealVisitorPhone === true && !!visitorPhone;
 

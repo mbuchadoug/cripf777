@@ -4518,7 +4518,7 @@ await UserSession.findOneAndUpdate(
       }
 
       // Do NOT allow empty service/hospitality quotations.
-      // Show correct examples based on profileType — never show /person /trip to plumbers.
+      // Show correct examples based on profileType - never show /person /trip to plumbers.
       if (_isService) {
         const _isHospSupplier = supplier?.profileType === "hospitality";
         return sendText(

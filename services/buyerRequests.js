@@ -57,7 +57,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
   const line = String(raw || "").trim();
   if (!line) return { product: line, quantity: 1, unitLabel: "units" };
 
-  // Case 1: explicit "x N unit?" at the END — always qty
+  // Case 1: explicit "x N unit?" at the END - always qty
   // EXCEPTION: "x4 core" is part of a cable spec (e.g. "16mm2 x4 core cu pvc swa cable")
   const xMatch = line.match(/^(.+?)\s+x\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/i);
   if (xMatch) {
@@ -74,7 +74,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
     return { product: line, quantity: 1, unitLabel: "units" };
   }
 
-  // Case 2: trailing "N unit" — qty only if unit is a known QTY unit
+  // Case 2: trailing "N unit" - qty only if unit is a known QTY unit
   const trailMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)\s+([a-zA-Z]+)$/i);
   if (trailMatch) {
     const prod = trailMatch[1].replace(/,\s*$/, "").trim();
@@ -85,7 +85,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
     }
   }
 
-  // Case 3: trailing bare number — only if product doesn't end with a measurement spec
+  // Case 3: trailing bare number - only if product doesn't end with a measurement spec
   const bareNumMatch = line.match(/^(.+?),?\s+(\d+(?:\.\d+)?)$/);
   if (bareNumMatch) {
     const prod = bareNumMatch[1].replace(/,\s*$/, "").trim();
@@ -96,7 +96,7 @@ export function parseBuyerRequestLineWithQty(raw = "") {
     }
   }
 
-  // Case 4: no quantity found — whole line is product, qty=1
+  // Case 4: no quantity found - whole line is product, qty=1
   return { product: line.replace(/,\s*$/, "").trim(), quantity: 1, unitLabel: "units" };
 }
 
@@ -110,7 +110,7 @@ export function parseItemListWithQty(text = "") {
 
   let lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 1) {
-    // Single line — split on commas only where next char is not a digit
+    // Single line - split on commas only where next char is not a digit
     // This prevents splitting cable specs like "16mm2 x4 core cu pvc swa cable, 100m"
     lines = raw.split(/,\s*(?=[^\d])/).map(l => l.trim()).filter(Boolean);
   }
@@ -183,7 +183,7 @@ export async function autoCloseExpiredRequests({
             `⏱ *No quotes received* (${_buildRef(req)})\n\n` +
             `No sellers responded within ${timeoutMinutes} minutes.\n\n` +
             `This can happen when items are specialised or no sellers in your area stock them right now.\n\n` +
-            `Your request is saved — new matching sellers will be notified automatically.`,
+            `Your request is saved - new matching sellers will be notified automatically.`,
           buttons: [
             { id: "sup_request_sellers", title: "⚡ New Request"   },
             { id: "find_supplier",       title: "🔍 Browse & Shop" }

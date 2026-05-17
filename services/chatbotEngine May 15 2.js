@@ -4724,10 +4724,10 @@ await UserSession.findOneAndUpdate(
               (_isTourismAddr
                 ? `📍 *Where will you be when the service starts?*\n\n` +
                   `_e.g. Kariba marina, Kingdom Hotel, Hwange main gate_\n\n` +
-                  `Or tap Skip — share your exact location with the operator later.`
+                  `Or tap Skip - share your exact location with the operator later.`
                 : `📍 *Where do you need this done?*\n\n` +
-                  `_Suburb, street, or landmark is fine — e.g. near Avondale shops, Mabelreign_\n\n` +
-                  `Or tap Skip — the provider will confirm address with you.`),
+                  `_Suburb, street, or landmark is fine - e.g. near Avondale shops, Mabelreign_\n\n` +
+                  `Or tap Skip - the provider will confirm address with you.`),
             buttons: [
               { id: "sup_skip_service_address", title: "⏭ Skip (share later)" },
               { id: "sup_confirm_request_edit", title: "✏️ Edit items"         },
@@ -5015,7 +5015,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
     return sendButtons(from, {
       text:
         `📝 *Any notes for sellers?*\n\n` +
-        `Budget, urgency, brand preference, date needed — or tap Skip.`,
+        `Budget, urgency, brand preference, date needed - or tap Skip.`,
       buttons: [
         { id: "sup_notes_skip", title: "⏭ Skip notes" },
         { id: "00",             title: "❌ Cancel"      }
@@ -5057,7 +5057,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
   return sendButtons(from, {
     text:
       `📝 *Any notes for sellers?*\n\n` +
-      `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
+      `Budget, urgency, brand preference, date needed - or tap Skip.\n\n` +
       `_e.g. "budget $120, need by Friday, cash, collect tomorrow"_`,
     buttons: [
       { id: "sup_notes_skip", title: "⏭ Skip notes" },
@@ -5103,10 +5103,10 @@ if (buyerRequestState === "awaiting_delivery_address") {
       }
       // Accept both typed "skip" and tapping the skip button
       const _saAddress = (al === "skip" || a === "sup_skip_service_address") ? null : text.trim();
-      // Min 3 chars — suburb name like "CBD" or "town" is valid
+      // Min 3 chars - suburb name like "CBD" or "town" is valid
       if (_saAddress && _saAddress.length < 3) {
         return sendButtons(from, {
-          text: `❌ Please enter a valid area or tap Skip.\n\n_A suburb or landmark is enough — exact address not needed._`,
+          text: `❌ Please enter a valid area or tap Skip.\n\n_A suburb or landmark is enough - exact address not needed._`,
           buttons: [
             { id: "sup_skip_service_address", title: "⏭ Skip (share later)" },
             { id: "sup_confirm_request_edit", title: "✏️ Edit items"         },
@@ -5132,7 +5132,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
       return sendButtons(from, {
         text:
           `📝 *Any notes for sellers?*\n\n` +
-          `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
+          `Budget, urgency, brand preference, date needed - or tap Skip.\n\n` +
           `_e.g. "budget $120, need done by Friday, prefer Msasa area"_`,
         buttons: [
           { id: "sup_notes_skip", title: "⏭ Skip notes"  },
@@ -5160,7 +5160,7 @@ if (buyerRequestState === "awaiting_delivery_address") {
       });
     }
  
-    // Skip notes — finalize without notes
+    // Skip notes - finalize without notes
     const _skipNotes = al === "skip" || a === "sup_notes_skip";
     const _notesText = _skipNotes ? null : text.trim() || null;
  
@@ -15839,7 +15839,7 @@ await UserSession.findOneAndUpdate(
   return sendButtons(from, {
     text:
       `📝 *Any notes for sellers?*\n\n` +
-      `Budget, urgency, brand preference, date needed — or tap Skip.\n\n` +
+      `Budget, urgency, brand preference, date needed - or tap Skip.\n\n` +
       `_e.g. "budget $120, cash only, need by end of week"_`,
     buttons: [
       { id: "sup_notes_skip", title: "⏭ Skip notes" },

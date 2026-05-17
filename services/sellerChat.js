@@ -182,10 +182,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
       const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
       const rates = [night, rest].filter(Boolean).join(" · ");
-      return "• " + rt.name + (rates ? "  —  " + rates : "  —  price on request");
+      return "• " + rt.name + (rates ? "  -  " + rates : "  -  price on request");
     });
     const extraLines = extras.map(es =>
-      "• " + es.name + (es.price > 0 ? "  —  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
+      "• " + es.name + (es.price > 0 ? "  -  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
     );
     productSample = [...roomLines, ...extraLines].join("\n");
   } else if (isService) {
@@ -740,8 +740,8 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       const idx  = i + j + 1;
       const name = (isHospitality || isService) ? item.service : item.product;
       const priceStr = (isHospitality || isService)
-        ? (item.rate ? "  —  " + item.rate : "  —  price on request")
-        : (item.amount ? "  —  $" + Number(item.amount).toFixed(2) + "/" + (item.unit || "each") : "  —  price on request");
+        ? (item.rate ? "  -  " + item.rate : "  -  price on request")
+        : (item.amount ? "  -  $" + Number(item.amount).toFixed(2) + "/" + (item.unit || "each") : "  -  price on request");
       return idx + ". " + name + priceStr;
     }).join("\n");
 
@@ -979,7 +979,7 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const summary = allItems.map(it => {
     const priceStr = priceMap[it.name?.toLowerCase().trim()];
     return priceStr
-      ? `• ${it.qty}× ${it.name}  —  ${priceStr}`
+      ? `• ${it.qty}× ${it.name}  -  ${priceStr}`
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
@@ -2566,7 +2566,7 @@ function _parseServiceRFQInput(raw, knownItems = []) {
 function _parseHospitalityInput(raw, knownItems = []) {
   const results = [];
 
-  // Split on commas — each segment is one item selection
+  // Split on commas - each segment is one item selection
   const parts = raw.split(/,\s*/).map(s => s.trim()).filter(Boolean);
 
   for (const part of parts) {
@@ -2585,7 +2585,7 @@ function _parseHospitalityInput(raw, knownItems = []) {
         });
       }
     } else {
-      // No number match — try name lookup (buyer typed the name)
+      // No number match - try name lookup (buyer typed the name)
       const lc = part.toLowerCase().trim();
       const found = knownItems.find(i => i.service?.toLowerCase().trim() === lc);
       if (found) {

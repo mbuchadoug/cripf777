@@ -944,7 +944,7 @@ const {
         const name  = parts[0];
         const cap   = parseInt(parts[1]) || 2;
         const price = parseFloat(parts[2]) || 0;
-        const rest  = parseFloat(parts[3]) || 0;   // rest/day-use rate — 4th column
+        const rest  = parseFloat(parts[3]) || 0;   // rest/day-use rate - 4th column
         if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, restRate: rest, currency: "USD" });
       }
     }
@@ -1267,8 +1267,8 @@ const successMsg = req.query.success
             <dt>Monthly Orders</dt><dd>${supplier.monthlyOrders || 0}</dd>
             <dt>Total Revenue</dt><dd><strong>$${totalRevenue.toFixed(2)}</strong></dd>
             <dt>Suspended</dt><dd>${supplier.suspended ? "⛔ Yes" : "✅ No"}</dd>
-            <dt>VIP Buyer Phone</dt><dd>${supplier.revealBuyerPhone ? "🔒 Yes — buyer phone revealed on requests" : "⚪ No"}</dd>
-            <dt>VIP Visitor Phone</dt><dd>${supplier.revealVisitorPhone ? "🔒 Yes — visitor phone revealed on smart link opens" : "⚪ No"}</dd>
+            <dt>VIP Buyer Phone</dt><dd>${supplier.revealBuyerPhone ? "🔒 Yes - buyer phone revealed on requests" : "⚪ No"}</dd>
+            <dt>VIP Visitor Phone</dt><dd>${supplier.revealVisitorPhone ? "🔒 Yes - visitor phone revealed on smart link opens" : "⚪ No"}</dd>
             <dt>Delivery</dt><dd>${supplier.delivery?.available ? "🚚 Yes" : "🏠 Collection only"}</dd>
             <dt>Min Order</dt><dd>$${supplier.minOrder || 0}</dd>
             <dt>Registered</dt><dd>${new Date(supplier.createdAt).toDateString()}</dd>
@@ -1631,7 +1631,7 @@ ${supplier.profileType === "hospitality" ? `
 <div class="fg" style="grid-column:1/-1">
   <label>🛏 Room Types, Night &amp; Rest Rates
     <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">
-      — one per line: <code>name, max guests, price/night, rest rate (optional)</code>
+      - one per line: <code>name, max guests, price/night, rest rate (optional)</code>
     </span>
   </label>
   <textarea name="roomTypes" rows="7">${(supplier.roomTypes||[]).map(rt =>
@@ -1647,7 +1647,7 @@ ${supplier.profileType === "hospitality" ? `
 <div class="fg" style="grid-column:1/-1">
   <label>➕ Extra Services
     <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">
-      — charged separately: one per line: <code>name, price, unit</code>
+      - charged separately: one per line: <code>name, price, unit</code>
     </span>
   </label>
   <textarea name="extraServices" rows="5">${(supplier.extraServices||[]).map(es =>
@@ -1885,13 +1885,13 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
       }
       update.extraServices = extraServices;
     }
-    // Legacy field — keep saving if present for backward compat
+    // Legacy field - keep saving if present for backward compat
     if (req.body.tourismType !== undefined) {
       update.tourismType = (req.body.tourismType || "").trim();
     }
 
     // ── VIP notification flags (set via VIP Settings page, not edit form) ────
-    // These are managed via /suppliers/:id/vip-settings — do not overwrite here.
+    // These are managed via /suppliers/:id/vip-settings - do not overwrite here.
     await SupplierProfile.findByIdAndUpdate(req.params.id, update, { new: true });
     res.redirect(`/zq-admin/suppliers/${req.params.id}`);
   } catch (err) {

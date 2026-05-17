@@ -146,7 +146,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   // ── HOSPITALITY & TOURISM fields ───────────────────────────────────────────
   // Populated when profileType = "hospitality".
   // tourismSubtype is an ARRAY so an operator can be both a lodge AND a safari
-  // operator — they appear in results for both accommodation and activity requests.
+  // operator - they appear in results for both accommodation and activity requests.
   //
   // Allowed values:
   //   "lodge"           - bush lodge, game lodge, tented camp, luxury lodge
@@ -188,7 +188,7 @@ const SupplierProfileSchema = new mongoose.Schema({
   // Total max guests the property can accommodate at once
   maxCapacity: { type: Number, default: 0 },
 
-  // Facilities offered — array of string codes, indexed for search
+  // Facilities offered - array of string codes, indexed for search
   // Allowed: "wifi","pool","hot_shower","breakfast","en_suite","generator",
   //          "dstv","braai","aircon","game_drives","fishing","boat_hire",
   //          "conference","gym","bar","restaurant","laundry","parking",
@@ -221,7 +221,7 @@ const SupplierProfileSchema = new mongoose.Schema({
     default: []
   },
 
-  // Legacy field — kept for backward compat; prefer tourismSubtype[]
+  // Legacy field - kept for backward compat; prefer tourismSubtype[]
   tourismType: { type: String, default: "" },
 
   // ── Saved / Waitlist ───────────────────────────────────────────────────────
