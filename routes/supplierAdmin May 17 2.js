@@ -1238,16 +1238,7 @@ const successMsg = req.query.success
     half_board:"Half Board",full_board:"Full Board",self_catering:"Self-Catering",
     not_applicable:"-"}[supplier.mealPlan] || "-"}</dd>
   <dt>Room Types</dt><dd>${(supplier.roomTypes || []).length
-    ? (supplier.roomTypes || []).map(rt => {
-        let s = rt.name;
-        if (rt.pricePerNight > 0) s += " ($" + rt.pricePerNight + "/night";
-        if (rt.restRate > 0) s += " · $" + rt.restRate + "/rest";
-        if (rt.pricePerNight > 0 || rt.restRate > 0) s += ")";
-        return s;
-      }).join(", ")
-    : "-"}</dd>
-  <dt>Extra Services</dt><dd>${(supplier.extraServices || []).length
-    ? (supplier.extraServices || []).map(es => es.name + (es.price > 0 ? " ($" + Number(es.price).toFixed(2) + "/" + (es.unit||"service") + ")" : "")).join(", ")
+    ? (supplier.roomTypes || []).map(rt => rt.name + (rt.pricePerNight > 0 ? " ($" + rt.pricePerNight + "/night)" : "")).join(", ")
     : "-"}</dd>
 ` : (supplier.categories || []).includes("tourism") ? `
   <dt>Tourism Type</dt><dd>${esc(supplier.tourismType || "-")}</dd>
@@ -1625,34 +1616,16 @@ ${supplier.profileType === "hospitality" ? `
 </div>
 
 <div class="fg" style="grid-column:1/-1">
-  <label>🛏 Room Types, Night &amp; Rest Rates
+  <label>🛏 Room Types &amp; Nightly Rates
     <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">
-      — one per line: <code>name, max guests, price/night, rest rate (optional)</code>
+      — one per line: <code>name, max guests, price/night</code>
     </span>
   </label>
-  <textarea name="roomTypes" rows="7">${(supplier.roomTypes||[]).map(rt =>
-    rt.name + ", " + (rt.capacity||2) + ", " + (rt.pricePerNight||0) + (rt.restRate > 0 ? ", " + rt.restRate : "")
+  <textarea name="roomTypes" rows="6">${(supplier.roomTypes||[]).map(rt =>
+    rt.name + ", " + (rt.capacity||2) + ", " + (rt.pricePerNight||0)
   ).join("\n")}</textarea>
   <span style="font-size:11px;color:var(--muted)">
-    Night only: <code>Double room, 2, 80</code> &nbsp;·&nbsp;
-    With rest rate: <code>Double room, 2, 80, 45</code> &nbsp;·&nbsp;
-    Activity: <code>Game drive, 4, 80</code>
-  </span>
-</div>
-
-<div class="fg" style="grid-column:1/-1">
-  <label>➕ Extra Services
-    <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">
-      — charged separately: one per line: <code>name, price, unit</code>
-    </span>
-  </label>
-  <textarea name="extraServices" rows="5">${(supplier.extraServices||[]).map(es =>
-    es.name + ", " + (es.price||0) + ", " + (es.unit||"service")
-  ).join("\n")}</textarea>
-  <span style="font-size:11px;color:var(--muted)">
-    Examples: <code>Conference room, 50, half day</code> &nbsp;·&nbsp;
-    <code>Airport pickup, 15, trip</code> &nbsp;·&nbsp;
-    <code>Breakfast, 8, person</code>
+    Example: <code>Double room, 2, 80</code> &nbsp;|&nbsp; <code>Family chalet, 6, 150</code> &nbsp;|&nbsp; <code>Game drive (morning), 2, 80</code>
   </span>
 </div>
 
@@ -1852,7 +1825,7 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
     if (req.body.mealPlan !== undefined) {
       update.mealPlan = req.body.mealPlan || "not_applicable";
     }
-    // Parse room types: "Double room, 2, 80" or with rest rate "Double room, 2, 80, 45"
+    // Parse room types from textarea: "Double room, 2, 80"
     if (req.body.roomTypes !== undefined) {
       const roomTypes = [];
       for (const line of (req.body.roomTypes || "").split("\n")) {
@@ -1860,22 +1833,13 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
         const name  = parts[0];
         const cap   = parseInt(parts[1]) || 2;
         const price = parseFloat(parts[2]) || 0;
-        const rest  = parseFloat(parts[3]) || 0;
-        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, restRate: rest, currency: "USD" });
+        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, currency: "USD" });
       }
       update.roomTypes = roomTypes;
-      if (roomTypes.length > 0) update.products = roomTypes.map(rt => rt.name.toLowerCase());
-    }
-    // Parse extra services: "Conference room, 50, half day"
-    if (req.body.extraServices !== undefined) {
-      const extraServices = [];
-      for (const line of (req.body.extraServices || "").split("\n")) {
-        const parts = line.split(",").map(s => s.trim());
-        const name  = parts[0];
-        if (!name || name.length < 2) continue;
-        extraServices.push({ name, price: parseFloat(parts[1]) || 0, unit: parts[2] || "service" });
+      // Also sync products[] from room type names for catalogue display
+      if (roomTypes.length > 0) {
+        update.products = roomTypes.map(rt => rt.name.toLowerCase());
       }
-      update.extraServices = extraServices;
     }
     // Legacy field — keep saving if present for backward compat
     if (req.body.tourismType !== undefined) {
@@ -2508,14 +2472,13 @@ router.get("/suppliers/:id/hospitality", requireSupplierAdmin, async (req, res) 
             </div>
             ${(supplier.roomTypes||[]).length ? `
             <table>
-              <thead><tr><th>Room Type</th><th>Guests</th><th>Night Rate</th><th>Rest Rate</th><th></th></tr></thead>
+              <thead><tr><th>Room Type</th><th>Max Guests</th><th>Price / Night</th><th></th></tr></thead>
               <tbody>
                 ${(supplier.roomTypes||[]).map((rt,i) => `
                 <tr>
                   <td><strong>${esc(rt.name)}</strong></td>
                   <td>${rt.capacity||"-"}</td>
-                  <td>${rt.pricePerNight > 0 ? "<strong>$" + Number(rt.pricePerNight).toFixed(0) + "/night</strong>" : "<em class='muted'>not set</em>"}</td>
-                  <td>${rt.restRate > 0 ? "$" + Number(rt.restRate).toFixed(0) + "/rest" : "<em class='muted'>-</em>"}</td>
+                  <td>${rt.pricePerNight > 0 ? `<strong>$${Number(rt.pricePerNight).toFixed(0)}</strong>` : "<em class='muted'>not set</em>"}</td>
                   <td>
                     <a href="/zq-admin/suppliers/${supplier._id}/hospitality/edit-room/${i}" class="btn-link" style="font-size:12px">Edit</a>
                     &nbsp;
@@ -2539,12 +2502,8 @@ router.get("/suppliers/:id/hospitality", requireSupplierAdmin, async (req, res) 
                   <input type="number" name="capacity" value="2" min="1" max="50" />
                 </div>
                 <div class="fg">
-                  <label>Night Rate (USD/night)</label>
+                  <label>Price per Night (USD)</label>
                   <input type="number" name="pricePerNight" value="0" min="0" step="0.5" />
-                </div>
-                <div class="fg">
-                  <label>Rest Rate (USD/few hours) <span style="font-weight:400;font-size:11px;color:var(--muted)">Optional</span></label>
-                  <input type="number" name="restRate" value="0" min="0" step="0.5" placeholder="e.g. 40" />
                 </div>
                 <div class="fg">
                   <label>Description (optional)</label>
@@ -2592,56 +2551,6 @@ router.get("/suppliers/:id/hospitality", requireSupplierAdmin, async (req, res) 
               <button type="submit" class="btn btn-green btn-sm">➕ Add Activity</button>
             </form>
           </div>` : ""}
-
-          <!-- Extra Services panel -->
-          <div class="panel">
-            <div class="panel-head">
-              <h3>➕ Extra Services <span style="font-size:12px;font-weight:400;color:var(--muted)">charged separately from room rate</span></h3>
-            </div>
-            ${(supplier.extraServices||[]).length ? `
-            <table style="margin-bottom:16px">
-              <thead><tr><th>Service</th><th>Price</th><th>Unit</th><th></th></tr></thead>
-              <tbody>
-                ${(supplier.extraServices||[]).map((es,i) => `
-                <tr>
-                  <td><strong>${esc(es.name)}</strong></td>
-                  <td>${es.price > 0 ? "$" + Number(es.price).toFixed(2) : "<em class='muted'>-</em>"}</td>
-                  <td>${esc(es.unit||"service")}</td>
-                  <td>
-                    <a href="/zq-admin/suppliers/${supplier._id}/hospitality/delete-extra/${i}"
-                       class="btn-link" style="color:#ef4444;font-size:12px"
-                       onclick="return confirm('Delete this extra service?')">Del</a>
-                  </td>
-                </tr>`).join("")}
-              </tbody>
-            </table>` : `<p class="muted" style="margin-bottom:14px">No extra services added yet.</p>`}
-
-            <form method="POST" action="/zq-admin/suppliers/${supplier._id}/hospitality/add-extra" style="padding-top:12px;border-top:1px solid var(--border)">
-              <p style="font-weight:600;font-size:13px;margin-bottom:10px">➕ Add Extra Service</p>
-              <div class="form-grid" style="margin-bottom:10px">
-                <div class="fg">
-                  <label>Service Name</label>
-                  <input name="extraName" placeholder="e.g. Conference room, Airport pickup, Breakfast" required />
-                </div>
-                <div class="fg">
-                  <label>Price (USD)</label>
-                  <input type="number" name="extraPrice" value="0" min="0" step="0.5" />
-                </div>
-                <div class="fg">
-                  <label>Unit</label>
-                  <input name="extraUnit" placeholder="e.g. half day, trip, person, load, night" value="service" />
-                </div>
-              </div>
-              <button type="submit" class="btn btn-green btn-sm">➕ Add Service</button>
-            </form>
-
-            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-              <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
-                <strong>Examples:</strong> Conference room $50/half day · Airport pickup $15/trip ·
-                Pool access $5/person · Laundry $3/load · Breakfast $8/person · Braai area $20/day
-              </p>
-            </div>
-          </div>
 
           <!-- Bulk room / activity edit -->
           <div class="panel">
@@ -2740,56 +2649,17 @@ router.get("/suppliers/:id/hospitality", requireSupplierAdmin, async (req, res) 
 });
 
 // ── Hospitality: Add room type ──────────────────────────────────────────────
-router.post("/suppliers/:id/hospitality/add-extra", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const { extraName, extraPrice, extraUnit } = req.body;
-    if (!extraName?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-    supplier.extraServices = supplier.extraServices || [];
-    supplier.extraServices.push({
-      name:  extraName.trim(),
-      price: Number(extraPrice) || 0,
-      unit:  (extraUnit || "service").trim()
-    });
-    supplier.markModified("extraServices");
-    await supplier.save();
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Extra service added: " + extraName.trim())}`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-router.get("/suppliers/:id/hospitality/delete-extra/:index", requireSupplierAdmin, async (req, res) => {
-  try {
-    const supplier = await SupplierProfile.findById(req.params.id);
-    if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const idx = Number(req.params.index);
-    if (!isNaN(idx) && idx >= 0 && idx < (supplier.extraServices||[]).length) {
-      const removed = supplier.extraServices[idx].name;
-      supplier.extraServices.splice(idx, 1);
-      supplier.markModified("extraServices");
-      await supplier.save();
-      return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Deleted: " + removed)}`);
-    }
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  } catch (err) {
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
-  }
-});
-
 router.post("/suppliers/:id/hospitality/add-room", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id);
     if (!supplier) return res.redirect("/zq-admin/suppliers");
-    const { roomName, capacity, pricePerNight, restRate, description } = req.body;
+    const { roomName, capacity, pricePerNight, description } = req.body;
     if (!roomName?.trim()) return res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality`);
     supplier.roomTypes = supplier.roomTypes || [];
     supplier.roomTypes.push({
       name:         roomName.trim(),
       capacity:     Number(capacity) || 2,
       pricePerNight:Number(pricePerNight) || 0,
-      restRate:     Number(restRate) || 0,
       currency:     "USD",
       description:  (description || "").trim()
     });
@@ -2885,25 +2755,14 @@ router.post("/suppliers/:id/hospitality/bulk-save", requireSupplierAdmin, async 
       rates.push({ service, rate: parts.slice(1).join(",").trim() });
     }
 
-    // Also parse extra services from the bulk save form
-    const extraServices = [];
-    for (const line of (req.body.extraServices || "").split("\n")) {
-      const parts = line.split(",").map(s => s.trim());
-      const name  = parts[0];
-      if (!name || name.length < 2) continue;
-      extraServices.push({ name, price: parseFloat(parts[1]) || 0, unit: parts[2] || "service" });
-    }
-
-    supplier.roomTypes     = roomTypes;
-    supplier.rates         = rates;
-    supplier.extraServices = extraServices;
-    supplier.products      = roomTypes.map(rt => rt.name.toLowerCase());
+    supplier.roomTypes = roomTypes;
+    supplier.rates     = rates;
+    supplier.products  = roomTypes.map(rt => rt.name.toLowerCase());
     supplier.markModified("roomTypes");
     supplier.markModified("rates");
-    supplier.markModified("extraServices");
     await supplier.save();
 
-    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent("Saved " + roomTypes.length + " rooms, " + rates.length + " activities, " + extraServices.length + " extra services")}`);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?success=${encodeURIComponent(`Saved ${roomTypes.length} rooms, ${rates.length} activities`)}`);
   } catch (err) {
     res.redirect(`/zq-admin/suppliers/${req.params.id}/hospitality?error=${encodeURIComponent(err.message)}`);
   }

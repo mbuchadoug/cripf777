@@ -3292,8 +3292,6 @@ a === "my_orders" ||
       a === "reg_type_school" ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
-      a === "sup_skip_rest_rates" ||
-      a === "sup_skip_extra_services" ||
       a.startsWith("sup_hosp_fac_toggle_") ||
       a.startsWith("sup_collar_") ||
       a === "sup_travel_yes" ||
@@ -3948,7 +3946,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
         const _unitExamples = _isTourismOffer
           ? (_isAccommodation
-            ? `*1x80/night*  or  *1x80/night  2x120/night  3x40/rest*\n_Accepted units: /night  /rest  /day  /room  /person  /person/night_`
+            ? `*1x80/night*  or  *1x80/night  2x120/night*\n_Accepted units: /night  /room  /person  /person/night_`
             : `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`)
           : (_introIsService
             ? `*${_blankEx || "1x80/job"}*  or  *1x80/job  2x50/hr*`
@@ -5546,8 +5544,6 @@ const allowedWithoutBiz =
       a === "reg_type_hospitality" ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
-      a === "sup_skip_rest_rates" ||
-      a === "sup_skip_extra_services" ||
       a.startsWith("sup_hosp_fac_toggle_") ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
@@ -8899,8 +8895,6 @@ const supplierStates = [
   "supplier_reg_hospitality_subtype",
   "supplier_reg_hospitality_rooms",
   "supplier_reg_hospitality_facilities",
-  "supplier_reg_hospitality_rest_rates",
-  "supplier_reg_hospitality_extra_services",
   "supplier_reg_hospitality_areas",
   "supplier_reg_city",
   "supplier_reg_category",
@@ -11898,18 +11892,6 @@ if (a === "sup_cat_more_2") {
     return;
   }
 
-  if (a === "sup_skip_rest_rates") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "sup_skip_rest_rates" });
-    return;
-  }
-
-  if (a === "sup_skip_extra_services") {
-    if (!biz) return sendMainMenu(from);
-    await continueTwilioFlow({ from, text: "sup_skip_extra_services" });
-    return;
-  }
-
   if (a.startsWith("sup_hosp_fac_toggle_")) {
     if (!biz) return sendMainMenu(from);
     await continueTwilioFlow({ from, text: a });
@@ -12728,8 +12710,7 @@ const supplier = await SupplierProfile.create({
       tourismAreas:   reg.tourismAreas   || [],
       tourismSubtype: reg.tourismSubtype || [],       // ["lodge","safari_operator",...]
       facilities:     reg.facilities     || [],       // ["wifi","pool","breakfast",...]
-      roomTypes:      reg.roomTypes      || [],       // [{ name, capacity, pricePerNight, restRate }]
-      extraServices:  reg.extraServices  || [],       // [{ name, price, unit }]
+      roomTypes:      reg.roomTypes      || [],       // [{ name, capacity, pricePerNight }]
       maxCapacity:    reg.maxCapacity    || 0,
       checkInTime:    reg.checkInTime    || "",
       checkOutTime:   reg.checkOutTime   || "",

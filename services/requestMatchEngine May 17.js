@@ -167,16 +167,6 @@ const INTENT_KEYWORD_MAP = [
   // Night / nights is the clearest accommodation signal
   { pattern: /\b(\d+\s+night|\d+\s+nights|one night|two nights|three nights|four nights|five nights|weekend stay|long weekend|midweek)\b/, intent: "hospitality_stay" },
 
-  // Day-use / rest — someone needing a room or facility for a few hours
-  // "rest" alone is vague but with a location or lodge context it is hospitality
-  { pattern: /\b(day use|day.use room|day rate|day room|rest room|midday rest|afternoon rest|day guest|pool day|day access)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(rest at lodge|rest at hotel|need rest|want rest)\b.*\b(lodge|hotel|guesthouse|inn)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(lodge|hotel|guesthouse)\b.*\b(rest|day use|day rate|few hours)\b/, intent: "hospitality_stay" },
-
-  // Conference / meeting rooms — lodge extra services
-  { pattern: /\b(conference room|meeting room|board room|function room|venue hire|event venue|conference hire|conference booking)\b/, intent: "hospitality_stay" },
-  { pattern: /\b(swimming pool access|pool hire|braai area hire|lapa hire|garden venue|outdoor venue)\b/, intent: "hospitality_stay" },
-
   // Famous Zim destinations combined with stay-words — strong accommodation signal
   { pattern: /\b(victoria falls|vic falls|hwange|kariba|lake kariba|nyanga|chimanimani|gonarezhou|mana pools|binga|matobo|matopos|great zimbabwe|vumba|nyanga mountains|eastern highlands)\b.*\b(night|nights|stay|lodge|hotel|room|chalet|book|accommodation)\b/, intent: "hospitality_stay" },
   { pattern: /\b(book|booking|reserve|reservation)\b.*\b(lodge|hotel|chalet|room|guesthouse|chalet|camp|stay)\b/, intent: "hospitality_stay" },
@@ -216,7 +206,6 @@ export const VAGUE_SINGLE_TERMS = new Set([
   "tiles", "tile", "paint", "sand", "cement", "hardware",
   // Hospitality vague terms — destination alone or property type alone
   "lodge", "hotel", "accommodation", "guesthouse", "chalet", "room",
-  "rest", "day use",
   "kariba", "hwange", "nyanga", "victoria falls", "vic falls",
   "safari", "tour", "cruise",
 ]);
@@ -279,19 +268,6 @@ const VAGUE_CLARIFICATION = {
     "Examples:\n" +
     "_double room hotel Bulawayo 2 nights_\n" +
     "_family room lodge Kariba 3 nights_",
-  rest:
-    "Are you looking for a rest at a lodge or hotel?\n\n" +
-    "Examples:\n" +
-    "_rest room Kariba town lodge 4 hours_\n" +
-    "_day use room Chinhoyi hotel_\n" +
-    "_afternoon rest lodge Binga_\n" +
-    "_day guest lodge Bindura_",
-  "day use":
-    "Day use at a lodge or hotel?\n\n" +
-    "Examples:\n" +
-    "_day use lodge Kariba town 2 people_\n" +
-    "_day room hotel Masvingo_\n" +
-    "_pool day access lodge Gweru_",
   safari:
     "What safari activity do you want?\n\n" +
     "Examples:\n" +

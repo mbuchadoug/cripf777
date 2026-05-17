@@ -748,23 +748,16 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
         await saveBiz(biz);
       }
 
-      const isAccom = _isAccommodationSupplier(seller);
       return sendText(from,
-        isAccom
-          ? `🛏 *How many guests and how many nights?*\n\n` +
-            `_e.g. "2 adults 3 nights"_\n` +
-            `_e.g. "family of 4 double room 2 nights"_\n` +
-            `_e.g. "1 person rest/day use"_\n\n` +
-            `Type *skip* if not sure yet.`
-          : isTourism
-            ? `👥 *How many people and when?*\n\n` +
-              `_e.g. "2 adults Saturday morning"_\n` +
-              `_e.g. "4 people full day"_\n` +
-              `_e.g. "group of 6 sunset cruise"_\n\n` +
-              `Type *skip* if not sure.`
-            : `👥 *How many people / how large is the job?*\n\n` +
-              `_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_\n\n` +
-              `Type *skip* if not applicable.`
+        isTourism
+          ? `👥 *How many people and when do you want to travel?*\n\n` +
+            `_e.g. "2 adults, 1 child, Saturday"_\n` +
+            `_e.g. "4 people, 2 nights"_\n` +
+            `_e.g. "airport transfer for 3 people"_\n\n` +
+            `Type *skip* if not sure.`
+          : `👥 *How many people / how large is the job?*\n\n` +
+            `_e.g. "2 people", "3-bed house", "office of 20 staff", "1 car"_\n\n` +
+            `Type *skip* if not applicable.`
       );
     }
     return _scQuoteDone(from, supplierId, biz, saveBiz);
@@ -780,25 +773,9 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   } catch (_) {}
   if (!knownItems.length) {
     // Fallback: re-read from DB
-    const isHospitality = seller.profileType === "hospitality";
-    if (isHospitality) {
-      // Accommodation: room types + rest rates + extra services all become selectable items
-      const roomItems = (seller.roomTypes || []).map(rt => ({
-        service: rt.name,
-        rate: rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : "",
-        restRate: rt.restRate > 0 ? "$" + Number(rt.restRate).toFixed(0) + "/rest" : null
-      }));
-      const extraItems = (seller.extraServices || []).map(es => ({
-        service: es.name,
-        rate: es.price > 0 ? "$" + Number(es.price).toFixed(2) + "/" + (es.unit || "service") : ""
-      }));
-      const activityItems = (seller.rates || []).map(r => ({ service: r.service, rate: r.rate || "" }));
-      knownItems = [...roomItems, ...extraItems, ...activityItems];
-    } else {
-      knownItems = isService
-        ? (seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || []).map(s => ({ service: s, rate: "" })))
-        : (seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || []).map(p => ({ product: p, amount: 0, unit: "each" })));
-    }
+    knownItems = isService
+      ? (seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || []).map(s => ({ service: s, rate: "" })))
+      : (seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || []).map(p => ({ product: p, amount: 0, unit: "each" })));
   }
 
   const existingItems = biz?.sessionData?.scQuoteItems || [];
@@ -2274,23 +2251,7 @@ function _formatRateUnit(unit = "job") {
 }
 
 function _isTourismSupplier(seller = {}) {
-  // Correct check: use profileType="hospitality" (set at registration).
-  // Fallback to categories for legacy records that predate profileType.
-  return seller.profileType === "hospitality" ||
-    (seller.categories || []).some(c => ["lodge","hotel","guesthouse","hospitality","tourism","accommodation"].includes(c));
-}
-
-// ── Is this supplier an accommodation provider (lodge/hotel/guesthouse)? ─────
-// True for property-based providers. False for activity-only providers
-// (safari operators, tour guides, boat hire).
-function _isAccommodationSupplier(seller = {}) {
-  if (!_isTourismSupplier(seller)) return false;
-  const subtypes = seller.tourismSubtype || [];
-  if (subtypes.length) {
-    return subtypes.some(s => ["lodge","hotel","guesthouse","self_catering","campsite"].includes(s));
-  }
-  // Fallback for legacy
-  return (seller.categories || []).some(c => ["lodge","hotel","guesthouse","accommodation"].includes(c));
+  return (seller.categories || []).includes("tourism");
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -2329,20 +2290,6 @@ function _guessServiceScopeHint(serviceName = "") {
     return ["relaxer", "braids"];
   if (/sofa|upholster|furniture/.test(s))
     return ["2-seater sofa", "dining chairs"];
-
-  // Hospitality services
-  if (/room|double|twin|suite|chalet|cottage|cabin|unit/.test(s))
-    return ["1 night", "2 nights"];
-  if (/conference|meeting|board|function|venue/.test(s))
-    return ["half day", "full day"];
-  if (/pool|swim|braai|lapa|garden/.test(s))
-    return ["half day access", "full day access"];
-  if (/breakfast|dinner|lunch|meal|restaurant/.test(s))
-    return ["per person", "group of 4"];
-  if (/airport|transfer|pickup|shuttle|taxi/.test(s))
-    return ["airport to town", "return trip"];
-  if (/laundry|wash/.test(s))
-    return ["per load", "per kg"];
 
   // Default: cleaning (most common in ZW smart links)
   return ["3-bed house", "office block"];
