@@ -728,25 +728,25 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
   if (isHospitality) {
     query.profileType = "hospitality";
   } else if (profileType && dominant !== "other") {
-    query.profileType = profileType;
+    // For non-hospitality: only exclude hospitality suppliers
+    query.profileType = { $ne: "hospitality" };
+    if (profileType) query.profileType = profileType;
   } else {
     // "other" intent: still exclude hospitality suppliers from general results
     query.profileType = { $ne: "hospitality" };
   }
 
-  // Location gate — pushed into $and to avoid conflict with category $or below
+  // Location gate
   const normalizedCity = normalizeCityForSearch(city || "");
   if (normalizedCity) {
+    // For hospitality, also check tourismAreas
     if (isHospitality) {
-      // For hospitality: match city OR tourismAreas (e.g. "Kariba" lodge covers kariba area)
-      query.$and.push({
-        $or: [
-          { "location.city": new RegExp(`^${normalizedCity}$`, "i") },
-          { tourismAreas: new RegExp(normalizedCity, "i") }
-        ]
-      });
+      query.$or = [
+        { "location.city": new RegExp(`^${normalizedCity}$`, "i") },
+        { tourismAreas: new RegExp(normalizedCity, "i") }
+      ];
     } else {
-      query.$and.push({ "location.city": new RegExp(`^${normalizedCity}$`, "i") });
+      query["location.city"] = new RegExp(`^${normalizedCity}$`, "i");
     }
   }
 
@@ -754,6 +754,7 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
   if (allowedCats.length > 0) {
     if (isHospitality) {
       // For hospitality: check categories OR tourismSubtype
+      query.$and = query.$and || [];
       query.$and.push({
         $or: [
           { categories: { $in: allowedCats } },
@@ -761,7 +762,7 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
         ]
       });
     } else {
-      query.$and.push({ categories: { $in: allowedCats } });
+      query.categories = { $in: allowedCats };
     }
   }
 
@@ -772,26 +773,9 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
 
   // Relax city if no results (especially useful for rural/tourist areas)
   if (normalizedCity && candidates.length === 0) {
-    const relaxedQuery = {
-      active: true,
-      $and: [
-        { $or: [{ suspended: false }, { suspended: { $exists: false } }] },
-        { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] },
-      ]
-    };
-    if (isHospitality) {
-      relaxedQuery.profileType = "hospitality";
-    } else if (profileType && dominant !== "other") {
-      relaxedQuery.profileType = profileType;
-    } else {
-      relaxedQuery.profileType = { $ne: "hospitality" };
-    }
-    if (allowedCats.length > 0) {
-      relaxedQuery.$and.push(isHospitality
-        ? { $or: [{ categories: { $in: allowedCats } }, { tourismSubtype: { $in: allowedCats } }] }
-        : { categories: { $in: allowedCats } }
-      );
-    }
+    const relaxedQuery = { ...query };
+    delete relaxedQuery["location.city"];
+    if (relaxedQuery.$or) delete relaxedQuery.$or;
     candidates = await SupplierProfile.find(relaxedQuery)
       .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
       .limit(80)
@@ -808,7 +792,7 @@ export async function findSuppliersForRequest({ items = [], city = null, area = 
         { $or: [{ subscriptionStatus: "active" }, { subscriptionStatus: "trial" }] },
       ],
     };
-    if (normalizedCity) openQuery.$and.push({ "location.city": new RegExp(`^${normalizedCity}$`, "i") });
+    if (normalizedCity) openQuery["location.city"] = new RegExp(`^${normalizedCity}$`, "i");
     candidates = await SupplierProfile.find(openQuery)
       .sort({ tierRank: -1, credibilityScore: -1, rating: -1 })
       .limit(80)

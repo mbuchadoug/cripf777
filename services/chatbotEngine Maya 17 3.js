@@ -385,15 +385,6 @@ function isGenericBuyerRequestName(value = "") {
   if (tokens.length === 1 && GENERIC_REQUEST_TERMS.has(tokens[0])) return true;
   if (tokens.length === 1) return true;
 
-  // Hospitality exception: "lodge night", "hotel room", "guesthouse 2 nights", "lodge rest" etc.
-  // These are 2-token requests that are specific enough for hospitality suppliers to quote.
-  // Without this exception they would be rejected as vague (2 tokens but one is a number/night).
-  const HOSPITALITY_ANCHORS = new Set(["lodge","hotel","guesthouse","chalet","accommodation","resort","campsite","safari","cruise","houseboat"]);
-  const HOSPITALITY_QUALIFIERS = new Set(["night","nights","rest","day","days","room","rooms","double","twin","single","family","suite","overnight","guests","adults","people","person"]);
-  const hasAnchor    = tokens.some(t => HOSPITALITY_ANCHORS.has(t));
-  const hasQualifier = tokens.some(t => HOSPITALITY_QUALIFIERS.has(t) || /^\d+$/.test(t));
-  if (hasAnchor && hasQualifier) return false;
-
   return false;
 }
 
@@ -415,12 +406,7 @@ function buildBuyerSpecificityPrompt(vagueItems = []) {
     `_ball valve brass 20mm harare_\n` +
     `_school uniform size 8 chitungwiza_\n` +
     `_hp laptop core i7 cbd harare_\n` +
-    `_geyser installation avondale harare_\n\n` +
-    `🏨 *For lodge / hotel / tourism requests:*\n` +
-    `_lodge night harare 2 adults_\n` +
-    `_double room overnight kariba 3 nights_\n` +
-    `_game drive hwange 4 people_\n` +
-    `_guesthouse bulawayo 2 nights_`
+    `_geyser installation avondale harare_`
   );
 }
 
@@ -2571,29 +2557,12 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
   }
 }
 async function notifySuppliersOfBuyerRequest(request) {
-  // ── Route to the correct supplier finder ─────────────────────────────────
-  // findSuppliersForBuyerRequest uses runSupplierSearch which only searches
-  // profileType "product" or "service" — it will NEVER return hospitality suppliers.
-  // For hospitality/tourism requests, we must use findSuppliersForRequest from
-  // requestMatchEngine which has the full hospitality intent classification.
-  const _isTourismNotif = _buyerRequestIsTourism(request.items || []);
-
-  let suppliers;
-  if (_isTourismNotif) {
-    // Use the requestMatchEngine which correctly finds profileType="hospitality" suppliers
-    suppliers = await findSuppliersForRequest({
-      items: (request.items || []).map(i => ({ product: i.product || i.service || i.raw || "", ...i })),
-      city:  request.city  || null,
-      area:  request.area  || null
-    });
-    console.log(`[BUYER REQ] Tourism/hospitality request → findSuppliersForRequest → ${suppliers.length} suppliers`);
-  } else {
-    suppliers = await findSuppliersForBuyerRequest({
-      items: request.items || [],
-      city:  request.city  || null,
-      area:  request.area  || null
-    });
-  }
+  const suppliers = await findSuppliersForBuyerRequest({
+    items: request.items || [],
+    city: request.city || null,
+    area: request.area || null
+    // profileType intentionally omitted: findSuppliersForBuyerRequest always searches both product & service
+  });
 
   const notifiedIds = [];
 
@@ -2778,14 +2747,14 @@ async function finalizeBuyerRequestSubmission({
     });
   }
 
-  const _isServiceReq    = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
-  const _isTourismReq2   = _buyerRequestIsTourism(pendingRequest.items || []);
-  const _storedProfileType = _isTourismReq2 ? "hospitality" : (_isServiceReq ? "service" : (pendingRequest.profileType || "product"));
+  const _isServiceReq =
+    pendingRequest.isServiceRequest ||
+    _buyerRequestIsService(pendingRequest.items || []);
 
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: _storedProfileType,
+    profileType: _isServiceReq ? "service" : (pendingRequest.profileType || "product"),
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
