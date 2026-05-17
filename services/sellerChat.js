@@ -167,13 +167,28 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
-  const isService  = seller.profileType === "service";
+  const isHospitality = seller.profileType === "hospitality";
+  const isService     = seller.profileType === "service";
   const PREVIEW_MAX = 5; // Items shown on profile card (teaser only - full list via View Catalogue button)
 
   // ── Build services/products sample (max PREVIEW_MAX shown on card) ────────
   // Fall through: rates → listedProducts → products - always show something real.
   let productSample = "";
-  if (isService) {
+  if (isHospitality) {
+    // Hospitality: show room types with night + rest rates, then extra services
+    const rooms = (seller.roomTypes || []).slice(0, PREVIEW_MAX);
+    const extras = (seller.extraServices || []).slice(0, 2);
+    const roomLines = rooms.map(rt => {
+      const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
+      const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
+      const rates = [night, rest].filter(Boolean).join(" · ");
+      return "• " + rt.name + (rates ? "  —  " + rates : "  —  price on request");
+    });
+    const extraLines = extras.map(es =>
+      "• " + es.name + (es.price > 0 ? "  —  $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
+    );
+    productSample = [...roomLines, ...extraLines].join("\n");
+  } else if (isService) {
     const hasRates = Array.isArray(seller.rates) && seller.rates.length > 0;
     if (hasRates) {
       productSample = seller.rates.slice(0, PREVIEW_MAX)
@@ -199,15 +214,19 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     }
   }
 
-  const hasPrices = isService
-    ? (Array.isArray(seller.rates) && seller.rates.length > 0)
-    : (Array.isArray(seller.prices) && seller.prices.length > 0);
+  const hasPrices = isHospitality
+    ? ((seller.roomTypes || []).some(rt => rt.pricePerNight > 0 || rt.restRate > 0))
+    : isService
+      ? (Array.isArray(seller.rates) && seller.rates.length > 0)
+      : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
   // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
   // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
   // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
   let deliveryLine = "";
-  if (isService) {
+  if (isHospitality) {
+    deliveryLine = "📍 " + location + (seller.address ? " · " + seller.address : "");
+  } else if (isService) {
     if (seller.travelAvailable) {
       const svcArea = seller.serviceArea
         || [seller.location?.area, seller.location?.city].filter(Boolean).join(", ");
@@ -242,9 +261,10 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   if (biz) {
     biz.sessionData = {
       ...(biz.sessionData || {}),
-      scSellerId:  supplierId,
-      scIsService: isService,
-      scHasPrices: hasPrices,
+      scSellerId:      supplierId,
+      scIsService:     isService,
+      scIsHospitality: isHospitality,
+      scHasPrices:     hasPrices,
       scSource:    source,
       scBuyerName: parentName
     };
@@ -265,16 +285,55 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   // ── Profile card ─────────────────────────────────────────────────────────
   // ── X more hint - tells buyer there's more and how to see it ─────────────
-  const catalogueTotal = isService
-    ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
-    : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
+  const catalogueTotal = isHospitality
+    ? ((seller.roomTypes || []).length + (seller.extraServices || []).length + (seller.rates || []).length)
+    : isService
+      ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
+      : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
   const extraCount = Math.max(0, catalogueTotal - PREVIEW_MAX);
   // moreHint shown as text AND as a button below - button is the primary CTA
   const moreHint   = extraCount > 0
     ? `_...and ${extraCount} more - tap "View Full Catalogue" below_`
     : null;
 
-  const profileCard = [
+  // Build profile card - hospitality uses dedicated layout
+  let profileCard;
+  if (isHospitality) {
+    const FACILITY_LABELS = {
+      wifi:"📶 WiFi", pool:"🏊 Pool", hot_shower:"🚿 Hot shower",
+      breakfast:"🍳 Breakfast", en_suite:"🚪 En-suite", generator:"⚡ Generator/Solar",
+      dstv:"📺 DSTV", braai:"🔥 Braai", aircon:"❄️ AC",
+      game_drives:"🦁 Game drives", fishing:"🎣 Fishing", boat_hire:"⛵ Boat hire",
+      conference:"🏢 Conference", restaurant:"🍽 Restaurant/Bar", laundry:"👕 Laundry",
+      parking:"🅿️ Parking", pets_allowed:"🐕 Pets OK", child_friendly:"👶 Child-friendly"
+    };
+    const SUBTYPE_LABELS = {
+      lodge:"🌿 Lodge", hotel:"🏨 Hotel", guesthouse:"🏡 Guesthouse/B&B",
+      self_catering:"🍳 Self-Catering", campsite:"⛺ Campsite",
+      safari_operator:"🦁 Safari Operator", tour_guide:"🗺 Tour Guide",
+      boat_hire:"⛵ Boat Hire", travel_agency:"✈️ Travel Agency"
+    };
+    const subtypeLabel = (seller.tourismSubtype || []).map(s => SUBTYPE_LABELS[s] || s).join(" · ") || "🏨 Lodge / Hotel";
+    const facilLine = (seller.facilities || []).slice(0, 8).map(f => FACILITY_LABELS[f] || f).join("  ·  ");
+    const ciLine = (seller.checkInTime || seller.checkOutTime)
+      ? "⏰ In: " + (seller.checkInTime || "?") + "  ·  Out: " + (seller.checkOutTime || "?") : "";
+
+    profileCard = [
+      "🏨 *" + seller.businessName + "*" + (seller.verified ? " ✅" : "") + (seller.topSupplierBadge ? " 🏅" : ""),
+      subtypeLabel,
+      "📍 " + location,
+      credLine || null,
+      "",
+      "🛏 *Rooms & Rates:*",
+      productSample || "_(Contact lodge for room availability)_",
+      facilLine ? "\n🏷 *Facilities:*\n" + facilLine : null,
+      ciLine || null,
+      "",
+      seller.address        ? "🏠 " + seller.address        : null,
+      seller.contactDetails ? "📞 " + seller.contactDetails : null,
+    ].filter(l => l !== null).join("\n");
+  } else {
+  profileCard = [
     `${isService ? "🔧" : "🏪"} *${seller.businessName}*${seller.verified ? " ✅" : ""}${seller.topSupplierBadge ? " 🏅" : ""}`,
     `📍 ${location}`,
     credLine || null,
@@ -288,6 +347,7 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     seller.contactDetails ? `📞 ${seller.contactDetails}` : null,
     seller.website        ? `🌐 ${seller.website}` : null,
   ].filter(l => l !== null).join("\n");
+  } // end else (non-hospitality)
 
   await sendText(from, profileCard);
 
@@ -296,7 +356,16 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
     ? [{ id: `sc_catalogue_${supplierId}`, title: `📋 View All ${isService ? "Services" : "Products"} (${catalogueTotal})` }]
     : [];
 
-  if (isService) {
+  if (isHospitality) {
+    return sendList(from, "What would you like to do?", [
+      { id: `sc_quote_${supplierId}`,   title: hasPrices ? "🛏 Book / Get a quote" : "🛏 Request availability" },
+      ...catalogueBtn,
+      { id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" },
+      ...repeatBtn,
+      { id: `sc_contact_${supplierId}`, title: "📞 Contact details" },
+      { id: `sc_review_${supplierId}`,  title: "⭐ Leave a review" }
+    ]);
+  } else if (isService) {
     return sendList(from, "What would you like to do?", [
       { id: `sc_quote_${supplierId}`,   title: hasPrices ? "💵 Get instant quote" : "💵 Request a quote" },
       ...catalogueBtn,
@@ -570,19 +639,35 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   const seller    = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return false;
 
-  const isService = seller.profileType === "service";
+  const isHospitality = seller.profileType === "hospitality";
+  const isService     = seller.profileType === "service";
 
-  // ── Full catalogue: rates[] for services, prices[] for products ───────────
-  // Also fall back to listedProducts/products for services without rates set
+  // ── Full catalogue ─────────────────────────────────────────────────────────
   let allItems = [];
   let hasPrices = false;
 
-  if (isService) {
+  if (isHospitality) {
+    // Hospitality: merge roomTypes (night + rest), extraServices, activities
+    // Each item becomes a selectable line in the catalogue
+    const roomItems = (seller.roomTypes || []).map(rt => {
+      const night = rt.pricePerNight > 0 ? "$" + Number(rt.pricePerNight).toFixed(0) + "/night" : null;
+      const rest  = rt.restRate       > 0 ? "$" + Number(rt.restRate).toFixed(0)       + "/rest"  : null;
+      const rate  = [night, rest].filter(Boolean).join("  ·  ");
+      return { service: rt.name, rate: rate || "", _isRoom: true };
+    });
+    const extraItems = (seller.extraServices || []).map(es => ({
+      service: es.name,
+      rate: es.price > 0 ? "$" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "",
+      _isExtra: true
+    }));
+    const activityItems = (seller.rates || []).map(r => ({ service: r.service, rate: r.rate || "" }));
+    allItems  = [...roomItems, ...extraItems, ...activityItems];
+    hasPrices = allItems.some(i => i.rate && i.rate.length > 0);
+  } else if (isService) {
     if (Array.isArray(seller.rates) && seller.rates.length > 0) {
       allItems  = seller.rates;
       hasPrices = true;
     } else {
-      // Service provider without rates - use listedProducts as item names, go RFQ
       const serviceList = (seller.listedProducts?.length ? seller.listedProducts : seller.products) || [];
       allItems  = serviceList.filter(s => s && s !== "pending_upload").map(s => ({ service: s, rate: "" }));
       hasPrices = false;
@@ -606,8 +691,9 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       scSellerId:      supplierId,
       scQuoteItems:    [],
       scRFQ:           !hasPrices,
-      scCatalogue:     JSON.stringify(allItems),  // stored for item# lookup
-      scCatalogueType: isService ? "service" : "product"
+      scIsHospitality: isHospitality,
+      scCatalogue:     JSON.stringify(allItems),
+      scCatalogueType: (isHospitality || isService) ? "service" : "product"
     };
     await saveBiz(biz);
   }
@@ -615,9 +701,6 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
   const total = allItems.length;
   const CHUNK = 30;
 
-  // ── Send full catalogue in chunks (handles 100+ item sellers) ────────────
-  // Profile shows 5 items as teaser. Quote flow shows EVERYTHING.
-  // This is the key UX improvement: buyer sees the full menu before choosing.
   for (let i = 0; i < total; i += CHUNK) {
     const chunk   = allItems.slice(i, i + CHUNK);
     const isFirst = i === 0;
@@ -625,21 +708,39 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
     const lines = chunk.map((item, j) => {
       const idx  = i + j + 1;
-      const name = isService ? item.service : item.product;
-      const priceStr = isService
-        ? (item.rate ? `  -  ${item.rate}` : "  -  rate on request")
-        : (item.amount ? `  -  $${Number(item.amount).toFixed(2)}/${item.unit || "each"}` : "  -  price on request");
-      return `${idx}. ${name}${priceStr}`;
+      const name = (isHospitality || isService) ? item.service : item.product;
+      const priceStr = (isHospitality || isService)
+        ? (item.rate ? "  —  " + item.rate : "  —  price on request")
+        : (item.amount ? "  —  $" + Number(item.amount).toFixed(2) + "/" + (item.unit || "each") : "  —  price on request");
+      return idx + ". " + name + priceStr;
     }).join("\n");
 
     if (isFirst) {
-      const header = hasPrices
-        ? `${isService ? "🛠" : "📦"} *${seller.businessName} - ${isService ? "Services & Rates" : "Products & Prices"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`
-        : `${isService ? "🛠" : "📦"} *${seller.businessName} - ${isService ? "Services" : "Products"} (${total} ${isService ? "service" : "item"}${total === 1 ? "" : "s"})*`;
-      await sendText(from, `${header}\n\n${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
+      const headerIcon = isHospitality ? "🏨" : (isService ? "🛠" : "📦");
+      const headerType = isHospitality ? "Rooms & Services" : (isService ? "Services & Rates" : "Products & Prices");
+      const itemWord   = isHospitality ? "option" : (isService ? "service" : "item");
+      const header = headerIcon + " *" + seller.businessName + " - " + headerType + " (" + total + " " + itemWord + (total === 1 ? "" : "s") + ")*";
+      await sendText(from, header + "\n\n" + lines + (isLast ? "" : "\n_(continued...)_"));
     } else {
-      await sendText(from, `${lines}${isLast ? "" : "\n_(continued in next message...)_"}`);
+      await sendText(from, lines + (isLast ? "" : "\n_(continued...)_"));
     }
+  }
+
+  // ── Hospitality instructions prompt ──────────────────────────────────────
+  if (isHospitality) {
+    const ex1 = allItems[0]?.service || "Double room";
+    const ex2 = allItems[1]?.service || null;
+    const exLine = ex2 ? `_1_ or _1, 2_ (for multiple)` : `_1_`;
+    return sendButtons(from, {
+      text:
+        `🛏 *Which room or service do you need?*\n\n` +
+        `Type the item number(s) from the list above.\n\n` +
+        `${exLine}\n\n` +
+        `Or type the name:\n` +
+        `_${ex1}_\n\n` +
+        `Then type *done* to send your request, or *cancel* to go back.`,
+      buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" }]
+    });
   }
 
   // ── Instructions - always sent last so buyer sees them ───────────────────
