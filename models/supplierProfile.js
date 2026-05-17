@@ -177,7 +177,8 @@ const SupplierProfileSchema = new mongoose.Schema({
     type: [{
       name:          { type: String },
       capacity:      { type: Number, default: 2 },
-      pricePerNight: { type: Number, default: 0 },
+      pricePerNight: { type: Number, default: 0 },  // overnight rate
+      restRate:      { type: Number, default: 0 },  // day-use / rest rate (few hours, no overnight)
       currency:      { type: String, default: "USD" },
       description:   { type: String, default: "" }
     }],
@@ -207,6 +208,17 @@ const SupplierProfileSchema = new mongoose.Schema({
     type:    String,
     enum:    ["room_only","bed_breakfast","half_board","full_board","self_catering","not_applicable"],
     default: "not_applicable"
+  },
+
+  // Extra services charged separately from room rate
+  // e.g. conference room, airport pickup, pool access, breakfast, laundry
+  extraServices: {
+    type: [{
+      name:  { type: String },
+      price: { type: Number, default: 0 },
+      unit:  { type: String, default: "service" }  // "person","trip","half day","load", etc.
+    }],
+    default: []
   },
 
   // Legacy field — kept for backward compat; prefer tourismSubtype[]
