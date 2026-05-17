@@ -194,7 +194,15 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
     const pages = Math.ceil(total / limit);
     const qs = (p) => `?page=${p}&search=${encodeURIComponent(search)}&status=${status}&tier=${tier}&type=${type}`;
 
+    const listSuccess = req.query.success
+      ? `<div style="background:#dcfce7;color:#16a34a;padding:12px 16px;border-radius:8px;margin-bottom:14px">✅ ${esc(req.query.success)}</div>`
+      : "";
+    const listError = req.query.error
+      ? `<div style="background:#fee2e2;color:#dc2626;padding:12px 16px;border-radius:8px;margin-bottom:14px">❌ ${esc(req.query.error)}</div>`
+      : "";
+
     res.send(layout("Suppliers", `
+      ${listSuccess}${listError}
 <div class="panel">
     <div class="panel-head">
           <h3>Suppliers <span class="count">${total}</span></h3>
@@ -245,7 +253,11 @@ router.get("/suppliers", requireSupplierAdmin, async (req, res) => {
               <td>${badge(s.active ? "Active" : "Inactive", s.active ? "green" : "gray")}</td>
               <td>${s.completedOrders || 0}</td>
               <td>⭐ ${(s.rating || 0).toFixed(1)}</td>
-              <td><a href="/zq-admin/suppliers/${s._id}" class="btn-link">Manage →</a></td>
+              <td style="white-space:nowrap">
+                <a href="/zq-admin/suppliers/${s._id}" class="btn-link">Manage →</a>
+                &nbsp;
+                <a href="/zq-admin/suppliers/${s._id}/delete-confirm" class="btn-link" style="color:#ef4444">Delete</a>
+              </td>
             </tr>`).join("")}
           </tbody>
         </table>
@@ -1295,6 +1307,11 @@ const successMsg = req.query.success
   <a href="/zq-admin/suppliers/${supplier._id}/vip-settings" class="btn btn-purple">
     🔒 VIP Notifications
   </a>
+
+  <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete" style="display:inline"
+        onsubmit="return confirm('⚠️ PERMANENTLY DELETE ${esc(supplier.businessName)}?\n\nThis removes:\n• Supplier profile\n• Business account & branch\n• Products & prices\n• Subscription payments\n• Search logs\n\nThis cannot be undone.')">
+    <button class="btn btn-red">🗑 Delete Supplier</button>
+  </form>
 </div>
         </div>
 
@@ -1839,6 +1856,196 @@ update.notificationContacts = [...new Set(_notifRaw)].filter(
 });
 
 // ── Toggle actions ─────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE SUPPLIER
+// GET  /zq-admin/suppliers/:id/delete-confirm  → confirmation page
+// POST /zq-admin/suppliers/:id/delete           → execute deletion
+// ─────────────────────────────────────────────────────────────────────────────
+// What gets deleted:
+//   SupplierProfile       → the profile itself
+//   Business              → the linked business account (via businessId)
+//   UserRole              → owner role records for this phone
+//   Branch                → all branches linked to the business
+//   Product               → all products in the business catalogue
+//   SupplierOrder         → all orders (kept as archive if hasOrders=true, unless admin confirms)
+//   SupplierSubscriptionPayment → payment history
+//   SearchCommandLog      → search logs for this phone
+//   UserSession           → active session state
+//
+// Orders are KEPT by default (financial audit trail). Admin sees the count and
+// can choose to also delete them via a checkbox.
+
+router.get("/suppliers/:id/delete-confirm", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const [orderCount, paymentCount] = await Promise.all([
+      SupplierOrder.countDocuments({ supplierId: supplier._id }),
+      SupplierSubscriptionPayment.countDocuments({
+        $or: [{ supplierId: supplier._id }, { supplierPhone: supplier.phone }]
+      })
+    ]);
+
+    const ordersCheckbox = orderCount > 0
+      ? '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:12px;margin-bottom:16px">' +
+        '<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px">' +
+        '<input type="checkbox" name="deleteOrders" value="true" style="margin-top:2px;width:15px;height:15px">' +
+        '<span><strong>Also delete ' + orderCount + ' order record' + (orderCount === 1 ? '' : 's') + '</strong><br>' +
+        '<span style="color:var(--muted)">Leave unchecked to keep orders for accounting records.</span>' +
+        '</span></label></div>'
+      : '';
+
+    res.send(layout(`Delete: ${esc(supplier.businessName)}`, `
+      <a href="/zq-admin/suppliers/${supplier._id}" class="back-link">← Back to Profile</a>
+
+      <div class="panel" style="max-width:580px;border:2px solid #ef4444">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+          <div style="width:44px;height:44px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🗑</div>
+          <div>
+            <h3 style="color:#dc2626;margin:0">Delete Supplier</h3>
+            <p style="margin:2px 0 0;color:var(--muted);font-size:13px">This action is permanent and cannot be undone.</p>
+          </div>
+        </div>
+
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px;margin-bottom:20px">
+          <p style="font-size:13px;margin-bottom:8px"><strong>You are about to permanently delete:</strong></p>
+          <dl style="display:grid;grid-template-columns:140px 1fr;gap:4px;font-size:13px">
+            <dt style="color:var(--muted)">Business</dt>
+            <dd><strong>${esc(supplier.businessName)}</strong></dd>
+            <dt style="color:var(--muted)">Phone</dt>
+            <dd>${esc(supplier.phone)}</dd>
+            <dt style="color:var(--muted)">Type</dt>
+            <dd>${esc(supplier.profileType || "product")} · ${esc(supplier.location?.city || "-")}</dd>
+            <dt style="color:var(--muted)">Status</dt>
+            <dd>${supplier.active ? "🟢 Active" : "⚫ Inactive"} · ${esc(supplier.tier || "basic")} plan</dd>
+            <dt style="color:var(--muted)">Orders</dt>
+            <dd>${orderCount > 0 ? "<strong style=\"color:#dc2626\">" + orderCount + " order" + (orderCount === 1 ? "" : "s") + " on record</strong>" : "No orders"}</dd>
+            <dt style="color:var(--muted)">Payments</dt>
+            <dd>${paymentCount > 0 ? paymentCount + " payment record" + (paymentCount === 1 ? "" : "s") : "No payments"}</dd>
+          </dl>
+        </div>
+
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          The following will be permanently removed:
+          supplier profile · business account · products & prices ·
+          subscription records · search logs · WhatsApp session
+        </p>
+
+        <form method="POST" action="/zq-admin/suppliers/${supplier._id}/delete">
+          ${ordersCheckbox}
+
+          <div style="margin-bottom:16px">
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">
+              Type the business name to confirm:
+            </label>
+            <input type="text" name="confirmName" required
+                   placeholder="${esc(supplier.businessName)}"
+                   style="width:100%;padding:10px 12px;border:1px solid #fca5a5;border-radius:7px;font-size:13px;outline:none"
+                   oninput="checkName(this.value, '${esc(supplier.businessName)}')" />
+            <p id="nameHint" style="font-size:11px;color:var(--muted);margin-top:4px">Must match exactly.</p>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" id="deleteBtn" class="btn btn-red" disabled>🗑 Permanently Delete</button>
+            <a href="/zq-admin/suppliers/${supplier._id}" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        function checkName(typed, expected) {
+          const btn  = document.getElementById("deleteBtn");
+          const hint = document.getElementById("nameHint");
+          const match = typed.trim() === expected.trim();
+          btn.disabled = !match;
+          hint.textContent = match ? "✅ Name confirmed." : "Must match exactly: " + expected;
+          hint.style.color = match ? "#16a34a" : "var(--muted)";
+        }
+      </script>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.post("/suppliers/:id/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const supplier = await SupplierProfile.findById(req.params.id).lean();
+    if (!supplier) return res.redirect("/zq-admin/suppliers");
+
+    const { confirmName, deleteOrders } = req.body;
+
+    // Name confirmation guard
+    if (
+      !confirmName ||
+      confirmName.trim().toLowerCase() !== supplier.businessName.trim().toLowerCase()
+    ) {
+      return res.redirect(
+        `/zq-admin/suppliers/${req.params.id}/delete-confirm?error=${encodeURIComponent("Business name did not match. Deletion cancelled.")}`
+      );
+    }
+
+    const phone = supplier.phone;
+
+    // ── Dynamic imports for models not loaded at module level ──────────────
+    const Business    = (await import("../models/business.js")).default;
+    const UserRole    = (await import("../models/userRole.js")).default;
+    const Branch      = (await import("../models/branch.js")).default;
+    const UserSession = (await import("../models/userSession.js")).default;
+    const Product     = (await import("../models/product.js")).default;
+
+    // 1. Delete the SupplierProfile
+    await SupplierProfile.findByIdAndDelete(supplier._id);
+    console.log(`[Admin Delete] SupplierProfile deleted: ${supplier._id} (${phone})`);
+
+    // 2. Delete linked Business + all its Branches + Products
+    if (supplier.businessId) {
+      const biz = await Business.findById(supplier.businessId).lean();
+      if (biz) {
+        await Branch.deleteMany({ businessId: biz._id });
+        await Product.deleteMany({ businessId: biz._id });
+        await Business.findByIdAndDelete(biz._id);
+        console.log(`[Admin Delete] Business deleted: ${biz._id}`);
+      }
+    }
+
+    // 3. Delete UserRole records for this phone
+    await UserRole.deleteMany({ phone });
+    console.log(`[Admin Delete] UserRole records deleted for ${phone}`);
+
+    // 4. Clear UserSession
+    await UserSession.findOneAndUpdate(
+      { phone: phone.replace(/\D+/g, "") },
+      { $unset: { activeBusinessId: "", sessionState: "", sessionData: "" } }
+    );
+
+    // 5. Delete subscription payment history
+    await SupplierSubscriptionPayment.deleteMany({
+      $or: [{ supplierId: supplier._id }, { supplierPhone: phone }]
+    });
+
+    // 6. Optionally delete orders
+    if (deleteOrders === "true") {
+      await SupplierOrder.deleteMany({ supplierId: supplier._id });
+      console.log(`[Admin Delete] Orders deleted for ${supplier._id}`);
+    }
+
+    // 7. Delete search logs for this phone
+    await SearchCommandLog.deleteMany({ phone: phone.replace(/\D+/g, "") });
+
+    console.log(`[Admin Delete] ✅ Full delete complete: ${supplier.businessName} (${phone})`);
+
+    res.redirect(`/zq-admin/suppliers?success=${encodeURIComponent(
+      supplier.businessName + " has been permanently deleted."
+    )}`);
+  } catch (err) {
+    console.error("[Admin Delete] Error:", err.message);
+    res.redirect(`/zq-admin/suppliers/${req.params.id}/delete-confirm?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
 router.post("/suppliers/:id/toggle-active", requireSupplierAdmin, async (req, res) => {
   try {
     const supplier = await SupplierProfile.findById(req.params.id);
@@ -4154,22 +4361,179 @@ router.post("/suppliers/:id/live-items", requireSupplierAdmin, async (req, res) 
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH: New routes to add to routes/supplierAdmin.js
 //
-// INSERT POINT: Add all routes below BEFORE the final `export default router;`
-// Also add this import at the top of supplierAdmin.js with the other imports:
-//
-//   import {
-//     notifySupplierTrialActivated,
-//     notifySupplierOffer,
-//     broadcastSupplierOffer,
-//     notifySupplierSubscriptionExpiring,
-//     notifySupplierSubscriptionExpired,
-//     notifySupplierPaymentReceipt,
-//   } from "../services/supplierNotifications.js";
-//
-// Also add this import for PDF receipt generation:
-//   import PDFDocument from "pdfkit";
-// And install pdfkit:  npm install pdfkit
+// INSERT POINT: Add all routes below BEFORE the final `
+// ═════════════════════════════════════════════════════════════════════════════
+// SCHOOL DELETE ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
+// COPY these two routes into your school admin router file (schoolAdmin.js or
+// wherever your /zq-admin/schools/:id routes live).
+//
+// Also add this Delete button to your school detail page action-row:
+//
+//   <form method="POST" action="/zq-admin/schools/${school._id}/delete" style="display:inline"
+//         onsubmit="return confirm('Permanently delete ${school.schoolName}? This cannot be undone.')">
+//     <button class="btn btn-red">🗑 Delete School</button>
+//   </form>
+//
+// And add this to your schools list table row:
+//
+//   <a href="/zq-admin/schools/${s._id}/delete-confirm"
+//      class="btn-link" style="color:#ef4444">Delete</a>
+//
+// What gets deleted:
+//   SchoolProfile         → the school listing itself
+//   Business              → linked business account (if any)
+//   UserRole              → owner role for this phone
+//   Branch                → all branches for this business
+//   Product               → all catalogue items
+//   UserSession           → clears active session
+// ═════════════════════════════════════════════════════════════════════════════
+
+router.get("/schools/:id/delete-confirm", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    res.send(layout(`Delete School: ${esc(school.schoolName)}`, `
+      <a href="/zq-admin/schools/${school._id}" class="back-link">← Back to School Profile</a>
+
+      <div class="panel" style="max-width:560px;border:2px solid #ef4444">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+          <div style="width:44px;height:44px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🗑</div>
+          <div>
+            <h3 style="color:#dc2626;margin:0">Delete School</h3>
+            <p style="margin:2px 0 0;color:var(--muted);font-size:13px">This is permanent and cannot be undone.</p>
+          </div>
+        </div>
+
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px;margin-bottom:20px">
+          <p style="font-size:13px;margin-bottom:8px"><strong>You are about to permanently delete:</strong></p>
+          <dl style="display:grid;grid-template-columns:130px 1fr;gap:4px;font-size:13px">
+            <dt style="color:var(--muted)">School</dt>
+            <dd><strong>${esc(school.schoolName)}</strong></dd>
+            <dt style="color:var(--muted)">Phone</dt>
+            <dd>${esc(school.phone || "-")}</dd>
+            <dt style="color:var(--muted)">City</dt>
+            <dd>${esc(school.city || "-")}</dd>
+            <dt style="color:var(--muted)">Type</dt>
+            <dd>${esc(school.schoolType || "-")} · ${esc(school.ownership || "-")}</dd>
+            <dt style="color:var(--muted)">Status</dt>
+            <dd>${school.active ? "🟢 Active" : "⚫ Inactive"}</dd>
+          </dl>
+        </div>
+
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          The following will be permanently removed:
+          school profile · business account · branches · WhatsApp session · products
+        </p>
+
+        <form method="POST" action="/zq-admin/schools/${school._id}/delete">
+          <div style="margin-bottom:16px">
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">
+              Type the school name to confirm:
+            </label>
+            <input type="text" name="confirmName" required
+                   placeholder="${esc(school.schoolName)}"
+                   style="width:100%;padding:10px 12px;border:1px solid #fca5a5;border-radius:7px;font-size:13px;outline:none"
+                   oninput="checkName(this.value, '${esc(school.schoolName)}')" />
+            <p id="nameHint" style="font-size:11px;color:var(--muted);margin-top:4px">Must match exactly.</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" id="deleteBtn" class="btn btn-red" disabled>🗑 Permanently Delete School</button>
+            <a href="/zq-admin/schools/${school._id}" class="btn btn-gray">Cancel</a>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        function checkName(typed, expected) {
+          const btn  = document.getElementById("deleteBtn");
+          const hint = document.getElementById("nameHint");
+          const match = typed.trim() === expected.trim();
+          btn.disabled = !match;
+          hint.textContent = match ? "✅ Name confirmed." : "Must match exactly: " + expected;
+          hint.style.color = match ? "#16a34a" : "var(--muted)";
+        }
+      </script>
+    `));
+  } catch (err) {
+    res.send(layout("Error", `<div class="alert red">${err.message}</div>`));
+  }
+});
+
+router.post("/schools/:id/delete", requireSupplierAdmin, async (req, res) => {
+  try {
+    const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+    const school = await SchoolProfile.findById(req.params.id).lean();
+    if (!school) return res.redirect("/zq-admin/schools");
+
+    const { confirmName } = req.body;
+
+    // Name confirmation guard
+    if (
+      !confirmName ||
+      confirmName.trim().toLowerCase() !== school.schoolName.trim().toLowerCase()
+    ) {
+      return res.redirect(
+        `/zq-admin/schools/${req.params.id}/delete-confirm?error=${encodeURIComponent("School name did not match. Deletion cancelled.")}`
+      );
+    }
+
+    const phone = school.phone || "";
+
+    // Dynamic model imports
+    const Business    = (await import("../models/business.js")).default;
+    const UserRole    = (await import("../models/userRole.js")).default;
+    const Branch      = (await import("../models/branch.js")).default;
+    const UserSession = (await import("../models/userSession.js")).default;
+    const Product     = (await import("../models/product.js")).default;
+
+    // 1. Delete SchoolProfile
+    await SchoolProfile.findByIdAndDelete(school._id);
+    console.log(`[Admin Delete School] SchoolProfile deleted: ${school._id} (${phone})`);
+
+    // 2. Delete linked Business + Branches + Products
+    if (school.businessId) {
+      const biz = await Business.findById(school.businessId).lean();
+      if (biz) {
+        await Branch.deleteMany({ businessId: biz._id });
+        await Product.deleteMany({ businessId: biz._id });
+        await Business.findByIdAndDelete(biz._id);
+        console.log(`[Admin Delete School] Business deleted: ${biz._id}`);
+      }
+    }
+
+    // 3. Delete UserRole records for this phone
+    if (phone) {
+      await UserRole.deleteMany({ phone });
+    }
+
+    // 4. Clear UserSession
+    if (phone) {
+      const cleanPhone = phone.replace(/\D+/g, "");
+      await UserSession.findOneAndUpdate(
+        { phone: cleanPhone },
+        { $unset: { activeBusinessId: "", sessionState: "", sessionData: "" } }
+      );
+    }
+
+    console.log(`[Admin Delete School] ✅ Full delete complete: ${school.schoolName} (${phone})`);
+
+    res.redirect(`/zq-admin/schools?success=${encodeURIComponent(
+      school.schoolName + " has been permanently deleted."
+    )}`);
+  } catch (err) {
+    console.error("[Admin Delete School] Error:", err.message);
+    res.redirect(`/zq-admin/schools/${req.params.id}/delete-confirm?error=${encodeURIComponent(err.message)}`);
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// END OF SCHOOL DELETE ROUTES (copy the block above into your school admin file)
+// ═════════════════════════════════════════════════════════════════════════════
+
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── 1. SEND OFFER (single supplier, from Manage page) ────────────────────────
