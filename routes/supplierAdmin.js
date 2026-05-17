@@ -936,7 +936,7 @@ const {
       if (!categories.includes("tourism"))       categories.push("tourism");
     }
 
-    // Parse room types: "Double room, 2, 80" → { name, capacity, pricePerNight }
+    // Parse room types: "Double room, 2, 30, 15" → { name, capacity, pricePerNight, restRate }
     const roomTypes = [];
     if (profileType === "hospitality" && req.body.roomTypes) {
       for (const line of req.body.roomTypes.split("\n")) {
@@ -944,7 +944,8 @@ const {
         const name  = parts[0];
         const cap   = parseInt(parts[1]) || 2;
         const price = parseFloat(parts[2]) || 0;
-        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, currency: "USD" });
+        const rest  = parseFloat(parts[3]) || 0;   // rest/day-use rate — 4th column
+        if (name && name.length > 1) roomTypes.push({ name, capacity: cap, pricePerNight: price, restRate: rest, currency: "USD" });
       }
     }
 
