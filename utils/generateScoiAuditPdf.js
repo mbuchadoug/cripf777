@@ -1,5 +1,6 @@
 // utils/generateScoiAuditPdf.js
 // Renders the same template used in the browser view so the PDF matches exactly.
+// FIX: Corrected puppeteer launch, content injection, font loading, and error handling.
 
 import fs from "fs";
 import path from "path";
@@ -17,12 +18,9 @@ export async function generateScoiAuditPdf({ audit, req }) {
   }
 
   // ── 2. Determine which view template to use ─────────────────────────────────
-  //   • Special audits  → admin/special_scoi_audit_view
-  //   • Placement audits → scoi/audit_view
-  //   Both templates must be available to express-handlebars.
   const isSpecial =
-    safeAudit.auditKind === "special" ||
-    safeAudit.auditType != null;        // SpecialScoiAudit has auditType field
+    safeAudit.auditClass === "special_report" ||
+    safeAudit.auditType != null;
 
   const templateName = isSpecial
     ? "admin/special_scoi_audit_view"
@@ -36,49 +34,72 @@ export async function generateScoiAuditPdf({ audit, req }) {
   const filepath  = path.join(baseDir, filename);
 
   // ── 4. Render HTML from the Handlebars template ─────────────────────────────
-  const html = await new Promise((resolve, reject) => {
-    req.app.render(
-      templateName,
-      {
-        audit:  safeAudit,
-        layout: false   // no wrapper layout - clean standalone HTML for PDF
-      },
-      (err, rendered) => (err ? reject(err) : resolve(rendered))
-    );
-  });
+  let html;
+  try {
+    html = await new Promise((resolve, reject) => {
+      req.app.render(
+        templateName,
+        {
+          audit:  safeAudit,
+          layout: false   // no wrapper layout
+        },
+        (err, rendered) => (err ? reject(err) : resolve(rendered))
+      );
+    });
+  } catch (renderErr) {
+    throw new Error(`Template render failed (${templateName}): ${renderErr.message}`);
+  }
 
   // ── 5. Launch Puppeteer ──────────────────────────────────────────────────────
   let puppeteer;
   try {
     puppeteer = (await import("puppeteer")).default;
-  } catch (err) {
-    throw new Error("Puppeteer not available - PDF generation disabled");
+  } catch {
+    throw new Error("Puppeteer not installed — run: npm install puppeteer");
   }
 
+  // FIX: Detect if running in a headless/server environment
   const browser = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    headless: true
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",    // FIX: prevents crashes in Docker/low-mem
+      "--disable-gpu",              // FIX: headless server compatibility
+      "--no-zygote",
+      "--single-process"            // FIX: avoids fork issues on some hosts
+    ],
+    headless: "new"                  // FIX: use new headless mode (Puppeteer ≥20)
   });
 
   try {
     const page = await browser.newPage();
 
-    // ── 6. Set content and wait for fonts / images to load ────────────────────
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // ── 6. Inject HTML with fonts pre-loaded ─────────────────────────────────
+    // FIX: Use setContent with a base URL so relative assets (CSS, images) resolve
+    const baseUrl = process.env.SITE_URL
+      ? process.env.SITE_URL.replace(/\/$/, "")
+      : `${req.protocol}://${req.get("host")}`;
 
-    // Load Google Fonts inline so they render in the PDF
-    // (Puppeteer can't fetch external fonts unless they're embedded or the
-    //  page is served over a real URL. The safest approach: inject a CSS block
-    //  that falls back to system serif/sans so the layout matches.)
-    await page.addStyleTag({
-      content: `
-        /* PDF font fallbacks - mirrors the view's font stack */
+    // FIX: Inject Google Fonts directly into the HTML before rendering
+    // so Puppeteer doesn't need external network access at render time.
+    const fontsBlock = `
+      <style>
         @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap');
-      `
+      </style>`;
+
+    // Insert font block right after <head>
+    const htmlWithFonts = html.includes("<head>")
+      ? html.replace("<head>", `<head>${fontsBlock}`)
+      : fontsBlock + html;
+
+    // FIX: setContent with networkidle2 (not networkidle0) to avoid font timeout
+    await page.setContent(htmlWithFonts, {
+      waitUntil: "networkidle2",
+      timeout: 30000
     });
 
-    // Give fonts a moment to load
-    await page.waitForTimeout(800).catch(() => {});
+    // Give fonts 1.2s to load (covers slow CDN responses)
+    await new Promise(r => setTimeout(r, 1200));
 
     await page.emulateMediaType("print");
 
@@ -86,18 +107,18 @@ export async function generateScoiAuditPdf({ audit, req }) {
     await page.pdf({
       path: filepath,
       format: "A4",
-      printBackground: true,   // required for the dark cover band, gold rules, etc.
+      printBackground: true,
       displayHeaderFooter: true,
       headerTemplate: `
-        <div style="font-family:Inter,system-ui,sans-serif;font-size:9px;color:#94A3B8;
+        <div style="font-family:Arial,sans-serif;font-size:9px;color:#94A3B8;
                     width:100%;padding:0 40px;box-sizing:border-box;text-align:right;">
-          CRIPFCnt SCOI Framework - Confidential Intelligence Report
+          CRIPFCnt SCOI Framework &mdash; Confidential Intelligence Report
         </div>`,
       footerTemplate: `
-        <div style="font-family:Inter,system-ui,sans-serif;font-size:9px;color:#94A3B8;
+        <div style="font-family:Arial,sans-serif;font-size:9px;color:#94A3B8;
                     width:100%;padding:0 40px;box-sizing:border-box;
                     display:flex;justify-content:space-between;align-items:center;">
-          <span>Donald Mataranyika · Chartered Secretary &amp; Governance Specialist</span>
+          <span>Donald Mataranyika &middot; Chartered Secretary &amp; Governance Specialist</span>
           <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
         </div>`,
       margin: {
@@ -118,5 +139,67 @@ export async function generateScoiAuditPdf({ audit, req }) {
 
   } finally {
     await browser.close();
+  }
+}
+
+
+// ── Express route handler ─────────────────────────────────────────────────────
+// Mount this in your admin router:
+//
+//   import { scoiAuditPdfRoute } from "../utils/generateScoiAuditPdf.js";
+//   router.post("/admin/special-scoi-audits/:id/generate-pdf", ensureAuth, scoiAuditPdfRoute);
+//   router.get("/admin/special-scoi-audits/:id/download-pdf",  ensureAuth, scoiAuditPdfRoute);
+//
+// OR add these routes directly inside admin_special_scoi_view.js
+
+export async function scoiAuditPdfRoute(req, res) {
+  try {
+    // Dynamically import the model (avoids circular dep issues)
+    let SpecialScoiAudit;
+    try {
+      SpecialScoiAudit = (await import("../models/specialScoiAudit.js")).default;
+    } catch {
+      return res.status(500).json({ success: false, error: "Model not found" });
+    }
+
+    const audit = await SpecialScoiAudit.findById(req.params.id);
+    if (!audit) {
+      return res.status(404).json({ success: false, error: "Audit not found" });
+    }
+
+    // If PDF already exists and is recent, serve it directly
+    if (audit.pdfUrl) {
+      const existingPath = path.join(process.cwd(), "public", audit.pdfUrl);
+      if (fs.existsSync(existingPath)) {
+        // For GET download requests
+        if (req.method === "GET") {
+          return res.download(existingPath, `SCOI-Audit-${audit.subject?.name || audit._id}.pdf`);
+        }
+        // For POST generate requests — return existing URL
+        return res.json({ success: true, url: audit.pdfUrl, cached: true });
+      }
+    }
+
+    // Generate new PDF
+    const result = await generateScoiAuditPdf({ audit, req });
+
+    // FIX: Save pdfUrl back to the audit record so next request serves from cache
+    await SpecialScoiAudit.findByIdAndUpdate(audit._id, {
+      $set: { pdfUrl: result.url }
+    });
+
+    // For GET download requests — stream the file
+    if (req.method === "GET") {
+      return res.download(result.filepath, `SCOI-Audit-${audit.subject?.name || audit._id}.pdf`);
+    }
+
+    return res.json({ success: true, url: result.url, filename: result.filename });
+
+  } catch (err) {
+    console.error("[SCOI PDF route]", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "PDF generation failed"
+    });
   }
 }
