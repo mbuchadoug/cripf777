@@ -1,25 +1,31 @@
 /**
  * certificateTemplate.js
  * ──────────────────────────────────────────────────────────────────────────────
- * Redesigned to international corporate standard.
- * Inspired by PMP / professional body certificate conventions:
- *  - Landscape A4 orientation (professional standard)
- *  - Dual-logo header band with institution seal
- *  - Heavy typographic hierarchy: title → recipient → designation
- *  - Double-rule gold border with corner ornaments
- *  - Official seal + two signature blocks
- *  - Credential ID and verification footer
+ * PMP-INSPIRED corporate international standard certificate.
  *
- * Usage (same signature):
- *   import { buildCertificateHtml } from "./certificateTemplate.js";
- *   const html = buildCertificateHtml({ name, orgName, moduleName, quizTitle,
- *                                        score, percentage, date });
+ * Design based directly on the PMP (Project Management Professional) certificate:
+ *  ✅ Clean cream/white background — NOT dark background
+ *  ✅ Dark institution header band at top
+ *  ✅ "THIS IS TO CERTIFY THAT" eyebrow small-caps
+ *  ✅ Large italic recipient name as the visual centrepiece
+ *  ✅ Tracked-caps achievement body paragraph
+ *  ✅ Bold qualification designation in dark box
+ *  ✅ "IN TESTIMONY WHEREOF" statement above signatures
+ *  ✅ Two signature blocks flanking official seal, bottom-aligned
+ *  ✅ Credential reference strip at very bottom
  *
- * Puppeteer settings (update in your PDF generator):
- *   format: "A4",
- *   landscape: true,          ← NEW: landscape for professional cert proportions
- *   printBackground: true,
- *   margin: { top: "0", bottom: "0", left: "0", right: "0" }
+ * Elevated over PMP baseline:
+ *  + Richer double-rule gold border with corner filigree
+ *  + Cinzel + Cormorant Garamond luxury editorial font pair
+ *  + SVG guild seal (multi-ring, arc text, radiating lines, star)
+ *  + Org-branded colour theming
+ *  + Grade badge (Distinction / Merit / Pass)
+ *  + Print-safe colour rendering
+ *
+ * Portrait A4 (210 × 297 mm).
+ * Puppeteer call should use:
+ *   format: "A4", printBackground: true,
+ *   margin: { top:"0", bottom:"0", left:"0", right:"0" }
  */
 
 export function buildCertificateHtml({
@@ -44,92 +50,81 @@ export function buildCertificateHtml({
     day: "numeric", month: "long", year: "numeric"
   });
 
-  const moduleTitle    = esc(quizTitle || moduleName || "Module");
-  const recipientName  = esc(name || "Recipient");
-  const institution    = esc(orgName || "CRIPFCnt Institute");
-  const scoreDisplay   = score      != null ? esc(String(score))      : null;
-  const pctDisplay     = percentage != null ? esc(String(percentage)) : null;
+  const moduleTitle   = esc(quizTitle || moduleName || "Module");
+  const recipientName = esc(name || "Recipient");
+  const pctDisplay    = percentage != null ? esc(String(percentage)) : null;
+  const scoreDisplay  = score      != null ? esc(String(score))      : null;
 
-  /* ── brand config by org ── */
-  const orgLow = (orgName || "").toLowerCase();
-  let brand = {
-    primary:  "#0a1628",
-    mid:      "#1E3A5F",
-    accent:   "#b8973a",
-    accent2:  "#d4aa50",
-    accentPale: "#f9f3e3",
-    cream:    "#fdf9f0",
-    series:   "CRIPFCnt Learning Management System",
-    abbrev:   "CRIPFCnt",
-    signatory1Name: "Donald Mataranyika",
-    signatory1Role: "Chartered Secretary & Governance Specialist",
-    signatory2Name: "Chief Academic Officer",
-    signatory2Role: "Academic Certification Authority",
-  };
-
-  if (/nyaradzo/.test(orgLow)) {
-    brand = { ...brand, primary: "#0a2e5c", accent: "#c9a227", accent2: "#dbb84a",
-              series: "Nyaradzo Group Training", abbrev: "NGT" };
-  } else if (/winchester/.test(orgLow)) {
-    brand = { ...brand, primary: "#1F3C88", accent: "#8B1E2D", accent2: "#a83040",
-              series: "Winchester School", abbrev: "WS" };
-  } else if (/st[\s-]?eurit|eurit/.test(orgLow)) {
-    brand = { ...brand, primary: "#111111", accent: "#D4AF37", accent2: "#e8c95a",
-              series: "St Eurit International School", abbrev: "SEIS" };
+  /* Grade label */
+  let gradeLabel = "";
+  if (percentage != null) {
+    const p = Number(percentage);
+    if      (p >= 90) gradeLabel = "With Distinction";
+    else if (p >= 75) gradeLabel = "With Merit";
+    else if (p >= 50) gradeLabel = "Pass";
   }
 
-  /* ── credential ID ── */
-  const credId = `${brand.abbrev.replace(/\s+/g,"")}-${dateStr.replace(/-/g,"")}-${
-    (name || "X").replace(/\s+/g,"").toUpperCase().slice(0,6).padEnd(6,"0")}`;
+  /* ── brand ── */
+  const orgLow = (orgName || "").toLowerCase();
+  let B = {
+    primary:    "#0A1628",
+    accent:     "#B8943A",
+    accent2:    "#D4AA50",
+    accentPale: "#F5EDD6",
+    cream:      "#FDFAF2",
+    text:       "#1A1A2E",
+    subtext:    "#6B5B35",
+    series:     "CRIPFCnt Learning Management System",
+    abbrev:     "CRIPFCNT",
+    displayName:"CRIPFCnt",
+    sig1Name:   "Donald Mataranyika",
+    sig1Role:   "Chair, Board of Directors",
+    sig1Script: "Donald",
+    sig2Name:   "Chief Academic Officer",
+    sig2Role:   "Director of Learning",
+    sig2Script: "Academic",
+  };
+  if (/nyaradzo/.test(orgLow))     B = { ...B, primary:"#062A5E", accent:"#C9A227", accent2:"#DDB84A", series:"Nyaradzo Group Training",        abbrev:"NGT",  displayName:"Nyaradzo" };
+  if (/winchester/.test(orgLow))   B = { ...B, primary:"#1F3C88", accent:"#8B1E2D", accent2:"#A83040", series:"Winchester School",               abbrev:"WS",   displayName:"Winchester" };
+  if (/st[\s-]?eurit|eurit/.test(orgLow)) B = { ...B, primary:"#111111", accent:"#D4AF37", accent2:"#E8C95A", series:"St Eurit International School", abbrev:"SEIS", displayName:"St Eurit" };
 
-  /* ── SVG ornament helpers ── */
-  const cornerSvg = (color1, color2) => `
-    <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 57V8C3 5.2 5.2 3 8 3H57" stroke="${color1}" stroke-width="2"/>
-      <path d="M3 38V8C3 5.2 5.2 3 8 3H38" stroke="${color2}" stroke-width="0.8"/>
-      <circle cx="8" cy="8" r="3.5" fill="${color1}"/>
-      <circle cx="3" cy="3" r="2" fill="${color2}"/>
-      <path d="M16 3H22M3 16V22" stroke="${color1}" stroke-width="1"/>
-      <path d="M6 3H9M3 6V9" stroke="${color2}" stroke-width="0.5"/>
-    </svg>`;
+  /* ── Credential ID ── */
+  const credId = `${B.abbrev}-${dateStr.replace(/-/g,"")}-${(name||"X").replace(/\s+/g,"").toUpperCase().slice(0,6).padEnd(6,"0")}`;
 
-  const sealSvg = `
-    <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Outer ring -->
-      <circle cx="60" cy="60" r="57" fill="${brand.primary}" stroke="${brand.accent}" stroke-width="2"/>
-      <!-- Inner rings -->
-      <circle cx="60" cy="60" r="50" fill="none" stroke="${brand.accent2}" stroke-width="0.8"/>
-      <circle cx="60" cy="60" r="44" fill="none" stroke="${brand.accent}" stroke-width="0.5" stroke-dasharray="3 2.5"/>
-      <!-- Star burst -->
-      <path d="M60 20l3.2 9.8H73l-8.2 6 3.2 9.8L60 39.6l-8 5.9 3.2-9.8-8.2-6h9.8L60 20z"
-            fill="${brand.accent2}" opacity="0.9"/>
-      <!-- Inner star -->
-      <path d="M60 28l2 6.2H68l-5.2 3.8 2 6.2L60 40.3l-4.8 3.9 2-6.2L52 34.2h6L60 28z"
-            fill="${brand.accent}" opacity="0.5"/>
-      <!-- Text arcs -->
-      <path id="arc-top" d="M18,60 a42,42 0 0,1 84,0" fill="none"/>
-      <path id="arc-bot" d="M18,62 a42,42 0 0,0 84,0" fill="none"/>
-      <text font-family="'Cinzel',serif" font-size="7.5" font-weight="600"
-            fill="${brand.accent2}" letter-spacing="3">
-        <textPath href="#arc-top" startOffset="50%" text-anchor="middle">
-          ${brand.abbrev.toUpperCase()}
-        </textPath>
-      </text>
-      <text font-family="'Cinzel',serif" font-size="6.5"
-            fill="${brand.accent}" letter-spacing="2.5">
-        <textPath href="#arc-bot" startOffset="50%" text-anchor="middle">
-          VERIFIED · OFFICIAL RECORD
-        </textPath>
-      </text>
-      <!-- Bottom dot -->
-      <circle cx="60" cy="97" r="3" fill="${brand.accent}" opacity="0.8"/>
-    </svg>`;
+  /* ── SVG Seal (PMP-inspired: solid ring, radiating lines, star, arc text) ── */
+  const rays = Array.from({length:24},(_,i)=>{
+    const a=(i*15)*Math.PI/180, x1=70+49*Math.cos(a), y1=70+49*Math.sin(a), x2=70+59*Math.cos(a), y2=70+59*Math.sin(a);
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${B.accent2}" stroke-width="0.9" opacity="0.65"/>`;
+  }).join("");
 
-  const starDivider = `
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-            fill="${brand.accent}"/>
-    </svg>`;
+  const seal = `<svg viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="70" cy="70" r="68" fill="${B.primary}" stroke="${B.accent}" stroke-width="2.5"/>
+    <circle cx="70" cy="70" r="61" fill="none" stroke="${B.accent2}" stroke-width="1"/>
+    <circle cx="70" cy="70" r="55" fill="none" stroke="${B.accent}" stroke-width="0.6" stroke-dasharray="4 3"/>
+    ${rays}
+    <path d="M70 26 L74.8 41.8 L91.5 41.8 L78.4 51.4 L83.2 67.2 L70 57.6 L56.8 67.2 L61.6 51.4 L48.5 41.8 L65.2 41.8 Z" fill="${B.accent2}" opacity="0.95"/>
+    <path d="M70 33 L73.5 44.2 L85.5 44.2 L76.3 50.8 L79.8 62 L70 55.4 L60.2 62 L63.7 50.8 L54.5 44.2 L66.5 44.2 Z" fill="${B.accent}" opacity="0.35"/>
+    <path id="arc-t" d="M13,70 a57,57 0 0,1 114,0" fill="none"/>
+    <path id="arc-b" d="M15,72 a55,55 0 0,0 110,0" fill="none"/>
+    <text font-family="'Cinzel',serif" font-size="9.5" font-weight="700" fill="${B.accent2}" letter-spacing="3.5"><textPath href="#arc-t" startOffset="50%" text-anchor="middle">${B.abbrev}</textPath></text>
+    <text font-family="'Cinzel',serif" font-size="7" fill="${B.accent}" letter-spacing="2"><textPath href="#arc-b" startOffset="50%" text-anchor="middle">VERIFIED · OFFICIAL RECORD</textPath></text>
+    <circle cx="70" cy="127" r="3.5" fill="${B.accent}" opacity="0.85"/>
+  </svg>`;
+
+  /* ── Corner filigree ── */
+  const corner = `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 69V9.5C3 6 6 3 9.5 3H69" stroke="${B.accent}" stroke-width="2.2"/>
+    <path d="M3 48V9.5C3 6 6 3 9.5 3H48" stroke="${B.accent2}" stroke-width="0.9"/>
+    <path d="M3 30V9.5C3 6 6 3 9.5 3H30" stroke="${B.accent}" stroke-width="0.4" opacity="0.45"/>
+    <circle cx="9.5" cy="9.5" r="4.2" fill="${B.accent}"/>
+    <circle cx="3" cy="3" r="2.6" fill="${B.accent2}"/>
+    <path d="M20 3H27M3 20V27" stroke="${B.accent}" stroke-width="1.2"/>
+    <path d="M9 3H13M3 9V13" stroke="${B.accent2}" stroke-width="0.65"/>
+    <path d="M34 3L37 6L34 9L31 6Z" fill="${B.accent}" opacity="0.6"/>
+  </svg>`;
+
+  /* ── Star divider ── */
+  const star = `<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M11 1.5l2.2 6.8H21l-5.8 4.2 2.2 6.8L11 15l-6.4 4.3 2.2-6.8L0.8 8.3H8.8Z" fill="${B.accent}"/></svg>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -137,478 +132,191 @@ export function buildCertificateHtml({
 <meta charset="utf-8"/>
 <title>Certificate — ${recipientName}</title>
 <style>
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Cinzel:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600;1,700&family=Cinzel:wght@400;500;600;700&display=swap');
 
-/* ── Reset ── */
-*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+@page{margin:0;size:A4 portrait;}
 
-@page { margin:0; size:A4 landscape; }
-
-html, body {
-  width:297mm;
-  height:210mm;
-  overflow:hidden;
-  font-family:'Cormorant Garamond', Georgia, serif;
+html,body{
+  width:210mm;height:297mm;overflow:hidden;
+  background:${B.primary};
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Cormorant Garamond',Georgia,serif;
+  -webkit-font-smoothing:antialiased;
 }
 
-body {
-  background:${brand.primary};
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
+/* ── FRAMES ── */
+.fo{width:196mm;height:283mm;background:${B.cream};padding:6px;position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.fb1{width:100%;height:100%;border:2.8px solid ${B.accent};padding:5px;position:relative;display:flex;}
+.fb2{flex:1;border:1px solid ${B.accent};position:relative;overflow:hidden;display:flex;flex-direction:column;background:${B.cream};}
 
-/* ── Outer dark frame ── */
-.frame-outer {
-  width:287mm;
-  height:200mm;
-  background:${brand.cream};
-  padding:5px;
-  position:relative;
-  display:flex;
-}
+/* ── CORNERS ── */
+.co{position:absolute;width:72px;height:72px;z-index:3;}
+.co.tl{top:-3px;left:-3px;}
+.co.tr{top:-3px;right:-3px;transform:scaleX(-1);}
+.co.bl{bottom:-3px;left:-3px;transform:scaleY(-1);}
+.co.br{bottom:-3px;right:-3px;transform:scale(-1,-1);}
 
-/* ── Double-rule border ── */
-.frame-border-1 {
-  flex:1;
-  border:2.5px solid ${brand.accent};
-  padding:5px;
-  position:relative;
-  display:flex;
-}
-.frame-border-2 {
-  flex:1;
-  border:1px solid ${brand.accent};
-  position:relative;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-  background:${brand.cream};
-}
+/* ── WATERMARK ── */
+.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);font-family:'Cinzel',serif;font-size:86px;font-weight:700;color:${B.accent};opacity:0.033;white-space:nowrap;letter-spacing:14px;pointer-events:none;z-index:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 
-/* ── Watermark ── */
-.watermark {
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%) rotate(-25deg);
-  font-family:'Cinzel', serif;
-  font-size:110px;
-  font-weight:700;
-  color:${brand.accent};
-  opacity:0.03;
-  white-space:nowrap;
-  letter-spacing:12px;
-  pointer-events:none;
-  z-index:0;
+/* ── TOP INSTITUTION BAND ── */
+.top-band{
+  background:${B.primary};
+  height:48px;padding:0 50px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:relative;z-index:2;flex-shrink:0;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
+.top-band::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,transparent,${B.accent} 15%,${B.accent2} 50%,${B.accent} 85%,transparent);}
+.tb-left{display:flex;flex-direction:column;gap:2px;}
+.tb-name{font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:5px;color:${B.accent2};text-transform:uppercase;}
+.tb-sub{font-family:'Cinzel',serif;font-size:6.5px;letter-spacing:3px;color:rgba(255,255,255,0.4);text-transform:uppercase;}
+.tb-right{font-family:'Cinzel',serif;font-size:7px;letter-spacing:2.5px;color:rgba(255,255,255,0.4);text-transform:uppercase;}
 
-/* ── Corner ornaments ── */
-.corner {
-  position:absolute;
-  width:60px;
-  height:60px;
-  z-index:3;
-}
-.corner.tl { top:-2px;    left:-2px; }
-.corner.tr { top:-2px;    right:-2px;  transform:scaleX(-1); }
-.corner.bl { bottom:-2px; left:-2px;   transform:scaleY(-1); }
-.corner.br { bottom:-2px; right:-2px;  transform:scale(-1); }
+/* ── BODY ── */
+.body{flex:1;display:flex;flex-direction:column;align-items:center;padding:26px 52px 8px;position:relative;z-index:1;text-align:center;}
 
-/* ── TOP HEADER BAND ── */
-.cert-header {
-  background:${brand.primary};
-  padding:0 50px;
-  height:36px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  position:relative;
-  z-index:2;
-  flex-shrink:0;
-}
-.cert-header::after {
-  content:'';
-  position:absolute;
-  bottom:0; left:0; right:0;
-  height:2px;
-  background:linear-gradient(90deg, transparent, ${brand.accent} 20%, ${brand.accent} 80%, transparent);
-}
-.hdr-series {
-  font-family:'Cinzel', serif;
-  font-size:7px;
-  letter-spacing:3.5px;
-  color:${brand.accent};
-  text-transform:uppercase;
-}
-.hdr-ref {
-  font-family:'Cinzel', serif;
-  font-size:7px;
-  letter-spacing:2px;
-  color:rgba(255,255,255,0.5);
-  text-transform:uppercase;
-}
+/* ── EYEBROW (PMP: "THIS IS TO CERTIFY THAT") ── */
+.eyebrow{font-family:'Cinzel',serif;font-size:8.5px;font-weight:500;letter-spacing:5px;color:${B.subtext};text-transform:uppercase;margin-bottom:10px;}
 
-/* ── MAIN BODY ── */
-.cert-body {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  padding:14px 54px 10px;
-  position:relative;
-  z-index:1;
-  text-align:center;
-}
+/* ── RECIPIENT — centrepiece ── */
+.recipient{font-family:'Cormorant Garamond',serif;font-size:54px;font-weight:600;font-style:italic;color:${B.text};line-height:1.05;letter-spacing:0.5px;margin-bottom:14px;max-width:450px;word-break:break-word;}
 
-/* ── Institution name ── */
-.inst-name {
-  font-family:'Cinzel', serif;
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:4px;
-  text-transform:uppercase;
-  color:${brand.primary};
-  margin-bottom:4px;
-}
+/* ── ACHIEVEMENT TEXT (PMP tracked caps paragraph) ── */
+.achieve{font-family:'Cormorant Garamond',serif;font-size:11.5px;color:${B.subtext};letter-spacing:1.6px;text-transform:uppercase;line-height:1.9;max-width:380px;margin-bottom:14px;}
 
-/* ── Main title ── */
-.cert-title {
-  font-family:'Cinzel', serif;
-  font-size:38px;
-  font-weight:700;
-  color:${brand.primary};
-  letter-spacing:5px;
-  text-transform:uppercase;
-  line-height:1;
-  margin-bottom:0;
-}
-.cert-title-sub {
-  font-family:'Cormorant Garamond', serif;
-  font-size:15px;
-  font-style:italic;
-  color:${brand.accent};
-  letter-spacing:3px;
-  margin-bottom:6px;
-}
+/* ── DIVIDER ── */
+.div-row{display:flex;align-items:center;gap:10px;width:280px;margin-bottom:14px;}
+.div-ln{flex:1;height:1px;background:linear-gradient(90deg,transparent,${B.accent} 35%,${B.accent} 65%,transparent);}
 
-/* ── Divider ── */
-.divider {
-  display:flex;
-  align-items:center;
-  gap:10px;
-  width:360px;
-  margin:5px auto;
-}
-.divider-line {
-  flex:1;
-  height:1px;
-  background:linear-gradient(90deg, transparent, ${brand.accent} 30%, ${brand.accent} 70%, transparent);
-}
+/* ── QUALIFICATION BOX (PMP dark box) ── */
+.qual{background:${B.primary};width:86%;max-width:410px;padding:14px 30px 16px;margin-bottom:16px;position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.qual::before,.qual::after{content:'';position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,${B.accent} 15%,${B.accent2} 50%,${B.accent} 85%,transparent);}
+.qual::before{top:0;}.qual::after{bottom:0;}
+.q-series{font-family:'Cinzel',serif;font-size:7px;letter-spacing:4px;color:${B.accent};text-transform:uppercase;margin-bottom:8px;}
+.q-title{font-family:'Cinzel',serif;font-size:13.5px;font-weight:700;color:${B.cream};letter-spacing:1.8px;line-height:1.55;text-transform:uppercase;}
 
-/* ── Presented to ── */
-.presented-to {
-  font-family:'Cormorant Garamond', serif;
-  font-size:10px;
-  color:${brand.accent};
-  letter-spacing:3.5px;
-  text-transform:uppercase;
-  margin-bottom:2px;
-}
+/* ── GRADE BADGE ── */
+.grade{display:inline-flex;align-items:center;gap:8px;background:${B.accentPale};border:1px solid ${B.accent};padding:5px 20px;margin-bottom:12px;}
+.g-dot{width:5px;height:5px;border-radius:50%;background:${B.accent};}
+.g-txt{font-family:'Cinzel',serif;font-size:8px;font-weight:700;letter-spacing:3px;color:${B.accent};text-transform:uppercase;}
 
-/* ── Recipient name ── */
-.recipient-name {
-  font-family:'Cormorant Garamond', serif;
-  font-size:46px;
-  font-weight:600;
-  font-style:italic;
-  color:${brand.primary};
-  line-height:1.05;
-  letter-spacing:0.5px;
-  margin-bottom:4px;
-  max-width:560px;
-  word-break:break-word;
-}
+/* ── STATS ── */
+.stats{display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+.stat{padding:0 20px;text-align:center;}
+.sv{font-family:'Cinzel',serif;font-size:21px;font-weight:700;color:${B.text};line-height:1;margin-bottom:4px;}
+.sv.gold{color:${B.accent};}
+.sl{font-family:'Cormorant Garamond',serif;font-size:9px;color:${B.subtext};letter-spacing:2.5px;text-transform:uppercase;}
+.ss{width:1px;height:40px;background:linear-gradient(180deg,transparent,${B.accent} 30%,${B.accent} 70%,transparent);}
 
-/* ── Body text ── */
-.cert-body-text {
-  font-family:'Cormorant Garamond', serif;
-  font-size:11.5px;
-  color:#5a4a2a;
-  letter-spacing:1.5px;
-  line-height:1.5;
-  max-width:520px;
-  margin:0 auto 6px;
-}
+/* ── TESTIMONY ── */
+.testimony{font-family:'Cormorant Garamond',serif;font-size:9px;color:${B.subtext};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;}
 
-/* ── Module/qualification box ── */
-.module-box {
-  background:${brand.primary};
-  padding:8px 30px 9px;
-  width:86%;
-  max-width:560px;
-  margin:0 auto 8px;
-  position:relative;
-}
-.module-box::before,
-.module-box::after {
-  content:'';
-  position:absolute;
-  left:0; right:0;
-  height:1.5px;
-  background:linear-gradient(90deg, transparent, ${brand.accent} 15%, ${brand.accent} 85%, transparent);
-}
-.module-box::before { top:0; }
-.module-box::after  { bottom:0; }
+/* ── FOOTER SIGNATURES ── */
+.footer{border-top:1px solid rgba(184,148,58,0.28);padding:12px 52px 0;display:flex;align-items:flex-start;justify-content:space-between;z-index:2;flex-shrink:0;}
+.sig{text-align:center;width:140px;}
+.ss2{font-family:'Cormorant Garamond',serif;font-size:25px;font-style:italic;color:${B.text};margin-bottom:2px;line-height:1;}
+.sr{width:125px;height:0.8px;background:${B.text};margin:0 auto 4px;}
+.sn{font-family:'Cinzel',serif;font-size:7px;letter-spacing:1.8px;color:${B.text};text-transform:uppercase;font-weight:600;margin-bottom:2px;}
+.so{font-family:'Cormorant Garamond',serif;font-size:9.5px;font-style:italic;color:${B.subtext};line-height:1.3;}
+.seal{width:98px;height:98px;flex-shrink:0;margin-top:-14px;}
 
-.module-label {
-  font-family:'Cinzel', serif;
-  font-size:6.5px;
-  letter-spacing:4px;
-  color:${brand.accent};
-  text-transform:uppercase;
-  margin-bottom:4px;
-}
-.module-title {
-  font-family:'Cinzel', serif;
-  font-size:11px;
-  font-weight:600;
-  color:${brand.cream};
-  letter-spacing:1.5px;
-  line-height:1.5;
-  text-transform:uppercase;
-}
-
-/* ── Stats row ── */
-.stats {
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:0;
-  margin-bottom:8px;
-}
-.stat {
-  padding:0 20px;
-  text-align:center;
-}
-.stat-value {
-  font-family:'Cinzel', serif;
-  font-size:20px;
-  font-weight:700;
-  color:${brand.primary};
-  line-height:1;
-  margin-bottom:3px;
-}
-.stat-value.gold { color:${brand.accent}; }
-.stat-label {
-  font-family:'Cormorant Garamond', serif;
-  font-size:8.5px;
-  color:#7a6040;
-  letter-spacing:2px;
-  text-transform:uppercase;
-}
-.stat-sep {
-  width:1px;
-  height:36px;
-  background:linear-gradient(180deg, transparent, ${brand.accent} 30%, ${brand.accent} 70%, transparent);
-}
-
-/* ── FOOTER SIGNATURE ROW ── */
-.cert-footer {
-  border-top:1px solid rgba(${brand.accent === "#b8973a" ? "184,151,58" : "184,151,58"},0.35);
-  padding:8px 54px 0;
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  position:relative;
-  z-index:2;
-  flex-shrink:0;
-  margin-bottom:6px;
-}
-
-.sig {
-  text-align:center;
-  width:160px;
-}
-.sig-script {
-  font-family:'Cormorant Garamond', serif;
-  font-size:22px;
-  font-style:italic;
-  color:${brand.primary};
-  margin-bottom:2px;
-  line-height:1;
-}
-.sig-line {
-  width:140px;
-  height:0.8px;
-  background:${brand.primary};
-  margin:0 auto 3px;
-}
-.sig-name {
-  font-family:'Cinzel', serif;
-  font-size:7px;
-  letter-spacing:1.5px;
-  color:${brand.primary};
-  text-transform:uppercase;
-  margin-bottom:1px;
-  font-weight:600;
-}
-.sig-role {
-  font-family:'Cormorant Garamond', serif;
-  font-size:9px;
-  font-style:italic;
-  color:#7a6040;
-  line-height:1.3;
-}
-
-/* ── Seal (center of footer) ── */
-.seal {
-  width:90px;
-  height:90px;
-  flex-shrink:0;
-  margin-top:-14px;
-}
-
-/* ── BOTTOM STRIP ── */
-.cert-strip {
-  background:${brand.primary};
-  height:22px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 50px;
-  position:relative;
-  z-index:2;
-  flex-shrink:0;
-}
-.cert-strip::before {
-  content:'';
-  position:absolute;
-  top:0; left:0; right:0;
-  height:1.5px;
-  background:linear-gradient(90deg, transparent, ${brand.accent} 20%, ${brand.accent} 80%, transparent);
-}
-.strip-id {
-  font-family:'Cormorant Garamond', serif;
-  font-size:8px;
-  color:rgba(255,255,255,0.55);
-  letter-spacing:1.2px;
-}
-.strip-verify {
-  font-family:'Cinzel', serif;
-  font-size:7px;
-  color:${brand.accent};
-  letter-spacing:2.5px;
-  text-transform:uppercase;
-}
+/* ── CREDENTIAL STRIP ── */
+.cstrip{background:${B.primary};height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 52px;position:relative;z-index:2;flex-shrink:0;margin-top:auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.cstrip::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,${B.accent} 15%,${B.accent2} 50%,${B.accent} 85%,transparent);}
+.ci{font-family:'Cormorant Garamond',serif;font-size:8.5px;color:rgba(255,255,255,0.48);letter-spacing:1.5px;}
+.cv{font-family:'Cinzel',serif;font-size:6.5px;color:${B.accent};letter-spacing:2.5px;text-transform:uppercase;}
 </style>
 </head>
 <body>
 
-<div class="frame-outer">
-  <div class="frame-border-1">
+<div class="fo">
+  <div class="fb1">
 
-    <!-- Corner ornaments -->
-    <div class="corner tl">${cornerSvg(brand.accent, brand.accent2)}</div>
-    <div class="corner tr">${cornerSvg(brand.accent, brand.accent2)}</div>
-    <div class="corner bl">${cornerSvg(brand.accent, brand.accent2)}</div>
-    <div class="corner br">${cornerSvg(brand.accent, brand.accent2)}</div>
+    <div class="co tl">${corner}</div>
+    <div class="co tr">${corner}</div>
+    <div class="co bl">${corner}</div>
+    <div class="co br">${corner}</div>
 
-    <div class="frame-border-2">
-      <div class="watermark">${brand.abbrev.toUpperCase()}</div>
+    <div class="fb2">
+      <div class="wm">${B.abbrev}</div>
 
-      <!-- TOP HEADER BAND -->
-      <div class="cert-header">
-        <div class="hdr-series">${esc(brand.series)}</div>
-        <div class="hdr-ref">Official Certification Record</div>
+      <!-- TOP INSTITUTION BAND -->
+      <div class="top-band">
+        <div class="tb-left">
+          <div class="tb-name">${esc(B.abbrev)}</div>
+          <div class="tb-sub">${esc(B.series)}</div>
+        </div>
+        <div class="tb-right">Official Certification Record</div>
       </div>
 
-      <!-- MAIN BODY -->
-      <div class="cert-body">
+      <!-- BODY -->
+      <div class="body">
 
-        <div class="inst-name">${institution}</div>
+        <p class="eyebrow">This Is To Certify That</p>
 
-        <div class="cert-title">Certificate</div>
-        <div class="cert-title-sub">of Achievement</div>
+        <div class="recipient">${recipientName}</div>
 
-        <div class="divider">
-          <div class="divider-line"></div>
-          ${starDivider}
-          <div class="divider-line"></div>
-        </div>
-
-        <p class="presented-to">This is to Certify That</p>
-
-        <div class="recipient-name">${recipientName}</div>
-
-        <p class="cert-body-text">
-          Has been formally evaluated for demonstrated knowledge, competence and performance,
-          and is hereby awarded the following professional certification:
+        <p class="achieve">
+          Has been formally evaluated for demonstrated experience,<br>
+          knowledge and performance in achieving an organisational<br>
+          objective and is hereby bestowed the global professional certification
         </p>
 
-        <div class="module-box">
-          <p class="module-label">${esc(brand.series)} &nbsp;·&nbsp; Official Record</p>
-          <p class="module-title">${moduleTitle}</p>
+        <div class="div-row">
+          <div class="div-ln"></div>${star}<div class="div-ln"></div>
         </div>
+
+        <div class="qual">
+          <p class="q-series">${esc(B.series)} &nbsp;·&nbsp; Official Record</p>
+          <p class="q-title">${moduleTitle}</p>
+        </div>
+
+        ${gradeLabel ? `<div class="grade"><span class="g-dot"></span><span class="g-txt">${esc(gradeLabel)}</span><span class="g-dot"></span></div>` : ""}
 
         ${(scoreDisplay || pctDisplay) ? `
         <div class="stats">
-          ${scoreDisplay ? `
-          <div class="stat">
-            <div class="stat-value">${scoreDisplay}</div>
-            <div class="stat-label">Final Score</div>
-          </div>
-          <div class="stat-sep"></div>` : ""}
-          ${pctDisplay ? `
-          <div class="stat">
-            <div class="stat-value gold">${pctDisplay}%</div>
-            <div class="stat-label">Grade</div>
-          </div>
-          <div class="stat-sep"></div>` : ""}
-          <div class="stat">
-            <div class="stat-value" style="font-size:14px;">${dateLong}</div>
-            <div class="stat-label">Date Awarded</div>
-          </div>
+          ${scoreDisplay ? `<div class="stat"><div class="sv">${scoreDisplay}</div><div class="sl">Final Score</div></div><div class="ss"></div>` : ""}
+          ${pctDisplay  ? `<div class="stat"><div class="sv gold">${pctDisplay}%</div><div class="sl">Grade</div></div><div class="ss"></div>` : ""}
+          <div class="stat"><div class="sv" style="font-size:14px;font-weight:600;">${dateLong}</div><div class="sl">Date Awarded</div></div>
         </div>` : `
         <div class="stats">
-          <div class="stat">
-            <div class="stat-value" style="font-size:14px;">${dateLong}</div>
-            <div class="stat-label">Date Awarded</div>
-          </div>
+          <div class="stat"><div class="sv" style="font-size:14px;font-weight:600;">${dateLong}</div><div class="sl">Date Awarded</div></div>
         </div>`}
 
-      </div><!-- /cert-body -->
+        <p class="testimony">In Testimony Whereof, We Have Subscribed Our Signatures Under the Seal of the Institute</p>
 
-      <!-- SIGNATURE ROW -->
-      <div class="cert-footer">
+      </div><!-- /body -->
+
+      <!-- SIGNATURES -->
+      <div class="footer">
         <div class="sig">
-          <div class="sig-script">${esc(brand.signatory1Name.split(" ")[0])}</div>
-          <div class="sig-line"></div>
-          <div class="sig-name">${esc(brand.signatory1Name)}</div>
-          <div class="sig-role">${esc(brand.signatory1Role)}</div>
+          <div class="ss2">${esc(B.sig1Script)}</div>
+          <div class="sr"></div>
+          <div class="sn">${esc(B.sig1Name)}</div>
+          <div class="so">${esc(B.sig1Role)}</div>
         </div>
 
-        <div class="seal">${sealSvg}</div>
+        <div class="seal">${seal}</div>
 
         <div class="sig">
-          <div class="sig-script">Academic</div>
-          <div class="sig-line"></div>
-          <div class="sig-name">${esc(brand.signatory2Name)}</div>
-          <div class="sig-role">${esc(brand.signatory2Role)}</div>
+          <div class="ss2">${esc(B.sig2Script)}</div>
+          <div class="sr"></div>
+          <div class="sn">${esc(B.sig2Name)}</div>
+          <div class="so">${esc(B.sig2Role)}</div>
         </div>
       </div>
 
-      <!-- BOTTOM STRIP -->
-      <div class="cert-strip">
-        <span class="strip-id">Credential ID: ${credId}</span>
-        <span class="strip-verify">In Testimony Whereof We Have Subscribed Our Signatures Under the Seal of the Institute</span>
+      <!-- CREDENTIAL STRIP -->
+      <div class="cstrip">
+        <span class="ci">Certificate ID: ${credId} &nbsp;&middot;&nbsp; Awarded by ${esc(B.abbrev)}</span>
+        <span class="cv">${esc(B.abbrev)} &nbsp;&middot;&nbsp; Verified</span>
       </div>
 
-    </div><!-- /frame-border-2 -->
-  </div><!-- /frame-border-1 -->
-</div><!-- /frame-outer -->
+    </div><!-- /fb2 -->
+  </div><!-- /fb1 -->
+</div><!-- /fo -->
 
 </body>
 </html>`;
