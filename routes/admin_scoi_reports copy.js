@@ -1,8 +1,6 @@
 // routes/admin_scoi_reports.js - ADMIN SCOI REPORTS MANAGEMENT
 
 import { Router } from "express";
-import fs from "fs";
-import path from "path";
 import PlacementAudit from "../models/placementAudit.js";
 import SpecialScoiAudit from "../models/specialScoiAudit.js";
 import { ensureAuth } from "../middleware/authGuard.js";
@@ -15,6 +13,7 @@ const router = Router();
  */
 router.get("/admin/scoi/reports", ensureAuth, async (req, res) => {
   try {
+    // Fetch both types of audits
     const placementAudits = await PlacementAudit.find({})
       .sort({ "assessmentWindow.label": -1 })
       .lean();
@@ -23,6 +22,7 @@ router.get("/admin/scoi/reports", ensureAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Normalize data
     const normalizedPlacement = placementAudits.map(a => ({
       ...a,
       auditKind: "placement"
@@ -36,13 +36,15 @@ router.get("/admin/scoi/reports", ensureAuth, async (req, res) => {
       }
     }));
 
+    // Combine
     const reports = [...normalizedSpecial, ...normalizedPlacement];
 
+    // Calculate stats
     const stats = {
-      total:     reports.length,
+      total: reports.length,
       placement: normalizedPlacement.length,
-      special:   normalizedSpecial.length,
-      withPdf:   reports.filter(r => r.pdfUrl).length
+      special: normalizedSpecial.length,
+      withPdf: reports.filter(r => r.pdfUrl).length
     };
 
     res.render("admin/scoi_reports_list", {
@@ -71,15 +73,14 @@ router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
       });
     }
 
-    // Not a placement — try special (use non-lean for getters)
-    audit = await SpecialScoiAudit.findById(req.params.id);
+    audit = await SpecialScoiAudit.findById(req.params.id).lean();
 
     if (!audit) {
       return res.status(404).send("Report not found");
     }
 
     return res.render("admin/special_scoi_audit_view", {
-      title: `Special SCOI Audit — ${audit.subject?.name || "Report"}`,
+      title: `Special SCOI Audit- ${audit.subject?.name || "Report"}`,
       audit,
       user: req.user,
       layout: false
@@ -95,29 +96,54 @@ router.get("/admin/scoi/reports/:id/view", ensureAuth, async (req, res) => {
  */
 router.post("/admin/scoi/reports/:id/generate-pdf", ensureAuth, async (req, res) => {
   try {
+    // Try placement first
     let audit = await PlacementAudit.findById(req.params.id);
     let Model = PlacementAudit;
-
+    
+    // Try special if not found
     if (!audit) {
       audit = await SpecialScoiAudit.findById(req.params.id);
       Model = SpecialScoiAudit;
     }
 
     if (!audit) {
-      return res.status(404).json({ success: false, error: "Report not found" });
+      return res.status(404).json({ 
+        success: false, 
+        error: "Report not found" 
+      });
     }
 
-    // Re-generate even if pdfUrl exists (admin may want a fresh copy)
+    // Check if PDF already exists
+    if (audit.pdfUrl) {
+      return res.json({ 
+        success: true, 
+        message: "PDF already exists",
+        pdfUrl: audit.pdfUrl 
+      });
+    }
+
+    // Generate PDF
+    console.log(`[PDF Generation] Generating PDF for audit: ${audit._id}`);
+    //const pdf = await generateScoiPdf(audit);
     const pdf = await generateScoiPdf({ audit, req });
+
+    // Update audit with PDF URL
     audit.pdfUrl = pdf.url;
     await audit.save();
 
     console.log(`[PDF Generation] ✅ PDF generated: ${pdf.url}`);
 
-    res.json({ success: true, pdfUrl: pdf.url, url: pdf.url });
+    res.json({ 
+      success: true, 
+      message: "PDF generated successfully",
+      pdfUrl: pdf.url 
+    });
   } catch (err) {
     console.error("[PDF generation error]", err);
-    res.status(500).json({ success: false, error: err.message || "Failed to generate PDF" });
+    res.status(500).json({ 
+      success: false, 
+      error: err.message || "Failed to generate PDF" 
+    });
   }
 });
 
@@ -126,43 +152,67 @@ router.post("/admin/scoi/reports/:id/generate-pdf", ensureAuth, async (req, res)
  */
 router.post("/admin/scoi/reports/generate-all-pdfs", ensureAuth, async (req, res) => {
   try {
-    const noPdfQuery = {
+    // Find all audits without PDFs
+    const placementAuditsNoPdf = await PlacementAudit.find({
       $or: [
         { pdfUrl: { $exists: false } },
         { pdfUrl: null },
         { pdfUrl: "" }
       ]
-    };
+    });
 
-    const placementNoPdf = await PlacementAudit.find(noPdfQuery);
-    const specialNoPdf   = await SpecialScoiAudit.find(noPdfQuery);
-    const allAudits      = [...placementNoPdf, ...specialNoPdf];
+    const specialAuditsNoPdf = await SpecialScoiAudit.find({
+      $or: [
+        { pdfUrl: { $exists: false } },
+        { pdfUrl: null },
+        { pdfUrl: "" }
+      ]
+    });
+
+    const allAudits = [...placementAuditsNoPdf, ...specialAuditsNoPdf];
 
     if (allAudits.length === 0) {
-      return res.json({ success: true, message: "All reports already have PDFs", generated: 0 });
+      return res.json({ 
+        success: true, 
+        message: "All reports already have PDFs",
+        generated: 0 
+      });
     }
 
-    console.log(`[Bulk PDF] Generating for ${allAudits.length} reports…`);
+    console.log(`[Bulk PDF Generation] Generating PDFs for ${allAudits.length} reports...`);
 
-    let generated = 0, failed = 0;
+    let generated = 0;
+    let failed = 0;
 
+    // Generate PDFs sequentially to avoid overwhelming the system
     for (const audit of allAudits) {
       try {
+        //const pdf = await generateScoiPdf(audit);
         const pdf = await generateScoiPdf({ audit, req });
         audit.pdfUrl = pdf.url;
         await audit.save();
         generated++;
-        console.log(`[Bulk PDF] ✅ ${audit.subject?.name}`);
+        console.log(`[Bulk PDF] ✅ Generated: ${audit.subject.name}`);
       } catch (err) {
         failed++;
-        console.error(`[Bulk PDF] ❌ ${audit.subject?.name}`, err.message);
+        console.error(`[Bulk PDF] ❌ Failed: ${audit.subject.name}`, err.message);
       }
     }
 
-    res.json({ success: true, generated, failed });
+    console.log(`[Bulk PDF Generation] Complete: ${generated} generated, ${failed} failed`);
+
+    res.json({ 
+      success: true, 
+      message: `Generated ${generated} PDFs`,
+      generated,
+      failed 
+    });
   } catch (err) {
-    console.error("[Bulk PDF error]", err);
-    res.status(500).json({ success: false, error: err.message || "Failed to generate PDFs" });
+    console.error("[Bulk PDF generation error]", err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message || "Failed to generate PDFs" 
+    });
   }
 });
 
@@ -171,73 +221,66 @@ router.post("/admin/scoi/reports/generate-all-pdfs", ensureAuth, async (req, res
  */
 router.delete("/admin/scoi/reports/:id", ensureAuth, async (req, res) => {
   try {
-    let deleted = await PlacementAudit.findByIdAndDelete(req.params.id);
-    if (!deleted) deleted = await SpecialScoiAudit.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
+
+    // Try placement first
+    let deleted = await PlacementAudit.findByIdAndDelete(id);
+
+    // If not placement, try special
+    if (!deleted) {
+      deleted = await SpecialScoiAudit.findByIdAndDelete(id);
+    }
 
     if (!deleted) {
-      return res.status(404).json({ success: false, error: "Report not found" });
+      return res.status(404).json({
+        success: false,
+        error: "Report not found"
+      });
     }
 
-    // Clean up PDF file if it exists
-    if (deleted.pdfUrl) {
-      const pdfPath = path.join(process.cwd(), "public", deleted.pdfUrl);
-      fs.unlink(pdfPath, () => {});
-    }
-
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      message: "Report deleted successfully"
+    });
   } catch (err) {
     console.error("[delete scoi report]", err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Failed to delete report"
+    });
   }
 });
-
 /**
- * GET - Download PDF directly (streams the file as an attachment)
- * FIX: Uses res.download() / stream instead of res.redirect() so the
- *      browser always triggers a file save rather than trying to navigate.
+ * GET - Download PDF directly
  */
 router.get("/scoi/audits/:id/download", async (req, res) => {
   try {
+    // Try placement first
     let audit = await PlacementAudit.findById(req.params.id);
-    if (!audit) audit = await SpecialScoiAudit.findById(req.params.id);
+    
+    // Try special if not found
+    if (!audit) {
+      audit = await SpecialScoiAudit.findById(req.params.id);
+    }
 
     if (!audit) {
       return res.status(404).send("Report not found");
     }
 
-    // Generate if missing
+    // Generate PDF if it doesn't exist
     if (!audit.pdfUrl) {
       console.log(`[Download] Generating PDF on-demand for: ${audit._id}`);
+      //const pdf = await generateScoiPdf(audit);
       const pdf = await generateScoiPdf({ audit, req });
       audit.pdfUrl = pdf.url;
       await audit.save();
     }
 
-    // Build absolute filesystem path from the stored relative URL
-    // pdfUrl is like "/docs/scoi-audits/scoi-xxx.pdf"
-    const filePath = path.join(process.cwd(), "public", audit.pdfUrl);
-
-    if (!fs.existsSync(filePath)) {
-      // File missing on disk — regenerate
-      console.warn(`[Download] PDF file missing on disk, regenerating: ${filePath}`);
-      const pdf = await generateScoiPdf({ audit, req });
-      audit.pdfUrl = pdf.url;
-      await audit.save();
-      const newPath = path.join(process.cwd(), "public", audit.pdfUrl);
-      const safeFilename = `SCOI-Report-${(audit.subject?.name || String(audit._id)).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-      return fs.createReadStream(newPath).pipe(res);
-    }
-
-    const safeFilename = `SCOI-Report-${(audit.subject?.name || String(audit._id)).replace(/[^a-zA-Z0-9-_]/g, "-")}.pdf`;
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-    return fs.createReadStream(filePath).pipe(res);
-
+    // Redirect to PDF file
+    res.redirect(audit.pdfUrl);
   } catch (err) {
     console.error("[PDF download error]", err);
-    res.status(500).send(`Failed to download PDF: ${err.message}`);
+    res.status(500).send("Failed to download PDF");
   }
 });
 
@@ -246,15 +289,23 @@ router.get("/scoi/audits/:id/download", async (req, res) => {
  */
 router.get("/scoi/audits/:id/view", async (req, res) => {
   try {
+    // Try placement first
     let audit = await PlacementAudit.findById(req.params.id).lean();
-    if (!audit) audit = await SpecialScoiAudit.findById(req.params.id).lean();
+    
+    // Try special if not found
+    if (!audit) {
+      audit = await SpecialScoiAudit.findById(req.params.id).lean();
+    }
 
     if (!audit) {
       return res.status(404).send("Report not found");
     }
 
-    // TODO: Add purchase verification
-    // const purchase = await AuditPurchase.findOne({ userId: req.user._id, auditId: audit._id });
+    // TODO: Add purchase verification here
+    // const purchase = await AuditPurchase.findOne({
+    //   userId: req.user._id,
+    //   auditId: audit._id
+    // });
     // if (!purchase) return res.status(403).send("Not purchased");
 
     res.render("scoi/audit_view", {

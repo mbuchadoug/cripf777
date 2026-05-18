@@ -53,28 +53,18 @@
     .hdr-btns { display:flex; gap:0.6rem; flex-wrap:wrap; }
 
     /* ── BUTTONS ──────────────────────────────────── */
-    .btn {
-      display:inline-flex; align-items:center; justify-content:center;
-      gap:0.4rem; padding:0.55rem 0.9rem;
-      border-radius:var(--r); font-size:0.8rem; font-weight:700;
-      border:none; cursor:pointer; text-decoration:none;
-      transition:all 0.18s; white-space:nowrap; line-height:1;
-      font-family:var(--font);
-    }
-    .btn-navy    { background:var(--navy);    color:var(--white); }
-    .btn-navy:hover    { background:#162d4a; }
-    .btn-outline { background:var(--white);   color:var(--g600); border:1.5px solid var(--g200); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.6rem 1.1rem; border-radius:var(--r); font-size:0.825rem; font-weight:700; border:none; cursor:pointer; text-decoration:none; transition:all 0.2s; white-space:nowrap; line-height:1; }
+    .btn-navy  { background:var(--navy);    color:var(--white); }
+    .btn-navy:hover  { background:#162d4a; }
+    .btn-outline { background:var(--white); color:var(--g600); border:1.5px solid var(--g200); }
     .btn-outline:hover { border-color:var(--navy); color:var(--navy); }
-    .btn-danger  { background:var(--danger);  color:var(--white); }
-    .btn-danger:hover  { background:#b91c1c; }
-    .btn-info    { background:var(--info);    color:var(--white); }
-    .btn-info:hover    { background:#1d4ed8; }
+    .btn-danger { background:var(--danger); color:var(--white); }
+    .btn-danger:hover { background:#b91c1c; }
+    .btn-info   { background:var(--info);   color:var(--white); }
+    .btn-info:hover   { background:#1d4ed8; }
     .btn-success { background:var(--success); color:var(--white); }
     .btn-success:hover { background:#047857; }
-    .btn-gold    { background:var(--gold);    color:var(--navy); }
-    .btn-gold:hover    { background:#b8943f; color:var(--white); }
-    /* FIX: explicit small size — do NOT rely on font-size alone */
-    .btn-sm { padding:0.38rem 0.7rem; font-size:0.75rem; }
+    .btn-sm { padding:0.42rem 0.75rem; font-size:0.78rem; }
     .btn:disabled { opacity:0.55; cursor:not-allowed; }
 
     /* ── STATS ────────────────────────────────────── */
@@ -93,41 +83,29 @@
 
     /* ── TABLE (desktop) ──────────────────────────── */
     .tbl-wrap { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; }
-    /* FIX: overflow-x:auto so actions column never gets clipped */
-    .tbl-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-    /* FIX: removed min-width:900px — use explicit column widths instead */
-    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .tbl-scroll { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; min-width:900px; }
     thead { background:var(--g50); border-bottom:2px solid var(--g200); }
-    th { padding:0.85rem 0.85rem; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--g600); text-align:left; white-space:nowrap; overflow:hidden; }
-    td { padding:0.8rem 0.85rem; border-bottom:1px solid var(--g100); font-size:0.845rem; vertical-align:middle; overflow:hidden; }
+    th { padding:0.85rem 1rem; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--g600); text-align:left; white-space:nowrap; }
+    td { padding:0.9rem 1rem; border-bottom:1px solid var(--g100); font-size:0.875rem; vertical-align:middle; }
     tbody tr:last-child td { border-bottom:none; }
     tbody tr { transition:background 0.15s; }
     tbody tr:hover { background:var(--g50); }
+    .col-title { min-width:200px; }
+    .col-type  { width:100px; }
+    .col-window{ min-width:140px; }
+    .col-status{ width:100px; }
+    .col-pdf   { width:80px; }
+    .col-actions { width:210px; }
 
-    /* FIX: explicit column widths that add up to 100% — actions always visible */
-    .col-title   { width:30%; }
-    .col-type    { width:9%; }
-    .col-window  { width:22%; }
-    .col-status  { width:9%; }
-    .col-pdf     { width:7%; }
-    /* FIX: actions column — min-content ensures buttons never wrap off-screen */
-    .col-actions { width:23%; white-space:nowrap; }
+    .rpt-name { font-weight:700; color:var(--navy); line-height:1.3; }
+    .rpt-meta { font-size:0.75rem; color:var(--g400); margin-top:0.2rem; }
 
-    .rpt-name { font-weight:700; color:var(--navy); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .rpt-meta { font-size:0.73rem; color:var(--g400); margin-top:0.2rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-    /* FIX: act-cell — flex with gap, never wraps, always in row */
-    .act-cell {
-      display:flex;
-      gap:0.3rem;
-      align-items:center;
-      flex-wrap:nowrap;
-      min-width:0;
-    }
-    .act-cell .btn { flex-shrink:0; }
+    /* action cell - fixed width, no wrapping */
+    .act-cell { display:flex; gap:0.4rem; align-items:center; flex-wrap:nowrap; }
 
     /* ── BADGES ──────────────────────────────────── */
-    .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.6rem; border-radius:30px; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+    .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.22rem 0.65rem; border-radius:30px; font-size:0.7rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
     .b-special   { background:rgba(124,58,237,0.1); color:var(--purple); }
     .b-placement { background:rgba(5,150,105,0.1);  color:var(--success); }
     .b-avail  { background:rgba(37,99,235,0.1);   color:var(--info); }
@@ -142,26 +120,12 @@
     .rcard-badges { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem; }
     .rcard-name { font-size:0.95rem; font-weight:700; color:var(--navy); line-height:1.35; }
     .rcard-body { padding:0.75rem 1.25rem; font-size:0.82rem; color:var(--g600); display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 1rem; }
+    .rcard-row { display:contents; }
     .rcard-lbl { font-weight:700; color:var(--navy); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; align-self:center; }
     .rcard-val { color:var(--g600); align-self:center; }
     .rcard-foot { padding:0.85rem 1.25rem; border-top:1px solid var(--g100); background:var(--g50); display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
     .rcard-foot .btn { width:100%; }
     .rcard-foot .btn-full { grid-column:1/-1; }
-
-    /* ── TOAST ──────────────────────────────────── */
-    .toast {
-      position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999;
-      background:var(--navy); color:var(--white);
-      padding:0.75rem 1.25rem; border-radius:var(--r);
-      font-size:0.85rem; font-weight:600;
-      box-shadow:var(--sh-lg);
-      display:none; align-items:center; gap:0.6rem;
-      max-width:340px;
-    }
-    .toast.show { display:flex; }
-    .toast.success { border-left:4px solid var(--success); }
-    .toast.error   { border-left:4px solid var(--danger); }
-    .toast.info    { border-left:4px solid var(--gold); }
 
     /* ── EMPTY STATE ─────────────────────────────── */
     .empty { text-align:center; padding:5rem 2rem; background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); }
@@ -172,15 +136,10 @@
     /* ── RESPONSIVE ──────────────────────────────── */
     @media (max-width:1100px) {
       .stats { grid-template-columns:repeat(2,1fr); }
-      /* On mid-size screens, keep table but allow horizontal scroll */
-      table { table-layout:auto; }
-      .col-title  { min-width:180px; }
-      .col-window { min-width:140px; }
-      .col-actions { min-width:220px; }
     }
     @media (max-width:860px) {
       /* swap table → cards */
-      .tbl-wrap  { display:none; }
+      .tbl-wrap { display:none; }
       .card-list { display:flex; }
       .stats { grid-template-columns:repeat(2,1fr); }
     }
@@ -284,81 +243,54 @@
   <div class="tbl-wrap">
     <div class="tbl-scroll">
       <table>
-        <colgroup>
-          <col class="col-title">
-          <col class="col-type">
-          <col class="col-window">
-          <col class="col-status">
-          <col class="col-pdf">
-          <col class="col-actions">
-        </colgroup>
         <thead>
           <tr>
-            <th>Report</th>
-            <th>Type</th>
-            <th>Window</th>
-            <th>Status</th>
-            <th>PDF</th>
-            <th>Actions</th>
+            <th class="col-title">Report</th>
+            <th class="col-type">Type</th>
+            <th class="col-window">Window</th>
+            <th class="col-status">Status</th>
+            <th class="col-pdf">PDF</th>
+            <th class="col-actions">Actions</th>
           </tr>
         </thead>
         <tbody id="desktopTable">
           {{#each reports}}
-          <tr
-            data-type="{{this.auditKind}}"
-            data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
-            data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}"
-          >
-            <td>
-              <div class="rpt-name" title="{{this.subject.name}}">{{this.subject.name}}</div>
+          <tr data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}" data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
+            <td class="col-title">
+              <div class="rpt-name">{{this.subject.name}}</div>
               <div class="rpt-meta">{{this.author}}{{#if this.subject.entityType}} · {{this.subject.entityType}}{{/if}}</div>
             </td>
-            <td>
+            <td class="col-type">
               {{#if (eq this.auditKind "special")}}
                 <span class="badge b-special">Special</span>
               {{else}}
                 <span class="badge b-placement">Placement</span>
               {{/if}}
             </td>
-            <td style="font-size:0.8rem;color:var(--g600);">{{this.assessmentWindow.label}}</td>
-            <td>
+            <td class="col-window">{{this.assessmentWindow.label}}</td>
+            <td class="col-status">
               {{#if this.isPaid}}
                 <span class="badge b-paid">Paid</span>
               {{else}}
                 <span class="badge b-avail">Available</span>
               {{/if}}
             </td>
-            <td>
+            <td class="col-pdf">
               {{#if this.pdfUrl}}
-                <span class="badge b-pdf">✓</span>
+                <span class="badge b-pdf">✓ Yes</span>
               {{else}}
-                <span class="badge b-nopdf">—</span>
+                <span class="badge b-nopdf">No</span>
               {{/if}}
             </td>
-            <td>
-              {{!-- FIX: act-cell is always visible; PDF download uses the dedicated route --}}
+            <td class="col-actions">
               <div class="act-cell">
-                <a href="/admin/scoi/reports/{{this._id}}/view"
-                   target="_blank"
-                   class="btn btn-outline btn-sm"
-                   title="View Report">👁 View</a>
-
+                <a href="/admin/scoi/reports/{{this._id}}/view" target="_blank" class="btn btn-outline btn-sm">👁 View</a>
                 {{#if this.pdfUrl}}
-                  {{!-- FIX: use /download route that streams the file properly --}}
-                  <a href="/scoi/audits/{{this._id}}/download"
-                     class="btn btn-success btn-sm"
-                     title="Download PDF">↓ PDF</a>
+                  <a href="{{this.pdfUrl}}" target="_blank" class="btn btn-success btn-sm">↓ PDF</a>
                 {{else}}
-                  <button
-                    onclick="generatePdf('{{this._id}}', this)"
-                    class="btn btn-info btn-sm"
-                    title="Generate PDF">⚙ Gen</button>
+                  <button onclick="generatePdf('{{this._id}}', this)" class="btn btn-info btn-sm">⚙ Gen PDF</button>
                 {{/if}}
-
-                <button
-                  onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
-                  class="btn btn-danger btn-sm"
-                  title="Delete">✕</button>
+                <button onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')" class="btn btn-danger btn-sm">✕</button>
               </div>
             </td>
           </tr>
@@ -371,10 +303,7 @@
   <!-- ── MOBILE CARD LIST ── -->
   <div class="card-list" id="mobileCards">
     {{#each reports}}
-    <div class="rcard"
-      data-type="{{this.auditKind}}"
-      data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
-      data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
+    <div class="rcard" data-type="{{this.auditKind}}" data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}" data-search="{{this.subject.name}} {{this.author}} {{this.subject.entityType}}">
       <div class="rcard-head">
         <div>
           <div class="rcard-badges">
@@ -401,20 +330,13 @@
         <span class="rcard-lbl">Entity</span><span class="rcard-val">{{this.subject.entityType}}</span>
       </div>
       <div class="rcard-foot">
-        <a href="/admin/scoi/reports/{{this._id}}/view"
-           target="_blank"
-           class="btn btn-outline btn-sm">👁 View</a>
-
+        <a href="/admin/scoi/reports/{{this._id}}/view" target="_blank" class="btn btn-outline btn-sm">👁 View</a>
         {{#if this.pdfUrl}}
-          <a href="/scoi/audits/{{this._id}}/download"
-             class="btn btn-success btn-sm">↓ PDF</a>
+          <a href="{{this.pdfUrl}}" target="_blank" class="btn btn-success btn-sm">↓ PDF</a>
         {{else}}
-          <button onclick="generatePdf('{{this._id}}', this)"
-                  class="btn btn-info btn-sm">⚙ Gen PDF</button>
+          <button onclick="generatePdf('{{this._id}}', this)" class="btn btn-info btn-sm">⚙ Gen PDF</button>
         {{/if}}
-
-        <button onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')"
-                class="btn btn-danger btn-sm btn-full">✕ Delete</button>
+        <button onclick="deleteReport('{{this._id}}', '{{this.subject.name}}')" class="btn btn-danger btn-sm btn-full">✕ Delete</button>
       </div>
     </div>
     {{/each}}
@@ -431,19 +353,7 @@
 
 </main>
 
-<!-- Toast notification -->
-<div class="toast" id="toast"></div>
-
 <script>
-  /* ── Toast ───────────────────────────────── */
-  function showToast(msg, type = 'info') {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = `toast show ${type}`;
-    clearTimeout(t._tid);
-    t._tid = setTimeout(() => t.classList.remove('show'), 4000);
-  }
-
   /* ── Filter ──────────────────────────────── */
   function applyFilters() {
     const q    = (document.getElementById('searchInput').value || '').toLowerCase();
@@ -462,6 +372,7 @@
     }
 
     document.querySelectorAll('#desktopTable tr').forEach(matchRow);
+    // reset visible before mobile count
     visible = 0;
     document.querySelectorAll('#desktopTable tr').forEach(r => { if (r.style.display !== 'none') visible++; });
     document.querySelectorAll('#mobileCards .rcard').forEach(matchRow);
@@ -470,11 +381,13 @@
     if (pill) pill.textContent = visible + ' result' + (visible !== 1 ? 's' : '');
   }
 
+  // Debounced search
   let _st;
   document.getElementById('searchInput')?.addEventListener('input', () => { clearTimeout(_st); _st = setTimeout(applyFilters, 180); });
   document.getElementById('typeFilter')?.addEventListener('change', applyFilters);
   document.getElementById('pdfFilter')?.addEventListener('change', applyFilters);
 
+  // Set initial count
   window.addEventListener('DOMContentLoaded', () => {
     const n = document.querySelectorAll('#desktopTable tr').length;
     const pill = document.getElementById('resultsPill');
@@ -483,51 +396,29 @@
 
   /* ── Generate single PDF ─────────────────── */
   async function generatePdf(auditId, btn) {
-    const orig = btn.innerHTML;
+    const orig = btn.textContent;
     btn.disabled = true;
-    btn.innerHTML = '⏳';
-    showToast('Generating PDF, please wait…', 'info');
+    btn.textContent = '⏳…';
     try {
       const r = await fetch(`/admin/scoi/reports/${auditId}/generate-pdf`, { method:'POST' });
       const d = await r.json();
-      if (d.success) {
-        showToast('✅ PDF generated successfully', 'success');
-        setTimeout(() => location.reload(), 1200);
-      } else {
-        showToast('❌ ' + (d.error || 'Unknown error'), 'error');
-        btn.disabled = false;
-        btn.innerHTML = orig;
-      }
-    } catch(e) {
-      showToast('❌ Request failed — check server logs', 'error');
-      btn.disabled = false;
-      btn.innerHTML = orig;
-    }
+      if (d.success) { alert('✅ PDF generated'); location.reload(); }
+      else { alert('❌ ' + (d.error || 'Unknown error')); btn.disabled = false; btn.textContent = orig; }
+    } catch(e) { alert('❌ Request failed'); btn.disabled = false; btn.textContent = orig; }
   }
 
   /* ── Generate all PDFs ───────────────────── */
   async function generateAllPdfs(btn) {
-    if (!confirm('Generate PDFs for all reports without PDFs? This may take several minutes.')) return;
-    const orig = btn.innerHTML;
+    if (!confirm('Generate PDFs for all reports without PDFs?')) return;
+    const orig = btn.textContent;
     btn.disabled = true;
-    btn.innerHTML = '⏳ Working…';
-    showToast('Bulk PDF generation started…', 'info');
+    btn.textContent = '⏳ Working…';
     try {
       const r = await fetch('/admin/scoi/reports/generate-all-pdfs', { method:'POST' });
       const d = await r.json();
-      if (d.success) {
-        showToast(`✅ Generated ${d.generated} PDF(s)${d.failed ? `, ${d.failed} failed` : ''}`, 'success');
-        setTimeout(() => location.reload(), 1500);
-      } else {
-        showToast('❌ ' + (d.error || 'Unknown error'), 'error');
-        btn.disabled = false;
-        btn.innerHTML = orig;
-      }
-    } catch(e) {
-      showToast('❌ Request failed', 'error');
-      btn.disabled = false;
-      btn.innerHTML = orig;
-    }
+      if (d.success) { alert(`✅ Generated ${d.generated} PDF(s)`); location.reload(); }
+      else { alert('❌ ' + (d.error || 'Unknown error')); btn.disabled = false; btn.textContent = orig; }
+    } catch(e) { alert('❌ Request failed'); btn.disabled = false; btn.textContent = orig; }
   }
 
   /* ── Delete ──────────────────────────────── */
@@ -536,15 +427,9 @@
     try {
       const r = await fetch(`/admin/scoi/reports/${id}`, { method:'DELETE' });
       const d = await r.json();
-      if (d.success) {
-        showToast('✅ Report deleted', 'success');
-        setTimeout(() => location.reload(), 1000);
-      } else {
-        showToast('❌ ' + (d.error || 'Unknown error'), 'error');
-      }
-    } catch(e) {
-      showToast('❌ Request failed', 'error');
-    }
+      if (d.success) { alert('✅ Deleted'); location.reload(); }
+      else alert('❌ ' + (d.error || 'Unknown error'));
+    } catch(e) { alert('❌ Request failed'); }
   }
 </script>
 </body>

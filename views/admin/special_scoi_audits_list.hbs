@@ -1,34 +1,573 @@
-<h1>Special SCOI Audit Reports</h1>
+{{!-- views/admin/special_scoi_audits_list.hbs --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Special SCOI Audit Reports | Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy:      #0F1C2E;
+      --navy-mid:  #1E3A5F;
+      --gold:      #C9A961;
+      --white:     #FFFFFF;
+      --g50:       #F8FAFC;
+      --g100:      #F1F5F9;
+      --g200:      #E2E8F0;
+      --g400:      #94A3B8;
+      --g600:      #475569;
+      --success:   #059669;
+      --warn:      #D97706;
+      --danger:    #DC2626;
+      --info:      #2563EB;
+      --purple:    #7C3AED;
+      --sh:        0 2px 10px rgba(15,28,46,0.08);
+      --sh-lg:     0 6px 24px rgba(15,28,46,0.12);
+      --r:         6px;
+      --r-lg:      10px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
 
-{{#if audits.length}}
-<table class="table">
-  <thead>
-    <tr>
-      <th>Entity</th>
-      <th>Audit Type</th>
-      <th>Assessment Window</th>
-      <th>Price</th>
-      <th>Status</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { overflow-x:hidden; }
+    body { font-family:var(--font); background:var(--g50); color:var(--navy); -webkit-font-smoothing:antialiased; }
+
+    /* ── HEADER ── */
+    .hdr { background:var(--white); border-bottom:1px solid var(--g200); box-shadow:var(--sh); position:sticky; top:0; z-index:200; }
+    .hdr-inner { max-width:1600px; margin:0 auto; padding:0 2rem; height:62px; display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+    .brand { font-weight:800; font-size:1.1rem; color:var(--navy); white-space:nowrap; display:flex; align-items:center; gap:0.5rem; }
+    .brand-badge { background:var(--navy); color:var(--gold); font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; padding:0.2rem 0.6rem; border-radius:3px; }
+    .nav { display:flex; gap:0.25rem; flex-wrap:wrap; }
+    .nav a { font-size:0.83rem; font-weight:600; color:var(--g600); text-decoration:none; padding:0.4rem 0.75rem; border-radius:var(--r); transition:all 0.2s; white-space:nowrap; }
+    .nav a:hover { background:var(--g100); color:var(--navy); }
+    .nav a.active { background:var(--navy); color:var(--white); }
+
+    /* ── CONTAINER ── */
+    .wrap { max-width:1600px; margin:0 auto; padding:2rem 2rem 4rem; }
+
+    /* ── PAGE HEADER ── */
+    .page-hdr { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2rem; gap:1rem; flex-wrap:wrap; }
+    .page-hdr-left h1 { font-size:1.75rem; font-weight:800; color:var(--navy); line-height:1.2; }
+    .page-hdr-left p { font-size:0.875rem; color:var(--g600); margin-top:0.3rem; }
+    .hdr-btns { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:0.4rem; padding:0.55rem 0.9rem;
+      border-radius:var(--r); font-size:0.8rem; font-weight:700;
+      border:none; cursor:pointer; text-decoration:none;
+      transition:all 0.18s; white-space:nowrap; line-height:1;
+      font-family:var(--font);
+    }
+    .btn-navy    { background:var(--navy);    color:var(--white); }
+    .btn-navy:hover    { background:#162d4a; }
+    .btn-outline { background:var(--white);   color:var(--g600); border:1.5px solid var(--g200); }
+    .btn-outline:hover { border-color:var(--navy); color:var(--navy); }
+    .btn-danger  { background:var(--danger);  color:var(--white); }
+    .btn-danger:hover  { background:#b91c1c; }
+    .btn-info    { background:var(--info);    color:var(--white); }
+    .btn-info:hover    { background:#1d4ed8; }
+    .btn-success { background:var(--success); color:var(--white); }
+    .btn-success:hover { background:#047857; }
+    .btn-gold    { background:var(--gold);    color:var(--navy); }
+    .btn-gold:hover    { background:#b8943f; color:var(--white); }
+    .btn-sm { padding:0.38rem 0.7rem; font-size:0.75rem; }
+    .btn:disabled { opacity:0.55; cursor:not-allowed; }
+
+    /* ── STATS ── */
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.75rem; }
+    .stat { background:var(--white); border-radius:var(--r-lg); padding:1.25rem 1.5rem; box-shadow:var(--sh); border-left:4px solid var(--navy); }
+    .stat-val { font-size:2rem; font-weight:800; color:var(--navy); line-height:1; }
+    .stat-lbl { font-size:0.75rem; font-weight:700; color:var(--g400); text-transform:uppercase; letter-spacing:1px; margin-top:0.35rem; }
+
+    /* ── FILTERS ── */
+    .filters { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); padding:1.25rem 1.5rem; margin-bottom:1.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; }
+    .fg { display:flex; flex-direction:column; gap:0.4rem; flex:1; min-width:160px; }
+    .fg label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--g600); }
+    .fg input, .fg select { padding:0.55rem 0.75rem; border:1.5px solid var(--g200); border-radius:var(--r); font-size:0.875rem; font-family:var(--font); color:var(--navy); background:var(--g50); transition:border-color 0.2s; }
+    .fg input:focus, .fg select:focus { outline:none; border-color:var(--navy); background:var(--white); }
+    .results-pill { font-size:0.78rem; font-weight:700; color:var(--g400); white-space:nowrap; align-self:flex-end; padding:0 0.25rem 0.55rem; }
+
+    /* ── TABLE ── */
+    .tbl-wrap { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; }
+    .tbl-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    thead { background:var(--g50); border-bottom:2px solid var(--g200); }
+    th { padding:0.85rem 0.85rem; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--g600); text-align:left; white-space:nowrap; }
+    td { padding:0.8rem 0.85rem; border-bottom:1px solid var(--g100); font-size:0.845rem; vertical-align:middle; overflow:hidden; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background 0.15s; }
+    tbody tr:hover { background:var(--g50); }
+
+    /* Column widths — always show the actions column */
+    .col-entity  { width:28%; }
+    .col-type    { width:14%; }
+    .col-window  { width:20%; }
+    .col-price   { width:8%; }
+    .col-status  { width:8%; }
+    .col-pdf     { width:6%; }
+    .col-actions { width:16%; white-space:nowrap; }
+
+    .rpt-name { font-weight:700; color:var(--navy); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rpt-meta { font-size:0.73rem; color:var(--g400); margin-top:0.2rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    .act-cell {
+      display:flex;
+      gap:0.3rem;
+      align-items:center;
+      flex-wrap:nowrap;
+    }
+    .act-cell .btn { flex-shrink:0; }
+
+    /* ── BADGES ── */
+    .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.6rem; border-radius:30px; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+    .b-special   { background:rgba(124,58,237,0.1); color:var(--purple); }
+    .b-locked { background:var(--g100); color:var(--g400); }
+    .b-paid   { background:rgba(5,150,105,0.1);   color:var(--success); }
+    .b-avail  { background:rgba(37,99,235,0.1);   color:var(--info); }
+    .b-pdf    { background:rgba(5,150,105,0.1);   color:var(--success); }
+    .b-nopdf  { background:var(--g100);            color:var(--g400); }
+
+    /* ── MOBILE CARDS ── */
+    .card-list { display:none; flex-direction:column; gap:0.85rem; }
+    .rcard { background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden; border-left:4px solid var(--purple); }
+    .rcard-head { padding:1rem 1.25rem 0.75rem; border-bottom:1px solid var(--g100); }
+    .rcard-badges { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+    .rcard-name { font-size:0.95rem; font-weight:700; color:var(--navy); line-height:1.35; }
+    .rcard-sub  { font-size:0.78rem; color:var(--g400); margin-top:0.2rem; }
+    .rcard-body { padding:0.75rem 1.25rem; display:grid; grid-template-columns:auto 1fr; gap:0.35rem 1rem; align-items:center; }
+    .rcard-lbl { font-weight:700; color:var(--navy); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; }
+    .rcard-val { color:var(--g600); font-size:0.82rem; }
+    .rcard-foot { padding:0.85rem 1.25rem; border-top:1px solid var(--g100); background:var(--g50); display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+    .rcard-foot .btn { width:100%; }
+    .rcard-foot .btn-full { grid-column:1/-1; }
+
+    /* ── TOAST ── */
+    .toast {
+      position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999;
+      background:var(--navy); color:var(--white);
+      padding:0.75rem 1.25rem; border-radius:var(--r);
+      font-size:0.85rem; font-weight:600;
+      box-shadow:var(--sh-lg);
+      display:none; align-items:center; gap:0.6rem;
+      max-width:340px;
+    }
+    .toast.show   { display:flex; }
+    .toast.success{ border-left:4px solid var(--success); }
+    .toast.error  { border-left:4px solid var(--danger); }
+    .toast.info   { border-left:4px solid var(--gold); }
+
+    /* ── EMPTY STATE ── */
+    .empty { text-align:center; padding:5rem 2rem; background:var(--white); border-radius:var(--r-lg); box-shadow:var(--sh); }
+    .empty-ico { font-size:3rem; opacity:0.3; margin-bottom:1rem; }
+    .empty h2 { font-size:1.35rem; font-weight:800; margin-bottom:0.5rem; }
+    .empty p  { font-size:0.9rem; color:var(--g600); margin-bottom:1.5rem; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width:1100px) {
+      .stats { grid-template-columns:repeat(2,1fr); }
+      table { table-layout:auto; }
+      .col-entity  { min-width:180px; }
+      .col-window  { min-width:130px; }
+      .col-actions { min-width:190px; }
+    }
+    @media (max-width:860px) {
+      .tbl-wrap  { display:none; }
+      .card-list { display:flex; }
+      .stats { grid-template-columns:repeat(2,1fr); }
+    }
+    @media (max-width:600px) {
+      .wrap { padding:1.25rem 1rem 3rem; }
+      .hdr-inner { padding:0 1rem; }
+      .page-hdr { flex-direction:column; }
+      .hdr-btns { width:100%; }
+      .hdr-btns .btn { flex:1; }
+      .filters { padding:1rem; }
+      .fg { min-width:100%; }
+      .stats { grid-template-columns:1fr 1fr; gap:0.75rem; }
+      .stat { padding:1rem; }
+      .stat-val { font-size:1.6rem; }
+      .nav { gap:0; }
+      .nav a { font-size:0.78rem; padding:0.35rem 0.55rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-inner">
+    <div class="brand">
+      <span>🏛️ CRIPFCnt</span>
+      <span class="brand-badge">Admin</span>
+    </div>
+    <nav class="nav">
+      <a href="/scoi">Marketplace</a>
+      <a href="/admin/scoi/reports">Reports</a>
+      <a href="/admin/scoi/import">Import</a>
+      <a href="/admin/special-scoi-audits" class="active">Special Audits</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- PAGE HEADER -->
+  <div class="page-hdr">
+    <div class="page-hdr-left">
+      <h1>Special SCOI Audit Reports</h1>
+      <p>Special Structural Contribution &amp; Organisational Intelligence Reports</p>
+    </div>
+    <div class="hdr-btns">
+      <a href="/admin/scoi/reports" class="btn btn-outline">← All Reports</a>
+      <a href="/admin/scoi/import" class="btn btn-outline">📤 Import</a>
+      <button onclick="generateAllPdfs(this)" class="btn btn-navy">⬇ Generate All PDFs</button>
+    </div>
+  </div>
+
+  {{#if audits.length}}
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat" style="border-left-color:var(--purple)">
+      <div class="stat-val">{{audits.length}}</div>
+      <div class="stat-lbl">Total Reports</div>
+    </div>
+    <div class="stat" style="border-left-color:var(--success)">
+      <div class="stat-val" id="statPdf">—</div>
+      <div class="stat-lbl">With PDF</div>
+    </div>
+    <div class="stat" style="border-left-color:var(--info)">
+      <div class="stat-val" id="statAvail">—</div>
+      <div class="stat-lbl">Available</div>
+    </div>
+    <div class="stat" style="border-left-color:var(--gold)">
+      <div class="stat-val" id="statPaid">—</div>
+      <div class="stat-lbl">Paid / Locked</div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <div class="fg" style="flex:2;min-width:200px;">
+      <label for="searchInput">Search</label>
+      <input type="text" id="searchInput" placeholder="Search by entity, audit type…" autocomplete="off">
+    </div>
+    <div class="fg">
+      <label for="pdfFilter">PDF Status</label>
+      <select id="pdfFilter">
+        <option value="">All</option>
+        <option value="with-pdf">Has PDF</option>
+        <option value="no-pdf">No PDF</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label for="statusFilter">Purchase Status</label>
+      <select id="statusFilter">
+        <option value="">All</option>
+        <option value="paid">Paid</option>
+        <option value="available">Available</option>
+      </select>
+    </div>
+    <span class="results-pill" id="resultsPill"></span>
+  </div>
+
+  <!-- ── DESKTOP TABLE ── -->
+  <div class="tbl-wrap">
+    <div class="tbl-scroll">
+      <table>
+        <colgroup>
+          <col class="col-entity">
+          <col class="col-type">
+          <col class="col-window">
+          <col class="col-price">
+          <col class="col-status">
+          <col class="col-pdf">
+          <col class="col-actions">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Entity / Subject</th>
+            <th>Audit Type</th>
+            <th>Assessment Window</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>PDF</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="desktopTable">
+          {{#each audits}}
+          <tr
+            data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
+            data-status="{{#if this.isPaid}}paid{{else}}available{{/if}}"
+            data-search="{{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}} {{this.subject.entityType}}"
+          >
+            <td>
+              <div class="rpt-name" title="{{this.subject.name}}">{{this.subject.name}}</div>
+              <div class="rpt-meta">
+                {{this.subject.entityType}}{{#if this.subject.jurisdiction}} · {{this.subject.jurisdiction}}{{/if}}
+              </div>
+            </td>
+            <td>
+              <span class="badge b-special" style="font-size:0.65rem;">
+                {{this.auditType}}
+              </span>
+            </td>
+            <td style="font-size:0.8rem;color:var(--g600);">{{this.assessmentWindow.label}}</td>
+            <td style="font-weight:700;color:var(--navy);">
+              {{#if this.price}}$\{{divide this.price 100}}{{else}}—{{/if}}
+            </td>
+            <td>
+              {{#if this.isPaid}}
+                <span class="badge b-paid">Paid</span>
+              {{else}}
+                <span class="badge b-avail">Available</span>
+              {{/if}}
+            </td>
+            <td>
+              {{#if this.pdfUrl}}
+                <span class="badge b-pdf">✓</span>
+              {{else}}
+                <span class="badge b-nopdf">—</span>
+              {{/if}}
+            </td>
+            <td>
+              <div class="act-cell">
+                <a href="/admin/special-scoi-audits/{{this._id}}"
+                   target="_blank"
+                   class="btn btn-outline btn-sm"
+                   title="View Report">👁 View</a>
+
+                {{#if this.pdfUrl}}
+                  <a href="/admin/special-scoi-audits/{{this._id}}/download-pdf"
+                     class="btn btn-success btn-sm"
+                     title="Download PDF">↓ PDF</a>
+                {{else}}
+                  <button
+                    onclick="generatePdf('{{this._id}}', this)"
+                    class="btn btn-info btn-sm"
+                    title="Generate PDF">⚙ Gen</button>
+                {{/if}}
+
+                <button
+                  onclick="deleteAudit('{{this._id}}', '{{this.subject.name}}')"
+                  class="btn btn-danger btn-sm"
+                  title="Delete">✕</button>
+              </div>
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── MOBILE CARDS ── -->
+  <div class="card-list" id="mobileCards">
     {{#each audits}}
-    <tr>
-      <td>{{this.subject.name}}</td>
-      <td>{{this.auditType}}</td>
-      <td>{{this.assessmentWindow.label}}</td>
-      <td>${{divide this.price 100}}</td>
-      <td>{{#if this.isPaid}}Paid{{else}}Locked{{/if}}</td>
-      <td>
-        <a href="/admin/special-scoi-audits/{{this._id}}">
-          View
-        </a>
-      </td>
-    </tr>
+    <div class="rcard"
+      data-pdf="{{#if this.pdfUrl}}with-pdf{{else}}no-pdf{{/if}}"
+      data-status="{{#if this.isPaid}}paid{{else}}available{{/if}}"
+      data-search="{{this.subject.name}} {{this.auditType}} {{this.assessmentWindow.label}}">
+      <div class="rcard-head">
+        <div class="rcard-badges">
+          <span class="badge b-special">Special</span>
+          {{#if this.isPaid}}
+            <span class="badge b-paid">Paid</span>
+          {{else}}
+            <span class="badge b-avail">Available</span>
+          {{/if}}
+          {{#if this.pdfUrl}}
+            <span class="badge b-pdf">PDF ✓</span>
+          {{/if}}
+        </div>
+        <div class="rcard-name">{{this.subject.name}}</div>
+        <div class="rcard-sub">{{this.subject.entityType}}{{#if this.subject.jurisdiction}} · {{this.subject.jurisdiction}}{{/if}}</div>
+      </div>
+      <div class="rcard-body">
+        <span class="rcard-lbl">Audit Type</span>
+        <span class="rcard-val">{{this.auditType}}</span>
+        <span class="rcard-lbl">Window</span>
+        <span class="rcard-val">{{this.assessmentWindow.label}}</span>
+        <span class="rcard-lbl">Price</span>
+        <span class="rcard-val">{{#if this.price}}$\{{divide this.price 100}}{{else}}—{{/if}}</span>
+      </div>
+      <div class="rcard-foot">
+        <a href="/admin/special-scoi-audits/{{this._id}}"
+           target="_blank"
+           class="btn btn-outline btn-sm">👁 View</a>
+
+        {{#if this.pdfUrl}}
+          <a href="/admin/special-scoi-audits/{{this._id}}/download-pdf"
+             class="btn btn-success btn-sm">↓ PDF</a>
+        {{else}}
+          <button onclick="generatePdf('{{this._id}}', this)"
+                  class="btn btn-info btn-sm">⚙ Gen PDF</button>
+        {{/if}}
+
+        <button onclick="deleteAudit('{{this._id}}', '{{this.subject.name}}')"
+                class="btn btn-danger btn-sm btn-full">✕ Delete</button>
+      </div>
+    </div>
     {{/each}}
-  </tbody>
-</table>
-{{else}}
-<p>No Special SCOI audits found.</p>
-{{/if}}
+  </div>
+
+  {{else}}
+  <div class="empty">
+    <div class="empty-ico">🔍</div>
+    <h2>No Special SCOI Audits Found</h2>
+    <p>Import special SCOI audit reports to manage them here.</p>
+    <a href="/admin/scoi/import" class="btn btn-navy">📤 Import Audits</a>
+  </div>
+  {{/if}}
+
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ── Compute stats from DOM ── */
+  window.addEventListener('DOMContentLoaded', () => {
+    const rows = document.querySelectorAll('#desktopTable tr');
+    let withPdf = 0, avail = 0, paid = 0;
+    rows.forEach(r => {
+      if (r.dataset.pdf === 'with-pdf') withPdf++;
+      if (r.dataset.status === 'available') avail++;
+      if (r.dataset.status === 'paid') paid++;
+    });
+    const s = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+    s('statPdf', withPdf);
+    s('statAvail', avail);
+    s('statPaid', paid);
+
+    const pill = document.getElementById('resultsPill');
+    if (pill) pill.textContent = rows.length + ' result' + (rows.length !== 1 ? 's' : '');
+  });
+
+  /* ── Toast ── */
+  function showToast(msg, type = 'info') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast show ${type}`;
+    clearTimeout(t._tid);
+    t._tid = setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  /* ── Filter ── */
+  function applyFilters() {
+    const q      = (document.getElementById('searchInput').value || '').toLowerCase();
+    const pdf    = document.getElementById('pdfFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    let visible  = 0;
+
+    function match(el) {
+      const text = (el.dataset.search || el.textContent).toLowerCase();
+      const ok = (!q      || text.includes(q)) &&
+                 (!pdf    || el.dataset.pdf    === pdf) &&
+                 (!status || el.dataset.status === status);
+      el.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    }
+
+    document.querySelectorAll('#desktopTable tr').forEach(match);
+    visible = 0;
+    document.querySelectorAll('#desktopTable tr').forEach(r => { if (r.style.display !== 'none') visible++; });
+    document.querySelectorAll('#mobileCards .rcard').forEach(match);
+
+    const pill = document.getElementById('resultsPill');
+    if (pill) pill.textContent = visible + ' result' + (visible !== 1 ? 's' : '');
+  }
+
+  let _st;
+  document.getElementById('searchInput')?.addEventListener('input', () => { clearTimeout(_st); _st = setTimeout(applyFilters, 180); });
+  document.getElementById('pdfFilter')?.addEventListener('change', applyFilters);
+  document.getElementById('statusFilter')?.addEventListener('change', applyFilters);
+
+  /* ── Generate single PDF ── */
+  async function generatePdf(auditId, btn) {
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳';
+    showToast('Generating PDF, please wait…', 'info');
+    try {
+      const r = await fetch(`/admin/special-scoi-audits/${auditId}/generate-pdf`, { method: 'POST' });
+      const d = await r.json();
+      if (d.success) {
+        showToast('✅ PDF generated', 'success');
+        setTimeout(() => location.reload(), 1200);
+      } else {
+        showToast('❌ ' + (d.error || 'Unknown error'), 'error');
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
+    } catch (e) {
+      showToast('❌ Request failed', 'error');
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+
+  /* ── Generate all PDFs ── */
+  async function generateAllPdfs(btn) {
+    if (!confirm('Generate PDFs for all audits without PDFs? This may take several minutes.')) return;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Working…';
+    showToast('Bulk PDF generation started…', 'info');
+
+    // Collect IDs of audits without PDFs
+    const noPdfIds = [...document.querySelectorAll('#desktopTable tr[data-pdf="no-pdf"]')]
+      .map(r => {
+        const viewBtn = r.querySelector('a[href*="/admin/special-scoi-audits/"]');
+        if (!viewBtn) return null;
+        const m = viewBtn.href.match(/\/admin\/special-scoi-audits\/([^\/]+)/);
+        return m ? m[1] : null;
+      })
+      .filter(Boolean);
+
+    if (noPdfIds.length === 0) {
+      showToast('All audits already have PDFs', 'info');
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      return;
+    }
+
+    let generated = 0, failed = 0;
+    for (const id of noPdfIds) {
+      try {
+        const r = await fetch(`/admin/special-scoi-audits/${id}/generate-pdf`, { method: 'POST' });
+        const d = await r.json();
+        if (d.success) generated++;
+        else failed++;
+      } catch { failed++; }
+    }
+
+    showToast(`✅ Done: ${generated} generated${failed ? `, ${failed} failed` : ''}`, generated > 0 ? 'success' : 'error');
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    setTimeout(() => location.reload(), 1500);
+  }
+
+  /* ── Delete ── */
+  async function deleteAudit(id, name) {
+    if (!confirm(`Delete "${name || 'this audit'}"?\n\nThis cannot be undone.`)) return;
+    try {
+      const r = await fetch(`/admin/special-scoi-audits/${id}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) {
+        showToast('✅ Audit deleted', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast('❌ ' + (d.error || 'Unknown error'), 'error');
+      }
+    } catch (e) {
+      showToast('❌ Request failed', 'error');
+    }
+  }
+</script>
+</body>
+</html>
