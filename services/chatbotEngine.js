@@ -408,20 +408,54 @@ function buildBuyerSpecificityPrompt(vagueItems = []) {
     : "• Your request";
 
   return (
-    `❌ *Please use the full product or service name.*\n\n` +
-    `These are too general for sellers to quote correctly:\n` +
+    `❌ *Please be more specific.*\n\n` +
+    `These are too general for sellers to quote:\n` +
     `${vagueLines}\n\n` +
-    `Please include type, size, model, brand, class, material, or exact service needed.\n\n` +
-    `Examples:\n` +
-    `_ball valve brass 20mm harare_\n` +
-    `_school uniform size 8 chitungwiza_\n` +
-    `_hp laptop core i7 cbd harare_\n` +
-    `_geyser installation avondale harare_\n\n` +
-    `🏨 *For lodge / hotel / tourism requests:*\n` +
+    `Add the type, size, brand, or exact job. Examples:\n\n` +
+
+    `🔧 *Plumbing:*\n` +
+    `_burst pipe repair harare_\n` +
+    `_geyser installation 150L avondale harare_\n` +
+    `_blocked drain unblocking bulawayo_\n` +
+    `_tap replacement bathroom harare_\n\n` +
+
+    `🔨 *Building & Construction:*\n` +
+    `_brick laying 3 bedroom house harare_\n` +
+    `_plastering interior walls harare_\n` +
+    `_roofing IBR sheets installation harare_\n` +
+    `_cement opc 42.5 10 bags harare_\n` +
+    `_river sand 2 loads harare_\n` +
+    `_building blocks 6 inch 500 harare_\n` +
+    `_steel reinforcing bar y12 20 lengths harare_\n\n` +
+
+    `⚡ *Electrical:*\n` +
+    `_electrical wiring new house harare_\n` +
+    `_DB board replacement harare_\n` +
+    `_solar panel installation 5kw harare_\n` +
+    `_inverter battery 200ah harare_\n` +
+    `_LED flood light 100W harare_\n\n` +
+
+    `🚜 *Tractor & Equipment Spares:*\n` +
+    `_tractor engine oil filter case IH harare_\n` +
+    `_hydraulic hose 1 inch 2 metres harare_\n` +
+    `_massey ferguson injector pump harare_\n` +
+    `_bulldozer track pad D6 harare_\n\n` +
+
+    `🏨 *Hotels, Lodges & Tourism:*\n` +
     `_lodge night harare 2 adults_\n` +
     `_double room overnight kariba 3 nights_\n` +
+    `_guesthouse bulawayo 2 nights_\n` +
+    `_houseboat kariba 4 people 2 nights_\n` +
     `_game drive hwange 4 people_\n` +
-    `_guesthouse bulawayo 2 nights_`
+    `_safari tour 3 days victoria falls_\n` +
+    `_guided tour great zimbabwe 2 people_\n\n` +
+
+    `💡 *Other:*\n` +
+    `_hp laptop core i7 8GB ram harare_\n` +
+    `_school uniform size 8 chitungwiza_\n` +
+    `_ball valve brass 20mm harare_\n\n` +
+
+    `Type *0* or *cancel* to go back.`
   );
 }
 
@@ -4877,7 +4911,13 @@ if (al === "my requests" || al === "buyer_my_requests") {
 
     const vagueItems = getVagueBuyerRequestItems(parsedItems || []);
     if (vagueItems.length) {
-      return sendText(from, buildBuyerSpecificityPrompt(vagueItems));
+      return sendButtons(from, {
+        text: buildBuyerSpecificityPrompt(vagueItems),
+        buttons: [
+          { id: "sup_request_sellers", title: "⚡ Try Again" },
+          { id: "main_menu_back",      title: "← Cancel"    }
+        ]
+      });
     }
 
     // ── Auto-detect service request ────────────────────────────────────────
@@ -5030,11 +5070,14 @@ if (al === "my requests" || al === "buyer_my_requests") {
 
   const vagueItems = getVagueBuyerRequestItems(items || []);
   if (vagueItems.length) {
-    return sendText(
-      from,
-      buildBuyerSpecificityPrompt(vagueItems) +
-        `\n\nFor bulk requests, fix the vague lines first, then send the full list again.`
-    );
+    return sendButtons(from, {
+      text: buildBuyerSpecificityPrompt(vagueItems) +
+        "\n\nFor bulk requests, fix the vague lines first, then send the full list again.",
+      buttons: [
+        { id: "sup_request_sellers", title: "⚡ Try Again" },
+        { id: "main_menu_back",      title: "← Cancel"    }
+      ]
+    });
   }
 
   await UserSession.findOneAndUpdate(
