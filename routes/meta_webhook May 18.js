@@ -187,90 +187,50 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
 
     // ===============================
-    // 🖼️ HANDLE ALL IMAGE MESSAGES
+    // 🖼️ HANDLE LOGO UPLOAD (META)
     // ===============================
-    // Two cases:
-    //  1. Supplier uploading their logo (sessionState = "awaiting_logo_upload")
-    //  2. Buyer attaching a photo to a request (buyerRequestState = "awaiting_photo_upload")
-    //  All other images are silently ignored.
     if (msg.type === "image") {
-      const from    = msg.from;
-      const mediaId = msg.image?.id;
-      const mime    = msg.image?.mime_type || "image/jpeg";
-      const caption = (msg.image?.caption || "").trim();
+      const from = msg.from;
+      const imageUrl = msg.image?.url;
 
-      if (!mediaId) return;
+      if (!imageUrl) return;
 
-      // ── Case 1: Logo upload (existing flow, unchanged) ─────────────────────
       const biz = await getBizForPhone(from);
-      if (biz && biz.sessionState === "awaiting_logo_upload") {
-        try {
-          // For logo we use the URL from msg.image if present, else fetch from Meta
-          const rawUrl  = msg.image?.url || await getMetaMediaUrl(mediaId);
-          if (!rawUrl) throw new Error("No image URL available");
-          const logoUrl = await saveMetaLogo({ imageUrl: rawUrl, businessId: biz._id.toString() });
-          biz.logoUrl      = logoUrl;
-          biz.sessionState = "ready";
-          biz.sessionData  = {};
-          await biz.save();
-          await sendText(from, "✅ Logo uploaded successfully!");
-          return sendMainMenu(from);
-        } catch (err) {
-          console.error("META LOGO SAVE ERROR:", err);
-          await sendText(from, "❌ Failed to save logo. Please try again.");
-          return;
-        }
-      }
 
-      // ── Case 2: Buyer attaching photo to request ────────────────────────────
-      // Check if buyer is in awaiting_photo_upload state in their UserSession
-      const { default: UserSession } = await import("../models/userSession.js");
-      const sess = await UserSession.findOne({ phone: from.replace(/\D+/g, "") }).lean();
-
-      if (sess?.tempData?.buyerRequestState === "awaiting_photo_upload") {
-        try {
-          // Download image from Meta immediately — mediaIds expire in ~10 minutes
-          const token  = process.env.META_ACCESS_TOKEN;
-          const metaRes = await axios.get(`https://graph.facebook.com/v24.0/${mediaId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const dlUrl = metaRes.data?.url;
-          if (!dlUrl) throw new Error("Could not get Meta media download URL");
-
-          const imgRes = await axios.get(dlUrl, {
-            headers:      { Authorization: `Bearer ${token}` },
-            responseType: "arraybuffer"
-          });
-
-          // Save to local filesystem using same folder as other generated files
-          const fsM    = await import("fs");
-          const pathM  = await import("path");
-          const ext    = mime.includes("png") ? "png" : "jpg";
-          const fname  = `req_photo_${from}_${Date.now()}.${ext}`;
-          const dir    = pathM.join(process.cwd(), "docs", "generated", "orders");
-          if (!fsM.existsSync(dir)) fsM.mkdirSync(dir, { recursive: true });
-          fsM.writeFileSync(pathM.join(dir, fname), Buffer.from(imgRes.data));
-
-          const siteUrl  = (process.env.SITE_URL || "").replace(/\/$/, "");
-          const imageUrl = `${siteUrl}/docs/generated/orders/${fname}`;
-
-          // Pass image data into chatbotEngine via action string + session
-          await handleIncomingMessage({
-            from,
-            action:       "__buyer_photo_uploaded__",
-            hasImage:     true,
-            imageUrl,
-            imageCaption: caption
-          });
-        } catch (err) {
-          console.error("[BUYER PHOTO UPLOAD ERROR]", err.message);
-          await sendText(from, "❌ Failed to save your photo. Please try again or type *skip* to submit without a photo.");
-        }
+      // Only accept image when user is in logo upload mode
+      if (!biz || biz.sessionState !== "awaiting_logo_upload") {
         return;
       }
 
-      // ── Unknown image context — ignore silently ─────────────────────────────
-      return;
+      try {
+        const logoUrl = await saveMetaLogo({
+          imageUrl,
+          businessId: biz._id.toString()
+        });
+
+      biz.logoUrl = logoUrl;
+
+// 🔑 COMPLETE ONBOARDING IF THIS WAS ONBOARDING
+if (biz.sessionState === "awaiting_logo_upload") {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await biz.save();
+
+  await sendText(from, "✅ Logo uploaded successfully!");
+  return sendMainMenu(from);
+}
+
+// ⚙️ Settings flow fallback
+await biz.save();
+await sendText(from, "✅ Logo updated successfully.");
+
+
+      } catch (err) {
+        console.error("META LOGO SAVE ERROR:", err);
+        await sendText(from, "❌ Failed to save logo. Please try again.");
+      }
+
+      return; // 🚫 STOP - do NOT continue to text handling
     }
 
 
@@ -360,11 +320,7 @@ if (msg.type === "text") {
   const rawText = (msg.text?.body || "").trim();
   const lowered = rawText.toLowerCase();
 
-  // ── ZQ:REQUEST deep link — drops buyer straight into Request Sellers flow ──
-  // Share link: https://wa.me/263771143904?text=ZQ%3AREQUEST
-  if (/^ZQ:REQUEST$/i.test(rawText)) {
-    action = "sup_request_sellers";
-  } else if (lowered === "view & quote" || lowered === "view and quote") {
+  if (lowered === "view & quote" || lowered === "view and quote") {
     action = "view_and_quote";
   } else if (lowered === "not available") {
     action = "not_available";
@@ -397,7 +353,8 @@ if (msg.type === "interactive") {
     .toLowerCase();
 }
     // 🔥 IMPORTANT: do NOT touch res below this line
-    await handleIncomingMessage({ from, action, hasImage: false, imageUrl: null, imageCaption: "" });
+    await handleIncomingMessage({ from, action });
+    //await handleIncomingMessage({ from, action: msg });
 
 
   } catch (e) {
@@ -409,3 +366,8 @@ if (msg.type === "interactive") {
 
 
 export default router;
+
+
+
+
+

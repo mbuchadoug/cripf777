@@ -178,24 +178,3 @@ export async function sendDocument(to, document) {
     document
   }, { headers });
 }
-
-/* =========================
-   IMAGE
-   Used to send buyer's attached photo to sellers when they view a request.
-   imageUrl must be a publicly accessible permanent URL (not a Meta mediaId).
-========================= */
-export async function sendImage(to, { imageUrl, caption = "" }) {
-  return axios.post(
-    API,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "image",
-      image: {
-        link: imageUrl,
-        ...(caption ? { caption } : {})
-      }
-    },
-    { headers }
-  );
-}

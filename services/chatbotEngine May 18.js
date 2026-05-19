@@ -17,7 +17,6 @@ import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
 import PhoneContact from "../models/phoneContact.js";
 import { sendDocument } from "./metaSender.js";
-import { sendImage }    from "./metaSender.js";
 import {
   canUseFeature,
   requiredPackageForFeature,
@@ -2770,9 +2769,7 @@ async function finalizeBuyerRequestSubmission({
   pendingRequest,
   deliveryRequired = false,
   serviceAddress = null,
-  deliveryAddress = null,
-  attachedImageUrl     = null,
-  attachedImageCaption = ""
+  deliveryAddress = null
 }) {
   if (!pendingRequest?.items?.length) {
     return sendButtons(from, {
@@ -2801,55 +2798,24 @@ async function finalizeBuyerRequestSubmission({
     deliveryAddress: !(_isServiceReq || _isTourismReq2) ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
 
     serviceAddress: (_isServiceReq || _isTourismReq2) ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
-    status: "open",
-
-    // Image fields (null for text-only requests — no change to existing flow)
-    imageUrl:     attachedImageUrl     || null,
-    imageCaption: attachedImageCaption || "",
-    imageStatus:  attachedImageUrl ? "pending_review" : "none"
+    status: "open"
   });
 
   await UserSession.findOneAndUpdate(
     { phone },
     {
       $unset: {
-        "tempData.buyerRequestState":   "",
+        "tempData.buyerRequestState": "",
         "tempData.pendingBuyerRequest": "",
-        "tempData.buyerRequestMode":    "",
-        "tempData.photoPromptShown":    ""
+        "tempData.buyerRequestMode": ""
       }
     },
     { upsert: true }
   );
 
-  const ref = buildBuyerRequestRef(request);
-
-  // ── IMAGE PATH: hold supplier notification, notify admin for review ────────
-  if (attachedImageUrl) {
-    const _imgSummary  = (request.items || []).slice(0, 3).map((it, i) => `${i + 1}. ${it.product} x${Number(it.quantity || 1)}`).join(", ");
-    const _imgLocation = request.area ? `${request.area}, ${request.city || ""}`.trim() : request.city || "Zimbabwe";
-    try {
-      const { notifyAdminPhotoReview } = await import("./buyerRequestNotifications.js");
-      await notifyAdminPhotoReview({ ref, itemSummary: _imgSummary, locationText: _imgLocation, requestId: String(request._id) });
-    } catch (err) {
-      console.warn("[FINALIZE] notifyAdminPhotoReview failed:", err.message);
-    }
-    return sendButtons(from, {
-      text:
-        `✅ *Request submitted — photo under review.*\n\n` +
-        `Ref: *${ref}*\n\n` +
-        `${(request.items || []).map((it, i) => `${i + 1}. ${it.product} x${Number(it.quantity || 1)}`).join("\n")}\n\n` +
-        `📸 Your photo is being reviewed before we send it to sellers.\n` +
-        `This usually takes a few hours. You will receive a WhatsApp notification here once it is approved.`,
-      buttons: [
-        { id: "buyer_my_requests",   title: "📋 My Requests" },
-        { id: "sup_request_sellers", title: "⚡ New Request"  }
-      ]
-    });
-  }
-
-  // ── TEXT-ONLY PATH: existing behaviour, completely unchanged ──────────────
   const notifiedCount = await notifySuppliersOfBuyerRequest(request);
+
+  const ref = buildBuyerRequestRef(request);
 
   const itemLines = (request.items || [])
     .map((item, i) => {
@@ -3297,7 +3263,7 @@ async function sendClientSelectList(from, biz) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "" }) {
+export async function handleIncomingMessage({ from, action }) {
 
   const phone = from.replace(/\D+/g, "");
 
@@ -3886,22 +3852,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introRef       = buildBuyerRequestRef(_introRequest);
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
-
-      // ── Send image to seller if this request has an approved photo ──────────
-      // Sent BEFORE the pricing form so the seller sees context first.
-      // Uses a separate sendImage call — template messages cannot carry images.
-      if (_introRequest.imageUrl && _introRequest.imageStatus === "approved") {
-        try {
-          await sendImage(from, {
-            imageUrl: _introRequest.imageUrl,
-            caption:  _introRequest.imageCaption
-              ? `📸 Photo from buyer: ${_introRequest.imageCaption}`
-              : `📸 Photo attached by buyer for request ${_introRef}`
-          });
-        } catch (imgErr) {
-          console.warn(`[OFFER INTRO] Failed to send buyer image to ${from}:`, imgErr.message);
-        }
-      }
 
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
       // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
@@ -5126,137 +5076,20 @@ if (buyerRequestState === "awaiting_delivery_address") {
         { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
         { upsert: true }
       );
-
-      // ── Photo prompt: before finalizing, offer the buyer a chance to attach a photo ──
-      // Only show once per request (guard: photoPromptShown)
-      const _saReqWithAddress = { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true };
-      if (!flowSess?.tempData?.photoPromptShown) {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          {
-            $set: {
-              "tempData.buyerRequestState":  "awaiting_photo_choice",
-              "tempData.pendingBuyerRequest": _saReqWithAddress,
-              "tempData.photoPromptShown":   true
-            }
-          },
-          { upsert: true }
-        );
-        return sendButtons(from, {
-          text:
-            `📷 *Add a photo? (optional)*\n\n` +
-            `A photo helps sellers understand exactly what you need and give a more accurate quote.\n\n` +
-            `Useful for: repairs, damage, custom items, matching colours or parts.\n\n` +
-            `Tap *Add Photo* then send your image, or tap *Skip* to submit now.`,
-          buttons: [
-            { id: "sup_req_photo_yes",  title: "📷 Add Photo"      },
-            { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
-          ]
-        });
-      }
-
       return finalizeBuyerRequestSubmission({
         from, phone,
-        pendingRequest: _saReqWithAddress,
+        pendingRequest: { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true },
         deliveryRequired: false,
         serviceAddress: _saAddress || null
       });
     }
-
-    // ── awaiting_photo_choice: buyer chose to add photo or skip ───────────────
-    if (buyerRequestState === "awaiting_photo_choice") {
-      if (a === "sup_req_photo_skip" || al === "skip" || al === "00" || al === "cancel") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
-          { upsert: true }
-        );
-        return finalizeBuyerRequestSubmission({
-          from, phone,
-          pendingRequest:  pendingBuyerRequest || {},
-          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
-          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
-          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
-        });
-      }
-      if (a === "sup_req_photo_yes" || al === "add photo" || al === "photo") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $set: { "tempData.buyerRequestState": "awaiting_photo_upload" } },
-          { upsert: true }
-        );
-        return sendText(from,
-          `📷 *Send your photo now.*\n\n` +
-          `You can add a caption to describe what you need.\n\n` +
-          `_Type *skip* if you changed your mind and want to submit without a photo._`
-        );
-      }
-      // Any other text while in photo_choice — re-show prompt
-      return sendButtons(from, {
-        text: `📷 Would you like to attach a photo to your request?`,
-        buttons: [
-          { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
-          { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
-        ]
-      });
-    }
-
-    // ── awaiting_photo_upload: waiting for buyer to send the image ────────────
-    if (buyerRequestState === "awaiting_photo_upload") {
-      // Buyer typed "skip" or cancel instead of sending image
-      if (al === "skip" || al === "cancel" || al === "00" || al === "0") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
-          { upsert: true }
-        );
-        return finalizeBuyerRequestSubmission({
-          from, phone,
-          pendingRequest:  pendingBuyerRequest || {},
-          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
-          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
-          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
-        });
-      }
-      // Buyer sent text instead of image — keep waiting
-      return sendText(from,
-        `📷 Please *send a photo* (image message).\n\nOr type *skip* to submit your request without a photo.`
-      );
-    }
-
-
-
-  // ── __buyer_photo_uploaded__: fired from meta_webhook after image download ──
-  // hasImage, imageUrl, imageCaption are passed in from the webhook handler.
-  if (a === "__buyer_photo_uploaded__") {
-    const _photoSess = await UserSession.findOne({ phone });
-    const _photoPending = _photoSess?.tempData?.pendingBuyerRequest || null;
-
-    if (!_photoPending?.items?.length) {
-      return sendText(from, "❌ Request session expired. Please start again with your request.");
-    }
-
-    if (!imageUrl) {
-      return sendText(from, "❌ Could not save your photo. Please try again or type *skip* to submit without a photo.");
-    }
-
-    // Clear photo state
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
-      { upsert: true }
-    );
-
-    return finalizeBuyerRequestSubmission({
-      from, phone,
-      pendingRequest:  _photoPending,
-      deliveryRequired: _photoPending.deliveryRequired || false,
-      serviceAddress:   _photoPending.serviceAddress   || null,
-      deliveryAddress:  _photoPending.deliveryAddress  || null,
-      attachedImageUrl:     imageUrl,
-      attachedImageCaption: imageCaption || ""
-    });
   }
+
+
+
+  // =========================
+  // 🟢 ONBOARDING GATE
+  // =========================
   const ownerRole = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
 
 if (!biz && ownerRole?.businessId) {
@@ -5279,18 +5112,10 @@ const GREETING_WORDS = new Set([
   "help", "start", "menu", "home", "back", "cancel",
   // Universal shortcuts
   "0", "00", "000", "quotes", "my quotes", "my requests",
-  "pause", "resume",
-  // Zimbabwean / common first-message greetings
-  "good morning", "good afternoon", "good evening", "good day", "good night",
-  "morning", "afternoon", "evening",
-  "how are you", "how r u", "how are u", "hows it", "howzit guys",
-  "i need help", "need help", "what can you do", "what do you do",
-  "greetings", "sawubona", "mangwanani", "maswera sei", "makadii",
-  "hello there", "hi there", "hey there",
-  "request", "request sellers", "request quote", "get quotes", "get a quote"
+  "pause", "resume"
 ]);
 
-  // ── Global greeting/menu guard ─────────────────────────────────────────────
+// ── Global greeting/menu guard ─────────────────────────────────────────────
 if (
   GREETING_WORDS.has(al) &&
   !isMetaAction &&
@@ -5315,10 +5140,6 @@ if (
   if (al === "resume") {
     return handleIncomingMessage({ from, action: "sup_resume_requests" });
   }
-  // "request", "request sellers", "get quotes" → direct to Request Sellers flow
-  if (al === "request" || al === "request sellers" || al === "request quote" || al === "get quotes" || al === "get a quote") {
-    return handleIncomingMessage({ from, action: "sup_request_sellers" });
-  }
 
   if (al === "help") {
     await sendText(from,
@@ -5328,7 +5149,6 @@ if (
       `*menu* = Main menu\n` +
       `*quotes* = View your current quotes\n` +
       `*my requests* = Request history\n` +
-      `*request* = Request Sellers (get quotes)\n` +
       `*pause* = Pause request notifications (sellers)\n` +
       `*resume* = Resume notifications (sellers)\n` +
       `*help* = Show this list`
@@ -5336,20 +5156,6 @@ if (
   }
 
   return sendMainMenu(from);
-}
-
-// ── NEW USER FIRST-MESSAGE GATE ────────────────────────────────────────────
-// Any brand-new contact (PhoneContact record doesn't exist yet) sees the
-// main menu first regardless of what they typed — greetings, questions, anything.
-// Smart links (ZQ:SUPPLIER, ZQ:SCHOOL, ZQ:REQUEST) are already handled above
-// and bypass this gate correctly.
-if (!isMetaAction && !biz) {
-  const _existingContact = await PhoneContact.findOne({ phone }).lean();
-  if (!_existingContact) {
-    // This IS their first message — the upsert at line ~3277 will create the record.
-    // Show main menu so they don't land mid-flow.
-    return sendMainMenu(from);
-  }
 }
 
 // ── All users: handle typed school enquiry message (biz and non-biz) ───────────
@@ -18307,5 +18113,4 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
-}
 }

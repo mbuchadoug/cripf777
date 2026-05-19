@@ -74,26 +74,7 @@ status: {
       index: true
     },
     notifiedSuppliers: [{ type: mongoose.Schema.Types.ObjectId, ref: "SupplierProfile" }],
-    responses: { type: [buyerRequestResponseSchema], default: [] },
-
-    // ── Image attachment (optional) ────────────────────────────────────────────
-    // Buyers can attach one photo to help sellers understand the request.
-    // Images go through admin review before suppliers are notified.
-    // imageStatus="none"           → text-only, processed immediately as before
-    // imageStatus="pending_review" → waiting for admin approval
-    // imageStatus="approved"       → admin approved, suppliers notified
-    // imageStatus="rejected"       → admin rejected, buyer notified, not sent to sellers
-    imageUrl:             { type: String,  default: null  },
-    imageCaption:         { type: String,  default: ""    },
-    imageStatus: {
-      type:    String,
-      enum:    ["none", "pending_review", "approved", "rejected"],
-      default: "none",
-      index:   true
-    },
-    imageRejectionReason: { type: String,  default: ""    },
-    imageReviewedAt:      { type: Date,    default: null  },
-    imageReviewedBy:      { type: String,  default: ""    }
+    responses: { type: [buyerRequestResponseSchema], default: [] }
   },
   { timestamps: true }
 );
