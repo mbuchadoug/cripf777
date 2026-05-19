@@ -3709,7 +3709,16 @@ const BUYER_REQUEST_META_ACTIONS = new Set([
   "sup_request_delivery_no",
   "sup_request_delivery_flexible",
   "sup_request_mode_simple",
-  "sup_request_mode_bulk"
+  "sup_request_mode_bulk",
+  // ── Main menu buyer actions — must pass through regardless of isMetaAction ──
+  "sup_request_sellers",
+  "find_supplier",
+  "my_orders",
+  "buyer_my_requests",
+  "register_supplier",
+  "sup_req_photo_yes",
+  "sup_req_photo_skip",
+  "find_school"
 ]);
 
 const isBuyerRequestMetaReply =
@@ -3719,7 +3728,20 @@ const isBuyerRequestMetaReply =
   al === "not available" ||
   al === "confirm" ||
   al === "send" ||
-  al === "skip";
+  al === "skip" ||
+  // All sup_ actions have handlers inside this block — must pass through
+  a.startsWith("sup_") ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_unavail_") ||
+  a.startsWith("buyer_") ||
+  a === "find_supplier" ||
+  a === "my_orders" ||
+  a === "register_supplier" ||
+  a === "find_school" ||
+  a === "onboard_business" ||
+  a === "my_supplier_account" ||
+  a === "biz_tools_menu" ||
+  a === "main_menu_back";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
