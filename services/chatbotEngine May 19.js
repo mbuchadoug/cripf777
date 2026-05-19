@@ -3647,43 +3647,6 @@ try {
     if (_zqHandled) return;
   }
 
-  // ZQ:REQUEST deep link
-  // Share: https://wa.me/263771143904?text=ZQ%3AREQUEST
-  // Drops any user straight into Request Sellers flow.
-  if (/^ZQ:REQUEST$/i.test(text)) {
-    if (biz && biz.sessionState !== "ready") {
-      biz.sessionState = "ready";
-      biz.sessionData  = {};
-      await saveBizSafe(biz);
-    }
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.buyerRequestState":  "awaiting_items",
-          "tempData.buyerRequestMode":   "simple",
-          "tempData.pendingBuyerRequest": { requestType: "simple", profileType: "product", items: [] }
-        }
-      },
-      { upsert: true }
-    );
-    return sendButtons(from, {
-      text:
-        "\u26a1 *Request Sellers*\n\n"
-        + "Get quotes from sellers in your area. Type what you need and your city.\n\n"
-        + "*Examples:*\n"
-        + "_cement 10 bags harare_\n"
-        + "_geyser repair avondale harare_\n"
-        + "_school uniform size 8 bulawayo_\n"
-        + "_lodge night harare 2 adults_\n\n"
-        + "Type your request below \u2193",
-      buttons: [
-        { id: "sup_request_mode_bulk", title: "Bulk / List"  },
-        { id: "main_menu_back",        title: "Main Menu"    }
-      ]
-    });
-  }
-
     // ── GLOBAL school shortcode trigger ──────────────────────────────────────
   // Must run before supplier shortcode search and before no-biz early returns,
   // but only after isMetaAction and biz are available.
