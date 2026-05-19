@@ -3719,7 +3719,20 @@ const isBuyerRequestMetaReply =
   al === "not available" ||
   al === "confirm" ||
   al === "send" ||
-  al === "skip";
+  al === "skip" ||
+  a.startsWith("sup_") ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_unavail_") ||
+  a.startsWith("buyer_") ||
+  a === "find_supplier" ||
+  a === "my_orders" ||
+  a === "register_supplier" ||
+  a === "find_school" ||
+  a === "onboard_business" ||
+  a === "my_supplier_account" ||
+  a === "suppliers_home" ||
+  a === "biz_tools_menu" ||
+  a === "main_menu_back";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
