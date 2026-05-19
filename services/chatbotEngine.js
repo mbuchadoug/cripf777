@@ -3709,16 +3709,7 @@ const BUYER_REQUEST_META_ACTIONS = new Set([
   "sup_request_delivery_no",
   "sup_request_delivery_flexible",
   "sup_request_mode_simple",
-  "sup_request_mode_bulk",
-  // ── Main menu buyer actions — must pass through regardless of isMetaAction ──
-  "sup_request_sellers",
-  "find_supplier",
-  "my_orders",
-  "buyer_my_requests",
-  "register_supplier",
-  "sup_req_photo_yes",
-  "sup_req_photo_skip",
-  "find_school"
+  "sup_request_mode_bulk"
 ]);
 
 const isBuyerRequestMetaReply =
@@ -3728,20 +3719,7 @@ const isBuyerRequestMetaReply =
   al === "not available" ||
   al === "confirm" ||
   al === "send" ||
-  al === "skip" ||
-  // All sup_ actions have handlers inside this block — must pass through
-  a.startsWith("sup_") ||
-  a.startsWith("req_offer_") ||
-  a.startsWith("req_unavail_") ||
-  a.startsWith("buyer_") ||
-  a === "find_supplier" ||
-  a === "my_orders" ||
-  a === "register_supplier" ||
-  a === "find_school" ||
-  a === "onboard_business" ||
-  a === "my_supplier_account" ||
-  a === "biz_tools_menu" ||
-  a === "main_menu_back";
+  al === "skip";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
@@ -4250,7 +4228,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
+   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId && !isMetaAction) {
 
   // ── cancel ───────────────────────────────────────────────────────────────
   if (al === "cancel") {
@@ -4355,8 +4333,10 @@ await UserSession.findOneAndUpdate(
       text:
         `*What would you like to do?*\n\n` +
         `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
+        `➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
+        `📝 *Add a note:* _note available from Monday_\n` +
         `❌ *Skip items:* _skip 3_ or _skip 3,7,15_\n` +
-        `⚡ *Only have some items:* _have 3,7,15_ (skips all others)\n` +
+        `⚡ *Only have some items:* _have 3,7_ (skips all others)\n` +
         `🗑️ *Discard:* _cancel_`,
       buttons: [
         { id: `req_offer_confirm_${reqId}`, title: "Confirm & Send" },
@@ -4418,10 +4398,73 @@ await UserSession.findOneAndUpdate(
     return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
   }
 
+  // ── Parse "add [item description] [price]" command ────────────────────────
+  // e.g. "add labour 150" or "add call-out fee 50/job"
+  function _parseAddCommand(inputText) {
+    const raw = String(inputText || "").trim();
+    const m = raw.match(/^add\s+(.+?)\s+([\d]+(?:\.\d+)?)(?:\s*\/(\S+))?$/i);
+    if (!m) return null;
+    return {
+      product:      m[1].trim(),
+      pricePerUnit: parseFloat(m[2]),
+      unit:         m[3] || "each"
+    };
+  }
+
+  // ── Parse "note [text]" command ───────────────────────────────────────────
+  function _parseNoteCommand(inputText) {
+    const raw = String(inputText || "").trim();
+    const m = raw.match(/^note\s+(.+)$/i);
+    return m ? m[1].trim() : null;
+  }
+
   const _isService = supplier.profileType === "service";
   const _ref = buildBuyerRequestRef(request);
 
-  // ── CONFIRM: send the current stored draft ────────────────────────────────
+  // ── "add [item] [price]" — seller adds a line not in original request ─────
+  const _addCmd = _parseAddCommand(text);
+  if (_addCmd) {
+    const _addDraft = pendingDraftQuote?.responseItems?.length
+      ? pendingDraftQuote
+      : { responseItems: buildDraftQuoteFromRequest(supplier, request).items || [], skippedItems: [], totalAmount: 0 };
+
+    const qty = 1;
+    const newItem = {
+      product:      _addCmd.product,
+      quantity:     qty,
+      unit:         _addCmd.unit,
+      pricePerUnit: _addCmd.pricePerUnit,
+      total:        Number((_addCmd.pricePerUnit * qty).toFixed(2)),
+      _edited:      true
+    };
+    const updatedItems = [...(_addDraft.responseItems || []), newItem];
+    const newTotal = Number(updatedItems.reduce((s, i) => s + Number(i.total || 0), 0).toFixed(2));
+    const updatedDraft = { ..._addDraft, responseItems: updatedItems, totalAmount: newTotal };
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { upsert: true }
+    );
+    return _sendDraftPreview(updatedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
+  }
+
+  // ── "note [text]" — attach a note to the quote ───────────────────────────
+  const _noteText = _parseNoteCommand(text);
+  if (_noteText) {
+    const _noteDraft = pendingDraftQuote || { responseItems: [], skippedItems: [], totalAmount: 0 };
+    const updatedDraft = { ..._noteDraft, sellerNote: _noteText };
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { upsert: true }
+    );
+    return sendText(from,
+      `📝 Note added: _"${_noteText}"_\n\n` +
+      `Type *confirm* to send, or keep editing.\n` +
+      `Type *note [new text]* to replace the note.`
+    );
+  }
   if (al === "confirm" || al === "send") {
     const _confirmDraft = pendingDraftQuote;
     if (!_confirmDraft?.responseItems?.length) {
@@ -4447,12 +4490,14 @@ await UserSession.findOneAndUpdate(
         _confirmDraft.missingItems?.length ? `Not available: ${_confirmDraft.missingItems.join(", ")}` : ""
       ].filter(Boolean).join(" | ");
 
+    const _draftNote = _confirmDraft.sellerNote || "";
+
     const response = {
       supplierId:        supplier._id,
       supplierPhone:     supplier.phone,
       supplierName:      supplier.businessName,
       mode:              "manual_offer",
-      message:           skippedNote,
+      message:           [skippedNote, _draftNote].filter(Boolean).join(" | "),
       items:             responseItems,
       totalAmount,
       deliveryAvailable: supplier.delivery?.available ?? null,
@@ -16130,6 +16175,33 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     );
   }
 
+  // ── Collection path: offer photo before finalizing ──────────────────────────
+  const _noDelSess = await UserSession.findOne({ phone });
+  if (!_noDelSess?.tempData?.photoPromptShown) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState":  "awaiting_photo_choice",
+          "tempData.pendingBuyerRequest": { ...pendingBuyerRequest, deliveryRequired: false },
+          "tempData.photoPromptShown":   true
+        }
+      },
+      { upsert: true }
+    );
+    return sendButtons(from, {
+      text:
+        `📷 *Add a photo? (optional)*\n\n` +
+        `A photo helps sellers understand exactly what you need.\n\n` +
+        `Useful for: repairs, custom items, matching parts or colours.\n\n` +
+        `Tap *Add Photo* to send an image, or *Skip* to submit now.`,
+      buttons: [
+        { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
+        { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+      ]
+    });
+  }
+
   return finalizeBuyerRequestSubmission({
     from,
     phone,
@@ -16138,8 +16210,6 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     deliveryAddress: null
   });
 }
-
-// ── Use saved location ──────────────────────────────────────────────────────
 if (a === "sup_use_saved_location") {
   const reqSess = await UserSession.findOne({ phone });
   const pendingBuyerRequest = reqSess?.tempData?.pendingBuyerRequest || null;
