@@ -2571,7 +2571,7 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
     }
   }
 }
-async function notifySuppliersOfBuyerRequest(request) {
+export async function notifySuppliersOfBuyerRequest(request) {
   // ── Route to the correct supplier finder ─────────────────────────────────
   // findSuppliersForBuyerRequest uses runSupplierSearch which only searches
   // profileType "product" or "service" — it will NEVER return hospitality suppliers.

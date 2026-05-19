@@ -9,7 +9,6 @@ import SearchCommandLog from "../models/searchCommandLog.js";
 import { sendBuyerSearchHelpTemplate } from "../services/buyerSearchFollowUp.js";
 import BuyerRequest from "../models/buyerRequest2.js";
 import { notifyBuyerRequestApproved, notifyBuyerRequestRejected, notifyAdminPhotoReview } from "../services/buyerRequestNotifications.js";
-import { notifySuppliersOfBuyerRequest } from "../services/chatbotEngine.js";
 import CategoryPreset from "../models/categoryPreset.js";
 import { SUPPLIER_CATEGORIES } from "../services/supplierPlans.js";
 import { TEMPLATES, getPresetCategories, setTemplateForCategory } from "../services/supplierProductTemplates.js";
