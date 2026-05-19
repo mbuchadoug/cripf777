@@ -5338,20 +5338,6 @@ if (
   return sendMainMenu(from);
 }
 
-// ── NEW USER FIRST-MESSAGE GATE ────────────────────────────────────────────
-// Any brand-new contact (PhoneContact record doesn't exist yet) sees the
-// main menu first regardless of what they typed — greetings, questions, anything.
-// Smart links (ZQ:SUPPLIER, ZQ:SCHOOL, ZQ:REQUEST) are already handled above
-// and bypass this gate correctly.
-if (!isMetaAction && !biz) {
-  const _existingContact = await PhoneContact.findOne({ phone }).lean();
-  if (!_existingContact) {
-    // This IS their first message — the upsert at line ~3277 will create the record.
-    // Show main menu so they don't land mid-flow.
-    return sendMainMenu(from);
-  }
-}
-
 // ── All users: handle typed school enquiry message (biz and non-biz) ───────────
 if (!isMetaAction) {
   const _enquirySess = await UserSession.findOne({ phone });
@@ -5888,7 +5874,20 @@ a === "sup_search_next_page" ||
   a === "school_more_options" ||
   a === "school_update_reg_link" ||
   a === "school_update_email" ||
-  a === "school_update_website";
+  a === "school_update_website" ||
+  // ── Buyer-facing actions: must work without a biz or supplier account ──────
+  a === "sup_request_sellers" ||
+  a === "sup_request_mode_simple" ||
+  a === "sup_request_mode_bulk" ||
+  a === "sup_request_delivery_yes" ||
+  a === "sup_request_delivery_no" ||
+  a === "sup_skip_service_address" ||
+  a === "sup_req_photo_yes" ||
+  a === "sup_req_photo_skip" ||
+  a === "buyer_my_requests" ||
+  a.startsWith("buyer_view_all_quotes_") ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_unavail_");
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
