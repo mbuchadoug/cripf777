@@ -5383,31 +5383,6 @@ if (buyerRequestState === "awaiting_delivery_address") {
       });
     }
 
-    // ── awaiting_photo_upload: waiting for buyer to send the image ────────────
-    if (buyerRequestState === "awaiting_photo_upload") {
-      // Buyer typed "skip" or cancel instead of sending image
-      if (al === "skip" || al === "cancel" || al === "00" || al === "0") {
-        await UserSession.findOneAndUpdate(
-          { phone },
-          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
-          { upsert: true }
-        );
-        return finalizeBuyerRequestSubmission({
-          from, phone,
-          pendingRequest:  pendingBuyerRequest || {},
-          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
-          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
-          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
-        });
-      }
-      // Buyer sent text instead of image — keep waiting
-      return sendText(from,
-        `📷 Please *send a photo* (image message).\n\nOr type *skip* to submit your request without a photo.`
-      );
-    }
-
-
-
   // ── __buyer_photo_uploaded__: fired from meta_webhook after image download ──
   // hasImage, imageUrl, imageCaption are passed in from the webhook handler.
   if (a === "__buyer_photo_uploaded__") {
@@ -5439,6 +5414,33 @@ if (buyerRequestState === "awaiting_delivery_address") {
       attachedImageCaption: imageCaption || ""
     });
   }
+
+
+    // ── awaiting_photo_upload: waiting for buyer to send the image ────────────
+    if (buyerRequestState === "awaiting_photo_upload") {
+      // Buyer typed "skip" or cancel instead of sending image
+      if (al === "skip" || al === "cancel" || al === "00" || al === "0") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
+          { upsert: true }
+        );
+        return finalizeBuyerRequestSubmission({
+          from, phone,
+          pendingRequest:  pendingBuyerRequest || {},
+          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
+          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
+          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
+        });
+      }
+      // Buyer sent text instead of image — keep waiting
+      return sendText(from,
+        `📷 Please *send a photo* (image message).\n\nOr type *skip* to submit your request without a photo.`
+      );
+    }
+
+
+
   const ownerRole = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
 
 if (!biz && ownerRole?.businessId) {
