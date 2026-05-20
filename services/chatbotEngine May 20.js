@@ -1159,20 +1159,9 @@ function buildDraftQuoteFromRequest(supplier, request) {
     const qty       = Number(item.quantity || 1);
     const unitPrice = Number(match.amount);
     const total     = Number((qty * unitPrice).toFixed(2));
-    // Use seller's catalogue name as the display name in the quote.
-    // If buyer typed a sentence ("geyser leaking"), we show the seller's clean
-    // service name ("Geyser Repair & Service") in the quote instead.
-    const displayName = (match.product && match.product !== item.product)
-      ? match.product
-      : item.product;
-    // Store buyer's original text as a note if it differs from the catalogue name
-    const buyerNote = (match.product && match.product.toLowerCase() !== item.product.toLowerCase())
-      ? item.product
-      : "";
 
     responseItems.push({
-      product:      displayName,
-      buyerNote,
+      product:      item.product,
       quantity:     qty,
       unit:         match.unit || item.unitLabel || "each",
       pricePerUnit: unitPrice,
@@ -1889,7 +1878,7 @@ function isBuyerRequestHeadingLine(line = "") {
 }
 
 function normalizeBuyerRequestLine(line = "") {
-  let s = String(line || "")
+  return String(line || "")
     .replace(/[’′`]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[•▪◦●]/g, "")
@@ -1898,19 +1887,6 @@ function normalizeBuyerRequestLine(line = "") {
     .replace(/,+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
-
-  // Strip problem-statement prefixes so "my geyser is leaking" -> "geyser leaking"
-  // This normalises natural Zimbabwean English into product/service names.
-  s = s
-    .replace(/^(i need someone to |i need |i want |please |kindly |can you |could you |we need |we want )/i, "")
-    .replace(/^(my |our |the |a |an )/i, "")
-    .replace(/^(there is a |there is |im having |i am having |i have a |i have |i've got a |i've got )/i, "")
-    .replace(/\b(is leaking|is broken|is faulty|is not working|is damaged|needs repair|needs fixing|needs replacement|has a leak|has a fault)\b/gi, "repair")
-    .replace(/\b(install|installation|fitting|fit|fix|repair|service|replace|replacement)\b/gi, (m) => m)
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return s;
 }
 
 function parseSingleBuyerRequestLine(line = "") {
@@ -3793,8 +3769,7 @@ const isBuyerRequestMetaReply =
   a === "my_supplier_account" ||
   a === "suppliers_home" ||
   a === "biz_tools_menu" ||
-  a === "main_menu_back" ||
-  a.startsWith("sc_");
+  a === "main_menu_back";
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
@@ -4112,38 +4087,21 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
             ? `*${_blankEx || "1x80/job"}*  or  *1x80/job  2x50/hr*`
             : `*${_blankEx || "1x12.50"}*`);
 
-        // Show seller's own catalogue items so they can "pick" from them
-        const _sellerCatItems = [
-          ...(_introSupplier?.prices    || []).map(p => ({ name: p.product,  price: p.amount,      unit: p.unit || "each" })),
-          ...(_introSupplier?.rates     || []).map(r => ({ name: r.service,  price: r.rate,        unit: "" })),
-          ...(_introSupplier?.roomTypes || []).map(t => ({ name: t.roomType, price: t.pricePerNight, unit: "/night" }))
-        ].filter(i => i.name).slice(0, 10);
-
-        const _catalogueLines = _sellerCatItems.length
-          ? "\n\n📋 *Your catalogue (pick by number):*\n" +
-            _sellerCatItems.map((it, i) =>
-              `P${i+1}. ${it.name}${it.price ? ` - $${Number(it.price).toFixed ? Number(it.price).toFixed(2) : it.price}${it.unit ? "/"+it.unit : ""}` : ""}`
-            ).join("\n") +
-            "\nType *pick P1 2* to add item P1 qty 2 to quote"
-          : "";
-
         return sendText(from,
           `📋 *${_introRef} - Enter your prices*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
           `*${_introIsService ? "Services" : "Items"} requested:*\n${_blankItemLines}\n` +
           `─────────────────\n\n` +
-          `💰 *How to price this request:*\n` +
+          `💰 *How to send your price:*\n` +
           (_blankSingle
             ? (_isTourismOffer
                 ? `Type: *80/person*  or  *80/hour*  or  *80/day*`
                 : `Type: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`)
             : `Type each price:\n${_unitExamples}\n\n_(item number x price/unit)_`) +
           (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\n➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
-          `📝 *Add a note:* _note available Monday, deposit 50% required_\n` +
-          `❌ *Cancel:* _cancel_` +
-          _catalogueLines
+          `\n\nAdd a note: start with *msg* e.g: _1=80/job msg available next week_\n` +
+          `Type *cancel* to go back.`
         );
       }
 
@@ -4426,8 +4384,7 @@ await UserSession.findOneAndUpdate(
         `*What would you like to do?*\n\n` +
         `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
         `➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
-        `📋 *Pick from catalogue:* _pick P1_ or _pick P2 3_\n` +
-        `📝 *Add a note:* _note deposit required, available Mon-Fri_\n` +
+        `📝 *Add a note:* _note available from Monday_\n` +
         `❌ *Skip items:* _skip 3_ or _skip 3,7,15_\n` +
         `⚡ *Only have some items:* _have 3,7_ (skips all others)\n` +
         `🗑️ *Discard:* _cancel_`,
@@ -4557,28 +4514,6 @@ await UserSession.findOneAndUpdate(
       `Type *confirm* to send, or keep editing.\n` +
       `Type *note [new text]* to replace the note.`
     );
-  }
-
-  // pick P1 2 -- seller picks from their own catalogue (P1=item 1, qty 2)
-  const _pickMatch = text.match(/^pick\s+p(\d+)(?:\s+(\d+(?:\.\d+)?))?/i);
-  if (_pickMatch) {
-    const _pickIdx  = parseInt(_pickMatch[1], 10) - 1;
-    const _pickQty  = parseFloat(_pickMatch[2] || "1") || 1;
-    const _catItems = [
-      ...(supplier?.prices    || []).map(p => ({ name: p.product,  price: Number(p.amount||0), unit: p.unit||"each" })),
-      ...(supplier?.rates     || []).map(r => ({ name: r.service,  price: parseFloat(String(r.rate||"").replace(/[^\d.]/g,"")||"0"), unit: "job" })),
-      ...(supplier?.roomTypes || []).map(t => ({ name: t.roomType, price: Number(t.pricePerNight||0), unit: "night" }))
-    ].filter(i => i.name).slice(0, 10);
-    const _picked = _catItems[_pickIdx];
-    if (!_picked) return sendText(from, `Item P${_pickIdx+1} not found in your catalogue.`);
-    const _pDraft  = pendingDraftQuote?.responseItems?.length ? pendingDraftQuote : { responseItems: [], skippedItems: [], totalAmount: 0 };
-    const _pTotal  = Number((_picked.price * _pickQty).toFixed(2));
-    const _pItem   = { product: _picked.name, quantity: _pickQty, unit: _picked.unit, pricePerUnit: _picked.price, total: _pTotal, _edited: true };
-    const _pItems  = [...(_pDraft.responseItems||[]), _pItem];
-    const _pGrand  = Number(_pItems.reduce((s,i)=>s+Number(i.total||0),0).toFixed(2));
-    const _pUpdate = { ..._pDraft, responseItems: _pItems, totalAmount: _pGrand };
-    await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.pendingDraftQuote": _pUpdate } }, { upsert: true });
-    return _sendDraftPreview(_pItems, _pDraft.skippedItems||[], _ref, _pGrand, sellerRequestId);
   }
   if (al === "confirm" || al === "send") {
     const _confirmDraft = pendingDraftQuote;
