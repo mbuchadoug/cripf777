@@ -500,23 +500,6 @@ export async function notifyAdminPhotoReview({
   const siteUrl    = (process.env.SITE_URL || "").replace(/\/$/, "");
   const reviewLink = `${siteUrl}/zq-admin/requests/${requestId}/review`;
 
-  // ── Tier 1: Utility template (works outside 24hr session) ─────────────────
-  // Template name: zq_admin_photo_review2
-  // See bottom of this file for full submission spec.
-  try {
-    await _sendTemplate(adminPhone, "zq_admin_photo_review2", [
-      ref,
-      String(itemSummary).slice(0, 200),
-      locationText || "Zimbabwe",
-      reviewLink
-    ]);
-    console.log(`[ADMIN PHOTO REVIEW] zq_admin_photo_review2 → ${adminPhone} (${ref})`);
-    return; // ← success, stop here
-  } catch (err) {
-    console.warn(`[ADMIN PHOTO REVIEW] template zq_admin_photo_review2 failed: ${err.message}. Trying old template.`);
-  }
-
-  // ── Tier 2: Try old template name in case it was approved ─────────────────
   try {
     await _sendTemplate(adminPhone, "zq_admin_photo_review", [
       ref,
@@ -525,89 +508,23 @@ export async function notifyAdminPhotoReview({
       reviewLink
     ]);
     console.log(`[ADMIN PHOTO REVIEW] zq_admin_photo_review → ${adminPhone} (${ref})`);
-    return;
   } catch (err) {
-    console.warn(`[ADMIN PHOTO REVIEW] old template also failed: ${err.message}. Trying sendButtons fallback.`);
-  }
-
-  // ── Tier 3: sendButtons — works when admin has an active 24hr session ─────
-  // This is the PRIMARY in-session fallback. sendButtons triggers an
-  // interactive message which WhatsApp delivers within an open session.
-  // More reliable than sendText for operational alerts.
-  try {
-    await sendButtons(adminPhone, {
-      text:
+    console.warn(`[ADMIN PHOTO REVIEW] template failed: ${err.message}. Falling back to sendText.`);
+    try {
+      await sendText(
+        adminPhone,
         `📸 *Photo Request Needs Review*\n\n` +
         `Ref: *${ref}*\n` +
-        `Items: ${String(itemSummary).slice(0, 200)}\n` +
+        `Items: ${itemSummary}\n` +
         `Location: ${locationText || "Zimbabwe"}\n\n` +
-        `Review link:\n${reviewLink}\n\n` +
-        `Open: Admin Panel → Requests → Pending Photos`,
-      buttons: [
-        { id: "main_menu_back", title: "🏠 Main Menu" }
-      ]
-    });
-    console.log(`[ADMIN PHOTO REVIEW] sendButtons fallback → ${adminPhone} (${ref})`);
-    return;
-  } catch (e) {
-    console.warn(`[ADMIN PHOTO REVIEW] sendButtons also failed: ${e.message}. Trying sendText last resort.`);
-  }
-
-  // ── Tier 4: sendText — absolute last resort ────────────────────────────────
-  try {
-    await sendText(
-      adminPhone,
-      `📸 *Photo Request Needs Review*\n\n` +
-      `Ref: *${ref}*\n` +
-      `Items: ${String(itemSummary).slice(0, 200)}\n` +
-      `Location: ${locationText || "Zimbabwe"}\n\n` +
-      `Review: ${reviewLink}\n\n` +
-      `Open admin panel → Requests → Pending Photos.`
-    );
-    console.log(`[ADMIN PHOTO REVIEW] sendText last resort → ${adminPhone} (${ref})`);
-  } catch (e) {
-    console.error(`[ADMIN PHOTO REVIEW] ALL delivery methods failed for ${adminPhone} (${ref}): ${e.message}`);
+        `Review: ${reviewLink}\n\n` +
+        `Open admin panel → Requests → Pending Photos.`
+      );
+    } catch (e) {
+      console.warn(`[ADMIN PHOTO REVIEW] fallback sendText also failed: ${e.message}`);
+    }
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// META TEMPLATE SUBMISSION SPEC: zq_admin_photo_review2
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Template name : zq_admin_photo_review2
-// Category      : UTILITY
-// Language      : English
-//
-// HEADER        : (none — leave blank)
-//
-// BODY (copy exactly — do not change wording, spacing, or variable order):
-//
-//   New buyer request received on ZimQuote.
-//   Ref: {{1}}
-//   Items: {{2}}
-//   Location: {{3}}
-//   Action required: review the attached photo before sellers are notified.
-//   Admin review link: {{4}}
-//   This is an automated operational alert from ZimQuote. No action needed if already reviewed.
-//
-// FOOTER        : ZimQuote Admin Alerts
-//
-// BUTTONS       : (none — no buttons needed, plain utility body only)
-//
-// VARIABLE EXAMPLES (required by Meta for submission):
-//   {{1}} = REQ-EA0291
-//   {{2}} = 1. copper pipe 15mm x5, 2. ball valve x2
-//   {{3}} = Avondale, Harare
-//   {{4}} = https://zimquote.co.zw/zq-admin/requests/683a1f2c4d5e6f7a8b9c0d1e/review
-//
-// WHY THIS PASSES UTILITY REVIEW:
-//   - Does NOT start with a variable (starts with "New buyer request received")
-//   - Does NOT end with a variable (ends with fixed disclaimer sentence)
-//   - No promotional language, no offers, no marketing
-//   - Operational/transactional: notifies a business operator of a pending action
-//   - Variables contain only reference numbers, item descriptions, location, URL
-//   - Footer clearly identifies the sender
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: Notify BUYER that their photo request was APPROVED
@@ -700,4 +617,4 @@ export async function notifyBuyerRequestRejected({
       console.warn(`[BUYER REJECTED] fallback also failed: ${e.message}`);
     }
   }
-}s
+}
