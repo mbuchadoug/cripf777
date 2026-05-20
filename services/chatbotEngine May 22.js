@@ -3382,8 +3382,6 @@ a === "my_orders" ||
       a === "reg_type_service" ||
       a === "reg_type_hospitality" ||
       a === "reg_type_school" ||
-      a === "reg_type_product" ||
-      a === "reg_type_service" ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
       a === "sup_skip_rest_rates" ||
@@ -5959,8 +5957,6 @@ const allowedWithoutBiz =
       a === "sup_search_type_service" ||
      a === "reg_type_school" ||
       a === "reg_type_hospitality" ||
-      a === "reg_type_product" ||
-      a === "reg_type_service" ||
       a.startsWith("sup_hosp_type_") ||
       a === "sup_hosp_facilities_done" ||
       a === "sup_skip_rest_rates" ||
@@ -12109,21 +12105,9 @@ _Type *cancel* to return to main menu._`
 
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
-  // ── Create pending biz for brand-new users with no business record ─────────
   if (!biz) {
-    const _newSchoolBiz = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      isSupplier: false,
-      sessionState: "school_reg_name",
-      sessionData: { supplierReg: { profileType: "school" } },
-      ownerPhone: phone
-    });
-    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newSchoolBiz._id });
-    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newSchoolBiz._id }, { upsert: true });
-    biz = _newSchoolBiz;
+    await sendText(from, "❌ Session expired. Type *menu* to start again.");
+    return;
   }
 
   // Check if already has a school profile
@@ -12156,22 +12140,7 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
-  // ── Create pending biz for brand-new users with no business record ─────────
-  if (!biz) {
-    const _newRegBiz = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      isSupplier: false,
-      sessionState: "supplier_reg_name",
-      sessionData: { supplierReg: {} },
-      ownerPhone: phone
-    });
-    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newRegBiz._id });
-    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newRegBiz._id }, { upsert: true });
-    biz = _newRegBiz;
-  }
+  if (!biz) return sendMainMenu(from);
 
   const profileType = a === "reg_type_service" ? "service" : "product";
 
@@ -12185,22 +12154,7 @@ if (a === "reg_type_product" || a === "reg_type_service") {
 
 // ── Hospitality / Tourism registration entry ──────────────────────────────
 if (a === "reg_type_hospitality") {
-  // ── Create pending biz for brand-new users with no business record ─────────
-  if (!biz) {
-    const _newHospBiz = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      isSupplier: false,
-      sessionState: "supplier_reg_name",
-      sessionData: { supplierReg: { profileType: "hospitality" } },
-      ownerPhone: phone
-    });
-    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newHospBiz._id });
-    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newHospBiz._id }, { upsert: true });
-    biz = _newHospBiz;
-  }
+  if (!biz) return sendMainMenu(from);
 
   biz.sessionData = biz.sessionData || {};
   biz.sessionData.supplierReg = { profileType: "hospitality" };

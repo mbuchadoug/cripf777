@@ -254,16 +254,6 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
           const siteUrl  = (process.env.SITE_URL || "").replace(/\/$/, "");
           const imageUrl = `${siteUrl}/docs/generated/orders/${fname}`;
 
-          // ── Validate the URL will be publicly accessible ─────────────────
-          if (!siteUrl) {
-            console.error("[BUYER PHOTO] ⚠️  SITE_URL is not set in .env!");
-            console.error("[BUYER PHOTO] ⚠️  Images will not display on admin panel or for sellers.");
-            console.error("[BUYER PHOTO] ⚠️  Set SITE_URL=https://yourdomain.com in your .env file.");
-          } else {
-            console.log("[BUYER PHOTO] ✅ imageUrl =", imageUrl);
-            console.log("[BUYER PHOTO] ✅ File saved to:", pathM.join(dir, fname));
-          }
-
           // Pass image data into chatbotEngine via action string + session
           await handleIncomingMessage({
             from,

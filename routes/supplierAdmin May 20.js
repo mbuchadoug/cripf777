@@ -6374,29 +6374,9 @@ router.get("/requests/:id/review", requireSupplierAdmin, async (req, res) => {
           </div>
           <div style="flex:0 0 280px">
             <p style="color:var(--muted);font-size:12px;margin-bottom:8px">ATTACHED PHOTO</p>
-            <div id="img-wrap">
-              <a href="${esc(r.imageUrl)}" target="_blank" id="img-link">
-                <img src="${esc(r.imageUrl)}"
-                     style="width:100%;max-width:280px;border-radius:10px;border:1px solid var(--border);display:block"
-                     onerror="document.getElementById('img-broken').style.display='block';document.getElementById('img-link').style.display='none'" />
-              </a>
-              <div id="img-broken" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;font-size:12px;margin-top:4px">
-                <strong>⚠️ Image cannot be displayed in browser</strong><br><br>
-                This is usually because <strong>express.static is not serving the <code>docs/</code> folder</strong>,
-                or <code>SITE_URL</code> is wrong in your <code>.env</code>.<br><br>
-                <strong>Fix — add to your Express app (app.js / server.js):</strong><br>
-                <code style="background:#fff;padding:4px 8px;border-radius:4px;display:block;margin:6px 0;font-size:11px">
-                  app.use('/docs', express.static(path.join(__dirname, 'docs')));
-                </code>
-                <strong>Also verify in .env:</strong><br>
-                <code style="background:#fff;padding:4px 8px;border-radius:4px;display:block;margin:6px 0;font-size:11px">
-                  SITE_URL=https://yourdomain.com
-                </code>
-                <hr style="margin:8px 0;border-color:#f59e0b">
-                Raw URL (right-click → open in new tab to test):<br>
-                <a href="${esc(r.imageUrl)}" target="_blank" style="color:#1d4ed8;word-break:break-all;font-size:11px">${esc(r.imageUrl)}</a>
-              </div>
-            </div>
+            <a href="${esc(r.imageUrl)}" target="_blank">
+              <img src="${esc(r.imageUrl)}" style="width:100%;max-width:280px;border-radius:10px;border:1px solid var(--border)" />
+            </a>
             <p style="font-size:11px;color:var(--muted);margin-top:4px">Click to open full size</p>
           </div>
         </div>
@@ -6450,13 +6430,7 @@ router.post("/requests/:id/approve-photo", requireSupplierAdmin, async (req, res
     const itemSummary = (r.items || []).slice(0, 3).map((it, i) => `${i + 1}. ${it.product} x${it.quantity || 1}`).join(", ");
     await notifyBuyerRequestApproved({ buyerPhone: r.buyerPhone, ref, itemSummary, notifiedCount });
 
-    // 3. Log image URL for diagnosis
-    if (r.imageUrl) {
-      console.log(`[ADMIN APPROVE] Request ${r._id} has imageUrl: ${r.imageUrl}`);
-      console.log(`[ADMIN APPROVE] imageStatus now: approved — sellers will receive image when they tap View & Quote`);
-    }
-
-    res.redirect(`/zq-admin/requests/pending-photos?approved=1&notified=${notifiedCount}`);
+    res.redirect(`/zq-admin/requests/pending-photos?approved=1`);
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));
   }
