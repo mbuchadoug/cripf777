@@ -5478,46 +5478,62 @@ if (
   !isMetaAction &&
   (!biz || biz.sessionState === "ready" || biz.sessionState === "supplier_search_city")
 ) {
-  if (biz && biz.sessionState !== "ready") {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-  }
+  // ── Don't intercept greetings if user has an active offer/quote flow ──────
+  // Notification contacts have no "biz" of their own but DO have session state
+  // (awaiting_offer_intro, awaiting_offer, etc). Without this check, "hi" from
+  // a notification contact hits sendMainMenu() and the offer flow is never reached.
+  const _greetSess = await UserSession.findOne({ phone }).lean();
+  const _greetOfferState = _greetSess?.tempData?.sellerRequestReplyState;
+  const _greetBuyerState = _greetSess?.tempData?.buyerRequestState;
+  const _offerFlowActive =
+    _greetOfferState === "awaiting_offer_intro" ||
+    _greetOfferState === "awaiting_offer" ||
+    _greetOfferState === "awaiting_offer_confirm";
+  const _buyerFlowActive = !!_greetBuyerState;
 
-  // Route universal shortcuts regardless of state
-  if (al === "quotes" || al === "my quotes") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "my requests") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "pause") {
-    return handleIncomingMessage({ from, action: "sup_pause_requests" });
-  }
-  if (al === "resume") {
-    return handleIncomingMessage({ from, action: "sup_resume_requests" });
-  }
-  // "request", "request sellers", "get quotes" → direct to Request Sellers flow
-  if (al === "request" || al === "request sellers" || al === "request quote" || al === "get quotes" || al === "get a quote") {
-    return handleIncomingMessage({ from, action: "sup_request_sellers" });
-  }
+  if (!_offerFlowActive && !_buyerFlowActive) {
+    if (biz && biz.sessionState !== "ready") {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+    }
 
-  if (al === "help") {
-    await sendText(from,
-      `📋 *Shortcuts (work anywhere):*\n\n` +
-      `*0* = Main menu\n` +
-      `*00* = Cancel current flow\n` +
-      `*menu* = Main menu\n` +
-      `*quotes* = View your current quotes\n` +
-      `*my requests* = Request history\n` +
-      `*request* = Request Sellers (get quotes)\n` +
-      `*pause* = Pause request notifications (sellers)\n` +
-      `*resume* = Resume notifications (sellers)\n` +
-      `*help* = Show this list`
-    );
-  }
+    // Route universal shortcuts regardless of state
+    if (al === "quotes" || al === "my quotes") {
+      return handleIncomingMessage({ from, action: "buyer_my_requests" });
+    }
+    if (al === "my requests") {
+      return handleIncomingMessage({ from, action: "buyer_my_requests" });
+    }
+    if (al === "pause") {
+      return handleIncomingMessage({ from, action: "sup_pause_requests" });
+    }
+    if (al === "resume") {
+      return handleIncomingMessage({ from, action: "sup_resume_requests" });
+    }
+    // "request", "request sellers", "get quotes" → direct to Request Sellers flow
+    if (al === "request" || al === "request sellers" || al === "request quote" || al === "get quotes" || al === "get a quote") {
+      return handleIncomingMessage({ from, action: "sup_request_sellers" });
+    }
 
-  return sendMainMenu(from);
+    if (al === "help") {
+      await sendText(from,
+        `📋 *Shortcuts (work anywhere):*\n\n` +
+        `*0* = Main menu\n` +
+        `*00* = Cancel current flow\n` +
+        `*menu* = Main menu\n` +
+        `*quotes* = View your current quotes\n` +
+        `*my requests* = Request history\n` +
+        `*request* = Request Sellers (get quotes)\n` +
+        `*pause* = Pause request notifications (sellers)\n` +
+        `*resume* = Resume notifications (sellers)\n` +
+        `*help* = Show this list`
+      );
+    }
+
+    return sendMainMenu(from);
+  }
+  // else: fall through — let the offer/buyer flow handlers below take over
 }
 
 // ── All users: handle typed school enquiry message (biz and non-biz) ───────────
