@@ -226,6 +226,21 @@ export async function handleSupplierRegistrationStates({
 }) {
   const phone = from.replace(/\D+/g, "");
 
+  // ── Guard: reg_type_* are button action IDs, never free text ─────────────────
+  // If the engine calls this function with a reg_type_ action as the "text",
+  // it means the user tapped a registration type button while their biz sessionState
+  // is still a text-input state (e.g. supplier_reg_listing_type, supplier_reg_name).
+  // Return false so execution falls through to the chatbotEngine action handlers.
+  const _actionId = (text || "").trim().toLowerCase();
+  if (
+    _actionId === "reg_type_product" ||
+    _actionId === "reg_type_service" ||
+    _actionId === "reg_type_school" ||
+    _actionId === "reg_type_hospitality"
+  ) {
+    return false; // ← let chatbotEngine handle it at the action handler
+  }
+
   // ── Step 1: Business Name ──────────────────────────────
  // ── Step 0: Listing type chosen via button (product/service handled in chatbotEngine)
   // School name free-text entry after "reg_type_school" button

@@ -12118,6 +12118,12 @@ _Type *cancel* to return to main menu._`
 
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "school_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
   // ── Create pending biz for brand-new users with no business record ─────────
   if (!biz) {
     const _newSchoolBiz = await Business.create({
@@ -12165,6 +12171,16 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
+  // ── If existing pending biz is in a listing-type or reg-name state, reset it ──
+  // This handles the case where the user tapped the button before (creating a pending biz)
+  // but their session was left in an intermediate state. Without this reset,
+  // handleSupplierRegistrationStates would intercept the action as free text.
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
   // ── Create pending biz for brand-new users with no business record ─────────
   if (!biz) {
     const _newRegBiz = await Business.create({
@@ -12194,6 +12210,12 @@ if (a === "reg_type_product" || a === "reg_type_service") {
 
 // ── Hospitality / Tourism registration entry ──────────────────────────────
 if (a === "reg_type_hospitality") {
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
   // ── Create pending biz for brand-new users with no business record ─────────
   if (!biz) {
     const _newHospBiz = await Business.create({
