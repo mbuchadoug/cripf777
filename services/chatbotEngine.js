@@ -3694,6 +3694,24 @@ if (
 }
 // ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
 
+// ── SCHOOL FAQ EARLY HANDLER ────────────────────────────────────────────────
+// MUST be at top level — sfaq_* arrive as isMetaAction=true interactive replies.
+// The handler inside the !isMetaAction block at ~line 10875 is dead for these.
+if (typeof a === "string" && a.startsWith("sfaq_")) {
+  console.log("[SFAQ_FIXED] phone:", phone, "action:", a);
+  const _sfaqHandled = await handleSchoolFAQAction({
+    from,
+    action: a,
+    biz,
+    saveBiz: biz ? saveBizSafe.bind(null, biz) : null
+  });
+  if (_sfaqHandled) return;
+  console.warn("[SFAQ_FIXED] unhandled sfaq action:", a);
+  return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
+}
+// ── END SCHOOL FAQ EARLY HANDLER ─────────────────────────────────────────────
+
+
 
 // ─────────────────────────────────────────────────────────────
 // GLOBAL COMMAND/TEXT LOGGER
