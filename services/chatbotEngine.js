@@ -10802,6 +10802,38 @@ if (a === "register_supplier") {
   return startSupplierRegistration(from, biz);
 }
 
+// ── Supplier registration type selected ─────────────────────────────
+if (
+  a === "reg_type_product" ||
+  a === "reg_type_service" ||
+  a === "reg_type_hospitality"
+) {
+  if (!biz) {
+    await sendText(from, "❌ Session expired. Please tap *List My Business* again.");
+    return sendMainMenu(from);
+  }
+
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+
+  biz.sessionData.supplierReg.profileType =
+    a === "reg_type_service"
+      ? "service"
+      : a === "reg_type_hospitality"
+        ? "hospitality"
+        : "product";
+
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  console.log("[SUP REG TYPE]", phone, a, biz.sessionData.supplierReg.profileType);
+
+  return sendText(
+    from,
+    "🏪 *Business Name*\n\nPlease enter your business name:"
+  );
+}
+
 // ── SCHOOL SMART LINK / FAQ ACTIONS ─────────────────────────────────────
 // MUST run before main-menu fallback, supplier registration, and generic handlers.
 // Parents who open school smart links may NOT have a biz record.
