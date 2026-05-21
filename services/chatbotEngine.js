@@ -17,6 +17,7 @@ import SubscriptionPayment from "../models/subscriptionPayment.js";
 import paynow from "./paynow.js";
 import PhoneContact from "../models/phoneContact.js";
 import { sendDocument } from "./metaSender.js";
+import { sendImage }    from "./metaSender.js";
 import {
   canUseFeature,
   requiredPackageForFeature,
@@ -108,13 +109,16 @@ import {
 import {
   trackSupplierResponseSpeed,
   getBuyerOpenRequests,
-  getBuyerLastRequest,
   formatBuyerQuoteComparison,
   formatRequestSummary,
   parseBuyerRequestLineWithQty,
   parseItemListWithQty
 } from "./buyerRequests.js";
-import { notifySupplierNewRequestTemplate } from "./buyerRequestNotifications.js";
+import {
+  notifySupplierNewRequestTemplate,
+  sendClarificationRequestToBuyer,
+  sendClarificationReplyToSeller
+} from "./buyerRequestNotifications.js";
 import { findSuppliersForRequest, getVagueTermClarification, notifyNewSellerOfUnmatchedRequests } from "./requestMatchEngine.js";
 import { sendRatingPrompt, updateSupplierCredibility } from "./supplierRatings.js";
 
@@ -382,6 +386,15 @@ function isGenericBuyerRequestName(value = "") {
   if (tokens.length === 1 && GENERIC_REQUEST_TERMS.has(tokens[0])) return true;
   if (tokens.length === 1) return true;
 
+  // Hospitality exception: "lodge night", "hotel room", "guesthouse 2 nights", "lodge rest" etc.
+  // These are 2-token requests that are specific enough for hospitality suppliers to quote.
+  // Without this exception they would be rejected as vague (2 tokens but one is a number/night).
+  const HOSPITALITY_ANCHORS = new Set(["lodge","hotel","guesthouse","chalet","accommodation","resort","campsite","safari","cruise","houseboat"]);
+  const HOSPITALITY_QUALIFIERS = new Set(["night","nights","rest","day","days","room","rooms","double","twin","single","family","suite","overnight","guests","adults","people","person"]);
+  const hasAnchor    = tokens.some(t => HOSPITALITY_ANCHORS.has(t));
+  const hasQualifier = tokens.some(t => HOSPITALITY_QUALIFIERS.has(t) || /^\d+$/.test(t));
+  if (hasAnchor && hasQualifier) return false;
+
   return false;
 }
 
@@ -403,7 +416,12 @@ function buildBuyerSpecificityPrompt(vagueItems = []) {
     `_ball valve brass 20mm harare_\n` +
     `_school uniform size 8 chitungwiza_\n` +
     `_hp laptop core i7 cbd harare_\n` +
-    `_geyser installation avondale harare_`
+    `_geyser installation avondale harare_\n\n` +
+    `🏨 *For lodge / hotel / tourism requests:*\n` +
+    `_lodge night harare 2 adults_\n` +
+    `_double room overnight kariba 3 nights_\n` +
+    `_game drive hwange 4 people_\n` +
+    `_guesthouse bulawayo 2 nights_`
   );
 }
 
@@ -1141,9 +1159,20 @@ function buildDraftQuoteFromRequest(supplier, request) {
     const qty       = Number(item.quantity || 1);
     const unitPrice = Number(match.amount);
     const total     = Number((qty * unitPrice).toFixed(2));
+    // Use seller's catalogue name as the display name in the quote.
+    // If buyer typed a sentence ("geyser leaking"), we show the seller's clean
+    // service name ("Geyser Repair & Service") in the quote instead.
+    const displayName = (match.product && match.product !== item.product)
+      ? match.product
+      : item.product;
+    // Store buyer's original text as a note if it differs from the catalogue name
+    const buyerNote = (match.product && match.product.toLowerCase() !== item.product.toLowerCase())
+      ? item.product
+      : "";
 
     responseItems.push({
-      product:      item.product,
+      product:      displayName,
+      buyerNote,
       quantity:     qty,
       unit:         match.unit || item.unitLabel || "each",
       pricePerUnit: unitPrice,
@@ -1860,7 +1889,7 @@ function isBuyerRequestHeadingLine(line = "") {
 }
 
 function normalizeBuyerRequestLine(line = "") {
-  return String(line || "")
+  let s = String(line || "")
     .replace(/[’′`]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[•▪◦●]/g, "")
@@ -1869,6 +1898,19 @@ function normalizeBuyerRequestLine(line = "") {
     .replace(/,+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  // Strip problem-statement prefixes so "my geyser is leaking" -> "geyser leaking"
+  // This normalises natural Zimbabwean English into product/service names.
+  s = s
+    .replace(/^(i need someone to |i need |i want |please |kindly |can you |could you |we need |we want )/i, "")
+    .replace(/^(my |our |the |a |an )/i, "")
+    .replace(/^(there is a |there is |im having |i am having |i have a |i have |i've got a |i've got )/i, "")
+    .replace(/\b(is leaking|is broken|is faulty|is not working|is damaged|needs repair|needs fixing|needs replacement|has a leak|has a fault)\b/gi, "repair")
+    .replace(/\b(install|installation|fitting|fit|fix|repair|service|replace|replacement)\b/gi, (m) => m)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return s;
 }
 
 function parseSingleBuyerRequestLine(line = "") {
@@ -2553,13 +2595,30 @@ async function sendBuyerRequestResponseToBuyer({ request, supplier, response }) 
     }
   }
 }
-async function notifySuppliersOfBuyerRequest(request) {
-  const suppliers = await findSuppliersForBuyerRequest({
-    items: request.items || [],
-    city: request.city || null,
-    area: request.area || null
-    // profileType intentionally omitted: findSuppliersForBuyerRequest always searches both product & service
-  });
+export async function notifySuppliersOfBuyerRequest(request) {
+  // ── Route to the correct supplier finder ─────────────────────────────────
+  // findSuppliersForBuyerRequest uses runSupplierSearch which only searches
+  // profileType "product" or "service" — it will NEVER return hospitality suppliers.
+  // For hospitality/tourism requests, we must use findSuppliersForRequest from
+  // requestMatchEngine which has the full hospitality intent classification.
+  const _isTourismNotif = _buyerRequestIsTourism(request.items || []);
+
+  let suppliers;
+  if (_isTourismNotif) {
+    // Use the requestMatchEngine which correctly finds profileType="hospitality" suppliers
+    suppliers = await findSuppliersForRequest({
+      items: (request.items || []).map(i => ({ product: i.product || i.service || i.raw || "", ...i })),
+      city:  request.city  || null,
+      area:  request.area  || null
+    });
+    console.log(`[BUYER REQ] Tourism/hospitality request → findSuppliersForRequest → ${suppliers.length} suppliers`);
+  } else {
+    suppliers = await findSuppliersForBuyerRequest({
+      items: request.items || [],
+      city:  request.city  || null,
+      area:  request.area  || null
+    });
+  }
 
   const notifiedIds = [];
 
@@ -2611,6 +2670,7 @@ async function notifySuppliersOfBuyerRequest(request) {
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
       await notifySupplierNewRequestTemplate({
         supplierPhone:        supplier.phone,
+        supplier,                                      // full object for VIP check
         notificationContacts: supplier.notificationContacts || [],
         requestId:            String(request._id),
         ref,
@@ -2619,7 +2679,8 @@ async function notifySuppliersOfBuyerRequest(request) {
         itemSummary:   _notifItemLines,
         deliveryLine:  _deliveryLine,
         fullItemLines: _notifItemLines,
-        replyExamples: _notifExamples
+        replyExamples: _notifExamples,
+        buyerPhone:    request.buyerPhone || null       // shown only to VIP sellers
       });
 
       // Step 2: Immediately send interactive pricing form - template opens the session
@@ -2708,7 +2769,9 @@ function _buyerRequestIsService(items = []) {
   });
 }
 
-// ── Detect if a request is tourism-related (for context-aware prompts) ─────────
+// ── Detect if a request is tourism/hospitality-related (for context-aware prompts) ─
+// Uses classifyRequestItems from requestMatchEngine for accuracy.
+// Falls back to keyword list for lightweight checks.
 function _buyerRequestIsTourism(items = []) {
   const TOURISM_KEYWORDS = [
     "safari","game drive","game park","lodge","cruise","fishing trip","boat trip",
@@ -2731,7 +2794,9 @@ async function finalizeBuyerRequestSubmission({
   pendingRequest,
   deliveryRequired = false,
   serviceAddress = null,
-  deliveryAddress = null
+  deliveryAddress = null,
+  attachedImageUrl     = null,
+  attachedImageCaption = ""
 }) {
   if (!pendingRequest?.items?.length) {
     return sendButtons(from, {
@@ -2740,41 +2805,75 @@ async function finalizeBuyerRequestSubmission({
     });
   }
 
-  const _isServiceReq =
-    pendingRequest.isServiceRequest ||
-    _buyerRequestIsService(pendingRequest.items || []);
+  const _isServiceReq    = pendingRequest.isServiceRequest || _buyerRequestIsService(pendingRequest.items || []);
+  const _isTourismReq2   = _buyerRequestIsTourism(pendingRequest.items || []);
+  // BuyerRequest.profileType enum only accepts "product" or "service" — hospitality is not a valid value.
+  // We use "service" for hospitality/tourism requests (they behave like services: no delivery, service address).
+  // The hospitality flag is re-derived at notify time from the item names via _buyerRequestIsTourism().
+  const _storedProfileType = (_isTourismReq2 || _isServiceReq) ? "service" : (pendingRequest.profileType || "product");
 
   const request = await BuyerRequest.create({
     buyerPhone: from,
     requestType: pendingRequest.requestType || "simple",
-    profileType: _isServiceReq ? "service" : (pendingRequest.profileType || "product"),
+    profileType: _storedProfileType,
     rawText: pendingRequest.rawText || "",
     items: pendingRequest.items || [],
     city: pendingRequest.city || null,
     area: pendingRequest.area || null,
 
-    deliveryRequired: _isServiceReq ? false : Boolean(deliveryRequired),
-    deliveryAddress: !_isServiceReq ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
+    deliveryRequired: (_isServiceReq || _isTourismReq2) ? false : Boolean(deliveryRequired),
+    deliveryAddress: !(_isServiceReq || _isTourismReq2) ? (deliveryAddress || pendingRequest.deliveryAddress || "") : "",
 
-    serviceAddress: _isServiceReq ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
-    status: "open"
+    serviceAddress: (_isServiceReq || _isTourismReq2) ? (serviceAddress || pendingRequest.serviceAddress || "") : "",
+    status: "open",
+
+    // Image fields (null for text-only requests — no change to existing flow)
+    imageUrl:     attachedImageUrl     || null,
+    imageCaption: attachedImageCaption || "",
+    imageStatus:  attachedImageUrl ? "pending_review" : "none"
   });
 
   await UserSession.findOneAndUpdate(
     { phone },
     {
       $unset: {
-        "tempData.buyerRequestState": "",
+        "tempData.buyerRequestState":   "",
         "tempData.pendingBuyerRequest": "",
-        "tempData.buyerRequestMode": ""
+        "tempData.buyerRequestMode":    "",
+        "tempData.photoPromptShown":    ""
       }
     },
     { upsert: true }
   );
 
-  const notifiedCount = await notifySuppliersOfBuyerRequest(request);
-
   const ref = buildBuyerRequestRef(request);
+
+  // ── IMAGE PATH: hold supplier notification, notify admin for review ────────
+  if (attachedImageUrl) {
+    const _imgSummary  = (request.items || []).slice(0, 3).map((it, i) => `${i + 1}. ${it.product} x${Number(it.quantity || 1)}`).join(", ");
+    const _imgLocation = request.area ? `${request.area}, ${request.city || ""}`.trim() : request.city || "Zimbabwe";
+    try {
+      const { notifyAdminPhotoReview } = await import("./buyerRequestNotifications.js");
+      await notifyAdminPhotoReview({ ref, itemSummary: _imgSummary, locationText: _imgLocation, requestId: String(request._id) });
+    } catch (err) {
+      console.warn("[FINALIZE] notifyAdminPhotoReview failed:", err.message);
+    }
+    return sendButtons(from, {
+      text:
+        `✅ *Request submitted — photo under review.*\n\n` +
+        `Ref: *${ref}*\n\n` +
+        `${(request.items || []).map((it, i) => `${i + 1}. ${it.product} x${Number(it.quantity || 1)}`).join("\n")}\n\n` +
+        `📸 Your photo is being reviewed before we send it to sellers.\n` +
+        `This usually takes a few hours. You will receive a WhatsApp notification here once it is approved.`,
+      buttons: [
+        { id: "buyer_my_requests",   title: "📋 My Requests" },
+        { id: "sup_request_sellers", title: "⚡ New Request"  }
+      ]
+    });
+  }
+
+  // ── TEXT-ONLY PATH: existing behaviour, completely unchanged ──────────────
+  const notifiedCount = await notifySuppliersOfBuyerRequest(request);
 
   const itemLines = (request.items || [])
     .map((item, i) => {
@@ -3222,7 +3321,7 @@ async function sendClientSelectList(from, biz) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleIncomingMessage({ from, action }) {
+export async function handleIncomingMessage({ from, action, hasImage = false, imageUrl = null, imageCaption = "" }) {
 
   const phone = from.replace(/\D+/g, "");
 
@@ -3281,7 +3380,15 @@ a === "my_orders" ||
       a.startsWith("exp_quick_save_") ||
   a === "reg_type_product" ||
       a === "reg_type_service" ||
+      a === "reg_type_hospitality" ||
       a === "reg_type_school" ||
+      a === "reg_type_product" ||
+      a === "reg_type_service" ||
+      a.startsWith("sup_hosp_type_") ||
+      a === "sup_hosp_facilities_done" ||
+      a === "sup_skip_rest_rates" ||
+      a === "sup_skip_extra_services" ||
+      a.startsWith("sup_hosp_fac_toggle_") ||
       a.startsWith("sup_collar_") ||
       a === "sup_travel_yes" ||
       a === "sup_travel_no" ||
@@ -3331,7 +3438,6 @@ a.startsWith("sup_load_preset_") ||
 
 
       a === "sup_request_sellers" ||
-      a === "sup_repeat_last_request" ||
       a === "sup_use_saved_location" ||
       a === "sup_change_location" ||
       a === "sup_pause_requests" ||
@@ -3352,6 +3458,24 @@ a.startsWith("sup_load_preset_") ||
       a.startsWith("view_quotes_page_") ||
         a.startsWith("view_receipts_page_") ||
       a.startsWith("view_all_products_page_") ||
+      a === "view_all_products" ||
+      a === "prod_update_prices" ||
+      a === "prod_update_rates" ||
+      a === "prod_add_products" ||
+      a === "prod_add_services" ||
+      a === "prod_preview_save" ||
+      a === "prod_preview_edit" ||
+      a === "prod_preview_cancel" ||
+      a === "prod_prices_confirm_save" ||
+      a === "prod_prices_confirm_edit" ||
+      a === "svc_rates_confirm_save" ||
+      a === "svc_rates_confirm_edit" ||
+      a === "svc_rate_per_job" ||
+      a === "svc_rate_per_hour" ||
+      a === "svc_rate_per_day" ||
+      a === "svc_rate_per_meter" ||
+      a === "svc_rate_per_room" ||
+      a === "svc_rate_per_visit" ||
       a === "suppliers_home" ||
       a === "back" ||
       a === "suppliers_home" ||
@@ -3482,8 +3606,25 @@ Reply *menu* to start.`);
 
   console.log("META INCOMING:", { from, action });
 
-const biz = await getBizForPhone(from);
+let biz = await getBizForPhone(from);
 const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
+
+// ── Ownership check for registration flows ───────────────────────────────────
+// getBizForPhone may return a biz where this phone is only a notification contact.
+// ownerPhone is unreliable on old records. UserRole is the ground truth.
+// _bizIsOwnedByUser = false means biz = null for all registration entry points.
+let _bizIsOwnedByUser = true;
+if (biz) {
+  const _ownerRoleCheck = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
+  if (!_ownerRoleCheck) {
+    _bizIsOwnedByUser = false;
+    console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "— notification contact only");
+  } else {
+    console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "state:", biz.sessionState);
+  }
+} else {
+  console.log("[OWNERSHIP] phone", phone, "has NO biz");
+}
 
 // ─────────────────────────────────────────────────────────────
 // GLOBAL COMMAND/TEXT LOGGER
@@ -3547,6 +3688,43 @@ try {
       saveBiz: saveBizSafe.bind(null, biz)
     });
     if (_zqHandled) return;
+  }
+
+  // ZQ:REQUEST deep link
+  // Share: https://wa.me/263771143904?text=ZQ%3AREQUEST
+  // Drops any user straight into Request Sellers flow.
+  if (/^ZQ:REQUEST$/i.test(text)) {
+    if (biz && biz.sessionState !== "ready") {
+      biz.sessionState = "ready";
+      biz.sessionData  = {};
+      await saveBizSafe(biz);
+    }
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState":  "awaiting_items",
+          "tempData.buyerRequestMode":   "simple",
+          "tempData.pendingBuyerRequest": { requestType: "simple", profileType: "product", items: [] }
+        }
+      },
+      { upsert: true }
+    );
+    return sendButtons(from, {
+      text:
+        "\u26a1 *Request Sellers*\n\n"
+        + "Get quotes from sellers in your area. Type what you need and your city.\n\n"
+        + "*Examples:*\n"
+        + "_cement 10 bags harare_\n"
+        + "_geyser repair avondale harare_\n"
+        + "_school uniform size 8 bulawayo_\n"
+        + "_lodge night harare 2 adults_\n\n"
+        + "Type your request below \u2193",
+      buttons: [
+        { id: "sup_request_mode_bulk", title: "Bulk / List"  },
+        { id: "main_menu_back",        title: "Main Menu"    }
+      ]
+    });
   }
 
     // ── GLOBAL school shortcode trigger ──────────────────────────────────────
@@ -3621,7 +3799,21 @@ const isBuyerRequestMetaReply =
   al === "not available" ||
   al === "confirm" ||
   al === "send" ||
-  al === "skip";
+  al === "skip" ||
+  a.startsWith("sup_") ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_unavail_") ||
+  a.startsWith("buyer_") ||
+  a === "find_supplier" ||
+  a === "my_orders" ||
+  a === "register_supplier" ||
+  a === "find_school" ||
+  a === "onboard_business" ||
+  a === "my_supplier_account" ||
+  a === "suppliers_home" ||
+  a === "biz_tools_menu" ||
+  a === "main_menu_back" ||
+  a.startsWith("sc_");
 
 if (!isMetaAction || isBuyerRequestMetaReply) {
     const flowSess = await UserSession.findOne({ phone });
@@ -3789,6 +3981,22 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
 
+      // ── Send image to seller if this request has an approved photo ──────────
+      // Sent BEFORE the pricing form so the seller sees context first.
+      // Uses a separate sendImage call — template messages cannot carry images.
+      if (_introRequest.imageUrl && _introRequest.imageStatus === "approved") {
+        try {
+          await sendImage(from, {
+            imageUrl: _introRequest.imageUrl,
+            caption:  _introRequest.imageCaption
+              ? `📸 Photo from buyer: ${_introRequest.imageCaption}`
+              : `📸 Photo attached by buyer for request ${_introRef}`
+          });
+        } catch (imgErr) {
+          console.warn(`[OFFER INTRO] Failed to send buyer image to ${from}:`, imgErr.message);
+        }
+      }
+
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
       // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
       if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
@@ -3902,29 +4110,59 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         const _blankEx     = _introItems.slice(0, 3).map((_, i) => `${i+1}x${(i*5+8).toFixed(2)}`).join("  ");
         const _blankSingle = _introItems.length === 1;
 
-        // Tourism suppliers price per person/hour/day - show relevant examples
-        const _isTourismOffer = _introIsService && _buyerRequestIsTourism(_introItems);
+        // Hospitality check: ONLY show per-night/person/room examples if the supplier
+        // has profileType="hospitality". Plumbers/electricians/product sellers
+        // NEVER see tourism or hospitality prompts regardless of categories.
+        const _supplierIsHospitality = _introSupplier?.profileType === "hospitality";
+        const _requestIsTourism  = _buyerRequestIsTourism(_introItems);
+        const _isTourismOffer    = _supplierIsHospitality && _requestIsTourism;
+
+        // Determine if request is specifically an accommodation (nights/room) request
+        const _isAccommodation = _isTourismOffer &&
+          ["hospitality_stay"].includes(
+            (() => { try { const {classifyRequestItems} = require("./requestMatchEngine.js"); return classifyRequestItems(_introItems).dominant; } catch(_){return "other";} })()
+          );
+
         const _unitExamples = _isTourismOffer
-          ? `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`
+          ? (_isAccommodation
+            ? `*1x80/night*  or  *1x80/night  2x120/night  3x40/rest*\n_Accepted units: /night  /rest  /day  /room  /person  /person/night_`
+            : `*1x80/person*  or  *1x80/person  2x50/hour*\n_Accepted units: /person  /hour  /hr  /day  /night  /trip  /group_`)
           : (_introIsService
             ? `*${_blankEx || "1x80/job"}*  or  *1x80/job  2x50/hr*`
             : `*${_blankEx || "1x12.50"}*`);
+
+        // Show seller's own catalogue items so they can "pick" from them
+        const _sellerCatItems = [
+          ...(_introSupplier?.prices    || []).map(p => ({ name: p.product,  price: p.amount,      unit: p.unit || "each" })),
+          ...(_introSupplier?.rates     || []).map(r => ({ name: r.service,  price: r.rate,        unit: "" })),
+          ...(_introSupplier?.roomTypes || []).map(t => ({ name: t.roomType, price: t.pricePerNight, unit: "/night" }))
+        ].filter(i => i.name).slice(0, 10);
+
+        const _catalogueLines = _sellerCatItems.length
+          ? "\n\n📋 *Your catalogue (pick by number):*\n" +
+            _sellerCatItems.map((it, i) =>
+              `P${i+1}. ${it.name}${it.price ? ` - $${Number(it.price).toFixed ? Number(it.price).toFixed(2) : it.price}${it.unit ? "/"+it.unit : ""}` : ""}`
+            ).join("\n") +
+            "\nType *pick P1 2* to add item P1 qty 2 to quote"
+          : "";
 
         return sendText(from,
           `📋 *${_introRef} - Enter your prices*\n` +
           `${_directLocation}  ${_directDelivery}\n` +
           `─────────────────\n` +
-          `*Services requested:*\n${_blankItemLines}\n` +
+          `*${_introIsService ? "Services" : "Items"} requested:*\n${_blankItemLines}\n` +
           `─────────────────\n\n` +
-          `💰 *How to send your price:*\n` +
+          `💰 *How to price this request:*\n` +
           (_blankSingle
             ? (_isTourismOffer
                 ? `Type: *80/person*  or  *80/hour*  or  *80/day*`
                 : `Type: *12.00*  or  *12.00/${_introIsService ? "job" : "each"}*`)
             : `Type each price:\n${_unitExamples}\n\n_(item number x price/unit)_`) +
           (_blankSingle ? "" : `\nCan't supply an item? Type *0* for it.`) +
-          `\n\nAdd a note: start with *msg* e.g: _80/person msg minimum 2 people_\n` +
-          `Type *cancel* to go back.`
+          `\n\n➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
+          `📝 *Add a note:* _note available Monday, deposit 50% required_\n` +
+          `❌ *Cancel:* _cancel_` +
+          _catalogueLines
         );
       }
 
@@ -4101,7 +4339,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId) {
+   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId && !isMetaAction) {
 
   // ── cancel ───────────────────────────────────────────────────────────────
   if (al === "cancel") {
@@ -4206,8 +4444,11 @@ await UserSession.findOneAndUpdate(
       text:
         `*What would you like to do?*\n\n` +
         `✏️ *Edit a price:* _edit 1x12.50_ or _edit 1x5 3x8_\n` +
+        `➕ *Add a line:* _add labour 150_ or _add call-out fee 50/job_\n` +
+        `📋 *Pick from catalogue:* _pick P1_ or _pick P2 3_\n` +
+        `📝 *Add a note:* _note deposit required, available Mon-Fri_\n` +
         `❌ *Skip items:* _skip 3_ or _skip 3,7,15_\n` +
-        `⚡ *Only have some items:* _have 3,7,15_ (skips all others)\n` +
+        `⚡ *Only have some items:* _have 3,7_ (skips all others)\n` +
         `🗑️ *Discard:* _cancel_`,
       buttons: [
         { id: `req_offer_confirm_${reqId}`, title: "Confirm & Send" },
@@ -4269,10 +4510,95 @@ await UserSession.findOneAndUpdate(
     return { editUpdates, skipIndices, hasEditCmd, hasSkipCmd, haveMode };
   }
 
+  // ── Parse "add [item description] [price]" command ────────────────────────
+  // e.g. "add labour 150" or "add call-out fee 50/job"
+  function _parseAddCommand(inputText) {
+    const raw = String(inputText || "").trim();
+    const m = raw.match(/^add\s+(.+?)\s+([\d]+(?:\.\d+)?)(?:\s*\/(\S+))?$/i);
+    if (!m) return null;
+    return {
+      product:      m[1].trim(),
+      pricePerUnit: parseFloat(m[2]),
+      unit:         m[3] || "each"
+    };
+  }
+
+  // ── Parse "note [text]" command ───────────────────────────────────────────
+  function _parseNoteCommand(inputText) {
+    const raw = String(inputText || "").trim();
+    const m = raw.match(/^note\s+(.+)$/i);
+    return m ? m[1].trim() : null;
+  }
+
   const _isService = supplier.profileType === "service";
   const _ref = buildBuyerRequestRef(request);
 
-  // ── CONFIRM: send the current stored draft ────────────────────────────────
+  // ── "add [item] [price]" — seller adds a line not in original request ─────
+  const _addCmd = _parseAddCommand(text);
+  if (_addCmd) {
+    const _addDraft = pendingDraftQuote?.responseItems?.length
+      ? pendingDraftQuote
+      : { responseItems: buildDraftQuoteFromRequest(supplier, request).items || [], skippedItems: [], totalAmount: 0 };
+
+    const qty = 1;
+    const newItem = {
+      product:      _addCmd.product,
+      quantity:     qty,
+      unit:         _addCmd.unit,
+      pricePerUnit: _addCmd.pricePerUnit,
+      total:        Number((_addCmd.pricePerUnit * qty).toFixed(2)),
+      _edited:      true
+    };
+    const updatedItems = [...(_addDraft.responseItems || []), newItem];
+    const newTotal = Number(updatedItems.reduce((s, i) => s + Number(i.total || 0), 0).toFixed(2));
+    const updatedDraft = { ..._addDraft, responseItems: updatedItems, totalAmount: newTotal };
+
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { upsert: true }
+    );
+    return _sendDraftPreview(updatedItems, updatedDraft.skippedItems || [], _ref, newTotal, sellerRequestId);
+  }
+
+  // ── "note [text]" — attach a note to the quote ───────────────────────────
+  const _noteText = _parseNoteCommand(text);
+  if (_noteText) {
+    const _noteDraft = pendingDraftQuote || { responseItems: [], skippedItems: [], totalAmount: 0 };
+    const updatedDraft = { ..._noteDraft, sellerNote: _noteText };
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $set: { "tempData.pendingDraftQuote": updatedDraft } },
+      { upsert: true }
+    );
+    return sendText(from,
+      `📝 Note added: _"${_noteText}"_\n\n` +
+      `Type *confirm* to send, or keep editing.\n` +
+      `Type *note [new text]* to replace the note.`
+    );
+  }
+
+  // pick P1 2 -- seller picks from their own catalogue (P1=item 1, qty 2)
+  const _pickMatch = text.match(/^pick\s+p(\d+)(?:\s+(\d+(?:\.\d+)?))?/i);
+  if (_pickMatch) {
+    const _pickIdx  = parseInt(_pickMatch[1], 10) - 1;
+    const _pickQty  = parseFloat(_pickMatch[2] || "1") || 1;
+    const _catItems = [
+      ...(supplier?.prices    || []).map(p => ({ name: p.product,  price: Number(p.amount||0), unit: p.unit||"each" })),
+      ...(supplier?.rates     || []).map(r => ({ name: r.service,  price: parseFloat(String(r.rate||"").replace(/[^\d.]/g,"")||"0"), unit: "job" })),
+      ...(supplier?.roomTypes || []).map(t => ({ name: t.roomType, price: Number(t.pricePerNight||0), unit: "night" }))
+    ].filter(i => i.name).slice(0, 10);
+    const _picked = _catItems[_pickIdx];
+    if (!_picked) return sendText(from, `Item P${_pickIdx+1} not found in your catalogue.`);
+    const _pDraft  = pendingDraftQuote?.responseItems?.length ? pendingDraftQuote : { responseItems: [], skippedItems: [], totalAmount: 0 };
+    const _pTotal  = Number((_picked.price * _pickQty).toFixed(2));
+    const _pItem   = { product: _picked.name, quantity: _pickQty, unit: _picked.unit, pricePerUnit: _picked.price, total: _pTotal, _edited: true };
+    const _pItems  = [...(_pDraft.responseItems||[]), _pItem];
+    const _pGrand  = Number(_pItems.reduce((s,i)=>s+Number(i.total||0),0).toFixed(2));
+    const _pUpdate = { ..._pDraft, responseItems: _pItems, totalAmount: _pGrand };
+    await UserSession.findOneAndUpdate({ phone }, { $set: { "tempData.pendingDraftQuote": _pUpdate } }, { upsert: true });
+    return _sendDraftPreview(_pItems, _pDraft.skippedItems||[], _ref, _pGrand, sellerRequestId);
+  }
   if (al === "confirm" || al === "send") {
     const _confirmDraft = pendingDraftQuote;
     if (!_confirmDraft?.responseItems?.length) {
@@ -4298,12 +4624,14 @@ await UserSession.findOneAndUpdate(
         _confirmDraft.missingItems?.length ? `Not available: ${_confirmDraft.missingItems.join(", ")}` : ""
       ].filter(Boolean).join(" | ");
 
+    const _draftNote = _confirmDraft.sellerNote || "";
+
     const response = {
       supplierId:        supplier._id,
       supplierPhone:     supplier.phone,
       supplierName:      supplier.businessName,
       mode:              "manual_offer",
-      message:           skippedNote,
+      message:           [skippedNote, _draftNote].filter(Boolean).join(" | "),
       items:             responseItems,
       totalAmount,
       deliveryAvailable: supplier.delivery?.available ?? null,
@@ -4475,20 +4803,22 @@ await UserSession.findOneAndUpdate(
         );
       }
 
-         // Do NOT allow empty service quotations.
-      // Services/tourism must include a price or clear pricing basis.
+      // Do NOT allow empty service/hospitality quotations.
+      // Show correct examples based on profileType — never show /person /trip to plumbers.
       if (_isService) {
+        const _isHospSupplier = supplier?.profileType === "hospitality";
         return sendText(
           from,
           `⚠️ Please include at least one price before sending the quote.\n\n` +
           `Examples:\n` +
-          `_1=80/person_\n` +
-          `_1=150/trip_\n` +
-          `_1=300/night_\n` +
-          `_1=500/group_\n\n` +
-          `You can also add a note like:\n` +
-          `_1=80/person msg minimum 2 people_\n\n` +
-          `Type *cancel* to discard.`
+          (_isHospSupplier
+            ? `_1=80/night_\n_1=120/night_\n_1=80/person_\n_1=150/trip_\n`
+            : `_1=80/job_\n_1=150/hr_\n_1=500/day_\n`) +
+          `\nYou can also add a note:\n` +
+          (_isHospSupplier
+            ? `_1=80/night msg includes breakfast, WiFi and braai area_\n`
+            : `_1=80/job msg available from Monday_\n`) +
+          `\nType *cancel* to discard.`
         );
       }
 
@@ -4556,18 +4886,13 @@ await UserSession.findOneAndUpdate(
       `*menu* = Main menu (always)\n` +
       `*back* = Previous step\n` +
       `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat your last request\n` +
       `*my requests* = View request history\n` +
       `*help* = Show this list\n\n` +
       `Type *0* to go to main menu now.`
     );
   }
 
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
-
-  if (al === "my requests" || al === "buyer_my_requests") {
+if (al === "my requests" || al === "buyer_my_requests") {
     return handleIncomingMessage({ from, action: "buyer_my_requests" });
   }
 
@@ -5002,20 +5327,139 @@ if (buyerRequestState === "awaiting_delivery_address") {
         { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "" } },
         { upsert: true }
       );
+
+      // ── Photo prompt: before finalizing, offer the buyer a chance to attach a photo ──
+      // Only show once per request (guard: photoPromptShown)
+      const _saReqWithAddress = { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true };
+      if (!flowSess?.tempData?.photoPromptShown) {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          {
+            $set: {
+              "tempData.buyerRequestState":  "awaiting_photo_choice",
+              "tempData.pendingBuyerRequest": _saReqWithAddress,
+              "tempData.photoPromptShown":   true
+            }
+          },
+          { upsert: true }
+        );
+        return sendButtons(from, {
+          text:
+            `📷 *Add a photo? (optional)*\n\n` +
+            `A photo helps sellers understand exactly what you need and give a more accurate quote.\n\n` +
+            `Useful for: repairs, damage, custom items, matching colours or parts.\n\n` +
+            `Tap *Add Photo* then send your image, or tap *Skip* to submit now.`,
+          buttons: [
+            { id: "sup_req_photo_yes",  title: "📷 Add Photo"      },
+            { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+          ]
+        });
+      }
+
       return finalizeBuyerRequestSubmission({
         from, phone,
-        pendingRequest: { ...(pendingBuyerRequest || {}), serviceAddress: _saAddress || null, isServiceRequest: true },
+        pendingRequest: _saReqWithAddress,
         deliveryRequired: false,
         serviceAddress: _saAddress || null
       });
     }
+
+    // ── awaiting_photo_choice: buyer chose to add photo or skip ───────────────
+    if (buyerRequestState === "awaiting_photo_choice") {
+      if (a === "sup_req_photo_skip" || al === "skip" || al === "00" || al === "cancel") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
+          { upsert: true }
+        );
+        return finalizeBuyerRequestSubmission({
+          from, phone,
+          pendingRequest:  pendingBuyerRequest || {},
+          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
+          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
+          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
+        });
+      }
+      if (a === "sup_req_photo_yes" || al === "add photo" || al === "photo") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $set: { "tempData.buyerRequestState": "awaiting_photo_upload" } },
+          { upsert: true }
+        );
+        return sendText(from,
+          `📷 *Send your photo now.*\n\n` +
+          `You can add a caption to describe what you need.\n\n` +
+          `_Type *skip* if you changed your mind and want to submit without a photo._`
+        );
+      }
+      // Any other text while in photo_choice — re-show prompt
+      return sendButtons(from, {
+        text: `📷 Would you like to attach a photo to your request?`,
+        buttons: [
+          { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
+          { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+        ]
+      });
+    }
+
+  // ── __buyer_photo_uploaded__: fired from meta_webhook after image download ──
+  // hasImage, imageUrl, imageCaption are passed in from the webhook handler.
+  if (a === "__buyer_photo_uploaded__") {
+    const _photoSess = await UserSession.findOne({ phone });
+    const _photoPending = _photoSess?.tempData?.pendingBuyerRequest || null;
+
+    if (!_photoPending?.items?.length) {
+      return sendText(from, "❌ Request session expired. Please start again with your request.");
+    }
+
+    if (!imageUrl) {
+      return sendText(from, "❌ Could not save your photo. Please try again or type *skip* to submit without a photo.");
+    }
+
+    // Clear photo state
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
+      { upsert: true }
+    );
+
+    return finalizeBuyerRequestSubmission({
+      from, phone,
+      pendingRequest:  _photoPending,
+      deliveryRequired: _photoPending.deliveryRequired || false,
+      serviceAddress:   _photoPending.serviceAddress   || null,
+      deliveryAddress:  _photoPending.deliveryAddress  || null,
+      attachedImageUrl:     imageUrl,
+      attachedImageCaption: imageCaption || ""
+    });
   }
 
 
+    // ── awaiting_photo_upload: waiting for buyer to send the image ────────────
+    if (buyerRequestState === "awaiting_photo_upload") {
+      // Buyer typed "skip" or cancel instead of sending image
+      if (al === "skip" || al === "cancel" || al === "00" || al === "0") {
+        await UserSession.findOneAndUpdate(
+          { phone },
+          { $unset: { "tempData.buyerRequestState": "", "tempData.pendingBuyerRequest": "", "tempData.buyerRequestMode": "", "tempData.photoPromptShown": "" } },
+          { upsert: true }
+        );
+        return finalizeBuyerRequestSubmission({
+          from, phone,
+          pendingRequest:  pendingBuyerRequest || {},
+          deliveryRequired: pendingBuyerRequest?.deliveryRequired || false,
+          serviceAddress:   pendingBuyerRequest?.serviceAddress   || null,
+          deliveryAddress:  pendingBuyerRequest?.deliveryAddress  || null
+        });
+      }
+      // Buyer sent text instead of image — keep waiting
+      return sendText(from,
+        `📷 Please *send a photo* (image message).\n\nOr type *skip* to submit your request without a photo.`
+      );
+    }
 
-  // =========================
-  // 🟢 ONBOARDING GATE
-  // =========================
+
+
   const ownerRole = await UserRole.findOne({ phone, role: "owner", pending: false }).lean();
 
 if (!biz && ownerRole?.businessId) {
@@ -5037,55 +5481,80 @@ const GREETING_WORDS = new Set([
   "yes", "no", "ok", "okay", "k", "sure", "thanks", "thank you",
   "help", "start", "menu", "home", "back", "cancel",
   // Universal shortcuts
-  "0", "00", "000", "quotes", "my quotes", "repeat", "my requests",
-  "pause", "resume"
+  "0", "00", "000", "quotes", "my quotes", "my requests",
+  "pause", "resume",
+  // Zimbabwean / common first-message greetings
+  "good morning", "good afternoon", "good evening", "good day", "good night",
+  "morning", "afternoon", "evening",
+  "how are you", "how r u", "how are u", "hows it", "howzit guys",
+  "i need help", "need help", "what can you do", "what do you do",
+  "greetings", "sawubona", "mangwanani", "maswera sei", "makadii",
+  "hello there", "hi there", "hey there",
+  "request", "request sellers", "request quote", "get quotes", "get a quote"
 ]);
 
-// ── Global greeting/menu guard ─────────────────────────────────────────────
+  // ── Global greeting/menu guard ─────────────────────────────────────────────
 if (
   GREETING_WORDS.has(al) &&
   !isMetaAction &&
   (!biz || biz.sessionState === "ready" || biz.sessionState === "supplier_search_city")
 ) {
-  if (biz && biz.sessionState !== "ready") {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-  }
+  // ── Don't intercept greetings if user has an active offer/quote flow ──────
+  // Notification contacts have no "biz" of their own but DO have session state
+  // (awaiting_offer_intro, awaiting_offer, etc). Without this check, "hi" from
+  // a notification contact hits sendMainMenu() and the offer flow is never reached.
+  const _greetSess = await UserSession.findOne({ phone }).lean();
+  const _greetOfferState = _greetSess?.tempData?.sellerRequestReplyState;
+  const _greetBuyerState = _greetSess?.tempData?.buyerRequestState;
+  const _offerFlowActive =
+    _greetOfferState === "awaiting_offer_intro" ||
+    _greetOfferState === "awaiting_offer" ||
+    _greetOfferState === "awaiting_offer_confirm";
+  const _buyerFlowActive = !!_greetBuyerState;
 
-  // Route universal shortcuts regardless of state
-  if (al === "quotes" || al === "my quotes") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "repeat") {
-    return handleIncomingMessage({ from, action: "sup_repeat_last_request" });
-  }
-  if (al === "my requests") {
-    return handleIncomingMessage({ from, action: "buyer_my_requests" });
-  }
-  if (al === "pause") {
-    return handleIncomingMessage({ from, action: "sup_pause_requests" });
-  }
-  if (al === "resume") {
-    return handleIncomingMessage({ from, action: "sup_resume_requests" });
-  }
+  if (!_offerFlowActive && !_buyerFlowActive) {
+    if (biz && biz.sessionState !== "ready") {
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+    }
 
-  if (al === "help") {
-    await sendText(from,
-      `📋 *Shortcuts (work anywhere):*\n\n` +
-      `*0* = Main menu\n` +
-      `*00* = Cancel current flow\n` +
-      `*menu* = Main menu\n` +
-      `*quotes* = View your current quotes\n` +
-      `*repeat* = Repeat last request\n` +
-      `*my requests* = Request history\n` +
-      `*pause* = Pause request notifications (sellers)\n` +
-      `*resume* = Resume notifications (sellers)\n` +
-      `*help* = Show this list`
-    );
-  }
+    // Route universal shortcuts regardless of state
+    if (al === "quotes" || al === "my quotes") {
+      return handleIncomingMessage({ from, action: "buyer_my_requests" });
+    }
+    if (al === "my requests") {
+      return handleIncomingMessage({ from, action: "buyer_my_requests" });
+    }
+    if (al === "pause") {
+      return handleIncomingMessage({ from, action: "sup_pause_requests" });
+    }
+    if (al === "resume") {
+      return handleIncomingMessage({ from, action: "sup_resume_requests" });
+    }
+    // "request", "request sellers", "get quotes" → direct to Request Sellers flow
+    if (al === "request" || al === "request sellers" || al === "request quote" || al === "get quotes" || al === "get a quote") {
+      return handleIncomingMessage({ from, action: "sup_request_sellers" });
+    }
 
-  return sendMainMenu(from);
+    if (al === "help") {
+      await sendText(from,
+        `📋 *Shortcuts (work anywhere):*\n\n` +
+        `*0* = Main menu\n` +
+        `*00* = Cancel current flow\n` +
+        `*menu* = Main menu\n` +
+        `*quotes* = View your current quotes\n` +
+        `*my requests* = Request history\n` +
+        `*request* = Request Sellers (get quotes)\n` +
+        `*pause* = Pause request notifications (sellers)\n` +
+        `*resume* = Resume notifications (sellers)\n` +
+        `*help* = Show this list`
+      );
+    }
+
+    return sendMainMenu(from);
+  }
+  // else: fall through — let the offer/buyer flow handlers below take over
 }
 
 // ── All users: handle typed school enquiry message (biz and non-biz) ───────────
@@ -5506,6 +5975,14 @@ const allowedWithoutBiz =
  a === "sup_search_type_product" ||
       a === "sup_search_type_service" ||
      a === "reg_type_school" ||
+      a === "reg_type_hospitality" ||
+      a === "reg_type_product" ||
+      a === "reg_type_service" ||
+      a.startsWith("sup_hosp_type_") ||
+      a === "sup_hosp_facilities_done" ||
+      a === "sup_skip_rest_rates" ||
+      a === "sup_skip_extra_services" ||
+      a.startsWith("sup_hosp_fac_toggle_") ||
   a === "sup_search_more_categories" ||
   a === "sup_search_all" ||
 
@@ -5548,7 +6025,6 @@ a.startsWith("sup_accept_") ||
       a.startsWith("paylist_search_") ||
 
   a === "sup_request_sellers" ||
-  a === "sup_repeat_last_request" ||
   a === "sup_use_saved_location" ||
   a === "sup_change_location" ||
   a === "sup_pause_requests" ||
@@ -5619,7 +6095,29 @@ a === "sup_search_next_page" ||
   a === "school_more_options" ||
   a === "school_update_reg_link" ||
   a === "school_update_email" ||
-  a === "school_update_website";
+  a === "school_update_website" ||
+  // ── Buyer-facing actions: must work without a biz or supplier account ──────
+  a === "sup_request_sellers" ||
+  a === "sup_request_mode_simple" ||
+  a === "sup_request_mode_bulk" ||
+  a === "sup_request_delivery_yes" ||
+  a === "sup_request_delivery_no" ||
+  a === "sup_skip_service_address" ||
+  a === "sup_req_photo_yes" ||
+  a === "sup_req_photo_skip" ||
+  a === "buyer_my_requests" ||
+  a.startsWith("buyer_view_all_quotes_") ||
+  a.startsWith("req_offer_") ||
+  a.startsWith("req_unavail_") ||
+
+  // ── Seller smart-link chat (sc_) — buyers visiting via ZQ:SUPPLIER link ─────
+  // These MUST be here or no-biz visitors get sent to welcome screen after
+  // tapping any menu option (Quote, Order, Enquiry, Contact, Review etc).
+  a.startsWith("sc_") ||
+
+  // ── School FAQ (sfaq_) — parents visiting via ZQ:SCHOOL link ────────────────
+  // Same issue: parent taps a school FAQ button → redirected without this.
+  a.startsWith("sfaq_");
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────
@@ -7644,14 +8142,17 @@ if (a === "expense_generate_receipt") {
     };
     await saveBizSafe(biz);
  
+    // sendText for the list (no 1024-char limit), then sendButtons for the action
+    await sendText(from,
+      `💰 *Update Product Prices*\n\n${numbered}\n\n` +
+      `─────────────────\n` +
+      `Type *item number × price*, separated by commas:\n\n` +
+      `_1 x 12_\n` +
+      `_1 x 12, 2 x 35, 3 x 28_\n\n` +
+      `This means: item number × price`
+    );
     return sendButtons(from, {
-      text:
-        `💰 *Update Product Prices*\n\n${numbered}\n\n` +
-        `─────────────────\n` +
-        `Type *item number × price*, separated by commas:\n\n` +
-        `_1 x 12_\n` +
-        `_1 x 12, 2 x 35, 3 x 28_\n\n` +
-        `This means: item number × price`,
+      text: "Type your price updates above, or cancel:",
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
@@ -7701,15 +8202,18 @@ if (a === "expense_generate_receipt") {
     };
     await saveBizSafe(biz);
  
+    // sendText for the list (no 1024-char limit), then sendButtons for the action
+    await sendText(from,
+      `💰 *Update Service Rates*\n\n${numbered}\n\n` +
+      `─────────────────\n` +
+      `Type *item number × price/rate*, separated by commas:\n\n` +
+      `_1 x 20/hour_\n` +
+      `_1 x 20/hour, 2 x 50/job, 3 x 10/meter_\n\n` +
+      `Rate types: /job /hour /day /meter /room /visit /project\n\n` +
+      `_If you leave out the rate type, we'll ask you._`
+    );
     return sendButtons(from, {
-      text:
-        `💰 *Update Service Rates*\n\n${numbered}\n\n` +
-        `─────────────────\n` +
-        `Type *item number × price/rate*, separated by commas:\n\n` +
-        `_1 x 20/hour_\n` +
-        `_1 x 20/hour, 2 x 50/job, 3 x 10/meter_\n\n` +
-        `Rate types: /job /hour /day /meter /room /visit /project\n\n` +
-        `_If you leave out the rate type, we'll ask you._`,
+      text: "Type your rate updates above, or cancel:",
       buttons: [{ id: "inv_cancel", title: "❌ Cancel" }]
     });
   }
@@ -7756,9 +8260,58 @@ if (a === "expense_generate_receipt") {
 
   if (a === "inv_item_custom") {
     if (!biz) return sendMainMenu(from);
-    biz.sessionData.itemMode = "custom";
+    // ── Custom item bulk entry: prompt for comma-separated names ─────────────
+    biz.sessionData.itemMode          = "custom_names";
+    biz.sessionData.pendingCustomNames = [];
+    biz.sessionState = "creating_invoice_custom_names";
     await saveBizSafe(biz);
-    return sendButtons(from, { text: "✍️ *Send item description:*", buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }] });
+    const _docLabel = biz.sessionData?.docType === "quote" ? "Quotation"
+      : biz.sessionData?.docType === "receipt" ? "Receipt"
+      : "Invoice";
+    return sendButtons(from, {
+      text:
+        `✍️ *Custom items - ${_docLabel}*\n\n` +
+        `Type one item or many separated by commas:\n\n` +
+        `_labour charge_\n` +
+        `_materials, transport fee, call-out charge_\n` +
+        `_geyser installation, plumbing supplies, consultation_\n\n` +
+        `You will set quantities and prices in the next steps.`,
+      buttons: [{ id: ACTIONS.MAIN_MENU, title: "🏠 Main Menu" }]
+    });
+  }
+
+  // ── Inline custom item action buttons ────────────────────────────────────
+  // ── inv_add_item: from confirm preview, user wants to add another item ─────
+  if (a === "inv_add_item") {
+    if (!biz) return sendMainMenu(from);
+    biz.sessionState = "creating_invoice_add_items";
+    biz.sessionData.itemMode          = null;
+    biz.sessionData.lastItem          = null;
+    biz.sessionData.expectingQty      = false;
+    biz.sessionData.pendingCustomNames = [];
+    await saveBizSafe(biz);
+    return sendAddItemPrompt(from);
+  }
+
+  if (a === "inv_custom_confirm") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "inv_custom_confirm" });
+    return;
+  }
+  if (a === "inv_custom_edit") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "inv_custom_edit" });
+    return;
+  }
+  if (a === "inv_custom_cancel") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "inv_custom_cancel" });
+    return;
+  }
+  if (a === "inv_custom_skip_price") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "inv_custom_skip_price" });
+    return;
   }
 
   if (a === "inv_client_phone_same" || a === "inv_client_phone_skip") {
@@ -8799,6 +9352,12 @@ const supplierStates = [
   "supplier_reg_travel",
   "supplier_reg_teacher_details",
   "supplier_reg_tourism_details",
+  "supplier_reg_hospitality_subtype",
+  "supplier_reg_hospitality_rooms",
+  "supplier_reg_hospitality_facilities",
+  "supplier_reg_hospitality_rest_rates",
+  "supplier_reg_hospitality_extra_services",
+  "supplier_reg_hospitality_areas",
   "supplier_reg_city",
   "supplier_reg_category",
   "supplier_reg_delivery",
@@ -8906,6 +9465,15 @@ const shortcodeBlockedStates = [
   "creating_receipt_add_note",
   "creating_invoice_qty",
   "creating_invoice_add_item_text",
+  "creating_invoice_custom_names",
+  "creating_invoice_custom_preview",
+  "creating_invoice_custom_edit",
+  "creating_quote_custom_names",
+  "creating_quote_custom_preview",
+  "creating_quote_custom_edit",
+  "creating_receipt_custom_names",
+  "creating_receipt_custom_preview",
+  "creating_receipt_custom_edit",
   "creating_invoice_set_discount",
   "creating_invoice_set_vat",
   "creating_invoice_enter_prices",
@@ -9371,6 +9939,15 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
     if (biz.sessionState?.startsWith("sfaq_")) {
       const handled = await handleSchoolFAQState({
         state: biz.sessionState, from, text, biz, saveBiz: saveBizSafe.bind(null, biz)
+      });
+      if (handled) return;
+    }
+
+    // ── School FAQ for non-biz users (first-time visitors via smart link) ────
+    // biz exists here but may have null sessionState if user is not registered
+    if (!biz.sessionState && flowSess?.tempData?.sfaqState?.startsWith("sfaq_")) {
+      const handled = await handleSchoolFAQState({
+        state: flowSess.tempData.sfaqState, from, text, biz: null, saveBiz: null
       });
       if (handled) return;
     }
@@ -10168,7 +10745,8 @@ if (a === "sup_search_more_categories") {
 }
 
 if (a === "register_supplier") {
-  const existingSupplier = await SupplierProfile.findOne({ phone });
+  if (!_bizIsOwnedByUser) biz = null;
+    const existingSupplier = await SupplierProfile.findOne({ phone });
 
   if (existingSupplier) {
     if (existingSupplier.active) {
@@ -10236,7 +10814,7 @@ if (isMetaAction && typeof a === "string" && a.startsWith("sfaq_")) {
   if (handled) return;
 
   console.warn("[SFAQ ACTION NOT HANDLED]", { from, action: a });
-  return sendText(from, "Sorry, that school option expired. Please open the school link again.");
+  return sendText(from, "Sorry, that option expired. Please open the school link again to start fresh.");
 }
 
 // ── Main Menu back button - always goes to start menu ────────────────────
@@ -10308,6 +10886,63 @@ if (a === "school_toggle_admissions" || a === "school_update_fees") {
   if (handled) return;
 }
  
+// ── School FAQ text state for no-biz first-time users ───────────────────────
+// A parent who opened a school smart link (ZQ:SCHOOL:...) is NOT a biz user.
+// Their sfaq state is in UserSession.tempData.sfaqState (saved by _sess in schoolFAQ.js).
+if (!biz && !isMetaAction && flowSess?.tempData?.sfaqState?.startsWith("sfaq_")) {
+  const handled = await handleSchoolFAQState({
+    state: flowSess.tempData.sfaqState, from, text, biz: null, saveBiz: null
+  });
+  if (handled) return;
+}
+
+// ── School enquiry text state for no-biz users (sent from smart link enquiry button) ─
+// biz?.sessionData?.enquirySchoolId is null for first-time users.
+// Read from UserSession.tempData instead and process the enquiry directly here.
+if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_parent_enquiry") {
+  const _seSchoolId = flowSess?.tempData?.enquirySchoolId;
+  if (_seSchoolId) {
+    const _seRaw = String(text || "").trim();
+    if (_seRaw.toLowerCase() === "cancel") {
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text: "❌ Enquiry cancelled.",
+        buttons: [{ id: "find_school", title: "🏫 Find a School" }]
+      });
+    }
+    if (!_seRaw || _seRaw.length < 3) {
+      return sendText(from, "Please type your question or message. Type *cancel* to go back.");
+    }
+    const SchoolProfile = (await import("../models/schoolProfile.js")).default;
+    const _seSchool = await SchoolProfile.findById(_seSchoolId).lean();
+    if (_seSchool) {
+      await SchoolProfile.findByIdAndUpdate(_seSchoolId, { $inc: { inquiries: 1 } });
+      const { notifyAllSchoolEnquiry } = await import("./schoolNotifications.js");
+      notifyAllSchoolEnquiry(_seSchool, from, _seRaw).catch(() => {});
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { $unset: { "tempData.schoolEnquiryState": "", "tempData.enquirySchoolId": "" } },
+        { upsert: true }
+      );
+      return sendButtons(from, {
+        text:
+          `✅ *Enquiry Sent to ${_seSchool.schoolName}!*\n\n` +
+          `Your message:\n_${_seRaw}_\n\n` +
+          `The school has been notified and will reply on WhatsApp.\n` +
+          `📞 ${_seSchool.contactPhone || _seSchool.phone}`,
+        buttons: [
+          { id: `school_apply_${_seSchoolId}`, title: "📝 Apply Online" },
+          { id: "find_school",                  title: "🏫 More Schools" }
+        ]
+      });
+    }
+  }
+}
+
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
 if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
   const _handled = await handleZqDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
@@ -10322,8 +10957,13 @@ if (!isMetaAction && /^zq /i.test(text) && text.trim().length > 4) {
 
 // ── School FAQ chatbot (sfaq_ actions) ───────────────────────────────────────
 if (a.startsWith("sfaq_")) {
-  const handled = await handleSchoolFAQAction({ from, action: a, biz, saveBiz: saveBizSafe.bind(null, biz) });
+  const handled = await handleSchoolFAQAction({
+    from, action: a, biz,
+    saveBiz: biz ? saveBizSafe.bind(null, biz) : null
+  });
   if (handled) return;
+  // Don't fall through to sendMainMenu - just silently ignore unhandled sfaq
+  return;
 }
 
 // ── Seller chatbot (sc_ actions) ─────────────────────────────────────────────
@@ -11496,9 +12136,108 @@ _Type *cancel* to return to main menu._`
 
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
+  if (!_bizIsOwnedByUser) biz = null;
   if (!biz) {
-    await sendText(from, "❌ Session expired. Type *menu* to start again.");
-    return;
+    const _ep = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_ep) { biz = await Business.findById(_ep._id); await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true }); }
+    else {
+      biz = await Business.create({ name: "pending_supplier_" + phone, currency: "USD", package: "trial", subscriptionStatus: "inactive", isSupplier: false, sessionState: "school_reg_name", sessionData: { supplierReg: { profileType: "school" } }, ownerPhone: phone });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+  biz.sessionData = { supplierReg: { profileType: "school" } };
+  biz.sessionState = "school_reg_name";
+  await saveBizSafe(biz);
+  return sendText(from, `🏫 *School Registration*\n\nWhat is your *school's full name*?\n\n_Type *cancel* at any time to stop._`);
+}
+
+if (a === "reg_type_product" || a === "reg_type_service") {
+  console.log("[REG_TYPE] HANDLER REACHED. phone:", phone, "biz:", biz?._id, "state:", biz?.sessionState, "owned:", _bizIsOwnedByUser);
+  // ── Ownership guard ───────────────────────────────────────────────────────
+  if (!_bizIsOwnedByUser) biz = null;
+
+  // ── Find or create a biz owned by this user ───────────────────────────────
+  // getBizForPhone may return a mid-registration biz from a previous attempt.
+  // We use it if it exists and belongs to this user; otherwise create fresh.
+  if (!biz) {
+    // Check for an existing pending biz for this phone (from a previous attempt)
+    const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_existingPendingBiz) {
+      // Re-use it — update UserSession pointer
+      biz = await Business.findById(_existingPendingBiz._id);
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    } else {
+      // Create brand new biz
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+
+  // ── Always reset registration state ──────────────────────────────────────
+  // If a previous attempt left the biz in a mid-registration state (e.g.
+  // supplier_reg_city, supplier_reg_area), clear it so we start fresh.
+  const profileType = a === "reg_type_service" ? "service" : "product";
+  biz.sessionData = { supplierReg: { profileType } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  return sendText(from, `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`);
+}
+
+// ── Hospitality / Tourism registration entry ──────────────────────────────
+if (a === "reg_type_hospitality") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (!biz) {
+    const _ep = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_ep) { biz = await Business.findById(_ep._id); await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true }); }
+    else {
+      biz = await Business.create({ name: "pending_supplier_" + phone, currency: "USD", package: "trial", subscriptionStatus: "inactive", isSupplier: false, sessionState: "supplier_reg_name", sessionData: { supplierReg: { profileType: "hospitality" } }, ownerPhone: phone });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+  biz.sessionData = { supplierReg: { profileType: "hospitality" } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+  return sendText(from,
+    `🏨 *Lodge / Hotel / Tourism Registration*\n\nWhat is your business name?\n\n_Examples:_\n_Wilderness Lodge Kariba_\n_Safari Dreams Hwange_\n_Victoria Falls Guesthouse_`
+  );
+}
+
+if (a === "reg_type_school") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "school_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
+  // ── Create pending biz for brand-new users with no business record ─────────
+  if (!biz) {
+    const _newSchoolBiz = await Business.create({
+      name: "pending_supplier_" + phone,
+      currency: "USD",
+      package: "trial",
+      subscriptionStatus: "inactive",
+      isSupplier: false,
+      sessionState: "school_reg_name",
+      sessionData: { supplierReg: { profileType: "school" } },
+      ownerPhone: phone
+    });
+    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newSchoolBiz._id });
+    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newSchoolBiz._id }, { upsert: true });
+    biz = _newSchoolBiz;
   }
 
   // Check if already has a school profile
@@ -11531,21 +12270,86 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
-  if (!biz) return sendMainMenu(from);
+  // ── Ownership guard ───────────────────────────────────────────────────────
+  if (!_bizIsOwnedByUser) biz = null;
 
+  // ── Find or create a biz owned by this user ───────────────────────────────
+  // getBizForPhone may return a mid-registration biz from a previous attempt.
+  // We use it if it exists and belongs to this user; otherwise create fresh.
+  if (!biz) {
+    // Check for an existing pending biz for this phone (from a previous attempt)
+    const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_existingPendingBiz) {
+      // Re-use it — update UserSession pointer
+      biz = await Business.findById(_existingPendingBiz._id);
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    } else {
+      // Create brand new biz
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+
+  // ── Always reset registration state ──────────────────────────────────────
+  // If a previous attempt left the biz in a mid-registration state (e.g.
+  // supplier_reg_city, supplier_reg_area), clear it so we start fresh.
   const profileType = a === "reg_type_service" ? "service" : "product";
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = {
-    profileType
-  };
-
+  biz.sessionData = { supplierReg: { profileType } };
   biz.sessionState = "supplier_reg_name";
   await saveBizSafe(biz);
 
-  return sendText(
-    from,
-    `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`
+  return sendText(from, `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`);
+}
+
+// ── Hospitality / Tourism registration entry ──────────────────────────────
+if (a === "reg_type_hospitality") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
+  // ── Create pending biz for brand-new users with no business record ─────────
+  if (!biz) {
+    const _newHospBiz = await Business.create({
+      name: "pending_supplier_" + phone,
+      currency: "USD",
+      package: "trial",
+      subscriptionStatus: "inactive",
+      isSupplier: false,
+      sessionState: "supplier_reg_name",
+      sessionData: { supplierReg: { profileType: "hospitality" } },
+      ownerPhone: phone
+    });
+    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newHospBiz._id });
+    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newHospBiz._id }, { upsert: true });
+    biz = _newHospBiz;
+  }
+
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = { profileType: "hospitality" };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  return sendText(from,
+    `🏨 *Lodge / Hotel / Tourism Registration*\n\n` +
+    `What is your business name?\n\n` +
+    `_Examples:_\n` +
+    `_Wilderness Lodge Kariba_\n` +
+    `_Safari Dreams Hwange_\n` +
+    `_Victoria Falls Guesthouse_\n` +
+    `_Lake View Self-Catering Nyanga_`
   );
 }
 
@@ -11660,6 +12464,64 @@ if (a === "sup_cat_more_2") {
 
   return sendList(from, "🗂 More Categories (Page 2)", moreRows);
 }
+
+  // ── Hospitality subtype selection buttons ────────────────────────────────────
+  // sup_hosp_type_lodge__safari_operator → tourismSubtype = ["lodge","safari_operator"]
+  if (a.startsWith("sup_hosp_type_")) {
+    if (!biz) return sendMainMenu(from);
+    const subtypes = a.replace("sup_hosp_type_", "").split("__").filter(Boolean);
+    biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
+    biz.sessionData.supplierReg.tourismSubtype = subtypes;
+
+    // Determine the categories array from subtypes
+    const subtypeCatMap = {
+      lodge:           "lodge",          hotel:           "hotel",
+      guesthouse:      "guesthouse",     self_catering:   "self_catering",
+      campsite:        "campsite",       safari_operator: "safari",
+      tour_guide:      "tours",          boat_hire:       "boat_hire",
+      travel_agency:   "tourism"
+    };
+    const cats = [...new Set(subtypes.map(s => subtypeCatMap[s]).filter(Boolean)), "tourism", "hospitality", "accommodation"];
+    biz.sessionData.supplierReg.categories = cats;
+    biz.sessionState = "supplier_reg_hospitality_areas";
+    await saveBizSafe(biz);
+
+    return sendText(from,
+      `🌍 *Which areas or destinations do you serve?*\n\n` +
+      `Type the areas separated by commas.\n\n` +
+      `Examples:\n` +
+      `_Kariba, Nyamhunga, Andora_\n` +
+      `_Hwange National Park, Victoria Falls_\n` +
+      `_Nyanga, Eastern Highlands_\n` +
+      `_Harare, Bulawayo (for city tours)_\n` +
+      `_Victoria Falls, Zambezi National Park_\n\n` +
+      `_Type *skip* to use your main location._`
+    );
+  }
+
+  if (a === "sup_hosp_facilities_done") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "sup_hosp_facilities_done" });
+    return;
+  }
+
+  if (a === "sup_skip_rest_rates") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "sup_skip_rest_rates" });
+    return;
+  }
+
+  if (a === "sup_skip_extra_services") {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: "sup_skip_extra_services" });
+    return;
+  }
+
+  if (a.startsWith("sup_hosp_fac_toggle_")) {
+    if (!biz) return sendMainMenu(from);
+    await continueTwilioFlow({ from, text: a });
+    return;
+  }
 
   // ── Travel yes/no during service registration ─────────────────────────────
 if (a === "sup_travel_yes") {
@@ -12468,9 +13330,21 @@ const supplier = await SupplierProfile.create({
       // ── Teacher fields (populated when category = tutoring) ─────────────────
       subjects:      reg.subjects      || [],
       gradesOffered: reg.gradesOffered || [],
-      // ── Tourism fields (populated when category = tourism) ──────────────────
-      tourismType:   reg.tourismType   || "",
-      tourismAreas:  reg.tourismAreas  || [],
+      // ── Tourism / Hospitality fields ─────────────────────────────────────────
+      tourismType:    reg.tourismType    || "",       // legacy single-string
+      tourismAreas:   reg.tourismAreas   || [],
+      tourismSubtype: reg.tourismSubtype || [],       // ["lodge","safari_operator",...]
+      facilities:     reg.facilities     || [],       // ["wifi","pool","breakfast",...]
+      roomTypes:      reg.roomTypes      || [],       // [{ name, capacity, pricePerNight, restRate }]
+      extraServices:  reg.extraServices  || [],       // [{ name, price, unit }]
+      // ── Sync products[] from roomTypes so smart link + sellerChat can find them ──
+      products: (reg.roomTypes || []).length > 0
+        ? (reg.roomTypes || []).map(rt => rt.name.toLowerCase()).filter(Boolean)
+        : (reg.products || []),
+      maxCapacity:    reg.maxCapacity    || 0,
+      checkInTime:    reg.checkInTime    || "",
+      checkOutTime:   reg.checkOutTime   || "",
+      mealPlan:       reg.mealPlan       || "not_applicable",
       active: false,
       subscriptionStatus: "pending",
       priceUpdatedAt: reg.prices?.length ? new Date() : null
@@ -15471,58 +16345,6 @@ isService
 
 // ── Buyer request lane: entry menu ───────────────────────────────────────────
 if (a === "sup_request_sellers") {
-
-  // ── Returning buyer: offer one-tap repeat of last request ─────────────────
-  const lastReq = await getBuyerLastRequest(phone);
-  if (lastReq && (lastReq.items || []).length > 0) {
-    const lastItems = formatBuyerRequestItems(lastReq.items || [], 5);
-    const lastLocation = lastReq.area
-      ? `${lastReq.area}, ${lastReq.city || ""}`
-      : (lastReq.city || "Zimbabwe");
-
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        $set: {
-          "tempData.buyerRequestState":  "awaiting_items",
-          "tempData.buyerRequestMode":   "simple",
-          "tempData.lastRequestSnapshot": {
-            items:   lastReq.items,
-            city:    lastReq.city,
-            area:    lastReq.area,
-            isServiceRequest: lastReq.isServiceRequest || false
-          }
-        }
-      },
-      { upsert: true }
-    );
-
- await sendButtons(from, {
-  text:
-    `⚡ *Request Sellers*\n\n` +
-    `👋 Welcome back! Repeat your last request?\n\n` +
-    `📦 1. element replacement x1\n` +
-    `📍 Harare\n\n` +
-    `Or type a new request below.\n\n` +
-    `0=Menu • 00=Cancel`,
-  buttons: [
-    { id: "sup_repeat_last_request", title: "🔁 Repeat" },
-    { id: "sup_request_mode_bulk", title: "📋 Bulk List" }
-  ]
-});
-
-return sendText(
-  from,
-  `*Examples:*\n` +
-  `_copper pipe 15mm, 5 lengths_\n` +
-  `_cement 50kg x20_\n` +
-  `_need plumber Avondale_\n\n` +
-  `Tip: Put quantity at the end.\n` +
-  `Example: copper pipe 15mm, 5 lengths`
-);
-  }
-
-  // ── First-time or no prior request ────────────────────────────────────────
   await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -15544,48 +16366,21 @@ return sendText(
       `⚡ *Request Sellers*\n\n` +
       `What do you need? Type your items or describe the job.\n\n` +
       `*📦 Products:*\n` +
-      `_copper pipe 15mm, 5 lengths_\n` +
-      `_cement 50kg x20 bags, river sand 3m3_\n` +
-      `_2.5mm TE cable, 50m_\n\n` +
+      `_copper pipe 15mm, 5 lengths, Msasa Harare_\n` +
+      `_cement 50kg x20 bags, river sand 3m3, Mbare_\n` +
+      `_16mm2 x4 core cu pvc swa cable 200m, Hatfield_\n` +
+      `_10kw growatt inverter x2, Glen View Harare_\n\n` +
       `*🔧 Services:*\n` +
-      `_need plumber, burst pipe, Avondale_\n` +
-      `_electrician for DB board, Chitungwiza_\n\n` +
+      `_need plumber, burst pipe, Avondale Harare_\n` +
+      `_house rewiring 4 bedroom 280sqm, Borrowdale_\n` +
+      `_glass repair 600x900mm, Eastlea_\n\n` +
       `*Bulk list?* Use the button below.\n\n` +
-      `_Tip: put quantity last - e.g. "copper pipe 15mm, 5 lengths"_\n` +
-      `_Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
+      `_Tip: put quantity last. Spec numbers like 15mm and 50kg stay part of the product name._\n\n` +
       `*0 = Main menu · 00 = Cancel*`,
     buttons: [
       { id: "sup_request_mode_bulk", title: "📋 Bulk List" },
       { id: "find_supplier",         title: "🔍 Browse & Shop" }
     ]
-  });
-}
-
-// ── Repeat last request: one tap resends ──────────────────────────────────────
-if (a === "sup_repeat_last_request") {
-  const reqSess = await UserSession.findOne({ phone });
-  const snapshot = reqSess?.tempData?.lastRequestSnapshot;
-
-  if (!snapshot?.items?.length) {
-    return sendText(from,
-      `❌ Last request not found. Please type a new request.\n\n` +
-      `Type *0* for main menu.`
-    );
-  }
-
-  return finalizeBuyerRequestSubmission({
-    from, phone,
-    pendingRequest: {
-      requestType:      "simple",
-      profileType:      "product",
-      items:            snapshot.items,
-      city:             snapshot.city,
-      area:             snapshot.area,
-      isServiceRequest: snapshot.isServiceRequest || false,
-      rawText:          "(repeated from last request)"
-    },
-    deliveryRequired: false,
-    serviceAddress:   null
   });
 }
 
@@ -15694,6 +16489,33 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     );
   }
 
+  // ── Collection path: offer photo before finalizing ──────────────────────────
+  const _noDelSess = await UserSession.findOne({ phone });
+  if (!_noDelSess?.tempData?.photoPromptShown) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        $set: {
+          "tempData.buyerRequestState":  "awaiting_photo_choice",
+          "tempData.pendingBuyerRequest": { ...pendingBuyerRequest, deliveryRequired: false },
+          "tempData.photoPromptShown":   true
+        }
+      },
+      { upsert: true }
+    );
+    return sendButtons(from, {
+      text:
+        `📷 *Add a photo? (optional)*\n\n` +
+        `A photo helps sellers understand exactly what you need.\n\n` +
+        `Useful for: repairs, custom items, matching parts or colours.\n\n` +
+        `Tap *Add Photo* to send an image, or *Skip* to submit now.`,
+      buttons: [
+        { id: "sup_req_photo_yes",  title: "📷 Add Photo"       },
+        { id: "sup_req_photo_skip", title: "⏭ Skip — submit now" }
+      ]
+    });
+  }
+
   return finalizeBuyerRequestSubmission({
     from,
     phone,
@@ -15702,8 +16524,6 @@ if (a === "sup_request_delivery_yes" || a === "sup_request_delivery_no") {
     deliveryAddress: null
   });
 }
-
-// ── Use saved location ──────────────────────────────────────────────────────
 if (a === "sup_use_saved_location") {
   const reqSess = await UserSession.findOne({ phone });
   const pendingBuyerRequest = reqSess?.tempData?.pendingBuyerRequest || null;
@@ -17892,4 +18712,5 @@ async function showAllBranchesCashBalance(from, biz) {
   await sendText(from, msg);
   const { sendCashBalanceMenu } = await import("./metaMenus.js");
   return sendCashBalanceMenu(from);
+}
 }
