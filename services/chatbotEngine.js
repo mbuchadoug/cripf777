@@ -6133,10 +6133,22 @@ const _orderBlockedStates = new Set([
 // AFTER:
 const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
 
+const RESERVED_ACTION_WORDS = new Set([
+  "register_supplier",
+  "reg_type_product",
+  "reg_type_service",
+  "reg_type_school",
+  "reg_type_hospitality",
+  "find_supplier",
+  "my_supplier_account",
+  "suppliers_home"
+]);
+
 if (
   !isMetaAction &&
   text.trim().length > 2 &&
-  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
+  !RESERVED_ACTION_WORDS.has(al) &&
+  !GREETING_WORDS.has(al) &&
   !_orderBlockedStates.has(_activeOrderState) &&
   _schoolEnquiryState !== "school_parent_enquiry" &&
   !biz?.sessionState?.startsWith("sc_")
@@ -9526,6 +9538,7 @@ if (
   biz &&
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
+  !RESERVED_ACTION_WORDS.has(al) &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
