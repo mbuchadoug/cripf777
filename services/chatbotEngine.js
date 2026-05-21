@@ -6133,22 +6133,10 @@ const _orderBlockedStates = new Set([
 // AFTER:
 const _schoolEnquiryState = _sessForOrderCheck?.tempData?.schoolEnquiryState;
 
-const RESERVED_ACTION_WORDS = new Set([
-  "register_supplier",
-  "reg_type_product",
-  "reg_type_service",
-  "reg_type_school",
-  "reg_type_hospitality",
-  "find_supplier",
-  "my_supplier_account",
-  "suppliers_home"
-]);
-
 if (
   !isMetaAction &&
   text.trim().length > 2 &&
-  !RESERVED_ACTION_WORDS.has(al) &&
-  !GREETING_WORDS.has(al) &&
+  !GREETING_WORDS.has(text.trim().toLowerCase()) &&
   !_orderBlockedStates.has(_activeOrderState) &&
   _schoolEnquiryState !== "school_parent_enquiry" &&
   !biz?.sessionState?.startsWith("sc_")
@@ -9538,7 +9526,6 @@ if (
   biz &&
   !isGhostSupplierBiz &&
   text.trim().length > 2 &&
-  !RESERVED_ACTION_WORDS.has(al) &&
   !shortcodeBlockedStates.includes(biz.sessionState) &&
   !settingsStates.includes(biz.sessionState) &&
   !schoolAdminStates.includes(biz.sessionState) &&
@@ -10800,38 +10787,6 @@ if (a === "register_supplier") {
   }
 
   return startSupplierRegistration(from, biz);
-}
-
-// ── Supplier registration type selected ─────────────────────────────
-if (
-  a === "reg_type_product" ||
-  a === "reg_type_service" ||
-  a === "reg_type_hospitality"
-) {
-  if (!biz) {
-    await sendText(from, "❌ Session expired. Please tap *List My Business* again.");
-    return sendMainMenu(from);
-  }
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = biz.sessionData.supplierReg || {};
-
-  biz.sessionData.supplierReg.profileType =
-    a === "reg_type_service"
-      ? "service"
-      : a === "reg_type_hospitality"
-        ? "hospitality"
-        : "product";
-
-  biz.sessionState = "supplier_reg_name";
-  await saveBizSafe(biz);
-
-  console.log("[SUP REG TYPE]", phone, a, biz.sessionData.supplierReg.profileType);
-
-  return sendText(
-    from,
-    "🏪 *Business Name*\n\nPlease enter your business name:"
-  );
 }
 
 // ── SCHOOL SMART LINK / FAQ ACTIONS ─────────────────────────────────────

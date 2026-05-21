@@ -148,13 +148,17 @@ function isSupplierRegistrationComplete(supplier) {
 export async function startSupplierRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
 
-  // ── Ignore biz if it belongs to a different user (notification contact scenario) ──
-  // getBizForPhone returns the notification contact's biz for numbers like 263771446827
-  // that are in another business's notificationContacts array. For registration we only
-  // want bizneses owned by this phone number.
-  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) {
-    console.log("[startSupplierRegistration] biz belongs to", biz.ownerPhone, "not", phone, "— using no-biz path");
-    biz = null;
+  // ── Ownership check: ignore biz if this user has no role on it ──────────────
+  // getBizForPhone returns a biz if the phone is in notificationContacts.
+  // For registration we only want bizneses this user owns.
+  // ownerPhone is unreliable on old records — use UserRole instead.
+  if (biz) {
+    const UserRole = (await import("../models/userRole.js")).default;
+    const _role = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
+    if (!_role) {
+      console.log("[startSupplierRegistration] no role for", phone, "on biz", biz._id, "— using no-biz path");
+      biz = null;
+    }
   }
 
   // ── School check: if this phone already has a school profile, route there ──
