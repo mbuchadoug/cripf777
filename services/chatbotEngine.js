@@ -3606,8 +3606,21 @@ Reply *menu* to start.`);
 
   console.log("META INCOMING:", { from, action });
 
-const biz = await getBizForPhone(from);
+let biz = await getBizForPhone(from);
 const isGhostSupplierBiz = !!(biz && biz.name?.startsWith("pending_supplier_"));
+
+// ── Ownership check for registration flows ───────────────────────────────────
+// getBizForPhone may return a biz where this phone is only a notification contact.
+// ownerPhone is unreliable on old records. UserRole is the ground truth.
+// _bizIsOwnedByUser = false means biz = null for all registration entry points.
+let _bizIsOwnedByUser = true;
+if (biz) {
+  const _ownerRoleCheck = await UserRole.findOne({ phone, businessId: biz._id, pending: false }).lean();
+  if (!_ownerRoleCheck) {
+    _bizIsOwnedByUser = false;
+    console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "— notification contact only");
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // GLOBAL COMMAND/TEXT LOGGER
@@ -10728,14 +10741,8 @@ if (a === "sup_search_more_categories") {
 }
 
 if (a === "register_supplier") {
-  // ── Use own biz only — notification contact biz belongs to another business ──
-  // getBizForPhone may return a biz this user is a notification contact for.
-  // For registration, we only care about bizneses they OWN.
-  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) {
-    console.log("[REGISTER_SUPPLIER] biz belongs to", biz.ownerPhone, "not", phone, "— treating as no-biz");
-    biz = null;
-  }
-  const existingSupplier = await SupplierProfile.findOne({ phone });
+  if (!_bizIsOwnedByUser) biz = null;
+    const existingSupplier = await SupplierProfile.findOne({ phone });
 
   if (existingSupplier) {
     if (existingSupplier.active) {
@@ -12125,7 +12132,7 @@ _Type *cancel* to return to main menu._`
 
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
-  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
+  if (!_bizIsOwnedByUser) biz = null;
   if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "school_reg_name")) {
     biz.sessionData = biz.sessionData || {};
     biz.sessionData.supplierReg = {};
@@ -12179,10 +12186,8 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
-  // ── Ignore biz if it belongs to another user (notification contact scenario) ──
-  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
-  console.log("[REG_TYPE] phone:", phone, "biz:", biz?._id, "state:", biz?.sessionState);
-  // ── If existing pending biz is in a listing-type or reg-name state, reset it ──
+  if (!_bizIsOwnedByUser) biz = null;
+    // ── If existing pending biz is in a listing-type or reg-name state, reset it ──
   // This handles the case where the user tapped the button before (creating a pending biz)
   // but their session was left in an intermediate state. Without this reset,
   // handleSupplierRegistrationStates would intercept the action as free text.
@@ -12221,7 +12226,7 @@ if (a === "reg_type_product" || a === "reg_type_service") {
 
 // ── Hospitality / Tourism registration entry ──────────────────────────────
 if (a === "reg_type_hospitality") {
-  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
+  if (!_bizIsOwnedByUser) biz = null;
   if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
     biz.sessionData = biz.sessionData || {};
     biz.sessionData.supplierReg = {};
