@@ -285,19 +285,11 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
 
   // ── Profile card ─────────────────────────────────────────────────────────
   // ── X more hint - tells buyer there's more and how to see it ─────────────
-  // BUG FIX: listedProducts/prices can be empty arrays ([]) which are truthy,
-  // so `arr || fallback` returns [] not the fallback. Must use .length checks.
   const catalogueTotal = isHospitality
     ? ((seller.roomTypes || []).length + (seller.extraServices || []).length + (seller.rates || []).length)
     : isService
-      ? ((seller.rates?.length > 0
-            ? seller.rates
-            : (seller.listedProducts?.length > 0 ? seller.listedProducts : (seller.products || []))
-         ).length)
-      : ((seller.prices?.length > 0
-            ? seller.prices
-            : (seller.listedProducts?.length > 0 ? seller.listedProducts : (seller.products || []))
-         ).length);
+      ? ((seller.rates?.length > 0 ? seller.rates : (seller.listedProducts || seller.products || [])).length)
+      : ((seller.prices?.length > 0 ? seller.prices : (seller.listedProducts || seller.products || [])).length);
   const extraCount = Math.max(0, catalogueTotal - PREVIEW_MAX);
   // moreHint shown as text AND as a button below - button is the primary CTA
   const moreHint   = extraCount > 0
