@@ -9967,78 +9967,6 @@ if (biz.sessionState === "supplier_search_city" && !isMetaAction && !schoolAdmin
       });
       if (handled) return;
     }
-
-
-
-// ── CRITICAL: Supplier registration type buttons must run BEFORE ghost-biz fallback ──
-if (
-  a === "reg_type_product" ||
-  a === "reg_type_service" ||
-  a === "reg_type_hospitality"
-) {
-  console.log("[REG_TYPE_EARLY] reached:", { phone, action: a, biz: biz?._id, state: biz?.sessionState });
-
-  if (!_bizIsOwnedByUser) biz = null;
-
-  if (!biz) {
-    const existingPendingBiz = await Business.findOne({
-      name: "pending_supplier_" + phone
-    });
-
-    if (existingPendingBiz) {
-      biz = existingPendingBiz;
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { activeBusinessId: biz._id },
-        { upsert: true }
-      );
-    } else {
-      biz = await Business.create({
-        name: "pending_supplier_" + phone,
-        currency: "USD",
-        package: "trial",
-        subscriptionStatus: "inactive",
-        isSupplier: false,
-        sessionState: "supplier_reg_name",
-        sessionData: { supplierReg: {} },
-        ownerPhone: phone
-      });
-
-      await UserRole.create({
-        phone,
-        role: "owner",
-        pending: false,
-        businessId: biz._id
-      });
-
-      await UserSession.findOneAndUpdate(
-        { phone },
-        { activeBusinessId: biz._id },
-        { upsert: true }
-      );
-    }
-  }
-
-  const profileType =
-    a === "reg_type_service"
-      ? "service"
-      : a === "reg_type_hospitality"
-        ? "hospitality"
-        : "product";
-
-  biz.sessionData = { supplierReg: { profileType } };
-  biz.sessionState = "supplier_reg_name";
-  await saveBizSafe(biz);
-
-  return sendText(
-    from,
-    profileType === "hospitality"
-      ? "🏨 *Lodge / Hotel / Tourism Registration*\n\nWhat is your business name?"
-      : "🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*"
-  );
-}
-
-
  
     if (supplierStates.includes(biz.sessionState)) {
       const handled = await handleSupplierRegistrationStates({
@@ -12341,9 +12269,89 @@ _Type *cancel* at any time to stop._`
   );
 }
 
+if (a === "reg_type_product" || a === "reg_type_service") {
+  // ── Ownership guard ───────────────────────────────────────────────────────
+  if (!_bizIsOwnedByUser) biz = null;
 
+  // ── Find or create a biz owned by this user ───────────────────────────────
+  // getBizForPhone may return a mid-registration biz from a previous attempt.
+  // We use it if it exists and belongs to this user; otherwise create fresh.
+  if (!biz) {
+    // Check for an existing pending biz for this phone (from a previous attempt)
+    const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_existingPendingBiz) {
+      // Re-use it — update UserSession pointer
+      biz = await Business.findById(_existingPendingBiz._id);
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    } else {
+      // Create brand new biz
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
 
+  // ── Always reset registration state ──────────────────────────────────────
+  // If a previous attempt left the biz in a mid-registration state (e.g.
+  // supplier_reg_city, supplier_reg_area), clear it so we start fresh.
+  const profileType = a === "reg_type_service" ? "service" : "product";
+  biz.sessionData = { supplierReg: { profileType } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
 
+  return sendText(from, `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`);
+}
+
+// ── Hospitality / Tourism registration entry ──────────────────────────────
+if (a === "reg_type_hospitality") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
+    biz.sessionData = biz.sessionData || {};
+    biz.sessionData.supplierReg = {};
+    await saveBizSafe(biz);
+  }
+
+  // ── Create pending biz for brand-new users with no business record ─────────
+  if (!biz) {
+    const _newHospBiz = await Business.create({
+      name: "pending_supplier_" + phone,
+      currency: "USD",
+      package: "trial",
+      subscriptionStatus: "inactive",
+      isSupplier: false,
+      sessionState: "supplier_reg_name",
+      sessionData: { supplierReg: { profileType: "hospitality" } },
+      ownerPhone: phone
+    });
+    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newHospBiz._id });
+    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newHospBiz._id }, { upsert: true });
+    biz = _newHospBiz;
+  }
+
+  biz.sessionData = biz.sessionData || {};
+  biz.sessionData.supplierReg = { profileType: "hospitality" };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  return sendText(from,
+    `🏨 *Lodge / Hotel / Tourism Registration*\n\n` +
+    `What is your business name?\n\n` +
+    `_Examples:_\n` +
+    `_Wilderness Lodge Kariba_\n` +
+    `_Safari Dreams Hwange_\n` +
+    `_Victoria Falls Guesthouse_\n` +
+    `_Lake View Self-Catering Nyanga_`
+  );
+}
 
 
 // ── Supplier collar group selected during service registration ────────────
