@@ -10728,6 +10728,13 @@ if (a === "sup_search_more_categories") {
 }
 
 if (a === "register_supplier") {
+  // ── Use own biz only — notification contact biz belongs to another business ──
+  // getBizForPhone may return a biz this user is a notification contact for.
+  // For registration, we only care about bizneses they OWN.
+  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) {
+    console.log("[REGISTER_SUPPLIER] biz belongs to", biz.ownerPhone, "not", phone, "— treating as no-biz");
+    biz = null;
+  }
   const existingSupplier = await SupplierProfile.findOne({ phone });
 
   if (existingSupplier) {
@@ -12118,6 +12125,7 @@ _Type *cancel* to return to main menu._`
 
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
+  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
   if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "school_reg_name")) {
     biz.sessionData = biz.sessionData || {};
     biz.sessionData.supplierReg = {};
@@ -12171,6 +12179,9 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
+  // ── Ignore biz if it belongs to another user (notification contact scenario) ──
+  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
+  console.log("[REG_TYPE] phone:", phone, "biz:", biz?._id, "state:", biz?.sessionState);
   // ── If existing pending biz is in a listing-type or reg-name state, reset it ──
   // This handles the case where the user tapped the button before (creating a pending biz)
   // but their session was left in an intermediate state. Without this reset,
@@ -12210,6 +12221,7 @@ if (a === "reg_type_product" || a === "reg_type_service") {
 
 // ── Hospitality / Tourism registration entry ──────────────────────────────
 if (a === "reg_type_hospitality") {
+  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) biz = null;
   if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
     biz.sessionData = biz.sessionData || {};
     biz.sessionData.supplierReg = {};

@@ -148,6 +148,15 @@ function isSupplierRegistrationComplete(supplier) {
 export async function startSupplierRegistration(from, biz) {
   const phone = from.replace(/\D+/g, "");
 
+  // ── Ignore biz if it belongs to a different user (notification contact scenario) ──
+  // getBizForPhone returns the notification contact's biz for numbers like 263771446827
+  // that are in another business's notificationContacts array. For registration we only
+  // want bizneses owned by this phone number.
+  if (biz && biz.ownerPhone && biz.ownerPhone !== phone) {
+    console.log("[startSupplierRegistration] biz belongs to", biz.ownerPhone, "not", phone, "— using no-biz path");
+    biz = null;
+  }
+
   // ── School check: if this phone already has a school profile, route there ──
   const SchoolProfile = (await import("../models/schoolProfile.js")).default;
   const existingSchool = await SchoolProfile.findOne({ phone });
