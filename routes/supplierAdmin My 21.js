@@ -6436,60 +6436,26 @@ router.post("/requests/:id/approve-photo", requireSupplierAdmin, async (req, res
     r.imageReviewedBy = "admin";
     await r.save();
 
-    // 1. Notify suppliers — sets awaiting_offer_intro session for each matched seller
+    // 1. Notify suppliers (same function used by text-only requests)
     let notifiedCount = 0;
-    let notifiedSuppliers = [];
     try {
-      const { notifySuppliersOfBuyerRequest: _notifyFn, findSuppliersForBuyerRequest: _findFn } = await import("../services/chatbotEngine.js");
+      const { notifySuppliersOfBuyerRequest: _notifyFn } = await import("../services/chatbotEngine.js");
       notifiedCount = await _notifyFn(r);
     } catch (err) {
       console.warn("[ADMIN APPROVE] notifySuppliersOfBuyerRequest failed:", err.message);
     }
 
-    // 2. If request has an image, immediately send it to all matched suppliers
-    //    This is belt-and-suspenders: the chatbotEngine also sends it when the seller
-    //    first replies, but this ensures instant delivery without waiting for a reply.
-    if (r.imageUrl && r.imageStatus === "approved") {
-      try {
-        const { sendImage } = await import("../services/metaSender.js");
-        const SupplierProfile = (await import("../models/supplierProfile.js")).default;
-        const UserSession     = (await import("../models/userSession.js")).default;
-
-        // Find all suppliers who just got set to awaiting_offer_intro for this request
-        const _sessionsForReq = await UserSession.find({
-          "tempData.sellerRequestId":         String(r._id),
-          "tempData.sellerRequestReplyState": "awaiting_offer_intro"
-        }).lean();
-
-        const _ref = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
-
-        for (const _sess of _sessionsForReq) {
-          const _supplierPhone = _sess.phone;
-          if (!_supplierPhone) continue;
-          const _wa = _supplierPhone.startsWith("0") ? "263" + _supplierPhone.slice(1) : _supplierPhone;
-          try {
-            await sendImage(_wa, {
-              imageUrl: r.imageUrl,
-              caption:  r.imageCaption
-                ? `📸 Buyer photo for ${_ref}: ${r.imageCaption}`
-                : `📸 Buyer attached a photo for request ${_ref}`
-            });
-            console.log(`[ADMIN APPROVE] Image sent to ${_wa} for ${_ref}`);
-          } catch (_imgErr) {
-            console.warn(`[ADMIN APPROVE] Could not send image to ${_wa}: ${_imgErr.message}`);
-          }
-        }
-      } catch (imgErr) {
-        console.warn("[ADMIN APPROVE] Image broadcast error:", imgErr.message);
-      }
-    }
-
-    // 3. Notify buyer via template (works outside 24hr session)
+    // 2. Notify buyer via template (works outside 24hr session)
     const ref         = `REQ-${String(r._id).slice(-6).toUpperCase()}`;
     const itemSummary = (r.items || []).slice(0, 3).map((it, i) => `${i + 1}. ${it.product} x${it.quantity || 1}`).join(", ");
     await notifyBuyerRequestApproved({ buyerPhone: r.buyerPhone, ref, itemSummary, notifiedCount });
 
-    console.log(`[ADMIN APPROVE] ${ref} approved. imageUrl: ${r.imageUrl || "none"} notified: ${notifiedCount}`);
+    // 3. Log image URL for diagnosis
+    if (r.imageUrl) {
+      console.log(`[ADMIN APPROVE] Request ${r._id} has imageUrl: ${r.imageUrl}`);
+      console.log(`[ADMIN APPROVE] imageStatus now: approved — sellers will receive image when they tap View & Quote`);
+    }
+
     res.redirect(`/zq-admin/requests/pending-photos?approved=1&notified=${notifiedCount}`);
   } catch (err) {
     res.send(layout("Error", `<div class="alert red">${esc(err.message)}</div>`));

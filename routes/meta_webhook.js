@@ -14,9 +14,19 @@ import axios from "axios";
 
 
 import dotenv from "dotenv";
-
+import { fileURLToPath } from "url";
+import fs_sync from "fs";
+import path_sync from "path";
 
 dotenv.config();
+
+// Derive __dirname for ES modules (same as server.js)
+// This ensures images are saved to the SAME docs/ folder that express.static serves.
+const __filename_wh = fileURLToPath(import.meta.url);
+// routes/meta_webhook.js → go up two levels to project root
+const __projectRoot  = path_sync.resolve(path_sync.dirname(__filename_wh), "..", "..");
+console.log("[WEBHOOK] Project root:", __projectRoot);
+
 const router = express.Router();
 
 
@@ -242,14 +252,15 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
             responseType: "arraybuffer"
           });
 
-          // Save to local filesystem using same folder as other generated files
-          const fsM    = await import("fs");
-          const pathM  = await import("path");
+          // Save to project root docs/ — same folder served by express.static in server.js
+          // Use __projectRoot (derived from import.meta.url) NOT process.cwd()
+          // process.cwd() differs from __dirname under PM2 and causes 404s.
           const ext    = mime.includes("png") ? "png" : "jpg";
           const fname  = `req_photo_${from}_${Date.now()}.${ext}`;
-          const dir    = pathM.join(process.cwd(), "docs", "generated", "orders");
-          if (!fsM.existsSync(dir)) fsM.mkdirSync(dir, { recursive: true });
-          fsM.writeFileSync(pathM.join(dir, fname), Buffer.from(imgRes.data));
+          const dir    = path_sync.join(__projectRoot, "docs", "generated", "orders");
+          if (!fs_sync.existsSync(dir)) fs_sync.mkdirSync(dir, { recursive: true });
+          fs_sync.writeFileSync(path_sync.join(dir, fname), Buffer.from(imgRes.data));
+          console.log("[BUYER PHOTO] ✅ Saved to:", path_sync.join(dir, fname));
 
           const siteUrl  = (process.env.SITE_URL || "").replace(/\/$/, "");
 
@@ -340,7 +351,7 @@ if (msg.type === "document") {
     const fs       = await import("fs");
     const path     = await import("path");
     const filename = `brochure_${from}_${Date.now()}.pdf`;
-    const dir      = path.join(process.cwd(), "docs", "generated", "orders");
+    const dir      = path_sync.join(__projectRoot, "docs", "generated", "orders");
 
     // Create directory if it doesn't exist
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
