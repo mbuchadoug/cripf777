@@ -12133,6 +12133,85 @@ _Type *cancel* to return to main menu._`
 // ── School listing type selected - pivot the entire reg flow into school mode ─
 if (a === "reg_type_school") {
   if (!_bizIsOwnedByUser) biz = null;
+  if (!biz) {
+    const _ep = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_ep) { biz = await Business.findById(_ep._id); await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true }); }
+    else {
+      biz = await Business.create({ name: "pending_supplier_" + phone, currency: "USD", package: "trial", subscriptionStatus: "inactive", isSupplier: false, sessionState: "school_reg_name", sessionData: { supplierReg: { profileType: "school" } }, ownerPhone: phone });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+  biz.sessionData = { supplierReg: { profileType: "school" } };
+  biz.sessionState = "school_reg_name";
+  await saveBizSafe(biz);
+  return sendText(from, `🏫 *School Registration*\n\nWhat is your *school's full name*?\n\n_Type *cancel* at any time to stop._`);
+}
+
+if (a === "reg_type_product" || a === "reg_type_service") {
+  // ── Ownership guard ───────────────────────────────────────────────────────
+  if (!_bizIsOwnedByUser) biz = null;
+
+  // ── Find or create a biz owned by this user ───────────────────────────────
+  // getBizForPhone may return a mid-registration biz from a previous attempt.
+  // We use it if it exists and belongs to this user; otherwise create fresh.
+  if (!biz) {
+    // Check for an existing pending biz for this phone (from a previous attempt)
+    const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_existingPendingBiz) {
+      // Re-use it — update UserSession pointer
+      biz = await Business.findById(_existingPendingBiz._id);
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    } else {
+      // Create brand new biz
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+
+  // ── Always reset registration state ──────────────────────────────────────
+  // If a previous attempt left the biz in a mid-registration state (e.g.
+  // supplier_reg_city, supplier_reg_area), clear it so we start fresh.
+  const profileType = a === "reg_type_service" ? "service" : "product";
+  biz.sessionData = { supplierReg: { profileType } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  return sendText(from, `🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*`);
+}
+
+// ── Hospitality / Tourism registration entry ──────────────────────────────
+if (a === "reg_type_hospitality") {
+  if (!_bizIsOwnedByUser) biz = null;
+  if (!biz) {
+    const _ep = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_ep) { biz = await Business.findById(_ep._id); await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true }); }
+    else {
+      biz = await Business.create({ name: "pending_supplier_" + phone, currency: "USD", package: "trial", subscriptionStatus: "inactive", isSupplier: false, sessionState: "supplier_reg_name", sessionData: { supplierReg: { profileType: "hospitality" } }, ownerPhone: phone });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
+  }
+  biz.sessionData = { supplierReg: { profileType: "hospitality" } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+  return sendText(from,
+    `🏨 *Lodge / Hotel / Tourism Registration*\n\nWhat is your business name?\n\n_Examples:_\n_Wilderness Lodge Kariba_\n_Safari Dreams Hwange_\n_Victoria Falls Guesthouse_`
+  );
+}
+
+if (a === "reg_type_school") {
+  if (!_bizIsOwnedByUser) biz = null;
   if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "school_reg_name")) {
     biz.sessionData = biz.sessionData || {};
     biz.sessionData.supplierReg = {};
@@ -12186,38 +12265,41 @@ _Type *cancel* at any time to stop._`
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
+  // ── Ownership guard ───────────────────────────────────────────────────────
   if (!_bizIsOwnedByUser) biz = null;
-    // ── If existing pending biz is in a listing-type or reg-name state, reset it ──
-  // This handles the case where the user tapped the button before (creating a pending biz)
-  // but their session was left in an intermediate state. Without this reset,
-  // handleSupplierRegistrationStates would intercept the action as free text.
-  if (biz && (biz.sessionState === "supplier_reg_listing_type" || biz.sessionState === "supplier_reg_name")) {
-    biz.sessionData = biz.sessionData || {};
-    biz.sessionData.supplierReg = {};
-    await saveBizSafe(biz);
-  }
 
-  // ── Create pending biz for brand-new users with no business record ─────────
+  // ── Find or create a biz owned by this user ───────────────────────────────
+  // getBizForPhone may return a mid-registration biz from a previous attempt.
+  // We use it if it exists and belongs to this user; otherwise create fresh.
   if (!biz) {
-    const _newRegBiz = await Business.create({
-      name: "pending_supplier_" + phone,
-      currency: "USD",
-      package: "trial",
-      subscriptionStatus: "inactive",
-      isSupplier: false,
-      sessionState: "supplier_reg_name",
-      sessionData: { supplierReg: {} },
-      ownerPhone: phone
-    });
-    await UserRole.create({ phone, role: "owner", pending: false, businessId: _newRegBiz._id });
-    await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: _newRegBiz._id }, { upsert: true });
-    biz = _newRegBiz;
+    // Check for an existing pending biz for this phone (from a previous attempt)
+    const _existingPendingBiz = await Business.findOne({ ownerPhone: phone, name: "pending_supplier_" + phone }).lean();
+    if (_existingPendingBiz) {
+      // Re-use it — update UserSession pointer
+      biz = await Business.findById(_existingPendingBiz._id);
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    } else {
+      // Create brand new biz
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate({ phone }, { activeBusinessId: biz._id }, { upsert: true });
+    }
   }
 
+  // ── Always reset registration state ──────────────────────────────────────
+  // If a previous attempt left the biz in a mid-registration state (e.g.
+  // supplier_reg_city, supplier_reg_area), clear it so we start fresh.
   const profileType = a === "reg_type_service" ? "service" : "product";
-
-  biz.sessionData = biz.sessionData || {};
-  biz.sessionData.supplierReg = { profileType };
+  biz.sessionData = { supplierReg: { profileType } };
   biz.sessionState = "supplier_reg_name";
   await saveBizSafe(biz);
 
