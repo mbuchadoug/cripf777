@@ -3619,7 +3619,11 @@ if (biz) {
   if (!_ownerRoleCheck) {
     _bizIsOwnedByUser = false;
     console.log("[OWNERSHIP] phone", phone, "has no role on biz", biz._id, "— notification contact only");
+  } else {
+    console.log("[OWNERSHIP] phone", phone, "owns biz", biz._id, "state:", biz.sessionState);
   }
+} else {
+  console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -12149,6 +12153,7 @@ if (a === "reg_type_school") {
 }
 
 if (a === "reg_type_product" || a === "reg_type_service") {
+  console.log("[REG_TYPE] HANDLER REACHED. phone:", phone, "biz:", biz?._id, "state:", biz?.sessionState, "owned:", _bizIsOwnedByUser);
   // ── Ownership guard ───────────────────────────────────────────────────────
   if (!_bizIsOwnedByUser) biz = null;
 
