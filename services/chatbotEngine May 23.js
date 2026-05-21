@@ -6091,16 +6091,7 @@ a === "sup_search_next_page" ||
   a === "buyer_my_requests" ||
   a.startsWith("buyer_view_all_quotes_") ||
   a.startsWith("req_offer_") ||
-  a.startsWith("req_unavail_") ||
-
-  // ── Seller smart-link chat (sc_) — buyers visiting via ZQ:SUPPLIER link ─────
-  // These MUST be here or no-biz visitors get sent to welcome screen after
-  // tapping any menu option (Quote, Order, Enquiry, Contact, Review etc).
-  a.startsWith("sc_") ||
-
-  // ── School FAQ (sfaq_) — parents visiting via ZQ:SCHOOL link ────────────────
-  // Same issue: parent taps a school FAQ button → redirected without this.
-  a.startsWith("sfaq_");
+  a.startsWith("req_unavail_");
 
 // ── Shortcode search intercept: "find cement", "s plumber harare" etc ─────
 // ── Shortcode search intercept: "find cement", "find mushambahuro harare" etc ─────

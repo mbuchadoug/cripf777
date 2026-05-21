@@ -252,17 +252,28 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
           fsM.writeFileSync(pathM.join(dir, fname), Buffer.from(imgRes.data));
 
           const siteUrl  = (process.env.SITE_URL || "").replace(/\/$/, "");
-          const imageUrl = `${siteUrl}/docs/generated/orders/${fname}`;
 
-          // ── Validate the URL will be publicly accessible ─────────────────
-          if (!siteUrl) {
-            console.error("[BUYER PHOTO] ⚠️  SITE_URL is not set in .env!");
-            console.error("[BUYER PHOTO] ⚠️  Images will not display on admin panel or for sellers.");
-            console.error("[BUYER PHOTO] ⚠️  Set SITE_URL=https://yourdomain.com in your .env file.");
-          } else {
-            console.log("[BUYER PHOTO] ✅ imageUrl =", imageUrl);
-            console.log("[BUYER PHOTO] ✅ File saved to:", pathM.join(dir, fname));
+          // ── STRICT: abort if SITE_URL is missing — relative URLs break Meta API ──
+          // Meta's sendImage and admin panel both need a full https:// URL.
+          // If SITE_URL is not set, the image is saved but unusable. Fail loudly.
+          if (!siteUrl || !siteUrl.startsWith("http")) {
+            console.error("[BUYER PHOTO] ❌ SITE_URL is not set or invalid in .env!");
+            console.error("[BUYER PHOTO] ❌ Must be a full URL: SITE_URL=https://yourdomain.com");
+            console.error("[BUYER PHOTO] ❌ Image saved to disk but cannot be sent to sellers.");
+            // Still call chatbotEngine with null imageUrl so buyer gets a useful message
+            await handleIncomingMessage({
+              from,
+              action:       "__buyer_photo_uploaded__",
+              hasImage:     false,
+              imageUrl:     null,
+              imageCaption: caption
+            });
+            return;
           }
+
+          const imageUrl = `${siteUrl}/docs/generated/orders/${fname}`;
+          console.log("[BUYER PHOTO] ✅ Saved:", pathM.join(dir, fname));
+          console.log("[BUYER PHOTO] ✅ Public URL:", imageUrl);
 
           // Pass image data into chatbotEngine via action string + session
           await handleIncomingMessage({
