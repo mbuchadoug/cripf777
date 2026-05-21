@@ -24,7 +24,7 @@ dotenv.config();
 // This ensures images are saved to the SAME docs/ folder that express.static serves.
 const __filename_wh = fileURLToPath(import.meta.url);
 // routes/meta_webhook.js → go up two levels to project root
-const __projectRoot  = path_sync.resolve(path_sync.dirname(__filename_wh), "..", "..");
+const __projectRoot  = path_sync.resolve(path_sync.dirname(__filename_wh), "..");
 console.log("[WEBHOOK] Project root:", __projectRoot);
 
 const router = express.Router();
