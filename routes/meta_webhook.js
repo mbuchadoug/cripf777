@@ -257,7 +257,7 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
           // process.cwd() differs from __dirname under PM2 and causes 404s.
           const ext    = mime.includes("png") ? "png" : "jpg";
           const fname  = `req_photo_${from}_${Date.now()}.${ext}`;
-          const dir    = path_sync.join(__projectRoot, "docs", "generated", "orders");
+          const dir    = path_sync.join(__projectRoot, "public", "docs", "generated", "orders");
           if (!fs_sync.existsSync(dir)) fs_sync.mkdirSync(dir, { recursive: true });
           fs_sync.writeFileSync(path_sync.join(dir, fname), Buffer.from(imgRes.data));
           console.log("[BUYER PHOTO] ✅ Saved to:", path_sync.join(dir, fname));
@@ -283,7 +283,6 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
           }
 
           const imageUrl = `${siteUrl}/docs/generated/orders/${fname}`;
-          console.log("[BUYER PHOTO] ✅ Saved:", pathM.join(dir, fname));
           console.log("[BUYER PHOTO] ✅ Public URL:", imageUrl);
 
           // Pass image data into chatbotEngine via action string + session
@@ -351,11 +350,11 @@ if (msg.type === "document") {
     const fs       = await import("fs");
     const path     = await import("path");
     const filename = `brochure_${from}_${Date.now()}.pdf`;
-    const dir      = path_sync.join(__projectRoot, "docs", "generated", "orders");
+    const dir      = path_sync.join(__projectRoot, "public", "docs", "generated", "orders");
 
     // Create directory if it doesn't exist
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, filename), pdfBuffer);
+    if (!fs_sync.existsSync(dir)) fs_sync.mkdirSync(dir, { recursive: true });
+    fs_sync.writeFileSync(path_sync.join(dir, filename), pdfBuffer);
 
     // 4. Build the public URL - same pattern as schoolPdfGenerator.js
     const site   = (process.env.SITE_URL || "").replace(/\/$/, "");
