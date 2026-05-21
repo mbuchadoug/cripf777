@@ -3626,6 +3626,75 @@ if (biz) {
   console.log("[OWNERSHIP] phone", phone, "has NO biz");
 }
 
+// ── REG TYPE EARLY HANDLER ──────────────────────────────────────────────────
+// Inserted at the TOP LEVEL, before the if(!isMetaAction || isBuyerRequestMetaReply)
+// mega-block (line ~3818) which wraps almost the entire engine.
+// reg_type_* arrive as isMetaAction=true list_reply buttons, so ANY handler
+// inside that mega-block is dead code for these actions.
+// This block must stay here — at depth 1 inside handleIncomingMessage only.
+if (
+  a === "reg_type_product" ||
+  a === "reg_type_service" ||
+  a === "reg_type_hospitality"
+) {
+  console.log("[REG_TYPE_FIXED] phone:", phone, "action:", a, "biz:", biz?._id, "state:", biz?.sessionState);
+
+  if (!_bizIsOwnedByUser) biz = null;
+
+  if (!biz) {
+    const _ep = await Business.findOne({
+      ownerPhone: phone,
+      name: "pending_supplier_" + phone
+    }).lean();
+
+    if (_ep) {
+      biz = await Business.findById(_ep._id);
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { activeBusinessId: biz._id },
+        { upsert: true }
+      );
+    } else {
+      biz = await Business.create({
+        name: "pending_supplier_" + phone,
+        currency: "USD",
+        package: "trial",
+        subscriptionStatus: "inactive",
+        isSupplier: false,
+        sessionState: "supplier_reg_name",
+        sessionData: { supplierReg: {} },
+        ownerPhone: phone
+      });
+      await UserRole.create({ phone, role: "owner", pending: false, businessId: biz._id });
+      await UserSession.findOneAndUpdate(
+        { phone },
+        { activeBusinessId: biz._id },
+        { upsert: true }
+      );
+    }
+  }
+
+  const profileType =
+    a === "reg_type_service"     ? "service"     :
+    a === "reg_type_hospitality" ? "hospitality" :
+    "product";
+
+  biz.sessionData  = { supplierReg: { profileType } };
+  biz.sessionState = "supplier_reg_name";
+  await saveBizSafe(biz);
+
+  console.log("[REG_TYPE_FIXED] profileType:", profileType, "bizId:", biz._id, "-> supplier_reg_name");
+
+  return sendText(
+    from,
+    profileType === "hospitality"
+      ? "🏨 *Lodge / Hotel / Tourism Registration*\n\nWhat is your business name?\n\n_Examples:_\n_Wilderness Lodge Kariba_\n_Safari Dreams Hwange_\n_Victoria Falls Guesthouse_"
+      : "🏪 *What is your business name?*\n\nExample: *Mudziyashe Hardware*"
+  );
+}
+// ── END REG TYPE EARLY HANDLER ───────────────────────────────────────────────
+
+
 // ─────────────────────────────────────────────────────────────
 // GLOBAL COMMAND/TEXT LOGGER
 // Captures EVERY incoming text/button/list/smart-link before flows return
