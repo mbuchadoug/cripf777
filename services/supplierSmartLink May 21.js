@@ -249,23 +249,18 @@ export function buildProfileCard(supplier) {
     // Fall through: rates → listedProducts → products - always show something real.
     const hasRates = (supplier.rates || []).length > 0;
     if (hasRates) {
-      const allRates = (supplier.rates || []).filter(r => r.service);
-      catalogueLines = allRates.slice(0, 5)
+      catalogueLines = (supplier.rates || []).slice(0, 5)
         .map(r => `• ${r.service}${r.rate ? "  -  " + r.rate : ""}`)
         .join("\n");
-      const extraRates = allRates.length - 5;
-      if (extraRates > 0) catalogueLines += `\n_...and ${extraRates} more services_`;
     } else {
-      const serviceList = (supplier.listedProducts?.length
+      const serviceList = supplier.listedProducts?.length
         ? supplier.listedProducts
-        : (supplier.products || [])
-      ).filter(p => p && p !== "pending_upload");
+        : (supplier.products || []);
       catalogueLines = serviceList
+        .filter(p => p && p !== "pending_upload")
         .slice(0, 6)
         .map(p => `• ${p}`)
         .join("\n");
-      const extraSvcs = serviceList.length - 6;
-      if (extraSvcs > 0) catalogueLines += `\n_...and ${extraSvcs} more services_`;
     }
   } else {
     // Product supplier - prefer prices list (has amounts), fall back to listedProducts

@@ -1013,6 +1013,14 @@ const {
         if (service && rate) rateList.push({ service, rate });
       }
     }
+    // ── FIX: for service suppliers, if no rates were entered but service names
+    // were typed into the products textarea, auto-build rateList from productList
+    // so that supplier.rates[] is populated and smart link / sellerChat work.
+    if (profileType === "service" && rateList.length === 0 && productList.length > 0) {
+      for (const svcName of productList) {
+        rateList.push({ service: svcName, rate: "" });
+      }
+    }
 
 
 
