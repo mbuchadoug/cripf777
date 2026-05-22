@@ -755,11 +755,7 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
     if (isFirst) {
       const headerIcon = isHospitality ? "🏨" : (isService ? "🛠" : "📦");
-      const headerType = isHospitality
-        ? ((seller.roomTypes || []).length > 0 && ((seller.extraServices || []).length > 0 || (seller.rates || []).length > 0)
-            ? "Rooms, Activities & Services"
-            : (seller.roomTypes || []).length > 0 ? "Rooms & Accommodation" : "Activities & Services")
-        : (isService ? "Services & Rates" : "Products & Prices");
+      const headerType = isHospitality ? "Rooms & Services" : (isService ? "Services & Rates" : "Products & Prices");
       const itemWord   = isHospitality ? "option" : (isService ? "service" : "item");
       const header = headerIcon + " *" + seller.businessName + " - " + headerType + " (" + total + " " + itemWord + (total === 1 ? "" : "s") + ")*";
       await sendText(from, header + "\n\n" + lines + (isLast ? "" : "\n_(continued...)_"));
@@ -770,26 +766,29 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
   // ── Hospitality instructions prompt ──────────────────────────────────────
   if (isHospitality) {
-    const ex1Name = allItems[0]?.service || "Double Room";
+    const ex1Name = allItems[0]?.service || "Double room (overnight)";
     const ex2Name = allItems[1]?.service || null;
-    const ex3Name = allItems[2]?.service || null;
+    const ex1Rate = allItems[0]?.rate    || "";
+    const ex2Rate = allItems[1]?.rate    || "";
 
-    // Build context-aware examples
-    const exParts = [`_1_ → select item 1`];
-    if (ex2Name) exParts.push(`_2_ → ${ex2Name}`);
-    exParts.push(`_1×3_ → item 1, qty 3 (e.g. 3 nights)`);
-    if (ex2Name) exParts.push(`_1×2, 2×1_ → mix`);
+    // Show qty examples: 1×1 for 1 night, 1×3 for 3 nights, 2×2 for 2 rooms 2 nights
+    const exLine = ex2Name
+      ? `_1_ or _2_ (one item)   _1×3_ (item 1, qty 3)   _1, 2_ (both items)`
+      : `_1_ (select item 1)   _1×3_ (item 1, qty/nights 3)`;
 
     return sendButtons(from, {
       text:
-        `🏨 *Select what you need:*\n\n` +
-        `Type the *item number* from the list.\n` +
-        `Add *×qty* for multiple nights, rooms, or people.\n\n` +
-        exParts.join("   ") + `\n\n` +
-        `Then type *done* to send your request.\n` +
-        `Or type *note: your message* to add details (e.g. _note: sunset cruise, 8 people, Saturday 18:00_).\n\n` +
-        `Type *cancel* to go back.`,
-      buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
+        `🛏 *Which room or service do you need?*\n\n` +
+        `Type the *item number* from the list above.\n` +
+        `Add *×qty* for multiple nights or rooms.\n\n` +
+        `${exLine}\n\n` +
+        `Examples:\n` +
+        `_1_ → 1× ${ex1Name}${ex1Rate ? " (" + ex1Rate + ")" : ""}\n` +
+        `_1×3_ → 3× ${ex1Name} (e.g. 3 nights)\n` +
+        (ex2Name ? `_2_ → 1× ${ex2Name}${ex2Rate ? " (" + ex2Rate + ")" : ""}\n` : "") +
+        `_1×2, 2×1_ → mix of both\n\n` +
+        `Then type *done* to send your request, or *cancel* to go back.`,
+      buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry" }]
     });
   }
 
@@ -890,58 +889,6 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
   const isHospitality = seller.profileType === "hospitality";
   const isRFQ         = biz?.sessionData?.scRFQ;
 
-  // ── Handle "note: ..." — tourist adds context/details without leaving the flow ──
-  const _noteMatch = raw.match(/^note[:\s]+(.+)/i);
-  if (_noteMatch) {
-    const touristNote = _noteMatch[1].trim().slice(0, 300);
-    if (biz) {
-      biz.sessionData = { ...(biz.sessionData || {}), scTouristNote: touristNote };
-      await saveBiz(biz);
-    }
-    const existingCart = biz?.sessionData?.scQuoteItems || [];
-    if (existingCart.length === 0) {
-      return sendText(from,
-        `📝 Note saved: _"${touristNote}"_\n\n` +
-        `Now type the item numbers you want from the list above, then type *done* to send.`
-      );
-    }
-    return sendButtons(from, {
-      text:
-        `📝 Note added: _"${touristNote}"_\n\n` +
-        `🛒 *Selected (${existingCart.length}):*\n` +
-        existingCart.map(it => `• ${it.qty}× ${it.name}`).join("\n") + `\n\n` +
-        `Type more item numbers, or tap *Get Quote* to send your request.`,
-      buttons: [
-        { id: `sc_quote_done_${supplierId}`, title: isHospitality ? "✅ Get Service Quote" : "✅ Get Quote" },
-        { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" }
-      ]
-    });
-  }
-
-  // ── Handle "edit: 1: corrected name" — tourist renames a cart item ──────
-  const _editMatch = raw.match(/^edit[:\s]+(\d+)[:\s]+(.+)/i);
-  if (_editMatch) {
-    const editIdx  = parseInt(_editMatch[1]) - 1;
-    const newName  = _editMatch[2].trim().slice(0, 100);
-    const cartItems = biz?.sessionData?.scQuoteItems || [];
-    if (editIdx >= 0 && editIdx < cartItems.length) {
-      cartItems[editIdx].name = newName;
-      if (biz) { biz.sessionData = { ...(biz.sessionData || {}), scQuoteItems: cartItems }; await saveBiz(biz); }
-      return sendButtons(from, {
-        text:
-          `✏️ *Updated item ${editIdx + 1}:* ${newName}\n\n` +
-          `🛒 *Cart (${cartItems.length}):*\n` +
-          cartItems.map(it => `• ${it.qty}× ${it.name}`).join("\n") + `\n\n` +
-          `Continue selecting, or tap *Get Quote* to send.`,
-        buttons: [
-          { id: `sc_quote_done_${supplierId}`, title: isHospitality ? "✅ Get Service Quote" : "✅ Get Quote" },
-          { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" }
-        ]
-      });
-    }
-    return sendText(from, `❌ Item ${editIdx + 1} not in your cart. Type the item numbers from the list above.`);
-  }
-
   if (raw.toLowerCase() === "done") {
     // For hospitality: ask check-in/scope before finalising if not yet captured
     if (isHospitality && !biz?.sessionData?.scPeopleCount) {
@@ -1037,8 +984,6 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     }
   }
 
-  const savedNote = biz?.sessionData?.scTouristNote || "";
-
   const summary = allItems.map(it => {
     const priceStr = priceMap[it.name?.toLowerCase().trim()];
     return priceStr
@@ -1046,17 +991,15 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
       : `• ${it.qty}× ${it.name}`;
   }).join("\n");
 
-  const termAdd  = isHospitality ? "room/activity" : (isService ? "service" : "item");
+  const termAdd  = isHospitality ? "room/service" : (isService ? "service" : "item");
   const termDone = isRFQ && !isHospitality
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = `\n\n_Type *note: your details* to add info (e.g. dates, group size)._\n_Type *edit: 1: new name* to rename an item._`;
-
   return sendButtons(from, {
     text:
-`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
-${summary}${savedNote ? "\n\n📝 _Note: " + savedNote + "_" : ""}${editHint}
+`🛒 *${isHospitality ? "Rooms/Services" : (isService ? "Services" : "Items")} selected (${allItems.length}):*
+${summary}
 
 Add more ${termAdd}s, or tap below when ready.`,
     buttons: [
@@ -1077,11 +1020,10 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
   if (!seller) return false;
 
   const isService = seller.profileType === "service";
-  const items        = biz?.sessionData?.scQuoteItems || [];
-  const isRFQ        = biz?.sessionData?.scRFQ;
-  const buyerName    = biz?.sessionData?.scBuyerName || "";
-  const buyerPhone   = from;
-  const touristNote  = biz?.sessionData?.scTouristNote || "";
+  const items     = biz?.sessionData?.scQuoteItems || [];
+  const isRFQ     = biz?.sessionData?.scRFQ;
+  const buyerName = biz?.sessionData?.scBuyerName || "";
+  const buyerPhone = from;
 
   if (!items.length) {
     return sendText(from, "❌ No items added. Please list the items you need first.");
@@ -1104,11 +1046,7 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
 
     // Include people/scope count in notification if captured
     const _rfqPeople     = biz?.sessionData?.scPeopleCount;
-    const itemListFull   = [
-      itemList,
-      _rfqPeople  ? "People / scope: " + _rfqPeople : "",
-      touristNote ? "Tourist note: " + touristNote  : ""
-    ].filter(Boolean).join("\n");
+    const itemListFull   = _rfqPeople ? itemList + `\nPeople / scope: ${_rfqPeople}` : itemList;
 
     // Notify seller via existing Meta template system - works outside 24hr window
     await _sendSellerNotification({
@@ -1124,13 +1062,12 @@ async function _scQuoteDone(from, supplierId, biz, saveBiz) {
     _trackConversion(biz);
 
     const _rfqPeopleSummary = _rfqPeople ? `\n👥 People / scope: ${_rfqPeople}` : "";
-    const _noteSummary = touristNote ? `\n📝 Your note: _${touristNote}_` : "";
     return sendButtons(from, {
       text:
-`✅ *Quote request sent to ${seller.businessName}!*
+`✅ *${isService ? "Service quote" : "Quote"} request sent to ${seller.businessName}!*
 
 Reference: *${refNum}*
-${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqPeopleSummary}${_noteSummary}
+${isService ? "Services" : "Items"}: ${items.length} ${isService ? "service" : "item"}${items.length > 1 ? "s" : ""}${_rfqPeopleSummary}
 
 ${itemList}
 

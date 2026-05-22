@@ -387,27 +387,20 @@ function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, 
     }).join("\n");
   }
 
-  // ── Activities / rates — shown for ALL hospitality providers that have them ─
-  // Mixed operators (e.g. lodge + safari + boat hire) show BOTH rooms AND activities.
+  // ── Activities / rates for non-accommodation providers ────────────────────
   let activityLines = "";
-  if ((supplier.rates || []).length > 0) {
-    const allRates = (supplier.rates || []).filter(r => r.service);
-    activityLines = allRates.slice(0, 6).map(r =>
-      "• " + r.service + (r.rate ? " — " + r.rate : " — price on request")
+  if (!isAccom && (supplier.rates || []).length > 0) {
+    activityLines = (supplier.rates || []).slice(0, 5).map(r =>
+      "• " + r.service + (r.rate ? " — " + r.rate : "")
     ).join("\n");
-    const moreRates = allRates.length - 6;
-    if (moreRates > 0) activityLines += "\n_...and " + moreRates + " more activities_";
   }
 
-  // ── Extra services (activities, tours, etc.) ─────────────────────────────
+  // ── Extra services ────────────────────────────────────────────────────────
   let extraLines = "";
   if ((supplier.extraServices || []).length > 0) {
-    const allExtras = supplier.extraServices || [];
-    extraLines = allExtras.slice(0, 8).map(es =>
-      "• " + es.name + (es.price > 0 ? " — $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : " — price on request")
+    extraLines = (supplier.extraServices || []).slice(0, 5).map(es =>
+      "• " + es.name + (es.price > 0 ? " — $" + Number(es.price).toFixed(0) + "/" + (es.unit || "service") : "")
     ).join("\n");
-    const moreExtras = allExtras.length - 8;
-    if (moreExtras > 0) extraLines += "\n_...and " + moreExtras + " more services_";
   }
 
   // ── Facilities ────────────────────────────────────────────────────────────
@@ -438,28 +431,18 @@ function _buildHospitalityCard(supplier, { name, location, city, verifiedBadge, 
   if (credibility) lines.push(credibility);
   if (capLine)     lines.push(capLine);
 
-  // Show rooms section if provider has rooms
-  if (roomLines) {
+  const servicesLabel = isAccom ? "🛏 *Rooms & Rates:*" : "🎯 *Activities & Rates:*";
+  const servicesBody  = isAccom ? roomLines : activityLines;
+
+  if (servicesBody) {
     lines.push("");
-    lines.push("🛏 *Rooms & Rates:*");
-    lines.push(roomLines);
-    const moreRooms = (supplier.roomTypes || []).length - 6;
-    if (moreRooms > 0) lines.push("_...and " + moreRooms + " more room types_");
+    lines.push(servicesLabel);
+    lines.push(servicesBody);
   }
 
-  // Show activities section if provider has rates (shown for ALL — mixed operators get both)
-  if (activityLines) {
-    lines.push("");
-    lines.push("🎯 *Activities & Tours:*");
-    lines.push(activityLines);
-  }
-
-  // Extra services (e.g. airport transfer, fishing, canoe hire entered in admin)
   if (extraLines) {
     lines.push("");
-    // If no rates but has extraServices, use Activities label; else "Additional Services"
-    const extraLabel = !activityLines ? "🎯 *Activities & Services:*" : "➕ *Also Available:*";
-    lines.push(extraLabel);
+    lines.push("➕ *Extra Services:*");
     lines.push(extraLines);
   }
 

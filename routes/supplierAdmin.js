@@ -803,11 +803,22 @@ router.get("/suppliers/new", requireSupplierAdmin, async (req, res) => {
           </div>
 
           <div class="fg full" style="margin-top:12px">
-            <label>Room Types (one per line: <code>name, capacity, price/night</code>)</label>
+            <label>🛏 Room / Accommodation Types <span style="font-weight:400;color:var(--muted)">(one per line — price optional)</span></label>
             <textarea name="roomTypes" rows="5"
-              placeholder="Double room, 2, 80&#10;Twin room, 2, 80&#10;Family chalet, 6, 150&#10;Self-catering unit, 4, 120&#10;Presidential suite, 2, 250"></textarea>
+              placeholder="Double Room, 2, 80&#10;Twin Room, 2, 80&#10;Family Chalet, 6, 150&#10;Presidential Suite, 2&#10;Camping Site, 4"></textarea>
             <span style="font-size:11px;color:var(--muted)">
-              For lodges/hotels only. Format: <code>Room name, max guests, price per night (USD)</code>
+              Format: <code>Room name, max guests, price/night</code> &nbsp;—&nbsp; price can be left out (shows "price on request")
+            </span>
+          </div>
+
+          <div class="fg full" style="margin-top:12px">
+            <label>🎯 Activities &amp; Tour Services <span style="font-weight:400;color:var(--muted)">(one per line — price optional)</span></label>
+            <textarea name="activityServices" rows="6"
+              placeholder="Safari Game Drive, 35&#10;Sunset Boat Cruise, 25&#10;Fishing Trip (half day), 20&#10;Full-Day Tour, 60&#10;Airport Transfer&#10;Canoe Hire (per hour)"></textarea>
+            <span style="font-size:11px;color:var(--muted)">
+              For safari operators, tour guides, boat hire, travel agencies, etc.
+              Format: <code>Service name, price per person/trip</code> &nbsp;—&nbsp; price can be left out.
+              These appear in the smart link catalogue and tourist can request a quote for any of them.
             </span>
           </div>
         </div>
@@ -1109,6 +1120,22 @@ const {
       }
     }
 
+    // ── Parse activityServices (safari drives, boat hire, tours, etc.) ────────
+    // These go into extraServices[] so they appear in smart link + quote catalogue.
+    // Format per line: "Service name, price" or just "Service name" (price on request)
+    const activityExtras = [];
+    if (profileType === "hospitality" && req.body.activityServices) {
+      for (const line of req.body.activityServices.split("\n")) {
+        const parts = line.trim().split(",").map(s => s.trim());
+        const svcName = parts[0];
+        const price   = parts[1] ? Number(parts[1].replace(/[^0-9.]/g, "")) || 0 : 0;
+        const unit    = parts[2]?.trim() || "per person";
+        if (svcName && svcName.length > 1) {
+          activityExtras.push({ name: svcName, price, unit });
+        }
+      }
+    }
+
     const rawFacilities = req.body.facilities || [];
     const facilities = Array.isArray(rawFacilities) ? rawFacilities : [rawFacilities].filter(Boolean);
     const tourismAreas = profileType === "hospitality"
@@ -1284,6 +1311,7 @@ const supplier = await SupplierProfile.create({
   tourismAreas:    tourismAreas    || [],
   facilities:      facilities      || [],
   roomTypes:       roomTypes       || [],
+  extraServices:   activityExtras  || [],
   maxCapacity:     Number(req.body.maxCapacity) || 0,
   checkInTime:     (req.body.checkInTime  || "").trim(),
   checkOutTime:    (req.body.checkOutTime || "").trim(),
