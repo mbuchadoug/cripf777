@@ -2276,14 +2276,6 @@ router.get("/suppliers/:id/activate", requireSupplierAdmin, async (req, res) => 
             </select>
           </div>
           <div class="form-actions">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
-                        background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">
-              <input type="checkbox" name="generateReceipt" value="true" id="genReceipt"
-                     style="width:18px;height:18px;accent-color:#16a34a;cursor:pointer">
-              <label for="genReceipt" style="font-size:14px;font-weight:600;color:#15803d;cursor:pointer">
-                📄 Download professional PDF receipt after activation
-              </label>
-            </div>
             <button type="submit" class="btn btn-green">✅ Activate Now</button>
             <a href="/zq-admin/suppliers/${supplier._id}" class="btn btn-gray">Cancel</a>
           </div>
@@ -2473,101 +2465,6 @@ Type *menu* to access your seller dashboard, manage your products and receive or
       } catch (notifyErr) {
         console.error("[Admin Activate] WhatsApp notify failed:", notifyErr.message);
       }
-    }
-
-    // ── 7. Generate & stream PDF receipt if admin requested it ──────────────
-    if (req.body.generateReceipt === "true" && isActive) {
-      const PDFDocument = (await import("pdfkit")).default;
-      const doc = new PDFDocument({ size: "A5", margin: 0, info: {
-        Title: `ZimQuote Receipt MANUAL_ACTIVATE_${req.params.id}`,
-        Author: "ZimQuote", Subject: "Supplier Activation Receipt"
-      }});
-
-      const refAct  = `ZQ-ACT-${Date.now()}`;
-      const sym     = "$";
-      const amtAct  = 0;
-      const W = doc.page.width;
-      const H = doc.page.height;
-
-      // ── Colour palette ────────────────────────────────────────────────────
-      const NAVY   = "#0f172a", BLUE  = "#1d4ed8", LBLUE = "#3b82f6";
-      const STEEL  = "#475569", MUTED = "#94a3b8",  PALE  = "#f1f5f9";
-      const WHITE  = "#ffffff", GREEN = "#16a34a",  LGRAY = "#e2e8f0";
-      const TIER_COLORS = { featured: "#7c3aed", pro: "#0369a1", basic: "#0f766e" };
-      const tierColor   = TIER_COLORS[tier] || BLUE;
-      const planLabel   = tier.charAt(0).toUpperCase() + tier.slice(1);
-      const cycleLabel  = plan === "annual" ? "Annual" : "Monthly";
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="ZimQuote_Activation_${refAct}.pdf"`);
-      doc.pipe(res);
-
-      // HEADER BAND
-      doc.rect(0, 0, W, 110).fill(NAVY);
-      doc.save().polygon([W - 80, 0], [W, 0], [W, 80]).fill(BLUE).restore();
-      doc.rect(0, 106, W, 4).fill(BLUE);
-      doc.fontSize(28).font("Helvetica-Bold").fillColor(WHITE).text("ZimQuote", 32, 22, { characterSpacing: -0.5 });
-      doc.fontSize(9).font("Helvetica").fillColor(MUTED).text("Zimbabwe\u2019s Marketplace for Products & Services", 34, 56);
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(LBLUE).text("ACTIVATION RECEIPT", 0, 24, { align: "right", width: W - 34 });
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(WHITE).text(refAct, 0, 38, { align: "right", width: W - 34 });
-      doc.fontSize(8).font("Helvetica").fillColor(MUTED).text(now.toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }), 0, 56, { align: "right", width: W - 34 });
-
-      // ACTIVE BADGE
-      doc.roundedRect(32, 124, 80, 22, 11).fill(GREEN);
-      doc.fontSize(9).font("Helvetica-Bold").fillColor(WHITE).text("✓  ACTIVATED", 32, 130, { width: 80, align: "center" });
-
-      // BUSINESS BLOCK
-      doc.fontSize(7).font("Helvetica-Bold").fillColor(MUTED).text("BILLED TO", 32, 122, { characterSpacing: 1.5 });
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(NAVY).text(supplier.businessName, 32, 134);
-      doc.fontSize(9).font("Helvetica").fillColor(STEEL)
-         .text(`📞 ${supplier.phone}`, 32, 152)
-         .text(`📍 ${[supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ")}`, 32, 165);
-      doc.moveTo(32, 184).lineTo(W - 32, 184).strokeColor(LGRAY).lineWidth(0.75).stroke();
-
-      // PLAN CARD
-      const cardY = 194;
-      doc.roundedRect(32, cardY, W - 64, 58, 8).fill(PALE);
-      doc.roundedRect(44, cardY + 12, 58, 18, 9).fill(tierColor);
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(WHITE).text(planLabel.toUpperCase(), 44, cardY + 17, { width: 58, align: "center" });
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(NAVY).text(`${planLabel} Plan  ·  ${cycleLabel}`, 114, cardY + 12);
-      doc.fontSize(9).font("Helvetica").fillColor(STEEL).text(`Valid until: ${expiresAt.toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`, 114, cardY + 28);
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(BLUE).text("Admin Activated", 0, cardY + 22, { align: "right", width: W - 48 });
-
-      // DETAIL TABLE
-      const tableY = cardY + 74, COL2 = 180, ROW_H = 28;
-      const tableRows = [
-        ["Reference",     refAct],
-        ["Activated By",  "ZimQuote Admin"],
-        ["Plan",          `${planLabel} · ${cycleLabel}`],
-        ["Duration",      `${days} days`],
-        ["Active From",   now.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })],
-        ["Active Until",  expiresAt.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })],
-        ["Status",        "Active & Live on ZimQuote"],
-      ];
-      if (reason) tableRows.push(["Note", reason]);
-      tableRows.forEach(([label, value], i) => {
-        const rowY = tableY + i * ROW_H;
-        if (i % 2 === 0) doc.rect(32, rowY, W - 64, ROW_H).fill(PALE);
-        doc.fontSize(8).font("Helvetica-Bold").fillColor(STEEL).text(label.toUpperCase(), 40, rowY + 9, { width: COL2 - 40, characterSpacing: 0.3 });
-        doc.fontSize(9).font("Helvetica").fillColor(NAVY).text(value, COL2 + 8, rowY + 9, { width: W - COL2 - 48 });
-      });
-      const tableBottom = tableY + tableRows.length * ROW_H;
-      doc.moveTo(32, tableBottom).lineTo(W - 32, tableBottom).strokeColor(LGRAY).lineWidth(0.75).stroke();
-
-      // FOOTER
-      const footerY = H - 58;
-      doc.moveTo(0, footerY).lineTo(W, footerY).strokeColor(LGRAY).lineWidth(0.75).stroke();
-      doc.rect(0, footerY, W, 58).fill(PALE);
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(NAVY).text("Thank you for your business!", 32, footerY + 10);
-      doc.fontSize(7.5).font("Helvetica").fillColor(STEEL)
-         .text("Type  menu  on WhatsApp to manage your listing.", 32, footerY + 23)
-         .text("Support: support@zimquote.co.zw", 32, footerY + 35);
-      doc.fontSize(7.5).font("Helvetica").fillColor(MUTED).text("zimquote.co.zw", 0, footerY + 12, { align: "right", width: W - 32 });
-      doc.fillColor(LBLUE).text("Official Activation Receipt", 0, footerY + 24, { align: "right", width: W - 32 });
-      doc.rect(0, H - 4, W, 4).fill(BLUE);
-
-      doc.end();
-      return;
     }
 
     res.redirect(`/zq-admin/suppliers/${req.params.id}?success=${encodeURIComponent("Supplier activated! Business account and WhatsApp access are ready.")}`);
@@ -5274,185 +5171,66 @@ router.post("/suppliers/:id/receipt", requireSupplierAdmin, async (req, res) => 
     const generatePDF = action === "send_and_download" || action === "pdf_only";
     if (generatePDF) {
       const PDFDocument = (await import("pdfkit")).default;
-
-      // ── Page setup: A5 portrait, tight margins ──────────────────────────────
-      const doc = new PDFDocument({ size: "A5", margin: 0, info: {
-        Title: `ZimQuote Receipt ${ref}`,
-        Author: "ZimQuote",
-        Subject: "Supplier Subscription Receipt"
-      }});
+      const doc = new PDFDocument({ size: "A5", margin: 40 });
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="ZimQuote_Receipt_${ref}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="ZimQuote_Receipt_${ref}.pdf"`
+      );
       doc.pipe(res);
 
-      const W = doc.page.width;   // 419.53 pt  (A5)
-      const H = doc.page.height;  // 595.28 pt
+      // ── PDF Header ──────────────────────────────────────────────────────────
+      doc
+        .fontSize(20).font("Helvetica-Bold").fillColor("#1d4ed8")
+        .text("ZimQuote", { align: "center" })
+        .fontSize(11).font("Helvetica").fillColor("#64748b")
+        .text("Supplier Platform - Official Receipt", { align: "center" })
+        .moveDown(0.5);
 
-      // ── Colour palette ──────────────────────────────────────────────────────
-      const NAVY   = "#0f172a";
-      const BLUE   = "#1d4ed8";
-      const LBLUE  = "#3b82f6";
-      const STEEL  = "#475569";
-      const MUTED  = "#94a3b8";
-      const PALE   = "#f1f5f9";
-      const WHITE  = "#ffffff";
-      const GREEN  = "#16a34a";
-      const LGRAY  = "#e2e8f0";
+      // Divider
+      doc.moveTo(40, doc.y).lineTo(375, doc.y).strokeColor("#e2e8f0").lineWidth(1).stroke();
+      doc.moveDown(0.5);
 
-      // ══════════════════════════════════════════════════════════════════════
-      // HEADER BAND
-      // ══════════════════════════════════════════════════════════════════════
-      // Deep navy background
-      doc.rect(0, 0, W, 110).fill(NAVY);
-
-      // Decorative diagonal accent (top-right corner triangle)
-      doc.save()
-         .polygon([W - 80, 0], [W, 0], [W, 80])
-         .fill(BLUE)
-         .restore();
-
-      // Thin blue stripe at bottom of header
-      doc.rect(0, 106, W, 4).fill(BLUE);
-
-      // ZimQuote wordmark
-      doc.fontSize(28).font("Helvetica-Bold").fillColor(WHITE)
-         .text("ZimQuote", 32, 22, { characterSpacing: -0.5 });
-
-      // Tagline
-      doc.fontSize(9).font("Helvetica").fillColor(MUTED)
-         .text("Zimbabwe’s Marketplace for Products & Services", 34, 56);
-
-      // "OFFICIAL RECEIPT" label — right side
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(LBLUE)
-         .text("OFFICIAL RECEIPT", 0, 24, { align: "right", width: W - 34 });
-
-      // Receipt number — right side
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(WHITE)
-         .text(ref, 0, 38, { align: "right", width: W - 34 });
-
-      // Date — right side
-      const dateStr = now.toLocaleString("en-GB", {
-        day: "numeric", month: "long", year: "numeric",
-        hour: "2-digit", minute: "2-digit"
-      });
-      doc.fontSize(8).font("Helvetica").fillColor(MUTED)
-         .text(dateStr, 0, 56, { align: "right", width: W - 34 });
-
-      // ══════════════════════════════════════════════════════════════════════
-      // PAID BADGE
-      // ══════════════════════════════════════════════════════════════════════
-      const badgeX = 32, badgeY = 124;
-      doc.roundedRect(badgeX, badgeY, 72, 22, 11).fill(GREEN);
-      doc.fontSize(9).font("Helvetica-Bold").fillColor(WHITE)
-         .text("✓  PAID", badgeX, badgeY + 6, { width: 72, align: "center" });
-
-      // ══════════════════════════════════════════════════════════════════════
-      // BUSINESS BLOCK
-      // ══════════════════════════════════════════════════════════════════════
+      // ── Receipt details ─────────────────────────────────────────────────────
       const sym = currency === "ZWL" ? "Z$" : currency === "ZAR" ? "R" : "$";
-      const planLabel  = (tier || supplier.tier).charAt(0).toUpperCase() + (tier || supplier.tier).slice(1);
-      const cycleLabel = billingCycle === "annual" ? "Annual" : "Monthly";
-      const methodLabel = (paymentMethod || "Manual").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
-      // Section title
-      doc.fontSize(7).font("Helvetica-Bold").fillColor(MUTED)
-         .text("BILLED TO", 32, 122, { characterSpacing: 1.5 });
-
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(NAVY)
-         .text(supplier.businessName, 32, 134);
-
-      doc.fontSize(9).font("Helvetica").fillColor(STEEL)
-         .text(`📞 ${supplier.phone}`, 32, 152)
-         .text(`📍 ${[supplier.location?.area, supplier.location?.city].filter(Boolean).join(", ")}`, 32, 165);
-
-      // ── Thin divider ────────────────────────────────────────────────────────
-      doc.moveTo(32, 184).lineTo(W - 32, 184).strokeColor(LGRAY).lineWidth(0.75).stroke();
-
-      // ══════════════════════════════════════════════════════════════════════
-      // PLAN HIGHLIGHT CARD
-      // ══════════════════════════════════════════════════════════════════════
-      const cardY = 194;
-      doc.roundedRect(32, cardY, W - 64, 58, 8).fill(PALE);
-
-      // Plan tier badge
-      const TIER_COLORS = { featured: "#7c3aed", pro: "#0369a1", basic: "#0f766e" };
-      const tierColor = TIER_COLORS[(tier || supplier.tier)] || BLUE;
-      doc.roundedRect(44, cardY + 12, 58, 18, 9).fill(tierColor);
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(WHITE)
-         .text(planLabel.toUpperCase(), 44, cardY + 17, { width: 58, align: "center" });
-
-      // Plan details
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(NAVY)
-         .text(`${planLabel} Plan  ·  ${cycleLabel}`, 114, cardY + 12);
-      doc.fontSize(9).font("Helvetica").fillColor(STEEL)
-         .text(`Valid until: ${expiryDate.toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`, 114, cardY + 28);
-
-      // Amount — right of card
-      doc.fontSize(20).font("Helvetica-Bold").fillColor(BLUE)
-         .text(`${sym}${amountNum.toFixed(2)}`, 0, cardY + 16, { align: "right", width: W - 48 });
-
-      // ══════════════════════════════════════════════════════════════════════
-      // DETAIL TABLE
-      // ══════════════════════════════════════════════════════════════════════
-      const tableY   = cardY + 74;
-      const COL1     = 32;
-      const COL2     = 180;
-      const ROW_H    = 28;
-
-      const tableRows = [
-        ["Receipt Number",  ref],
-        ["Payment Method",  methodLabel],
-        ["Subscription",    `${planLabel} · ${cycleLabel}`],
-        ["Amount Paid",     `${sym}${amountNum.toFixed(2)}`],
-        ["Valid From",      now.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })],
-        ["Valid Until",     expiryDate.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })],
-        ["Status",          "Active & Live on ZimQuote"],
+      const rows = [
+        ["Receipt No.",    ref],
+        ["Date",           now.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })],
+        ["Business",       supplier.businessName],
+        ["Phone",          supplier.phone],
+        ["Plan",           `${(tier || supplier.tier).charAt(0).toUpperCase() + (tier || supplier.tier).slice(1)} (${billingCycle === "annual" ? "Annual" : "Monthly"})`],
+        ["Amount Paid",    `${sym}${amountNum.toFixed(2)}`],
+        ["Payment Method", (paymentMethod || "Manual").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())],
+        ["Valid Until",    expiryDate.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })],
+        ["Status",         "✓ PAID"],
       ];
-      if (adminNote) tableRows.push(["Note", adminNote]);
 
-      tableRows.forEach(([label, value], i) => {
-        const rowY = tableY + i * ROW_H;
-        // Alternating row background
-        if (i % 2 === 0) {
-          doc.rect(32, rowY, W - 64, ROW_H).fill(PALE);
-        }
-        doc.fontSize(8).font("Helvetica-Bold").fillColor(STEEL)
-           .text(label.toUpperCase(), COL1 + 8, rowY + 9, { width: COL2 - COL1 - 8, characterSpacing: 0.3 });
-        doc.fontSize(9).font("Helvetica").fillColor(NAVY)
-           .text(value, COL2 + 8, rowY + 9, { width: W - COL2 - 48 });
-      });
+      if (adminNote) rows.push(["Note", adminNote]);
 
-      // Bottom border of table
-      const tableBottom = tableY + tableRows.length * ROW_H;
-      doc.moveTo(32, tableBottom).lineTo(W - 32, tableBottom).strokeColor(LGRAY).lineWidth(0.75).stroke();
+      for (const [label, value] of rows) {
+        doc
+          .fontSize(10).font("Helvetica-Bold").fillColor("#475569")
+          .text(label, 40, doc.y, { continued: true, width: 130 })
+          .font("Helvetica").fillColor("#0f172a")
+          .text(value, { align: "left" })
+          .moveDown(0.3);
+      }
 
-      // ══════════════════════════════════════════════════════════════════════
-      // FOOTER
-      // ══════════════════════════════════════════════════════════════════════
-      const footerY = H - 58;
+      // Divider
+      doc.moveDown(0.3);
+      doc.moveTo(40, doc.y).lineTo(375, doc.y).strokeColor("#e2e8f0").lineWidth(1).stroke();
+      doc.moveDown(0.5);
 
-      // Thin top border
-      doc.moveTo(0, footerY).lineTo(W, footerY).strokeColor(LGRAY).lineWidth(0.75).stroke();
-
-      // Footer band
-      doc.rect(0, footerY, W, 58).fill(PALE);
-
-      // Left: thank-you text
-      doc.fontSize(8).font("Helvetica-Bold").fillColor(NAVY)
-         .text("Thank you for your business!", 32, footerY + 10);
-      doc.fontSize(7.5).font("Helvetica").fillColor(STEEL)
-         .text("Type  menu  on WhatsApp to manage your listing.", 32, footerY + 23)
-         .text("Support: support@zimquote.co.zw", 32, footerY + 35);
-
-      // Right: website
-      doc.fontSize(7.5).font("Helvetica").fillColor(MUTED)
-         .text("zimquote.co.zw", 0, footerY + 12, { align: "right", width: W - 32 })
-         .fillColor(LBLUE)
-         .text("Official Payment Receipt", 0, footerY + 24, { align: "right", width: W - 32 });
-
-      // Subtle bottom stripe
-      doc.rect(0, H - 4, W, 4).fill(BLUE);
+      // Footer
+      doc
+        .fontSize(9).font("Helvetica").fillColor("#94a3b8")
+        .text("Thank you for your payment. Your listing is now LIVE on ZimQuote.", { align: "center" })
+        .text("Type menu on WhatsApp to access your seller dashboard.", { align: "center" })
+        .moveDown(0.5)
+        .fillColor("#cbd5e1")
+        .text("ZimQuote - Zimbabwe's Supplier & Service Platform", { align: "center" });
 
       doc.end();
       return; // Response already handled by PDF pipe
