@@ -1124,62 +1124,6 @@ const SUBURB_TO_CITY = {
 
   //Murehwa suburbs
   "macheke": "Murehwa",
-
-  // Victoria Falls areas
-  "victoria falls": "Victoria Falls",
-  "vic falls": "Victoria Falls",
-  "chinotimba": "Victoria Falls",
-  "mkhosana": "Victoria Falls",
-  "mlalankunzi": "Victoria Falls",
-  "aerodrome": "Victoria Falls",
-  "victoria falls town": "Victoria Falls",
-  "falls way": "Victoria Falls",
-  "parkway": "Victoria Falls",
-  "westwood": "Victoria Falls",
-  "chamabondo": "Victoria Falls",
-
-  // Kariba areas
-  "kariba": "Kariba",
-  "kariba heights": "Kariba",
-  "mahombekombe": "Kariba",
-  "nyamhunga": "Kariba",
-  "charara": "Kariba",
-  "andora harbour": "Kariba",
-  "kariba town": "Kariba",
-  "caribbea bay": "Kariba",
-
-  // Hwange areas
-  "hwange": "Hwange",
-  "hwange town": "Hwange",
-  "empumalanga": "Hwange",
-  "hwange colliery": "Hwange",
-  "victoria falls road hwange": "Hwange",
-  "baobab": "Hwange",
-  "crossroads hwange": "Hwange",
-
-  // Binga areas
-  "binga": "Binga",
-  "binga town": "Binga",
-  "lusulu": "Binga",
-  "siachilaba": "Binga",
-
-  // Nyanga areas
-  "nyanga": "Nyanga",
-  "nyanga town": "Nyanga",
-  "troutbeck": "Nyanga",
-  "juliasdale": "Nyanga",
-  "mtarazi": "Nyanga",
-  "rhodes nyanga": "Nyanga",
-
-  // Beitbridge areas
-  "beitbridge": "Beitbridge",
-  "beitbridge town": "Beitbridge",
-  "dulibadzimu": "Beitbridge",
-
-  // Zvishavane areas
-  "zvishavane": "Zvishavane",
-  "maglas": "Zvishavane",
-  "mandava": "Zvishavane",
 };
 
 function normalizeLocationPart(value = "") {

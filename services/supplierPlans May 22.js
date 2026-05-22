@@ -55,14 +55,7 @@ export const SUPPLIER_CITIES = [
   "Masvingo",
   "Chinhoyi",
   "Bindura",
-  "Murehwa",
-  "Victoria Falls",
-  "Kariba",
-  "Hwange",
-  "Binga",
-  "Nyanga",
-  "Beitbridge",
-  "Zvishavane"
+  "Murehwa"
 ];
 
 
