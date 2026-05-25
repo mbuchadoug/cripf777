@@ -4158,15 +4158,30 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       const _introRequest  = await BuyerRequest.findById(_resolvedRequestId);
 
-      // FIX: Helper to check if this supplier already responded or declined this request
+      // ── Multi-format phone lookup (primary phone OR notification contact) ──────
+      // FIX: Do this BEFORE the helper functions so _introSupplier is available.
+      const _introPhone2   = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
+      let _introSupplier = await SupplierProfile.findOne({
+        phone: { $in: [phone, _introPhone2, "+" + phone] }
+      }).lean();
+      if (!_introSupplier) {
+        _introSupplier = await SupplierProfile.findOne({
+          notificationContacts: { $in: [phone, _introPhone2, "+" + phone] }
+        }).lean();
+        if (_introSupplier) {
+          console.log(`[OFFER INTRO] ${phone} is a notification contact for ${_introSupplier.businessName} (${_introSupplier.phone})`);
+        }
+      }
+
+      // ── Helper: has this supplier already responded or declined this request? ───
       const _myNormPhone = String(phone).replace(/\D+/g, "");
+      const _introSuppId = String(_introSupplier?._id || "");
       function _supplierAlreadyResponded(req) {
         if (!req) return true;
         if (req.status === "closed") return true;
         // Check declinedBy array (set when "Not Available" is tapped)
         if ((req.declinedBy || []).some(p => String(p).replace(/\D+/g,"") === _myNormPhone)) return true;
-        // Check responses array for existing response from this phone
-        const _introSuppId = String(_introSupplier?._id || "");
+        // Check responses array - match by phone OR supplierId (whichever is available)
         if ((req.responses || []).some(r =>
           String(r.supplierPhone || "").replace(/\D+/g,"") === _myNormPhone ||
           (_introSuppId && String(r.supplierId || "") === _introSuppId)
@@ -4174,7 +4189,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         return false;
       }
 
-      // Helper to advance to next valid pending request or clear state
+      // ── Helper: advance to next valid pending request or clear all state ────────
       async function _advanceOrClearPendingRequests(skipId, reason = "closed") {
         await UserSession.findOneAndUpdate(
           { phone },
@@ -4187,7 +4202,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
         const _nxtSess = await UserSession.findOne({ phone }).lean();
         const _nxtMap  = _nxtSess?.tempData?.sellerPendingRequests || {};
-        // Filter to only IDs that have not been responded to
         const _nxtIds  = Object.keys(_nxtMap).filter(id => id !== skipId);
         const _validNxt = [];
         for (const id of _nxtIds) {
@@ -4195,7 +4209,6 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           if (_nxtReq && !_supplierAlreadyResponded(_nxtReq)) {
             _validNxt.push(id);
           } else {
-            // Clean up expired/responded entries from map
             await UserSession.findOneAndUpdate(
               { phone },
               { $unset: { [`tempData.sellerPendingRequests.${id}`]: "" } },
@@ -4227,25 +4240,10 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         );
       }
 
+      // ── Skip this request if supplier already responded or it's closed ───────
       if (!_introRequest || _supplierAlreadyResponded(_introRequest)) {
-        // Already responded or closed — advance to next valid request or clear
         const _reason = !_introRequest ? "closed" : "already_responded";
         return _advanceOrClearPendingRequests(_resolvedRequestId, _reason);
-      }
-
-      // ── Multi-format phone lookup (primary phone OR notification contact) ──────
-      const _introPhone2   = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
-      let _introSupplier = await SupplierProfile.findOne({
-        phone: { $in: [phone, _introPhone2, "+" + phone] }
-      }).lean();
-      // If not found as primary, check if this phone is a notification contact
-      if (!_introSupplier) {
-        _introSupplier = await SupplierProfile.findOne({
-          notificationContacts: { $in: [phone, _introPhone2, "+" + phone] }
-        }).lean();
-        if (_introSupplier) {
-          console.log(`[OFFER INTRO] ${phone} is a notification contact for ${_introSupplier.businessName} (${_introSupplier.phone})`);
-        }
       }
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
