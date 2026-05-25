@@ -3967,17 +3967,34 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       if (_scDraft) {
         const _scDraftSupplierPhone = _scDraft.supplierPhone || _scDraft.sellerPhone || "";
         const _myPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
+        let _shouldDiscard = false;
 
         if (!_scDraftSupplierPhone) {
-          // Legacy draft (pre-supplierPhone field) — accept only if phone owns a SupplierProfile
-          const _legacyProfile = await SupplierProfile.findOne({ phone: { $in: [phone, _myPhone2] } }).lean();
-          if (!_legacyProfile) {
-            console.log(`[SC DRAFT GUARD] ${phone}: legacy draft, no matching SupplierProfile — discarding`);
-            _scDraft = null;
-          }
+          // Legacy draft with no supplierPhone — cannot verify ownership, always discard.
+          // These are left over from before the supplierPhone field was added.
+          // A legitimate draft will always have supplierPhone set (from sellerChat.js).
+          console.log(`[SC DRAFT GUARD] ${phone}: legacy draft has no supplierPhone — discarding`);
+          _shouldDiscard = true;
         } else if (_scDraftSupplierPhone !== phone && _scDraftSupplierPhone !== _myPhone2) {
-          // Draft has a supplierPhone but it doesn't match — belongs to a different seller
+          // Draft's supplierPhone doesn't match this phone — belongs to a different seller
           console.log(`[SC DRAFT GUARD] ${phone}: draft belongs to ${_scDraftSupplierPhone} — discarding`);
+          _shouldDiscard = true;
+        }
+
+        if (_shouldDiscard) {
+          // Actively clear the stale draft from the session so it never shows again
+          try {
+            await UserSession.findOneAndUpdate(
+              { phone },
+              { $unset: {
+                  "tempData.scPendingSellerQuote": "",
+                  "tempData.scSellerQuoteState":   "",
+                  "tempData.scBuyerPhone":          ""
+                }
+              },
+              { upsert: true }
+            );
+          } catch (_) {}
           _scDraft = null;
         }
       }
@@ -4066,23 +4083,26 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // This is the reliable entry point for outside-24hr-session suppliers.
     // ── ESCAPE HATCH: seller can always type 0/menu/cancel to exit offer flow ──────
     // Without this, a pending BuyerRequest blocks ALL other actions permanently.
-    if (
-      sellerRequestReplyState &&
-      sellerRequestReplyState.startsWith("awaiting_offer") &&
-      (al === "0" || al === "00" || al === "menu" || al === "cancel" || al === "exit")
-    ) {
+    if (al === "0" || al === "00" || al === "menu" || al === "cancel" || al === "exit") {
+      // Clear ALL pending quote/offer state so nothing stale blocks the seller
       await UserSession.findOneAndUpdate(
         { phone },
         { $unset: {
             "tempData.sellerRequestReplyState": "",
             "tempData.sellerRequestId":         "",
             "tempData.pendingDraftQuote":        "",
-            "tempData.pendingOfferResponse":     ""
+            "tempData.pendingOfferResponse":     "",
+            "tempData.scPendingSellerQuote":     "",
+            "tempData.scSellerQuoteState":       "",
+            "tempData.scBuyerPhone":             "",
+            "tempData.sellerQueueList":          ""
           }
         },
         { upsert: true }
       );
-      console.log(`[ESCAPE] ${phone} exited offer flow via "${al}"`);
+      if (sellerRequestReplyState?.startsWith("awaiting_offer")) {
+        console.log(`[ESCAPE] ${phone} exited offer flow via "${al}"`);
+      }
       // Fall through to normal menu handling below
     }
 
