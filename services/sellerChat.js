@@ -226,6 +226,36 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const seller = await SupplierProfile.findById(supplierId).lean();
   if (!seller) return sendText(from, "❌ Seller profile not found. Please try again.");
 
+  // ── FIX: Clear stale BuyerRequest seller-side state when a BUYER opens this
+  // smart link. If the visitor is a SELLER who owns this profile, their BuyerRequest
+  // state (awaiting_offer / awaiting_offer_intro) is NOT the buyer-facing sc_ flow,
+  // so it should NOT be cleared here — they need that state to respond to requests.
+  // We only clear if the visitor is NOT this seller (i.e. it's a buyer visiting).
+  // Detection: if biz exists and biz is the supplier's own business, skip.
+  try {
+    const _fromPhone = String(from).replace(/\D+/g, "");
+    const _sellerPhone = String(seller.phone || "").replace(/\D+/g, "");
+    const _isOwnProfile = _fromPhone === _sellerPhone ||
+      (seller.notificationContacts || []).some(nc => String(nc).replace(/\D+/g,"") === _fromPhone);
+
+    if (!_isOwnProfile) {
+      // This is a BUYER visiting the smart link — clear any residual sc_ biz state
+      // that could have been left from a previous sc_ interaction, and ensure
+      // the BuyerRequest state in UserSession doesn't bleed through.
+      // We do NOT touch sellerRequestReplyState here — the seller's quote flow
+      // is in a different UserSession (the seller's phone, not the buyer's).
+      if (biz && biz.sessionState && biz.sessionState.startsWith("sc_") &&
+          biz.sessionData?.scSellerId && biz.sessionData.scSellerId !== supplierId) {
+        // Buyer was in a different seller's sc_ flow — reset to start fresh
+        biz.sessionState = "ready";
+        biz.sessionData  = {};
+        if (saveBiz) await saveBiz(biz);
+      }
+    }
+  } catch (_scCleanErr) {
+    // Non-critical, never rethrow
+  }
+
   const isHospitality = seller.profileType === "hospitality";
   const isService     = seller.profileType === "service";
   const PREVIEW_MAX = 5; // Items shown on profile card (teaser only - full list via View Catalogue button)
@@ -829,24 +859,37 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
 
   // ── Hospitality instructions prompt ──────────────────────────────────────
   if (isHospitality) {
+    // Build a quick-reference reminder of first 4 items so buyer doesn't
+    // have to scroll back up to check what number maps to what.
+    const _hospRefLines = allItems.slice(0, 4).map((item, i) => {
+      const _rateStr = item.rate ? `  -  ${item.rate}` : `  -  price on request`;
+      return `${i + 1}. ${item.service}${_rateStr}`;
+    }).join("\n");
+    const _hospRefSuffix = allItems.length > 4
+      ? `\n_...scroll up for full list (${allItems.length} total)_`
+      : "";
+
+    // Build concrete examples using actual item names
     const ex1Name = allItems[0]?.service || "Double Room";
     const ex2Name = allItems[1]?.service || null;
-    const ex3Name = allItems[2]?.service || null;
 
-    // Build context-aware examples
-    const exParts = [`_1_ → select item 1`];
-    if (ex2Name) exParts.push(`_2_ → ${ex2Name}`);
-    exParts.push(`_1×3_ → item 1, qty 3 (e.g. 3 nights)`);
-    if (ex2Name) exParts.push(`_1×2, 2×1_ → mix`);
+    const exLines = [
+      `_1_ → ${ex1Name}`,
+      `_1×2_ → ${ex1Name}, 2 nights/units`,
+      ex2Name ? `_2_ → ${ex2Name}` : null,
+      ex2Name ? `_1×2, 2×1_ → mix of items` : null,
+    ].filter(Boolean).join("\n");
 
     return sendButtons(from, {
       text:
         `🏨 *Select what you need:*\n\n` +
-        `Type the *item number* from the list.\n` +
+        `📌 *Quick reference:*\n${_hospRefLines}${_hospRefSuffix}\n\n` +
+        `Type the *item number* from the list above.\n` +
         `Add *×qty* for multiple nights, rooms, or people.\n\n` +
-        exParts.join("   ") + `\n\n` +
+        `*Examples:*\n${exLines}\n\n` +
         `Then type *done* to send your request.\n` +
-        `Or type *note: your message* to add details (e.g. _note: sunset cruise, 8 people, Saturday 18:00_).\n\n` +
+        `Or type *note: your message* to add details\n` +
+        `_e.g. note: 8 people, Saturday, need airport pickup_\n\n` +
         `Type *cancel* to go back.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
     });

@@ -4134,7 +4134,13 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // Fires regardless of what they typed ("hi", "hello", a price, anything).
     // Shows them the full item list + View & Quote button properly.
     // This is the reliable entry point for outside-24hr-session suppliers.
-    if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
+    //
+    // FIX: if the seller is currently in an active sc_ smart-link buyer session
+    // (e.g. a buyer is browsing their hospitality catalogue and typing item numbers),
+    // the sc_ flow must take priority. We skip the BuyerRequest interceptor so the
+    // seller's biz.sessionState sc_awaiting_items is handled correctly downstream.
+    if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId &&
+        !biz?.sessionState?.startsWith("sc_")) {
 
       // ── FIX: resolve requestId from the button ID, not just the scalar ──────────
       // Template buttons are req_offer_<requestId> and req_unavail_<requestId>.
@@ -4152,42 +4158,79 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       const _introRequest  = await BuyerRequest.findById(_resolvedRequestId);
 
-      if (!_introRequest) {
-        // Clean up this specific entry
+      // FIX: Helper to check if this supplier already responded or declined this request
+      const _myNormPhone = String(phone).replace(/\D+/g, "");
+      function _supplierAlreadyResponded(req) {
+        if (!req) return true;
+        if (req.status === "closed") return true;
+        // Check declinedBy array (set when "Not Available" is tapped)
+        if ((req.declinedBy || []).some(p => String(p).replace(/\D+/g,"") === _myNormPhone)) return true;
+        // Check responses array for existing response from this phone
+        const _introSuppId = String(_introSupplier?._id || "");
+        if ((req.responses || []).some(r =>
+          String(r.supplierPhone || "").replace(/\D+/g,"") === _myNormPhone ||
+          (_introSuppId && String(r.supplierId || "") === _introSuppId)
+        )) return true;
+        return false;
+      }
+
+      // Helper to advance to next valid pending request or clear state
+      async function _advanceOrClearPendingRequests(skipId, reason = "closed") {
         await UserSession.findOneAndUpdate(
           { phone },
           { $unset: {
               "tempData.sellerRequestReplyState": "",
               "tempData.sellerRequestId":          "",
-              [`tempData.sellerPendingRequests.${_resolvedRequestId}`]: ""
+              [`tempData.sellerPendingRequests.${skipId}`]: ""
           }},
           { upsert: true }
         );
-
-        // Check if other pending requests remain for this seller
-        const _remainSess = await UserSession.findOne({ phone }).lean();
-        const _remainMap  = _remainSess?.tempData?.sellerPendingRequests || {};
-        const _remainIds  = Object.keys(_remainMap).filter(id => id !== _resolvedRequestId);
-        if (_remainIds.length > 0) {
+        const _nxtSess = await UserSession.findOne({ phone }).lean();
+        const _nxtMap  = _nxtSess?.tempData?.sellerPendingRequests || {};
+        // Filter to only IDs that have not been responded to
+        const _nxtIds  = Object.keys(_nxtMap).filter(id => id !== skipId);
+        const _validNxt = [];
+        for (const id of _nxtIds) {
+          const _nxtReq = await BuyerRequest.findById(id).lean().catch(() => null);
+          if (_nxtReq && !_supplierAlreadyResponded(_nxtReq)) {
+            _validNxt.push(id);
+          } else {
+            // Clean up expired/responded entries from map
+            await UserSession.findOneAndUpdate(
+              { phone },
+              { $unset: { [`tempData.sellerPendingRequests.${id}`]: "" } },
+              { upsert: true }
+            );
+          }
+        }
+        if (_validNxt.length > 0) {
           await UserSession.findOneAndUpdate(
             { phone },
             { $set: {
                 "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-                "tempData.sellerRequestId":          _remainIds[0]
+                "tempData.sellerRequestId":          _validNxt[0]
             }},
             { upsert: true }
           );
+          const _msgReason = reason === "already_responded"
+            ? `You already responded to that request.`
+            : `That request has closed.`;
           return sendText(from,
-            `⏰ That request has closed. You have ${_remainIds.length} other pending request(s).\n\n` +
+            `⏰ ${_msgReason} You have ${_validNxt.length} other pending request(s).\n\n` +
             `Reply with anything to see the next one.`
           );
         }
-
         return sendText(from,
           `⏰ *That request has closed.*\n\n` +
           `The buyer's request has expired or been filled.\n\n` +
           `New requests will be sent to you automatically when buyers need your products or services.`
         );
+      }
+
+      if (!_introRequest || _supplierAlreadyResponded(_introRequest)) {
+        // Already responded or closed — advance to next valid request or clear
+        const _reason = !_introRequest ? "closed" : "already_responded";
+        return _advanceOrClearPendingRequests(_resolvedRequestId, _reason);
       }
 
       // ── Multi-format phone lookup (primary phone OR notification contact) ──────
@@ -4232,7 +4275,20 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           const _reqDocs = await Promise.all(
             _pendingIds.map(id => BuyerRequest.findById(id).lean().catch(() => null))
           );
-          const _validDocs = _reqDocs.filter(Boolean);
+          // FIX: filter out requests where this supplier already responded or declined
+          const _myPhone = String(phone).replace(/\D+/g, "");
+          const _validDocs = _reqDocs.filter(req => {
+            if (!req) return false;
+            if (req.status === "closed") return false;
+            // Skip if this phone is in declinedBy
+            if ((req.declinedBy || []).some(p => String(p).replace(/\D+/g,"") === _myPhone)) return false;
+            // Skip if this supplier already submitted a response
+            if ((req.responses || []).some(r =>
+              String(r.supplierPhone || "").replace(/\D+/g,"") === _myPhone ||
+              String(r.supplierId || "") === String(_introSupplier?._id || "")
+            )) return false;
+            return true;
+          });
           if (_validDocs.length > 1) {
             const _reqLines = _validDocs.map((req, i) => {
               const _ref   = buildBuyerRequestRef(req);
@@ -4443,23 +4499,40 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       // ── If supplier tapped "Not Available" from the v2 template ─────────────
       if (a === "not_available" || al === "not available") {
+        // FIX: fully clear ALL BuyerRequest session state, not just the one entry.
+        // Also remove from sellerPendingRequests map so it can't reappear.
         await UserSession.findOneAndUpdate(
           { phone },
           { $unset: {
-              "tempData.sellerRequestReplyState": "",
-              "tempData.sellerRequestId":          "",
+              "tempData.sellerRequestReplyState":  "",
+              "tempData.sellerRequestId":           "",
+              "tempData.pendingDraftQuote":         "",
+              "tempData.pendingOfferResponse":      "",
               [`tempData.sellerPendingRequests.${_resolvedRequestId}`]: ""
           }},
           { upsert: true }
         );
         if (_introSupplier) {
           const _naResponse = {
-            supplierId: _introSupplier._id, supplierPhone: _introSupplier.phone,
-            supplierName: _introSupplier.businessName, mode: "unavailable",
-            message: "", items: [], totalAmount: null,
-            deliveryAvailable: _introSupplier.delivery?.available ?? null, etaText: ""
+            supplierId:       _introSupplier._id,
+            supplierPhone:    _introSupplier.phone,
+            supplierName:     _introSupplier.businessName,
+            mode:             "unavailable",
+            message:          "",
+            items:            [],
+            totalAmount:      null,
+            deliveryAvailable: _introSupplier.delivery?.available ?? null,
+            etaText:          "",
+            respondedAt:      new Date()
           };
           _introRequest.responses.push(_naResponse);
+          // FIX: mark the request as declined by this supplier so it never
+          // re-opens for them. We store the supplier's phone in a declinedBy array.
+          if (!_introRequest.declinedBy) _introRequest.declinedBy = [];
+          const _naPhone = String(_introSupplier.phone || phone).replace(/\D+/g, "");
+          if (!_introRequest.declinedBy.includes(_naPhone)) {
+            _introRequest.declinedBy.push(_naPhone);
+          }
           await _introRequest.save();
           await sendBuyerRequestResponseToBuyer({ request: _introRequest, supplier: _introSupplier, response: _naResponse });
         }
@@ -4593,7 +4666,9 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
 
     // If supplier types while in confirm state, treat as wanting to edit → re-enter pricing
-    if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a) {
+    // FIX: skip if sc_ smart-link buyer session is active
+    if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a &&
+        !biz?.sessionState?.startsWith("sc_")) {
       await UserSession.findOneAndUpdate(
         { phone },
         {
@@ -4621,7 +4696,12 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
     }
 
-   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId && !isMetaAction) {
+   // FIX: skip BuyerRequest awaiting_offer handler if an sc_ smart-link buyer
+   // session is active on this phone. The sc_ flow (biz.sessionState) handles
+   // typed input like "1x3,5" - if we let awaiting_offer run first it hijacks
+   // the input and shows the wrong (old BuyerRequest) quote preview.
+   if (sellerRequestReplyState === "awaiting_offer" && sellerRequestId && !isMetaAction &&
+       !biz?.sessionState?.startsWith("sc_")) {
 
   // ── cancel ───────────────────────────────────────────────────────────────
   if (al === "cancel") {
