@@ -221,7 +221,22 @@ function formatMoney(amount, currency) {
   return `${sym}${n}`;
 }
 
+async function findBuyerRequestByIdOrRef(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
 
+  if (mongoose.Types.ObjectId.isValid(raw)) {
+    return BuyerRequest.findById(raw);
+  }
+
+  return BuyerRequest.findOne({
+    $or: [
+      { ref: raw },
+      { reference: raw },
+      { requestRef: raw }
+    ]
+  });
+}
 
 // ── Invoice/quote/receipt preview with edit option ────────────────────────
 async function _sendInvoicePreview(from, biz, extraNote = "") {
@@ -4219,7 +4234,7 @@ if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || a
         if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
       }
 
-      const _introRequest  = await BuyerRequest.findById(_resolvedRequestId);
+    const _introRequest = await findBuyerRequestByIdOrRef(_resolvedRequestId);
 
       // ── Multi-format phone lookup (primary phone OR notification contact) ──────
       // FIX: Do this BEFORE the helper functions so _introSupplier is available.
@@ -17163,8 +17178,8 @@ if (!_confirmedResp?.supplierPhone) {
 }
 
 if (a.startsWith("req_offer_")) {
-  const requestId = a.replace("req_offer_", "");
-  const request = await BuyerRequest.findById(requestId);
+  const requestId = a.replace("req_offer_", "").trim().toUpperCase();
+  const request = await findBuyerRequestByIdOrRef(requestId);
   if (!request) return sendText(from, "❌ Request not found or expired.");
 
   const supplier = await SupplierProfile.findOne({ phone }).lean();
@@ -17216,7 +17231,7 @@ if (a.startsWith("req_offer_")) {
 
 if (a.startsWith("req_auto_")) {
   const requestId = a.replace("req_auto_", "");
-  const request = await BuyerRequest.findById(requestId);
+  const request = await findBuyerRequestByIdOrRef(requestId);
   if (!request) return sendText(from, "❌ Request not found or expired.");
 
   return sendButtons(from, {
