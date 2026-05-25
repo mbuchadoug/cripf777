@@ -793,17 +793,20 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
       ex2Name ? `*1×2, 2×3* → 2× ${ex1Name} and 3× ${ex2Name}` : null,
     ].filter(Boolean);
 
+    // Send instructions as plain text first (no 1024-char limit), then buttons
+    await sendText(from,
+      `🏨 *How to select rooms, activities or services:*\n\n` +
+      `Type the *item number* from the list above.\n` +
+      `Use *×qty* for multiple nights, rooms, or people.\n\n` +
+      `*Examples:*\n` + exLines.map(e => `  ${e}`).join("\n") +
+      `\n\n` +
+      `💡 *Tips:*\n` +
+      `  _note: 2 adults, 3 nights, 15 June_ → adds details to your request\n` +
+      `  _edit: 1: correct name_ → fixes a misspelled item\n` +
+      `  Type *done* when finished  ·  *cancel* to go back`
+    );
     return sendButtons(from, {
-      text:
-        `🏨 *Select rooms, activities or services:*\n\n` +
-        `Type the *item numbers* from the list above.\n` +
-        `Use *×qty* for multiple nights, rooms, or people.\n\n` +
-        `*Examples:*\n` + exLines.map(e => `  ${e}`).join("\n") +
-        `\n\n` +
-        `💡 *Tips:*\n` +
-        `  Type *note: your details* to add info (dates, group size, special requests)\n` +
-        `  Type *edit: 1: new name* to rename/correct an item\n` +
-        `  Type *done* when finished  ·  *cancel* to go back`,
+      text: `Tap below to send an enquiry instead, or type item numbers above to get a quote.`,
       buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
     });
   }
@@ -920,12 +923,12 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
         `Now type the item numbers you want from the list above, then type *done* to send.`
       );
     }
+    const _noteSummary2 = `🛒 *Selected (${existingCart.length}):*\n` +
+      existingCart.map(it => `• ${it.qty}× ${it.name}`).join("\n") +
+      `\n\n📝 _Note saved: "${touristNote}"_`;
+    await sendText(from, _noteSummary2);
     return sendButtons(from, {
-      text:
-        `📝 Note added: _"${touristNote}"_\n\n` +
-        `🛒 *Selected (${existingCart.length}):*\n` +
-        existingCart.map(it => `• ${it.qty}× ${it.name}`).join("\n") + `\n\n` +
-        `Type more item numbers, or tap *Get Quote* to send your request.`,
+      text: `Type more item numbers to add, or tap below when ready.`,
       buttons: [
         { id: `sc_quote_done_${supplierId}`, title: isHospitality ? "✅ Get Service Quote" : "✅ Get Quote" },
         { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" }
@@ -1066,14 +1069,33 @@ async function _scProcessItemList(from, supplierId, raw, biz, saveBiz) {
     ? "📤 Send Request"
     : (isHospitality ? "✅ Get Service Quote" : (isService ? "✅ Get Service Quote" : "✅ Get Quote"));
 
-  const editHint = `\n\n_Type *note: your details* to add info (e.g. dates, group size)._\n_Type *edit: 1: new name* to rename an item._`;
+  // ── Send instructions as a SEPARATE message first ─────────────────────────
+  // WhatsApp button messages have a 1024-char body limit. With items + hints the
+  // text gets truncated silently, hiding all instructions. Splitting into two
+  // messages guarantees the tourist always sees the full instructions.
+  const _cartHeader = isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items");
+  const _cartBody   = `🛒 *${_cartHeader} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*\n${summary}` +
+    (savedNote ? `\n\n📝 _Note: ${savedNote}_` : "");
 
+  // Build context-aware instructions
+  const _noteExample = isHospitality
+    ? "note: 2 adults, 3 nights, 15 June"
+    : "note: office of 10 staff, 2nd floor";
+  const _editExample = `edit: 1: ${allItems[0]?.name || "correct name"}`;
+
+  const _instructionMsg =
+    `➕ *Add more ${termAdd}s* by typing their numbers (e.g. _3_, _5×2_)
+` +
+    `📝 *Add a note:* type _${_noteExample}_
+` +
+    `✏️ *Fix an item name:* type _${_editExample}_
+
+` +
+    `When done, tap *${termDone}* below, or *🗑 Start Over* to clear.`;
+
+  await sendText(from, _cartBody);
   return sendButtons(from, {
-    text:
-`🛒 *${isHospitality ? "Selected (rooms/activities)" : (isService ? "Services" : "Items")} — ${allItems.length} item${allItems.length === 1 ? "" : "s"}:*
-${summary}${savedNote ? "\n\n📝 _Note: " + savedNote + "_" : ""}${editHint}
-
-Add more ${termAdd}s, or tap below when ready.`,
+    text: _instructionMsg,
     buttons: [
       { id: `sc_quote_done_${supplierId}`,  title: termDone },
       { id: `sc_quote_clear_${supplierId}`, title: "🗑 Start Over" },
