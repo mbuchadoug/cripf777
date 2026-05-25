@@ -2316,7 +2316,16 @@ async function findSuppliersForBuyerRequest({ items = [], city = null, area = nu
 }
 
 function buildBuyerRequestRef(request) {
-  return `REQ-${String(request._id).slice(-6).toUpperCase()}`;
+  return (
+    request?.ref ||
+    request?.reference ||
+    request?.requestRef ||
+    `REQ-${String(request?._id || "").slice(-6).toUpperCase()}`
+  );
+}
+
+function getBuyerRequestKey(request) {
+  return String(request?._id || "").trim();
 }
 
 
@@ -2683,11 +2692,11 @@ export async function notifySuppliersOfBuyerRequest(request) {
           : "🏠 Collection / flexible";
 
    // Step 1: Send template ping - reaches supplier even outside 24-hour window
-      await notifySupplierNewRequestTemplate({
-        supplierPhone:        supplier.phone,
-        supplier,                                      // full object for VIP check
-        notificationContacts: supplier.notificationContacts || [],
-        requestId:            String(request._id),
+     await notifySupplierNewRequestTemplate({
+  supplierPhone:        supplier.phone,
+  supplier,
+  notificationContacts: supplier.notificationContacts || [],
+  requestId:            requestKey,
         ref,
         locationText:  _templateLocation,
         itemCount:     _templateItemCount,
@@ -2712,7 +2721,7 @@ export async function notifySuppliersOfBuyerRequest(request) {
       //
       // FIX: store requestIds in a map (sellerPendingRequests) so a notification
       // contact on multiple sellers' lists never has one request overwrite another.
-      const _reqId = String(request._id);
+      const _reqId = requestKey;
 
       async function _setSellerRequestSession(targetPhone) {
         const _existing = await UserSession.findOne({ phone: targetPhone }).lean();
@@ -4321,10 +4330,20 @@ if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || a
       }
 
       // ── Skip this request if supplier already responded or it's closed ───────
-      if (!_introRequest || _supplierAlreadyResponded(_introRequest)) {
-        const _reason = !_introRequest ? "closed" : "already_responded";
-        return _advanceOrClearPendingRequests(_resolvedRequestId, _reason);
-      }
+     if (!_introRequest) {
+  console.warn(`[OFFER INTRO] Request not found for payload=${_resolvedRequestId}`);
+  return sendText(
+    from,
+    `⚠️ I could not open that request.\n\nPlease tap the latest *View & Quote* button again, or type *menu*.`
+  );
+}
+
+if (_supplierAlreadyResponded(_introRequest)) {
+  return sendText(
+    from,
+    `✅ You already responded to this request.\n\nNew requests will be sent to you automatically.`
+  );
+}
 
       const _introRef       = buildBuyerRequestRef(_introRequest);
       const _introItems     = (_introRequest.items || []);
@@ -4654,10 +4673,10 @@ if (!_resolvedRequestId && (a === "view_and_quote" || al === "view & quote" || a
           `─────────────────\n` +
           `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
           `The buyer receives your quote instantly.`,
-        buttons: [
-          { id: `req_offer_${_resolvedRequestId}`,   title: "View & Quote"  },
-          { id: `req_unavail_${_resolvedRequestId}`, title: "Not Available" }
-        ]
+      buttons: [
+  { id: `req_offer_${String(_introRequest._id)}`,   title: "View & Quote"  },
+  { id: `req_unavail_${String(_introRequest._id)}`, title: "Not Available" }
+]
       });
     }
 
