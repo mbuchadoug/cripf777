@@ -3786,9 +3786,16 @@ try {
   // Must be placed HERE - after biz is declared, but before the supplier
   // search text handler (which was treating ZQ:SCHOOL:... as a product search).
   // ZQ:SCHOOL:<id> and ZQ:SUPPLIER:<id> arrive as plain text from wa.me links.
-  if (/^ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+  //
+  // FIX: wa.me pre-fill text sometimes gets doubled by WhatsApp
+  //   e.g. "ZQ:SUPPLIER:<id>ZQ:SUPPLIER:<id>"
+  // Extract only the FIRST valid 24-char hex ObjectId so the doubled/malformed
+  // string never reaches the ObjectId parser.
+  if (/ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+    const _zqMatch = text.match(/ZQ:(SCHOOL|SUPPLIER):([a-f0-9]{24})/i);
+    const _zqCleanText = _zqMatch ? ("ZQ:" + _zqMatch[1].toUpperCase() + ":" + _zqMatch[2]) : text;
     const _zqHandled = await handleZqDeepLink({
-      from, text, biz,
+      from, text: _zqCleanText, biz,
       saveBiz: saveBizSafe.bind(null, biz)
     });
     if (_zqHandled) return;
@@ -11219,8 +11226,12 @@ if (!biz && !isMetaAction && flowSess?.tempData?.schoolEnquiryState === "school_
 }
 
 // ── ZQ deep-link intercept (ZQ:SCHOOL:id and ZQ:SUPPLIER:id) ────────────────
-if (!isMetaAction && /^ZQ:(SCHOOL|SUPPLIER):/i.test(text)) {
-  const _handled = await handleZqDeepLink({ from, text, biz, saveBiz: saveBizSafe.bind(null, biz) });
+// FIX: tightened regex to require valid 24-char hex ID, and sanitize text to
+// extract only the first valid deep-link token (handles wa.me doubled pre-fills).
+if (!isMetaAction && /ZQ:(SCHOOL|SUPPLIER):[a-f0-9]{24}/i.test(text)) {
+  const _zqMatch2 = text.match(/ZQ:(SCHOOL|SUPPLIER):([a-f0-9]{24})/i);
+  const _zqClean2 = _zqMatch2 ? ("ZQ:" + _zqMatch2[1].toUpperCase() + ":" + _zqMatch2[2]) : text;
+  const _handled = await handleZqDeepLink({ from, text: _zqClean2, biz, saveBiz: saveBizSafe.bind(null, biz) });
   if (_handled) return;
 }
 
