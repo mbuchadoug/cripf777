@@ -128,12 +128,16 @@ async function _sendTemplate(to, templateName, variables = []) {
 }
 
 // ─── Low-level: send v2 template (2 quick reply buttons) ─────────────────────
-async function _sendTemplateV2(to, templateName, variables = []) {
+async function _sendTemplateV2(to, templateName, variables = [], requestId = null) {
   const phone = _normalizeZimPhone(to);
+
+  const viewPayload = requestId ? `req_offer_${requestId}` : "view_and_quote";
+  const noPayload   = requestId ? `req_unavail_${requestId}` : "not_available";
+
   const components = [
     { type: "body", parameters: variables.map(v => ({ type: "text", text: String(v).slice(0, 1024) })) },
-    { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: "view_and_quote" }] },
-    { type: "button", sub_type: "quick_reply", index: "1", parameters: [{ type: "payload", payload: "not_available" }] }
+    { type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: viewPayload }] },
+    { type: "button", sub_type: "quick_reply", index: "1", parameters: [{ type: "payload", payload: noPayload }] }
   ];
 
   const res = await axios.post(
@@ -146,6 +150,7 @@ async function _sendTemplateV2(to, templateName, variables = []) {
     },
     { headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, "Content-Type": "application/json" } }
   );
+
   return res.data;
 }
 
@@ -222,22 +227,22 @@ async function _sendNewRequestToPhone({
     try {
       if (isVip && buyerPhone) {
         // ── VIP path: 5-variable template with buyer phone ──────────────────
-        await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2_with_phone", [
-          _itemSummary,
-          locationText,
-          deliveryLine,
-          ref,
-          _formatPhoneDisplay(buyerPhone)
-        ]);
+      await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2_with_phone", [
+  _itemSummary,
+  locationText,
+  deliveryLine,
+  ref,
+  _formatPhoneDisplay(buyerPhone)
+], requestId);
         console.log(`[BUY REQ TPL VIP] supplier_new_request_v2_with_phone → ${normalizedPhone} (${ref})`);
       } else {
         // ── Standard path ───────────────────────────────────────────────────
-        await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2", [
-          _itemSummary,
-          locationText,
-          deliveryLine,
-          ref
-        ]);
+    await _sendTemplateV2(normalizedPhone, "supplier_new_request_v2", [
+  _itemSummary,
+  locationText,
+  deliveryLine,
+  ref
+], requestId);
         console.log(`[BUY REQ TPL v2] supplier_new_request_v2 → ${normalizedPhone} (${ref})`);
       }
       return;
