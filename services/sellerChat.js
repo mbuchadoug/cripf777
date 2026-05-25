@@ -1265,24 +1265,14 @@ The seller will review and price your request.
       },
       { upsert: true }
     );
-    // Fan out to notification contacts - they receive the template too
-    const _notifPhones = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
-    if (_notifPhones.length > 0) {
-      await Promise.allSettled(_notifPhones.map(nc =>
-        UserSession.findOneAndUpdate(
-          { phone: nc },
-          {
-            $set: {
-              "tempData.scPendingSellerQuote": _draftPayload,
-              "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-              "tempData.scBuyerPhone":          buyerPhone,
-            }
-          },
-          { upsert: true }
-        )
-      ));
-    }
-    console.log(`[SC QUOTE] Draft stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
+    // NOTE: We intentionally do NOT fan-out scPendingSellerQuote to notification contacts.
+    // Notification contacts receive the Meta template notification (handled by _sendSellerNotification).
+    // Writing the draft to their session causes cross-contamination: a phone that is a
+    // notification contact for multiple sellers would see whichever draft was written last,
+    // regardless of which "View & Quote" button they tapped.
+    // Notification contacts who tap "View & Quote" are handled by the sellerRequestReplyState
+    // flow (BuyerRequest path), not the scPendingSellerQuote path.
+    console.log(`[SC QUOTE] Draft stored on primary session for ${seller.businessName} (${_primaryPhone})`);
   } catch (err) {
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }

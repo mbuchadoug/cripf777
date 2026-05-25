@@ -3960,40 +3960,25 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         ? (typeof _scDraftRaw === "string" ? (() => { try { return JSON.parse(_scDraftRaw); } catch { return null; } })() : _scDraftRaw)
         : null;
 
-      // Guard: only use this draft if it was created for THIS seller phone.
-      // Prevents notification contacts (who may also be buyers) from having
-      // their buyer-side smart link quote accidentally fire here.
+      // Guard: only use this draft if it belongs to THIS seller phone.
+      // sc_ drafts are now stored ONLY on the primary seller session (not notification contacts),
+      // so this check just verifies the supplierPhone field matches.
+      // Legacy drafts (no supplierPhone field) are accepted if this phone owns a SupplierProfile.
       if (_scDraft) {
         const _scDraftSupplierPhone = _scDraft.supplierPhone || _scDraft.sellerPhone || "";
         const _myPhone2 = phone.startsWith("263") ? "0" + phone.slice(3) : "263" + phone.slice(1);
 
-        // If the draft has NO supplierPhone (stored before this field was added),
-        // accept it if this phone directly owns a SupplierProfile — safe fallback.
         if (!_scDraftSupplierPhone) {
-          const _fallbackProfile = await SupplierProfile.findOne({
-            phone: { $in: [phone, _myPhone2] }
-          }).lean();
-          if (!_fallbackProfile) {
-            // No supplier profile for this phone AND no supplierPhone in draft
-            // — could be a stale buyer-side quote, discard it.
-            console.log(`[SC DRAFT GUARD] ${phone} has legacy draft with no supplierPhone and no SupplierProfile — ignoring`);
+          // Legacy draft (pre-supplierPhone field) — accept only if phone owns a SupplierProfile
+          const _legacyProfile = await SupplierProfile.findOne({ phone: { $in: [phone, _myPhone2] } }).lean();
+          if (!_legacyProfile) {
+            console.log(`[SC DRAFT GUARD] ${phone}: legacy draft, no matching SupplierProfile — discarding`);
             _scDraft = null;
           }
-          // else: phone owns a profile → accept the draft (it's theirs)
-        } else {
-          // Draft has a supplierPhone — verify it matches this phone or their notification contacts
-          const _scDraftSellerProfile = await SupplierProfile.findOne({
-            phone: { $in: [_scDraftSupplierPhone, _myPhone2] }
-          }).lean();
-          const _scIsMyDraft = (
-            _scDraftSupplierPhone === phone ||
-            _scDraftSupplierPhone === _myPhone2 ||
-            (_scDraftSellerProfile?.notificationContacts || []).some(nc => nc === phone || nc === _myPhone2)
-          );
-          if (!_scIsMyDraft) {
-            console.log(`[SC DRAFT GUARD] ${phone} has a scPendingSellerQuote that belongs to ${_scDraftSupplierPhone} — ignoring`);
-            _scDraft = null;
-          }
+        } else if (_scDraftSupplierPhone !== phone && _scDraftSupplierPhone !== _myPhone2) {
+          // Draft has a supplierPhone but it doesn't match — belongs to a different seller
+          console.log(`[SC DRAFT GUARD] ${phone}: draft belongs to ${_scDraftSupplierPhone} — discarding`);
+          _scDraft = null;
         }
       }
  
