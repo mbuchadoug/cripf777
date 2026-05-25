@@ -4052,7 +4052,19 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
         }
       }
  
-      if (_scDraft && (
+      // FIX: If the seller has a pending BuyerRequest (awaiting_offer_intro/awaiting_offer),
+      // the BuyerRequest path must take priority over a stale _scDraft.
+      // "view_and_quote" from the BuyerRequest template button must NOT be intercepted
+      // here — the BuyerRequest handler below handles it correctly.
+      const _hasPendingBuyerReq = !!(sellerRequestReplyState === "awaiting_offer_intro" ||
+        sellerRequestReplyState === "awaiting_offer");
+      const _scDraftShouldHandle = _scDraft && !(_hasPendingBuyerReq && (
+        a === "view_and_quote" || al === "view & quote" || al === "view and quote" ||
+        a === "not_available" || al === "not available" ||
+        a?.startsWith("req_offer_") || a?.startsWith("req_unavail_")
+      ));
+
+      if (_scDraftShouldHandle && (
         a === "view_and_quote" ||
         al === "view & quote" ||
         al === "view and quote" ||
