@@ -2694,17 +2694,43 @@ export async function notifySuppliersOfBuyerRequest(request) {
       // when the supplier sends a message back to us, not when we send to them.
       // Instead, the FIRST message the supplier sends (even "hi") will show
       // them the full item list + View & Quote button. See awaiting_offer_intro handler.
-      await UserSession.findOneAndUpdate(
-        { phone: _normalizedSupplierPhone },
-        {
-          $set: {
-            "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-            "tempData.sellerRequestId":         String(request._id)
-          }
-        },
-        { upsert: true }
-      );
-      console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone}`);
+      //
+      // FIX: store requestIds in a map (sellerPendingRequests) so a notification
+      // contact on multiple sellers' lists never has one request overwrite another.
+      const _reqId = String(request._id);
+
+      async function _setSellerRequestSession(targetPhone) {
+        const _existing = await UserSession.findOne({ phone: targetPhone }).lean();
+        let _map = {};
+        try {
+          const _raw = _existing?.tempData?.sellerPendingRequests;
+          _map = _raw ? (typeof _raw === "object" && !Array.isArray(_raw) ? _raw : JSON.parse(_raw)) : {};
+        } catch (_) { _map = {}; }
+
+        // Prune entries older than 48 hours
+        const _cutoff = Date.now() - 48 * 60 * 60 * 1000;
+        for (const key of Object.keys(_map)) {
+          if ((_map[key]?.storedAt || 0) < _cutoff) delete _map[key];
+        }
+        _map[_reqId] = { state: "awaiting_offer_intro", storedAt: Date.now(), requestId: _reqId };
+
+        await UserSession.findOneAndUpdate(
+          { phone: targetPhone },
+          {
+            $set: {
+              // New map — safely accumulates multiple concurrent request pointers
+              "tempData.sellerPendingRequests":    _map,
+              // Legacy scalar — kept for backward compat with in-flight sessions
+              "tempData.sellerRequestReplyState":  "awaiting_offer_intro",
+              "tempData.sellerRequestId":           _reqId
+            }
+          },
+          { upsert: true }
+        );
+      }
+
+      await _setSellerRequestSession(_normalizedSupplierPhone);
+      console.log(`[BUYER REQ] Session set to awaiting_offer_intro for ${_normalizedSupplierPhone} (req ${_reqId})`);
 
       // ── Also set awaiting_offer_intro for all notification contacts ────────────
       // They receive the template too (fan-out in notifySupplierNewRequestTemplate)
@@ -2715,17 +2741,8 @@ export async function notifySuppliersOfBuyerRequest(request) {
           const _ncNorm = String(nc).replace(/\D+/g, "");
           const _ncPhone = _ncNorm.startsWith("0") && _ncNorm.length === 10
             ? "263" + _ncNorm.slice(1) : _ncNorm;
-          await UserSession.findOneAndUpdate(
-            { phone: _ncPhone },
-            {
-              $set: {
-                "tempData.sellerRequestReplyState": "awaiting_offer_intro",
-                "tempData.sellerRequestId":         String(request._id)
-              }
-            },
-            { upsert: true }
-          );
-          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone}`);
+          await _setSellerRequestSession(_ncPhone);
+          console.log(`[BUYER REQ] Session set to awaiting_offer_intro for notif contact ${_ncPhone} (req ${_reqId})`);
         }));
       }
       notifiedIds.push(supplier._id);
@@ -3777,6 +3794,47 @@ try {
     if (_zqHandled) return;
   }
 
+  // ── HARD-RESET: "menu" / "0" / "cancel" / main_menu_back always escape ───────
+  // Runs BEFORE all state interceptors (buyer request flow, seller pending request,
+  // smart-link quote state, booking flow) so no active state can trap a user.
+  // This fixes: seller stuck viewing the same pending request; buyer unable to
+  // reach the main menu while in a quote/booking/request flow.
+  const _isHardReset =
+    al === "menu"      || al === "main menu" || al === "main_menu" ||
+    al === "0"         || al === "00"        || al === "000"       ||
+    al === "cancel"    ||
+    a  === "main_menu_back";
+
+  if (_isHardReset) {
+    // Reset buyer biz session if stuck in any flow state
+    if (biz && biz.sessionState && biz.sessionState !== "ready") {
+      biz.sessionState = "ready";
+      biz.sessionData  = {};
+      await saveBizSafe(biz);
+    }
+    // Clear ALL active flow state from UserSession so nothing re-triggers
+    await UserSession.findOneAndUpdate(
+      { phone },
+      { $unset: {
+          // Buyer request flow
+          "tempData.buyerRequestState":      "",
+          "tempData.pendingBuyerRequest":    "",
+          "tempData.buyerRequestMode":       "",
+          // Seller BuyerRequest flow
+          "tempData.sellerRequestReplyState": "",
+          "tempData.sellerRequestId":         "",
+          "tempData.pendingDraftQuote":       "",
+          "tempData.pendingOfferResponse":    "",
+          // Seller smart-link quote flow
+          "tempData.scSellerQuoteState":      "",
+          // Browse-and-shop quote reply
+          "tempData.pendingQuoteReply":       "",
+      }},
+      { upsert: true }
+    );
+    return sendMainMenu(from);
+  }
+
   // ZQ:REQUEST deep link
   // Share: https://wa.me/263771143904?text=ZQ%3AREQUEST
   // Drops any user straight into Request Sellers flow.
@@ -3945,11 +4003,47 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // Fires when the seller has a pending draft quote from the sc_ smart link flow
     // (stored as scPendingSellerQuote in their UserSession by sellerChat.js _scQuoteDone).
     // This has nothing to do with BuyerRequest - it's a direct smart-link quote.
+    //
+    // FIX: use the scPendingDrafts MAP keyed by refNum so the correct draft is
+    // returned when the seller has multiple concurrent smart-link quote notifications.
     {
-      const _scDraftRaw = flowSess?.tempData?.scPendingSellerQuote;
-      const _scDraft    = _scDraftRaw
-        ? (typeof _scDraftRaw === "string" ? (() => { try { return JSON.parse(_scDraftRaw); } catch { return null; } })() : _scDraftRaw)
-        : null;
+      // Extract refNum from the action button ID if it's a specific quote action
+      let _scTargetRef = null;
+      if (a?.startsWith("sc_quote_confirm_")) _scTargetRef = a.replace("sc_quote_confirm_", "").toUpperCase();
+      else if (a?.startsWith("sc_quote_edit_")) _scTargetRef = a.replace("sc_quote_edit_", "").toUpperCase();
+      else if (a?.startsWith("sc_rfq_price_"))  _scTargetRef = a.replace("sc_rfq_price_", "").toUpperCase();
+
+      let _scDraft = null;
+      const _draftsMapRaw = flowSess?.tempData?.scPendingDrafts;
+
+      // Try the map with the specific refNum from the button (most reliable)
+      if (_draftsMapRaw && _scTargetRef) {
+        try {
+          const _map = typeof _draftsMapRaw === "string" ? JSON.parse(_draftsMapRaw) : _draftsMapRaw;
+          const _candidate = _map[_scTargetRef];
+          if (_candidate) _scDraft = typeof _candidate === "string" ? JSON.parse(_candidate) : _candidate;
+        } catch (_) {}
+      }
+
+      // For "view_and_quote" (no specific refNum), use scLastNotifiedRef to pick the right draft
+      if (!_scDraft && _draftsMapRaw) {
+        const _lastRef = flowSess?.tempData?.scLastNotifiedRef;
+        if (_lastRef) {
+          try {
+            const _map = typeof _draftsMapRaw === "string" ? JSON.parse(_draftsMapRaw) : _draftsMapRaw;
+            const _candidate = _map[_lastRef];
+            if (_candidate) _scDraft = typeof _candidate === "string" ? JSON.parse(_candidate) : _candidate;
+          } catch (_) {}
+        }
+      }
+
+      // Final fallback: legacy scPendingSellerQuote scalar (backward compat)
+      if (!_scDraft) {
+        const _legacyRaw = flowSess?.tempData?.scPendingSellerQuote;
+        if (_legacyRaw) {
+          try { _scDraft = typeof _legacyRaw === "string" ? JSON.parse(_legacyRaw) : _legacyRaw; } catch (_) {}
+        }
+      }
  
       if (_scDraft && (
         a === "view_and_quote" ||
@@ -4034,14 +4128,54 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // Shows them the full item list + View & Quote button properly.
     // This is the reliable entry point for outside-24hr-session suppliers.
     if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId) {
-      const _introRequest  = await BuyerRequest.findById(sellerRequestId);
+
+      // ── FIX: resolve requestId from the button ID, not just the scalar ──────────
+      // Template buttons are req_offer_<requestId> and req_unavail_<requestId>.
+      // When seller taps one of these, `a` already has the correct requestId embedded.
+      // Using the button ID prevents the wrong request from opening when the scalar
+      // was overwritten by a more recent notification.
+      let _resolvedRequestId = sellerRequestId;
+      if (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_")) {
+        const _btnId = a.replace("req_offer_", "").trim();
+        if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
+      } else if (a?.startsWith("req_unavail_")) {
+        const _btnId = a.replace("req_unavail_", "").trim();
+        if (_btnId && _btnId.length > 5) _resolvedRequestId = _btnId;
+      }
+
+      const _introRequest  = await BuyerRequest.findById(_resolvedRequestId);
 
       if (!_introRequest) {
+        // Clean up this specific entry
         await UserSession.findOneAndUpdate(
           { phone },
-          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { $unset: {
+              "tempData.sellerRequestReplyState": "",
+              "tempData.sellerRequestId":          "",
+              [`tempData.sellerPendingRequests.${_resolvedRequestId}`]: ""
+          }},
           { upsert: true }
         );
+
+        // Check if other pending requests remain for this seller
+        const _remainSess = await UserSession.findOne({ phone }).lean();
+        const _remainMap  = _remainSess?.tempData?.sellerPendingRequests || {};
+        const _remainIds  = Object.keys(_remainMap).filter(id => id !== _resolvedRequestId);
+        if (_remainIds.length > 0) {
+          await UserSession.findOneAndUpdate(
+            { phone },
+            { $set: {
+                "tempData.sellerRequestReplyState": "awaiting_offer_intro",
+                "tempData.sellerRequestId":          _remainIds[0]
+            }},
+            { upsert: true }
+          );
+          return sendText(from,
+            `⏰ That request has closed. You have ${_remainIds.length} other pending request(s).\n\n` +
+            `Reply with anything to see the next one.`
+          );
+        }
+
         return sendText(from,
           `⏰ *That request has closed.*\n\n` +
           `The buyer's request has expired or been filled.\n\n` +
@@ -4068,6 +4202,51 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       const _introItems     = (_introRequest.items || []);
       const _introIsService = _introSupplier?.profileType === "service";
 
+      // ── FIX: when seller types something generic (not a specific button tap),
+      // check if they have multiple pending requests and show a picker so they
+      // can choose which one to open — preventing the wrong request from auto-opening.
+      const _isSpecificAction = a?.startsWith("req_offer_") || a?.startsWith("req_unavail_")
+        || a === "view_and_quote" || al === "view & quote" || al === "view and quote"
+        || a === "not_available"  || al === "not available";
+
+      if (!_isSpecificAction) {
+        let _pendingMap = {};
+        try {
+          const _pendingSess = await UserSession.findOne({ phone }).lean();
+          _pendingMap = _pendingSess?.tempData?.sellerPendingRequests || {};
+          const _cutoff48 = Date.now() - 48 * 60 * 60 * 1000;
+          for (const key of Object.keys(_pendingMap)) {
+            if ((_pendingMap[key]?.storedAt || 0) < _cutoff48) delete _pendingMap[key];
+          }
+        } catch (_) { _pendingMap = {}; }
+
+        const _pendingIds = Object.keys(_pendingMap).filter(Boolean);
+        if (_pendingIds.length > 1) {
+          const _reqDocs = await Promise.all(
+            _pendingIds.map(id => BuyerRequest.findById(id).lean().catch(() => null))
+          );
+          const _validDocs = _reqDocs.filter(Boolean);
+          if (_validDocs.length > 1) {
+            const _reqLines = _validDocs.map((req, i) => {
+              const _ref   = buildBuyerRequestRef(req);
+              const _items = (req.items || []).map(it => it.product || it.service).slice(0, 2).join(", ");
+              const _loc   = req.area ? `${req.area}, ${req.city || ""}` : (req.city || "");
+              return `${i + 1}. *${_ref}* — ${_items}${_loc ? ` (${_loc})` : ""}`;
+            }).join("\n");
+            return sendButtons(from, {
+              text:
+                `📋 *You have ${_validDocs.length} pending quote requests:*\n\n` +
+                `${_reqLines}\n\n` +
+                `Tap one to open and quote it.`,
+              buttons: _validDocs.slice(0, 3).map(req => ({
+                id:    `req_offer_${String(req._id)}`,
+                title: buildBuyerRequestRef(req)
+              }))
+            });
+          }
+        }
+      }
+
       // ── Send image to seller if this request has an approved photo ──────────
       // Sent BEFORE the pricing form so the seller sees context first.
       // Uses a separate sendImage call — template messages cannot carry images.
@@ -4085,8 +4264,10 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       }
 
       // ── If supplier tapped "View & Quote" from the v2 template ───────────────
+      // Also fires when they tap a specific req_offer_<id> button from the picker.
       // Go DIRECTLY to the pricing form - skip the intermediate buttons message.
-      if (a === "view_and_quote" || al === "view & quote" || al === "view and quote") {
+      if (a === "view_and_quote" || al === "view & quote" || al === "view and quote"
+          || (a?.startsWith("req_offer_") && !a.startsWith("req_offer_confirm_"))) {
         // ── Build auto-priced draft from supplier's own prices + preset prices ──
         const _draft = buildDraftQuoteFromRequest(_introSupplier, _introRequest);
 
@@ -4113,7 +4294,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           {
             $set: {
               "tempData.sellerRequestReplyState": "awaiting_offer",
-              "tempData.sellerRequestId":         sellerRequestId,
+              "tempData.sellerRequestId":         _resolvedRequestId,
               "tempData.pendingDraftQuote":        _draft,
               "tempData.pendingOfferResponse":     JSON.stringify(_draftResponse)
             }
@@ -4257,7 +4438,11 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
       if (a === "not_available" || al === "not available") {
         await UserSession.findOneAndUpdate(
           { phone },
-          { $unset: { "tempData.sellerRequestReplyState": "", "tempData.sellerRequestId": "" } },
+          { $unset: {
+              "tempData.sellerRequestReplyState": "",
+              "tempData.sellerRequestId":          "",
+              [`tempData.sellerPendingRequests.${_resolvedRequestId}`]: ""
+          }},
           { upsert: true }
         );
         if (_introSupplier) {
@@ -4294,7 +4479,10 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
 
       await UserSession.findOneAndUpdate(
         { phone },
-        { $set: { "tempData.sellerRequestReplyState": "awaiting_offer" } },
+        { $set: {
+            "tempData.sellerRequestReplyState": "awaiting_offer",
+            "tempData.sellerRequestId":          _resolvedRequestId
+        }},
         { upsert: true }
       );
 
@@ -4309,8 +4497,8 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
           `Tap *View & Quote* to enter your price${_introItems.length === 1 ? "" : "s"}.\n` +
           `The buyer receives your quote instantly.`,
         buttons: [
-          { id: `req_offer_${sellerRequestId}`,   title: "View & Quote"  },
-          { id: `req_unavail_${sellerRequestId}`, title: "Not Available" }
+          { id: `req_offer_${_resolvedRequestId}`,   title: "View & Quote"  },
+          { id: `req_unavail_${_resolvedRequestId}`, title: "Not Available" }
         ]
       });
     }

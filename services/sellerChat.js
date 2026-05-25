@@ -41,6 +41,65 @@ function _normPhone(raw = "") {
   return p;
 }
 
+// ─── Draft map helpers ────────────────────────────────────────────────────────
+// Drafts are stored as scPendingDrafts: { [refNum]: draftPayload } so a phone
+// that is a notification contact for multiple sellers never has one draft
+// overwrite another. Legacy scPendingSellerQuote scalar kept for backward compat.
+
+async function _getSellerDraft(phone, refNum) {
+  const UserSession = (await import("../models/userSession.js")).default;
+  const sess = await UserSession.findOne({ phone: _normPhone(phone) }).lean();
+  if (!sess) return null;
+
+  // Try map first (new format)
+  const _mapRaw = sess?.tempData?.scPendingDrafts;
+  if (_mapRaw) {
+    try {
+      const _map = typeof _mapRaw === "string" ? JSON.parse(_mapRaw) : _mapRaw;
+      const key = (refNum || "").toUpperCase();
+      if (_map[key]) {
+        const val = _map[key];
+        return typeof val === "string" ? JSON.parse(val) : val;
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: legacy scalar — only if refNum matches
+  const _raw = sess?.tempData?.scPendingSellerQuote;
+  if (!_raw) return null;
+  try {
+    const _draft = typeof _raw === "string" ? JSON.parse(_raw) : _raw;
+    if (_draft && (_draft.refNum || "").toUpperCase() === (refNum || "").toUpperCase()) {
+      return _draft;
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function _clearSellerDraft(phone, refNum) {
+  const UserSession = (await import("../models/userSession.js")).default;
+  const sess = await UserSession.findOne({ phone: _normPhone(phone) }).lean();
+  let _draftsMap = {};
+  try {
+    const _raw = sess?.tempData?.scPendingDrafts;
+    _draftsMap = _raw ? (typeof _raw === "string" ? JSON.parse(_raw) : _raw) : {};
+  } catch (_) {}
+  delete _draftsMap[(refNum || "").toUpperCase()];
+
+  await UserSession.findOneAndUpdate(
+    { phone: _normPhone(phone) },
+    {
+      $set:   { "tempData.scPendingDrafts": JSON.stringify(_draftsMap) },
+      $unset: {
+        "tempData.scPendingSellerQuote": "",
+        "tempData.scSellerQuoteState":   "",
+        "tempData.scBuyerPhone":         ""
+      }
+    },
+    { upsert: true }
+  );
+}
+
 // Non-blocking smart link conversion tracker
 function _trackConversion(biz) {
   if (biz?.sessionData?.scSource && biz.sessionData.scSellerId) {
@@ -800,6 +859,20 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     ? (item.service || item)
     : (item.product || item);
 
+  // ── Quick-reference: repeat the first 3 items inline so the buyer doesn't
+  // have to scroll back up to check what number maps to what service/product.
+  const _qrLines = allItems.slice(0, 3).map((item, i) => {
+    const name = (isHospitality || isService) ? item.service : item.product;
+    const price = (isHospitality || isService)
+      ? (item.rate ? "  " + item.rate : "")
+      : (item.amount ? "  $" + Number(item.amount).toFixed(2) + "/" + (item.unit || "each") : "");
+    return `${i + 1}. ${name}${price}`;
+  }).join("\n");
+  const _qrSuffix = allItems.length > 3
+    ? `\n_...scroll up for full list (${allItems.length} total)_`
+    : "";
+  const _quickRef = `📌 *Quick reference:*\n${_qrLines}${_qrSuffix}\n\n`;
+
   if (hasPrices) {
     // Priced: show "number × qty" examples using real item numbers
     const ex1 = allItems[0] ? `1×1` : "1×1";
@@ -816,12 +889,12 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
     return sendText(from,
 `📝 *Select what you need:*
 
-Type *item number × quantity*, e.g:
+${_quickRef}Type *item number × quantity*, e.g:
 ${exampleLine}
 ${singleHint ? "\n" + singleHint : ""}${multiHint ? "\n" + multiHint : ""}
 
 ${isService
-  ? "Qty = number of times / rooms / jobs needed."
+  ? "Qty = number of times / jobs needed."
   : "Qty = how many units you need."}
 
 Type *done* when finished, or *cancel* to go back.`
@@ -832,7 +905,6 @@ Type *done* when finished, or *cancel* to go back.`
     // Build examples using the seller's actual service names
     const name1 = allItems[0] ? _ex(0, allItems[0]) : null;
     const name2 = allItems[1] ? _ex(1, allItems[1]) : null;
-    const name3 = allItems[2] ? _ex(2, allItems[2]) : null;
 
     // Pick 1-2 realistic scope hints based on what the service is
     // (e.g. a cleaner gets "3-bed house", a plumber gets "blocked drain")
@@ -851,7 +923,7 @@ Type *done* when finished, or *cancel* to go back.`
     return sendText(from,
 `📝 *Which services do you need?*
 
-Type the *number(s)* from the list above.
+${_quickRef}Type the *number(s)* from the list above.
 Add details after a colon if needed.
 
 ${examples}
@@ -872,7 +944,7 @@ Type *done* when finished, or *cancel* to go back.`
     return sendText(from,
 `📝 *Which products do you need?*
 
-Type item *number(s)* from the list, or type the name + quantity.
+${_quickRef}Type item *number(s)* from the list, or type the name + quantity.
 
 ${examples}
 
@@ -1209,42 +1281,56 @@ The seller will review and price your request.
   }).join("\n");
 
   // Store draft in SELLER's UserSession (primary + all notification contacts)
-  // so any registered line can tap View & Quote and respond
+  // FIX: store as a MAP keyed by refNum so multiple concurrent requests from
+  // different buyers never overwrite each other, especially on shared notification
+  // contact phones that may be listed on several sellers' accounts.
   try {
     const UserSession = (await import("../models/userSession.js")).default;
-    const _draftPayload = JSON.stringify({
-      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry, isService
-    });
+    const _draftPayload = {
+      refNum, supplierId, buyerPhone, buyerName, lineItems, total, expiry,
+      isService, storedAt: Date.now()
+    };
+
+    async function _addDraftToSession(targetPhone) {
+      const _existing = await UserSession.findOne({ phone: targetPhone }).lean();
+      let _draftsMap = {};
+      try {
+        const _raw = _existing?.tempData?.scPendingDrafts;
+        _draftsMap = _raw ? (typeof _raw === "string" ? JSON.parse(_raw) : _raw) : {};
+      } catch (_) { _draftsMap = {}; }
+
+      // Prune drafts older than 72 hours to keep the map tidy
+      const _cutoff = Date.now() - 72 * 60 * 60 * 1000;
+      for (const key of Object.keys(_draftsMap)) {
+        if ((_draftsMap[key]?.storedAt || 0) < _cutoff) delete _draftsMap[key];
+      }
+      _draftsMap[refNum.toUpperCase()] = _draftPayload;
+
+      await UserSession.findOneAndUpdate(
+        { phone: targetPhone },
+        {
+          $set: {
+            // New map format — supports multiple concurrent drafts per phone
+            "tempData.scPendingDrafts":      JSON.stringify(_draftsMap),
+            "tempData.scLastNotifiedRef":    refNum.toUpperCase(),
+            // Legacy scalar — kept so any in-flight sessions before this deploy still work
+            "tempData.scPendingSellerQuote": JSON.stringify(_draftPayload),
+            "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
+            "tempData.scBuyerPhone":         buyerPhone,
+          }
+        },
+        { upsert: true }
+      );
+    }
+
     const _primaryPhone = _normPhone(seller.phone);
-    await UserSession.findOneAndUpdate(
-      { phone: _primaryPhone },
-      {
-        $set: {
-          "tempData.scPendingSellerQuote": _draftPayload,
-          "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-          "tempData.scBuyerPhone":          buyerPhone,
-        }
-      },
-      { upsert: true }
-    );
-    // Fan out to notification contacts - they receive the template too
+    await _addDraftToSession(_primaryPhone);
+
     const _notifPhones = (seller.notificationContacts || []).map(_normPhone).filter(Boolean);
     if (_notifPhones.length > 0) {
-      await Promise.allSettled(_notifPhones.map(nc =>
-        UserSession.findOneAndUpdate(
-          { phone: nc },
-          {
-            $set: {
-              "tempData.scPendingSellerQuote": _draftPayload,
-              "tempData.scSellerQuoteState":   "awaiting_seller_quote_confirm",
-              "tempData.scBuyerPhone":          buyerPhone,
-            }
-          },
-          { upsert: true }
-        )
-      ));
+      await Promise.allSettled(_notifPhones.map(nc => _addDraftToSession(nc)));
     }
-    console.log(`[SC QUOTE] Draft stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
+    console.log(`[SC QUOTE] Draft ${refNum} stored on ${1 + _notifPhones.length} session(s) for ${seller.businessName}`);
   } catch (err) {
     console.error("[SC QUOTE] Failed to store draft on seller session:", err.message);
   }
@@ -1299,12 +1385,11 @@ async function _scQuoteClear(from, supplierId, biz, saveBiz) {
 // SELLER CONFIRMS DRAFT QUOTE → PDF generated → buyer notified
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  const sess  = await UserSession.findOne({ phone: _normPhone(from) }).lean();
-  const raw   = sess?.tempData?.scPendingSellerQuote;
-  const draft = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
+  // FIX: use map-aware lookup so the correct draft is found even when this phone
+  // holds multiple drafts (e.g. notification contact for several sellers).
+  const draft = await _getSellerDraft(from, refNum);
 
- if (!draft || draft.refNum.toUpperCase() !== refNum.toUpperCase()) {
+  if (!draft) {
     return sendText(from, `❌ Quote ${refNum} not found or already sent. It may have expired.`);
   }
 
@@ -1363,17 +1448,8 @@ async function _scHandleQuoteConfirm(from, refNum, biz, saveBiz) {
     isService: draft.isService || false,
   });
 
-  // Clear draft from seller's session
-  await UserSession.findOneAndUpdate(
-    { phone: _normPhone(from) },
-    { $unset: {
-        "tempData.scPendingSellerQuote": "",
-        "tempData.scSellerQuoteState":   "",
-        "tempData.scBuyerPhone":         ""
-      }
-    },
-    { upsert: true }
-  );
+  // Clear draft from seller's session (removes from map + legacy scalar)
+  await _clearSellerDraft(from, refNum);
 
   const itemRows = lineItems.map((l, i) =>
     `${i + 1}. ${l.name} × ${l.qty} @ $${l.unitPrice.toFixed(2)} = $${l.lineTotal.toFixed(2)}`
@@ -1399,16 +1475,15 @@ Valid until: ${expiry}`,
 // SELLER EDITS DRAFT PRICES → shows numbered list → waits for typed reply
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scHandleQuoteEdit(from, refNum, biz, saveBiz) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  const sess  = await UserSession.findOne({ phone: _normPhone(from) }).lean();
-  const raw   = sess?.tempData?.scPendingSellerQuote;
-  const draft = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
+  // FIX: use map-aware lookup so correct draft is found for this specific refNum
+  const draft = await _getSellerDraft(from, refNum);
 
- if (!draft || draft.refNum.toUpperCase() !== refNum.toUpperCase()) {
+  if (!draft) {
     return sendText(from, `❌ Quote ${refNum} not found or already sent.`);
   }
 
   // Set state so next typed message is treated as a price edit
+  const UserSession = (await import("../models/userSession.js")).default;
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
     { $set: { "tempData.scSellerQuoteState": "awaiting_seller_price_edit" } },
@@ -1435,26 +1510,26 @@ Type *confirm* to send as-is, or *cancel* to discard.`
 // PROCESS SELLER'S TYPED PRICE EDITS
 // ─────────────────────────────────────────────────────────────────────────────
 async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
+  // FIX: use map-aware lookup; fall back to last-notified ref if no specific refNum available
   const UserSession = (await import("../models/userSession.js")).default;
-  const sess  = await UserSession.findOne({ phone: _normPhone(from) }).lean();
-  const raw   = sess?.tempData?.scPendingSellerQuote;
-  const draft = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
+  const _tmpSess = await UserSession.findOne({ phone: _normPhone(from) }).lean();
+  const _lastRef = _tmpSess?.tempData?.scLastNotifiedRef;
+  let draft = _lastRef ? await _getSellerDraft(from, _lastRef) : null;
+
+  // Fallback: legacy scalar
+  if (!draft) {
+    const _raw = _tmpSess?.tempData?.scPendingSellerQuote;
+    if (_raw) {
+      try { draft = typeof _raw === "string" ? JSON.parse(_raw) : _raw; } catch (_) {}
+    }
+  }
 
   if (!draft) return sendText(from, "❌ No pending quote found. It may have expired.");
 
   const al = text.trim().toLowerCase();
 
   if (al === "cancel") {
-    await UserSession.findOneAndUpdate(
-      { phone: _normPhone(from) },
-      { $unset: {
-          "tempData.scPendingSellerQuote": "",
-          "tempData.scSellerQuoteState":   "",
-          "tempData.scBuyerPhone":         ""
-        }
-      },
-      { upsert: true }
-    );
+    await _clearSellerDraft(from, draft.refNum);
     return sendText(from, `🗑 Quote ${draft.refNum} discarded.`);
   }
 
@@ -1503,9 +1578,22 @@ async function _scProcessSellerPriceEdit(from, text, biz, saveBiz) {
   });
 
   const updatedDraft = { ...draft, lineItems: updatedItems, total: newTotal };
+
+  // Update both the map entry and legacy scalar
+  let _dm2 = {};
+  try {
+    const _r = _tmpSess?.tempData?.scPendingDrafts;
+    _dm2 = _r ? (typeof _r === "string" ? JSON.parse(_r) : _r) : {};
+  } catch (_) {}
+  const _updRef = (updatedDraft.refNum || "").toUpperCase();
+  if (_updRef) _dm2[_updRef] = updatedDraft;
+
   await UserSession.findOneAndUpdate(
     { phone: _normPhone(from) },
-    { $set: { "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft) } },
+    { $set: {
+        "tempData.scPendingDrafts":      JSON.stringify(_dm2),
+        "tempData.scPendingSellerQuote": JSON.stringify(updatedDraft)
+    }},
     { upsert: true }
   );
 
