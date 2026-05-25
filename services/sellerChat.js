@@ -309,6 +309,11 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
       ? (Array.isArray(seller.rates) && seller.rates.length > 0)
       : (Array.isArray(seller.prices) && seller.prices.length > 0);
 
+  // ── Location helpers (must be declared before deliveryLine uses them) ───────
+  const area     = seller.location?.area || "";
+  const city     = seller.location?.city || "";
+  const location = [area, city].filter(Boolean).join(", ");
+
   // ── BUG FIX: Correct travel/delivery line ─────────────────────────────────
   // Service providers with travelAvailable=true TRAVEL TO CLIENTS.
   // NEVER show "Collection only" for a cleaning/plumbing/electrical service.
@@ -341,10 +346,6 @@ export async function showSellerMenu(from, supplierId, biz, saveBiz, { source = 
   const respStr   = (respMin !== null && respMin !== undefined && respMin <= 240)
     ? `⚡ Replies ${respMin <= 5 ? "instantly" : respMin <= 30 ? "within 30 min" : "within a few hours"}` : "";
   const credLine  = [ratingStr, ordersStr, respStr].filter(Boolean).join("  ·  ");
-
-  const area     = seller.location?.area || "";
-  const city     = seller.location?.city || "";
-  const location = [area, city].filter(Boolean).join(", ");
 
   // ── Store session context ─────────────────────────────────────────────────
   if (biz) {
@@ -891,7 +892,7 @@ async function _scQuote(from, supplierId, biz, saveBiz) {
         `Or type *note: your message* to add details\n` +
         `_e.g. note: 8 people, Saturday, need airport pickup_\n\n` +
         `Type *cancel* to go back.`,
-      buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Send an enquiry instead" }]
+      buttons: [{ id: `sc_enquiry_${supplierId}`, title: "💬 Enquiry" }]
     });
   }
 
@@ -2135,7 +2136,7 @@ _e.g. "Tomorrow morning", "Saturday 9am", "Monday after 2pm"_
 
 Or tap Urgent if you need it done today.`,
     buttons: [
-      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent - Today/Tomorrow" }
+      { id: `sc_book_urgent_${supplierId}`, title: "⚡ Urgent - ASAP" }
     ]
   });
 }

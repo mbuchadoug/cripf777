@@ -4139,8 +4139,26 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     // (e.g. a buyer is browsing their hospitality catalogue and typing item numbers),
     // the sc_ flow must take priority. We skip the BuyerRequest interceptor so the
     // seller's biz.sessionState sc_awaiting_items is handled correctly downstream.
+    // EXCEPTION: "view_and_quote", "not_available", and req_offer_/req_unavail_ actions
+    // are definitive BuyerRequest seller actions (from the WhatsApp template button).
+    // They ALWAYS bypass the sc_ guard — they must work even when biz is in sc_ state.
+    // This handles the race condition where sc_quote saves sc_awaiting_items before failing,
+    // leaving the biz stuck in sc_ state when the seller later taps "View & Quote".
+    const _isBuyerReqAction = a === "view_and_quote" || al === "view & quote" ||
+      al === "view and quote" || a === "not_available" || al === "not available" ||
+      a?.startsWith("req_offer_") || a?.startsWith("req_unavail_");
+
     if (sellerRequestReplyState === "awaiting_offer_intro" && sellerRequestId &&
-        !biz?.sessionState?.startsWith("sc_")) {
+        (!biz?.sessionState?.startsWith("sc_") || _isBuyerReqAction)) {
+
+      // ── If biz is stuck in sc_ state but seller tapped a BuyerRequest button, ──
+      // reset the stale sc_ state so the BuyerRequest flow proceeds cleanly.
+      if (_isBuyerReqAction && biz?.sessionState?.startsWith("sc_")) {
+        biz.sessionState = "ready";
+        biz.sessionData  = {};
+        await saveBizSafe(biz);
+        console.log(`[OFFER INTRO] Reset stale sc_ state for ${phone} to handle ${a}`);
+      }
 
       // ── FIX: resolve requestId from the button ID, not just the scalar ──────────
       // Template buttons are req_offer_<requestId> and req_unavail_<requestId>.
@@ -4664,7 +4682,7 @@ if (!isMetaAction || isBuyerRequestMetaReply) {
     }
 
     // If supplier types while in confirm state, treat as wanting to edit → re-enter pricing
-    // FIX: skip if sc_ smart-link buyer session is active
+    // FIX: skip if sc_ smart-link buyer session is active (not a BuyerRequest confirm action)
     if (sellerRequestReplyState === "awaiting_offer_confirm" && sellerRequestId && text && !a &&
         !biz?.sessionState?.startsWith("sc_")) {
       await UserSession.findOneAndUpdate(
@@ -5394,7 +5412,7 @@ if (al === "my requests" || al === "buyer_my_requests") {
             `${locationLine}\n\n` +
             `📍 *Where will you be? / Where should the operator meet you?*`,
           buttons: [
-            { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
+            { id: "sup_request_delivery_yes", title: "📍 My location" },
             { id: "sup_request_delivery_no",  title: "🏕 I'll go to the operator" }
           ]
         });
@@ -16931,7 +16949,7 @@ if (a === "sup_use_saved_location") {
     return sendButtons(from, {
       text: `📍 *Where will you be? Should the operator come to you?*\n\n📍 ${savedArea ? `${savedArea}, ` : ""}${savedCity}`,
       buttons: [
-        { id: "sup_request_delivery_yes", title: "📍 Come to my location" },
+        { id: "sup_request_delivery_yes", title: "📍 My location" },
         { id: "sup_request_delivery_no",  title: "🏕 I'll go to operator" }
       ]
     });
